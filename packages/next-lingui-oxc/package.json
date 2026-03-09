@@ -1,0 +1,61 @@
+{
+  "name": "@palamedes/next",
+  "version": "0.1.0",
+  "description": "Next.js integration for Lingui using OXC-based macro transformer",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "license": "MIT",
+  "keywords": [
+    "next.js",
+    "nextjs",
+    "i18n",
+    "linguijs",
+    "oxc",
+    "internationalization",
+    "localization",
+    "translation"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub"
+  },
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/next-lingui-oxc"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/",
+    "lingui-oxc-loader.cjs",
+    "lingui-po-loader.cjs"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./lingui-oxc-loader": "./lingui-oxc-loader.cjs",
+    "./lingui-po-loader": "./lingui-po-loader.cjs"
+  },
+  "dependencies": {
+    "@lingui/conf": "^5.9.2",
+    "@palamedes/transform": "workspace:^"
+  },
+  "peerDependencies": {
+    "next": "^13 || ^14 || ^15"
+  },
+  "devDependencies": {
+    "next": "^15.0.0",
+    "unbuild": "^3.6.1"
+  }
+}
