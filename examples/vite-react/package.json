@@ -1,0 +1,29 @@
+{
+  "name": "@palamedes/example-vite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "extract": "pmds extract"
+  },
+  "dependencies": {
+    "@lingui/core": "^5.9.2",
+    "@lingui/react": "^5.9.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@lingui/conf": "^5.9.2",
+    "@lingui/format-po": "^5.9.2",
+    "@palamedes/cli": "workspace:^",
+    "@palamedes/vite": "workspace:^",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}
