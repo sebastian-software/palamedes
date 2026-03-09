@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 
 export interface NativeInfo {
   palamedesVersion: string
-  pofileGitRev: string
+  pofileVersion: string
 }
 
 export interface ParsedPoItem {

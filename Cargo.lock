@@ -254,8 +254,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pofile"
-version = "0.1.0"
-source = "git+https://github.com/sebastian-software/pofile-ts?rev=61ab31494e46b937f99b0578d21fe7b32f9ad91f#61ab31494e46b937f99b0578d21fe7b32f9ad91f"
+version = "5.0.0-beta.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a91636976355f61171e27a1329d1d52aaa4c42bf6c20a65fa10f98e2ce12d4"
 
 [[package]]
 name = "proc-macro2"

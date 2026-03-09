@@ -3,14 +3,14 @@ use std::collections::BTreeMap;
 use pofile::{parse_po, PoFile, PoItem};
 use serde::Serialize;
 
-pub const POFILE_GIT_REV: &str = "61ab31494e46b937f99b0578d21fe7b32f9ad91f";
+pub const POFILE_VERSION: &str = "5.0.0-beta.0";
 
 #[derive(Debug, Serialize)]
 pub struct NativeInfo {
     #[serde(rename = "palamedesVersion")]
     pub palamedes_version: &'static str,
-    #[serde(rename = "pofileGitRev")]
-    pub pofile_git_rev: &'static str,
+    #[serde(rename = "pofileVersion")]
+    pub pofile_version: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -75,7 +75,7 @@ impl From<PoItem> for JsPoItem {
 pub fn get_native_info() -> NativeInfo {
     NativeInfo {
         palamedes_version: env!("CARGO_PKG_VERSION"),
-        pofile_git_rev: POFILE_GIT_REV,
+        pofile_version: POFILE_VERSION,
     }
 }
 
@@ -95,7 +95,7 @@ pub fn parse_po_json(source: &str) -> Result<String, serde_json::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_message_id, get_native_info, parse_po_json, POFILE_GIT_REV};
+    use super::{generate_message_id, get_native_info, parse_po_json, POFILE_VERSION};
 
     #[test]
     fn generates_message_ids_via_pofile() {
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn exposes_native_info() {
         let info = get_native_info();
-        assert_eq!(info.pofile_git_rev, POFILE_GIT_REV);
+        assert_eq!(info.pofile_version, POFILE_VERSION);
         assert_eq!(info.palamedes_version, env!("CARGO_PKG_VERSION"));
     }
 

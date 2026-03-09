@@ -5,7 +5,7 @@ Thin Node.js wrapper around the Palamedes Rust core.
 This package is the first migration spike for the Rust-core architecture. It currently exposes a minimal API surface to validate:
 
 - Cargo workspace integration
-- external `pofile` dependency usage from Rust
+- published `pofile` crate usage from Rust
 - Node native bindings loading from a TypeScript wrapper
 
 ## Available APIs
