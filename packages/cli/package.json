@@ -1,0 +1,56 @@
+{
+  "name": "@palamedes/cli",
+  "version": "0.0.1",
+  "description": "Palamedes CLI - Next-generation Lingui tooling",
+  "keywords": [
+    "lingui",
+    "i18n",
+    "internationalization",
+    "cli",
+    "palamedes"
+  ],
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/cli"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": "./dist/cli.mjs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@lingui/conf": "^5.9.2",
+    "@palamedes/extractor": "workspace:^",
+    "chalk": "^5.3.0",
+    "chokidar": "^4.0.3",
+    "commander": "^13.0.0",
+    "glob": "^11.0.0",
+    "pofile-ts": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "unbuild": "^3.6.1"
+  }
+}
