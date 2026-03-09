@@ -16,7 +16,7 @@
     { "path": "packages/extractor-oxc" },
     { "path": "packages/oxc-transform" },
     { "path": "packages/vite-plugin-oxc" },
-    { "path": "packages/next-lingui-oxc" },
+    { "path": "packages/nextjs-oxc" },
     { "path": "packages/cli" }
   ]
 }
