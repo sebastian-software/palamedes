@@ -212,7 +212,7 @@ Expected ADR checkpoints:
 - packaging and release strategy for native binaries
 - fallback strategy, if any, for unsupported environments
 
-`DECISIONS.md` should remain the canonical ADR log unless the repository later moves to one-file-per-ADR.
+ADRs should be stored as individual numbered files under `adr/`, with `DECISIONS.md` acting as the index.
 
 ## Notes
 
