@@ -15,3 +15,4 @@ This document is the index for Palamedes ADRs. Each ADR lives in its own numbere
 - [ADR-009: pofile-ts as Central PO Library](./adr/009-pofile-ts-as-central-po-library.md)
 - [ADR-010: OXC-based Message Extraction](./adr/010-oxc-based-message-extraction.md)
 - [ADR-011: Rust Core with Thin Node/TypeScript Wrappers](./adr/011-rust-core-with-thin-node-typescript-wrappers.md)
+- [ADR-012: Native Node Bindings via napi-rs](./adr/012-native-node-bindings-via-napi-rs.md)

@@ -1,53 +1,43 @@
 {
-  "name": "@palamedes/cli",
-  "version": "0.0.1",
-  "description": "Palamedes CLI - Next-generation Lingui tooling",
+  "name": "@palamedes/core-node",
+  "version": "0.1.0",
+  "description": "Thin Node.js wrapper around the Palamedes Rust core",
   "keywords": [
-    "lingui",
+    "palamedes",
+    "rust",
+    "napi",
     "i18n",
-    "internationalization",
-    "cli",
-    "palamedes"
+    "lingui"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
-    "directory": "packages/cli"
+    "directory": "packages/core-node"
   },
   "license": "MIT",
   "type": "module",
-  "bin": "./dist/cli.mjs",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.mjs"
     }
   },
-  "main": "./dist/index.cjs",
+  "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "files": [
-    "LICENSE",
     "README.md",
-    "dist/"
+    "dist/",
+    "palamedes-node.node"
   ],
   "scripts": {
-    "build": "unbuild",
+    "build": "node ./scripts/build-native.mjs && unbuild",
     "stub": "unbuild --stub"
   },
   "engines": {
     "node": ">=20.0.0"
-  },
-  "dependencies": {
-    "@lingui/conf": "^5.9.2",
-    "@palamedes/extractor": "workspace:^",
-    "chalk": "^5.3.0",
-    "chokidar": "^4.0.3",
-    "commander": "^13.0.0",
-    "glob": "^11.0.0",
-    "pofile-ts": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

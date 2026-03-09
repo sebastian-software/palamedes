@@ -4,6 +4,8 @@ dist/
 .DS_Store
 .env
 .env.local
+target/
+packages/core-node/palamedes-node.node
 
 # Yarn
 .pnp.*

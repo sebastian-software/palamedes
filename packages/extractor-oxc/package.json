@@ -50,6 +50,7 @@
   },
   "devDependencies": {
     "@lingui/conf": "^5.9.2",
+    "typescript": "^5.7.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.0.0"
   }

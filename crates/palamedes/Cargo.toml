@@ -1,0 +1,13 @@
+[package]
+name = "palamedes"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Rust core for Palamedes."
+
+[dependencies]
+pofile = { git = "https://github.com/sebastian-software/pofile-ts", rev = "61ab31494e46b937f99b0578d21fe7b32f9ad91f", package = "pofile" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"

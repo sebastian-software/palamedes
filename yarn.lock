@@ -1223,9 +1223,20 @@ __metadata:
     commander: "npm:^13.0.0"
     glob: "npm:^11.0.0"
     pofile-ts: "npm:^4.0.0"
+    typescript: "npm:^5.7.2"
     unbuild: "npm:^3.6.1"
   bin:
     cli: ./dist/cli.mjs
+  languageName: unknown
+  linkType: soft
+
+"@palamedes/core-node@workspace:packages/core-node":
+  version: 0.0.0-use.local
+  resolution: "@palamedes/core-node@workspace:packages/core-node"
+  dependencies:
+    "@types/node": "npm:^22.10.2"
+    typescript: "npm:^5.7.2"
+    unbuild: "npm:^3.6.1"
   languageName: unknown
   linkType: soft
 
@@ -1277,6 +1288,7 @@ __metadata:
     "@lingui/conf": "npm:^5.9.2"
     oxc-parser: "npm:^0.72.1"
     pofile-ts: "npm:^4.0.0"
+    typescript: "npm:^5.7.2"
     unbuild: "npm:^3.6.1"
     vitest: "npm:^4.0.0"
   peerDependencies:
@@ -1284,13 +1296,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@palamedes/next@workspace:^, @palamedes/next@workspace:packages/next-lingui-oxc":
+"@palamedes/next@workspace:^, @palamedes/next@workspace:packages/nextjs-oxc":
   version: 0.0.0-use.local
-  resolution: "@palamedes/next@workspace:packages/next-lingui-oxc"
+  resolution: "@palamedes/next@workspace:packages/nextjs-oxc"
   dependencies:
     "@lingui/conf": "npm:^5.9.2"
     "@palamedes/transform": "workspace:^"
     next: "npm:^15.0.0"
+    typescript: "npm:^5.7.2"
     unbuild: "npm:^3.6.1"
   peerDependencies:
     next: ^13 || ^14 || ^15
@@ -1304,6 +1317,7 @@ __metadata:
     magic-string: "npm:^0.30.17"
     oxc-parser: "npm:^0.72.1"
     pofile-ts: "npm:^4.0.0"
+    typescript: "npm:^5.7.2"
     unbuild: "npm:^3.6.1"
     vitest: "npm:^4.0.0"
   languageName: unknown
@@ -1315,6 +1329,7 @@ __metadata:
   dependencies:
     "@lingui/conf": "npm:^5.9.2"
     "@palamedes/transform": "workspace:^"
+    typescript: "npm:^5.7.2"
     unbuild: "npm:^3.6.1"
     vite: "npm:^6.0.2"
   peerDependencies:
@@ -3465,6 +3480,8 @@ __metadata:
 "palamedes@workspace:.":
   version: 0.0.0-use.local
   resolution: "palamedes@workspace:."
+  dependencies:
+    typescript: "npm:^5.7.2"
   languageName: unknown
   linkType: soft
 

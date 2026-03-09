@@ -13,6 +13,7 @@
     "rootDir": "src"
   },
   "references": [
+    { "path": "packages/core-node" },
     { "path": "packages/extractor-oxc" },
     { "path": "packages/oxc-transform" },
     { "path": "packages/vite-plugin-oxc" },
