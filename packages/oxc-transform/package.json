@@ -1,0 +1,53 @@
+{
+  "name": "@palamedes/transform",
+  "version": "0.1.0",
+  "description": "OXC-based macro transformer for Lingui - transforms Lingui macros to runtime calls without Babel",
+  "keywords": [
+    "lingui",
+    "i18n",
+    "oxc",
+    "macro",
+    "transform",
+    "preprocessor"
+  ],
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/oxc-transform"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "magic-string": "^0.30.17",
+    "oxc-parser": "^0.72.1",
+    "pofile-ts": "^4.0.0"
+  },
+  "devDependencies": {
+    "unbuild": "^3.6.1",
+    "vitest": "^4.0.0"
+  }
+}
