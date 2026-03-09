@@ -29,10 +29,20 @@ export interface ParsedPoFile {
   items: ParsedPoItem[]
 }
 
+export interface NativeExtractedMessage {
+  id: string
+  message?: string
+  comment?: string
+  context?: string
+  placeholders?: Record<string, string>
+  origin: [filename: string, line: number, column?: number]
+}
+
 interface NativeBindings {
   getNativeInfoJson(): string
   generateMessageId(message: string, context?: string): string
   parsePoJson(source: string): string
+  extractMessagesJson(source: string, filename: string): string
 }
 
 function loadNativeBindings(): NativeBindings {
@@ -62,4 +72,11 @@ export function generateMessageId(message: string, context?: string): string {
 
 export function parsePo(source: string): ParsedPoFile {
   return JSON.parse(native.parsePoJson(source)) as ParsedPoFile
+}
+
+export function extractMessagesNative(
+  source: string,
+  filename: string
+): NativeExtractedMessage[] {
+  return JSON.parse(native.extractMessagesJson(source, filename)) as NativeExtractedMessage[]
 }

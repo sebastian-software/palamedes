@@ -1,6 +1,6 @@
 import oxc from "oxc-parser"
 import { extractMessages } from "./extractMessages"
-import { generateMessageIdSync } from "pofile-ts"
+import { generateMessageId } from "@palamedes/core-node"
 
 function extract(code: string) {
   const result = oxc.parseSync("test.tsx", code, { sourceType: "module" })
@@ -9,7 +9,7 @@ function extract(code: string) {
 
 // Helper to generate expected ID (same as the extractor does)
 function msgId(message: string, context = "") {
-  return generateMessageIdSync(message, context)
+  return generateMessageId(message, context)
 }
 
 describe("extractMessages", () => {

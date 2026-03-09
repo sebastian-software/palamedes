@@ -1230,7 +1230,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@palamedes/core-node@workspace:packages/core-node":
+"@palamedes/core-node@workspace:^, @palamedes/core-node@workspace:packages/core-node":
   version: 0.0.0-use.local
   resolution: "@palamedes/core-node@workspace:packages/core-node"
   dependencies:
@@ -1286,6 +1286,7 @@ __metadata:
   resolution: "@palamedes/extractor@workspace:packages/extractor-oxc"
   dependencies:
     "@lingui/conf": "npm:^5.9.2"
+    "@palamedes/core-node": "workspace:^"
     oxc-parser: "npm:^0.72.1"
     pofile-ts: "npm:^4.0.0"
     typescript: "npm:^5.7.2"

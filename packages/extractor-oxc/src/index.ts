@@ -65,4 +65,5 @@ export const oxcExtractor: ExtractorType = {
 
 export default oxcExtractor
 export { extractMessages } from "./extractMessages"
+export { extractMessagesJs } from "./extractMessages"
 export type { ExtractedMessageInfo } from "./extractMessages"
