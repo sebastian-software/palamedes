@@ -1,0 +1,56 @@
+{
+  "name": "@palamedes/extractor",
+  "version": "0.1.0",
+  "description": "High-performance message extractor for Lingui using oxc-parser",
+  "keywords": [
+    "lingui",
+    "palamedes",
+    "i18n",
+    "extractor",
+    "oxc",
+    "performance"
+  ],
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/extractor-oxc"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "oxc-parser": "^0.72.1",
+    "pofile-ts": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@lingui/conf": "^5.0.0 || ^6.0.0"
+  },
+  "devDependencies": {
+    "@lingui/conf": "^5.9.2",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.0.0"
+  }
+}
