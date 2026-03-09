@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "references": [
+    { "path": "packages/extractor-oxc" },
+    { "path": "packages/oxc-transform" },
+    { "path": "packages/vite-plugin-oxc" },
+    { "path": "packages/next-lingui-oxc" },
+    { "path": "packages/cli" }
+  ]
+}
