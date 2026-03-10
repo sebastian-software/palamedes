@@ -21,5 +21,5 @@ msgid "Click me"
 msgstr ""
 
 #: src/app/page.tsx:37
-msgid "Powered by <0>@lingui/next-lingui-oxc</0>"
+msgid "Powered by <0>@palamedes/next-plugin</0>"
 msgstr ""

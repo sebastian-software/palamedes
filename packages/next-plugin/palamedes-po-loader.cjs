@@ -10,7 +10,7 @@ const {
   createCompilationErrorMessage,
 } = require("@lingui/cli/api");
 
-module.exports = function linguiPoLoader() {
+module.exports = function palamedesPoLoader() {
   const callback = this.async();
   const options = typeof this.getOptions === "function" ? this.getOptions() : {};
   const failOnMissing = options.failOnMissing === true;

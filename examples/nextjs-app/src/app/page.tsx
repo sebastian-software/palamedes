@@ -32,7 +32,7 @@ export default async function Home() {
       {/* Footer rendered on server with direct macros / Trans */}
       <footer style={{ marginTop: "3rem", paddingTop: "1rem", borderTop: "1px solid #eee", color: "#999", fontSize: "0.875rem" }}>
         <Trans>
-          Powered by <code>@lingui/next-lingui-oxc</code>
+          Powered by <code>@palamedes/next-plugin</code>
         </Trans>
       </footer>
     </main>

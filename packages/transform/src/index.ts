@@ -1,5 +1,5 @@
 /**
- * @lingui/oxc-transform
+ * @palamedes/transform
  *
  * OXC-based macro transformer for Lingui.
  * Transforms Lingui macros to runtime calls without Babel.

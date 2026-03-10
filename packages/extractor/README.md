@@ -1,4 +1,4 @@
-# @lingui/extractor-oxc
+# @palamedes/extractor
 
 High-performance message extractor for [Lingui](https://lingui.dev) using [oxc-parser](https://oxc.rs).
 
@@ -16,14 +16,14 @@ The default Babel-based extractor is powerful but slow. This extractor uses oxc-
 ## Installation
 
 ```bash
-pnpm add @lingui/extractor-oxc
+pnpm add @palamedes/extractor
 ```
 
 ## Usage
 
 ```ts
 // lingui.config.ts
-import { oxcExtractor } from '@lingui/extractor-oxc'
+import { extractor } from '@palamedes/extractor'
 
 export default {
   locales: ['en', 'de', 'fr'],
@@ -34,7 +34,7 @@ export default {
       include: ['src'],
     },
   ],
-  extractors: [oxcExtractor],
+  extractors: [extractor],
 }
 ```
 

@@ -6,7 +6,7 @@
 
 ## Summary
 
-`@palamedes/next` currently exports `./lingui-oxc-loader` and `./lingui-po-loader`, but the package does not actually contain these files.
+`@palamedes/next-plugin` currently exports `./palamedes-loader` and `./palamedes-po-loader`, but the package does not actually contain these files.
 
 The Next.js example and package consumers therefore fail during config loading before the build can even begin.
 
@@ -14,8 +14,8 @@ The Next.js example and package consumers therefore fail during config loading b
 
 Add real CommonJS loader files at the package root:
 
-- `packages/nextjs-oxc/lingui-oxc-loader.cjs`
-- `packages/nextjs-oxc/lingui-po-loader.cjs`
+- `packages/next-plugin/palamedes-loader.cjs`
+- `packages/next-plugin/palamedes-po-loader.cjs`
 
 These files should be shipped as package assets and referenced by the existing `exports` map.
 
@@ -28,13 +28,13 @@ These files should be shipped as package assets and referenced by the existing `
 
 ## Loader Responsibilities
 
-### `lingui-oxc-loader.cjs`
+### `palamedes-loader.cjs`
 
 - read webpack loader options
 - run `transformLinguiMacros`
 - return transformed code and source map
 
-### `lingui-po-loader.cjs`
+### `palamedes-po-loader.cjs`
 
 - read webpack loader options
 - resolve Lingui config
@@ -44,6 +44,6 @@ These files should be shipped as package assets and referenced by the existing `
 
 ## Follow-Up
 
-- verify `pnpm --filter @palamedes/next build`
+- verify `pnpm --filter @palamedes/next-plugin build`
 - verify `pnpm --filter @palamedes/example-nextjs build`
 - if Next still fails, fix remaining adapter/runtime issues separately

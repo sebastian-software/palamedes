@@ -1,4 +1,4 @@
-# @lingui/oxc-transform
+# @palamedes/transform
 
 OXC-based macro transformer for Lingui. Transforms Lingui macros (e.g., `` t`Hello` ``, `<Trans>`, `plural`, `select`) into runtime calls without requiring Babel.
 
@@ -11,13 +11,13 @@ OXC-based macro transformer for Lingui. Transforms Lingui macros (e.g., `` t`Hel
 ## Installation
 
 ```bash
-pnpm add @lingui/oxc-transform
+pnpm add @palamedes/transform
 ```
 
 ## Usage
 
 ```ts
-import { transformLinguiMacros } from "@lingui/oxc-transform"
+import { transformLinguiMacros } from "@palamedes/transform"
 
 const result = transformLinguiMacros(sourceCode, "filename.tsx", {
   runtimeModule: "@palamedes/runtime",

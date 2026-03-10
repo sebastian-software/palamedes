@@ -14,17 +14,17 @@ Three-layer architecture:
 ```
 ┌─────────────────────────────────────────┐
 │  Framework Adapters                     │
-│  (vite-plugin-oxc, next-lingui-oxc)     │
+│  (vite-plugin, next-plugin)     │
 ├─────────────────────────────────────────┤
 │  Core Transform                         │
-│  (oxc-transform)                        │
+│  (transform)                        │
 ├─────────────────────────────────────────┤
 │  OXC Parser + magic-string              │
 │  (dependencies)                         │
 └─────────────────────────────────────────┘
 ```
 
-- `oxc-transform`: Pure transformation logic, no framework dependencies
+- `transform`: Pure transformation logic, no framework dependencies
 - Framework adapters: Thin wrappers that integrate with build tool APIs
 
 ### Consequences

@@ -147,13 +147,13 @@ This validates the binding design before moving the larger OXC flows.
 
 ### Phase 3: Extractor migration
 
-- move extraction logic from `packages/extractor-oxc` into Rust
+- move extraction logic from `packages/extractor` into Rust
 - reuse OXC parsing/traversal in Rust
 - return extracted messages in a stable binding format
 
 ### Phase 4: Transform migration
 
-- move macro transform logic from `packages/oxc-transform` into Rust
+- move macro transform logic from `packages/transform` into Rust
 - preserve transform behavior and source map semantics
 - expose transform as a coarse-grained native operation
 - converge transformed output on `getI18n()` instead of `useLingui()` and `getLingui()`-specific code paths

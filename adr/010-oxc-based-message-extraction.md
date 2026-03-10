@@ -11,13 +11,13 @@ Lingui's Babel-based extractor is slow and requires complex configuration. The e
 
 Implement OXC-based extraction with two packages:
 
-**`@palamedes/extractor`** (extractor-oxc):
+**`@palamedes/extractor`** (extractor):
 ```typescript
-import { oxcExtractor } from "@palamedes/extractor"
+import { extractor } from "@palamedes/extractor"
 
 // Use in lingui.config.ts
 export default {
-  extractors: [oxcExtractor],
+  extractors: [extractor],
 }
 ```
 
@@ -34,7 +34,7 @@ palamedes extract --watch --verbose
 │  (extract command, watch mode)          │
 ├─────────────────────────────────────────┤
 │  @palamedes/extractor                   │
-│  (oxcExtractor, extractMessages)        │
+│  (extractor, extractMessages)        │
 ├─────────────────────────────────────────┤
 │  oxc-parser + pofile-ts                 │
 └─────────────────────────────────────────┘

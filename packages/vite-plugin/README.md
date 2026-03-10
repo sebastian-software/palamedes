@@ -1,4 +1,4 @@
-# @lingui/vite-plugin-oxc
+# @palamedes/vite-plugin
 
 Vite plugin for Lingui that uses OXC-based macro transformation. No Babel required.
 
@@ -12,7 +12,7 @@ Vite plugin for Lingui that uses OXC-based macro transformation. No Babel requir
 ## Installation
 
 ```bash
-pnpm add @lingui/vite-plugin-oxc @lingui/core @lingui/react
+pnpm add @palamedes/vite-plugin @lingui/core @lingui/react
 ```
 
 ## Usage
@@ -21,11 +21,11 @@ pnpm add @lingui/vite-plugin-oxc @lingui/core @lingui/react
 // vite.config.ts
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
-import { linguiOxc } from "@lingui/vite-plugin-oxc"
+import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
   plugins: [
-    linguiOxc(),
+    palamedes(),
     react(), // or any other framework plugin
   ],
 })
@@ -39,7 +39,7 @@ That's it! The plugin will:
 ## Options
 
 ```ts
-linguiOxc({
+palamedes({
   // Only transform files matching this pattern (optional)
   include: /\.(tsx?|jsx?)$/,
 
@@ -91,7 +91,7 @@ i18n.activate("en")
 
 ## Comparison with @lingui/vite-plugin
 
-| Feature | @lingui/vite-plugin | @lingui/vite-plugin-oxc |
+| Feature | @lingui/vite-plugin | @palamedes/vite-plugin |
 |---------|---------------------|-------------------------|
 | PO compilation | ✅ | ✅ |
 | Macro transformation | ❌ (requires babel) | ✅ |

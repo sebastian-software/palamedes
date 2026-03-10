@@ -1,5 +1,5 @@
 /**
- * @palamedes/next
+ * @palamedes/next-plugin
  *
  * Next.js integration for Lingui using OXC-based macro transformation.
  * No Babel required!
@@ -10,7 +10,7 @@ import type { NextConfig } from "next"
 
 const require = createRequire(import.meta.url)
 
-export interface WithLinguiOxcOptions {
+export interface WithPalamedesOptions {
   /**
    * Pattern to include files for transformation.
    * @default /\.(tsx?|jsx?)$/
@@ -60,16 +60,16 @@ export interface WithLinguiOxcOptions {
  * @example
  * ```js
  * // next.config.js
- * const { withLinguiOxc } = require("@palamedes/next")
+ * const { withPalamedes } = require("@palamedes/next-plugin")
  *
- * module.exports = withLinguiOxc({
+ * module.exports = withPalamedes({
  *   // your existing next config
  * })
  * ```
  */
-export function withLinguiOxc(
+export function withPalamedes(
   baseConfig: NextConfig = {},
-  options: WithLinguiOxcOptions = {}
+  options: WithPalamedesOptions = {}
 ): NextConfig {
   const {
     include = /\.[jt]sx?$/,
@@ -83,11 +83,16 @@ export function withLinguiOxc(
 
   // Resolve loader paths
   const oxcLoaderPath = require.resolve(
-    "@palamedes/next/lingui-oxc-loader"
+    "@palamedes/next-plugin/palamedes-loader"
   )
   const poLoaderPath = require.resolve(
-    "@palamedes/next/lingui-po-loader"
+    "@palamedes/next-plugin/palamedes-po-loader"
   )
+  const poLoaderOptions = {
+    failOnMissing,
+    failOnCompileError,
+    ...(configPath ? { configPath } : {}),
+  }
 
   return {
     ...baseConfig,
@@ -112,7 +117,7 @@ export function withLinguiOxc(
             loaders: [
               {
                 loader: poLoaderPath,
-                options: { configPath, failOnMissing, failOnCompileError },
+                options: poLoaderOptions,
               },
             ],
             as: "*.js",
@@ -144,7 +149,7 @@ export function withLinguiOxc(
           use: [
             {
               loader: poLoaderPath,
-              options: { configPath, failOnMissing, failOnCompileError },
+              options: poLoaderOptions,
             },
           ],
         })
@@ -160,4 +165,4 @@ export function withLinguiOxc(
   }
 }
 
-export default withLinguiOxc
+export default withPalamedes

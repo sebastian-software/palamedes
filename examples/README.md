@@ -26,9 +26,9 @@ pnpm dev
 
 ## Packages Used
 
-- `@lingui/oxc-transform` - Core macro transformer
-- `@lingui/vite-plugin-oxc` - Vite plugin
-- `@lingui/next-lingui-oxc` - Next.js integration
+- `@palamedes/transform` - Core macro transformer
+- `@palamedes/vite-plugin` - Vite plugin
+- `@palamedes/next-plugin` - Next.js integration
 
 ## Features Demonstrated
 

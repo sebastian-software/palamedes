@@ -57,7 +57,7 @@ Aktuell aus Rust bzw. über `@palamedes/core-node` verfügbar:
 Relevante Dateien:
 
 - [crates/palamedes/src/extract.rs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/crates/palamedes/src/extract.rs)
-- [packages/extractor-oxc/src/extractMessages.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor-oxc/src/extractMessages.ts)
+- [packages/extractor/src/extractMessages.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor/src/extractMessages.ts)
 
 ### Transform
 
@@ -83,8 +83,8 @@ Aktuell noch im JS-Fallback:
 Relevante Dateien:
 
 - [crates/palamedes/src/transform.rs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/crates/palamedes/src/transform.rs)
-- [packages/oxc-transform/src/transform.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/oxc-transform/src/transform.ts)
-- [packages/oxc-transform/src/transformJs.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/oxc-transform/src/transformJs.ts)
+- [packages/transform/src/transform.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/transform/src/transform.ts)
+- [packages/transform/src/transformJs.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/transform/src/transformJs.ts)
 
 ### Runtime-Modell
 
@@ -103,9 +103,9 @@ Relevante Dateien:
 - `pnpm-workspace.yaml` und `pnpm-lock.yaml` eingeführt
 - Yarn-/PnP-Artefakte entfernt
 - Repo-Dokumentation auf `pnpm` umgestellt
-- `@palamedes/next` liefert jetzt die realen Loader-Dateien aus:
-  - [packages/nextjs-oxc/lingui-oxc-loader.cjs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/nextjs-oxc/lingui-oxc-loader.cjs)
-  - [packages/nextjs-oxc/lingui-po-loader.cjs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/nextjs-oxc/lingui-po-loader.cjs)
+- `@palamedes/next-plugin` liefert jetzt die realen Loader-Dateien aus:
+  - [packages/next-plugin/palamedes-loader.cjs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/next-plugin/palamedes-loader.cjs)
+  - [packages/next-plugin/palamedes-po-loader.cjs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/next-plugin/palamedes-po-loader.cjs)
 - `@palamedes/core-node` baut jetzt zusätzlich CJS, damit der Next-Loader-Pfad funktioniert
 
 Begleitende Design-Dokumente:
@@ -126,8 +126,8 @@ Heute erneut geprüft:
 
 Aktueller `check-types`-Fehler:
 
-- [packages/extractor-oxc/src/extractMessages.test.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor-oxc/src/extractMessages.test.ts): fehlende Vitest-Globals (`describe`, `it`, `expect`) im TypeScript-Check
-- [packages/extractor-oxc/src/extractMessagesJs.ts:415](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor-oxc/src/extractMessagesJs.ts#L415): `string | undefined` wird an eine Funktion übergeben, die `string` erwartet
+- [packages/extractor/src/extractMessages.test.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor/src/extractMessages.test.ts): fehlende Vitest-Globals (`describe`, `it`, `expect`) im TypeScript-Check
+- [packages/extractor/src/extractMessagesJs.ts:415](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor/src/extractMessagesJs.ts#L415): `string | undefined` wird an eine Funktion übergeben, die `string` erwartet
 
 ## Offene TODOs
 

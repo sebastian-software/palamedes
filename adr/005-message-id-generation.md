@@ -23,7 +23,7 @@ const id = generateMessageIdSync("Hello {name}", "greeting")
 
 ### Consequences
 
-- Single implementation across all packages (format-po, format-po-gettext, babel-plugin-lingui-macro, oxc-transform, extractor-oxc)
+- Single implementation across all packages (format-po, format-po-gettext, babel-plugin-lingui-macro, transform, extractor)
 - 8-character IDs are more collision-resistant than previous 6-character IDs
 - No external crypto dependencies (uses Web Crypto API)
 

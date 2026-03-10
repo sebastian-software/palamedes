@@ -6,10 +6,10 @@ Next-generation i18n tooling powered by [OXC](https://oxc-project.github.io/) �
 
 | Package | Description |
 |---------|-------------|
-| [`@palamedes/transform`](packages/oxc-transform) | OXC-based macro transformer — compiles i18n macros to runtime calls without Babel |
-| [`@palamedes/extractor`](packages/extractor-oxc) | High-performance message extractor using oxc-parser |
-| [`@palamedes/vite`](packages/vite-plugin-oxc) | Vite plugin for automatic macro transformation |
-| [`@palamedes/next`](packages/next-lingui-oxc) | Next.js integration with webpack loaders |
+| [`@palamedes/transform`](packages/transform) | OXC-based macro transformer — compiles i18n macros to runtime calls without Babel |
+| [`@palamedes/extractor`](packages/extractor) | High-performance message extractor using oxc-parser |
+| [`@palamedes/vite-plugin`](packages/vite-plugin) | Vite plugin for automatic macro transformation |
+| [`@palamedes/next-plugin`](packages/next-plugin) | Next.js integration with webpack loaders |
 | [`@palamedes/cli`](packages/cli) | CLI tool for message extraction with watch mode |
 
 ## Architecture
@@ -17,7 +17,7 @@ Next-generation i18n tooling powered by [OXC](https://oxc-project.github.io/) �
 ```
 ┌─────────────────────────────────────────┐
 │  Framework Adapters                     │
-│  @palamedes/vite, @palamedes/next       │
+│  @palamedes/vite-plugin, @palamedes/next-plugin│
 ├─────────────────────────────────────────┤
 │  Core Transform                         │
 │  @palamedes/transform                   │
@@ -39,29 +39,29 @@ Next-generation i18n tooling powered by [OXC](https://oxc-project.github.io/) �
 ### Vite
 
 ```bash
-pnpm add @palamedes/vite @palamedes/cli
+pnpm add @palamedes/vite-plugin @palamedes/cli
 ```
 
 ```ts
 // vite.config.ts
-import { lingui } from "@palamedes/vite"
+import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [lingui()],
+  plugins: [palamedes()],
 })
 ```
 
 ### Next.js
 
 ```bash
-pnpm add @palamedes/next @palamedes/cli
+pnpm add @palamedes/next-plugin @palamedes/cli
 ```
 
 ```ts
 // next.config.ts
-import { withLingui } from "@palamedes/next"
+import { withPalamedes } from "@palamedes/next-plugin"
 
-export default withLingui(nextConfig)
+export default withPalamedes(nextConfig)
 ```
 
 ### Extracting Messages

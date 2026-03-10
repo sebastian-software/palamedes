@@ -1,5 +1,5 @@
 /**
- * @lingui/extractor-oxc
+ * @palamedes/extractor
  *
  * High-performance message extractor using oxc-parser.
  * This extractor is ~20-100x faster than the Babel-based extractor.
@@ -26,15 +26,15 @@ const SUPPORTED_EXTENSIONS =
  * @example
  * ```ts
  * // lingui.config.ts
- * import { oxcExtractor } from '@lingui/extractor-oxc'
+ * import { extractor } from '@palamedes/extractor'
  *
  * export default {
- *   extractors: [oxcExtractor],
+ *   extractors: [extractor],
  *   // ...
  * }
  * ```
  */
-export const oxcExtractor: ExtractorType = {
+export const extractor: ExtractorType = {
   match(filename: string): boolean {
     return SUPPORTED_EXTENSIONS.test(filename)
   },
@@ -63,7 +63,7 @@ export const oxcExtractor: ExtractorType = {
   },
 }
 
-export default oxcExtractor
+export default extractor
 export { extractMessages } from "./extractMessages"
 export { extractMessagesJs } from "./extractMessages"
 export type { ExtractedMessageInfo } from "./extractMessages"

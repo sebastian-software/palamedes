@@ -1,4 +1,4 @@
-# @lingui/next-lingui-oxc
+# @palamedes/next-plugin
 
 Next.js integration for Lingui using OXC-based macro transformation. No Babel required.
 
@@ -12,21 +12,21 @@ Next.js integration for Lingui using OXC-based macro transformation. No Babel re
 ## Installation
 
 ```bash
-pnpm add @lingui/next-lingui-oxc @lingui/core @lingui/react
+pnpm add @palamedes/next-plugin @lingui/core @lingui/react
 ```
 
 ## Usage
 
 ```js
 // next.config.js
-const { withLinguiOxc } = require("@lingui/next-lingui-oxc")
+const { withPalamedes } = require("@palamedes/next-plugin")
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // your existing config
 }
 
-module.exports = withLinguiOxc(nextConfig)
+module.exports = withPalamedes(nextConfig)
 ```
 
 That's it! The plugin will:
@@ -37,9 +37,9 @@ That's it! The plugin will:
 ## Options
 
 ```js
-const { withLinguiOxc } = require("@lingui/next-lingui-oxc")
+const { withPalamedes } = require("@palamedes/next-plugin")
 
-module.exports = withLinguiOxc(nextConfig, {
+module.exports = withPalamedes(nextConfig, {
   // Only transform files matching this pattern (optional)
   include: /\.(tsx?|jsx?)$/,
 
@@ -106,7 +106,7 @@ i18n.activate("en")
 
 ## Comparison with @lingui/swc-plugin
 
-| Feature | @lingui/swc-plugin | @lingui/next-lingui-oxc |
+| Feature | @lingui/swc-plugin | @palamedes/next-plugin |
 |---------|-------------------|-------------------------|
 | PO compilation | ❌ (separate loader) | ✅ Built-in |
 | Macro transformation | ✅ | ✅ |

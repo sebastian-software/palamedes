@@ -5,7 +5,7 @@ import chalk from "chalk"
 import { glob } from "glob"
 import { watch } from "chokidar"
 import { getConfig, type LinguiConfig, type CatalogConfig } from "@lingui/conf"
-import { oxcExtractor } from "@palamedes/extractor"
+import { extractor } from "@palamedes/extractor"
 import type { ExtractedMessage } from "@lingui/conf"
 import {
   parsePo,
@@ -99,7 +99,7 @@ async function extractFromCatalog(
       const code = await readFile(file, "utf-8")
       const relativePath = path.relative(rootDir, file)
 
-      await oxcExtractor.extract(
+      await extractor.extract(
         file,
         code,
         (msg: ExtractedMessage) => {

@@ -15,10 +15,10 @@
   "references": [
     { "path": "packages/core-node" },
     { "path": "packages/runtime" },
-    { "path": "packages/extractor-oxc" },
-    { "path": "packages/oxc-transform" },
-    { "path": "packages/vite-plugin-oxc" },
-    { "path": "packages/nextjs-oxc" },
+    { "path": "packages/extractor" },
+    { "path": "packages/transform" },
+    { "path": "packages/vite-plugin" },
+    { "path": "packages/next-plugin" },
     { "path": "packages/cli" }
   ]
 }

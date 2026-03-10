@@ -1,10 +1,10 @@
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
-import { linguiOxc } from "@palamedes/vite"
+import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
   plugins: [
-    linguiOxc(),
+    palamedes(),
     react(),
   ],
 })

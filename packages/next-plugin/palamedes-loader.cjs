@@ -2,7 +2,7 @@
 
 const { transformLinguiMacros } = require("@palamedes/transform");
 
-module.exports = function linguiOxcLoader(source, inputSourceMap) {
+module.exports = function palamedesLoader(source, inputSourceMap) {
   const callback = this.async ? this.async() : null;
   const options = typeof this.getOptions === "function" ? this.getOptions() : {};
 

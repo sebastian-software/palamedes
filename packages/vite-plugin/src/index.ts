@@ -1,5 +1,5 @@
 /**
- * @palamedes/vite
+ * @palamedes/vite-plugin
  *
  * Vite plugin for Lingui using OXC-based macro transformer.
  * No Babel required!
@@ -19,9 +19,9 @@ import {
 } from "@lingui/cli/api"
 import { transformLinguiMacros } from "@palamedes/transform"
 
-const PO_FILE_REGEX = /(\.po|\?lingui)$/
+const PO_FILE_REGEX = /(\.po|\?palamedes)$/
 
-export interface LinguiOxcPluginOptions {
+export interface PalamedesPluginOptions {
   /**
    * Pattern to include files for transformation.
    * @default /\.(tsx?|jsx?|mjs|cjs)$/
@@ -76,9 +76,9 @@ export interface LinguiOxcPluginOptions {
 }
 
 /**
- * Create the Lingui OXC Vite plugin
+ * Create the Palamedes Vite plugin
  */
-export function linguiOxc(options: LinguiOxcPluginOptions = {}): Plugin[] {
+export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   const {
     include = /\.(tsx?|jsx?|mjs|cjs)$/,
     exclude = /node_modules/,
@@ -116,7 +116,7 @@ export function linguiOxc(options: LinguiOxcPluginOptions = {}): Plugin[] {
 
   // Plugin 1: Report macro resolution errors
   plugins.push({
-    name: "lingui-oxc:report-macro-error",
+    name: "palamedes:report-macro-error",
     enforce: "pre" as const,
 
     resolveId(id) {
@@ -126,7 +126,7 @@ export function linguiOxc(options: LinguiOxcPluginOptions = {}): Plugin[] {
       if (ids.has(id)) {
         throw new Error(
           `The macro you imported from "${id}" is being executed outside the context of compilation.\n` +
-            `This indicates that @palamedes/vite is not transforming the file.\n` +
+            `This indicates that @palamedes/vite-plugin is not transforming the file.\n` +
             `Please ensure the plugin is configured correctly in your vite.config.ts`
         )
       }
@@ -145,7 +145,7 @@ export function linguiOxc(options: LinguiOxcPluginOptions = {}): Plugin[] {
 
   // Plugin 2: Transform macros
   plugins.push({
-    name: "lingui-oxc:transform",
+    name: "palamedes:transform",
     enforce: "pre" as const,
 
     config(viteConfig) {
@@ -204,7 +204,7 @@ export function linguiOxc(options: LinguiOxcPluginOptions = {}): Plugin[] {
   // Plugin 3: PO file loader
   if (enablePoLoader) {
     plugins.push({
-      name: "lingui-oxc:po-loader",
+      name: "palamedes:po-loader",
 
       async transform(src, id) {
         if (!PO_FILE_REGEX.test(id)) {
@@ -295,4 +295,4 @@ export function linguiOxc(options: LinguiOxcPluginOptions = {}): Plugin[] {
   return plugins
 }
 
-export default linguiOxc
+export default palamedes

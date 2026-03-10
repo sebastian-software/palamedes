@@ -87,7 +87,7 @@ export function App() {
 
       <footer style={{ marginTop: "3rem", paddingTop: "1rem", borderTop: "1px solid #eee", color: "#999", fontSize: "0.875rem" }}>
         <Trans>
-          Powered by <code>@lingui/vite-plugin-oxc</code>
+          Powered by <code>@palamedes/vite-plugin</code>
         </Trans>
       </footer>
     </main>

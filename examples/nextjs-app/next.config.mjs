@@ -1,7 +1,7 @@
-import { withLinguiOxc } from "@palamedes/next"
+import { withPalamedes } from "@palamedes/next-plugin"
 
 const nextConfig = {
   // Your Next.js config here
 }
 
-export default withLinguiOxc(nextConfig)
+export default withPalamedes(nextConfig)

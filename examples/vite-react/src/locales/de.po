@@ -38,7 +38,7 @@ msgid "Click me"
 msgstr ""
 
 #: src/App.tsx:89
-msgid "Powered by <0>@lingui/vite-plugin-oxc</0>"
+msgid "Powered by <0>@palamedes/vite-plugin</0>"
 msgstr ""
 
 #: src/App.tsx:30
@@ -67,5 +67,5 @@ msgid "Click me"
 msgstr ""
 
 #: src/App.tsx:89
-msgid "Powered by <0>@lingui/vite-plugin-oxc</0>"
+msgid "Powered by <0>@palamedes/vite-plugin</0>"
 msgstr ""
