@@ -76,8 +76,8 @@ import { t } from "@lingui/macro"
 const greeting = t`Hello, ${name}!`
 
 // After (transformed)
-import { i18n } from "@lingui/core"
-const greeting = i18n._({ id: "abc123", message: "Hello, {name}!", values: { name } })
+import { getI18n } from "@palamedes/runtime"
+const greeting = getI18n()._({ id: "abc123", message: "Hello, {name}!", values: { name } })
 ```
 
 ### PO File Loading
@@ -85,7 +85,7 @@ const greeting = i18n._({ id: "abc123", message: "Hello, {name}!", values: { nam
 Import `.po` files directly:
 
 ```tsx
-import { i18n } from "@lingui/core"
+import { getI18n } from "@palamedes/runtime"
 import messages from "./locales/en.po"
 
 i18n.load("en", messages)

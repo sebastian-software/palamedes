@@ -1,11 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { useLingui } from "@lingui/react/macro"
+import { plural } from "@lingui/core/macro"
 import { Trans } from "@lingui/react/macro"
 
 export function Counter() {
-  const { plural } = useLingui()
   const [count, setCount] = useState(0)
 
   return (

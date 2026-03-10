@@ -325,7 +325,7 @@ fn transform_tagged_template(
     let descriptor =
         build_message_descriptor(&id, Some(&message), values.as_deref(), None, None, options);
 
-    Some(format!("i18n._({descriptor})"))
+    Some(build_runtime_call(&descriptor, options))
 }
 
 fn transform_descriptor_call(
@@ -363,8 +363,13 @@ fn transform_descriptor_call(
     if macro_name == "defineMessage" {
         Some(descriptor)
     } else {
-        Some(format!("i18n._({descriptor})"))
+        Some(build_runtime_call(&descriptor, options))
     }
+}
+
+fn build_runtime_call(descriptor: &str, options: &NativeTransformOptions) -> String {
+    let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
+    format!("{runtime_import_name}()._({descriptor})")
 }
 
 pub fn transform_macros_json(
@@ -381,11 +386,11 @@ pub fn transform_macros_json(
     let runtime_module = options
         .runtime_module
         .clone()
-        .unwrap_or_else(|| "@lingui/core".to_string());
+        .unwrap_or_else(|| "@palamedes/runtime".to_string());
     let runtime_import_name = options
         .runtime_import_name
         .clone()
-        .unwrap_or_else(|| "i18n".to_string());
+        .unwrap_or_else(|| "getI18n".to_string());
 
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
@@ -456,18 +461,22 @@ mod tests {
 
     #[test]
     fn transforms_tagged_templates() {
-        let result = serde_json::from_str::<NativeTransformResult>(&transform_macros_json(
-            "import { t } from \"@lingui/macro\";\nconst msg = t`Hello ${name}`;\n",
-            "test.ts",
-            None,
+        let result = serde_json::from_str::<NativeTransformResult>(
+            &transform_macros_json(
+                "import { t } from \"@lingui/macro\";\nconst msg = t`Hello ${name}`;\n",
+                "test.ts",
+                None,
+            )
+            .expect("transform should succeed"),
         )
-        .expect("transform should succeed"))
         .expect("json should deserialize");
 
-        assert!(result.code.contains("i18n._({ id:"));
+        assert!(result.code.contains("getI18n()._({ id:"));
         assert!(result.code.contains("message: \"Hello {name}\""));
         assert!(result.code.contains("values: { name }"));
-        assert!(result.code.contains("import { i18n } from \"@lingui/core\";"));
+        assert!(result
+            .code
+            .contains("import { getI18n } from \"@palamedes/runtime\";"));
     }
 
     #[test]
@@ -482,6 +491,6 @@ mod tests {
 
         assert!(result.code.contains("id:"));
         assert!(result.code.contains("message: \"Hello\""));
-        assert!(!result.code.contains("i18n._("));
+        assert!(!result.code.contains("getI18n()._("));
     }
 }

@@ -56,8 +56,8 @@ module.exports = withLinguiOxc(nextConfig, {
   // Path to lingui.config.js (optional)
   configPath: "./lingui.config.js",
 
-  // Module to import i18n from (default: "@lingui/core")
-  runtimeModule: "@lingui/core",
+  // Module to import getI18n from (default: "@palamedes/runtime")
+  runtimeModule: "@palamedes/runtime",
 })
 ```
 
@@ -94,9 +94,10 @@ function Greeting({ name }) {
 
 ```tsx
 // Importing .po files
-import { i18n } from "@lingui/core"
+import { getI18n } from "@palamedes/runtime"
 import messages from "./locales/en.po"
 
+const i18n = getI18n()
 i18n.load("en", messages)
 i18n.activate("en")
 ```

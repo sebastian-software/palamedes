@@ -44,7 +44,9 @@
     }
   },
   "dependencies": {
+    "@lingui/cli": "^5.9.2",
     "@lingui/conf": "^5.9.2",
+    "@palamedes/runtime": "workspace:^",
     "@palamedes/transform": "workspace:^"
   },
   "peerDependencies": {

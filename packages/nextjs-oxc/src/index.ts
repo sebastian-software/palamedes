@@ -5,7 +5,10 @@
  * No Babel required!
  */
 
+import { createRequire } from "node:module"
 import type { NextConfig } from "next"
+
+const require = createRequire(import.meta.url)
 
 export interface WithLinguiOxcOptions {
   /**
@@ -33,8 +36,8 @@ export interface WithLinguiOxcOptions {
   configPath?: string
 
   /**
-   * Module to import i18n from.
-   * @default "@lingui/core"
+   * Module to import the runtime getter from.
+   * @default "@palamedes/runtime"
    */
   runtimeModule?: string
 }
@@ -61,7 +64,7 @@ export function withLinguiOxc(
     exclude = /node_modules/,
     enablePoLoader = true,
     configPath,
-    runtimeModule = "@lingui/core",
+    runtimeModule = "@palamedes/runtime",
   } = options
 
   // Resolve loader paths

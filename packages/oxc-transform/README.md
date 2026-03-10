@@ -24,7 +24,7 @@ pnpm add @lingui/oxc-transform
 import { transformLinguiMacros } from "@lingui/oxc-transform"
 
 const result = transformLinguiMacros(sourceCode, "filename.tsx", {
-  runtimeModule: "@lingui/core",
+  runtimeModule: "@palamedes/runtime",
 })
 
 console.log(result.code)
@@ -41,7 +41,7 @@ Transforms source code containing Lingui macros into runtime calls.
 - `code` (string): The source code to transform
 - `filename` (string): The filename (used for source maps and determining file type)
 - `options` (object, optional):
-  - `runtimeModule` (string): The module to import `i18n` from. Default: `"@lingui/core"`
+  - `runtimeModule` (string): The module to import `getI18n` from. Default: `"@palamedes/runtime"`
 
 #### Returns
 
@@ -56,7 +56,7 @@ Transforms source code containing Lingui macros into runtime calls.
 - `selectOrdinal(count, { ... })`
 - `<Trans>...</Trans>`
 - `<Plural>`, `<Select>`, `<SelectOrdinal>`
-- `useLingui()` hook with destructured `t`
+- legacy `useLingui()` / `getLingui()` compatibility paths
 
 ## License
 

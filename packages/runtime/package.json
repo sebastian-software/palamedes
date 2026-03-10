@@ -1,0 +1,34 @@
+{
+  "name": "@palamedes/runtime",
+  "version": "0.1.0",
+  "description": "Palamedes runtime primitives for resolving the active i18n instance",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "README.md",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "unbuild": "^3.6.1"
+  }
+}

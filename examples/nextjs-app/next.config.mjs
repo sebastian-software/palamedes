@@ -1,7 +1,6 @@
-import type { NextConfig } from "next"
 import { withLinguiOxc } from "@palamedes/next"
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   // Your Next.js config here
 }
 

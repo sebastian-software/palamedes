@@ -14,6 +14,7 @@
   },
   "references": [
     { "path": "packages/core-node" },
+    { "path": "packages/runtime" },
     { "path": "packages/extractor-oxc" },
     { "path": "packages/oxc-transform" },
     { "path": "packages/vite-plugin-oxc" },

@@ -42,7 +42,7 @@ const msg = t\`Hello\`;
   })
 
   describe("tagged template transform: t`...`", () => {
-    it("should transform simple t`` to i18n._()", () => {
+    it("should transform simple t`` to getI18n()._()", () => {
       const code = `
 import { t } from "@lingui/macro";
 const msg = t\`Hello\`;
@@ -50,9 +50,9 @@ const msg = t\`Hello\`;
       const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._({ id:')
+      expect(result.code).toContain('getI18n()._({ id:')
       expect(result.code).toContain('message: "Hello"')
-      expect(result.code).toContain('import { i18n } from "@lingui/core"')
+      expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
       expect(result.code).not.toContain('@lingui/macro')
     })
 
@@ -77,7 +77,7 @@ const msg = translate\`Hello\`;
       const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._(')
+      expect(result.code).toContain('getI18n()._(')
     })
   })
 
@@ -90,7 +90,7 @@ const msg = t({ message: "Hello" });
       const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._({ id:')
+      expect(result.code).toContain('getI18n()._({ id:')
       expect(result.code).toContain('message: "Hello"')
     })
 
@@ -128,8 +128,7 @@ const msg = defineMessage({ message: "Hello" });
       const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      // defineMessage should not add i18n._()
-      expect(result.code).not.toContain('i18n._')
+      expect(result.code).not.toContain('getI18n()._')
       // But should have the descriptor
       expect(result.code).toContain('id:')
       expect(result.code).toContain('message: "Hello"')
@@ -148,7 +147,7 @@ const msg = defineMessage({ message: "Hello" });
       expect(result.map).toBeNull()
       expect(result.code).toContain('id:')
       expect(result.code).toContain('message: "Hello"')
-      expect(result.code).not.toContain('i18n._')
+      expect(result.code).not.toContain('getI18n()._')
     })
   })
 
@@ -161,7 +160,7 @@ const message = msg\`Hello\`;
       const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._({ id:')
+      expect(result.code).toContain('getI18n()._({ id:')
       expect(result.code).toContain('message: "Hello"')
     })
   })
@@ -184,7 +183,7 @@ const msg = t\`Hello\`;
 `
       const result = transformLinguiMacros(code, "test.ts")
 
-      expect(result.code).toContain('import { i18n } from "@lingui/core"')
+      expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
     })
 
     it("should use custom runtime module", () => {
@@ -196,19 +195,19 @@ const msg = t\`Hello\`;
         runtimeModule: "./i18n",
       })
 
-      expect(result.code).toContain('import { i18n } from "./i18n"')
+      expect(result.code).toContain('import { getI18n } from "./i18n"')
     })
 
     it("should not add duplicate runtime import if already present", () => {
       const code = `
 import { t } from "@lingui/macro";
-import { i18n } from "@lingui/core";
+import { getI18n } from "@palamedes/runtime";
 const msg = t\`Hello\`;
 `
       const result = transformLinguiMacros(code, "test.ts")
 
       // Should only have one i18n import
-      const importMatches = result.code.match(/import.*i18n.*from.*@lingui\/core/g)
+      const importMatches = result.code.match(/import.*getI18n.*from.*@palamedes\/runtime/g)
       expect(importMatches?.length).toBe(1)
     })
   })
@@ -250,7 +249,7 @@ const msg = plural(count, { one: "# item", other: "# items" });
       const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._({')
+      expect(result.code).toContain('getI18n()._({')
       expect(result.code).toContain('{count, plural, one {# item} other {# items}}')
       expect(result.code).toContain('values: { count }')
     })
@@ -278,7 +277,7 @@ const msg = select(gender, { male: "He", female: "She", other: "They" });
       const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._({')
+      expect(result.code).toContain('getI18n()._({')
       expect(result.code).toContain('{gender, select,')
       expect(result.code).toContain('male {He}')
       expect(result.code).toContain('female {She}')
@@ -296,7 +295,7 @@ const msg = selectOrdinal(count, { one: "#st", two: "#nd", few: "#rd", other: "#
       const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._({')
+      expect(result.code).toContain('getI18n()._({')
       expect(result.code).toContain('{count, selectordinal,')
       expect(result.code).toContain('one {#st}')
       expect(result.code).toContain('other {#th}')
@@ -315,10 +314,10 @@ function MyComponent() {
       const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('const { _ } = useLingui()')
-      expect(result.code).toContain('_({ id:')
+      expect(result.code).not.toContain("useLingui()")
+      expect(result.code).toContain('getI18n()._({ id:')
       expect(result.code).toContain('message: "Hello"')
-      expect(result.code).toContain('import { useLingui } from "@lingui/react"')
+      expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
     })
 
     it("should transform useLingui() with plural", () => {
@@ -332,8 +331,8 @@ function MyComponent() {
       const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('const { _ } = useLingui()')
-      expect(result.code).toContain('_({ id:')
+      expect(result.code).not.toContain("useLingui()")
+      expect(result.code).toContain('getI18n()._({ id:')
       expect(result.code).toContain('{count, plural,')
       expect(result.code).toContain('values: { count }')
     })
@@ -351,14 +350,13 @@ function MyComponent() {
       const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('const { _ } = useLingui()')
-      // Both should use _()
-      expect(result.code.match(/_\(\{/g)?.length).toBe(2)
+      expect(result.code).not.toContain("useLingui()")
+      expect(result.code.match(/getI18n\(\)\._\(\{/g)?.length).toBe(2)
     })
   })
 
   describe("getLingui macro transform", () => {
-    it("should transform getLingui() with t to i18n._()", () => {
+    it("should transform getLingui() with t to getI18n()._()", () => {
       const code = `
 import { getLingui } from "@lingui/core/macro";
 async function ServerPage() {
@@ -371,13 +369,12 @@ async function ServerPage() {
       expect(result.hasChanged).toBe(true)
       // getLingui declaration should be removed
       expect(result.code).not.toContain("getLingui()")
-      // Should use i18n._() instead of just _()
-      expect(result.code).toContain('i18n._({ id:')
+      expect(result.code).toContain('getI18n()._({ id:')
       expect(result.code).toContain('message: "Hello"')
-      expect(result.code).toContain('import { i18n } from "@lingui/core"')
+      expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
     })
 
-    it("should transform getLingui() with plural to i18n._()", () => {
+    it("should transform getLingui() with plural to getI18n()._()", () => {
       const code = `
 import { getLingui } from "@lingui/core/macro";
 function ServerPage() {
@@ -389,7 +386,7 @@ function ServerPage() {
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).not.toContain("getLingui()")
-      expect(result.code).toContain('i18n._({ id:')
+      expect(result.code).toContain('getI18n()._({ id:')
       expect(result.code).toContain('{count, plural,')
       expect(result.code).toContain('values: { count }')
     })
@@ -409,8 +406,7 @@ export default async function Page() {
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).not.toContain("getLingui()")
-      // Both should use i18n._()
-      expect(result.code.match(/i18n\._\(\{/g)?.length).toBe(2)
+      expect(result.code.match(/getI18n\(\)\._\(\{/g)?.length).toBe(2)
     })
   })
 
@@ -474,7 +470,7 @@ const el = <Plural value={count} one="# item" other="# items" />;
       const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._({')
+      expect(result.code).toContain('getI18n()._({')
       expect(result.code).toContain('{count, plural,')
       expect(result.code).toContain('one {# item}')
       expect(result.code).toContain('other {# items}')
@@ -490,7 +486,7 @@ const el = <Select value={gender} male="He" female="She" other="They" />;
       const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.code).toContain('i18n._({')
+      expect(result.code).toContain('getI18n()._({')
       expect(result.code).toContain('{gender, select,')
       expect(result.code).toContain('male {He}')
     })

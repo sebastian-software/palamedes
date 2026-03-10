@@ -2,6 +2,7 @@ import "server-only"
 
 import { cookies } from "next/headers"
 import { setI18n } from "@lingui/react/server"
+import { setServerI18nGetter } from "@palamedes/runtime"
 import { i18n, Locale, LOCALES, DEFAULT_LOCALE, loadMessages } from "./i18n"
 
 /**
@@ -23,8 +24,9 @@ export async function initI18nServer(): Promise<Locale> {
 
   i18n.load(locale, messages)
   i18n.activate(locale)
+  setServerI18nGetter(() => i18n)
 
-  // Required for <Trans> and useLingui() in Server Components
+  // Required for <Trans> and other Lingui React APIs in Server Components
   setI18n(i18n)
 
   return locale

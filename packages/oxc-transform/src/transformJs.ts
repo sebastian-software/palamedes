@@ -61,14 +61,13 @@ export function transformLinguiMacros(
     return { code, hasChanged: false, map: null }
   }
 
-  const runtimeModule = options.runtimeModule ?? "@lingui/core"
-  const runtimeImportName = options.runtimeImportName ?? "i18n"
+  const runtimeModule = getRuntimeModule(options)
+  const runtimeImportName = getRuntimeImportName(options)
 
   // Collect all replacements
   const replacements: Replacement[] = []
   const importsToRemove: Array<{ start: number; end: number }> = []
   let needsRuntimeImport = false
-  let needsUseLinguiImport = false
 
   // Track which imports to remove
   const importDeclarationsToRemove = new Set<unknown>()
@@ -143,27 +142,14 @@ export function transformLinguiMacros(
                     }
                   }
 
-                  if (isUseLingui) {
-                    // Transform: const { t, plural } = useLingui() → const { _ } = useLingui()
-                    const idStart = id.start as number
-                    const idEnd = id.end as number
-                    replacements.push({
-                      start: idStart,
-                      end: idEnd,
-                      text: "{ _ }",
-                    })
-                    needsUseLinguiImport = true
-                  } else {
-                    // For getLingui: remove the entire VariableDeclaration
-                    const declStart = record.start as number
-                    const declEnd = record.end as number
-                    replacements.push({
-                      start: declStart,
-                      end: declEnd,
-                      text: "",
-                    })
-                    needsRuntimeImport = true
-                  }
+                  const declStart = record.start as number
+                  const declEnd = record.end as number
+                  replacements.push({
+                    start: declStart,
+                    end: declEnd,
+                    text: "",
+                  })
+                  needsRuntimeImport = true
                 }
               }
             }
@@ -180,17 +166,14 @@ export function transformLinguiMacros(
           // Check if this is from useLingui() destructuring (uses _)
           const useLinguiBinding = useLinguiBindings.get(tagName)
           if (useLinguiBinding === "t") {
-            // Transform t`Hello` from useLingui to _({ id, message })
-            const replacement = transformTaggedTemplateToUnderscore(record)
+            const replacement = transformTaggedTemplateToRuntimeCall(record, options)
             if (replacement) {
               replacements.push(replacement)
             }
           } else {
-            // Check if this is from getLingui() destructuring (uses i18n._)
             const getLinguiBinding = getLinguiBindings.get(tagName)
             if (getLinguiBinding === "t") {
-              // Transform t`Hello` from getLingui to i18n._({ id, message })
-              const replacement = transformTaggedTemplateToI18n(record)
+              const replacement = transformTaggedTemplateToRuntimeCall(record, options)
               if (replacement) {
                 replacements.push(replacement)
               }
@@ -198,7 +181,7 @@ export function transformLinguiMacros(
               // Check if from direct macro import
               const macro = macroImports.get(tagName)
               if (macro && (macro.importedName === "t" || macro.importedName === "msg")) {
-                const replacement = transformTaggedTemplate(record, macro)
+                const replacement = transformTaggedTemplate(record, macro, options)
                 if (replacement) {
                   replacements.push(replacement)
                   needsRuntimeImport = true
@@ -219,17 +202,16 @@ export function transformLinguiMacros(
           const useLinguiBinding = useLinguiBindings.get(calleeName)
           if (useLinguiBinding) {
             if (useLinguiBinding === "plural" || useLinguiBinding === "select" || useLinguiBinding === "selectOrdinal") {
-              const replacement = transformPluralSelectCallToUnderscore(record, useLinguiBinding, options)
+              const replacement = transformPluralSelectCallToRuntimeCall(record, useLinguiBinding, options)
               if (replacement) {
                 replacements.push(replacement)
               }
             }
           } else {
-            // Check if this is from getLingui() destructuring (uses i18n._)
             const getLinguiBinding = getLinguiBindings.get(calleeName)
             if (getLinguiBinding) {
               if (getLinguiBinding === "plural" || getLinguiBinding === "select" || getLinguiBinding === "selectOrdinal") {
-                const replacement = transformPluralSelectCallToI18n(record, getLinguiBinding, options)
+                const replacement = transformPluralSelectCallToRuntimeCall(record, getLinguiBinding, options)
                 if (replacement) {
                   replacements.push(replacement)
                 }
@@ -347,22 +329,6 @@ export function transformLinguiMacros(
     }
   }
 
-  // Add useLingui import if needed
-  if (needsUseLinguiImport) {
-    const useLinguiImportRegex = /import\s*\{[^}]*\buseLingui\b[^}]*\}\s*from\s*["']@lingui\/react["']/
-    const hasUseLinguiImport = useLinguiImportRegex.test(code)
-
-    if (!hasUseLinguiImport) {
-      const importStatement = `import { useLingui } from "@lingui/react";\n`
-      const firstImportMatch = code.match(/^import\s/m)
-      if (firstImportMatch && firstImportMatch.index !== undefined) {
-        s.appendLeft(firstImportMatch.index, importStatement)
-      } else {
-        s.prepend(importStatement)
-      }
-    }
-  }
-
   // Generate result
   let result = s.toString()
 
@@ -392,12 +358,25 @@ export function transformLinguiMacros(
 
 export { transformLinguiMacros as transformLinguiMacrosJs }
 
+function getRuntimeModule(options: TransformOptions): string {
+  return options.runtimeModule ?? "@palamedes/runtime"
+}
+
+function getRuntimeImportName(options: TransformOptions): string {
+  return options.runtimeImportName ?? "getI18n"
+}
+
+function buildRuntimeCall(descriptor: string, options?: TransformOptions): string {
+  return `${getRuntimeImportName(options ?? {})}()._(${descriptor})`
+}
+
 /**
  * Transform a tagged template expression: t`Hello ${name}`
  */
 function transformTaggedTemplate(
   node: Record<string, unknown>,
-  _macro: ImportInfo
+  _macro: ImportInfo,
+  options: TransformOptions
 ): Replacement | null {
   const quasi = node.quasi as Record<string, unknown> | undefined
   if (!quasi) {
@@ -416,19 +395,18 @@ function transformTaggedTemplate(
   // Generate message ID
   const id = generateMessageId(message, "")
 
-  // Build the replacement: i18n._({ id: "...", message: "..." })
-  // or with values: i18n._({ id: "...", message: "...", values: { name } })
   const descriptor = buildMessageDescriptor(id, message, values)
-  const text = `i18n._(${descriptor})`
+  const text = buildRuntimeCall(descriptor, options)
 
   return { start, end, text }
 }
 
 /**
- * Transform a tagged template from useLingui: t`Hello` → _({ id, message })
+ * Transform a tagged template from a compatibility macro binding.
  */
-function transformTaggedTemplateToUnderscore(
-  node: Record<string, unknown>
+function transformTaggedTemplateToRuntimeCall(
+  node: Record<string, unknown>,
+  options: TransformOptions
 ): Replacement | null {
   const quasi = node.quasi as Record<string, unknown> | undefined
   if (!quasi) {
@@ -442,18 +420,18 @@ function transformTaggedTemplateToUnderscore(
   const id = generateMessageId(message)
 
   const descriptor = buildMessageDescriptor(id, message, values)
-  const text = `_(${descriptor})`
+  const text = buildRuntimeCall(descriptor, options)
 
   return { start, end, text }
 }
 
 /**
- * Transform plural/select/selectOrdinal from useLingui to _({ id, message, values })
+ * Transform plural/select/selectOrdinal from a compatibility macro binding.
  */
-function transformPluralSelectCallToUnderscore(
+function transformPluralSelectCallToRuntimeCall(
   node: Record<string, unknown>,
   macroType: "plural" | "select" | "selectOrdinal",
-  _options: TransformOptions
+  options: TransformOptions
 ): Replacement | null {
   const args = node.arguments as Array<Record<string, unknown>> | undefined
   if (!args || args.length < 2) {
@@ -486,72 +464,7 @@ function transformPluralSelectCallToUnderscore(
   const id = generateMessageId(message)
 
   const descriptor = buildMessageDescriptor(id, message, [valueName])
-  const text = `_(${descriptor})`
-
-  return { start, end, text }
-}
-
-/**
- * Transform a tagged template from getLingui: t`Hello` → i18n._({ id, message })
- */
-function transformTaggedTemplateToI18n(node: Record<string, unknown>): Replacement | null {
-  const quasi = node.quasi as Record<string, unknown> | undefined
-  if (!quasi) {
-    return null
-  }
-
-  const start = node.start as number
-  const end = node.end as number
-
-  const { message, values } = extractTemplateLiteral(quasi)
-  const id = generateMessageId(message)
-
-  const descriptor = buildMessageDescriptor(id, message, values)
-  const text = `i18n._(${descriptor})`
-
-  return { start, end, text }
-}
-
-/**
- * Transform plural/select/selectOrdinal from getLingui to i18n._({ id, message, values })
- */
-function transformPluralSelectCallToI18n(
-  node: Record<string, unknown>,
-  macroType: "plural" | "select" | "selectOrdinal",
-  _options: TransformOptions
-): Replacement | null {
-  const args = node.arguments as Array<Record<string, unknown>> | undefined
-  if (!args || args.length < 2) {
-    return null
-  }
-
-  const start = node.start as number
-  const end = node.end as number
-
-  // First arg is the value, second is options
-  const valueArg = args[0]
-  const optionsArg = args[1]
-
-  // Get the value name (for interpolation)
-  const valueName = extractExpressionName(valueArg) ?? "0"
-
-  // Extract options from the second argument
-  if (optionsArg?.type !== "ObjectExpression") {
-    return null
-  }
-
-  const choiceOptions = extractChoiceOptions(optionsArg)
-  if (Object.keys(choiceOptions).length === 0) {
-    return null
-  }
-
-  // Build ICU message format
-  const format = macroType === "selectOrdinal" ? "selectordinal" : macroType
-  const message = buildICUMessage(format, valueName, choiceOptions)
-  const id = generateMessageId(message)
-
-  const descriptor = buildMessageDescriptor(id, message, [valueName])
-  const text = `i18n._(${descriptor})`
+  const text = buildRuntimeCall(descriptor, options)
 
   return { start, end, text }
 }
@@ -596,9 +509,8 @@ function transformCallExpression(
     return { start, end, text: descriptor }
   }
 
-  // For t/msg, wrap in i18n._()
   const descriptor = buildMessageDescriptor(id, message, undefined, context, comment, options)
-  const text = `i18n._(${descriptor})`
+  const text = buildRuntimeCall(descriptor, options)
 
   return { start, end, text }
 }
@@ -700,7 +612,7 @@ function buildMessageDescriptor(
 /**
  * Transform plural/select/selectOrdinal call expressions
  * plural(count, { one: "# item", other: "# items" })
- * -> i18n._({ id: "...", message: "{count, plural, one {# item} other {# items}}", values: { count } })
+ * -> getI18n()._({ id: "...", message: "{count, plural, one {# item} other {# items}}", values: { count } })
  */
 function transformPluralSelectCall(
   node: Record<string, unknown>,
@@ -739,7 +651,7 @@ function transformPluralSelectCall(
 
   // Build the replacement
   const descriptor = buildMessageDescriptor(id, message, [valueName], undefined, undefined, options)
-  const text = `i18n._(${descriptor})`
+  const text = buildRuntimeCall(descriptor, options)
 
   return { start, end, text }
 }
@@ -747,7 +659,7 @@ function transformPluralSelectCall(
 /**
  * Transform <Trans> component to runtime call
  * <Trans>Hello {name}</Trans>
- * -> {i18n._({ id: "...", message: "Hello {name}", values: { name } })}
+ * -> {getI18n()._({ id: "...", message: "Hello {name}", values: { name } })}
  *
  * Note: We wrap in {...} because Trans is often used as JSX child
  */
@@ -794,7 +706,7 @@ function transformTransComponent(
 /**
  * Transform <Plural>, <Select>, <SelectOrdinal> components
  * <Plural value={count} one="# item" other="# items" />
- * -> {i18n._({ id: "...", message: "{count, plural, one {# item} other {# items}}", values: { count } })}
+ * -> {getI18n()._({ id: "...", message: "{count, plural, one {# item} other {# items}}", values: { count } })}
  */
 function transformPluralSelectComponent(
   node: Record<string, unknown>,
@@ -848,10 +760,11 @@ function transformPluralSelectComponent(
   // Check if this JSX element is a child of another JSX element
   const beforeStart = code.slice(0, start).trimEnd()
   const isJsxChild = beforeStart.endsWith(">")
+  const runtimeCall = buildRuntimeCall(descriptor, options)
 
   const text = isJsxChild
-    ? `{i18n._(${descriptor})}`
-    : `i18n._(${descriptor})`
+    ? `{${runtimeCall}}`
+    : runtimeCall
 
   return { start, end, text }
 }

@@ -69,8 +69,8 @@ export interface LinguiOxcPluginOptions {
   failOnCompileError?: boolean
 
   /**
-   * Module to import i18n from.
-   * @default "@lingui/core"
+   * Module to import the runtime getter from.
+   * @default "@palamedes/runtime"
    */
   runtimeModule?: string
 }
@@ -85,7 +85,7 @@ export function linguiOxc(options: LinguiOxcPluginOptions = {}): Plugin[] {
     enablePoLoader = true,
     failOnMissing = false,
     failOnCompileError = false,
-    runtimeModule = "@lingui/core",
+    runtimeModule = "@palamedes/runtime",
     ...linguiConfigOptions
   } = options
 

@@ -15,14 +15,14 @@ export interface SourceMap {
  */
 export interface TransformOptions {
   /**
-   * Module to import the i18n runtime from.
-   * @default "@lingui/core"
+   * Module to import the runtime getter from.
+   * @default "@palamedes/runtime"
    */
   runtimeModule?: string
 
   /**
-   * Name of the i18n export to import from the runtime module.
-   * @default "i18n"
+   * Name of the runtime getter export to import from the runtime module.
+   * @default "getI18n"
    */
   runtimeImportName?: string
 

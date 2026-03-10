@@ -11,6 +11,7 @@
   "dependencies": {
     "@lingui/core": "^5.9.2",
     "@lingui/react": "^5.9.2",
+    "@palamedes/runtime": "workspace:^",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
