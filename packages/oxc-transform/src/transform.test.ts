@@ -134,6 +134,22 @@ const msg = defineMessage({ message: "Hello" });
       expect(result.code).toContain('id:')
       expect(result.code).toContain('message: "Hello"')
     })
+
+    it("should transform defineMessage() via native path when source maps are disabled", () => {
+      const code = `
+import { defineMessage } from "@lingui/macro";
+const msg = defineMessage({ message: "Hello" });
+`
+      const result = transformLinguiMacros(code, "test.ts", {
+        sourceMap: false,
+      })
+
+      expect(result.hasChanged).toBe(true)
+      expect(result.map).toBeNull()
+      expect(result.code).toContain('id:')
+      expect(result.code).toContain('message: "Hello"')
+      expect(result.code).not.toContain('i18n._')
+    })
   })
 
   describe("msg transform", () => {
@@ -517,6 +533,21 @@ const msg = t\`Hello\`;
 
       expect(result.hasChanged).toBe(true)
       expect(result.map).toBeNull()
+    })
+
+    it("should still transform interpolated tagged templates when source maps are disabled", () => {
+      const code = `
+import { t } from "@lingui/macro";
+const msg = t\`Hello \${name}\`;
+`
+      const result = transformLinguiMacros(code, "test.ts", {
+        sourceMap: false,
+      })
+
+      expect(result.hasChanged).toBe(true)
+      expect(result.map).toBeNull()
+      expect(result.code).toContain('message: "Hello {name}"')
+      expect(result.code).toContain('values: { name }')
     })
 
     it("should return null map when no changes", () => {

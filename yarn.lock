@@ -1315,6 +1315,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@palamedes/transform@workspace:packages/oxc-transform"
   dependencies:
+    "@palamedes/core-node": "workspace:^"
     magic-string: "npm:^0.30.17"
     oxc-parser: "npm:^0.72.1"
     pofile-ts: "npm:^4.0.0"

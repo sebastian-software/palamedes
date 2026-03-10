@@ -38,11 +38,28 @@ export interface NativeExtractedMessage {
   origin: [filename: string, line: number, column?: number]
 }
 
+export interface NativeTransformOptions {
+  runtimeModule?: string
+  runtimeImportName?: string
+  stripNonEssentialProps?: boolean
+  stripMessageField?: boolean
+}
+
+export interface NativeTransformResult {
+  code: string
+  hasChanged: boolean
+}
+
 interface NativeBindings {
   getNativeInfoJson(): string
   generateMessageId(message: string, context?: string): string
   parsePoJson(source: string): string
   extractMessagesJson(source: string, filename: string): string
+  transformMacrosJson(
+    source: string,
+    filename: string,
+    optionsJson?: string
+  ): string
 }
 
 function loadNativeBindings(): NativeBindings {
@@ -79,4 +96,18 @@ export function extractMessagesNative(
   filename: string
 ): NativeExtractedMessage[] {
   return JSON.parse(native.extractMessagesJson(source, filename)) as NativeExtractedMessage[]
+}
+
+export function transformMacrosNative(
+  source: string,
+  filename: string,
+  options?: NativeTransformOptions
+): NativeTransformResult {
+  return JSON.parse(
+    native.transformMacrosJson(
+      source,
+      filename,
+      options ? JSON.stringify(options) : undefined
+    )
+  ) as NativeTransformResult
 }

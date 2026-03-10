@@ -25,3 +25,13 @@ pub fn parse_po_json(source: String) -> Result<String> {
 pub fn extract_messages_json(source: String, filename: String) -> Result<String> {
     palamedes::extract_messages_json(&source, &filename).map_err(Error::from_reason)
 }
+
+#[napi]
+pub fn transform_macros_json(
+    source: String,
+    filename: String,
+    options_json: Option<String>,
+) -> Result<String> {
+    palamedes::transform_macros_json(&source, &filename, options_json.as_deref())
+        .map_err(Error::from_reason)
+}

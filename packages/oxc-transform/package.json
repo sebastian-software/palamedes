@@ -42,6 +42,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@palamedes/core-node": "workspace:^",
     "magic-string": "^0.30.17",
     "oxc-parser": "^0.72.1",
     "pofile-ts": "^4.0.0"
