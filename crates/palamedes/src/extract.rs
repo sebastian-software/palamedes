@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, BindingPattern, CallExpression, Expression, ImportDeclaration,
-    ImportDeclarationSpecifier, MemberExpression, ObjectExpression, ObjectPropertyKind,
+    ImportDeclarationSpecifier, JSXAttributeValue, JSXChild, JSXElement, JSXExpression,
+    JSXOpeningElement, MemberExpression, ObjectExpression, ObjectPropertyKind,
     TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
@@ -14,6 +15,7 @@ use serde::Serialize;
 
 const LINGUI_MACRO_PACKAGES: [&str; 3] =
     ["@lingui/macro", "@lingui/core/macro", "@lingui/react/macro"];
+type ChoiceOptions = Vec<(String, String)>;
 
 #[derive(Debug, Clone)]
 struct ImportedMacro {
@@ -184,6 +186,26 @@ impl<'a> ExtractionVisitor<'a> {
 }
 
 impl<'a> Visit<'a> for ExtractionVisitor<'a> {
+    fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        let Some(tag_name) = it.opening_element.name.get_identifier_name() else {
+            walk::walk_jsx_element(self, it);
+            return;
+        };
+
+        if let Some(macro_name) = self.imported_macro_name(
+            tag_name.as_str(),
+            &["Trans", "Plural", "Select", "SelectOrdinal"],
+        ) {
+            if let Some(message) =
+                extract_from_jsx_element(it, macro_name, self.origin(it.span.start as usize))
+            {
+                self.push(message);
+            }
+        }
+
+        walk::walk_jsx_element(self, it);
+    }
+
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
         if let Some(tag_name) = identifier_name(&it.tag) {
             if matches!(
@@ -213,14 +235,31 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if let Some(callee_name) = identifier_name(&it.callee) {
-            if let Some(macro_name) =
-                self.imported_macro_name(callee_name, &["t", "defineMessage", "msg"])
-            {
-                if let Some(message) = extract_from_descriptor_call(
-                    it,
-                    macro_name,
-                    self.origin(it.span.start as usize),
-                ) {
+            if let Some(macro_name) = self.imported_macro_name(
+                callee_name,
+                &[
+                    "t",
+                    "defineMessage",
+                    "msg",
+                    "plural",
+                    "select",
+                    "selectOrdinal",
+                ],
+            ) {
+                let message = match macro_name {
+                    "plural" | "select" | "selectOrdinal" => extract_from_choice_call(
+                        it,
+                        macro_name,
+                        self.origin(it.span.start as usize),
+                    ),
+                    _ => extract_from_descriptor_call(
+                        it,
+                        macro_name,
+                        self.origin(it.span.start as usize),
+                    ),
+                };
+
+                if let Some(message) = message {
                     self.push(message);
                 }
             }
@@ -284,6 +323,103 @@ fn extract_object_properties(object: &ObjectExpression<'_>) -> BTreeMap<String, 
     properties
 }
 
+fn extract_choice_options_from_object(object: &ObjectExpression<'_>) -> ChoiceOptions {
+    let mut options = Vec::new();
+
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            continue;
+        };
+        let Some(key) = property.key.static_name() else {
+            continue;
+        };
+        let Some(value) = string_value(&property.value) else {
+            continue;
+        };
+
+        let key = key.into_owned();
+        if let Some(exact) = key.strip_prefix('_') {
+            options.push((format!("={exact}"), value));
+        } else {
+            options.push((key, value));
+        }
+    }
+
+    options
+}
+
+fn extract_from_jsx_element(
+    element: &JSXElement<'_>,
+    macro_name: &str,
+    origin: (String, usize, Option<usize>),
+) -> Option<ExtractedMessageRecord> {
+    let attrs = jsx_attributes(&element.opening_element);
+
+    if macro_name == "Trans" {
+        let explicit_id = attrs.get("id").cloned();
+        let message = attrs
+            .get("message")
+            .cloned()
+            .or_else(|| Some(extract_jsx_children_as_message(&element.children)))
+            .filter(|message| !message.is_empty());
+        let comment = attrs.get("comment").cloned();
+        let context = attrs.get("context").cloned();
+
+        if explicit_id.is_none() && message.is_none() {
+            return None;
+        }
+
+        let id = explicit_id.unwrap_or_else(|| {
+            generate_message_id(message.as_deref().unwrap_or(""), context.as_deref())
+        });
+
+        return Some(ExtractedMessageRecord {
+            id,
+            message,
+            comment,
+            context,
+            placeholders: None,
+            origin,
+        });
+    }
+
+    if matches!(macro_name, "Plural" | "Select" | "SelectOrdinal") {
+        let explicit_id = attrs.get("id").cloned();
+        let value_name = extract_jsx_value_name(&element.opening_element)?;
+        let options = extract_choice_options_from_jsx(&element.opening_element);
+        if options.is_empty() {
+            return None;
+        }
+
+        let format = match macro_name {
+            "Plural" => "plural",
+            "Select" => "select",
+            "SelectOrdinal" => "selectordinal",
+            _ => return None,
+        };
+
+        let message = build_icu_message(
+            format,
+            &value_name,
+            &options,
+            attrs.get("offset").map(String::as_str),
+        );
+        let context = attrs.get("context").cloned();
+        let id = explicit_id.unwrap_or_else(|| generate_message_id(&message, context.as_deref()));
+
+        return Some(ExtractedMessageRecord {
+            id,
+            message: Some(message),
+            comment: attrs.get("comment").cloned(),
+            context,
+            placeholders: None,
+            origin,
+        });
+    }
+
+    None
+}
+
 fn extract_from_tagged_template(
     template: &TemplateLiteral<'_>,
     origin: (String, usize, Option<usize>),
@@ -345,6 +481,42 @@ fn extract_from_descriptor_call(
         message,
         comment,
         context,
+        placeholders: None,
+        origin,
+    })
+}
+
+fn extract_from_choice_call(
+    call: &CallExpression<'_>,
+    macro_name: &str,
+    origin: (String, usize, Option<usize>),
+) -> Option<ExtractedMessageRecord> {
+    let value_arg = call.arguments.first()?;
+    let options_arg = call.arguments.get(1)?;
+    let Argument::ObjectExpression(object) = options_arg else {
+        return None;
+    };
+
+    let value_name = argument_expression_name(value_arg)?;
+    let options = extract_choice_options_from_object(object);
+    if options.is_empty() {
+        return None;
+    }
+
+    let format = match macro_name {
+        "plural" => "plural",
+        "select" => "select",
+        "selectOrdinal" => "selectordinal",
+        _ => return None,
+    };
+
+    let message = build_icu_message(format, &value_name, &options, None);
+
+    Some(ExtractedMessageRecord {
+        id: generate_message_id(&message, None),
+        message: Some(message),
+        comment: None,
+        context: None,
         placeholders: None,
         origin,
     })
@@ -437,6 +609,197 @@ fn template_to_message(template: &TemplateLiteral<'_>) -> (String, BTreeMap<Stri
     }
 
     (message, placeholders)
+}
+
+fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> BTreeMap<String, String> {
+    let mut attrs = BTreeMap::new();
+
+    for attr in &opening_element.attributes {
+        let Some(attr) = attr.as_attribute() else {
+            continue;
+        };
+        let key = attr.name.get_identifier().name.to_string();
+        let Some(value) = attr.value.as_ref().and_then(jsx_attribute_string_value) else {
+            continue;
+        };
+        attrs.insert(key, value);
+    }
+
+    attrs
+}
+
+fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
+    match value {
+        JSXAttributeValue::StringLiteral(literal) => Some(literal.value.to_string()),
+        JSXAttributeValue::ExpressionContainer(container) => {
+            jsx_expression_string_value(&container.expression)
+        }
+        _ => None,
+    }
+}
+
+fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
+    match expr {
+        JSXExpression::StringLiteral(literal) => Some(literal.value.to_string()),
+        JSXExpression::TemplateLiteral(template) => {
+            template.single_quasi().map(|value| value.to_string())
+        }
+        _ => None,
+    }
+}
+
+fn extract_jsx_value_name(opening_element: &JSXOpeningElement<'_>) -> Option<String> {
+    for attr in &opening_element.attributes {
+        let Some(attr) = attr.as_attribute() else {
+            continue;
+        };
+        if attr.name.get_identifier().name != "value" {
+            continue;
+        }
+        let Some(JSXAttributeValue::ExpressionContainer(container)) = attr.value.as_ref() else {
+            continue;
+        };
+
+        return jsx_expression_name(&container.expression);
+    }
+
+    None
+}
+
+fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
+    match expr {
+        JSXExpression::Identifier(identifier) => Some(identifier.name.to_string()),
+        JSXExpression::StaticMemberExpression(member) => Some(member.property.name.to_string()),
+        JSXExpression::ComputedMemberExpression(member) => {
+            member.static_property_name().map(|name| name.to_string())
+        }
+        JSXExpression::CallExpression(call) => getter_name(call.callee_name()?),
+        JSXExpression::ParenthesizedExpression(expr) => expression_name(&expr.expression),
+        _ => None,
+    }
+}
+
+fn extract_jsx_children_as_message(children: &[JSXChild<'_>]) -> String {
+    let mut placeholder_index = 0usize;
+    let mut parts = Vec::new();
+
+    for child in children {
+        match child {
+            JSXChild::Text(text) => {
+                let value = clean_jsx_text(text.value.as_str());
+                if !value.is_empty() {
+                    parts.push(value);
+                }
+            }
+            JSXChild::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
+                expr => {
+                    if let Some(name) = jsx_expression_name(expr) {
+                        parts.push(format!("{{{name}}}"));
+                    } else {
+                        parts.push(format!("{{{placeholder_index}}}"));
+                        placeholder_index += 1;
+                    }
+                }
+            },
+            JSXChild::Element(element) => {
+                let current_index = placeholder_index;
+                let inner = extract_jsx_children_as_message(&element.children);
+                parts.push(format!("<{current_index}>{inner}</{current_index}>"));
+                placeholder_index += 1;
+            }
+            JSXChild::Fragment(fragment) => {
+                let inner = extract_jsx_children_as_message(&fragment.children);
+                if !inner.is_empty() {
+                    parts.push(inner);
+                }
+            }
+            JSXChild::Spread(_) => {
+                parts.push(format!("{{{placeholder_index}}}"));
+                placeholder_index += 1;
+            }
+        }
+    }
+
+    parts.join("").trim().to_string()
+}
+
+fn clean_jsx_text(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut last_was_whitespace = false;
+
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !last_was_whitespace {
+                result.push(' ');
+                last_was_whitespace = true;
+            }
+        } else {
+            result.push(ch);
+            last_was_whitespace = false;
+        }
+    }
+
+    result
+}
+
+fn extract_choice_options_from_jsx(opening_element: &JSXOpeningElement<'_>) -> ChoiceOptions {
+    let mut options = Vec::new();
+
+    for attr in &opening_element.attributes {
+        let Some(attr) = attr.as_attribute() else {
+            continue;
+        };
+        let key = attr.name.get_identifier().name.to_string();
+        if matches!(
+            key.as_str(),
+            "id" | "message" | "comment" | "context" | "value" | "offset"
+        ) {
+            continue;
+        }
+        let Some(value) = attr.value.as_ref().and_then(jsx_attribute_string_value) else {
+            continue;
+        };
+
+        if let Some(exact) = key.strip_prefix('_') {
+            options.push((format!("={exact}"), value));
+        } else {
+            options.push((key, value));
+        }
+    }
+
+    options
+}
+
+fn build_icu_message(
+    format: &str,
+    value_name: &str,
+    options: &ChoiceOptions,
+    offset: Option<&str>,
+) -> String {
+    let option_parts = options
+        .iter()
+        .map(|(key, value)| format!("{key} {{{value}}}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let offset_part = offset
+        .map(|value| format!(" offset:{value}"))
+        .unwrap_or_default();
+
+    format!("{{{value_name}, {format},{offset_part} {option_parts}}}")
+}
+
+fn argument_expression_name(arg: &Argument<'_>) -> Option<String> {
+    match arg {
+        Argument::Identifier(identifier) => Some(identifier.name.to_string()),
+        Argument::StaticMemberExpression(member) => Some(member.property.name.to_string()),
+        Argument::ComputedMemberExpression(member) => {
+            member.static_property_name().map(|name| name.to_string())
+        }
+        Argument::CallExpression(call) => getter_name(call.callee_name()?),
+        Argument::ParenthesizedExpression(expr) => expression_name(&expr.expression),
+        _ => None,
+    }
 }
 
 fn expression_name(expr: &Expression<'_>) -> Option<String> {
