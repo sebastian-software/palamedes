@@ -61,9 +61,9 @@ Relevante Dateien:
 
 ### Transform
 
-- Ein erster nativer Transform-Slice ist implementiert
-- Der Wrapper nutzt Rust dort, wo die aktuelle native Abdeckung reicht
-- Für Sourcemaps und noch nicht portierte Muster gibt es weiterhin JS-Fallbacks
+- Der native Transform deckt jetzt alle unterstützten Makroformen ab
+- Der Wrapper nutzt den Rust-Core als einzigen Transformpfad
+- Sourcemaps werden aus nativen Edit-Metadaten erzeugt
 
 Aktuell nativ abgedeckt:
 
@@ -75,15 +75,11 @@ Aktuell nativ abgedeckt:
 - Einfügen des Runtime-Imports
 - `getI18n()`-basiertes Runtime-Target
 
-Aktuell noch im JS-Fallback:
-
-- Sourcemaps
-
 Relevante Dateien:
 
 - [crates/palamedes/src/transform.rs](/Users/sebastian/Workspace/business/palamedes/crates/palamedes/src/transform.rs)
 - [packages/transform/src/transform.ts](/Users/sebastian/Workspace/business/palamedes/packages/transform/src/transform.ts)
-- [packages/transform/src/transformJs.ts](/Users/sebastian/Workspace/business/palamedes/packages/transform/src/transformJs.ts)
+- [packages/core-node/src/index.ts](/Users/sebastian/Workspace/business/palamedes/packages/core-node/src/index.ts)
 
 ### Runtime-Modell
 
@@ -136,11 +132,10 @@ Heute erneut geprüft:
 
 ### Mittelfristig
 
-1. Sourcemap-Strategie für den Rust-Transform entscheiden und umsetzen
-2. CLI-, Vite- und Next-Pfade noch konsequenter auf den nativen Core ausrichten
-3. Alte TS-Core-Logik entfernen, sobald die Rust-Pfade vollständig genug sind
-4. Native Packaging-/Release-Strategie dokumentieren und automatisieren
-5. Benchmarks für Extract/Transform vor und nach der Migration ergänzen
+1. CLI-, Vite- und Next-Pfade noch konsequenter auf den nativen Core ausrichten
+2. Alte Transform-/Extractor-Spuren aus Doku und Restcode weiter abbauen
+3. Native Packaging-/Release-Strategie dokumentieren und automatisieren
+4. Benchmarks für Extract/Transform vor und nach der Migration ergänzen
 
 ### Offene Architekturfragen
 
@@ -149,9 +144,9 @@ Heute erneut geprüft:
 
 ## Empfohlene nächste Schritte
 
-1. Sourcemap-Strategie für den Rust-Transform umsetzen
-2. Dann TS-Fallbacks und Altpfade gezielt abbauen
-3. Danach Beispiel-Builds und native Packaging-/Release-Fluss weiter härten
+1. Beispiel-Builds und Cargo-Workspace gemeinsam wieder ausdrücklich verifizieren
+2. Verbleibende Altspuren wie `useLingui()` / `getLingui()` außerhalb des Transforms abbauen
+3. Danach native Packaging-/Release-Fluss weiter härten
 
 ## Letzte relevante Commits
 

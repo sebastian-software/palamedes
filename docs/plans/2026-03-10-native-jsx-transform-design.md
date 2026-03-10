@@ -29,4 +29,4 @@ Extend the Rust transform path to cover JSX Lingui macros:
 - `pnpm --filter @palamedes/core-node build`
 - `pnpm test`
 - `pnpm check-types`
-- direct native probe for `<Trans>` via `transformMacrosNative(..., { sourceMap: false })`
+- direct native probe for `<Trans>` via `transformMacrosNative(...)`

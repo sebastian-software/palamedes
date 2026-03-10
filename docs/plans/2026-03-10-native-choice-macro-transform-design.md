@@ -36,4 +36,4 @@ At the same time, remove the old `useLingui()` and `getLingui()` transform paths
 - `cargo test --workspace`
 - `pnpm test`
 - `pnpm check-types`
-- direct tests that exercise native choice macro transforms with `sourceMap: false`
+- direct tests that exercise native choice macro transforms

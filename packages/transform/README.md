@@ -41,7 +41,7 @@ Transforms source code containing Lingui macros into runtime calls.
 
 #### Returns
 
-- `{ code: string, hasChanged: boolean, map?: SourceMap | null }`: The transformed code, whether any transformations were made, and an optional source map
+- `{ code: string, hasChanged: boolean, map: SourceMap | null }`: The transformed code, whether any transformations were made, and the generated source map
 
 ## Supported Macros
 

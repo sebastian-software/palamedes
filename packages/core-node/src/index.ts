@@ -45,9 +45,17 @@ export interface NativeTransformOptions {
   stripMessageField?: boolean
 }
 
+export interface NativeTransformEdit {
+  start: number
+  end: number
+  text: string
+}
+
 export interface NativeTransformResult {
   code: string
   hasChanged: boolean
+  edits: NativeTransformEdit[]
+  prependText?: string
 }
 
 interface NativeBindings {

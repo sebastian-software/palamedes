@@ -29,10 +29,21 @@ pub struct NativeTransformOptions {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct NativeTransformEdit {
+    pub start: usize,
+    pub end: usize,
+    pub text: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct NativeTransformResult {
     pub code: String,
     #[serde(rename = "hasChanged")]
     pub has_changed: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub edits: Vec<NativeTransformEdit>,
+    #[serde(rename = "prependText", skip_serializing_if = "Option::is_none")]
+    pub prepend_text: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -835,6 +846,8 @@ pub fn transform_macros_json(
         return serde_json::to_string(&NativeTransformResult {
             code: source.to_string(),
             has_changed: false,
+            edits: Vec::new(),
+            prepend_text: None,
         })
         .map_err(|error| error.to_string());
     }
@@ -846,6 +859,8 @@ pub fn transform_macros_json(
         return serde_json::to_string(&NativeTransformResult {
             code: source.to_string(),
             has_changed: false,
+            edits: Vec::new(),
+            prepend_text: None,
         })
         .map_err(|error| error.to_string());
     }
@@ -863,14 +878,24 @@ pub fn transform_macros_json(
         return serde_json::to_string(&NativeTransformResult {
             code: source.to_string(),
             has_changed: false,
+            edits: Vec::new(),
+            prepend_text: None,
         })
         .map_err(|error| error.to_string());
     }
 
     replacements.sort_by(|a, b| b.start.cmp(&a.start).then(b.end.cmp(&a.end)));
+    let edits = replacements
+        .iter()
+        .map(|replacement| NativeTransformEdit {
+            start: replacement.start,
+            end: replacement.end,
+            text: replacement.text.clone(),
+        })
+        .collect::<Vec<_>>();
 
     let mut code = source.to_string();
-    for replacement in replacements {
+    for replacement in &replacements {
         code.replace_range(replacement.start..replacement.end, &replacement.text);
     }
 
@@ -893,6 +918,8 @@ pub fn transform_macros_json(
     serde_json::to_string(&NativeTransformResult {
         has_changed: code != source,
         code,
+        edits,
+        prepend_text: (!prefix.is_empty()).then_some(prefix),
     })
     .map_err(|error| error.to_string())
 }

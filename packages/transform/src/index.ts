@@ -6,7 +6,6 @@
  */
 
 export { transformLinguiMacros } from "./transform"
-export { transformLinguiMacrosJs } from "./transform"
 export type { TransformOptions, TransformResult, SourceMap } from "./types"
 export { LINGUI_MACRO_PACKAGES, JS_MACROS, JSX_MACROS } from "./types"
 export { mightContainLinguiMacros, findMacroImports } from "./detect"

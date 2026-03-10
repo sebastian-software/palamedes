@@ -188,7 +188,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         try {
           const result = transformLinguiMacros(code, id, {
             runtimeModule,
-            sourceMap: true,
           })
 
           if (!result.hasChanged) {

@@ -134,17 +134,15 @@ const msg = defineMessage({ message: "Hello" });
       expect(result.code).toContain('message: "Hello"')
     })
 
-    it("should transform defineMessage() via native path when source maps are disabled", () => {
+    it("should transform defineMessage() and still return a source map", () => {
       const code = `
 import { defineMessage } from "@lingui/macro";
 const msg = defineMessage({ message: "Hello" });
 `
-      const result = transformLinguiMacros(code, "test.ts", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.map).toBeNull()
+      expect(result.map).not.toBeNull()
       expect(result.code).toContain('id:')
       expect(result.code).toContain('message: "Hello"')
       expect(result.code).not.toContain('getI18n()._')
@@ -246,9 +244,7 @@ const msg = t({ id: "greeting", message: "Hello", context: "informal", comment: 
 import { plural } from "@lingui/macro";
 const msg = plural(count, { one: "# item", other: "# items" });
 `
-      const result = transformLinguiMacros(code, "test.ts", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('getI18n()._({')
@@ -261,9 +257,7 @@ const msg = plural(count, { one: "# item", other: "# items" });
 import { plural } from "@lingui/macro";
 const msg = plural(count, { _0: "No items", one: "# item", other: "# items" });
 `
-      const result = transformLinguiMacros(code, "test.ts", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('=0 {No items}')
@@ -278,9 +272,7 @@ const msg = plural(count, { _0: "No items", one: "# item", other: "# items" });
 import { select } from "@lingui/macro";
 const msg = select(gender, { male: "He", female: "She", other: "They" });
 `
-      const result = transformLinguiMacros(code, "test.ts", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('getI18n()._({')
@@ -298,9 +290,7 @@ const msg = select(gender, { male: "He", female: "She", other: "They" });
 import { selectOrdinal } from "@lingui/macro";
 const msg = selectOrdinal(count, { one: "#st", two: "#nd", few: "#rd", other: "#th" });
 `
-      const result = transformLinguiMacros(code, "test.ts", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('getI18n()._({')
@@ -316,9 +306,7 @@ const msg = selectOrdinal(count, { one: "#st", two: "#nd", few: "#rd", other: "#
 import { Trans } from "@lingui/react/macro";
 const el = <Trans>Hello World</Trans>;
 `
-      const result = transformLinguiMacros(code, "test.tsx", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
       // Trans macro transforms to Trans component from @lingui/react
@@ -332,9 +320,7 @@ const el = <Trans>Hello World</Trans>;
 import { Trans } from "@lingui/react/macro";
 const el = <Trans>Hello {name}</Trans>;
 `
-      const result = transformLinguiMacros(code, "test.tsx", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('message="Hello {name}"')
@@ -346,9 +332,7 @@ const el = <Trans>Hello {name}</Trans>;
 import { Trans } from "@lingui/react/macro";
 const el = <Trans id="greeting">Hello</Trans>;
 `
-      const result = transformLinguiMacros(code, "test.tsx", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('id="greeting"')
@@ -359,9 +343,7 @@ const el = <Trans id="greeting">Hello</Trans>;
 import { Trans } from "@lingui/react/macro";
 const el = <Trans>Hello <b>World</b></Trans>;
 `
-      const result = transformLinguiMacros(code, "test.tsx", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
       // Nested elements become <0>...</0>
@@ -375,9 +357,7 @@ const el = <Trans>Hello <b>World</b></Trans>;
 import { Plural } from "@lingui/react/macro";
 const el = <Plural value={count} one="# item" other="# items" />;
 `
-      const result = transformLinguiMacros(code, "test.tsx", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('getI18n()._({')
@@ -393,9 +373,7 @@ const el = <Plural value={count} one="# item" other="# items" />;
 import { Select } from "@lingui/react/macro";
 const el = <Select value={gender} male="He" female="She" other="They" />;
 `
-      const result = transformLinguiMacros(code, "test.tsx", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.tsx")
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('getI18n()._({')
@@ -430,30 +408,15 @@ const msg = t\`Hello\`;
       expect(result.map?.sourcesContent?.[0]).toBe(code)
     })
 
-    it("should not generate source map when disabled", () => {
-      const code = `
-import { t } from "@lingui/macro";
-const msg = t\`Hello\`;
-`
-      const result = transformLinguiMacros(code, "test.ts", {
-        sourceMap: false,
-      })
-
-      expect(result.hasChanged).toBe(true)
-      expect(result.map).toBeNull()
-    })
-
-    it("should still transform interpolated tagged templates when source maps are disabled", () => {
+    it("should generate a source map for interpolated tagged templates", () => {
       const code = `
 import { t } from "@lingui/macro";
 const msg = t\`Hello \${name}\`;
 `
-      const result = transformLinguiMacros(code, "test.ts", {
-        sourceMap: false,
-      })
+      const result = transformLinguiMacros(code, "test.ts")
 
       expect(result.hasChanged).toBe(true)
-      expect(result.map).toBeNull()
+      expect(result.map).not.toBeNull()
       expect(result.code).toContain('message: "Hello {name}"')
       expect(result.code).toContain('values: { name }')
     })

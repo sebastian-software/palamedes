@@ -38,11 +38,6 @@ export interface TransformOptions {
    */
   stripMessageField?: boolean
 
-  /**
-   * Whether to generate source maps.
-   * @default true
-   */
-  sourceMap?: boolean
 }
 
 /**
@@ -60,9 +55,9 @@ export interface TransformResult {
   hasChanged: boolean
 
   /**
-   * Source map for the transformation (if sourceMap option is true)
+   * Source map for the transformation.
    */
-  map?: SourceMap | null
+  map: SourceMap | null
 }
 
 /**
