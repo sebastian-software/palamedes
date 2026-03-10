@@ -13,18 +13,18 @@
     "@lingui/core": "^5.9.2",
     "@lingui/react": "^5.9.2",
     "@palamedes/runtime": "workspace:^",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@lingui/conf": "^5.9.2",
     "@lingui/format-po": "^5.9.2",
     "@palamedes/cli": "workspace:^",
     "@palamedes/vite": "workspace:^",
-    "@types/react": "^19.0.1",
-    "@types/react-dom": "^19.0.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "typescript": "^5.7.2",
-    "vite": "^6.0.3"
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   }
 }

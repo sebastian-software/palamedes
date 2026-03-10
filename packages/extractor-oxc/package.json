@@ -44,7 +44,7 @@
   },
   "dependencies": {
     "@palamedes/core-node": "workspace:^",
-    "oxc-parser": "^0.72.1",
+    "oxc-parser": "^0.117.0",
     "pofile-ts": "^4.0.0"
   },
   "peerDependencies": {
@@ -52,8 +52,8 @@
   },
   "devDependencies": {
     "@lingui/conf": "^5.9.2",
-    "typescript": "^5.7.2",
+    "typescript": "^5.9.3",
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.0"
+    "vitest": "^4.0.18"
   }
 }

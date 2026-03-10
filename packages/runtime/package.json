@@ -27,8 +27,8 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "typescript": "^5.7.2",
+    "@types/node": "^25.4.0",
+    "typescript": "^5.9.3",
     "unbuild": "^3.6.1"
   }
 }

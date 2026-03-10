@@ -8,7 +8,7 @@
  * requiring Babel transformation first.
  */
 
-import oxc from "oxc-parser"
+import { parseSync } from "oxc-parser"
 import type { ExtractorType, ExtractedMessage, ExtractorCtx } from "@lingui/conf"
 
 import { extractMessages } from "./extractMessages"
@@ -45,7 +45,7 @@ export const oxcExtractor: ExtractorType = {
     onMessageExtracted: (msg: ExtractedMessage) => void,
     ctx: ExtractorCtx
   ): Promise<void> {
-    const result = oxc.parseSync(filename, code, {
+    const result = parseSync(filename, code, {
       sourceType: "module",
     })
 

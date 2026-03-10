@@ -45,13 +45,13 @@
   "dependencies": {
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "magic-string": "^0.30.17",
-    "oxc-parser": "^0.72.1",
+    "magic-string": "^0.30.21",
+    "oxc-parser": "^0.117.0",
     "pofile-ts": "^4.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
+    "typescript": "^5.9.3",
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.0"
+    "vitest": "^4.0.18"
   }
 }

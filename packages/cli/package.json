@@ -46,15 +46,15 @@
   "dependencies": {
     "@lingui/conf": "^5.9.2",
     "@palamedes/extractor": "workspace:^",
-    "chalk": "^5.3.0",
-    "chokidar": "^4.0.3",
-    "commander": "^13.0.0",
-    "glob": "^11.0.0",
+    "chalk": "^5.6.2",
+    "chokidar": "^5.0.0",
+    "commander": "^14.0.3",
+    "glob": "^13.0.6",
     "pofile-ts": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "typescript": "^5.7.2",
+    "@types/node": "^25.4.0",
+    "typescript": "^5.9.3",
     "unbuild": "^3.6.1"
   }
 }

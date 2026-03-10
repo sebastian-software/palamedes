@@ -1,9 +1,9 @@
-import oxc from "oxc-parser"
+import { parseSync } from "oxc-parser"
 import { extractMessages } from "./extractMessages"
 import { generateMessageId } from "@palamedes/core-node"
 
 function extract(code: string) {
-  const result = oxc.parseSync("test.tsx", code, { sourceType: "module" })
+  const result = parseSync("test.tsx", code, { sourceType: "module" })
   return extractMessages(result.program, "test.tsx", code)
 }
 

@@ -3,7 +3,7 @@
  */
 
 import { generateMessageId } from "@palamedes/core-node"
-import oxc from "oxc-parser"
+import { parseSync } from "oxc-parser"
 import MagicString from "magic-string"
 import type { TransformOptions, TransformResult, SourceMap } from "./types"
 import { LINGUI_MACRO_PACKAGES } from "./types"
@@ -14,7 +14,7 @@ import { mightContainLinguiMacros, findMacroImports } from "./detect"
  * Parse code using oxc-parser
  */
 function parseCode(code: string, filename: string): { program: unknown } {
-  const result = oxc.parseSync(filename, code, {
+  const result = parseSync(filename, code, {
     sourceType: "module",
   })
 
