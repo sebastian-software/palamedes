@@ -1,9 +1,13 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "isolatedModules": true,
-    "forceConsistentCasingInFileNames": true
-  }
+    "forceConsistentCasingInFileNames": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["src"]
 }

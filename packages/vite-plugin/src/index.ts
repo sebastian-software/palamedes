@@ -8,7 +8,7 @@
 import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter } from "vite"
-import { getConfig } from "@lingui/conf"
+import { getConfig, type LinguiConfigNormalized, type FallbackLocales } from "@lingui/conf"
 import {
   createCompiledCatalog,
   getCatalogs,
@@ -20,6 +20,11 @@ import {
 import { transformLinguiMacros } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
+
+type TranslationOptions = {
+  sourceLocale: string
+  fallbackLocales: FallbackLocales
+}
 
 export interface PalamedesPluginOptions {
   /**
@@ -90,7 +95,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   } = options
 
   // Initialize lazily
-  let config: ReturnType<typeof getConfig> | null = null
+  let config: LinguiConfigNormalized | null = null
   let filter: ReturnType<typeof createFilter> | null = null
   let macroIds: Set<string> | null = null
 
@@ -98,8 +103,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     if (!config) {
       config = getConfig(linguiConfigOptions)
       macroIds = new Set([
-        ...config.macro.corePackage,
-        ...config.macro.jsxPackage,
+        ...(config.macro?.corePackage ?? []),
+        ...(config.macro?.jsxPackage ?? []),
       ])
     }
     return config
@@ -192,7 +197,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
           return {
             code: result.code,
-            map: result.map,
+            map: result.map as any,
           }
         } catch (error) {
           const err = error as Error
@@ -212,8 +217,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         const cfg = getConfigLazy()
-        const cleanId = id.split("?")[0]
-        const catalogRelativePath = path.relative(cfg.rootDir, cleanId)
+        const cleanId = id.split("?")[0] ?? id
+        const catalogRelativePath = path.relative(cfg.rootDir ?? process.cwd(), cleanId)
 
         const fileCatalog = getCatalogForFile(
           catalogRelativePath,
@@ -222,9 +227,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         if (!fileCatalog) {
           throw new Error(
-            `Requested resource ${catalogRelativePath} is not matched to any of your catalogs paths specified in "lingui.config".\n\n` +
+              `Requested resource ${catalogRelativePath} is not matched to any of your catalogs paths specified in "lingui.config".\n\n` +
               `Resource: ${id}\n\n` +
-              `Your catalogs:\n${cfg.catalogs.map((c) => c.path).join("\n")}\n\n` +
+              `Your catalogs:\n${(cfg.catalogs ?? []).map((c) => c.path).join("\n")}\n\n` +
               `Please check that catalogs.path is filled properly.`
           )
         }
@@ -234,12 +239,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         // Add dependencies for HMR
         const dependency = await getCatalogDependentFiles(catalog, locale)
         dependency.forEach((file) => this.addWatchFile(file))
+        const translationOptions: TranslationOptions = {
+          sourceLocale: cfg.sourceLocale!,
+          fallbackLocales: (cfg.fallbackLocales ?? {}) as FallbackLocales,
+        }
 
         const { messages, missing: missingMessages } =
-          await catalog.getTranslations(locale, {
-            fallbackLocales: cfg.fallbackLocales,
-            sourceLocale: cfg.sourceLocale,
-          })
+          await catalog.getTranslations(locale, translationOptions)
 
         // Check for missing translations
         if (

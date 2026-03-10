@@ -4,7 +4,7 @@ import path from "path"
 import chalk from "chalk"
 import { glob } from "glob"
 import { watch } from "chokidar"
-import { getConfig, type LinguiConfig, type CatalogConfig } from "@lingui/conf"
+import { getConfig, type LinguiConfig, type CatalogConfig, type ExtractorCtx } from "@lingui/conf"
 import { extractor } from "@palamedes/extractor"
 import type { ExtractedMessage } from "@lingui/conf"
 import {
@@ -43,8 +43,9 @@ async function runExtraction(config: LinguiConfig, options: ExtractOptions): Pro
   const startTime = Date.now()
   let totalMessages = 0
   let totalFiles = 0
+  const catalogs = config.catalogs ?? []
 
-  for (const catalog of config.catalogs) {
+  for (const catalog of catalogs) {
     const { messages, fileCount } = await extractFromCatalog(catalog, config, options)
     totalMessages += Object.keys(messages).length
     totalFiles += fileCount
@@ -98,6 +99,9 @@ async function extractFromCatalog(
     try {
       const code = await readFile(file, "utf-8")
       const relativePath = path.relative(rootDir, file)
+      const extractorCtx: ExtractorCtx = {
+        linguiConfig: config as ExtractorCtx["linguiConfig"],
+      }
 
       await extractor.extract(
         file,
@@ -131,7 +135,7 @@ async function extractFromCatalog(
             messages[key].origins.push(origin)
           }
         },
-        { linguiConfig: config }
+        extractorCtx
       )
     } catch (error) {
       if (options.verbose) {
@@ -212,7 +216,7 @@ async function runWatchMode(config: LinguiConfig, options: ExtractOptions): Prom
 
   // Watch for changes
   const rootDir = config.rootDir || process.cwd()
-  const watchPatterns = config.catalogs.flatMap((catalog) =>
+  const watchPatterns = (config.catalogs ?? []).flatMap((catalog) =>
     catalog.include.map((pattern) => pattern.replace("<rootDir>", rootDir))
   )
 

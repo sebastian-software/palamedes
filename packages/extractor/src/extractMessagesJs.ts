@@ -412,7 +412,9 @@ function extractFromCallExpression(
       if (!explicitId && !message) return null
 
       // If no explicit ID, generate one from message + context
-      const id = explicitId || generateMessageId(message, context)
+      const id = explicitId ?? (message ? generateMessageId(message, context) : null)
+
+      if (!id) return null
 
       return {
         id,

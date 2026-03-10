@@ -1,29 +1,29 @@
 # Palamedes Status
 
 **Last updated:** 2026-03-10
-**Branch:** `t3code/plan-pofile-thin-ts-wrapper`
-**HEAD:** `608a77c` (`feat: ship next loader files`)
-**Worktree before this document:** clean
+**Branch:** `main`
+**HEAD:** `9de22c4` (`refactor: rename package surface to palamedes`)
+**Worktree before this document:** dirty during active follow-up work
 
 ## Summary
 
 Der Branch hat den ersten größeren Umbau von Palamedes auf ein Rust-Core-Modell bereits gestartet.
 
-Im aktuellen Stand sind Rust-Workspace, Node-Bindings, `pofile`-Integration, ein nativer Extractor, ein erster nativer Transform-Slice, das neue `getI18n()`-Runtime-Modell, die `pnpm`-Migration und die reparierte Next-Loader-Auslieferung umgesetzt.
+Im aktuellen Stand sind Rust-Workspace, Node-Bindings, `pofile`-Integration, ein nativer Extractor, ein erster nativer Transform-Slice, das neue `getI18n()`-Runtime-Modell, die `pnpm`-Migration, die reparierte Next-Loader-Auslieferung und die Umbenennung der öffentlichen Paketoberfläche auf Palamedes-Namen umgesetzt.
 
-Die größten offenen Baustellen liegen jetzt nicht mehr bei der Grundarchitektur, sondern bei Parität und Aufräumen: vollständige Rust-Transform-Abdeckung, Sourcemaps, Entfernen alter Kompatibilitätspfade, native Distribution und ein noch roter `check-types`-Pfad.
+Die größten offenen Baustellen liegen jetzt nicht mehr bei der Grundarchitektur, sondern bei Parität und Aufräumen: vollständige Rust-Transform-Abdeckung, Sourcemaps, Entfernen alter Kompatibilitätspfade und native Distribution.
 
 ## Was erledigt ist
 
 ### Architektur und Entscheidungen
 
-- Rust-Core-Zielbild dokumentiert: [docs/plans/2026-03-09-palamedes-rust-core-design.md](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/docs/plans/2026-03-09-palamedes-rust-core-design.md)
-- ADR-Struktur auf einzelne Dateien unter [`adr/`](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/adr) umgestellt
+- Rust-Core-Zielbild dokumentiert: [docs/plans/2026-03-09-palamedes-rust-core-design.md](/Users/sebastian/Workspace/business/palamedes/docs/plans/2026-03-09-palamedes-rust-core-design.md)
+- ADR-Struktur auf einzelne Dateien unter [adr/](/Users/sebastian/Workspace/business/palamedes/adr) umgestellt
 - Zentrale ADRs ergänzt:
-  - [ADR-011 Rust Core with Thin Node/TypeScript Wrappers](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/adr/011-rust-core-with-thin-node-typescript-wrappers.md)
-  - [ADR-012 Native Node Bindings via napi-rs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/adr/012-native-node-bindings-via-napi-rs.md)
-  - [ADR-013 Hybrid Native Extractor Rollout](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/adr/013-hybrid-native-extractor-rollout.md)
-  - [ADR-014 Universal `getI18n()` Runtime Primitive](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/adr/014-universal-geti18n-runtime-primitive.md)
+  - [ADR-011 Rust Core with Thin Node/TypeScript Wrappers](/Users/sebastian/Workspace/business/palamedes/adr/011-rust-core-with-thin-node-typescript-wrappers.md)
+  - [ADR-012 Native Node Bindings via napi-rs](/Users/sebastian/Workspace/business/palamedes/adr/012-native-node-bindings-via-napi-rs.md)
+  - [ADR-013 Hybrid Native Extractor Rollout](/Users/sebastian/Workspace/business/palamedes/adr/013-hybrid-native-extractor-rollout.md)
+  - [ADR-014 Universal `getI18n()` Runtime Primitive](/Users/sebastian/Workspace/business/palamedes/adr/014-universal-geti18n-runtime-primitive.md)
 
 ### Rust-Core und Bindings
 
@@ -56,8 +56,8 @@ Aktuell aus Rust bzw. über `@palamedes/core-node` verfügbar:
 
 Relevante Dateien:
 
-- [crates/palamedes/src/extract.rs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/crates/palamedes/src/extract.rs)
-- [packages/extractor/src/extractMessages.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor/src/extractMessages.ts)
+- [crates/palamedes/src/extract.rs](/Users/sebastian/Workspace/business/palamedes/crates/palamedes/src/extract.rs)
+- [packages/extractor/src/extractMessages.ts](/Users/sebastian/Workspace/business/palamedes/packages/extractor/src/extractMessages.ts)
 
 ### Transform
 
@@ -82,13 +82,13 @@ Aktuell noch im JS-Fallback:
 
 Relevante Dateien:
 
-- [crates/palamedes/src/transform.rs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/crates/palamedes/src/transform.rs)
-- [packages/transform/src/transform.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/transform/src/transform.ts)
-- [packages/transform/src/transformJs.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/transform/src/transformJs.ts)
+- [crates/palamedes/src/transform.rs](/Users/sebastian/Workspace/business/palamedes/crates/palamedes/src/transform.rs)
+- [packages/transform/src/transform.ts](/Users/sebastian/Workspace/business/palamedes/packages/transform/src/transform.ts)
+- [packages/transform/src/transformJs.ts](/Users/sebastian/Workspace/business/palamedes/packages/transform/src/transformJs.ts)
 
 ### Runtime-Modell
 
-- Neues Runtime-Paket eingeführt: [packages/runtime](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/runtime)
+- Neues Runtime-Paket eingeführt: [packages/runtime](/Users/sebastian/Workspace/business/palamedes/packages/runtime)
 - Neues Zielmodell ist `getI18n()` statt `useLingui()` / `getLingui()`
 - Runtime-API:
   - `getI18n()`
@@ -103,15 +103,21 @@ Relevante Dateien:
 - `pnpm-workspace.yaml` und `pnpm-lock.yaml` eingeführt
 - Yarn-/PnP-Artefakte entfernt
 - Repo-Dokumentation auf `pnpm` umgestellt
+- Öffentliche Paketoberfläche auf Palamedes-Namen umgestellt:
+  - `packages/extractor`
+  - `packages/transform`
+  - `packages/vite-plugin`
+  - `packages/next-plugin`
 - `@palamedes/next-plugin` liefert jetzt die realen Loader-Dateien aus:
-  - [packages/next-plugin/palamedes-loader.cjs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/next-plugin/palamedes-loader.cjs)
-  - [packages/next-plugin/palamedes-po-loader.cjs](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/next-plugin/palamedes-po-loader.cjs)
+  - [packages/next-plugin/palamedes-loader.cjs](/Users/sebastian/Workspace/business/palamedes/packages/next-plugin/palamedes-loader.cjs)
+  - [packages/next-plugin/palamedes-po-loader.cjs](/Users/sebastian/Workspace/business/palamedes/packages/next-plugin/palamedes-po-loader.cjs)
 - `@palamedes/core-node` baut jetzt zusätzlich CJS, damit der Next-Loader-Pfad funktioniert
 
 Begleitende Design-Dokumente:
 
-- [docs/plans/2026-03-10-pnpm-migration-design.md](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/docs/plans/2026-03-10-pnpm-migration-design.md)
-- [docs/plans/2026-03-10-next-loader-packaging-design.md](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/docs/plans/2026-03-10-next-loader-packaging-design.md)
+- [docs/plans/2026-03-10-pnpm-migration-design.md](/Users/sebastian/Workspace/business/palamedes/docs/plans/2026-03-10-pnpm-migration-design.md)
+- [docs/plans/2026-03-10-next-loader-packaging-design.md](/Users/sebastian/Workspace/business/palamedes/docs/plans/2026-03-10-next-loader-packaging-design.md)
+- [docs/plans/2026-03-10-palamedes-hard-rename-design.md](/Users/sebastian/Workspace/business/palamedes/docs/plans/2026-03-10-palamedes-hard-rename-design.md)
 
 ## Aktueller Verifikationsstand
 
@@ -119,23 +125,15 @@ Heute erneut geprüft:
 
 - `pnpm build` ✅
 - `pnpm test` ✅
-- `cargo test --workspace` ✅
-- `pnpm --filter @palamedes/example-vite build` ✅
-- `pnpm --filter @palamedes/example-nextjs build` ✅
-- `pnpm check-types` ❌
-
-Aktueller `check-types`-Fehler:
-
-- [packages/extractor/src/extractMessages.test.ts](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor/src/extractMessages.test.ts): fehlende Vitest-Globals (`describe`, `it`, `expect`) im TypeScript-Check
-- [packages/extractor/src/extractMessagesJs.ts:415](/Users/sebastian/.t3/worktrees/palamedes/t3code-462fd5ad/packages/extractor/src/extractMessagesJs.ts#L415): `string | undefined` wird an eine Funktion übergeben, die `string` erwartet
+- `pnpm check-types` ✅
 
 ## Offene TODOs
 
 ### Kurzfristig
 
-1. `pnpm check-types` wieder grün machen
-2. Den nativen Transform weiter Richtung Parität bringen
-3. Die verbleibenden `useLingui()` / `getLingui()`-Kompatibilitätspfade aus Transform, Tests und Doku zurückdrängen
+1. Den nativen Transform weiter Richtung Parität bringen
+2. Die verbleibenden `useLingui()` / `getLingui()`-Kompatibilitätspfade aus Transform, Tests und Doku zurückdrängen
+3. Den Verifikationsstand für Beispiel-Builds und Cargo-Workspace wieder ausdrücklich auffrischen
 
 ### Mittelfristig
 
@@ -153,13 +151,17 @@ Aktueller `check-types`-Fehler:
 
 ## Empfohlene nächste Schritte
 
-1. `check-types` reparieren, damit Root-Verifikation wieder vollständig grün ist
-2. Nächsten Rust-Transform-Slice umsetzen: `plural` / `select` / `selectOrdinal`
-3. Danach JSX-Transform-Fälle und Sourcemaps angehen
-4. Anschließend TS-Fallbacks und Altpfade gezielt abbauen
+1. Nächsten Rust-Transform-Slice umsetzen: `plural` / `select` / `selectOrdinal`
+2. Danach JSX-Transform-Fälle angehen
+3. Anschließend Sourcemap-Strategie für den Rust-Transform umsetzen
+4. Dann TS-Fallbacks und Altpfade gezielt abbauen
 
 ## Letzte relevante Commits
 
+- `9de22c4` refactor: rename package surface to palamedes
+- `78c1cce` chore: updated deps
+- `c1aaa28` fix(cli): make workspace bin resilient
+- `9368352` docs: add project status summary
 - `608a77c` feat: ship next loader files
 - `92aa106` chore: migrate workspace to pnpm
 - `137a40b` feat: adopt geti18n runtime defaults

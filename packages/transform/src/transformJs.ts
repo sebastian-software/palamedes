@@ -104,6 +104,9 @@ export function transformLinguiMacros(
         const declarations = record.declarations as Array<Record<string, unknown>> | undefined
         if (declarations && declarations.length === 1) {
           const declarator = declarations[0]
+          if (!declarator) {
+            return
+          }
           const init = declarator?.init as Record<string, unknown> | undefined
           if (init?.type === "CallExpression") {
             const callee = init.callee as Record<string, unknown> | undefined
@@ -444,6 +447,10 @@ function transformPluralSelectCallToRuntimeCall(
   // First arg is the value, second is options
   const valueArg = args[0]
   const optionsArg = args[1]
+
+  if (!valueArg || typeof valueArg !== "object") {
+    return null
+  }
 
   // Get the value name (for interpolation)
   const valueName = extractExpressionName(valueArg) ?? "0"
