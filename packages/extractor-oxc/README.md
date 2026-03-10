@@ -16,10 +16,6 @@ The default Babel-based extractor is powerful but slow. This extractor uses oxc-
 ## Installation
 
 ```bash
-npm install @lingui/extractor-oxc
-# or
-yarn add @lingui/extractor-oxc
-# or
 pnpm add @lingui/extractor-oxc
 ```
 

@@ -36,6 +36,7 @@
   ],
   "scripts": {
     "build": "unbuild",
+    "test": "vitest run --globals src/extractMessages.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {

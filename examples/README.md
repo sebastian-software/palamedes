@@ -10,8 +10,8 @@ Vite + React 19 example with hot module replacement.
 
 ```bash
 cd examples-pala/vite-react
-yarn install
-yarn dev
+pnpm install
+pnpm dev
 ```
 
 ### `nextjs-app/`
@@ -20,8 +20,8 @@ Next.js 15 App Router example.
 
 ```bash
 cd examples-pala/nextjs-app
-yarn install
-yarn dev
+pnpm install
+pnpm dev
 ```
 
 ## Packages Used

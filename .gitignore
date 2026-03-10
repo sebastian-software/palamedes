@@ -1,4 +1,6 @@
 node_modules/
+.pnpm-store/
+pnpm-debug.log*
 dist/
 *.tsbuildinfo
 .DS_Store
@@ -6,15 +8,6 @@ dist/
 .env.local
 target/
 packages/core-node/palamedes-node.node
-
-# Yarn
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
 
 # Build output
 *.js.map

@@ -12,10 +12,6 @@ Next.js integration for Lingui using OXC-based macro transformation. No Babel re
 ## Installation
 
 ```bash
-npm install @lingui/next-lingui-oxc @lingui/core @lingui/react
-# or
-yarn add @lingui/next-lingui-oxc @lingui/core @lingui/react
-# or
 pnpm add @lingui/next-lingui-oxc @lingui/core @lingui/react
 ```
 

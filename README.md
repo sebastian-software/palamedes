@@ -39,7 +39,7 @@ Next-generation i18n tooling powered by [OXC](https://oxc-project.github.io/) â€
 ### Vite
 
 ```bash
-npm install @palamedes/vite @palamedes/cli
+pnpm add @palamedes/vite @palamedes/cli
 ```
 
 ```ts
@@ -54,7 +54,7 @@ export default defineConfig({
 ### Next.js
 
 ```bash
-npm install @palamedes/next @palamedes/cli
+pnpm add @palamedes/next @palamedes/cli
 ```
 
 ```ts
@@ -67,8 +67,8 @@ export default withLingui(nextConfig)
 ### Extracting Messages
 
 ```bash
-npx pmds extract
-npx pmds extract --watch
+pnpm exec pmds extract
+pnpm exec pmds extract --watch
 ```
 
 ## Examples
@@ -79,9 +79,10 @@ npx pmds extract --watch
 ## Development
 
 ```bash
-yarn install
-yarn build
-yarn test
+pnpm install
+pnpm build
+pnpm build:examples
+pnpm test
 ```
 
 Requires Node.js >= 20.

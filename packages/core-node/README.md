@@ -17,7 +17,7 @@ This package is the first migration spike for the Rust-core architecture. It cur
 ## Development
 
 ```bash
-yarn workspace @palamedes/core-node build
+pnpm --filter @palamedes/core-node build
 ```
 
 The build script compiles the Rust binding crate and copies the resulting native module into the package root as `palamedes-node.node`.

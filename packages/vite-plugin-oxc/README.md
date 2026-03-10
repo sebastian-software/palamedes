@@ -12,10 +12,6 @@ Vite plugin for Lingui that uses OXC-based macro transformation. No Babel requir
 ## Installation
 
 ```bash
-npm install @lingui/vite-plugin-oxc @lingui/core @lingui/react
-# or
-yarn add @lingui/vite-plugin-oxc @lingui/core @lingui/react
-# or
 pnpm add @lingui/vite-plugin-oxc @lingui/core @lingui/react
 ```
 
@@ -88,6 +84,7 @@ Import `.po` files directly:
 import { getI18n } from "@palamedes/runtime"
 import messages from "./locales/en.po"
 
+const i18n = getI18n()
 i18n.load("en", messages)
 i18n.activate("en")
 ```

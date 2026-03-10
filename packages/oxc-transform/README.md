@@ -11,10 +11,6 @@ OXC-based macro transformer for Lingui. Transforms Lingui macros (e.g., `` t`Hel
 ## Installation
 
 ```bash
-npm install @lingui/oxc-transform
-# or
-yarn add @lingui/oxc-transform
-# or
 pnpm add @lingui/oxc-transform
 ```
 

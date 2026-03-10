@@ -5,9 +5,7 @@ Next-generation Lingui CLI with OXC-based extraction.
 ## Installation
 
 ```bash
-npm install -g pmds
-# or
-yarn global add pmds
+pnpm add -g pmds
 ```
 
 ## Usage
