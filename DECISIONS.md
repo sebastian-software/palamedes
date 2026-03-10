@@ -17,3 +17,4 @@ This document is the index for Palamedes ADRs. Each ADR lives in its own numbere
 - [ADR-011: Rust Core with Thin Node/TypeScript Wrappers](./adr/011-rust-core-with-thin-node-typescript-wrappers.md)
 - [ADR-012: Native Node Bindings via napi-rs](./adr/012-native-node-bindings-via-napi-rs.md)
 - [ADR-013: Hybrid Native Extractor Rollout](./adr/013-hybrid-native-extractor-rollout.md)
+- [ADR-014: Universal `getI18n()` Runtime Primitive](./adr/014-universal-geti18n-runtime-primitive.md)

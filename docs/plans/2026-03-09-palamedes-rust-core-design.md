@@ -19,6 +19,8 @@ The target is not just to adopt the external `pofile` crate for PO handling. The
 
 TypeScript should remain the integration layer for Node tooling, framework adapters, and package ergonomics.
 
+The runtime model should also converge on a single Palamedes-owned primitive, `getI18n()`, instead of separate `useLingui()` and `getLingui()` access paths.
+
 ## Goals
 
 - Keep the hot build-time path in Rust wherever practical.
@@ -61,6 +63,7 @@ TypeScript should remain the integration layer for Node tooling, framework adapt
 - OXC-based message extraction
 - validation and diagnostics
 - orchestration around `pofile`
+- code generation targeting a single runtime lookup model via `getI18n()`
 
 **Node binding layer**
 
@@ -91,9 +94,15 @@ Preferred native entry points:
 - `validateMessage(message, locale, options)`
 - `generateMessageId(message, context?)`
 
+Preferred runtime entry point:
+
+- `getI18n()`
+
 Guiding rule:
 
 TypeScript should pass source strings, filenames, config-derived options, and simple catalog payloads. It should not prepare ASTs, walk PO structures, or reimplement semantic logic already owned by Rust.
+
+Macro output should also avoid multiple semantic targets for equivalent translations. The long-term transform target is a single runtime lookup path built around `getI18n()`.
 
 ## Why This Approach
 
@@ -147,6 +156,7 @@ This validates the binding design before moving the larger OXC flows.
 - move macro transform logic from `packages/oxc-transform` into Rust
 - preserve transform behavior and source map semantics
 - expose transform as a coarse-grained native operation
+- converge transformed output on `getI18n()` instead of `useLingui()` and `getLingui()`-specific code paths
 
 ### Phase 5: Wrapper migration
 
@@ -208,6 +218,7 @@ Expected ADR checkpoints:
 - Rust-core architecture as the new default direction
 - native Node bindings as phase 1 deployment target
 - external `pofile` as foundational dependency
+- universal `getI18n()` runtime lookup with no silent fallback
 - source map strategy for Rust transform
 - packaging and release strategy for native binaries
 - fallback strategy, if any, for unsupported environments

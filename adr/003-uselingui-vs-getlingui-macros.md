@@ -1,6 +1,6 @@
 # ADR-003: `useLingui()` vs `getLingui()` Macros
 
-**Status:** Accepted
+**Status:** Superseded by ADR-014
 **Date:** 2025-12
 
 ### Context
@@ -66,5 +66,10 @@ async function ServerPage() {
 - Two entry points instead of one
 - Clearer documentation needed
 - Better RSC support out of the box
+
+### Superseded
+
+This ADR reflected the earlier Lingui-compatible split between hook-like and direct-access macros.
+Palamedes now prefers a single runtime primitive, `getI18n()`. See ADR-014.
 
 ---
