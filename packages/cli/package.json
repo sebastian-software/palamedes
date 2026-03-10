@@ -17,7 +17,9 @@
   },
   "license": "MIT",
   "type": "module",
-  "bin": "./dist/cli.mjs",
+  "bin": {
+    "pmds": "./bin/pmds.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -31,6 +33,7 @@
   "files": [
     "LICENSE",
     "README.md",
+    "bin/",
     "dist/"
   ],
   "scripts": {
