@@ -4,16 +4,12 @@ import type { TransformOptions, TransformResult } from "./types"
 import { mightContainLinguiMacros } from "./detect"
 import { transformLinguiMacrosJs } from "./transformJs"
 
-const UNSUPPORTED_NATIVE_PATTERNS = [
-  /<\s*(Trans|Plural|Select|SelectOrdinal)\b/,
-]
-
 function shouldUseJsFallback(code: string, options: TransformOptions): boolean {
+  void code
   if (options.sourceMap !== false) {
     return true
   }
-
-  return UNSUPPORTED_NATIVE_PATTERNS.some((pattern) => pattern.test(code))
+  return false
 }
 
 export function transformLinguiMacros(

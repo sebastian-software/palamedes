@@ -70,6 +70,7 @@ Aktuell nativ abgedeckt:
 - `t`/`msg` Tagged Templates
 - `t({...})`, `msg({...})`, `defineMessage({...})`
 - `plural(...)`, `select(...)`, `selectOrdinal(...)`
+- `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
 - Entfernen von Macro-Imports
 - Einfügen des Runtime-Imports
 - `getI18n()`-basiertes Runtime-Target
@@ -77,7 +78,6 @@ Aktuell nativ abgedeckt:
 Aktuell noch im JS-Fallback:
 
 - Sourcemaps
-- JSX-Makros im Transform (`<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`)
 
 Relevante Dateien:
 
@@ -149,9 +149,9 @@ Heute erneut geprüft:
 
 ## Empfohlene nächste Schritte
 
-1. Nächsten Rust-Transform-Slice umsetzen: JSX-Transform-Fälle (`<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`)
-2. Anschließend Sourcemap-Strategie für den Rust-Transform umsetzen
-3. Dann TS-Fallbacks und Altpfade gezielt abbauen
+1. Sourcemap-Strategie für den Rust-Transform umsetzen
+2. Dann TS-Fallbacks und Altpfade gezielt abbauen
+3. Danach Beispiel-Builds und native Packaging-/Release-Fluss weiter härten
 
 ## Letzte relevante Commits
 

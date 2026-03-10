@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
-    ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression, TemplateLiteral,
+    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, ObjectExpression,
+    ObjectPropertyKind, TaggedTemplateExpression, TemplateLiteral,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -52,6 +53,7 @@ struct ImportCollector {
     macro_imports: HashMap<String, ImportedMacro>,
     macro_import_ranges: Vec<(usize, usize)>,
     has_runtime_import: bool,
+    has_trans_import: bool,
 }
 
 impl ImportCollector {
@@ -62,6 +64,7 @@ impl ImportCollector {
             macro_imports: HashMap::new(),
             macro_import_ranges: Vec::new(),
             has_runtime_import: false,
+            has_trans_import: false,
         }
     }
 }
@@ -100,32 +103,86 @@ impl<'a> Visit<'a> for ImportCollector {
             }
         }
 
+        if source == "@lingui/react" {
+            if let Some(specifiers) = &it.specifiers {
+                for specifier in specifiers {
+                    if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
+                        if specifier.local.name == "Trans" {
+                            self.has_trans_import = true;
+                        }
+                    }
+                }
+            }
+        }
+
         walk::walk_import_declaration(self, it);
     }
 }
 
 struct TransformVisitor<'a> {
+    source: &'a str,
     macro_imports: &'a HashMap<String, ImportedMacro>,
     options: &'a NativeTransformOptions,
     replacements: Vec<Replacement>,
     needs_runtime_import: bool,
+    needs_trans_import: bool,
 }
 
 impl<'a> TransformVisitor<'a> {
     fn new(
+        source: &'a str,
         macro_imports: &'a HashMap<String, ImportedMacro>,
         options: &'a NativeTransformOptions,
     ) -> Self {
         Self {
+            source,
             macro_imports,
             options,
             replacements: Vec::new(),
             needs_runtime_import: false,
+            needs_trans_import: false,
         }
     }
 }
 
 impl<'a> Visit<'a> for TransformVisitor<'a> {
+    fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        let Some(tag_name) = it.opening_element.name.get_identifier_name() else {
+            walk::walk_jsx_element(self, it);
+            return;
+        };
+
+        let Some(macro_info) = self.macro_imports.get(tag_name.as_str()) else {
+            walk::walk_jsx_element(self, it);
+            return;
+        };
+
+        let replacement = match macro_info.imported_name.as_str() {
+            "Trans" => transform_trans_element(it, self.source, self.options),
+            "Plural" | "Select" | "SelectOrdinal" => {
+                transform_choice_jsx_element(it, &macro_info.imported_name, self.options)
+            }
+            _ => None,
+        };
+
+        if let Some(text) = replacement {
+            self.replacements.push(Replacement {
+                start: it.span.start as usize,
+                end: it.span.end as usize,
+                text,
+            });
+
+            if macro_info.imported_name == "Trans" {
+                self.needs_trans_import = true;
+            } else {
+                self.needs_runtime_import = true;
+            }
+            return;
+        }
+
+        walk::walk_jsx_element(self, it);
+    }
+
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
         let Some(local_name) = identifier_name(&it.tag) else {
             walk::walk_tagged_template_expression(self, it);
@@ -261,6 +318,189 @@ fn extract_choice_options(object: &ObjectExpression<'_>) -> Vec<(String, String)
     }
 
     options
+}
+
+fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
+    match value {
+        JSXAttributeValue::StringLiteral(literal) => Some(literal.value.to_string()),
+        JSXAttributeValue::ExpressionContainer(container) => {
+            jsx_expression_string_value(&container.expression)
+        }
+        _ => None,
+    }
+}
+
+fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
+    match expr {
+        JSXExpression::StringLiteral(literal) => Some(literal.value.to_string()),
+        JSXExpression::TemplateLiteral(template) => {
+            template.single_quasi().map(|value| value.to_string())
+        }
+        _ => None,
+    }
+}
+
+fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> HashMap<String, String> {
+    let mut attrs = HashMap::new();
+
+    for attr in &opening_element.attributes {
+        let Some(attr) = attr.as_attribute() else {
+            continue;
+        };
+        let key = attr.name.get_identifier().name.to_string();
+        let Some(value) = attr.value.as_ref().and_then(jsx_attribute_string_value) else {
+            continue;
+        };
+        attrs.insert(key, value);
+    }
+
+    attrs
+}
+
+fn extract_jsx_value_name(opening_element: &JSXOpeningElement<'_>) -> Option<String> {
+    for attr in &opening_element.attributes {
+        let Some(attr) = attr.as_attribute() else {
+            continue;
+        };
+        if attr.name.get_identifier().name != "value" {
+            continue;
+        }
+        let Some(JSXAttributeValue::ExpressionContainer(container)) = attr.value.as_ref() else {
+            continue;
+        };
+
+        return jsx_expression_name(&container.expression);
+    }
+
+    None
+}
+
+fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
+    match expr {
+        JSXExpression::Identifier(identifier) => Some(identifier.name.to_string()),
+        JSXExpression::StaticMemberExpression(member) => Some(member.property.name.to_string()),
+        JSXExpression::ComputedMemberExpression(member) => {
+            member.static_property_name().map(|name| name.to_string())
+        }
+        JSXExpression::ParenthesizedExpression(expr) => expression_name(&expr.expression),
+        _ => None,
+    }
+}
+
+fn extract_choice_options_from_jsx(opening_element: &JSXOpeningElement<'_>) -> Vec<(String, String)> {
+    let mut options = Vec::new();
+
+    for attr in &opening_element.attributes {
+        let Some(attr) = attr.as_attribute() else {
+            continue;
+        };
+        let key = attr.name.get_identifier().name.to_string();
+        if matches!(
+            key.as_str(),
+            "id" | "message" | "comment" | "context" | "value" | "offset"
+        ) {
+            continue;
+        }
+        let Some(value) = attr.value.as_ref().and_then(jsx_attribute_string_value) else {
+            continue;
+        };
+
+        if let Some(exact) = key.strip_prefix('_') {
+            options.push((format!("={exact}"), value));
+        } else {
+            options.push((key, value));
+        }
+    }
+
+    options
+}
+
+fn clean_jsx_text(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut last_was_whitespace = false;
+
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !last_was_whitespace {
+                result.push(' ');
+                last_was_whitespace = true;
+            }
+        } else {
+            result.push(ch);
+            last_was_whitespace = false;
+        }
+    }
+
+    result
+}
+
+fn opening_element_to_component(opening_element: &JSXOpeningElement<'_>, source: &str) -> String {
+    let start = opening_element.span.start as usize;
+    let end = opening_element.span.end as usize;
+    let markup = &source[start..end];
+
+    if markup.trim_end().ends_with("/>") {
+        return markup.to_string();
+    }
+
+    if let Some(prefix) = markup.strip_suffix('>') {
+        format!("{prefix} />")
+    } else {
+        format!("{markup} />")
+    }
+}
+
+fn extract_jsx_children_parts(
+    children: &[JSXChild<'_>],
+    source: &str,
+    next_component_index: &mut usize,
+) -> (String, Vec<String>, Vec<String>) {
+    let mut parts = Vec::new();
+    let mut values = Vec::new();
+    let mut components = Vec::new();
+
+    for child in children {
+        match child {
+            JSXChild::Text(text) => {
+                let value = clean_jsx_text(text.value.as_str());
+                if !value.is_empty() {
+                    parts.push(value);
+                }
+            }
+            JSXChild::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
+                expr => {
+                    if let Some(name) = jsx_expression_name(expr) {
+                        parts.push(format!("{{{name}}}"));
+                        values.push(name);
+                    }
+                }
+            },
+            JSXChild::Element(element) => {
+                let current_index = *next_component_index;
+                *next_component_index += 1;
+
+                let (inner_message, inner_values, inner_components) =
+                    extract_jsx_children_parts(&element.children, source, next_component_index);
+                parts.push(format!("<{current_index}>{inner_message}</{current_index}>"));
+                values.extend(inner_values);
+                components.push(opening_element_to_component(&element.opening_element, source));
+                components.extend(inner_components);
+            }
+            JSXChild::Fragment(fragment) => {
+                let (inner_message, inner_values, inner_components) =
+                    extract_jsx_children_parts(&fragment.children, source, next_component_index);
+                if !inner_message.is_empty() {
+                    parts.push(inner_message);
+                }
+                values.extend(inner_values);
+                components.extend(inner_components);
+            }
+            JSXChild::Spread(_) => {}
+        }
+    }
+
+    (parts.join("").trim().to_string(), values, components)
 }
 
 fn expression_name(expr: &Expression<'_>) -> Option<String> {
@@ -448,6 +688,91 @@ fn transform_choice_call(
     Some(build_runtime_call(&descriptor, options))
 }
 
+fn transform_trans_element(
+    element: &JSXElement<'_>,
+    source: &str,
+    _options: &NativeTransformOptions,
+) -> Option<String> {
+    let attrs = jsx_attributes(&element.opening_element);
+    let explicit_id = attrs.get("id").cloned();
+    let context = attrs.get("context").cloned();
+
+    let mut next_component_index = 0usize;
+    let (children_message, values, components) =
+        extract_jsx_children_parts(&element.children, source, &mut next_component_index);
+    let message = attrs
+        .get("message")
+        .cloned()
+        .or_else(|| (!children_message.is_empty()).then_some(children_message))?;
+
+    let id = explicit_id
+        .unwrap_or_else(|| generate_message_id(&message, context.as_deref()));
+
+    let mut attrs = vec![
+        format!("id=\"{}\"", escape_string(&id)),
+        format!("message=\"{}\"", escape_string(&message)),
+    ];
+
+    if !components.is_empty() {
+        let components_prop = components
+            .iter()
+            .enumerate()
+            .map(|(index, component)| format!("{index}: {component}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        attrs.push(format!("components={{{{ {components_prop} }}}}"));
+    }
+
+    if !values.is_empty() {
+        attrs.push(format!("values={{{{ {} }}}}", values.join(", ")));
+    }
+
+    Some(format!("<Trans {} />", attrs.join(" ")))
+}
+
+fn transform_choice_jsx_element(
+    element: &JSXElement<'_>,
+    macro_name: &str,
+    options: &NativeTransformOptions,
+) -> Option<String> {
+    let attrs = jsx_attributes(&element.opening_element);
+    let explicit_id = attrs.get("id").cloned();
+    let context = attrs.get("context").cloned();
+    let comment = attrs.get("comment").cloned();
+    let value_name = extract_jsx_value_name(&element.opening_element)?;
+    let choice_options = extract_choice_options_from_jsx(&element.opening_element);
+
+    if choice_options.is_empty() {
+        return None;
+    }
+
+    let format = match macro_name {
+        "Plural" => "plural",
+        "Select" => "select",
+        "SelectOrdinal" => "selectordinal",
+        _ => return None,
+    };
+    let message = build_icu_message(
+        format,
+        &value_name,
+        &choice_options,
+        attrs.get("offset").map(String::as_str),
+    );
+    let id =
+        explicit_id.unwrap_or_else(|| generate_message_id(&message, context.as_deref()));
+    let values = [value_name];
+    let descriptor = build_message_descriptor(
+        &id,
+        Some(&message),
+        Some(&values),
+        context.as_deref(),
+        comment.as_deref(),
+        options,
+    );
+
+    Some(build_runtime_call(&descriptor, options))
+}
+
 fn build_runtime_call(descriptor: &str, options: &NativeTransformOptions) -> String {
     let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
     format!("{runtime_import_name}()._({descriptor})")
@@ -514,7 +839,7 @@ pub fn transform_macros_json(
         .map_err(|error| error.to_string());
     }
 
-    let mut visitor = TransformVisitor::new(&collector.macro_imports, &options);
+    let mut visitor = TransformVisitor::new(source, &collector.macro_imports, &options);
     visitor.visit_program(&parsed.program);
 
     if visitor.replacements.is_empty() {
@@ -549,8 +874,20 @@ pub fn transform_macros_json(
         code.replace_range(replacement.start..replacement.end, &replacement.text);
     }
 
+    let mut prefix = String::new();
+
     if visitor.needs_runtime_import && !collector.has_runtime_import {
-        code = format!("import {{ {runtime_import_name} }} from \"{runtime_module}\";\n{code}");
+        prefix.push_str(&format!(
+            "import {{ {runtime_import_name} }} from \"{runtime_module}\";\n"
+        ));
+    }
+
+    if visitor.needs_trans_import && !collector.has_trans_import {
+        prefix.push_str("import { Trans } from \"@lingui/react\";\n");
+    }
+
+    if !prefix.is_empty() {
+        code = format!("{prefix}{code}");
     }
 
     serde_json::to_string(&NativeTransformResult {
@@ -634,6 +971,48 @@ mod tests {
         assert!(result
             .code
             .contains("message: \"{count, selectordinal, one {#st} other {#th}}\""));
+        assert!(result.code.contains("values: { count }"));
+    }
+
+    #[test]
+    fn transforms_trans_jsx_macro() {
+        let result = serde_json::from_str::<NativeTransformResult>(
+            &transform_macros_json(
+                "import { Trans } from \"@lingui/react/macro\";\nconst el = <Trans>Hello {name}</Trans>;\n",
+                "test.tsx",
+                None,
+            )
+            .expect("transform should succeed"),
+        )
+        .expect("json should deserialize");
+
+        assert!(result
+            .code
+            .contains("import { Trans } from \"@lingui/react\";"));
+        assert!(result
+            .code
+            .contains("<Trans id=\""));
+        assert!(result.code.contains("message=\"Hello {name}\""));
+        assert!(result.code.contains("values={{ name }}"));
+        assert!(!result.code.contains("@palamedes/runtime"));
+    }
+
+    #[test]
+    fn transforms_plural_jsx_macro() {
+        let result = serde_json::from_str::<NativeTransformResult>(
+            &transform_macros_json(
+                "import { Plural } from \"@lingui/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",
+                "test.tsx",
+                None,
+            )
+            .expect("transform should succeed"),
+        )
+        .expect("json should deserialize");
+
+        assert!(result.code.contains("getI18n()._({ id:"));
+        assert!(result
+            .code
+            .contains("message: \"{count, plural, one {# item} other {# items}}\""));
         assert!(result.code.contains("values: { count }"));
     }
 }
