@@ -9,7 +9,7 @@
 
 Der Branch hat den ersten größeren Umbau von Palamedes auf ein Rust-Core-Modell bereits gestartet.
 
-Im aktuellen Stand sind Rust-Workspace, Node-Bindings, `pofile`-Integration, ein nativer Extractor, ein erster nativer Transform-Slice, das neue `getI18n()`-Runtime-Modell, die `pnpm`-Migration, die reparierte Next-Loader-Auslieferung und die Umbenennung der öffentlichen Paketoberfläche auf Palamedes-Namen umgesetzt.
+Im aktuellen Stand sind Rust-Workspace, Node-Bindings, `pofile`-Integration, ein nativer Extractor, ein erweiterter nativer Transform-Slice, das neue `getI18n()`-Runtime-Modell, die `pnpm`-Migration, die reparierte Next-Loader-Auslieferung und die Umbenennung der öffentlichen Paketoberfläche auf Palamedes-Namen umgesetzt.
 
 Die größten offenen Baustellen liegen jetzt nicht mehr bei der Grundarchitektur, sondern bei Parität und Aufräumen: vollständige Rust-Transform-Abdeckung, Sourcemaps, Entfernen alter Kompatibilitätspfade und native Distribution.
 
@@ -69,6 +69,7 @@ Aktuell nativ abgedeckt:
 
 - `t`/`msg` Tagged Templates
 - `t({...})`, `msg({...})`, `defineMessage({...})`
+- `plural(...)`, `select(...)`, `selectOrdinal(...)`
 - Entfernen von Macro-Imports
 - Einfügen des Runtime-Imports
 - `getI18n()`-basiertes Runtime-Target
@@ -76,8 +77,6 @@ Aktuell nativ abgedeckt:
 Aktuell noch im JS-Fallback:
 
 - Sourcemaps
-- `plural`, `select`, `selectOrdinal`
-- `useLingui()` / `getLingui()`-Kompatibilitätspfade
 - JSX-Makros im Transform (`<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`)
 
 Relevante Dateien:
@@ -132,8 +131,8 @@ Heute erneut geprüft:
 ### Kurzfristig
 
 1. Den nativen Transform weiter Richtung Parität bringen
-2. Die verbleibenden `useLingui()` / `getLingui()`-Kompatibilitätspfade aus Transform, Tests und Doku zurückdrängen
-3. Den Verifikationsstand für Beispiel-Builds und Cargo-Workspace wieder ausdrücklich auffrischen
+2. Den Verifikationsstand für Beispiel-Builds und Cargo-Workspace wieder ausdrücklich auffrischen
+3. Alte `useLingui()` / `getLingui()`-Spuren außerhalb des Transforms gezielt aus Doku und verbleibenden Implementierungen entfernen
 
 ### Mittelfristig
 
@@ -145,16 +144,14 @@ Heute erneut geprüft:
 
 ### Offene Architekturfragen
 
-1. Wann `useLingui()` und `getLingui()` nur noch Kompatibilität und nicht mehr empfohlene API sind
-2. Wie strikt der Rust-Transform bestehende Lingui-Kompatibilität weiterträgt, bevor Palamedes-native APIs die Defaults werden
-3. Wie native Binaries für macOS/Linux/Windows veröffentlicht und konsumiert werden sollen
+1. Wie strikt verbleibende Lingui-Kompatibilität außerhalb des Transforms noch weitergetragen wird
+2. Wie native Binaries für macOS/Linux/Windows veröffentlicht und konsumiert werden sollen
 
 ## Empfohlene nächste Schritte
 
-1. Nächsten Rust-Transform-Slice umsetzen: `plural` / `select` / `selectOrdinal`
-2. Danach JSX-Transform-Fälle angehen
-3. Anschließend Sourcemap-Strategie für den Rust-Transform umsetzen
-4. Dann TS-Fallbacks und Altpfade gezielt abbauen
+1. Nächsten Rust-Transform-Slice umsetzen: JSX-Transform-Fälle (`<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`)
+2. Anschließend Sourcemap-Strategie für den Rust-Transform umsetzen
+3. Dann TS-Fallbacks und Altpfade gezielt abbauen
 
 ## Letzte relevante Commits
 

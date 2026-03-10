@@ -52,7 +52,6 @@ Transforms source code containing Lingui macros into runtime calls.
 - `selectOrdinal(count, { ... })`
 - `<Trans>...</Trans>`
 - `<Plural>`, `<Select>`, `<SelectOrdinal>`
-- legacy `useLingui()` / `getLingui()` compatibility paths
 
 ## License
 

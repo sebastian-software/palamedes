@@ -246,7 +246,9 @@ const msg = t({ id: "greeting", message: "Hello", context: "informal", comment: 
 import { plural } from "@lingui/macro";
 const msg = plural(count, { one: "# item", other: "# items" });
 `
-      const result = transformLinguiMacros(code, "test.ts")
+      const result = transformLinguiMacros(code, "test.ts", {
+        sourceMap: false,
+      })
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('getI18n()._({')
@@ -259,7 +261,9 @@ const msg = plural(count, { one: "# item", other: "# items" });
 import { plural } from "@lingui/macro";
 const msg = plural(count, { _0: "No items", one: "# item", other: "# items" });
 `
-      const result = transformLinguiMacros(code, "test.ts")
+      const result = transformLinguiMacros(code, "test.ts", {
+        sourceMap: false,
+      })
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('=0 {No items}')
@@ -274,7 +278,9 @@ const msg = plural(count, { _0: "No items", one: "# item", other: "# items" });
 import { select } from "@lingui/macro";
 const msg = select(gender, { male: "He", female: "She", other: "They" });
 `
-      const result = transformLinguiMacros(code, "test.ts")
+      const result = transformLinguiMacros(code, "test.ts", {
+        sourceMap: false,
+      })
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('getI18n()._({')
@@ -292,121 +298,15 @@ const msg = select(gender, { male: "He", female: "She", other: "They" });
 import { selectOrdinal } from "@lingui/macro";
 const msg = selectOrdinal(count, { one: "#st", two: "#nd", few: "#rd", other: "#th" });
 `
-      const result = transformLinguiMacros(code, "test.ts")
+      const result = transformLinguiMacros(code, "test.ts", {
+        sourceMap: false,
+      })
 
       expect(result.hasChanged).toBe(true)
       expect(result.code).toContain('getI18n()._({')
       expect(result.code).toContain('{count, selectordinal,')
       expect(result.code).toContain('one {#st}')
       expect(result.code).toContain('other {#th}')
-    })
-  })
-
-  describe("useLingui macro transform", () => {
-    it("should transform useLingui() with t", () => {
-      const code = `
-import { useLingui } from "@lingui/react/macro";
-function MyComponent() {
-  const { t } = useLingui();
-  return t\`Hello\`;
-}
-`
-      const result = transformLinguiMacros(code, "test.tsx")
-
-      expect(result.hasChanged).toBe(true)
-      expect(result.code).not.toContain("useLingui()")
-      expect(result.code).toContain('getI18n()._({ id:')
-      expect(result.code).toContain('message: "Hello"')
-      expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
-    })
-
-    it("should transform useLingui() with plural", () => {
-      const code = `
-import { useLingui } from "@lingui/react/macro";
-function MyComponent() {
-  const { plural } = useLingui();
-  return plural(count, { one: "# item", other: "# items" });
-}
-`
-      const result = transformLinguiMacros(code, "test.tsx")
-
-      expect(result.hasChanged).toBe(true)
-      expect(result.code).not.toContain("useLingui()")
-      expect(result.code).toContain('getI18n()._({ id:')
-      expect(result.code).toContain('{count, plural,')
-      expect(result.code).toContain('values: { count }')
-    })
-
-    it("should transform useLingui() with multiple destructured functions", () => {
-      const code = `
-import { useLingui } from "@lingui/react/macro";
-function MyComponent() {
-  const { t, plural } = useLingui();
-  const a = t\`Hello\`;
-  const b = plural(n, { one: "#", other: "#" });
-  return a + b;
-}
-`
-      const result = transformLinguiMacros(code, "test.tsx")
-
-      expect(result.hasChanged).toBe(true)
-      expect(result.code).not.toContain("useLingui()")
-      expect(result.code.match(/getI18n\(\)\._\(\{/g)?.length).toBe(2)
-    })
-  })
-
-  describe("getLingui macro transform", () => {
-    it("should transform getLingui() with t to getI18n()._()", () => {
-      const code = `
-import { getLingui } from "@lingui/core/macro";
-async function ServerPage() {
-  const { t } = getLingui();
-  return t\`Hello\`;
-}
-`
-      const result = transformLinguiMacros(code, "test.tsx")
-
-      expect(result.hasChanged).toBe(true)
-      // getLingui declaration should be removed
-      expect(result.code).not.toContain("getLingui()")
-      expect(result.code).toContain('getI18n()._({ id:')
-      expect(result.code).toContain('message: "Hello"')
-      expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
-    })
-
-    it("should transform getLingui() with plural to getI18n()._()", () => {
-      const code = `
-import { getLingui } from "@lingui/core/macro";
-function ServerPage() {
-  const { plural } = getLingui();
-  return plural(count, { one: "# item", other: "# items" });
-}
-`
-      const result = transformLinguiMacros(code, "test.tsx")
-
-      expect(result.hasChanged).toBe(true)
-      expect(result.code).not.toContain("getLingui()")
-      expect(result.code).toContain('getI18n()._({ id:')
-      expect(result.code).toContain('{count, plural,')
-      expect(result.code).toContain('values: { count }')
-    })
-
-    it("should work with getLingui() in Server Components (async functions)", () => {
-      const code = `
-import { getLingui } from "@lingui/core/macro";
-
-export default async function Page() {
-  const { t, plural } = getLingui();
-  const greeting = t\`Welcome\`;
-  const items = plural(n, { one: "# result", other: "# results" });
-  return <div>{greeting}: {items}</div>;
-}
-`
-      const result = transformLinguiMacros(code, "test.tsx")
-
-      expect(result.hasChanged).toBe(true)
-      expect(result.code).not.toContain("getLingui()")
-      expect(result.code.match(/getI18n\(\)\._\(\{/g)?.length).toBe(2)
     })
   })
 

@@ -84,8 +84,6 @@ export const JS_MACROS = [
   "plural",
   "select",
   "selectOrdinal",
-  "useLingui",
-  "getLingui",
 ] as const
 
 /**

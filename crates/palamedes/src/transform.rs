@@ -165,22 +165,36 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         };
 
-        if !matches!(
-            macro_info.imported_name.as_str(),
-            "t" | "msg" | "defineMessage"
-        ) {
-            walk::walk_call_expression(self, it);
-            return;
-        }
-
-        if let Some(text) = transform_descriptor_call(it, &macro_info.imported_name, self.options) {
-            self.replacements.push(Replacement {
-                start: it.span.start as usize,
-                end: it.span.end as usize,
-                text,
-            });
-            if macro_info.imported_name != "defineMessage" {
-                self.needs_runtime_import = true;
+        match macro_info.imported_name.as_str() {
+            "t" | "msg" | "defineMessage" => {
+                if let Some(text) =
+                    transform_descriptor_call(it, &macro_info.imported_name, self.options)
+                {
+                    self.replacements.push(Replacement {
+                        start: it.span.start as usize,
+                        end: it.span.end as usize,
+                        text,
+                    });
+                    if macro_info.imported_name != "defineMessage" {
+                        self.needs_runtime_import = true;
+                    }
+                }
+            }
+            "plural" | "select" | "selectOrdinal" => {
+                if let Some(text) =
+                    transform_choice_call(it, &macro_info.imported_name, self.options)
+                {
+                    self.replacements.push(Replacement {
+                        start: it.span.start as usize,
+                        end: it.span.end as usize,
+                        text,
+                    });
+                    self.needs_runtime_import = true;
+                }
+            }
+            _ => {
+                walk::walk_call_expression(self, it);
+                return;
             }
         }
 
@@ -222,6 +236,31 @@ fn extract_object_properties(object: &ObjectExpression<'_>) -> HashMap<String, S
     }
 
     properties
+}
+
+fn extract_choice_options(object: &ObjectExpression<'_>) -> Vec<(String, String)> {
+    let mut options = Vec::new();
+
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            continue;
+        };
+        let Some(key) = property.key.static_name() else {
+            continue;
+        };
+        let Some(value) = string_value(&property.value) else {
+            continue;
+        };
+
+        let normalized_key = if let Some(exact) = key.strip_prefix('_') {
+            format!("={exact}")
+        } else {
+            key.into_owned()
+        };
+        options.push((normalized_key, value));
+    }
+
+    options
 }
 
 fn expression_name(expr: &Expression<'_>) -> Option<String> {
@@ -367,9 +406,67 @@ fn transform_descriptor_call(
     }
 }
 
+fn transform_choice_call(
+    call: &CallExpression<'_>,
+    macro_name: &str,
+    options: &NativeTransformOptions,
+) -> Option<String> {
+    let value_arg = call.arguments.first()?;
+    let options_arg = call.arguments.get(1)?;
+
+    let Some(value_expr) = value_arg.as_expression() else {
+        return None;
+    };
+    let Argument::ObjectExpression(choice_object) = options_arg else {
+        return None;
+    };
+
+    let value_name = expression_name(value_expr).unwrap_or_else(|| "0".to_string());
+    let choice_options = extract_choice_options(choice_object);
+
+    if choice_options.is_empty() {
+        return None;
+    }
+
+    let format = if macro_name == "selectOrdinal" {
+        "selectordinal"
+    } else {
+        macro_name
+    };
+    let message = build_icu_message(format, &value_name, &choice_options, None);
+    let id = generate_message_id(&message, None);
+    let values = [value_name];
+    let descriptor = build_message_descriptor(
+        &id,
+        Some(&message),
+        Some(&values),
+        None,
+        None,
+        options,
+    );
+
+    Some(build_runtime_call(&descriptor, options))
+}
+
 fn build_runtime_call(descriptor: &str, options: &NativeTransformOptions) -> String {
     let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
     format!("{runtime_import_name}()._({descriptor})")
+}
+
+fn build_icu_message(
+    format: &str,
+    value_name: &str,
+    options: &[(String, String)],
+    offset: Option<&str>,
+) -> String {
+    let option_parts = options
+        .iter()
+        .map(|(key, value)| format!("{key} {{{value}}}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let offset_part = offset.map(|value| format!(" offset:{value}")).unwrap_or_default();
+
+    format!("{{{value_name}, {format},{offset_part} {option_parts}}}")
 }
 
 pub fn transform_macros_json(
@@ -419,6 +516,14 @@ pub fn transform_macros_json(
 
     let mut visitor = TransformVisitor::new(&collector.macro_imports, &options);
     visitor.visit_program(&parsed.program);
+
+    if visitor.replacements.is_empty() {
+        return serde_json::to_string(&NativeTransformResult {
+            code: source.to_string(),
+            has_changed: false,
+        })
+        .map_err(|error| error.to_string());
+    }
 
     let mut replacements = visitor.replacements;
     for (start, end) in collector.macro_import_ranges {
@@ -492,5 +597,43 @@ mod tests {
         assert!(result.code.contains("id:"));
         assert!(result.code.contains("message: \"Hello\""));
         assert!(!result.code.contains("getI18n()._("));
+    }
+
+    #[test]
+    fn transforms_plural_choice_macros() {
+        let result = serde_json::from_str::<NativeTransformResult>(
+            &transform_macros_json(
+                "import { plural } from \"@lingui/macro\";\nconst msg = plural(count, { one: \"# item\", other: \"# items\" });\n",
+                "test.ts",
+                None,
+            )
+            .expect("transform should succeed"),
+        )
+        .expect("json should deserialize");
+
+        assert!(result.code.contains("getI18n()._({ id:"));
+        assert!(result
+            .code
+            .contains("message: \"{count, plural, one {# item} other {# items}}\""));
+        assert!(result.code.contains("values: { count }"));
+    }
+
+    #[test]
+    fn transforms_select_ordinal_choice_macros() {
+        let result = serde_json::from_str::<NativeTransformResult>(
+            &transform_macros_json(
+                "import { selectOrdinal } from \"@lingui/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",
+                "test.ts",
+                None,
+            )
+            .expect("transform should succeed"),
+        )
+        .expect("json should deserialize");
+
+        assert!(result.code.contains("getI18n()._({ id:"));
+        assert!(result
+            .code
+            .contains("message: \"{count, selectordinal, one {#st} other {#th}}\""));
+        assert!(result.code.contains("values: { count }"));
     }
 }

@@ -69,15 +69,6 @@ export function transformLinguiMacros(
   const importsToRemove: Array<{ start: number; end: number }> = []
   let needsRuntimeImport = false
 
-  // Track which imports to remove
-  const importDeclarationsToRemove = new Set<unknown>()
-
-  // Track useLingui/getLingui destructured variables: { t: "_", plural: "_" }
-  // Maps local variable name to the function it provides
-  const useLinguiBindings = new Map<string, "t" | "plural" | "select" | "selectOrdinal">()
-  // Track getLingui bindings separately (these use i18n._ instead of hook's _)
-  const getLinguiBindings = new Map<string, "t" | "plural" | "select" | "selectOrdinal">()
-
   // Walk the AST and collect transformations
   walk(program, {
     enter(node) {
@@ -91,73 +82,11 @@ export function transformLinguiMacros(
       if (record.type === "ImportDeclaration") {
         const source = (record.source as Record<string, unknown>)?.value as string
         if (LINGUI_MACRO_PACKAGES.some((pkg) => source === pkg)) {
-          importDeclarationsToRemove.add(node)
           const start = record.start as number
           const end = record.end as number
           importsToRemove.push({ start, end })
         }
         return
-      }
-
-      // Track useLingui()/getLingui() in VariableDeclaration: const { t } = useLingui()
-      if (record.type === "VariableDeclaration") {
-        const declarations = record.declarations as Array<Record<string, unknown>> | undefined
-        if (declarations && declarations.length === 1) {
-          const declarator = declarations[0]
-          if (!declarator) {
-            return
-          }
-          const init = declarator?.init as Record<string, unknown> | undefined
-          if (init?.type === "CallExpression") {
-            const callee = init.callee as Record<string, unknown> | undefined
-            const calleeName = callee?.name as string | undefined
-            if (calleeName && macroImports.has(calleeName)) {
-              const macro = macroImports.get(calleeName)
-              const isUseLingui = macro?.importedName === "useLingui"
-              const isGetLingui = macro?.importedName === "getLingui"
-
-              if (isUseLingui || isGetLingui) {
-                // Parse destructuring pattern: const { t, plural } = useLingui()
-                const id = declarator.id as Record<string, unknown> | undefined
-                if (id?.type === "ObjectPattern") {
-                  const properties = id.properties as Array<Record<string, unknown>> | undefined
-                  const targetBindings = isUseLingui ? useLinguiBindings : getLinguiBindings
-
-                  if (properties) {
-                    for (const prop of properties) {
-                      const key = prop.key as Record<string, unknown> | undefined
-                      const value = prop.value as Record<string, unknown> | undefined
-                      const keyName = key?.name as string | undefined
-                      const valueName = (value?.name ?? keyName) as string | undefined
-
-                      if (keyName && valueName) {
-                        // Map: local name -> macro function type
-                        if (keyName === "t" || keyName === "_") {
-                          targetBindings.set(valueName, "t")
-                        } else if (keyName === "plural") {
-                          targetBindings.set(valueName, "plural")
-                        } else if (keyName === "select") {
-                          targetBindings.set(valueName, "select")
-                        } else if (keyName === "selectOrdinal") {
-                          targetBindings.set(valueName, "selectOrdinal")
-                        }
-                      }
-                    }
-                  }
-
-                  const declStart = record.start as number
-                  const declEnd = record.end as number
-                  replacements.push({
-                    start: declStart,
-                    end: declEnd,
-                    text: "",
-                  })
-                  needsRuntimeImport = true
-                }
-              }
-            }
-          }
-        }
       }
 
       // Transform tagged template expressions: t`Hello`
@@ -166,30 +95,12 @@ export function transformLinguiMacros(
         const tagName = tag?.name as string | undefined
 
         if (tagName) {
-          // Check if this is from useLingui() destructuring (uses _)
-          const useLinguiBinding = useLinguiBindings.get(tagName)
-          if (useLinguiBinding === "t") {
-            const replacement = transformTaggedTemplateToRuntimeCall(record, options)
+          const macro = macroImports.get(tagName)
+          if (macro && (macro.importedName === "t" || macro.importedName === "msg")) {
+            const replacement = transformTaggedTemplate(record, macro, options)
             if (replacement) {
               replacements.push(replacement)
-            }
-          } else {
-            const getLinguiBinding = getLinguiBindings.get(tagName)
-            if (getLinguiBinding === "t") {
-              const replacement = transformTaggedTemplateToRuntimeCall(record, options)
-              if (replacement) {
-                replacements.push(replacement)
-              }
-            } else {
-              // Check if from direct macro import
-              const macro = macroImports.get(tagName)
-              if (macro && (macro.importedName === "t" || macro.importedName === "msg")) {
-                const replacement = transformTaggedTemplate(record, macro, options)
-                if (replacement) {
-                  replacements.push(replacement)
-                  needsRuntimeImport = true
-                }
-              }
+              needsRuntimeImport = true
             }
           }
         }
@@ -201,44 +112,21 @@ export function transformLinguiMacros(
         const calleeName = callee?.name as string | undefined
 
         if (calleeName) {
-          // Check if this is from useLingui() destructuring (uses _)
-          const useLinguiBinding = useLinguiBindings.get(calleeName)
-          if (useLinguiBinding) {
-            if (useLinguiBinding === "plural" || useLinguiBinding === "select" || useLinguiBinding === "selectOrdinal") {
-              const replacement = transformPluralSelectCallToRuntimeCall(record, useLinguiBinding, options)
+          const macro = macroImports.get(calleeName)
+          if (macro) {
+            if (macro.importedName === "t" || macro.importedName === "msg" || macro.importedName === "defineMessage") {
+              const replacement = transformCallExpression(record, macro, options)
               if (replacement) {
                 replacements.push(replacement)
-              }
-            }
-          } else {
-            const getLinguiBinding = getLinguiBindings.get(calleeName)
-            if (getLinguiBinding) {
-              if (getLinguiBinding === "plural" || getLinguiBinding === "select" || getLinguiBinding === "selectOrdinal") {
-                const replacement = transformPluralSelectCallToRuntimeCall(record, getLinguiBinding, options)
-                if (replacement) {
-                  replacements.push(replacement)
+                if (macro.importedName !== "defineMessage") {
+                  needsRuntimeImport = true
                 }
               }
-            } else {
-              // Check if from direct macro import
-              const macro = macroImports.get(calleeName)
-              if (macro) {
-                if (macro.importedName === "t" || macro.importedName === "msg" || macro.importedName === "defineMessage") {
-                  const replacement = transformCallExpression(record, macro, options)
-                  if (replacement) {
-                    replacements.push(replacement)
-                    // Only add runtime import for t/msg, not defineMessage
-                    if (macro.importedName !== "defineMessage") {
-                      needsRuntimeImport = true
-                    }
-                  }
-                } else if (macro.importedName === "plural" || macro.importedName === "select" || macro.importedName === "selectOrdinal") {
-                  const replacement = transformPluralSelectCall(record, macro, options)
-                  if (replacement) {
-                    replacements.push(replacement)
-                    needsRuntimeImport = true
-                  }
-                }
+            } else if (macro.importedName === "plural" || macro.importedName === "select" || macro.importedName === "selectOrdinal") {
+              const replacement = transformPluralSelectCall(record, macro, options)
+              if (replacement) {
+                replacements.push(replacement)
+                needsRuntimeImport = true
               }
             }
           }
@@ -273,8 +161,8 @@ export function transformLinguiMacros(
     },
   })
 
-  // If no transformations needed, return early
-  if (replacements.length === 0 && importsToRemove.length === 0) {
+  // If no supported transformations were produced, leave the file unchanged.
+  if (replacements.length === 0) {
     return { code, hasChanged: false, map: null }
   }
 
@@ -399,78 +287,6 @@ function transformTaggedTemplate(
   const id = generateMessageId(message, "")
 
   const descriptor = buildMessageDescriptor(id, message, values)
-  const text = buildRuntimeCall(descriptor, options)
-
-  return { start, end, text }
-}
-
-/**
- * Transform a tagged template from a compatibility macro binding.
- */
-function transformTaggedTemplateToRuntimeCall(
-  node: Record<string, unknown>,
-  options: TransformOptions
-): Replacement | null {
-  const quasi = node.quasi as Record<string, unknown> | undefined
-  if (!quasi) {
-    return null
-  }
-
-  const start = node.start as number
-  const end = node.end as number
-
-  const { message, values } = extractTemplateLiteral(quasi)
-  const id = generateMessageId(message)
-
-  const descriptor = buildMessageDescriptor(id, message, values)
-  const text = buildRuntimeCall(descriptor, options)
-
-  return { start, end, text }
-}
-
-/**
- * Transform plural/select/selectOrdinal from a compatibility macro binding.
- */
-function transformPluralSelectCallToRuntimeCall(
-  node: Record<string, unknown>,
-  macroType: "plural" | "select" | "selectOrdinal",
-  options: TransformOptions
-): Replacement | null {
-  const args = node.arguments as Array<Record<string, unknown>> | undefined
-  if (!args || args.length < 2) {
-    return null
-  }
-
-  const start = node.start as number
-  const end = node.end as number
-
-  // First arg is the value, second is options
-  const valueArg = args[0]
-  const optionsArg = args[1]
-
-  if (!valueArg || typeof valueArg !== "object") {
-    return null
-  }
-
-  // Get the value name (for interpolation)
-  const valueName = extractExpressionName(valueArg) ?? "0"
-
-  // Extract options from the second argument
-  if (optionsArg?.type !== "ObjectExpression") {
-    return null
-  }
-
-  const choiceOptions = extractChoiceOptions(optionsArg)
-  if (Object.keys(choiceOptions).length === 0) {
-    return null
-  }
-
-  // Build ICU message format
-  const format = macroType === "selectOrdinal" ? "selectordinal" : macroType
-  const message = buildICUMessage(format, valueName, choiceOptions)
-  const id = generateMessageId(message)
-
-  const descriptor = buildMessageDescriptor(id, message, [valueName])
   const text = buildRuntimeCall(descriptor, options)
 
   return { start, end, text }

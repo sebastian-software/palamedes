@@ -5,7 +5,6 @@ import { mightContainLinguiMacros } from "./detect"
 import { transformLinguiMacrosJs } from "./transformJs"
 
 const UNSUPPORTED_NATIVE_PATTERNS = [
-  /\b(useLingui|getLingui|plural|select|selectOrdinal)\b/,
   /<\s*(Trans|Plural|Select|SelectOrdinal)\b/,
 ]
 
