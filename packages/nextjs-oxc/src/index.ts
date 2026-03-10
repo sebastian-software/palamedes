@@ -36,6 +36,18 @@ export interface WithLinguiOxcOptions {
   configPath?: string
 
   /**
+   * If true, fail compilation on missing translations.
+   * @default false
+   */
+  failOnMissing?: boolean
+
+  /**
+   * If true, fail compilation on message compilation errors.
+   * @default false
+   */
+  failOnCompileError?: boolean
+
+  /**
    * Module to import the runtime getter from.
    * @default "@palamedes/runtime"
    */
@@ -64,6 +76,8 @@ export function withLinguiOxc(
     exclude = /node_modules/,
     enablePoLoader = true,
     configPath,
+    failOnMissing = false,
+    failOnCompileError = false,
     runtimeModule = "@palamedes/runtime",
   } = options
 
@@ -98,7 +112,7 @@ export function withLinguiOxc(
             loaders: [
               {
                 loader: poLoaderPath,
-                options: { configPath },
+                options: { configPath, failOnMissing, failOnCompileError },
               },
             ],
             as: "*.js",
@@ -130,7 +144,7 @@ export function withLinguiOxc(
           use: [
             {
               loader: poLoaderPath,
-              options: { configPath },
+              options: { configPath, failOnMissing, failOnCompileError },
             },
           ],
         })

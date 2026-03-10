@@ -52,6 +52,12 @@ module.exports = withLinguiOxc(nextConfig, {
   // Path to lingui.config.js (optional)
   configPath: "./lingui.config.js",
 
+  // Fail build on missing translations (default: false)
+  failOnMissing: false,
+
+  // Fail build on compilation errors (default: false)
+  failOnCompileError: false,
+
   // Module to import getI18n from (default: "@palamedes/runtime")
   runtimeModule: "@palamedes/runtime",
 })
