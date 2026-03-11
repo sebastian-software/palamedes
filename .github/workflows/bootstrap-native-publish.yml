@@ -1,0 +1,51 @@
+name: Bootstrap Native Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package_name: "@palamedes/core-node-darwin-arm64"
+            runner: macos-14
+          - package_name: "@palamedes/core-node-linux-x64-gnu"
+            runner: ubuntu-24.04
+          - package_name: "@palamedes/core-node-linux-arm64-gnu"
+            runner: ubuntu-24.04-arm
+          - package_name: "@palamedes/core-node-win32-x64-msvc"
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      PALAMEDES_RUST_PROFILE: release
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native package
+        run: pnpm --filter "${{ matrix.package_name }}" build
+
+      - name: Publish native package with bootstrap token
+        run: pnpm --filter "${{ matrix.package_name }}" publish --access public --no-git-checks
