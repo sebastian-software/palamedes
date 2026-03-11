@@ -2,6 +2,13 @@
   "name": "@palamedes/runtime",
   "version": "0.1.0",
   "description": "Palamedes runtime primitives for resolving the active i18n instance",
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/runtime"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "license": "MIT",
   "type": "module",
   "exports": {

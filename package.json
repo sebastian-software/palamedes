@@ -2,6 +2,12 @@
   "name": "palamedes",
   "private": true,
   "description": "Next-generation Lingui tooling powered by OXC",
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "packageManager": "pnpm@10.32.0",
   "engines": {
     "node": ">=22.0.0"
