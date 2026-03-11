@@ -76,6 +76,11 @@ pnpm exec pmds extract --watch
 - [`examples/vite-react`](examples/vite-react) — Vite + React SPA
 - [`examples/nextjs-app`](examples/nextjs-app) — Next.js App Router with RSC
 
+## Docs
+
+- [`docs/comparison-with-lingui.md`](docs/comparison-with-lingui.md) — Why we think Palamedes is the better default choice
+- [`docs/migrate-from-lingui.md`](docs/migrate-from-lingui.md) — Step-by-step migration guide for Lingui users
+
 ## Development
 
 ```bash
