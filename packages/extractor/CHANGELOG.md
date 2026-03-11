@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.1](https://github.com/sebastian-software/palamedes/compare/extractor-v0.1.0...extractor-v0.1.1) (2026-03-11)
+
+
+### Miscellaneous Chores
+
+* **extractor:** Synchronize palamedes versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/core-node bumped to 0.1.1
+
 ## [0.1.0](https://github.com/sebastian-software/palamedes/compare/extractor-v0.0.1...extractor-v0.1.0) (2026-03-11)
 
 

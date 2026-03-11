@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/transform",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OXC-based macro transformer for Lingui - transforms Lingui macros to runtime calls without Babel",
   "keywords": [
     "lingui",

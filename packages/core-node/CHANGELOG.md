@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.1](https://github.com/sebastian-software/palamedes/compare/core-node-v0.1.0...core-node-v0.1.1) (2026-03-11)
+
+
+### Miscellaneous Chores
+
+* **core-node:** Synchronize palamedes versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * optionalDependencies
+    * @palamedes/core-node-darwin-arm64 bumped to 0.1.1
+    * @palamedes/core-node-linux-arm64-gnu bumped to 0.1.1
+    * @palamedes/core-node-linux-x64-gnu bumped to 0.1.1
+    * @palamedes/core-node-win32-x64-msvc bumped to 0.1.1
+
 ## [0.1.0](https://github.com/sebastian-software/palamedes/compare/core-node-v0.0.1...core-node-v0.1.0) (2026-03-11)
 
 
