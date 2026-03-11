@@ -11,7 +11,6 @@
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
     "check-types": "pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",
-    "bootstrap:native-placeholders": "node ./scripts/publish-native-placeholders.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "build:native": "cargo build --workspace",
