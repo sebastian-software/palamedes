@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/next-plugin",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Next.js integration for Lingui using OXC-based macro transformer",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
