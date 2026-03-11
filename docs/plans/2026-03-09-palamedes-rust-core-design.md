@@ -19,7 +19,7 @@ The target is not just to adopt the external `pofile` crate for PO handling. The
 
 TypeScript should remain the integration layer for Node tooling, framework adapters, and package ergonomics.
 
-The runtime model should also converge on a single Palamedes-owned primitive, `getI18n()`, instead of separate `useLingui()` and `getLingui()` access paths.
+The runtime model should also converge on a single Palamedes-owned primitive, `getI18n()`, instead of separate client/server accessor paths.
 
 ## Goals
 
@@ -156,7 +156,7 @@ This validates the binding design before moving the larger OXC flows.
 - move macro transform logic from `packages/transform` into Rust
 - preserve transform behavior and source map semantics
 - expose transform as a coarse-grained native operation
-- converge transformed output on `getI18n()` instead of `useLingui()` and `getLingui()`-specific code paths
+- converge transformed output on `getI18n()` instead of maintaining accessor-specific code paths
 
 ### Phase 5: Wrapper migration
 

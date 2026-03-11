@@ -78,17 +78,6 @@ plural(count, { one: '# item', other: '# items' })
 select(gender, { male: 'He', female: 'She', other: 'They' })
 ```
 
-### useLingui Hook
-
-```tsx
-import { useLingui } from '@lingui/react/macro'
-
-function MyComponent() {
-  const { t } = useLingui()
-  return <div>{t`Hello ${name}`}</div>
-}
-```
-
 ### Runtime Calls (i18n._)
 
 ```ts

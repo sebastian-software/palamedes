@@ -84,7 +84,7 @@ Relevante Dateien:
 ### Runtime-Modell
 
 - Neues Runtime-Paket eingeführt: [packages/runtime](/Users/sebastian/Workspace/business/palamedes/packages/runtime)
-- Neues Zielmodell ist `getI18n()` statt `useLingui()` / `getLingui()`
+- Neues Zielmodell ist `getI18n()` statt getrennter Zugriffspfade für Client und Server
 - Runtime-API:
   - `getI18n()`
   - `setClientI18n()`
@@ -128,7 +128,7 @@ Heute erneut geprüft:
 
 1. Den nativen Transform weiter Richtung Parität bringen
 2. Den Verifikationsstand für Beispiel-Builds und Cargo-Workspace wieder ausdrücklich auffrischen
-3. Alte `useLingui()` / `getLingui()`-Spuren außerhalb des Transforms gezielt aus Doku und verbleibenden Implementierungen entfernen
+3. Alte accessor-spezifische Spuren außerhalb des Transforms gezielt aus Doku und verbleibenden Implementierungen entfernen
 
 ### Mittelfristig
 
@@ -145,7 +145,7 @@ Heute erneut geprüft:
 ## Empfohlene nächste Schritte
 
 1. Beispiel-Builds und Cargo-Workspace gemeinsam wieder ausdrücklich verifizieren
-2. Verbleibende Altspuren wie `useLingui()` / `getLingui()` außerhalb des Transforms abbauen
+2. Verbleibende Altspuren alter Zugriffspfade außerhalb des Transforms abbauen
 3. Danach native Packaging-/Release-Fluss weiter härten
 
 ## Letzte relevante Commits

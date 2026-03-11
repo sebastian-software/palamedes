@@ -48,9 +48,6 @@ const JSX_MACROS = ["Trans", "Plural", "Select", "SelectOrdinal"] as const
 // JS macro names
 const JS_MACROS = ["t", "msg", "defineMessage", "plural", "select", "selectOrdinal"] as const
 
-// useLingui hook - the destructured `t` from it should be treated as a macro
-const USE_LINGUI_MACRO = "useLingui"
-
 export interface ExtractedMessageInfo extends ExtractedMessage {
   origin: [filename: string, line: number, column?: number]
 }
@@ -59,11 +56,6 @@ interface ImportedMacro {
   localName: string
   importedName: string
   source: string
-}
-
-interface DestructuredMacro {
-  localName: string
-  fromHook: string
 }
 
 /**
@@ -98,7 +90,6 @@ export function extractMessages(
 ): ExtractedMessageInfo[] {
   const messages: ExtractedMessageInfo[] = []
   const importedMacros = new Map<string, ImportedMacro>()
-  const destructuredFromHook = new Map<string, DestructuredMacro>()
   const getLine = code ? createLineLocator(code) : () => 0
 
   // First pass: collect imports from Lingui packages
@@ -130,61 +121,12 @@ export function extractMessages(
   // Note: We don't skip extraction if there are no macro imports,
   // because we also want to extract i18n._() runtime calls which don't require imports
 
-  // Second pass: find useLingui() destructuring patterns
-  // e.g., const { t } = useLingui() or const { t: translate } = useLingui()
-  walk(program, {
-    enter(node) {
-      if (node.type === "VariableDeclarator") {
-        const init = node.init
-
-        // Check if init is useLingui() call
-        if (
-          init?.type === "CallExpression" &&
-          init.callee?.type === "Identifier" &&
-          importedMacros.get(init.callee.name)?.importedName === USE_LINGUI_MACRO
-        ) {
-          // Check if we have object destructuring: const { t } = useLingui()
-          const id = node.id
-          if (id?.type === "ObjectPattern") {
-            for (const prop of id.properties || []) {
-              // Handle { t } and { t: myT }
-              if (prop.type === "Property" || prop.type === "ObjectProperty") {
-                const key = prop.key?.name // original name (t)
-                const value = prop.value?.name || prop.key?.name // local name
-
-                if (key && value && ["t", "_"].includes(key)) {
-                  destructuredFromHook.set(value, {
-                    localName: value,
-                    fromHook: USE_LINGUI_MACRO,
-                  })
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-  })
-
-  // Helper to check if an identifier is a Lingui macro (direct import or from useLingui)
+  // Helper to check if an identifier is a Lingui macro from a direct import.
   function isLinguiMacro(name: string, expectedMacros: readonly string[]): ImportedMacro | undefined {
-    // Check direct imports first
     const macro = importedMacros.get(name)
     if (macro && expectedMacros.includes(macro.importedName as any)) {
       return macro
     }
-
-    // Check if destructured from useLingui hook
-    const fromHook = destructuredFromHook.get(name)
-    if (fromHook && expectedMacros.includes("t")) {
-      // Treat destructured t from useLingui as if it was imported as "t"
-      return {
-        localName: name,
-        importedName: "t",
-        source: "@lingui/react/macro",
-      }
-    }
-
     return undefined
   }
 

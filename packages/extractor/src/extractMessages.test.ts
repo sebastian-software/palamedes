@@ -183,64 +183,6 @@ const y = <Trans>Line 3</Trans>`
     })
   })
 
-  describe("useLingui hook", () => {
-    it("extracts from destructured t", () => {
-      const code = `
-        import { useLingui } from "@lingui/react/macro"
-        function MyComponent() {
-          const { t } = useLingui()
-          return t\`Hello World\`
-        }
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].id).toBe(msgId("Hello World"))
-      expect(messages[0].message).toBe("Hello World")
-    })
-
-    it("extracts from renamed destructured t", () => {
-      const code = `
-        import { useLingui } from "@lingui/react/macro"
-        function MyComponent() {
-          const { t: translate } = useLingui()
-          return translate\`Hello World\`
-        }
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].id).toBe(msgId("Hello World"))
-      expect(messages[0].message).toBe("Hello World")
-    })
-
-    it("extracts t with interpolation from useLingui", () => {
-      const code = `
-        import { useLingui } from "@lingui/react/macro"
-        function MyComponent() {
-          const { t } = useLingui()
-          return t\`Hello \${name}\`
-        }
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].id).toBe(msgId("Hello {name}"))
-      expect(messages[0].message).toBe("Hello {name}")
-    })
-
-    it("extracts t call expression from useLingui", () => {
-      const code = `
-        import { useLingui } from "@lingui/react/macro"
-        function MyComponent() {
-          const { t } = useLingui()
-          return t({ id: "greeting", message: "Hello" })
-        }
-      `
-      const messages = extract(code)
-      expect(messages).toHaveLength(1)
-      expect(messages[0].id).toBe("greeting")
-      expect(messages[0].message).toBe("Hello")
-    })
-  })
-
   describe("multiple imports", () => {
     it("handles @lingui/macro imports", () => {
       const code = `

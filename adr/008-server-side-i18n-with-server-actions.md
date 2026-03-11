@@ -15,8 +15,8 @@ Use **Server Actions + `revalidatePath()`** for language switching:
 ┌─────────────────────────────────────────────────────────────┐
 │  1. Server reads locale from cookie                         │
 │  2. Server initializes i18n with setI18n()                  │
-│  3. Server Components use getLingui() → i18n._()            │
-│  4. Client Components use useLingui() → reactive _()        │
+│  3. Server Components use getI18n() → getI18n()._()         │
+│  4. Client Components use runtime-backed translations       │
 │  5. Language switch: Server Action sets cookie + revalidates│
 │  6. Next.js streams new Server Components to client         │
 └─────────────────────────────────────────────────────────────┘
@@ -32,13 +32,13 @@ src/lib/
 
 **Server Component:**
 ```tsx
-import { getLingui } from "@lingui/core/macro"
+import { t } from "@lingui/core/macro"
+import { getI18n } from "@palamedes/runtime"
 import { initI18nServer } from "@/lib/i18n.server"
 
 export default async function Page() {
   await initI18nServer()
-  const { t } = getLingui()
-  return <h1>{t`Hello`}</h1>
+  return <h1>{getI18n()._(t`Hello`)}</h1>
 }
 ```
 

@@ -7,13 +7,13 @@
 
 Palamedes currently carries two separate macro-facing access patterns:
 
-- `useLingui()` for React-oriented access
-- `getLingui()` for direct runtime access
+- a React-oriented accessor style
+- a direct runtime accessor style
 
 That split was intended to distinguish hook-like usage from server-safe usage, but it creates an unclear mental model:
 
 - users have to decide between two APIs for the same translation work
-- `useLingui()` looks like a normal React Hook, even when macro expansion is the real mechanism
+- the React-oriented accessor looks like a normal hook, even when macro expansion is the real mechanism
 - Server Components become harder to reason about because it is not obvious which API is valid where
 - the transform has to special-case multiple runtime targets for equivalent operations
 
@@ -27,7 +27,7 @@ Target model:
 
 - translation macros compile against `getI18n()`
 - runtime consumers may call `getI18n()` directly for data such as `getI18n().locale`
-- `useLingui()` and `getLingui()` are no longer part of the preferred long-term API model
+- separate client/server accessors are no longer part of the preferred long-term API model
 
 `getI18n()` semantics:
 
@@ -47,7 +47,6 @@ No silent fallback is allowed. Returning a wrong locale for part of the app is c
 
 ### Consequences
 
-- ADR-003 is superseded in the long term
 - runtime and transform layers should converge on `getI18n()`-based code generation
 - React integration becomes an adapter concern, not the core i18n access pattern
 - server initialization must provide a request-local i18n instance before translated code executes
@@ -55,6 +54,6 @@ No silent fallback is allowed. Returning a wrong locale for part of the app is c
 
 ### Follow-Up
 
-- deprecate `useLingui()` and `getLingui()` in docs and examples
+- remove old accessor terminology from docs and examples
 - update transform output to target `getI18n()`
 - define the concrete runtime package surface for `getI18n()` and initialization helpers

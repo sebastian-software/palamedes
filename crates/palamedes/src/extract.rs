@@ -1,11 +1,11 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, BindingPattern, CallExpression, Expression, ImportDeclaration,
-    ImportDeclarationSpecifier, JSXAttributeValue, JSXChild, JSXElement, JSXExpression,
-    JSXOpeningElement, MemberExpression, ObjectExpression, ObjectPropertyKind,
-    TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
+    Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
+    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
+    MemberExpression, ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression,
+    TemplateLiteral,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -61,14 +61,12 @@ impl LineLocator {
 
 struct MacroCollector {
     imported_macros: HashMap<String, ImportedMacro>,
-    hook_t_bindings: HashSet<String>,
 }
 
 impl MacroCollector {
     fn new() -> Self {
         Self {
             imported_macros: HashMap::new(),
-            hook_t_bindings: HashSet::new(),
         }
     }
 }
@@ -94,53 +92,12 @@ impl<'a> Visit<'a> for MacroCollector {
         }
     }
 
-    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        let Some(Expression::CallExpression(call_expr)) = &it.init else {
-            walk::walk_variable_declarator(self, it);
-            return;
-        };
-
-        let Expression::Identifier(callee) = call_expr.callee.without_parentheses() else {
-            walk::walk_variable_declarator(self, it);
-            return;
-        };
-
-        let Some(macro_info) = self.imported_macros.get(callee.name.as_str()) else {
-            walk::walk_variable_declarator(self, it);
-            return;
-        };
-
-        if macro_info.imported_name != "useLingui" {
-            walk::walk_variable_declarator(self, it);
-            return;
-        }
-
-        let BindingPattern::ObjectPattern(object_pattern) = &it.id else {
-            walk::walk_variable_declarator(self, it);
-            return;
-        };
-
-        for property in &object_pattern.properties {
-            let Some(key) = property.key.static_name() else {
-                continue;
-            };
-            if key != "t" && key != "_" {
-                continue;
-            }
-            if let Some(binding_name) = property.value.get_identifier_name() {
-                self.hook_t_bindings.insert(binding_name.to_string());
-            }
-        }
-
-        walk::walk_variable_declarator(self, it);
-    }
 }
 
 struct ExtractionVisitor<'a> {
     filename: String,
     line_locator: &'a LineLocator,
     imported_macros: &'a HashMap<String, ImportedMacro>,
-    hook_t_bindings: &'a HashSet<String>,
     messages: Vec<ExtractedMessageRecord>,
 }
 
@@ -149,13 +106,11 @@ impl<'a> ExtractionVisitor<'a> {
         filename: &str,
         line_locator: &'a LineLocator,
         imported_macros: &'a HashMap<String, ImportedMacro>,
-        hook_t_bindings: &'a HashSet<String>,
     ) -> Self {
         Self {
             filename: filename.to_string(),
             line_locator,
             imported_macros,
-            hook_t_bindings,
             messages: Vec::new(),
         }
     }
@@ -173,10 +128,6 @@ impl<'a> ExtractionVisitor<'a> {
     }
 
     fn imported_macro_name(&self, local_name: &str, expected: &[&str]) -> Option<&str> {
-        if self.hook_t_bindings.contains(local_name) && expected.contains(&"t") {
-            return Some("t");
-        }
-
         self.imported_macros.get(local_name).and_then(|macro_info| {
             expected
                 .contains(&macro_info.imported_name.as_str())
@@ -856,7 +807,6 @@ pub fn extract_messages_json(source: &str, filename: &str) -> Result<String, Str
         filename,
         &line_locator,
         &collector.imported_macros,
-        &collector.hook_t_bindings,
     );
     extractor.visit_program(&parsed.program);
 

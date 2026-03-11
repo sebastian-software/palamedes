@@ -26,7 +26,7 @@ Phase-1 native coverage includes:
 - tagged template extraction for `t` and `msg`
 - descriptor-style extraction for `t({...})`, `defineMessage({...})`, and `msg({...})`
 - runtime extraction for `i18n._(...)` and `i18n.t\`...\``
-- `useLingui()` destructured `t` bindings
+- legacy hook-style destructured `t` bindings
 
 The TypeScript extractor remains as a fallback for:
 
