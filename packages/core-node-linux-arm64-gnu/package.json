@@ -8,6 +8,7 @@
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/core-node-linux-arm64-gnu"
   },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "license": "MIT",
   "type": "commonjs",
   "main": "./palamedes-node.node",

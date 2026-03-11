@@ -15,6 +15,7 @@
     "url": "git+https://github.com/sebastian-software/palamedes.git",
     "directory": "packages/cli"
   },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "license": "MIT",
   "type": "module",
   "bin": {
