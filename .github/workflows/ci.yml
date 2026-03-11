@@ -23,9 +23,7 @@ jobs:
           node-version: 24
 
       - name: Enable Corepack
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.32.0 --activate
+        run: corepack enable
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
