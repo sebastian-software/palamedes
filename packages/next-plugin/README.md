@@ -5,17 +5,17 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The recommended way to use Palamedes in Next.js.
+The fast path to Palamedes in Next.js.
 
-`@palamedes/next-plugin` wires Palamedes into webpack and Turbopack so message macros are transformed before they leak into runtime, and `.po` files can be loaded as part of the application build.
+`@palamedes/next-plugin` wires Palamedes into webpack and Turbopack so message macros are transformed at speed before they leak into runtime, and `.po` files can be loaded as part of the application build.
 
 ## When To Use This Package
 
-Use this package when you are integrating Palamedes into a Next.js application.
+Use this package when you want Palamedes wired cleanly into a Next.js application.
 
 It is the right starting point if you want:
 
-- message macro transforms without adding Babel back to the project
+- brutally fast message macro transforms without adding Babel back to the project
 - `.po` file loading as part of the app build
 - one supported integration point for both webpack and Turbopack
 

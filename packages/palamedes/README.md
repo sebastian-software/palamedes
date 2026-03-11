@@ -5,13 +5,13 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The reserved top-level npm package for the Palamedes toolchain.
+The canonical npm home for Palamedes.
 
-Today this package is intentionally small. It secures the canonical package name and gives the project room for a future top-level CLI, starter experience, or unified entry point without a rename later.
+Today this package is intentionally small. It secures the name now so Palamedes can grow into a first-class top-level entry point later without a confusing rename or a split identity.
 
 ## When To Use This Package
 
-Right now, mostly as a marker that the canonical package name is taken and maintained by the project.
+Right now, mainly as a marker that the canonical package name is taken, maintained, and ready for future expansion.
 
 If you want to use Palamedes today, install the scoped packages directly:
 

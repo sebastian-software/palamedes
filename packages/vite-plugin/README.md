@@ -5,17 +5,17 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The recommended way to use Palamedes in Vite.
+The fast path to Palamedes in Vite.
 
-`@palamedes/vite-plugin` gives Vite projects fast macro transforms, `.po` loading, and a cleaner path than bolting Babel back onto a modern frontend stack.
+`@palamedes/vite-plugin` gives Vite projects brutally fast message macro transforms, `.po` loading, and a much cleaner path than bolting Babel back onto a modern frontend stack.
 
 ## When To Use This Package
 
-Use this package when you are integrating Palamedes into a Vite application.
+Use this package when you want Palamedes to feel native inside a Vite application.
 
 It is the right starting point if you want:
 
-- message macro transforms before the rest of your Vite pipeline runs
+- brutally fast message macro transforms before the rest of your Vite pipeline runs
 - `.po` file loading during development and build
 - a supported integration that stays close to normal Vite behavior
 

@@ -5,14 +5,14 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Palamedes is a modern i18n toolchain for JavaScript and TypeScript apps that want faster builds, faster extraction, and less Babel-shaped plumbing.
+Palamedes is brutally fast i18n tooling for modern JavaScript and TypeScript apps.
 
-It combines a native core, OXC-powered transforms, and framework adapters for Vite and Next.js into a package family that feels small, focused, and ready for real projects.
+It combines a native core, OXC-powered transforms, and first-party adapters for Vite and Next.js into a package family built to move fast in real codebases, not just benchmark demos.
 
 ## Why Palamedes
 
-- Faster macro transforms without adding Babel back into the stack
-- Fast message extraction for large TypeScript and React codebases
+- Brutally fast macro transforms without dragging Babel back into the stack
+- Shockingly fast message extraction for large TypeScript and React codebases
 - First-party adapters for Vite and Next.js
 - A small runtime layer instead of framework lock-in
 - Native packaging underneath, but straightforward setup at the package level
