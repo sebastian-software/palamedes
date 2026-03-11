@@ -41,7 +41,10 @@
     "stub": "unbuild --stub"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@lingui/conf": "^5.9.2",

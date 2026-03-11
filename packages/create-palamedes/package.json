@@ -1,0 +1,33 @@
+{
+  "name": "create-palamedes",
+  "version": "0.0.1",
+  "description": "Placeholder starter package for future Palamedes scaffolding",
+  "keywords": [
+    "create-palamedes",
+    "palamedes",
+    "scaffold",
+    "starter"
+  ],
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/create-palamedes"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-palamedes": "./bin/create-palamedes.mjs"
+  },
+  "files": [
+    "README.md",
+    "bin/"
+  ],
+  "scripts": {
+    "build": "node -e \"process.exit(0)\""
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

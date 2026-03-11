@@ -153,6 +153,8 @@ importers:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)
 
+  packages/create-palamedes: {}
+
   packages/extractor:
     dependencies:
       '@palamedes/core-node':
@@ -202,6 +204,8 @@ importers:
       unbuild:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)
+
+  packages/palamedes: {}
 
   packages/runtime:
     devDependencies:

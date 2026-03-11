@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/runtime",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Palamedes runtime primitives for resolving the active i18n instance",
   "license": "MIT",
   "type": "module",
@@ -24,7 +24,10 @@
     "stub": "unbuild --stub"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",

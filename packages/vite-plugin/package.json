@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/vite-plugin",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Vite plugin for Lingui using OXC-based macro transformer",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -29,7 +29,10 @@
   },
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "LICENSE",

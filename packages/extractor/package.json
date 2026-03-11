@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/extractor",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "High-performance message extractor for Lingui using oxc-parser",
   "keywords": [
     "lingui",
@@ -40,7 +40,10 @@
     "stub": "unbuild --stub"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@palamedes/core-node": "workspace:^",
