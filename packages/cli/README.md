@@ -5,7 +5,7 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The Palamedes command-line interface for extracting Lingui messages quickly and predictably.
+The Palamedes command-line interface for extracting message catalogs quickly and predictably.
 
 This is the package behind the `pmds` binary. Use it when you want extraction in local development, CI, or custom scripts without wiring the lower-level extractor yourself.
 
@@ -17,7 +17,7 @@ Use `@palamedes/cli` when you want:
 - watch mode during development
 - a clean way to update `.po` catalogs in CI
 
-If you are building your own extraction workflow inside Lingui config or custom tooling, look at [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor) instead.
+If you are building your own extraction workflow inside your i18n config or custom tooling, look at [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor) instead.
 
 ## Installation
 

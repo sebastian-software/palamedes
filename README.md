@@ -5,7 +5,7 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Palamedes is a modern i18n toolchain for Lingui projects that want faster builds, faster extraction, and less Babel-shaped plumbing.
+Palamedes is a modern i18n toolchain for JavaScript and TypeScript apps that want faster builds, faster extraction, and less Babel-shaped plumbing.
 
 It combines a native core, OXC-powered transforms, and framework adapters for Vite and Next.js into a package family that feels small, focused, and ready for real projects.
 
@@ -36,7 +36,7 @@ The lower-level packages are there when you want to build custom integrations, t
 | [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) | Extraction CLI | App teams, CI |
 | [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime) | Runtime bridge for transformed code | App teams, infra |
 | [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform) | Low-level macro transform | Tool builders |
-| [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor) | Low-level Lingui extractor | Tool builders |
+| [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor) | Low-level message extractor | Tool builders |
 | [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node) | Node wrapper around the native core | Tool builders |
 | [`@palamedes/core-node-darwin-arm64`](https://www.npmjs.com/package/@palamedes/core-node-darwin-arm64) | Internal native package | Do not install directly |
 | [`@palamedes/core-node-linux-x64-gnu`](https://www.npmjs.com/package/@palamedes/core-node-linux-x64-gnu) | Internal native package | Do not install directly |
@@ -89,7 +89,7 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 module.exports = withPalamedes({})
 ```
 
-Use `@palamedes/runtime` to expose the active Lingui instance on the client and server before translated code runs.
+Use `@palamedes/runtime` to expose the active i18n instance on the client and server before translated code runs.
 
 ## How The Packages Fit Together
 

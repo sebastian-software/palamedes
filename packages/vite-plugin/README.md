@@ -7,7 +7,7 @@
 
 The recommended way to use Palamedes in Vite.
 
-`@palamedes/vite-plugin` gives Vite projects fast Lingui macro transforms, `.po` loading, and a cleaner path than bolting Babel back onto a modern frontend stack.
+`@palamedes/vite-plugin` gives Vite projects fast macro transforms, `.po` loading, and a cleaner path than bolting Babel back onto a modern frontend stack.
 
 ## When To Use This Package
 
@@ -15,7 +15,7 @@ Use this package when you are integrating Palamedes into a Vite application.
 
 It is the right starting point if you want:
 
-- Lingui macro transforms before the rest of your Vite pipeline runs
+- message macro transforms before the rest of your Vite pipeline runs
 - `.po` file loading during development and build
 - a supported integration that stays close to normal Vite behavior
 
@@ -60,7 +60,7 @@ palamedes({
 
 ## What It Handles
 
-- transforms Lingui macros in JavaScript and TypeScript files
+- transforms supported message macros in JavaScript and TypeScript files
 - compiles imported `.po` files into JavaScript modules
 - reports common macro-resolution mistakes early in Vite
 

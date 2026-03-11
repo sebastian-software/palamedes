@@ -41,7 +41,7 @@ The result should feel like one coherent product family: consistent structure, c
 
 ### Product-Level Positioning
 
-Palamedes should be framed as modern i18n tooling for teams that want Lingui-style workflows with a faster, cleaner, more opinionated implementation.
+Palamedes should be framed as modern i18n tooling for teams that want a faster, cleaner, more opinionated workflow, with Lingui mentioned only where compatibility or migration needs to be explicit.
 
 Primary narrative:
 

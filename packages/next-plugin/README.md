@@ -7,7 +7,7 @@
 
 The recommended way to use Palamedes in Next.js.
 
-`@palamedes/next-plugin` wires Palamedes into webpack and Turbopack so Lingui macros are transformed before they leak into runtime, and `.po` files can be loaded as part of the application build.
+`@palamedes/next-plugin` wires Palamedes into webpack and Turbopack so message macros are transformed before they leak into runtime, and `.po` files can be loaded as part of the application build.
 
 ## When To Use This Package
 
@@ -15,7 +15,7 @@ Use this package when you are integrating Palamedes into a Next.js application.
 
 It is the right starting point if you want:
 
-- Lingui macro transforms without adding Babel back to the project
+- message macro transforms without adding Babel back to the project
 - `.po` file loading as part of the app build
 - one supported integration point for both webpack and Turbopack
 
@@ -56,7 +56,7 @@ module.exports = withPalamedes({}, {
 
 ## What It Handles
 
-- transforms Lingui macros in JavaScript and TypeScript sources
+- transforms supported message macros in JavaScript and TypeScript sources
 - compiles imported `.po` files into JavaScript modules
 - integrates with both webpack and Turbopack
 

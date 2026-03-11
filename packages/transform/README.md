@@ -5,9 +5,9 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Low-level Lingui macro transformation powered by Palamedes' native core.
+Low-level macro transformation powered by Palamedes' native core.
 
-This package turns Lingui macro imports into runtime calls without requiring Babel. It is the building block behind the framework adapters and the right entry point when you want to embed Palamedes in your own bundler, compiler, or tooling flow.
+This package turns supported message macro imports into runtime calls without requiring Babel. It is the building block behind the framework adapters and the right entry point when you want to embed Palamedes in your own bundler, compiler, or tooling flow.
 
 ## When To Use This Package
 

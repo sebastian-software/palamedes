@@ -5,9 +5,9 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Fast Lingui message extraction for teams that want a lower-level API, not just a CLI.
+Fast message extraction for teams that want a lower-level API, not just a CLI.
 
-`@palamedes/extractor` plugs into Lingui config and uses OXC-backed parsing plus Palamedes' native core to extract messages from JavaScript, TypeScript, and React codebases with less overhead than Babel-based extraction paths.
+`@palamedes/extractor` plugs into the current config surface and uses OXC-backed parsing plus Palamedes' native core to extract messages from JavaScript, TypeScript, and React codebases with less overhead than Babel-based extraction paths.
 
 ## When To Use This Package
 

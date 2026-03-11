@@ -7,7 +7,7 @@
 
 Small runtime primitives for Palamedes-transformed code.
 
-When Palamedes rewrites Lingui macros, the generated code expects a `getI18n()` function. `@palamedes/runtime` is the package that provides that contract in a way that works for browser code, server code, and framework integrations.
+When Palamedes rewrites message macros, the generated code expects a `getI18n()` function. `@palamedes/runtime` is the package that provides that contract in a way that works for browser code, server code, and framework integrations.
 
 ## When To Use This Package
 
