@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/cli",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Palamedes CLI - Next-generation Lingui tooling",
   "keywords": [
     "lingui",

@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/extractor",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "High-performance message extractor for Lingui using oxc-parser",
   "keywords": [
     "lingui",

@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/runtime",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Palamedes runtime primitives for resolving the active i18n instance",
   "license": "MIT",
   "type": "module",
