@@ -1,7 +1,41 @@
 # create-palamedes
 
-Reserved package name for future `pnpm create palamedes` scaffolding.
+[![npm version](https://img.shields.io/npm/v/create-palamedes?logo=npm)](https://www.npmjs.com/package/create-palamedes)
+[![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-This package is intentionally minimal in the first release. It exists to secure the package name and provide a clean upgrade path once a real project generator is ready.
+Reserved package name for the future `pnpm create palamedes` experience.
 
-For now, Palamedes setup is still manual.
+Today this package is intentionally minimal. It exists so Palamedes can grow into a proper first-run scaffold without losing the canonical npm entry point later.
+
+## When To Use This Package
+
+Right now, you probably should not.
+
+`create-palamedes` is a placeholder package that prints a short status message and exits. Once scaffolding lands, this will become the natural starting point for `pnpm create palamedes`.
+
+## Installation
+
+You do not need to add this package to a project today. If you are setting up Palamedes now, install the specific packages you need:
+
+```bash
+pnpm add @palamedes/runtime @palamedes/vite-plugin @lingui/core @lingui/react
+pnpm add -D @palamedes/cli
+```
+
+## Current Status
+
+- package name is reserved
+- no project generator is implemented yet
+- future releases can turn this into a real scaffold without a naming migration
+
+## Related Packages
+
+- [`palamedes`](https://www.npmjs.com/package/palamedes)
+- [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin)
+- [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin)
+- [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)
+
+## License
+
+MIT © Sebastian Software GmbH

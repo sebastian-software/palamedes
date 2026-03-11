@@ -1,103 +1,75 @@
 # @palamedes/vite-plugin
 
-Vite plugin for Lingui that uses OXC-based macro transformation. No Babel required.
+[![npm version](https://img.shields.io/npm/v/%40palamedes%2Fvite-plugin?logo=npm)](https://www.npmjs.com/package/@palamedes/vite-plugin)
+[![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-## Features
+The recommended way to use Palamedes in Vite.
 
-- 🚀 **Fast**: Uses [oxc-parser](https://oxc-project.github.io/) for high-performance parsing
-- 🔧 **No Babel**: Transforms Lingui macros without Babel or SWC plugins
-- 📦 **PO Loader**: Compiles `.po` files to JS at build time
-- ⚡ **Vite Native**: Works seamlessly with Vite's plugin system
+`@palamedes/vite-plugin` gives Vite projects fast Lingui macro transforms, `.po` loading, and a cleaner path than bolting Babel back onto a modern frontend stack.
+
+## When To Use This Package
+
+Use this package when you are integrating Palamedes into a Vite application.
+
+It is the right starting point if you want:
+
+- Lingui macro transforms before the rest of your Vite pipeline runs
+- `.po` file loading during development and build
+- a supported integration that stays close to normal Vite behavior
+
+If you are on Next.js, use [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) instead.
 
 ## Installation
 
 ```bash
-pnpm add @palamedes/vite-plugin @lingui/core @lingui/react
+pnpm add @palamedes/vite-plugin @palamedes/runtime @lingui/core @lingui/react
+pnpm add -D @palamedes/cli
 ```
 
-## Usage
+## Minimal Setup
 
 ```ts
-// vite.config.ts
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [
-    palamedes(),
-    react(), // or any other framework plugin
-  ],
+  plugins: [palamedes(), react()],
 })
 ```
 
-That's it! The plugin will:
-
-1. Transform Lingui macros (`` t`...` ``, `<Trans>`, etc.) to runtime calls
-2. Compile `.po` files when imported
+Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure your app registers the active Lingui instance before translated code executes.
 
 ## Options
 
 ```ts
+import { palamedes } from "@palamedes/vite-plugin"
+
 palamedes({
-  // Only transform files matching this pattern (optional)
-  include: /\.(tsx?|jsx?)$/,
-
-  // Exclude files matching this pattern (optional)
+  include: /\.(tsx?|jsx?|mjs|cjs)$/,
   exclude: /node_modules/,
-
-  // Enable/disable .po file compilation (default: true)
   enablePoLoader: true,
-
-  // Path to lingui.config.js (optional)
-  configPath: "./lingui.config.js",
-
-  // Fail build on missing translations (default: false)
+  configPath: "./lingui.config.ts",
   failOnMissing: false,
-
-  // Fail build on compilation errors (default: false)
   failOnCompileError: false,
+  runtimeModule: "@palamedes/runtime",
 })
 ```
 
-## How It Works
+## What It Handles
 
-### Macro Transformation
+- transforms Lingui macros in JavaScript and TypeScript files
+- compiles imported `.po` files into JavaScript modules
+- reports common macro-resolution mistakes early in Vite
 
-The plugin runs as a `pre` transform, processing your source files before other plugins (like React):
+## Related Packages
 
-```tsx
-// Before (your code)
-import { t } from "@lingui/macro"
-const greeting = t`Hello, ${name}!`
-
-// After (transformed)
-import { getI18n } from "@palamedes/runtime"
-const greeting = getI18n()._({ id: "abc123", message: "Hello, {name}!", values: { name } })
-```
-
-### PO File Loading
-
-Import `.po` files directly:
-
-```tsx
-import { getI18n } from "@palamedes/runtime"
-import messages from "./locales/en.po"
-
-const i18n = getI18n()
-i18n.load("en", messages)
-i18n.activate("en")
-```
-
-## Comparison with @lingui/vite-plugin
-
-| Feature | @lingui/vite-plugin | @palamedes/vite-plugin |
-|---------|---------------------|-------------------------|
-| PO compilation | ✅ | ✅ |
-| Macro transformation | ❌ (requires babel) | ✅ |
-| Babel required | Yes | No |
-| Parser | N/A | OXC |
+- [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)
+- [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)
+- [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)
+- [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin)
 
 ## License
 
-MIT
+MIT © Sebastian Software GmbH

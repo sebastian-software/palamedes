@@ -1,58 +1,69 @@
 # @palamedes/transform
 
-OXC-based macro transformer for Lingui. Transforms Lingui macros (e.g., `` t`Hello` ``, `<Trans>`, `plural`, `select`) into runtime calls without requiring Babel.
+[![npm version](https://img.shields.io/npm/v/%40palamedes%2Ftransform?logo=npm)](https://www.npmjs.com/package/@palamedes/transform)
+[![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-## Features
+Low-level Lingui macro transformation powered by Palamedes' native core.
 
-- 🚀 Fast: Uses [oxc-parser](https://oxc-project.github.io/) for high-performance parsing
-- 🔧 No Babel required: Works as a standalone transform
-- 📦 Framework agnostic: Can be integrated with any bundler via adapters
+This package turns Lingui macro imports into runtime calls without requiring Babel. It is the building block behind the framework adapters and the right entry point when you want to embed Palamedes in your own bundler, compiler, or tooling flow.
+
+## When To Use This Package
+
+Use `@palamedes/transform` when you are:
+
+- building a custom integration outside the official plugins
+- experimenting with your own compile pipeline
+- working on Palamedes internals
+
+If you are integrating Palamedes into an app, start with [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) or [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) instead.
 
 ## Installation
 
 ```bash
-pnpm add @palamedes/transform
+pnpm add -D @palamedes/transform
 ```
 
-## Usage
+## Minimal Example
 
 ```ts
 import { transformLinguiMacros } from "@palamedes/transform"
 
-const result = transformLinguiMacros(sourceCode, "filename.tsx", {
-  runtimeModule: "@palamedes/runtime",
-})
+const result = transformLinguiMacros(
+  'import { t } from "@lingui/macro"; const message = t`Hello ${name}`',
+  "example.ts",
+  {
+    runtimeModule: "@palamedes/runtime",
+  }
+)
 
 console.log(result.code)
 ```
 
-## API
+## Key Exports
 
-### `transformLinguiMacros(code, filename, options?)`
+- `transformLinguiMacros(code, filename, options?)`
+- `mightContainLinguiMacros(code)`
+- `findMacroImports(program)`
+- `LINGUI_MACRO_PACKAGES`
+- `JS_MACROS`
+- `JSX_MACROS`
 
-Transforms source code containing Lingui macros into runtime calls.
+## Supported Macro Shapes
 
-#### Parameters
+- tagged templates such as `t\`...\`` and `msg\`...\``
+- descriptor calls such as `t({ message: "..." })`
+- `defineMessage(...)`
+- `plural(...)`, `select(...)`, `selectOrdinal(...)`
+- `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
 
-- `code` (string): The source code to transform
-- `filename` (string): The filename (used for source maps and determining file type)
-- `options` (object, optional):
-  - `runtimeModule` (string): The module to import `getI18n` from. Default: `"@palamedes/runtime"`
+## Related Packages
 
-#### Returns
-
-- `{ code: string, hasChanged: boolean, map: SourceMap | null }`: The transformed code, whether any transformations were made, and the generated source map
-
-## Supported Macros
-
-- `` t`...` `` - Tagged template literal
-- `t({ id, message })` - Call expression with message descriptor
-- `plural(count, { one: "...", other: "..." })`
-- `select(value, { ... })`
-- `selectOrdinal(count, { ... })`
-- `<Trans>...</Trans>`
-- `<Plural>`, `<Select>`, `<SelectOrdinal>`
+- [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node)
+- [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor)
+- [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin)
+- [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin)
 
 ## License
 
-MIT
+MIT © Sebastian Software GmbH

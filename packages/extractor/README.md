@@ -1,108 +1,73 @@
 # @palamedes/extractor
 
-High-performance message extractor for [Lingui](https://lingui.dev) using [oxc-parser](https://oxc.rs).
+[![npm version](https://img.shields.io/npm/v/%40palamedes%2Fextractor?logo=npm)](https://www.npmjs.com/package/@palamedes/extractor)
+[![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-## Why?
+Fast Lingui message extraction for teams that want a lower-level API, not just a CLI.
 
-The default Babel-based extractor is powerful but slow. This extractor uses oxc-parser, which is written in Rust and is **20-100x faster** than Babel for parsing JavaScript/TypeScript.
+`@palamedes/extractor` plugs into Lingui config and uses OXC-backed parsing plus Palamedes' native core to extract messages from JavaScript, TypeScript, and React codebases with less overhead than Babel-based extraction paths.
 
-**Benchmark results (100 files, 2000 messages):**
+## When To Use This Package
 
-| Extractor | Time |
-|-----------|------|
-| Babel     | ~1500ms |
-| **oxc**   | **~15ms** |
+Use `@palamedes/extractor` when you want:
+
+- direct control over extraction in `lingui.config.ts`
+- a lower-level extractor for custom workflows
+- the same extraction engine that powers the Palamedes CLI
+
+If you just want the supported command-line workflow, use [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli).
 
 ## Installation
 
 ```bash
-pnpm add @palamedes/extractor
+pnpm add -D @palamedes/extractor
 ```
 
-## Usage
+## Minimal Setup
 
 ```ts
-// lingui.config.ts
-import { extractor } from '@palamedes/extractor'
+import { extractor } from "@palamedes/extractor"
+import type { LinguiConfig } from "@lingui/conf"
 
-export default {
-  locales: ['en', 'de', 'fr'],
-  sourceLocale: 'en',
+const config: LinguiConfig = {
+  locales: ["en", "de"],
+  sourceLocale: "en",
   catalogs: [
     {
-      path: '<rootDir>/src/locales/{locale}',
-      include: ['src'],
+      path: "<rootDir>/src/locales/{locale}",
+      include: ["src"],
     },
   ],
   extractors: [extractor],
 }
+
+export default config
 ```
 
-## Supported Syntax
+## Supported Inputs
 
-### JSX Macros
+- `t`, `msg`, `defineMessage`, `plural`, `select`, `selectOrdinal`
+- `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
+- `i18n._(...)` and `i18n.t\`...\`` style runtime calls
+- JavaScript, TypeScript, JSX, and TSX sources
 
-```tsx
-import { Trans, Plural, Select, SelectOrdinal } from '@lingui/react/macro'
+## Key Exports
 
-// Trans
-<Trans>Hello {name}</Trans>
-<Trans id="greeting">Hello World</Trans>
-<Trans id="greeting" message="Hello {name}">...</Trans>
+- `extractor`
+- `extractMessages(program, filename, source)`
+- `extractMessagesJs(source, filename)`
 
-// Plural
-<Plural value={count} one="# item" other="# items" />
+## Related Packages
 
-// Select
-<Select value={gender} male="He" female="She" other="They" />
-
-// SelectOrdinal
-<SelectOrdinal value={position} one="#st" two="#nd" few="#rd" other="#th" />
-```
-
-### JS Macros
-
-```ts
-import { t, msg, defineMessage, plural, select, selectOrdinal } from '@lingui/core/macro'
-
-// Tagged template
-t`Hello ${name}`
-msg`Hello World`
-
-// Object descriptor
-t({ id: 'greeting', message: 'Hello' })
-defineMessage({ id: 'greeting', message: 'Hello {name}' })
-
-// Plural/Select functions
-plural(count, { one: '# item', other: '# items' })
-select(gender, { male: 'He', female: 'She', other: 'They' })
-```
-
-### Runtime Calls (i18n._)
-
-```ts
-import { i18n } from '@lingui/core'
-
-// String ID
-i18n._("greeting")
-
-// Message descriptor
-i18n._({ id: "greeting", message: "Hello" })
-
-// With values and descriptor
-i18n._("greeting", { name }, { message: "Hello {name}" })
-
-// Tagged template
-i18n.t`Hello ${name}`
-
-// Also works with this.i18n or obj.i18n
-this.i18n._("greeting")
-```
+- [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)
+- [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)
+- [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node)
 
 ## Limitations
 
-- Does not support `// lingui-extract-ignore` comments (yet)
+The extractor currently does not support `lingui-extract-ignore` comments.
 
 ## License
 
-MIT
+MIT © Sebastian Software GmbH

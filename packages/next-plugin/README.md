@@ -1,119 +1,71 @@
 # @palamedes/next-plugin
 
-Next.js integration for Lingui using OXC-based macro transformation. No Babel required.
+[![npm version](https://img.shields.io/npm/v/%40palamedes%2Fnext-plugin?logo=npm)](https://www.npmjs.com/package/@palamedes/next-plugin)
+[![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-## Features
+The recommended way to use Palamedes in Next.js.
 
-- 🚀 **Fast**: Uses [oxc-parser](https://oxc-project.github.io/) for high-performance parsing
-- 🔧 **No Babel**: Transforms Lingui macros without Babel or SWC plugins
-- 📦 **PO Loader**: Compiles `.po` files to JS at build time
-- ⚡ **Webpack & Turbopack**: Works with both bundlers
+`@palamedes/next-plugin` wires Palamedes into webpack and Turbopack so Lingui macros are transformed before they leak into runtime, and `.po` files can be loaded as part of the application build.
+
+## When To Use This Package
+
+Use this package when you are integrating Palamedes into a Next.js application.
+
+It is the right starting point if you want:
+
+- Lingui macro transforms without adding Babel back to the project
+- `.po` file loading as part of the app build
+- one supported integration point for both webpack and Turbopack
+
+If you are on Vite, use [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) instead.
 
 ## Installation
 
 ```bash
-pnpm add @palamedes/next-plugin @lingui/core @lingui/react
+pnpm add @palamedes/next-plugin @palamedes/runtime @lingui/core @lingui/react
+pnpm add -D @palamedes/cli
 ```
 
-## Usage
+## Minimal Setup
 
 ```js
-// next.config.js
 const { withPalamedes } = require("@palamedes/next-plugin")
 
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  // your existing config
-}
-
-module.exports = withPalamedes(nextConfig)
+module.exports = withPalamedes({})
 ```
 
-That's it! The plugin will:
-
-1. Transform Lingui macros (`` t`...` ``, `<Trans>`, etc.) to runtime calls
-2. Compile `.po` files when imported
+Transformed code expects a runtime getter from `@palamedes/runtime`, so make sure you register your active Lingui instance on the client and server before translated code runs.
 
 ## Options
 
 ```js
 const { withPalamedes } = require("@palamedes/next-plugin")
 
-module.exports = withPalamedes(nextConfig, {
-  // Only transform files matching this pattern (optional)
+module.exports = withPalamedes({}, {
   include: /\.(tsx?|jsx?)$/,
-
-  // Exclude files matching this pattern (optional)
   exclude: /node_modules/,
-
-  // Enable/disable .po file compilation (default: true)
   enablePoLoader: true,
-
-  // Path to lingui.config.js (optional)
   configPath: "./lingui.config.js",
-
-  // Fail build on missing translations (default: false)
   failOnMissing: false,
-
-  // Fail build on compilation errors (default: false)
   failOnCompileError: false,
-
-  // Module to import getI18n from (default: "@palamedes/runtime")
   runtimeModule: "@palamedes/runtime",
 })
 ```
 
-## How It Works
+## What It Handles
 
-### With Webpack
+- transforms Lingui macros in JavaScript and TypeScript sources
+- compiles imported `.po` files into JavaScript modules
+- integrates with both webpack and Turbopack
 
-The plugin adds webpack loaders that:
-1. Transform Lingui macros in JS/TS files before SWC processes them
-2. Compile `.po` files to JS modules
+## Related Packages
 
-### With Turbopack
-
-The plugin configures Turbopack rules to:
-1. Run the OXC transform loader for JS/TS files
-2. Compile `.po` files to JS modules
-
-## Usage in Components
-
-```tsx
-// Using macros (transformed at build time)
-import { t } from "@lingui/macro"
-import { Trans } from "@lingui/react/macro"
-
-function Greeting({ name }) {
-  return (
-    <div>
-      <p>{t`Hello, ${name}!`}</p>
-      <Trans>Welcome to our app</Trans>
-    </div>
-  )
-}
-```
-
-```tsx
-// Importing .po files
-import { getI18n } from "@palamedes/runtime"
-import messages from "./locales/en.po"
-
-const i18n = getI18n()
-i18n.load("en", messages)
-i18n.activate("en")
-```
-
-## Comparison with @lingui/swc-plugin
-
-| Feature | @lingui/swc-plugin | @palamedes/next-plugin |
-|---------|-------------------|-------------------------|
-| PO compilation | ❌ (separate loader) | ✅ Built-in |
-| Macro transformation | ✅ | ✅ |
-| Written in | Rust | TypeScript |
-| Parser | SWC | OXC |
-| Easy to extend | Difficult | Easy |
+- [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)
+- [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)
+- [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)
+- [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin)
 
 ## License
 
-MIT
+MIT © Sebastian Software GmbH
