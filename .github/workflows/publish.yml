@@ -1,0 +1,154 @@
+name: Publish
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  determine-release:
+    runs-on: ubuntu-24.04
+    outputs:
+      should_publish: ${{ steps.release.outputs.should_publish }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect release commit
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base_ref="${{ github.event.before }}"
+          if [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+            base_ref="$(git rev-parse HEAD^)"
+          fi
+
+          version_changed=false
+          if git diff --name-only "$base_ref" "${{ github.sha }}" -- 'packages/*/package.json' | grep -q .; then
+            version_changed=true
+          fi
+
+          has_changesets=false
+          if [ -d .changeset ] && find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' -print -quit | grep -q .; then
+            has_changesets=true
+          fi
+
+          if [ "$version_changed" = true ] && [ "$has_changesets" = false ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish-native:
+    needs: determine-release
+    if: needs.determine-release.outputs.should_publish == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package_name: "@palamedes/core-node-darwin-arm64"
+            runner: macos-14
+          - package_name: "@palamedes/core-node-linux-x64-gnu"
+            runner: ubuntu-24.04
+          - package_name: "@palamedes/core-node-linux-arm64-gnu"
+            runner: ubuntu-24.04-arm
+          - package_name: "@palamedes/core-node-win32-x64-msvc"
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NPM_CONFIG_PROVENANCE: true
+      PALAMEDES_RUST_PROFILE: release
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native package
+        run: pnpm --filter "${{ matrix.package_name }}" build
+
+      - name: Publish native package
+        run: pnpm --filter "${{ matrix.package_name }}" publish --access public --no-git-checks
+
+  publish-js:
+    needs:
+      - determine-release
+      - publish-native
+    if: needs.determine-release.outputs.should_publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NPM_CONFIG_PROVENANCE: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build publishable packages
+        run: >
+          pnpm -r
+          --filter @palamedes/runtime
+          --filter @palamedes/core-node
+          --filter @palamedes/transform
+          --filter @palamedes/extractor
+          --filter @palamedes/cli
+          --filter @palamedes/vite-plugin
+          --filter @palamedes/next-plugin
+          --filter palamedes
+          --filter create-palamedes
+          build
+
+      - name: Publish JavaScript packages
+        run: >
+          pnpm -r
+          --filter @palamedes/runtime
+          --filter @palamedes/core-node
+          --filter @palamedes/transform
+          --filter @palamedes/extractor
+          --filter @palamedes/cli
+          --filter @palamedes/vite-plugin
+          --filter @palamedes/next-plugin
+          --filter palamedes
+          --filter create-palamedes
+          publish --no-git-checks

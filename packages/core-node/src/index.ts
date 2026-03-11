@@ -70,17 +70,60 @@ interface NativeBindings {
   ): string
 }
 
+function detectLinuxLibc(): "gnu" | "musl" | null {
+  if (process.platform !== "linux") {
+    return null
+  }
+
+  const report = process.report?.getReport?.() as
+    | { header?: { glibcVersionRuntime?: string } }
+    | undefined
+  const glibcVersion = report?.header?.glibcVersionRuntime
+
+  if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
+    return "gnu"
+  }
+
+  return "musl"
+}
+
+function getNativePackageName(): string {
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return "@palamedes/core-node-darwin-arm64"
+  }
+
+  if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "gnu") {
+    return "@palamedes/core-node-linux-x64-gnu"
+  }
+
+  if (
+    process.platform === "linux" &&
+    process.arch === "arm64" &&
+    detectLinuxLibc() === "gnu"
+  ) {
+    return "@palamedes/core-node-linux-arm64-gnu"
+  }
+
+  if (process.platform === "win32" && process.arch === "x64") {
+    return "@palamedes/core-node-win32-x64-msvc"
+  }
+
+  throw new Error(
+    `No Palamedes native bindings package is available for ${process.platform}/${process.arch}.`
+  )
+}
+
 function loadNativeBindings(): NativeBindings {
   const require = createRequire(import.meta.url)
   const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-  const bindingPath = path.join(packageDir, "palamedes-node.node")
+  const nativePackageName = getNativePackageName()
 
   try {
-    return require(bindingPath) as NativeBindings
+    return require(nativePackageName) as NativeBindings
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(
-      `Failed to load Palamedes native bindings from ${bindingPath}: ${message}`
+      `Failed to load Palamedes native bindings from ${nativePackageName} for package ${packageDir}: ${message}`
     )
   }
 }

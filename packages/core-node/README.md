@@ -2,11 +2,14 @@
 
 Thin Node.js wrapper around the Palamedes Rust core.
 
-This package is the first migration spike for the Rust-core architecture. It currently exposes a minimal API surface to validate:
+This package provides the JavaScript wrapper around the Palamedes native bindings.
 
-- Cargo workspace integration
-- published `pofile` crate usage from Rust
-- Node native bindings loading from a TypeScript wrapper
+The actual `.node` binary is delivered through platform-specific optional dependencies:
+
+- `@palamedes/core-node-darwin-arm64`
+- `@palamedes/core-node-linux-x64-gnu`
+- `@palamedes/core-node-linux-arm64-gnu`
+- `@palamedes/core-node-win32-x64-msvc`
 
 ## Available APIs
 
@@ -20,4 +23,4 @@ This package is the first migration spike for the Rust-core architecture. It cur
 pnpm --filter @palamedes/core-node build
 ```
 
-The build script compiles the Rust binding crate and copies the resulting native module into the package root as `palamedes-node.node`.
+In development, build the matching native target package for your current platform before using this wrapper.

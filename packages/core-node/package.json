@@ -29,12 +29,12 @@
   "types": "./dist/index.d.ts",
   "sideEffects": false,
   "files": [
+    "LICENSE",
     "README.md",
-    "dist/",
-    "palamedes-node.node"
+    "dist/"
   ],
   "scripts": {
-    "build": "node ./scripts/build-native.mjs && unbuild",
+    "build": "unbuild",
     "stub": "unbuild --stub"
   },
   "engines": {
@@ -43,12 +43,12 @@
   "publishConfig": {
     "access": "public"
   },
-  "os": [
-    "darwin"
-  ],
-  "cpu": [
-    "arm64"
-  ],
+  "optionalDependencies": {
+    "@palamedes/core-node-darwin-arm64": "workspace:^",
+    "@palamedes/core-node-linux-arm64-gnu": "workspace:^",
+    "@palamedes/core-node-linux-x64-gnu": "workspace:^",
+    "@palamedes/core-node-win32-x64-msvc": "workspace:^"
+  },
   "devDependencies": {
     "@types/node": "^25.4.0",
     "typescript": "^5.9.3",

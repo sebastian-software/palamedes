@@ -1,0 +1,37 @@
+{
+  "name": "@palamedes/core-node-linux-arm64-gnu",
+  "version": "0.0.1",
+  "description": "Linux arm64 glibc native bindings for @palamedes/core-node",
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/core-node-linux-arm64-gnu"
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "./palamedes-node.node",
+  "files": [
+    "LICENSE",
+    "README.md",
+    "palamedes-node.node"
+  ],
+  "scripts": {
+    "build": "node ../core-node/scripts/build-native.mjs"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "glibc"
+  ]
+}
