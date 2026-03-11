@@ -36,12 +36,7 @@ jobs:
             version_changed=true
           fi
 
-          has_changesets=false
-          if [ -d .changeset ] && find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' -print -quit | grep -q .; then
-            has_changesets=true
-          fi
-
-          if [ "$version_changed" = true ] && [ "$has_changesets" = false ]; then
+          if [ "$version_changed" = true ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_publish=false" >> "$GITHUB_OUTPUT"

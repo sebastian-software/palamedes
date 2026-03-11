@@ -11,14 +11,11 @@
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
     "check-types": "pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",
-    "changeset": "changeset",
-    "version-packages": "changeset version",
     "build:native": "cargo build --workspace",
     "check:rust": "cargo check --workspace",
     "test:rust": "cargo test --workspace"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.7",
     "typescript": "^5.9.3"
   }
 }

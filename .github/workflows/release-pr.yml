@@ -1,4 +1,4 @@
-name: Release PR
+name: Release Please
 
 on:
   push:
@@ -6,10 +6,11 @@ on:
       - main
 
 jobs:
-  release-pr:
+  release-please:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      issues: write
       pull-requests: write
 
     steps:
@@ -18,23 +19,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          cache: pnpm
           node-version: 24
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Open or update release PR
-        uses: changesets/action@v1
+      - name: Run release-please
+        uses: googleapis/release-please-action@v4
         with:
-          version: pnpm version-packages
-          commit: "chore: version packages"
-          title: "chore: version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}

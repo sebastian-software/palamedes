@@ -1,0 +1,96 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "separate-pull-requests": false,
+  "plugins": [
+    {
+      "type": "node-workspace"
+    },
+    {
+      "type": "linked-versions",
+      "groupName": "palamedes",
+      "merge": true,
+      "components": [
+        "cli",
+        "core-node",
+        "core-node-darwin-arm64",
+        "core-node-linux-arm64-gnu",
+        "core-node-linux-x64-gnu",
+        "core-node-win32-x64-msvc",
+        "extractor",
+        "next-plugin",
+        "runtime",
+        "transform",
+        "vite-plugin",
+        "create-palamedes",
+        "palamedes"
+      ]
+    }
+  ],
+  "packages": {
+    "packages/cli": {
+      "release-type": "node",
+      "package-name": "@palamedes/cli",
+      "component": "cli"
+    },
+    "packages/core-node": {
+      "release-type": "node",
+      "package-name": "@palamedes/core-node",
+      "component": "core-node"
+    },
+    "packages/core-node-darwin-arm64": {
+      "release-type": "node",
+      "package-name": "@palamedes/core-node-darwin-arm64",
+      "component": "core-node-darwin-arm64"
+    },
+    "packages/core-node-linux-arm64-gnu": {
+      "release-type": "node",
+      "package-name": "@palamedes/core-node-linux-arm64-gnu",
+      "component": "core-node-linux-arm64-gnu"
+    },
+    "packages/core-node-linux-x64-gnu": {
+      "release-type": "node",
+      "package-name": "@palamedes/core-node-linux-x64-gnu",
+      "component": "core-node-linux-x64-gnu"
+    },
+    "packages/core-node-win32-x64-msvc": {
+      "release-type": "node",
+      "package-name": "@palamedes/core-node-win32-x64-msvc",
+      "component": "core-node-win32-x64-msvc"
+    },
+    "packages/extractor": {
+      "release-type": "node",
+      "package-name": "@palamedes/extractor",
+      "component": "extractor"
+    },
+    "packages/next-plugin": {
+      "release-type": "node",
+      "package-name": "@palamedes/next-plugin",
+      "component": "next-plugin"
+    },
+    "packages/runtime": {
+      "release-type": "node",
+      "package-name": "@palamedes/runtime",
+      "component": "runtime"
+    },
+    "packages/transform": {
+      "release-type": "node",
+      "package-name": "@palamedes/transform",
+      "component": "transform"
+    },
+    "packages/vite-plugin": {
+      "release-type": "node",
+      "package-name": "@palamedes/vite-plugin",
+      "component": "vite-plugin"
+    },
+    "packages/create-palamedes": {
+      "release-type": "node",
+      "package-name": "create-palamedes",
+      "component": "create-palamedes"
+    },
+    "packages/palamedes": {
+      "release-type": "node",
+      "package-name": "palamedes",
+      "component": "palamedes"
+    }
+  }
+}
