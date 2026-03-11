@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fcore-node?logo=npm)](https://www.npmjs.com/package/@palamedes/core-node)
 [![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
 The Node.js wrapper around Palamedes' native core.
@@ -70,4 +71,6 @@ console.log(po.headers.Language)
 
 ## License
 
-MIT © 2026 [Sebastian Software](https://oss.sebastian-software.com/)
+[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
+
+MIT © 2026 Sebastian Software

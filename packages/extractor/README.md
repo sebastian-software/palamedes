@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fextractor?logo=npm)](https://www.npmjs.com/package/@palamedes/extractor)
 [![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
 Fast Lingui message extraction for teams that want a lower-level API, not just a CLI.
@@ -70,4 +71,6 @@ The extractor currently does not support `lingui-extract-ignore` comments.
 
 ## License
 
-MIT © 2026 [Sebastian Software](https://oss.sebastian-software.com/)
+[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
+
+MIT © 2026 Sebastian Software

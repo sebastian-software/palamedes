@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
 [![Node >=22](https://img.shields.io/badge/node-%3E%3D22-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
+[![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
 Palamedes is a modern i18n toolchain for Lingui projects that want faster builds, faster extraction, and less Babel-shaped plumbing.
@@ -125,4 +126,6 @@ Palamedes currently targets Node.js `>=22`.
 
 ## License
 
-MIT © 2026 [Sebastian Software](https://oss.sebastian-software.com/)
+[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
+
+MIT © 2026 Sebastian Software
