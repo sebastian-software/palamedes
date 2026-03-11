@@ -70,4 +70,4 @@ The extractor currently does not support `lingui-extract-ignore` comments.
 
 ## License
 
-MIT © Sebastian Software GmbH
+MIT © 2026 [Sebastian Software](https://oss.sebastian-software.com/)

@@ -125,4 +125,4 @@ Palamedes currently targets Node.js `>=22`.
 
 ## License
 
-MIT © Sebastian Software GmbH
+MIT © 2026 [Sebastian Software](https://oss.sebastian-software.com/)
