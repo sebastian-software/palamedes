@@ -34,12 +34,12 @@ jobs:
             base_ref="$(git rev-parse HEAD^)"
           fi
 
-          version_changed=false
-          if git diff --name-only "$base_ref" "${{ github.sha }}" -- 'packages/*/package.json' | grep -q .; then
-            version_changed=true
+          has_release_commit=false
+          if git log --format=%s "$base_ref..${{ github.sha }}" | grep -Eq '^chore: release '; then
+            has_release_commit=true
           fi
 
-          if [ "$version_changed" = true ]; then
+          if [ "$has_release_commit" = true ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
@@ -72,15 +72,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           cache: pnpm
           node-version: 24
           registry-url: https://registry.npmjs.org
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -110,15 +110,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           cache: pnpm
           node-version: 24
           registry-url: https://registry.npmjs.org
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
