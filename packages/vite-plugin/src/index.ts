@@ -9,26 +9,14 @@ import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter } from "vite"
 import {
-  expandFallbackLocales,
   loadPalamedesConfig,
   type LoadedPalamedesConfig,
 } from "@palamedes/config"
-import {
-  createCompiledCatalog,
-  getCatalogs,
-  getCatalogForFile,
-  getCatalogDependentFiles,
-  createMissingErrorMessage,
-  createCompilationErrorMessage,
-} from "@lingui/cli/api"
+import { getCatalogModule } from "@palamedes/core-node"
 import { transformLinguiMacros } from "@palamedes/transform"
 import { LINGUI_MACRO_PACKAGES } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
-
-type LinguiCatalogConfig = Parameters<typeof getCatalogs>[0]
-type CatalogInstance = Awaited<ReturnType<typeof getCatalogs>>[number]
-type TranslationOptions = Parameters<CatalogInstance["getTranslations"]>[1]
 
 export interface PalamedesPluginOptions {
   /**
@@ -84,17 +72,22 @@ export interface PalamedesPluginOptions {
   runtimeModule?: string
 }
 
-function toLinguiCatalogConfig(config: LoadedPalamedesConfig): LinguiCatalogConfig {
-  return {
-    ...config,
-    fallbackLocales: expandFallbackLocales(config.locales, config.fallbackLocales),
-    format: "po",
-    runtimeConfigModule: {
-      i18n: ["@lingui/core", "i18n"],
-      useLingui: ["@lingui/react", "useLingui"],
-      Trans: ["@lingui/react", "Trans"],
-    },
-  } as LinguiCatalogConfig
+function createMissingErrorMessage(
+  locale: string,
+  missingMessages: Array<{ id: string; source: string }>
+): string {
+  const lines = missingMessages.map((missing) => `${missing.id}: ${missing.source}`)
+  return `Failed to compile catalog for locale ${locale}!\n\nMissing ${missingMessages.length} translation(s):\n${lines.join("\n")}`
+}
+
+function createCompilationErrorMessage(
+  locale: string,
+  errors: Array<{ id?: string; message: string }>
+): string {
+  const lines = errors.map((error) =>
+    error.id ? `${error.id}\nReason: ${error.message}` : error.message
+  )
+  return `Failed to compile catalog for locale ${locale}!\n\nCompilation error for ${errors.length} translation(s):\n${lines.join("\n\n")}`
 }
 
 /**
@@ -228,64 +221,39 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         const cfg = await getConfigLazy()
         const cleanId = id.split("?")[0] ?? id
-        const catalogRelativePath = path.relative(cfg.rootDir, cleanId)
-
-        const fileCatalog = getCatalogForFile(
-          catalogRelativePath,
-          await getCatalogs(toLinguiCatalogConfig(cfg))
+        const result = getCatalogModule(
+          {
+            rootDir: cfg.rootDir,
+            locales: cfg.locales,
+            sourceLocale: cfg.sourceLocale,
+            fallbackLocales: cfg.fallbackLocales,
+            pseudoLocale: cfg.pseudoLocale,
+            catalogs: cfg.catalogs,
+          },
+          cleanId
         )
 
-        if (!fileCatalog) {
-          throw new Error(
-              `Requested resource ${catalogRelativePath} is not matched to any of your catalogs paths specified in "palamedes.config".\n\n` +
-              `Resource: ${id}\n\n` +
-              `Your catalogs:\n${(cfg.catalogs ?? []).map((c) => c.path).join("\n")}\n\n` +
-              `Please check that catalogs.path is filled properly.`
-          )
-        }
-
-        const { locale, catalog } = fileCatalog
-
-        // Add dependencies for HMR
-        const dependency = await getCatalogDependentFiles(catalog, locale)
-        dependency.forEach((file) => this.addWatchFile(file))
-        const translationOptions: TranslationOptions = {
-          sourceLocale: cfg.sourceLocale,
-          fallbackLocales: expandFallbackLocales(cfg.locales, cfg.fallbackLocales),
-        }
-
-        const { messages, missing: missingMessages } =
-          await catalog.getTranslations(locale, translationOptions)
+        result.watchFiles.forEach((file: string) => this.addWatchFile(file))
+        const locale = path.basename(cleanId, ".po")
 
         // Check for missing translations
         if (
           failOnMissing &&
           locale !== cfg.pseudoLocale &&
-          missingMessages.length > 0
+          result.missing.length > 0
         ) {
           const message = createMissingErrorMessage(
             locale,
-            missingMessages,
-            "loader"
+            result.missing
           )
           throw new Error(
             `${message}\nYou see this error because \`failOnMissing=true\` in Vite Plugin configuration.`
           )
         }
 
-        // Compile the catalog
-        const { source: compiledCode, errors } = createCompiledCatalog(
-          locale,
-          messages,
-          {
-            namespace: "es",
-            pseudoLocale: cfg.pseudoLocale,
-          }
-        )
-
         // Handle compilation errors
-        if (errors.length) {
-          const message = createCompilationErrorMessage(locale, errors)
+        if (result.errors.length) {
+          const message = createCompilationErrorMessage(locale, result.errors)
 
           if (failOnCompileError) {
             throw new Error(
@@ -301,7 +269,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         return {
-          code: compiledCode,
+          code: result.code,
           map: null,
         }
       },

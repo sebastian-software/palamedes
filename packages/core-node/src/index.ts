@@ -58,10 +58,46 @@ export interface NativeTransformResult {
   prependText?: string
 }
 
+export interface CatalogModuleCatalogConfig {
+  path: string
+  include: string[]
+  exclude?: string[]
+}
+
+export type CatalogModuleFallbackLocales = string[] | Record<string, string[]>
+
+export interface CatalogModuleConfig {
+  rootDir: string
+  locales: string[]
+  sourceLocale: string
+  fallbackLocales?: CatalogModuleFallbackLocales
+  pseudoLocale?: string
+  catalogs: CatalogModuleCatalogConfig[]
+}
+
+export interface CatalogModuleMissingTranslation {
+  id: string
+  source: string
+}
+
+export interface CatalogModuleCompilationError {
+  message: string
+  id?: string
+}
+
+export interface CatalogModuleResult {
+  code: string
+  watchFiles: string[]
+  missing: CatalogModuleMissingTranslation[]
+  errors: CatalogModuleCompilationError[]
+  resolvedLocaleChain?: string[]
+}
+
 interface NativeBindings {
   getNativeInfoJson(): string
   generateMessageId(message: string, context?: string): string
   parsePoJson(source: string): string
+  getCatalogModuleJson(requestJson: string): string
   extractMessagesJson(source: string, filename: string): string
   transformMacrosJson(
     source: string,
@@ -140,6 +176,20 @@ export function generateMessageId(message: string, context?: string): string {
 
 export function parsePo(source: string): ParsedPoFile {
   return JSON.parse(native.parsePoJson(source)) as ParsedPoFile
+}
+
+export function getCatalogModule(
+  config: CatalogModuleConfig,
+  resourcePath: string
+): CatalogModuleResult {
+  return JSON.parse(
+    native.getCatalogModuleJson(
+      JSON.stringify({
+        config,
+        resourcePath,
+      })
+    )
+  ) as CatalogModuleResult
 }
 
 export function extractMessagesNative(

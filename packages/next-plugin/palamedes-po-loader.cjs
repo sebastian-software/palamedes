@@ -1,17 +1,20 @@
 "use strict";
 
 const path = require("node:path");
-const {
-  expandFallbackLocales,
-  loadPalamedesConfig,
-} = require("@palamedes/config");
-const {
-  createCompiledCatalog,
-  getCatalogs,
-  getCatalogForFile,
-  createMissingErrorMessage,
-  createCompilationErrorMessage,
-} = require("@lingui/cli/api");
+const { loadPalamedesConfig } = require("@palamedes/config");
+const { getCatalogModule } = require("@palamedes/core-node");
+
+function createMissingErrorMessage(locale, missingMessages) {
+  const lines = missingMessages.map((missing) => `${missing.id}: ${missing.source}`);
+  return `Failed to compile catalog for locale ${locale}!\n\nMissing ${missingMessages.length} translation(s):\n${lines.join("\n")}`;
+}
+
+function createCompilationErrorMessage(locale, errors) {
+  const lines = errors.map((error) =>
+    error.id ? `${error.id}\nReason: ${error.message}` : error.message
+  );
+  return `Failed to compile catalog for locale ${locale}!\n\nCompilation error for ${errors.length} translation(s):\n${lines.join("\n\n")}`;
+}
 
 module.exports = function palamedesPoLoader() {
   const callback = this.async();
@@ -21,41 +24,30 @@ module.exports = function palamedesPoLoader() {
 
   (async () => {
     const cfg = await loadPalamedesConfig({ configPath: options.configPath });
-    const catalogRelativePath = path.relative(cfg.rootDir, this.resourcePath);
-    const fileCatalog = getCatalogForFile(
-      catalogRelativePath,
-      await getCatalogs(cfg)
-    );
-
-    if (!fileCatalog) {
-      throw new Error(
-        `Requested resource ${catalogRelativePath} is not matched to any of your catalogs paths specified in "palamedes.config".\n\n` +
-          `Resource: ${this.resourcePath}\n\n` +
-          `Your catalogs:\n${cfg.catalogs.map((catalog) => catalog.path).join("\n")}\n\n` +
-          "Please check that catalogs.path is filled properly."
-      );
-    }
-
-    const { locale, catalog } = fileCatalog;
-    const { messages, missing: missingMessages } = await catalog.getTranslations(
-      locale,
+    const result = getCatalogModule(
       {
-        fallbackLocales: expandFallbackLocales(cfg.locales, cfg.fallbackLocales),
+        rootDir: cfg.rootDir,
+        locales: cfg.locales,
         sourceLocale: cfg.sourceLocale,
-      }
+        fallbackLocales: cfg.fallbackLocales,
+        pseudoLocale: cfg.pseudoLocale,
+        catalogs: cfg.catalogs,
+      },
+      this.resourcePath
     );
-
-    if (locale !== cfg.pseudoLocale && missingMessages.length > 0 && failOnMissing) {
-      throw new Error(createMissingErrorMessage(locale, missingMessages, "loader"));
-    }
-
-    const { source, errors } = createCompiledCatalog(locale, messages, {
-      namespace: "es",
-      pseudoLocale: cfg.pseudoLocale,
+    const locale = path.basename(this.resourcePath, ".po");
+    result.watchFiles.forEach((file) => {
+      if (typeof this.addDependency === "function") {
+        this.addDependency(file);
+      }
     });
 
-    if (errors.length > 0) {
-      const message = createCompilationErrorMessage(locale, errors);
+    if (locale !== cfg.pseudoLocale && result.missing.length > 0 && failOnMissing) {
+      throw new Error(createMissingErrorMessage(locale, result.missing));
+    }
+
+    if (result.errors.length > 0) {
+      const message = createCompilationErrorMessage(locale, result.errors);
 
       if (failOnCompileError) {
         throw new Error(message);
@@ -64,7 +56,7 @@ module.exports = function palamedesPoLoader() {
       console.warn(message);
     }
 
-    callback(null, source, null);
+    callback(null, result.code, null);
   })().catch((error) => {
     callback(error);
   });

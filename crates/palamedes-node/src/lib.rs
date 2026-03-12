@@ -22,6 +22,11 @@ pub fn parse_po_json(source: String) -> Result<String> {
 }
 
 #[napi]
+pub fn get_catalog_module_json(request_json: String) -> Result<String> {
+    palamedes::get_catalog_module_json(&request_json).map_err(Error::from_reason)
+}
+
+#[napi]
 pub fn extract_messages_json(source: String, filename: String) -> Result<String> {
     palamedes::extract_messages_json(&source, &filename).map_err(Error::from_reason)
 }

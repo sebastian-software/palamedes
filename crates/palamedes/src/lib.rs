@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
 
 mod extract;
+mod catalog_module;
 mod transform;
 
 use pofile::{parse_po, PoFile, PoItem};
 use serde::Serialize;
 
 pub use extract::extract_messages_json;
+pub use catalog_module::get_catalog_module_json;
 pub use transform::transform_macros_json;
 
 pub const POFILE_VERSION: &str = "5.0.0-beta.0";

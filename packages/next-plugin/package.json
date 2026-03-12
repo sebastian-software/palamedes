@@ -51,8 +51,8 @@
     "./palamedes-po-loader": "./palamedes-po-loader.cjs"
   },
   "dependencies": {
-    "@lingui/cli": "^5.9.2",
     "@palamedes/config": "workspace:^",
+    "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/transform": "workspace:^"
   },
