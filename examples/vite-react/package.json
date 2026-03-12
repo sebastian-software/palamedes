@@ -17,9 +17,9 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
-    "@lingui/conf": "^5.9.2",
     "@lingui/format-po": "^5.9.2",
     "@palamedes/cli": "workspace:^",
+    "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

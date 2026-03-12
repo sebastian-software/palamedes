@@ -4,9 +4,15 @@ import path from "path"
 import chalk from "chalk"
 import { glob } from "glob"
 import { watch } from "chokidar"
-import { getConfig, type LinguiConfig, type CatalogConfig, type ExtractorCtx } from "@lingui/conf"
-import { extractor } from "@palamedes/extractor"
-import type { ExtractedMessage } from "@lingui/conf"
+import {
+  loadPalamedesConfig,
+  resolveCatalogPath,
+  resolveConfigPattern,
+  type LoadedPalamedesConfig,
+  type PalamedesCatalogConfig,
+} from "@palamedes/config"
+import { parseSync } from "oxc-parser"
+import { extractMessages } from "@palamedes/extractor"
 import {
   parsePo,
   stringifyPo,
@@ -26,7 +32,7 @@ interface ExtractOptions {
 }
 
 export async function extract(options: ExtractOptions): Promise<void> {
-  const config = getConfig({ configPath: options.config })
+  const config = await loadPalamedesConfig({ configPath: options.config })
 
   if (options.verbose) {
     console.log(chalk.gray("Config loaded:"), config.locales)
@@ -39,7 +45,10 @@ export async function extract(options: ExtractOptions): Promise<void> {
   }
 }
 
-async function runExtraction(config: LinguiConfig, options: ExtractOptions): Promise<void> {
+async function runExtraction(
+  config: LoadedPalamedesConfig,
+  options: ExtractOptions
+): Promise<void> {
   const startTime = Date.now()
   let totalMessages = 0
   let totalFiles = 0
@@ -65,24 +74,22 @@ async function runExtraction(config: LinguiConfig, options: ExtractOptions): Pro
 }
 
 async function extractFromCatalog(
-  catalog: CatalogConfig,
-  config: LinguiConfig,
+  catalog: PalamedesCatalogConfig,
+  config: LoadedPalamedesConfig,
   options: ExtractOptions
 ): Promise<{ messages: Catalog; fileCount: number }> {
   const messages: Catalog = {}
-  const rootDir = config.rootDir || process.cwd()
+  const rootDir = config.rootDir
 
-  // Get source files - convert directory patterns to glob patterns
   const includePatterns = catalog.include.map((pattern) => {
-    const resolved = pattern.replace("<rootDir>", rootDir)
-    // If pattern doesn't have glob chars or extension, treat as directory
+    const resolved = resolveConfigPattern(config, pattern)
     if (!resolved.includes("*") && !resolved.includes(".")) {
       return `${resolved}/**/*.{js,jsx,ts,tsx}`
     }
     return resolved
   })
   const excludePatterns = catalog.exclude?.map((pattern) =>
-    pattern.replace("<rootDir>", rootDir)
+    resolveConfigPattern(config, pattern)
   ) || ["**/node_modules/**"]
 
   const files = await glob(includePatterns, {
@@ -99,44 +106,40 @@ async function extractFromCatalog(
     try {
       const code = await readFile(file, "utf-8")
       const relativePath = path.relative(rootDir, file)
-      const extractorCtx: ExtractorCtx = {
-        linguiConfig: config as ExtractorCtx["linguiConfig"],
+      const result = parseSync(file, code, { sourceType: "module" })
+
+      if (result.errors.length > 0) {
+        const errorMessages = result.errors.map((error) => error.message).join(", ")
+        throw new Error(`Parse error: ${errorMessages}`)
       }
 
-      await extractor.extract(
-        file,
-        code,
-        (msg: ExtractedMessage) => {
-          // Use explicit ID if provided, otherwise use message as key (standard PO behavior)
-          const key = msg.id || msg.message || ""
-          if (!key) {
-            return
-          }
+      const extractedMessages = extractMessages(result.program, file, code)
 
-          if (!messages[key]) {
-            messages[key] = {
-              // For explicit IDs, store the message separately
-              // For message-as-key, message field is optional
-              message: msg.id ? msg.message : undefined,
-              translation: "",
-              context: msg.context,
-              extractedComments: msg.comment ? [msg.comment] : [],
-              origins: [],
-            }
-          }
+      for (const msg of extractedMessages) {
+        const key = msg.id || msg.message || ""
+        if (!key) {
+          continue
+        }
 
-          // Add origin
-          if (msg.origin) {
-            const origin: SourceReference = {
-              file: relativePath,
-              line: msg.origin[1],
-            }
-            messages[key].origins = messages[key].origins || []
-            messages[key].origins.push(origin)
+        if (!messages[key]) {
+          messages[key] = {
+            message: msg.id ? msg.message : undefined,
+            translation: "",
+            context: msg.context,
+            extractedComments: msg.comment ? [msg.comment] : [],
+            origins: [],
           }
-        },
-        extractorCtx
-      )
+        }
+
+        if (msg.origin) {
+          const origin: SourceReference = {
+            file: relativePath,
+            line: msg.origin[1],
+          }
+          messages[key].origins = messages[key].origins || []
+          messages[key].origins.push(origin)
+        }
+      }
     } catch (error) {
       if (options.verbose) {
         console.warn(chalk.yellow("Warning:"), `Failed to extract from ${file}:`, error)
@@ -148,16 +151,13 @@ async function extractFromCatalog(
 }
 
 async function writeCatalog(
-  catalog: CatalogConfig,
+  catalog: PalamedesCatalogConfig,
   locale: string,
   extractedMessages: Catalog,
-  config: LinguiConfig,
+  config: LoadedPalamedesConfig,
   options: ExtractOptions
 ): Promise<void> {
-  const rootDir = config.rootDir || process.cwd()
-  const catalogPath = catalog.path
-    .replace("<rootDir>", rootDir)
-    .replace("{locale}", locale)
+  const catalogPath = resolveCatalogPath(config, catalog.path, locale)
   const poPath = `${catalogPath}.po`
 
   // Load existing catalog if it exists
@@ -208,16 +208,18 @@ async function writeCatalog(
   }
 }
 
-async function runWatchMode(config: LinguiConfig, options: ExtractOptions): Promise<void> {
+async function runWatchMode(
+  config: LoadedPalamedesConfig,
+  options: ExtractOptions
+): Promise<void> {
   console.log(chalk.cyan("Watching for changes..."))
 
   // Initial extraction
   await runExtraction(config, options)
 
   // Watch for changes
-  const rootDir = config.rootDir || process.cwd()
   const watchPatterns = (config.catalogs ?? []).flatMap((catalog) =>
-    catalog.include.map((pattern) => pattern.replace("<rootDir>", rootDir))
+    catalog.include.map((pattern) => resolveConfigPattern(config, pattern))
   )
 
   const watcher = watch(watchPatterns, {

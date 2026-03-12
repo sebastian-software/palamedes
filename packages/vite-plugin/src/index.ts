@@ -1,14 +1,18 @@
 /**
  * @palamedes/vite-plugin
  *
- * Vite plugin for Lingui using OXC-based macro transformer.
+ * Vite plugin for Palamedes using OXC-based macro transformation.
  * No Babel required!
  */
 
 import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter } from "vite"
-import { getConfig, type LinguiConfigNormalized, type FallbackLocales } from "@lingui/conf"
+import {
+  expandFallbackLocales,
+  loadPalamedesConfig,
+  type LoadedPalamedesConfig,
+} from "@palamedes/config"
 import {
   createCompiledCatalog,
   getCatalogs,
@@ -18,13 +22,13 @@ import {
   createCompilationErrorMessage,
 } from "@lingui/cli/api"
 import { transformLinguiMacros } from "@palamedes/transform"
+import { LINGUI_MACRO_PACKAGES } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
 
-type TranslationOptions = {
-  sourceLocale: string
-  fallbackLocales: FallbackLocales
-}
+type LinguiCatalogConfig = Parameters<typeof getCatalogs>[0]
+type CatalogInstance = Awaited<ReturnType<typeof getCatalogs>>[number]
+type TranslationOptions = Parameters<CatalogInstance["getTranslations"]>[1]
 
 export interface PalamedesPluginOptions {
   /**
@@ -46,7 +50,7 @@ export interface PalamedesPluginOptions {
   enablePoLoader?: boolean
 
   /**
-   * Path to lingui.config.js.
+   * Path to palamedes.config.js/ts.
    * If not provided, searches for config automatically.
    */
   configPath?: string
@@ -80,6 +84,19 @@ export interface PalamedesPluginOptions {
   runtimeModule?: string
 }
 
+function toLinguiCatalogConfig(config: LoadedPalamedesConfig): LinguiCatalogConfig {
+  return {
+    ...config,
+    fallbackLocales: expandFallbackLocales(config.locales, config.fallbackLocales),
+    format: "po",
+    runtimeConfigModule: {
+      i18n: ["@lingui/core", "i18n"],
+      useLingui: ["@lingui/react", "useLingui"],
+      Trans: ["@lingui/react", "Trans"],
+    },
+  } as LinguiCatalogConfig
+}
+
 /**
  * Create the Palamedes Vite plugin
  */
@@ -91,21 +108,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     failOnMissing = false,
     failOnCompileError = false,
     runtimeModule = "@palamedes/runtime",
-    ...linguiConfigOptions
+    ...configLoaderOptions
   } = options
 
   // Initialize lazily
-  let config: LinguiConfigNormalized | null = null
+  let config: LoadedPalamedesConfig | null = null
   let filter: ReturnType<typeof createFilter> | null = null
   let macroIds: Set<string> | null = null
 
-  function getConfigLazy() {
+  async function getConfigLazy() {
     if (!config) {
-      config = getConfig(linguiConfigOptions)
-      macroIds = new Set([
-        ...(config.macro?.corePackage ?? []),
-        ...(config.macro?.jsxPackage ?? []),
-      ])
+      config = await loadPalamedesConfig(configLoaderOptions)
+      macroIds = new Set(LINGUI_MACRO_PACKAGES)
     }
     return config
   }
@@ -125,9 +139,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre" as const,
 
     resolveId(id) {
-      // Ensure config is loaded
-      getConfigLazy()
-      const ids = macroIds!
+      const ids = macroIds ?? new Set(LINGUI_MACRO_PACKAGES)
       if (ids.has(id)) {
         throw new Error(
           `The macro you imported from "${id}" is being executed outside the context of compilation.\n` +
@@ -138,11 +150,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
 
     resolveDynamicImport(id) {
-      const ids = macroIds!
+      const ids = macroIds ?? new Set(LINGUI_MACRO_PACKAGES)
       if (ids.has(id as string)) {
         throw new Error(
           `The macro you imported from "${id}" cannot be dynamically imported.\n` +
-            `Lingui macros must be statically imported.`
+            `Palamedes macros must be statically imported.`
         )
       }
     },
@@ -154,9 +166,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre" as const,
 
     config(viteConfig) {
-      // Ensure config is loaded to populate macroIds
-      getConfigLazy()
-      const ids = macroIds!
+      const ids = new Set(LINGUI_MACRO_PACKAGES)
+      macroIds = ids
 
       // Exclude macro packages from optimization
       // https://github.com/lingui/js-lingui/issues/1464
@@ -170,39 +181,39 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       }
     },
 
-      transform(code, id) {
-        // Check file extension and filter
-        if (!getFilterLazy()(id)) {
+    transform(code, id) {
+      // Check file extension and filter
+      if (!getFilterLazy()(id)) {
+        return null
+      }
+
+      // Quick check: skip if no macro imports
+      const ids = macroIds ?? new Set(LINGUI_MACRO_PACKAGES)
+      const hasAnyMacroImport = Array.from(ids).some((macroId) =>
+        code.includes(macroId)
+      )
+      if (!hasAnyMacroImport) {
+        return null
+      }
+
+      try {
+        const result = transformLinguiMacros(code, id, {
+          runtimeModule,
+        })
+
+        if (!result.hasChanged) {
           return null
         }
 
-        // Quick check: skip if no macro imports
-        const ids = macroIds!
-        const hasAnyMacroImport = Array.from(ids).some((macroId) =>
-          code.includes(macroId)
-        )
-        if (!hasAnyMacroImport) {
-          return null
+        return {
+          code: result.code,
+          map: result.map as any,
         }
-
-        try {
-          const result = transformLinguiMacros(code, id, {
-            runtimeModule,
-          })
-
-          if (!result.hasChanged) {
-            return null
-          }
-
-          return {
-            code: result.code,
-            map: result.map as any,
-          }
-        } catch (error) {
-          const err = error as Error
-          this.error(`Lingui transform error in ${id}: ${err.message}`)
-        }
-      },
+      } catch (error) {
+        const err = error as Error
+        this.error(`Palamedes transform error in ${id}: ${err.message}`)
+      }
+    },
   })
 
   // Plugin 3: PO file loader
@@ -215,18 +226,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return null
         }
 
-        const cfg = getConfigLazy()
+        const cfg = await getConfigLazy()
         const cleanId = id.split("?")[0] ?? id
-        const catalogRelativePath = path.relative(cfg.rootDir ?? process.cwd(), cleanId)
+        const catalogRelativePath = path.relative(cfg.rootDir, cleanId)
 
         const fileCatalog = getCatalogForFile(
           catalogRelativePath,
-          await getCatalogs(cfg)
+          await getCatalogs(toLinguiCatalogConfig(cfg))
         )
 
         if (!fileCatalog) {
           throw new Error(
-              `Requested resource ${catalogRelativePath} is not matched to any of your catalogs paths specified in "lingui.config".\n\n` +
+              `Requested resource ${catalogRelativePath} is not matched to any of your catalogs paths specified in "palamedes.config".\n\n` +
               `Resource: ${id}\n\n` +
               `Your catalogs:\n${(cfg.catalogs ?? []).map((c) => c.path).join("\n")}\n\n` +
               `Please check that catalogs.path is filled properly.`
@@ -239,8 +250,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const dependency = await getCatalogDependentFiles(catalog, locale)
         dependency.forEach((file) => this.addWatchFile(file))
         const translationOptions: TranslationOptions = {
-          sourceLocale: cfg.sourceLocale!,
-          fallbackLocales: (cfg.fallbackLocales ?? {}) as FallbackLocales,
+          sourceLocale: cfg.sourceLocale,
+          fallbackLocales: expandFallbackLocales(cfg.locales, cfg.fallbackLocales),
         }
 
         const { messages, missing: missingMessages } =
@@ -279,12 +290,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           if (failOnCompileError) {
             throw new Error(
               message +
-                `These errors fail build because \`failOnCompileError=true\` in Lingui Vite plugin configuration.`
+                `These errors fail build because \`failOnCompileError=true\` in the Palamedes Vite plugin configuration.`
             )
           } else {
             console.warn(
               message +
-                `You can fail the build on these errors by setting \`failOnCompileError=true\` in Lingui Vite Plugin configuration.`
+                `You can fail the build on these errors by setting \`failOnCompileError=true\` in the Palamedes Vite plugin configuration.`
             )
           }
         }

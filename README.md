@@ -75,6 +75,22 @@ setClientI18n(i18n)
 pnpm exec pmds extract
 ```
 
+```ts
+// palamedes.config.ts
+import { defineConfig } from "@palamedes/config"
+
+export default defineConfig({
+  locales: ["en", "de"],
+  sourceLocale: "en",
+  catalogs: [
+    {
+      path: "src/locales/{locale}",
+      include: ["src"],
+    },
+  ],
+})
+```
+
 ## Quick Start With Next.js
 
 ```bash

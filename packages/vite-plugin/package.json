@@ -1,7 +1,7 @@
 {
   "name": "@palamedes/vite-plugin",
   "version": "0.1.1",
-  "description": "Vite plugin for Lingui using OXC-based macro transformer",
+  "description": "Vite plugin for Palamedes using OXC-based macro transformation",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@lingui/cli": "^5.9.2",
-    "@lingui/conf": "^5.9.2",
+    "@palamedes/config": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/transform": "workspace:^"
   },

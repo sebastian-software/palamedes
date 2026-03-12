@@ -36,15 +36,15 @@ importers:
         specifier: ^0.0.1
         version: 0.0.1
     devDependencies:
-      '@lingui/conf':
-        specifier: ^5.9.2
-        version: 5.9.2(typescript@5.9.3)
       '@lingui/format-po':
         specifier: ^5.9.2
         version: 5.9.2(typescript@5.9.3)
       '@palamedes/cli':
         specifier: workspace:^
         version: link:../../packages/cli
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../../packages/config
       '@palamedes/next-plugin':
         specifier: workspace:^
         version: link:../../packages/next-plugin
@@ -79,15 +79,15 @@ importers:
         specifier: ^19.2.4
         version: 19.2.4(react@19.2.4)
     devDependencies:
-      '@lingui/conf':
-        specifier: ^5.9.2
-        version: 5.9.2(typescript@5.9.3)
       '@lingui/format-po':
         specifier: ^5.9.2
         version: 5.9.2(typescript@5.9.3)
       '@palamedes/cli':
         specifier: workspace:^
         version: link:../../packages/cli
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../../packages/config
       '@palamedes/vite-plugin':
         specifier: workspace:^
         version: link:../../packages/vite-plugin
@@ -109,9 +109,9 @@ importers:
 
   packages/cli:
     dependencies:
-      '@lingui/conf':
-        specifier: ^5.9.2
-        version: 5.9.2(typescript@5.9.3)
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../config
       '@palamedes/extractor':
         specifier: workspace:^
         version: link:../extractor
@@ -127,6 +127,9 @@ importers:
       glob:
         specifier: ^13.0.6
         version: 13.0.6
+      oxc-parser:
+        specifier: ^0.117.0
+        version: 0.117.0
       pofile-ts:
         specifier: ^4.0.0
         version: 4.0.0
@@ -140,6 +143,25 @@ importers:
       unbuild:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)
+
+  packages/config:
+    dependencies:
+      jiti:
+        specifier: ^2.6.1
+        version: 2.6.1
+    devDependencies:
+      '@types/node':
+        specifier: ^25.4.0
+        version: 25.4.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      unbuild:
+        specifier: ^3.6.1
+        version: 3.6.1(typescript@5.9.3)
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@25.4.0)(jiti@2.6.1)
 
   packages/core-node:
     devDependencies:
@@ -188,9 +210,6 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0
     devDependencies:
-      '@lingui/conf':
-        specifier: ^5.9.2
-        version: 5.9.2(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -206,9 +225,9 @@ importers:
       '@lingui/cli':
         specifier: ^5.9.2
         version: 5.9.2(typescript@5.9.3)
-      '@lingui/conf':
-        specifier: ^5.9.2
-        version: 5.9.2(typescript@5.9.3)
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../config
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../runtime
@@ -273,9 +292,9 @@ importers:
       '@lingui/cli':
         specifier: ^5.9.2
         version: 5.9.2(typescript@5.9.3)
-      '@lingui/conf':
-        specifier: ^5.9.2
-        version: 5.9.2(typescript@5.9.3)
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../config
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../runtime

@@ -38,6 +38,23 @@ module.exports = withPalamedes({})
 
 Transformed code expects a runtime getter from `@palamedes/runtime`, so make sure you register your active Lingui instance on the client and server before translated code runs.
 
+Add a `palamedes.config.ts` file to define locales and catalog locations:
+
+```ts
+import { defineConfig } from "@palamedes/config"
+
+export default defineConfig({
+  locales: ["en", "de"],
+  sourceLocale: "en",
+  catalogs: [
+    {
+      path: "src/locales/{locale}",
+      include: ["src"],
+    },
+  ],
+})
+```
+
 ## Options
 
 ```js
@@ -47,7 +64,7 @@ module.exports = withPalamedes({}, {
   include: /\.(tsx?|jsx?)$/,
   exclude: /node_modules/,
   enablePoLoader: true,
-  configPath: "./lingui.config.js",
+  configPath: "./palamedes.config.ts",
   failOnMissing: false,
   failOnCompileError: false,
   runtimeModule: "@palamedes/runtime",

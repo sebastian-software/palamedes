@@ -1,7 +1,7 @@
 {
   "name": "@palamedes/cli",
   "version": "0.1.1",
-  "description": "Palamedes CLI - Next-generation Lingui tooling",
+  "description": "Palamedes CLI for fast message extraction workflows",
   "keywords": [
     "lingui",
     "i18n",
@@ -48,12 +48,13 @@
     "access": "public"
   },
   "dependencies": {
-    "@lingui/conf": "^5.9.2",
+    "@palamedes/config": "workspace:^",
     "@palamedes/extractor": "workspace:^",
     "chalk": "^5.6.2",
     "chokidar": "^5.0.0",
     "commander": "^14.0.3",
     "glob": "^13.0.6",
+    "oxc-parser": "^0.117.0",
     "pofile-ts": "^4.0.0"
   },
   "devDependencies": {

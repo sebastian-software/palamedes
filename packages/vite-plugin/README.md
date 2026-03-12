@@ -42,6 +42,23 @@ export default defineConfig({
 
 Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure your app registers the active Lingui instance before translated code executes.
 
+Add a `palamedes.config.ts` file to define locales and catalog locations:
+
+```ts
+import { defineConfig } from "@palamedes/config"
+
+export default defineConfig({
+  locales: ["en", "de"],
+  sourceLocale: "en",
+  catalogs: [
+    {
+      path: "src/locales/{locale}",
+      include: ["src"],
+    },
+  ],
+})
+```
+
 ## Options
 
 ```ts
@@ -51,7 +68,7 @@ palamedes({
   include: /\.(tsx?|jsx?|mjs|cjs)$/,
   exclude: /node_modules/,
   enablePoLoader: true,
-  configPath: "./lingui.config.ts",
+  configPath: "./palamedes.config.ts",
   failOnMissing: false,
   failOnCompileError: false,
   runtimeModule: "@palamedes/runtime",

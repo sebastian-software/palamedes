@@ -37,31 +37,27 @@ pnpm dlx @palamedes/cli extract
 pnpm exec pmds extract
 pnpm exec pmds extract --watch
 pnpm exec pmds extract --clean
-pnpm exec pmds extract --config ./lingui.config.ts
+pnpm exec pmds extract --config ./palamedes.config.ts
 pnpm exec pmds extract --verbose
 ```
 
 ## Configuration
 
-`@palamedes/cli` uses your existing `lingui.config.ts` or `lingui.config.js`.
+`@palamedes/cli` uses `palamedes.config.ts` or `palamedes.config.js`.
 
 ```ts
-import { extractor } from "@palamedes/extractor"
-import type { LinguiConfig } from "@lingui/conf"
+import { defineConfig } from "@palamedes/config"
 
-const config: LinguiConfig = {
+export default defineConfig({
   locales: ["en", "de"],
   sourceLocale: "en",
   catalogs: [
     {
-      path: "<rootDir>/src/locales/{locale}",
+      path: "src/locales/{locale}",
       include: ["src"],
     },
   ],
-  extractors: [extractor],
-}
-
-export default config
+})
 ```
 
 ## Related Packages

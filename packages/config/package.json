@@ -1,23 +1,21 @@
 {
-  "name": "@palamedes/extractor",
+  "name": "@palamedes/config",
   "version": "0.1.1",
-  "description": "High-performance message extractor for Palamedes-compatible code using OXC",
+  "description": "Lean config loading for Palamedes projects",
   "keywords": [
-    "lingui",
     "palamedes",
-    "i18n",
-    "extractor",
-    "oxc",
-    "performance"
+    "config",
+    "i18n"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
-    "directory": "packages/extractor"
+    "directory": "packages/config"
   },
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "license": "MIT",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -36,7 +34,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/extractMessages.test.ts",
+    "test": "vitest run --globals src/loadConfig.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {
@@ -46,11 +44,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@palamedes/core-node": "workspace:^",
-    "oxc-parser": "^0.117.0",
-    "pofile-ts": "^4.0.0"
+    "jiti": "^2.6.1"
   },
   "devDependencies": {
+    "@types/node": "^25.4.0",
     "typescript": "^5.9.3",
     "unbuild": "^3.6.1",
     "vitest": "^4.0.18"

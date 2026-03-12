@@ -9,7 +9,6 @@
  */
 
 import { parseSync } from "oxc-parser"
-import type { ExtractorType, ExtractedMessage, ExtractorCtx } from "@lingui/conf"
 
 import { extractMessages } from "./extractMessages"
 
@@ -17,7 +16,7 @@ const SUPPORTED_EXTENSIONS =
   /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx)$/i
 
 /**
- * oxc-based extractor for Lingui messages.
+ * OXC-based extractor for Palamedes-compatible message syntax.
  *
  * Supports:
  * - JSX: <Trans>, <Plural>, <Select>, <SelectOrdinal>
@@ -25,16 +24,25 @@ const SUPPORTED_EXTENSIONS =
  *
  * @example
  * ```ts
- * // lingui.config.ts
- * import { extractor } from '@palamedes/extractor'
+ * import { extractor } from "@palamedes/extractor"
  *
- * export default {
- *   extractors: [extractor],
- *   // ...
+ * if (extractor.match("app.tsx")) {
+ *   await extractor.extract("app.tsx", source, (message) => {
+ *     console.log(message)
+ *   })
  * }
  * ```
  */
-export const extractor: ExtractorType = {
+export interface PalamedesExtractor {
+  match(filename: string): boolean
+  extract(
+    filename: string,
+    code: string,
+    onMessageExtracted: (msg: import("./extractMessages").ExtractedMessageInfo) => void
+  ): Promise<void>
+}
+
+export const extractor: PalamedesExtractor = {
   match(filename: string): boolean {
     return SUPPORTED_EXTENSIONS.test(filename)
   },
@@ -42,8 +50,7 @@ export const extractor: ExtractorType = {
   async extract(
     filename: string,
     code: string,
-    onMessageExtracted: (msg: ExtractedMessage) => void,
-    ctx: ExtractorCtx
+    onMessageExtracted: (msg: import("./extractMessages").ExtractedMessageInfo) => void
   ): Promise<void> {
     const result = parseSync(filename, code, {
       sourceType: "module",
@@ -65,5 +72,5 @@ export const extractor: ExtractorType = {
 
 export default extractor
 export { extractMessages } from "./extractMessages"
-export { extractMessagesJs } from "./extractMessages"
+export { extractMessagesJs } from "./extractMessagesJs"
 export type { ExtractedMessageInfo } from "./extractMessages"

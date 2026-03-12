@@ -1,4 +1,3 @@
-import type { ExtractedMessage } from "@lingui/conf"
 import {
   extractMessagesNative,
   type NativeExtractedMessage,
@@ -6,7 +5,12 @@ import {
 
 import { extractMessagesJs } from "./extractMessagesJs"
 
-export interface ExtractedMessageInfo extends ExtractedMessage {
+export interface ExtractedMessageInfo {
+  id?: string
+  message?: string
+  comment?: string
+  context?: string
+  placeholders?: Record<string, string>
   origin: [filename: string, line: number, column?: number]
 }
 

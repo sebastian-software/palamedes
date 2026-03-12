@@ -2,7 +2,6 @@
  * Core message extraction logic using oxc AST
  */
 
-import type { ExtractedMessage } from "@lingui/conf"
 import { generateMessageId } from "@palamedes/core-node"
 
 /**
@@ -48,7 +47,12 @@ const JSX_MACROS = ["Trans", "Plural", "Select", "SelectOrdinal"] as const
 // JS macro names
 const JS_MACROS = ["t", "msg", "defineMessage", "plural", "select", "selectOrdinal"] as const
 
-export interface ExtractedMessageInfo extends ExtractedMessage {
+export interface ExtractedMessageInfo {
+  id?: string
+  message?: string
+  comment?: string
+  context?: string
+  placeholders?: Record<string, string>
   origin: [filename: string, line: number, column?: number]
 }
 

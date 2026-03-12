@@ -1,7 +1,7 @@
 /**
  * @palamedes/next-plugin
  *
- * Next.js integration for Lingui using OXC-based macro transformation.
+ * Next.js integration for Palamedes using OXC-based macro transformation.
  * No Babel required!
  */
 
@@ -30,7 +30,7 @@ export interface WithPalamedesOptions {
   enablePoLoader?: boolean
 
   /**
-   * Path to lingui.config.js.
+   * Path to palamedes.config.js/ts.
    * If not provided, searches for config automatically.
    */
   configPath?: string
@@ -55,7 +55,7 @@ export interface WithPalamedesOptions {
 }
 
 /**
- * Wraps a Next.js config to add Lingui OXC transformation.
+ * Wraps a Next.js config to add Palamedes OXC transformation.
  *
  * @example
  * ```js

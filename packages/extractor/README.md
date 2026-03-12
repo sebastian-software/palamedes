@@ -7,13 +7,13 @@
 
 Fast message extraction for teams that want a lower-level API, not just a CLI.
 
-`@palamedes/extractor` plugs into the current config surface and uses OXC-backed parsing plus Palamedes' native core to extract messages from JavaScript, TypeScript, and React codebases with less overhead than Babel-based extraction paths.
+`@palamedes/extractor` uses OXC-backed parsing plus Palamedes' native core to extract messages from JavaScript, TypeScript, and React codebases with less overhead than Babel-based extraction paths.
 
 ## When To Use This Package
 
 Use `@palamedes/extractor` when you want:
 
-- direct control over extraction in `lingui.config.ts`
+- direct control over extraction in your own scripts or tools
 - a lower-level extractor for custom workflows
 - the same extraction engine that powers the Palamedes CLI
 
@@ -25,25 +25,17 @@ If you just want the supported command-line workflow, use [`@palamedes/cli`](htt
 pnpm add -D @palamedes/extractor
 ```
 
-## Minimal Setup
+## Minimal Example
 
 ```ts
-import { extractor } from "@palamedes/extractor"
-import type { LinguiConfig } from "@lingui/conf"
+import { parseSync } from "oxc-parser"
+import { extractMessages } from "@palamedes/extractor"
 
-const config: LinguiConfig = {
-  locales: ["en", "de"],
-  sourceLocale: "en",
-  catalogs: [
-    {
-      path: "<rootDir>/src/locales/{locale}",
-      include: ["src"],
-    },
-  ],
-  extractors: [extractor],
-}
+const source = 'import { t } from "@lingui/macro"; const message = t`Hello ${name}`'
+const result = parseSync("example.ts", source, { sourceType: "module" })
+const messages = extractMessages(result.program, "example.ts", source)
 
-export default config
+console.log(messages)
 ```
 
 ## Supported Inputs

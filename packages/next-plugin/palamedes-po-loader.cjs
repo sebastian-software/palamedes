@@ -1,7 +1,10 @@
 "use strict";
 
 const path = require("node:path");
-const { getConfig } = require("@lingui/conf");
+const {
+  expandFallbackLocales,
+  loadPalamedesConfig,
+} = require("@palamedes/config");
 const {
   createCompiledCatalog,
   getCatalogs,
@@ -17,7 +20,7 @@ module.exports = function palamedesPoLoader() {
   const failOnCompileError = options.failOnCompileError === true;
 
   (async () => {
-    const cfg = getConfig({ configPath: options.configPath });
+    const cfg = await loadPalamedesConfig({ configPath: options.configPath });
     const catalogRelativePath = path.relative(cfg.rootDir, this.resourcePath);
     const fileCatalog = getCatalogForFile(
       catalogRelativePath,
@@ -26,7 +29,7 @@ module.exports = function palamedesPoLoader() {
 
     if (!fileCatalog) {
       throw new Error(
-        `Requested resource ${catalogRelativePath} is not matched to any of your catalogs paths specified in "lingui.config".\n\n` +
+        `Requested resource ${catalogRelativePath} is not matched to any of your catalogs paths specified in "palamedes.config".\n\n` +
           `Resource: ${this.resourcePath}\n\n` +
           `Your catalogs:\n${cfg.catalogs.map((catalog) => catalog.path).join("\n")}\n\n` +
           "Please check that catalogs.path is filled properly."
@@ -37,7 +40,7 @@ module.exports = function palamedesPoLoader() {
     const { messages, missing: missingMessages } = await catalog.getTranslations(
       locale,
       {
-        fallbackLocales: cfg.fallbackLocales,
+        fallbackLocales: expandFallbackLocales(cfg.locales, cfg.fallbackLocales),
         sourceLocale: cfg.sourceLocale,
       }
     );
