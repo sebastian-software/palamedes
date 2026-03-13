@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/sebastian-software/palamedes/compare/runtime-v0.1.1...runtime-v0.2.0) (2026-03-13)
+
+
+### Miscellaneous Chores
+
+* **runtime:** Synchronize palamedes versions
+
 ## [0.1.1](https://github.com/sebastian-software/palamedes/compare/runtime-v0.1.0...runtime-v0.1.1) (2026-03-11)
 
 
