@@ -9,6 +9,8 @@ Low-level macro transformation powered by Palamedes' native core.
 
 This package turns supported message macro imports into runtime calls without requiring Babel. It is the building block behind the framework adapters and the right entry point when you want to embed Palamedes in your own bundler, compiler, or tooling flow.
 
+Palamedes stays source-string-first at the public model level. The transform may emit a compact internal lookup key, but that key is a runtime artifact, not a user-facing message ID.
+
 ## When To Use This Package
 
 Use `@palamedes/transform` when you are:
@@ -57,6 +59,8 @@ console.log(result.code)
 - `defineMessage(...)`
 - `plural(...)`, `select(...)`, `selectOrdinal(...)`
 - `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
+
+Explicit author-facing `id` fields are intentionally not part of the supported end-state model.
 
 ## Related Packages
 

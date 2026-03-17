@@ -9,6 +9,8 @@ The Node.js wrapper around Palamedes' native core.
 
 Use this package when you are building tooling on top of Palamedes and want direct access to native catalog updates, `.po` parsing, extraction, or macro transformation.
 
+The public catalog model is source-string-first: `message + context` is the semantic identity, while any compact lookup key remains an internal compile/runtime detail.
+
 ## When To Use This Package
 
 Reach for `@palamedes/core-node` when you are:
@@ -64,6 +66,8 @@ console.log(po.headers.Language)
 - `getNativeInfo()`
 - `parsePo(source)`
 - `updateCatalogFile(request)`
+- `parseCatalog(source, locale, sourceLocale)`
+- `getCatalogModule(source, locale, sourceLocale, options?)`
 - `extractMessagesNative(source, filename)`
 - `transformMacrosNative(source, filename, options?)`
 

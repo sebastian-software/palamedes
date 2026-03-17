@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-03-17
 **Branch:** `main`
-**HEAD:** `5f5582c` (`refactor: remove pofile from palamedes core`)
+**HEAD:** `1d82637` (`docs: reset ADRs around current architecture`)
 **Worktree before this document:** clean
 
 ## Summary
@@ -147,6 +147,7 @@ Heute erneut geprüft:
 
 ## Letzte relevante Commits
 
+- `1d82637` docs: reset ADRs around current architecture
 - `5f5582c` refactor: remove pofile from palamedes core
 - `4f172a1` refactor: adopt ferrocat 0.5.2 high-level catalog APIs
 - `61d8ff6` refactor: reset palamedes to source-string-first catalogs

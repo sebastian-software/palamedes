@@ -40,7 +40,7 @@ export default defineConfig({
 })
 ```
 
-Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure your app registers the active Lingui instance before translated code executes.
+Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure your app registers the active i18n instance before translated code executes.
 
 Add a `palamedes.config.ts` file to define locales and catalog locations:
 
@@ -79,6 +79,7 @@ palamedes({
 
 - transforms supported message macros in JavaScript and TypeScript files
 - compiles imported `.po` files into JavaScript modules
+- keeps source-string-first catalog semantics aligned with the native core
 - reports common macro-resolution mistakes early in Vite
 
 ## Related Packages

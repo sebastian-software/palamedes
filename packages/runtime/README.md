@@ -33,7 +33,7 @@ import { setClientI18n } from "@palamedes/runtime"
 setClientI18n(i18n)
 ```
 
-For server-side rendering or server components, register a getter:
+For server-side rendering or server components, register a getter for the active request-local i18n instance:
 
 ```ts
 import { setServerI18nGetter } from "@palamedes/runtime"

@@ -36,7 +36,7 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 module.exports = withPalamedes({})
 ```
 
-Transformed code expects a runtime getter from `@palamedes/runtime`, so make sure you register your active Lingui instance on the client and server before translated code runs.
+Transformed code expects a runtime getter from `@palamedes/runtime`, so make sure you register your active i18n instance on the client and server before translated code runs.
 
 Add a `palamedes.config.ts` file to define locales and catalog locations:
 
@@ -75,6 +75,7 @@ module.exports = withPalamedes({}, {
 
 - transforms supported message macros in JavaScript and TypeScript sources
 - compiles imported `.po` files into JavaScript modules
+- keeps source-string-first catalog semantics aligned with the native core
 - integrates with both webpack and Turbopack
 
 ## Related Packages

@@ -12,6 +12,7 @@ Wenn du heute neu startest oder ein bestehendes Setup vereinfachen willst, halte
 |---|---|---|
 | Grundidee | starke Macro-basierte i18n-Lösung | gleiche Kernidee, aber architektonisch vereinfacht |
 | Transform-Core | historisch stärker JS-/Babel-geprägt | nativer Rust-Core mit dünnen TS-Wrappern |
+| Message-Identität | historisch mit mehr API-Oberfläche und Altpfaden | konsequent source-string-first (`message + context`) |
 | Runtime-Modell | mehrere gewachsene Zugriffspfade | ein Zielmodell: `getI18n()` |
 | Framework-Integration | gut, aber stärker vom Lingui-Modell geprägt | auf den nativen Core ausgerichtete Vite-/Next-Adapter |
 | Source Maps | Teil des Tooling-Stapels | immer Teil des Transform-Ergebnisses |
@@ -70,10 +71,22 @@ Palamedes nutzt einen Rust-Core für:
 
 - Macro-Transform
 - Message-Extraction
-- Message-ID-Generierung
 - PO-Verarbeitung über den nativen Stack
+- Catalog-Update und Parse-Semantik über `ferrocat`
 
 Das reduziert den Anteil an JavaScript-Infrastruktur im kritischsten Teil der Toolchain.
+
+### Ein konsequenteres Message-Modell
+
+Palamedes behandelt `message + context` als einzige fachliche Identität.
+
+Das bedeutet:
+
+- keine author-facing expliziten IDs
+- source-string-first Catalogs und Diagnostics
+- kompakte Hash-Keys nur noch als internes Compile-/Runtime-Detail
+
+Damit bleibt das Modell näher an gettext und gleichzeitig klarer als eine Mischung aus Source-Strings und separaten Produkt-IDs.
 
 ### Immer erzeugte Source Maps
 

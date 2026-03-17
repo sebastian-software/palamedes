@@ -13,9 +13,11 @@ It combines a native core, OXC-powered transforms, and first-party adapters for 
 
 - Brutally fast macro transforms without dragging Babel back into the stack
 - Shockingly fast message extraction for large TypeScript and React codebases
+- Source-string-first catalogs with gettext-style `message + context` identity
 - First-party adapters for Vite and Next.js
 - A small runtime layer instead of framework lock-in
 - Native packaging underneath, but straightforward setup at the package level
+- Catalog parsing and updating delegated to `ferrocat` instead of bespoke PO glue
 
 ## Start Here
 
@@ -115,7 +117,7 @@ Palamedes is split deliberately:
 - the CLI handles extraction workflows
 - the transform and extractor packages are the low-level building blocks
 - the runtime package provides the `getI18n()` contract that transformed code expects
-- the native core packages carry the heavy lifting behind the scenes
+- the native core packages carry extraction, transform, and catalog semantics behind the scenes
 
 That gives most application teams a simple starting point, while still leaving room for custom tooling and deeper integration work.
 

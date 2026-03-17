@@ -1,6 +1,6 @@
 # Palamedes Examples
 
-Examples using the new OXC-based Lingui packages (codename: Palamedes).
+Examples using the current Palamedes package family.
 
 ## Examples
 
@@ -9,7 +9,7 @@ Examples using the new OXC-based Lingui packages (codename: Palamedes).
 Vite + React 19 example with hot module replacement.
 
 ```bash
-cd examples-pala/vite-react
+cd examples/vite-react
 pnpm install
 pnpm dev
 ```
@@ -19,7 +19,7 @@ pnpm dev
 Next.js 15 App Router example.
 
 ```bash
-cd examples-pala/nextjs-app
+cd examples/nextjs-app
 pnpm install
 pnpm dev
 ```
@@ -29,6 +29,7 @@ pnpm dev
 - `@palamedes/transform` - Core macro transformer
 - `@palamedes/vite-plugin` - Vite plugin
 - `@palamedes/next-plugin` - Next.js integration
+- `@palamedes/runtime` - `getI18n()` runtime contract
 
 ## Features Demonstrated
 

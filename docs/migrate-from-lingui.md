@@ -11,14 +11,17 @@ In den meisten Projekten sieht die Migration so aus:
 1. Framework-Integration auf Palamedes umstellen
 2. Extraction auf Palamedes umstellen
 3. Runtime-Zugriff auf `getI18n()` ausrichten
-4. alte accessor-spezifische Pfade entfernen
-5. Build, Extraction und App-Verhalten verifizieren
+4. explizite `id`-Authoring-Pfade entfernen
+5. alte accessor-spezifische Pfade entfernen
+6. Build, Extraction und App-Verhalten verifizieren
 
 ## Konzept-Mapping
 
 | Lingui-Welt | Palamedes-Welt |
 |---|---|
 | Lingui als komplette Produktoberfläche | Palamedes als Tooling- und Runtime-Oberfläche |
+| gemischte historische API-Oberfläche | bewusst kleinerer, opinionated Endzustand |
+| Message-Identität teils mit expliziten `id`-Pfaden | `message + context` als einzige fachliche Identität |
 | mehrere Zugriffspfade je nach Kontext | ein Zielmodell über `getI18n()` |
 | Framework-Setup über Lingui-Adapter | Framework-Setup über `@palamedes/vite-plugin` oder `@palamedes/next-plugin` |
 | Extraction über Lingui-CLI/Babel-orientierte Wege | Extraction über `@palamedes/extractor` und `pmds extract` |
@@ -56,7 +59,24 @@ import { getI18n } from "@palamedes/runtime"
 
 Dann arbeitet der Rest des Systems gegen dieselbe Grundannahme.
 
-### 2. Framework-Integration austauschen
+### 2. Explizite `id`-Authoring-Pfade entfernen
+
+Palamedes ist source-string-first. Wenn dein Projekt Stellen wie diese nutzt, müssen sie vor oder während der Migration verschwinden:
+
+```ts
+t({ id: "checkout.cta", message: "Buy now" })
+defineMessage({ id: "checkout.cta", message: "Buy now" })
+```
+
+Stattdessen gilt in Palamedes:
+
+- `message` ist der Source String
+- `context` disambiguiert bei Bedarf
+- `message + context` ist die fachliche Identität
+
+Das passt besser zu gettext und hält Catalogs, Diagnostics und Transform-Modell konsistent.
+
+### 3. Framework-Integration austauschen
 
 #### Vite
 
@@ -94,7 +114,7 @@ import { withPalamedes } from "@palamedes/next-plugin"
 export default withPalamedes(nextConfig)
 ```
 
-### 3. Extraction umstellen
+### 4. Extraction umstellen
 
 Mit Palamedes läuft die Extraction über die eigene Toolchain:
 
@@ -186,6 +206,12 @@ Auch hier liegt die Veränderung primär im Stack darunter, nicht in der Surface
 
 Palamedes ist opinionated. Wenn dein Projekt stark auf mehrere historische Zugriffspfade aufbaut, solltest du diese Vereinheitlichung bewusst einplanen.
 
+### Explizite Authoring-IDs werden nicht mehr mitgetragen
+
+Palamedes behandelt explizite `id`-Felder nicht mehr als reguläres Authoring-Modell.
+
+Wenn dein bisheriger Code solche Felder verwendet, plane die Umstellung bewusst ein, statt auf stillschweigende Kompatibilität zu hoffen.
+
 ### Tooling-Namen ändern sich
 
 Du migrierst nicht nur Implementierungsdetails, sondern auch Produktoberflächen:
@@ -223,6 +249,7 @@ Palamedes versucht nicht, jede alte Form ewig mitzuziehen. Das ist gut für den 
 - Build läuft mit Palamedes-Plugin
 - Extraction läuft über `pmds`
 - Runtime-Zugriff ist auf `getI18n()` ausgerichtet
+- keine expliziten `id`-Authoring-Pfade mehr im Projekt
 - Catalogs werden korrekt erzeugt oder aktualisiert
 - Fehlerpositionen und Source Maps funktionieren im Dev-Tooling
 - keine alten accessor-spezifischen Muster mehr im Projekt
