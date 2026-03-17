@@ -700,7 +700,6 @@ dependencies = [
  "oxc_ast_visit",
  "oxc_parser",
  "oxc_span",
- "pofile",
  "regex",
  "serde",
  "serde_json",
@@ -770,12 +769,6 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
-
-[[package]]
-name = "pofile"
-version = "5.0.0-beta.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3a91636976355f61171e27a1329d1d52aaa4c42bf6c20a65fa10f98e2ce12d4"
 
 [[package]]
 name = "potential_utf"

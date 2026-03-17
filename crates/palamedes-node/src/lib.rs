@@ -13,7 +13,7 @@ pub fn get_native_info_json() -> Result<String> {
 
 #[napi]
 pub fn parse_po_json(source: String) -> Result<String> {
-    palamedes::parse_po_json(&source).map_err(to_napi_error)
+    palamedes::parse_po_json(&source).map_err(Error::from_reason)
 }
 
 #[napi]
