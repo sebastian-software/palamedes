@@ -1,186 +1,61 @@
 import path from "node:path"
 import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
+import type {
+  CatalogModuleCatalogConfig as GeneratedCatalogModuleCatalogConfig,
+  CatalogModuleCompilationError as GeneratedCatalogModuleCompilationError,
+  CatalogModuleConfig as GeneratedCatalogModuleConfig,
+  CatalogModuleMissingTranslation as GeneratedCatalogModuleMissingTranslation,
+  CatalogModuleRequest as GeneratedCatalogModuleRequest,
+  CatalogModuleResult as GeneratedCatalogModuleResult,
+  CatalogOrigin as GeneratedCatalogOrigin,
+  CatalogParseRequest as GeneratedCatalogParseRequest,
+  CatalogParseResult as GeneratedCatalogParseResult,
+  CatalogUpdateMessage as GeneratedCatalogUpdateMessage,
+  CatalogUpdateRequest as GeneratedCatalogUpdateRequest,
+  CatalogUpdateResult as GeneratedCatalogUpdateResult,
+  CatalogUpdateStats as GeneratedCatalogUpdateStats,
+  NativeBindings as GeneratedNativeBindings,
+  NativeExtractedMessage as GeneratedNativeExtractedMessage,
+  NativeInfo as GeneratedNativeInfo,
+  NativeTransformEdit as GeneratedNativeTransformEdit,
+  NativeTransformOptions as GeneratedNativeTransformOptions,
+  NativeTransformResult as GeneratedNativeTransformResult,
+  ParsedCatalogMessage as GeneratedParsedCatalogMessage,
+  ParsedPoFile as GeneratedParsedPoFile,
+  ParsedPoItem as GeneratedParsedPoItem,
+} from "./generated/palamedes-node-types"
 
-export interface NativeInfo {
-  palamedesVersion: string
-  ferrocatVersion: string
-}
+export type NativeInfo = GeneratedNativeInfo
+export type ParsedPoItem = GeneratedParsedPoItem
+export type ParsedPoFile = GeneratedParsedPoFile
+export type CatalogOrigin = GeneratedCatalogOrigin
+export type CatalogUpdateMessage = GeneratedCatalogUpdateMessage
+export type CatalogUpdateRequest = GeneratedCatalogUpdateRequest
+export type CatalogUpdateStats = GeneratedCatalogUpdateStats
+export type CatalogUpdateResult = GeneratedCatalogUpdateResult
+export type CatalogParseRequest = GeneratedCatalogParseRequest
+export type ParsedCatalogMessage = GeneratedParsedCatalogMessage
+export type CatalogParseResult = GeneratedCatalogParseResult
 
-export interface ParsedPoItem {
-  msgid: string
-  msgctxt?: string
-  references: string[]
-  msgidPlural?: string
-  msgstr: string[]
-  comments: string[]
-  extractedComments: string[]
-  flags: Record<string, boolean>
-  metadata: Record<string, string>
-  obsolete: boolean
-  nplurals: number
-}
-
-export interface ParsedPoFile {
-  comments: string[]
-  extractedComments: string[]
-  headers: Record<string, string>
-  headerOrder: string[]
-  items: ParsedPoItem[]
-}
-
-export interface CatalogOrigin {
-  file: string
-  line: number
-}
-
-export interface CatalogUpdateMessage {
-  message: string
-  context?: string
-  extractedComments: string[]
-  origins: CatalogOrigin[]
-}
-
-export interface CatalogUpdateRequest {
-  targetPath: string
-  locale: string
-  sourceLocale: string
-  clean: boolean
-  messages: CatalogUpdateMessage[]
-}
-
-export interface CatalogUpdateStats {
-  total: number
-  added: number
-  changed: number
-  unchanged: number
-  obsoleteMarked: number
-  obsoleteRemoved: number
-}
-
-export interface CatalogUpdateResult {
-  created: boolean
-  updated: boolean
-  stats: CatalogUpdateStats
-  diagnostics: string[]
-}
-
-export interface CatalogParseRequest {
-  targetPath: string
-  locale: string
-  sourceLocale: string
-}
-
-export interface ParsedCatalogMessage {
-  message: string
-  context?: string
-  comments: string[]
-  origins: CatalogOrigin[]
-  obsolete: boolean
-}
-
-export interface CatalogParseResult {
-  locale?: string
-  headers: Record<string, string>
-  messages: ParsedCatalogMessage[]
-  diagnostics: string[]
-}
-
-export interface NativeExtractedMessage {
-  message: string
-  comment?: string
-  context?: string
-  placeholders?: Record<string, string>
+export type NativeExtractedMessage =
+  Omit<GeneratedNativeExtractedMessage, "origin"> & {
   origin: [filename: string, line: number, column?: number]
-}
+  }
 
-export interface NativeTransformOptions {
-  runtimeModule?: string
-  runtimeImportName?: string
-  stripNonEssentialProps?: boolean
-  stripMessageField?: boolean
-}
+export type NativeTransformOptions = GeneratedNativeTransformOptions
+export type NativeTransformEdit = GeneratedNativeTransformEdit
+export type NativeTransformResult = GeneratedNativeTransformResult
+export type CatalogModuleCatalogConfig = GeneratedCatalogModuleCatalogConfig
+export type CatalogModuleFallbackLocales =
+  NonNullable<GeneratedCatalogModuleConfig["fallbackLocales"]>
+export type CatalogModuleConfig = GeneratedCatalogModuleConfig
+export type CatalogModuleMissingTranslation = GeneratedCatalogModuleMissingTranslation
+export type CatalogModuleCompilationError = GeneratedCatalogModuleCompilationError
+export type CatalogModuleResult = GeneratedCatalogModuleResult
 
-export interface NativeTransformEdit {
-  start: number
-  end: number
-  text: string
-}
-
-export interface NativeTransformResult {
-  code: string
-  hasChanged: boolean
-  edits: NativeTransformEdit[]
-  prependText?: string
-}
-
-export interface CatalogModuleCatalogConfig {
-  path: string
-  include: string[]
-  exclude?: string[]
-}
-
-export type CatalogModuleFallbackLocales = string[] | Record<string, string[]>
-
-export interface CatalogModuleConfig {
-  rootDir: string
-  locales: string[]
-  sourceLocale: string
-  fallbackLocales?: CatalogModuleFallbackLocales
-  pseudoLocale?: string
-  catalogs: CatalogModuleCatalogConfig[]
-}
-
-export interface CatalogModuleMissingTranslation {
-  message: string
-  context?: string
-}
-
-export interface CatalogModuleCompilationError {
-  message: string
-  context?: string
-}
-
-export interface CatalogModuleResult {
-  code: string
-  watchFiles: string[]
-  missing: CatalogModuleMissingTranslation[]
-  errors: CatalogModuleCompilationError[]
-  resolvedLocaleChain?: string[]
-}
-
-interface NativeExtractedMessageOrigin {
-  filename: string
-  line: number
-  column?: number
-}
-
-interface NativeBindingsExtractedMessage {
-  message: string
-  comment?: string
-  context?: string
-  placeholders?: Record<string, string>
-  origin: NativeExtractedMessageOrigin
-}
-
-interface NativeCatalogModuleRequest {
-  config: CatalogModuleConfig
-  resourcePath: string
-}
-
-interface NativeBindings {
-  getNativeInfo(): NativeInfo
-  parsePo(source: string): ParsedPoFile
-  updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult
-  parseCatalog(request: CatalogParseRequest): CatalogParseResult
-  getCatalogModule(request: NativeCatalogModuleRequest): CatalogModuleResult
-  extractMessages(source: string, filename: string): NativeBindingsExtractedMessage[]
-  transformMacros(
-    source: string,
-    filename: string,
-    options?: NativeTransformOptions
-  ): NativeTransformResult
-}
+type NativeBindings = GeneratedNativeBindings
+type NativeCatalogModuleRequest = GeneratedCatalogModuleRequest
 
 function detectLinuxLibc(): "gnu" | "musl" | null {
   if (process.platform !== "linux") {

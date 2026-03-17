@@ -5,13 +5,7 @@ import {
 
 import { extractMessagesJs } from "./extractMessagesJs"
 
-export interface ExtractedMessageInfo {
-  message: string
-  comment?: string
-  context?: string
-  placeholders?: Record<string, string>
-  origin: [filename: string, line: number, column?: number]
-}
+export type ExtractedMessageInfo = NativeExtractedMessage
 
 function normalizeNativeMessages(
   messages: NativeExtractedMessage[]

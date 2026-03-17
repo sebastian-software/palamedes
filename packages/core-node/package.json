@@ -35,6 +35,8 @@
     "dist/"
   ],
   "scripts": {
+    "generate-native-types": "node ./scripts/generate-native-types.mjs",
+    "check-native-types": "node ./scripts/generate-native-types.mjs --check",
     "build": "unbuild",
     "stub": "unbuild --stub"
   },

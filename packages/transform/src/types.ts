@@ -1,3 +1,5 @@
+import type { NativeTransformOptions } from "@palamedes/core-node"
+
 /**
  * Source map interface (compatible with standard source map format)
  */
@@ -13,32 +15,7 @@ export interface SourceMap {
 /**
  * Configuration options for the Lingui OXC transform
  */
-export interface TransformOptions {
-  /**
-   * Module to import the runtime getter from.
-   * @default "@palamedes/runtime"
-   */
-  runtimeModule?: string
-
-  /**
-   * Name of the runtime getter export to import from the runtime module.
-   * @default "getI18n"
-   */
-  runtimeImportName?: string
-
-  /**
-   * Whether to strip non-essential props (comment, context) in production.
-   * @default false
-   */
-  stripNonEssentialProps?: boolean
-
-  /**
-   * Whether to strip the message field from descriptors.
-   * @default false
-   */
-  stripMessageField?: boolean
-
-}
+export type TransformOptions = NativeTransformOptions
 
 /**
  * Result of a transform operation

@@ -16,7 +16,8 @@
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
-    "check-types": "pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",
+    "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
+    "check-types": "pnpm check:native-types && pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",
     "build:native": "cargo build --workspace",
     "check:rust": "cargo check --workspace",
     "test:rust": "cargo test --workspace"
