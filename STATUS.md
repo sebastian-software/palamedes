@@ -17,7 +17,6 @@ Die größten offenen Baustellen liegen jetzt nicht mehr bei der Grundarchitektu
 
 ### Architektur und Entscheidungen
 
-- Rust-Core-Zielbild dokumentiert: [docs/plans/2026-03-09-palamedes-rust-core-design.md](/Users/sebastian/Workspace/business/palamedes/docs/plans/2026-03-09-palamedes-rust-core-design.md)
 - ADR-Struktur auf einzelne Dateien unter [adr/](/Users/sebastian/Workspace/business/palamedes/adr) umgestellt
 - Zentrale ADRs ergänzt:
   - [ADR-011 Rust Core with Thin Node/TypeScript Wrappers](/Users/sebastian/Workspace/business/palamedes/adr/011-rust-core-with-thin-node-typescript-wrappers.md)
@@ -110,12 +109,6 @@ Relevante Dateien:
   - [packages/next-plugin/palamedes-loader.cjs](/Users/sebastian/Workspace/business/palamedes/packages/next-plugin/palamedes-loader.cjs)
   - [packages/next-plugin/palamedes-po-loader.cjs](/Users/sebastian/Workspace/business/palamedes/packages/next-plugin/palamedes-po-loader.cjs)
 - `@palamedes/core-node` baut jetzt zusätzlich CJS, damit der Next-Loader-Pfad funktioniert
-
-Begleitende Design-Dokumente:
-
-- [docs/plans/2026-03-10-pnpm-migration-design.md](/Users/sebastian/Workspace/business/palamedes/docs/plans/2026-03-10-pnpm-migration-design.md)
-- [docs/plans/2026-03-10-next-loader-packaging-design.md](/Users/sebastian/Workspace/business/palamedes/docs/plans/2026-03-10-next-loader-packaging-design.md)
-- [docs/plans/2026-03-10-palamedes-hard-rename-design.md](/Users/sebastian/Workspace/business/palamedes/docs/plans/2026-03-10-palamedes-hard-rename-design.md)
 
 ## Aktueller Verifikationsstand
 
