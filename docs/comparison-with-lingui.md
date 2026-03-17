@@ -1,140 +1,140 @@
 # Palamedes vs. Lingui
 
-Lingui ist eine der besseren i18n-Lösungen im JavaScript-Ökosystem. Viele Ideen, die Palamedes wichtig sind, sind davon inspiriert: Makros statt String-Chaos, saubere Message-Deskriptoren, gute Extractor-Story und pragmatische Framework-Integration.
+Lingui is one of the better i18n systems in the JavaScript ecosystem. A lot of what matters in Palamedes was shaped by the same instincts: macro-based authoring, extracted catalogs, and pragmatic framework integration.
 
-Palamedes ist trotzdem nicht einfach "Lingui in neuem Gewand". Das Projekt nimmt dieselben Grundideen und baut darauf eine konsequentere Architektur: nativer Core, weniger historischer Ballast, ein klareres Runtime-Modell und ein kleinerer Transform-Stack.
+Palamedes is not "Lingui with a new coat of paint," though. It takes the same core direction and pushes it to a clearer end state: a native core, thinner JavaScript layers, a stricter runtime model, and less historical API drag.
 
-Wenn du heute neu startest oder ein bestehendes Setup vereinfachen willst, halten wir Palamedes für die bessere Default-Wahl.
+If you are starting fresh or already doing architecture cleanup, Palamedes is the better default in our view.
 
-## Kurzvergleich
+## Quick Comparison
 
-| Thema | Lingui | Palamedes |
-|---|---|---|
-| Grundidee | starke Macro-basierte i18n-Lösung | gleiche Kernidee, aber architektonisch vereinfacht |
-| Transform-Core | historisch stärker JS-/Babel-geprägt | nativer Rust-Core mit dünnen TS-Wrappern |
-| Message-Identität | historisch mit mehr API-Oberfläche und Altpfaden | konsequent source-string-first (`message + context`) |
-| Runtime-Modell | mehrere gewachsene Zugriffspfade | ein Zielmodell: `getI18n()` |
-| Framework-Integration | gut, aber stärker vom Lingui-Modell geprägt | auf den nativen Core ausgerichtete Vite-/Next-Adapter |
-| Source Maps | Teil des Tooling-Stapels | immer Teil des Transform-Ergebnisses |
-| Produktziel | breite Lingui-Kompatibilität | bewusst opinionated, schlanker Endzustand |
+| Topic | Lingui | Palamedes |
+| --- | --- | --- |
+| Core idea | Strong macro-based i18n workflow | Same core idea, but with a tighter architecture |
+| Transform core | More historically shaped by JS and Babel | Native Rust core with thin TypeScript wrappers |
+| Message identity | Broader historical API surface | Strictly source-string-first: `message + context` |
+| Runtime model | Multiple grown-over-time access paths | One public model: `getI18n()` |
+| Framework integration | Good, but more shaped by Lingui's existing model | Thin Vite and Next.js adapters over the native core |
+| Source maps | Part of the toolchain stack | Always part of transform output |
+| Product direction | Broad compatibility pressure | Opinionated, narrower, cleaner end state |
 
-## Warum wir Palamedes für die bessere Default-Wahl halten
+## Why We Think Palamedes Is the Better Default
 
-### 1. Gleiche gute Grundidee, klarere Architektur
+### 1. Same strong idea, cleaner architecture
 
-Lingui hat die richtige Richtung früh vorgegeben: Makros, Message-Deskriptoren und Extraction statt manueller String-Verwaltung.
+Lingui got the big idea right early: macros, extracted messages, and catalog-driven workflows are better than scattering translation strings across an app by hand.
 
-Palamedes übernimmt genau diese Stärken, trennt sich aber von einem Teil der historischen Last. Der Kern liegt heute in Rust, die Node- und TypeScript-Schichten sind bewusst dünn, und die Transform-Entscheidungen leben nicht mehr in mehreren halbparallelen Implementierungen.
+Palamedes keeps that part. What it drops is a lot of the architectural weight that builds up over time in mature ecosystems. The semantic core lives in Rust, the TypeScript layer stays thinner, and the transform story is no longer spread across multiple partially overlapping implementations.
 
-Das macht den Stack leichter zu verstehen und leichter zu warten.
+That makes the system easier to understand, easier to maintain, and easier to evolve.
 
-### 2. Ein Runtime-Modell statt mehrerer Denkweisen
+### 2. One runtime model instead of several
 
-Palamedes setzt auf ein klares Zielmodell: `getI18n()`.
+Palamedes standardizes on one runtime access model: `getI18n()`.
 
-Das ist mehr als nur ein anderer API-Name. Es entfernt die alte Unterscheidung zwischen verschiedenen Zugriffspfaden und macht die eigentliche Frage sichtbar: "Wie komme ich in dieser Umgebung an die aktive i18n-Instanz?"
+That is not just a rename. It removes the old split between multiple access styles and makes the real question explicit: how does this environment provide the active i18n instance?
 
-Das Ergebnis:
+The result is straightforward:
 
-- weniger mentale Verzweigungen
-- klarere Transform-Ausgabe
-- weniger Spezialfälle in Client-/Server-Code
+- fewer mental branches
+- clearer transform output
+- fewer client/server special cases
 
-### 3. Nativer Core statt wachsender JS-Sonderpfade
+### 3. Native core instead of growing JavaScript side paths
 
-Palamedes transformiert und extrahiert heute über einen nativen Core. Die TypeScript-Schicht existiert noch, aber sie ist keine zweite Produktlogik mehr.
+Palamedes now does transform, extraction, and catalog work through a native core. TypeScript still matters, but it is no longer carrying a second copy of product semantics.
 
-Das zahlt sich an mehreren Stellen aus:
+That pays off in a few ways:
 
-- weniger doppelte Implementierungen
-- weniger Drift zwischen "eigentlich" und "Fallback"
-- klarere Ownership im Code
-- einfachere Weiterentwicklung in Richtung Packaging, Benchmarks und Releases
+- less duplicated logic
+- less drift between "main path" and fallback behavior
+- clearer ownership in the codebase
+- a cleaner path to packaging, benchmarking, and release work
 
-### 4. Bessere Endstate-Disziplin
+### 4. Better end-state discipline
 
-Lingui muss naturgemäß Rücksicht auf eine große existierende Welt nehmen. Das ist verständlich und oft richtig.
+Lingui has to account for a large existing ecosystem. That is normal, and often the right trade-off.
 
-Palamedes hat diesen Druck nicht in derselben Form. Dadurch können wir Entscheidungen schneller zu Ende führen:
+Palamedes does not have the same historical burden. That gives it room to finish decisions instead of carrying half-migrated states indefinitely:
 
-- alte Zugriffspfade nicht ewig mitschleppen
-- Transform und Extractor auf einen klaren Zielzustand zuschneiden
-- API-Flächen eher verkleinern als ausweiten
+- old access paths do not need to live forever
+- transform and extractor behavior can be designed toward a single target state
+- API surfaces can get smaller instead of only growing
 
-Wenn du eine moderne i18n-Toolchain für ein neues Projekt willst, ist das ein Vorteil, nicht ein Nachteil.
+If you want a modern i18n toolchain for a new codebase, that is an advantage.
 
-## Was Palamedes konkret besser macht
+## Where Palamedes Is Concretely Better
 
-### Ein nativer Transform- und Extractor-Kern
+### Native transform and extraction core
 
-Palamedes nutzt einen Rust-Core für:
+Palamedes uses Rust for:
 
-- Macro-Transform
-- Message-Extraction
-- PO-Verarbeitung über den nativen Stack
-- Catalog-Update und Parse-Semantik über `ferrocat`
+- macro transforms
+- message extraction
+- PO parsing and catalog updates
+- catalog parsing and normalization through `ferrocat`
 
-Das reduziert den Anteil an JavaScript-Infrastruktur im kritischsten Teil der Toolchain.
+That removes a lot of JavaScript infrastructure from the hottest part of the toolchain.
 
-### Ein konsequenteres Message-Modell
+### Cleaner message model
 
-Palamedes behandelt `message + context` als einzige fachliche Identität.
+Palamedes treats `message + context` as the only semantic identity.
 
-Das bedeutet:
+That means:
 
-- keine author-facing expliziten IDs
-- source-string-first Catalogs und Diagnostics
-- kompakte Hash-Keys nur noch als internes Compile-/Runtime-Detail
+- no author-facing explicit IDs
+- source-string-first catalogs and diagnostics
+- compact hash keys only as internal compile/runtime artifacts
 
-Damit bleibt das Modell näher an gettext und gleichzeitig klarer als eine Mischung aus Source-Strings und separaten Produkt-IDs.
+That is closer to gettext, and cleaner than mixing source strings with a second public ID model.
 
-### Immer erzeugte Source Maps
+### Source maps by default
 
-Source Maps sind in Palamedes kein optionaler Nebengedanke mehr. Der Transform liefert sie bei Änderungen immer mit.
+Source maps are not an optional side concern in Palamedes. If the transform rewrites code, it emits source maps.
 
-Das ist wichtig für:
+That matters for:
 
-- Vite-Integration
-- nachvollziehbare Fehlerpositionen
-- saubere Tooling-Ketten nach dem Rewrite
+- Vite integration
+- debuggable error locations
+- clean downstream toolchains after transformation
 
-### Ein bewusst kleineres Produktmodell
+### Smaller product surface
 
-Palamedes will nicht jede historische Form gleichzeitig konservieren. Das Projekt bevorzugt:
+Palamedes is not trying to preserve every historical shape forever. It prefers:
 
-- einen klaren Runtime-Pfad
-- weniger Sonderfälle
-- weniger "für alle Fälle noch kompatibel"
+- one runtime path
+- fewer edge-case APIs
+- fewer "just in case" compatibility branches
 
-Das macht das System strenger, aber auch lesbarer.
+That makes the system stricter, but also more legible.
 
-## Was gleich bleibt
+## What Still Feels Familiar
 
-Palamedes ist kein kompletter Neuanfang ohne Wiedererkennung. Wenn du von Lingui kommst, bleiben viele Grundmuster vertraut:
+Palamedes is not a total reset with zero continuity. If you are coming from Lingui, a lot will still look familiar:
 
-- Makro-orientiertes Arbeiten
-- `t`, `msg`, `defineMessage`
-- `plural`, `select`, `selectOrdinal`
-- `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
-- Catalog-/Extraction-Denke statt inline Übersetzungschaos
+- macro-oriented authoring
+- `t`, `msg`, and `defineMessage`
+- `plural`, `select`, and `selectOrdinal`
+- `<Trans>`, `<Plural>`, `<Select>`, and `<SelectOrdinal>`
+- extracted catalogs instead of ad hoc inline translation calls
 
-Gerade deshalb ist Palamedes als Migration attraktiv: du behältst viele gute Arbeitsweisen, aber mit einer aufgeräumteren Unterseite.
+That is exactly why migration is practical: a lot of the day-to-day authoring model stays recognizable while the underlying stack gets cleaner.
 
-## Wann Lingui weiterhin okay ist
+## When Lingui Still Makes Sense
 
-Lingui bleibt eine starke Wahl, besonders wenn:
+Lingui is still a strong choice, especially if:
 
-- du bereits tief in Lingui investiert bist
-- du maximale Kompatibilität mit bestehender Lingui-Dokumentation willst
-- du bewusst im etablierten Lingui-Ökosystem bleiben willst
+- you are already deeply invested in Lingui
+- you want maximum compatibility with existing Lingui documentation
+- you intentionally want to stay inside the established Lingui ecosystem
 
-Palamedes ist nicht die Aussage, dass Lingui schlecht sei. Palamedes ist die Aussage, dass man dieselben Grundideen heute noch klarer, nativer und entschlossener bauen kann.
+Palamedes is not an argument that Lingui is bad. It is an argument that the same core ideas can now be pushed into a clearer, more native, more opinionated architecture.
 
-## Empfehlung
+## Recommendation
 
-- Wenn du ein bestehendes großes Lingui-System nur minimal anfassen willst: Lingui weiterfahren kann sinnvoll sein.
-- Wenn du neu startest oder gerade sowieso Architekturarbeit machst: Palamedes ist aus unserer Sicht die bessere Default-Wahl.
+- If you want to minimally disturb a large existing Lingui setup, staying on Lingui can be reasonable.
+- If you are starting fresh or already doing architectural cleanup, Palamedes is the better default.
 
-Weiter geht es hier:
+Continue here:
 
 - [Migration from Lingui](./migrate-from-lingui.md)
