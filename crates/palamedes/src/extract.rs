@@ -10,7 +10,6 @@ use oxc_ast::ast::{
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::SourceType;
-use pofile::generate_message_id;
 use serde::Serialize;
 
 const LINGUI_MACRO_PACKAGES: [&str; 3] =
@@ -24,9 +23,7 @@ struct ImportedMacro {
 
 #[derive(Debug, Serialize)]
 pub struct ExtractedMessageRecord {
-    pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
+    pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -99,6 +96,7 @@ struct ExtractionVisitor<'a> {
     line_locator: &'a LineLocator,
     imported_macros: &'a HashMap<String, ImportedMacro>,
     messages: Vec<ExtractedMessageRecord>,
+    error: Option<String>,
 }
 
 impl<'a> ExtractionVisitor<'a> {
@@ -112,11 +110,18 @@ impl<'a> ExtractionVisitor<'a> {
             line_locator,
             imported_macros,
             messages: Vec::new(),
+            error: None,
         }
     }
 
     fn push(&mut self, message: ExtractedMessageRecord) {
         self.messages.push(message);
+    }
+
+    fn fail(&mut self, message: String) {
+        if self.error.is_none() {
+            self.error = Some(message);
+        }
     }
 
     fn origin(&self, span_start: usize) -> (String, usize, Option<usize>) {
@@ -138,6 +143,10 @@ impl<'a> ExtractionVisitor<'a> {
 
 impl<'a> Visit<'a> for ExtractionVisitor<'a> {
     fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        if self.error.is_some() {
+            return;
+        }
+
         let Some(tag_name) = it.opening_element.name.get_identifier_name() else {
             walk::walk_jsx_element(self, it);
             return;
@@ -147,10 +156,13 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             tag_name.as_str(),
             &["Trans", "Plural", "Select", "SelectOrdinal"],
         ) {
-            if let Some(message) =
-                extract_from_jsx_element(it, macro_name, self.origin(it.span.start as usize))
-            {
-                self.push(message);
+            match extract_from_jsx_element(it, macro_name, self.origin(it.span.start as usize)) {
+                Ok(Some(message)) => self.push(message),
+                Ok(None) => {}
+                Err(error) => {
+                    self.fail(error);
+                    return;
+                }
             }
         }
 
@@ -158,6 +170,10 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
     }
 
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        if self.error.is_some() {
+            return;
+        }
+
         if let Some(tag_name) = identifier_name(&it.tag) {
             if matches!(
                 self.imported_macro_name(tag_name, &["t", "msg"]),
@@ -185,6 +201,10 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.error.is_some() {
+            return;
+        }
+
         if let Some(callee_name) = identifier_name(&it.callee) {
             if let Some(macro_name) = self.imported_macro_name(
                 callee_name,
@@ -198,11 +218,13 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 ],
             ) {
                 let message = match macro_name {
-                    "plural" | "select" | "selectOrdinal" => extract_from_choice_call(
-                        it,
-                        macro_name,
-                        self.origin(it.span.start as usize),
-                    ),
+                    "plural" | "select" | "selectOrdinal" => {
+                        Ok(extract_from_choice_call(
+                            it,
+                            macro_name,
+                            self.origin(it.span.start as usize),
+                        ))
+                    }
                     _ => extract_from_descriptor_call(
                         it,
                         macro_name,
@@ -210,17 +232,25 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     ),
                 };
 
-                if let Some(message) = message {
-                    self.push(message);
+                match message {
+                    Ok(Some(message)) => self.push(message),
+                    Ok(None) => {}
+                    Err(error) => {
+                        self.fail(error);
+                        return;
+                    }
                 }
             }
         }
 
         if is_i18n_runtime_call(&it.callee, false) {
-            if let Some(message) =
-                extract_from_runtime_call(it, self.origin(it.span.start as usize))
-            {
-                self.push(message);
+            match extract_from_runtime_call(it, self.origin(it.span.start as usize)) {
+                Ok(Some(message)) => self.push(message),
+                Ok(None) => {}
+                Err(error) => {
+                    self.fail(error);
+                    return;
+                }
             }
         }
 
@@ -303,11 +333,13 @@ fn extract_from_jsx_element(
     element: &JSXElement<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
-) -> Option<ExtractedMessageRecord> {
+) -> Result<Option<ExtractedMessageRecord>, String> {
     let attrs = jsx_attributes(&element.opening_element);
 
     if macro_name == "Trans" {
-        let explicit_id = attrs.get("id").cloned();
+        if attrs.contains_key("id") {
+            return Err(unsupported_explicit_id_message());
+        }
         let message = attrs
             .get("message")
             .cloned()
@@ -316,37 +348,36 @@ fn extract_from_jsx_element(
         let comment = attrs.get("comment").cloned();
         let context = attrs.get("context").cloned();
 
-        if explicit_id.is_none() && message.is_none() {
-            return None;
+        if message.is_none() {
+            return Ok(None);
         }
 
-        let id = explicit_id.unwrap_or_else(|| {
-            generate_message_id(message.as_deref().unwrap_or(""), context.as_deref())
-        });
-
-        return Some(ExtractedMessageRecord {
-            id,
-            message,
+        return Ok(Some(ExtractedMessageRecord {
+            message: message.expect("message checked"),
             comment,
             context,
             placeholders: None,
             origin,
-        });
+        }));
     }
 
     if matches!(macro_name, "Plural" | "Select" | "SelectOrdinal") {
-        let explicit_id = attrs.get("id").cloned();
-        let value_name = extract_jsx_value_name(&element.opening_element)?;
+        if attrs.contains_key("id") {
+            return Err(unsupported_explicit_id_message());
+        }
+        let Some(value_name) = extract_jsx_value_name(&element.opening_element) else {
+            return Ok(None);
+        };
         let options = extract_choice_options_from_jsx(&element.opening_element);
         if options.is_empty() {
-            return None;
+            return Ok(None);
         }
 
         let format = match macro_name {
             "Plural" => "plural",
             "Select" => "select",
             "SelectOrdinal" => "selectordinal",
-            _ => return None,
+            _ => return Ok(None),
         };
 
         let message = build_icu_message(
@@ -356,40 +387,31 @@ fn extract_from_jsx_element(
             attrs.get("offset").map(String::as_str),
         );
         let context = attrs.get("context").cloned();
-        let id = explicit_id.unwrap_or_else(|| generate_message_id(&message, context.as_deref()));
 
-        return Some(ExtractedMessageRecord {
-            id,
-            message: Some(message),
+        return Ok(Some(ExtractedMessageRecord {
+            message,
             comment: attrs.get("comment").cloned(),
             context,
             placeholders: None,
             origin,
-        });
+        }));
     }
 
-    None
+    Ok(None)
 }
 
 fn extract_from_tagged_template(
     template: &TemplateLiteral<'_>,
     origin: (String, usize, Option<usize>),
-    runtime: bool,
+    _runtime: bool,
 ) -> Option<ExtractedMessageRecord> {
     let (message, placeholders) = template_to_message(template);
     if message.is_empty() {
         return None;
     }
 
-    let id = if runtime {
-        message.clone()
-    } else {
-        generate_message_id(&message, None)
-    };
-
     Some(ExtractedMessageRecord {
-        id,
-        message: (!runtime).then_some(message),
+        message,
         comment: None,
         context: None,
         placeholders: (!placeholders.is_empty()).then_some(placeholders),
@@ -401,25 +423,25 @@ fn extract_from_descriptor_call(
     call: &CallExpression<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
-) -> Option<ExtractedMessageRecord> {
-    let first_arg = call.arguments.first()?;
+) -> Result<Option<ExtractedMessageRecord>, String> {
+    let Some(first_arg) = call.arguments.first() else {
+        return Ok(None);
+    };
     let Argument::ObjectExpression(object) = first_arg else {
-        return None;
+        return Ok(None);
     };
 
     let props = extract_object_properties(object);
-    let explicit_id = props.get("id").cloned();
+    if props.contains_key("id") {
+        return Err(unsupported_explicit_id_message());
+    }
     let message = props.get("message").cloned();
     let comment = props.get("comment").cloned();
     let context = props.get("context").cloned();
 
-    if explicit_id.is_none() && message.is_none() {
-        return None;
+    if message.is_none() {
+        return Ok(None);
     }
-
-    let id = explicit_id.unwrap_or_else(|| {
-        generate_message_id(message.as_deref().unwrap_or(""), context.as_deref())
-    });
 
     let message = if macro_name == "t" || macro_name == "defineMessage" || macro_name == "msg" {
         message
@@ -427,14 +449,13 @@ fn extract_from_descriptor_call(
         None
     };
 
-    Some(ExtractedMessageRecord {
-        id,
+    Ok(message.map(|message| ExtractedMessageRecord {
         message,
         comment,
         context,
         placeholders: None,
         origin,
-    })
+    }))
 }
 
 fn extract_from_choice_call(
@@ -442,13 +463,19 @@ fn extract_from_choice_call(
     macro_name: &str,
     origin: (String, usize, Option<usize>),
 ) -> Option<ExtractedMessageRecord> {
-    let value_arg = call.arguments.first()?;
-    let options_arg = call.arguments.get(1)?;
+    let Some(value_arg) = call.arguments.first() else {
+        return None;
+    };
+    let Some(options_arg) = call.arguments.get(1) else {
+        return None;
+    };
     let Argument::ObjectExpression(object) = options_arg else {
         return None;
     };
 
-    let value_name = argument_expression_name(value_arg)?;
+    let Some(value_name) = argument_expression_name(value_arg) else {
+        return None;
+    };
     let options = extract_choice_options_from_object(object);
     if options.is_empty() {
         return None;
@@ -464,8 +491,7 @@ fn extract_from_choice_call(
     let message = build_icu_message(format, &value_name, &options, None);
 
     Some(ExtractedMessageRecord {
-        id: generate_message_id(&message, None),
-        message: Some(message),
+        message,
         comment: None,
         context: None,
         placeholders: None,
@@ -501,42 +527,49 @@ fn is_i18n_runtime_call(expr: &Expression<'_>, allow_t: bool) -> bool {
 fn extract_from_runtime_call(
     call: &CallExpression<'_>,
     origin: (String, usize, Option<usize>),
-) -> Option<ExtractedMessageRecord> {
-    let first_arg = call.arguments.first()?;
+) -> Result<Option<ExtractedMessageRecord>, String> {
+    let Some(first_arg) = call.arguments.first() else {
+        return Ok(None);
+    };
 
     if let Argument::ObjectExpression(object) = first_arg {
         let props = extract_object_properties(object);
-        let id = props.get("id")?.clone();
-        return Some(ExtractedMessageRecord {
-            id,
-            message: props.get("message").cloned(),
+        if props.contains_key("id") {
+            return Err(unsupported_explicit_id_message());
+        }
+        let Some(message) = props.get("message").cloned() else {
+            return Ok(None);
+        };
+        return Ok(Some(ExtractedMessageRecord {
+            message,
             comment: props.get("comment").cloned(),
             context: props.get("context").cloned(),
             placeholders: None,
             origin,
-        });
+        }));
     }
 
-    let id = argument_string_value(first_arg)?;
-    let mut message = None;
+    let mut message = argument_string_value(first_arg);
     let mut comment = None;
     let mut context = None;
 
     if let Some(Argument::ObjectExpression(object)) = call.arguments.get(2) {
         let props = extract_object_properties(object);
-        message = props.get("message").cloned();
+        if props.contains_key("id") {
+            return Err(unsupported_explicit_id_message());
+        }
+        message = props.get("message").cloned().or(message);
         comment = props.get("comment").cloned();
         context = props.get("context").cloned();
     }
 
-    Some(ExtractedMessageRecord {
-        id,
+    Ok(message.map(|message| ExtractedMessageRecord {
         message,
         comment,
         context,
         placeholders: None,
         origin,
-    })
+    }))
 }
 
 fn template_to_message(template: &TemplateLiteral<'_>) -> (String, BTreeMap<String, String>) {
@@ -810,7 +843,16 @@ pub fn extract_messages_json(source: &str, filename: &str) -> Result<String, Str
     );
     extractor.visit_program(&parsed.program);
 
+    if let Some(error) = extractor.error {
+        return Err(error);
+    }
+
     serde_json::to_string(&extractor.messages).map_err(|error| error.to_string())
+}
+
+fn unsupported_explicit_id_message() -> String {
+    "Explicit message ids are no longer supported. Remove `id` and rely on message/context instead."
+        .to_owned()
 }
 
 #[cfg(test)]
@@ -835,13 +877,26 @@ mod tests {
     fn extracts_runtime_calls() {
         let json = extract_messages_json(
             r#"
-              const message = i18n._("greeting", { name }, { message: "Hello {name}" })
+              const message = i18n._("lookup-key", { name }, { message: "Hello {name}" })
             "#,
             "test.tsx",
         )
         .expect("messages should serialize");
 
-        assert!(json.contains(r#""id":"greeting""#));
         assert!(json.contains(r#""message":"Hello {name}""#));
+    }
+
+    #[test]
+    fn rejects_explicit_ids() {
+        let error = extract_messages_json(
+            r#"
+              import { t } from "@lingui/core/macro"
+              const message = t({ id: "greeting", message: "Hello" })
+            "#,
+            "test.tsx",
+        )
+        .expect_err("explicit ids should fail");
+
+        assert!(error.contains("Explicit message ids"));
     }
 }

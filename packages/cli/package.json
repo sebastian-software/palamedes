@@ -39,6 +39,7 @@
   ],
   "scripts": {
     "build": "unbuild",
+    "test": "vitest run --globals src/commands/extract.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {
@@ -49,17 +50,18 @@
   },
   "dependencies": {
     "@palamedes/config": "workspace:^",
+    "@palamedes/core-node": "workspace:^",
     "@palamedes/extractor": "workspace:^",
     "chalk": "^5.6.2",
     "chokidar": "^5.0.0",
     "commander": "^14.0.3",
     "glob": "^13.0.6",
-    "oxc-parser": "^0.117.0",
-    "pofile-ts": "^4.0.0"
+    "oxc-parser": "^0.117.0"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
     "typescript": "^5.9.3",
-    "unbuild": "^3.6.1"
+    "unbuild": "^3.6.1",
+    "vitest": "^4.0.18"
   }
 }

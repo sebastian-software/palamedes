@@ -1,30 +1,31 @@
-# ADR-005: Message ID Generation
+# ADR-005: Internal Lookup Key Generation
 
-**Status:** Accepted
+**Status:** Superseded
 **Date:** 2025-12
 
 ### Context
 
-Lingui generates stable message IDs from message content. IDs are used internally and don't need to be backwards-compatible.
+Palamedes originally documented generated message IDs as if they were part of the product-level message model.
+
+That turned out to be the wrong abstraction. Conceptually, Palamedes follows the Lingui/Gettext model:
+
+- `msgid` is the source string
+- `msgctxt` disambiguates when needed
+- together they define message identity
 
 ### Decision
 
-Use `generateMessageIdSync()` from pofile-ts:
+Generated short hashes derived from `message + context` remain allowed only as an internal compile/runtime lookup key.
 
-```typescript
-import { generateMessageIdSync } from "pofile-ts"
+They are:
 
-const id = generateMessageIdSync("Hello {name}", "greeting")
-// => "qAzMJBud" (8 chars)
-```
-
-- **Algorithm:** SHA256 hash, base64url encoded, truncated to 8 characters
-- **Inputs:** Message string + optional context
+- not part of the public authoring model
+- not exposed as a first-class API in `@palamedes/core-node`
+- not the conceptual identity used by extraction or catalog updates
 
 ### Consequences
 
-- Single implementation across all packages (format-po, format-po-gettext, babel-plugin-lingui-macro, transform, extractor)
-- 8-character IDs are more collision-resistant than previous 6-character IDs
-- No external crypto dependencies (uses Web Crypto API)
+- source strings and optional context are the only public message identity model
+- explicit author-facing `id` flows are not part of the intended Palamedes design
+- generated lookup hashes may still appear in transformed output where compact runtime lookup is useful
 
----

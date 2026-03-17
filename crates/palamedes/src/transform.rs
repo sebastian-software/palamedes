@@ -9,8 +9,9 @@ use oxc_ast::ast::{
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::SourceType;
-use pofile::generate_message_id;
 use serde::{Deserialize, Serialize};
+
+use crate::lookup_key;
 
 const LINGUI_MACRO_PACKAGES: [&str; 3] =
     ["@lingui/macro", "@lingui/core/macro", "@lingui/react/macro"];
@@ -137,6 +138,7 @@ struct TransformVisitor<'a> {
     replacements: Vec<Replacement>,
     needs_runtime_import: bool,
     needs_trans_import: bool,
+    error: Option<String>,
 }
 
 impl<'a> TransformVisitor<'a> {
@@ -152,12 +154,23 @@ impl<'a> TransformVisitor<'a> {
             replacements: Vec::new(),
             needs_runtime_import: false,
             needs_trans_import: false,
+            error: None,
+        }
+    }
+
+    fn fail(&mut self, message: String) {
+        if self.error.is_none() {
+            self.error = Some(message);
         }
     }
 }
 
 impl<'a> Visit<'a> for TransformVisitor<'a> {
     fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        if self.error.is_some() {
+            return;
+        }
+
         let Some(tag_name) = it.opening_element.name.get_identifier_name() else {
             walk::walk_jsx_element(self, it);
             return;
@@ -173,28 +186,39 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             "Plural" | "Select" | "SelectOrdinal" => {
                 transform_choice_jsx_element(it, &macro_info.imported_name, self.options)
             }
-            _ => None,
+            _ => Ok(None),
         };
 
-        if let Some(text) = replacement {
-            self.replacements.push(Replacement {
-                start: it.span.start as usize,
-                end: it.span.end as usize,
-                text,
-            });
+        match replacement {
+            Ok(Some(text)) => {
+                self.replacements.push(Replacement {
+                    start: it.span.start as usize,
+                    end: it.span.end as usize,
+                    text,
+                });
 
-            if macro_info.imported_name == "Trans" {
-                self.needs_trans_import = true;
-            } else {
-                self.needs_runtime_import = true;
+                if macro_info.imported_name == "Trans" {
+                    self.needs_trans_import = true;
+                } else {
+                    self.needs_runtime_import = true;
+                }
+                return;
             }
-            return;
+            Ok(None) => {}
+            Err(error) => {
+                self.fail(error);
+                return;
+            }
         }
 
         walk::walk_jsx_element(self, it);
     }
 
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        if self.error.is_some() {
+            return;
+        }
+
         let Some(local_name) = identifier_name(&it.tag) else {
             walk::walk_tagged_template_expression(self, it);
             return;
@@ -223,6 +247,10 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.error.is_some() {
+            return;
+        }
+
         let Some(local_name) = identifier_name(&it.callee) else {
             walk::walk_call_expression(self, it);
             return;
@@ -235,16 +263,21 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
         match macro_info.imported_name.as_str() {
             "t" | "msg" | "defineMessage" => {
-                if let Some(text) =
-                    transform_descriptor_call(it, &macro_info.imported_name, self.options)
-                {
-                    self.replacements.push(Replacement {
-                        start: it.span.start as usize,
-                        end: it.span.end as usize,
-                        text,
-                    });
-                    if macro_info.imported_name != "defineMessage" {
-                        self.needs_runtime_import = true;
+                match transform_descriptor_call(it, &macro_info.imported_name, self.options) {
+                    Ok(Some(text)) => {
+                        self.replacements.push(Replacement {
+                            start: it.span.start as usize,
+                            end: it.span.end as usize,
+                            text,
+                        });
+                        if macro_info.imported_name != "defineMessage" {
+                            self.needs_runtime_import = true;
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        self.fail(error);
+                        return;
                     }
                 }
             }
@@ -559,14 +592,14 @@ fn template_to_message(template: &TemplateLiteral<'_>) -> (String, Option<Vec<St
 }
 
 fn build_message_descriptor(
-    id: &str,
+    lookup_key: &str,
     message: Option<&str>,
     values: Option<&[String]>,
     context: Option<&str>,
     comment: Option<&str>,
     options: &NativeTransformOptions,
 ) -> String {
-    let mut parts = vec![format!("id: \"{}\"", escape_string(id))];
+    let mut parts = vec![format!("id: \"{}\"", escape_string(lookup_key))];
 
     if let Some(message) = message {
         if !options.strip_message_field.unwrap_or(false) {
@@ -611,39 +644,46 @@ fn transform_tagged_template(
         return None;
     }
 
-    let id = generate_message_id(&message, None);
-    let descriptor =
-        build_message_descriptor(&id, Some(&message), values.as_deref(), None, None, options);
-
-    Some(build_runtime_call(&descriptor, options))
+    let lookup_key = lookup_key(&message, None);
+    Some(build_runtime_call(
+        &lookup_key,
+        Some(&message),
+        values.as_deref(),
+        None,
+        None,
+        options,
+    ))
 }
 
 fn transform_descriptor_call(
     call: &CallExpression<'_>,
     macro_name: &str,
     options: &NativeTransformOptions,
-) -> Option<String> {
-    let first_arg = call.arguments.first()?;
+) -> Result<Option<String>, String> {
+    let Some(first_arg) = call.arguments.first() else {
+        return Ok(None);
+    };
     let Argument::ObjectExpression(object) = first_arg else {
-        return None;
+        return Ok(None);
     };
 
     let props = extract_object_properties(object);
-    let explicit_id = props.get("id").cloned();
+    if props.contains_key("id") {
+        return Err(unsupported_explicit_id_message());
+    }
     let message = props.get("message").cloned();
     let context = props.get("context").cloned();
     let comment = props.get("comment").cloned();
 
-    if explicit_id.is_none() && message.is_none() {
-        return None;
+    if message.is_none() {
+        return Ok(None);
     }
 
-    let id = explicit_id.unwrap_or_else(|| {
-        generate_message_id(message.as_deref().unwrap_or(""), context.as_deref())
-    });
+    let message = message.expect("message checked");
+    let lookup_key = lookup_key(&message, context.as_deref());
     let descriptor = build_message_descriptor(
-        &id,
-        message.as_deref(),
+        &lookup_key,
+        Some(&message),
         None,
         context.as_deref(),
         comment.as_deref(),
@@ -651,9 +691,16 @@ fn transform_descriptor_call(
     );
 
     if macro_name == "defineMessage" {
-        Some(descriptor)
+        Ok(Some(descriptor))
     } else {
-        Some(build_runtime_call(&descriptor, options))
+        Ok(Some(build_runtime_call(
+            &lookup_key,
+            Some(&message),
+            None,
+            context.as_deref(),
+            comment.as_deref(),
+            options,
+        )))
     }
 }
 
@@ -662,8 +709,12 @@ fn transform_choice_call(
     macro_name: &str,
     options: &NativeTransformOptions,
 ) -> Option<String> {
-    let value_arg = call.arguments.first()?;
-    let options_arg = call.arguments.get(1)?;
+    let Some(value_arg) = call.arguments.first() else {
+        return None;
+    };
+    let Some(options_arg) = call.arguments.get(1) else {
+        return None;
+    };
 
     let Some(value_expr) = value_arg.as_expression() else {
         return None;
@@ -685,27 +736,27 @@ fn transform_choice_call(
         macro_name
     };
     let message = build_icu_message(format, &value_name, &choice_options, None);
-    let id = generate_message_id(&message, None);
+    let lookup_key = lookup_key(&message, None);
     let values = [value_name];
-    let descriptor = build_message_descriptor(
-        &id,
+    Some(build_runtime_call(
+        &lookup_key,
         Some(&message),
         Some(&values),
         None,
         None,
         options,
-    );
-
-    Some(build_runtime_call(&descriptor, options))
+    ))
 }
 
 fn transform_trans_element(
     element: &JSXElement<'_>,
     source: &str,
     _options: &NativeTransformOptions,
-) -> Option<String> {
+) -> Result<Option<String>, String> {
     let attrs = jsx_attributes(&element.opening_element);
-    let explicit_id = attrs.get("id").cloned();
+    if attrs.contains_key("id") {
+        return Err(unsupported_explicit_id_message());
+    }
     let context = attrs.get("context").cloned();
 
     let mut next_component_index = 0usize;
@@ -714,13 +765,14 @@ fn transform_trans_element(
     let message = attrs
         .get("message")
         .cloned()
-        .or_else(|| (!children_message.is_empty()).then_some(children_message))?;
-
-    let id = explicit_id
-        .unwrap_or_else(|| generate_message_id(&message, context.as_deref()));
+        .or_else(|| (!children_message.is_empty()).then_some(children_message));
+    let Some(message) = message else {
+        return Ok(None);
+    };
+    let lookup_key = lookup_key(&message, context.as_deref());
 
     let mut attrs = vec![
-        format!("id=\"{}\"", escape_string(&id)),
+        format!("id=\"{}\"", escape_string(&lookup_key)),
         format!("message=\"{}\"", escape_string(&message)),
     ];
 
@@ -738,30 +790,34 @@ fn transform_trans_element(
         attrs.push(format!("values={{{{ {} }}}}", values.join(", ")));
     }
 
-    Some(format!("<Trans {} />", attrs.join(" ")))
+    Ok(Some(format!("<Trans {} />", attrs.join(" "))))
 }
 
 fn transform_choice_jsx_element(
     element: &JSXElement<'_>,
     macro_name: &str,
     options: &NativeTransformOptions,
-) -> Option<String> {
+) -> Result<Option<String>, String> {
     let attrs = jsx_attributes(&element.opening_element);
-    let explicit_id = attrs.get("id").cloned();
+    if attrs.contains_key("id") {
+        return Err(unsupported_explicit_id_message());
+    }
     let context = attrs.get("context").cloned();
     let comment = attrs.get("comment").cloned();
-    let value_name = extract_jsx_value_name(&element.opening_element)?;
+    let Some(value_name) = extract_jsx_value_name(&element.opening_element) else {
+        return Ok(None);
+    };
     let choice_options = extract_choice_options_from_jsx(&element.opening_element);
 
     if choice_options.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let format = match macro_name {
         "Plural" => "plural",
         "Select" => "select",
         "SelectOrdinal" => "selectordinal",
-        _ => return None,
+        _ => return Ok(None),
     };
     let message = build_icu_message(
         format,
@@ -769,24 +825,78 @@ fn transform_choice_jsx_element(
         &choice_options,
         attrs.get("offset").map(String::as_str),
     );
-    let id =
-        explicit_id.unwrap_or_else(|| generate_message_id(&message, context.as_deref()));
+    let lookup_key = lookup_key(&message, context.as_deref());
     let values = [value_name];
-    let descriptor = build_message_descriptor(
-        &id,
+    Ok(Some(build_runtime_call(
+        &lookup_key,
         Some(&message),
         Some(&values),
         context.as_deref(),
         comment.as_deref(),
         options,
-    );
-
-    Some(build_runtime_call(&descriptor, options))
+    )))
 }
 
-fn build_runtime_call(descriptor: &str, options: &NativeTransformOptions) -> String {
+fn build_runtime_call(
+    lookup_key: &str,
+    message: Option<&str>,
+    values: Option<&[String]>,
+    context: Option<&str>,
+    comment: Option<&str>,
+    options: &NativeTransformOptions,
+) -> String {
     let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
-    format!("{runtime_import_name}()._({descriptor})")
+    let descriptor = build_runtime_descriptor(message, context, comment, options);
+    let values_text = values
+        .filter(|values| !values.is_empty())
+        .map(|values| format!("{{ {} }}", values.join(", ")));
+
+    match (values_text, descriptor) {
+        (None, None) => format!("{runtime_import_name}()._(\"{}\")", escape_string(lookup_key)),
+        (Some(values), None) => {
+            format!(
+                "{runtime_import_name}()._(\"{}\", {values})",
+                escape_string(lookup_key)
+            )
+        }
+        (None, Some(descriptor)) => format!(
+            "{runtime_import_name}()._(\"{}\", undefined, {descriptor})",
+            escape_string(lookup_key)
+        ),
+        (Some(values), Some(descriptor)) => format!(
+            "{runtime_import_name}()._(\"{}\", {values}, {descriptor})",
+            escape_string(lookup_key)
+        ),
+    }
+}
+
+fn build_runtime_descriptor(
+    message: Option<&str>,
+    context: Option<&str>,
+    comment: Option<&str>,
+    options: &NativeTransformOptions,
+) -> Option<String> {
+    let mut parts = Vec::new();
+
+    if let Some(message) = message {
+        if !options.strip_message_field.unwrap_or(false) {
+            parts.push(format!("message: \"{}\"", escape_string(message)));
+        }
+    }
+
+    if let Some(context) = context {
+        if !options.strip_non_essential_props.unwrap_or(false) {
+            parts.push(format!("context: \"{}\"", escape_string(context)));
+        }
+    }
+
+    if let Some(comment) = comment {
+        if !options.strip_non_essential_props.unwrap_or(false) {
+            parts.push(format!("comment: \"{}\"", escape_string(comment)));
+        }
+    }
+
+    (!parts.is_empty()).then(|| format!("{{ {} }}", parts.join(", ")))
 }
 
 fn build_icu_message(
@@ -854,6 +964,10 @@ pub fn transform_macros_json(
 
     let mut visitor = TransformVisitor::new(source, &collector.macro_imports, &options);
     visitor.visit_program(&parsed.program);
+
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
 
     if visitor.replacements.is_empty() {
         return serde_json::to_string(&NativeTransformResult {
@@ -924,6 +1038,11 @@ pub fn transform_macros_json(
     .map_err(|error| error.to_string())
 }
 
+fn unsupported_explicit_id_message() -> String {
+    "Explicit message ids are no longer supported. Remove `id` and rely on message/context instead."
+        .to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{transform_macros_json, NativeTransformResult};
@@ -940,9 +1059,9 @@ mod tests {
         )
         .expect("json should deserialize");
 
-        assert!(result.code.contains("getI18n()._({ id:"));
+        assert!(result.code.contains("getI18n()._(\""));
         assert!(result.code.contains("message: \"Hello {name}\""));
-        assert!(result.code.contains("values: { name }"));
+        assert!(result.code.contains("{ name }"));
         assert!(result
             .code
             .contains("import { getI18n } from \"@palamedes/runtime\";"));
@@ -975,11 +1094,11 @@ mod tests {
         )
         .expect("json should deserialize");
 
-        assert!(result.code.contains("getI18n()._({ id:"));
+        assert!(result.code.contains("getI18n()._(\""));
         assert!(result
             .code
             .contains("message: \"{count, plural, one {# item} other {# items}}\""));
-        assert!(result.code.contains("values: { count }"));
+        assert!(result.code.contains("{ count }"));
     }
 
     #[test]
@@ -994,11 +1113,11 @@ mod tests {
         )
         .expect("json should deserialize");
 
-        assert!(result.code.contains("getI18n()._({ id:"));
+        assert!(result.code.contains("getI18n()._(\""));
         assert!(result
             .code
             .contains("message: \"{count, selectordinal, one {#st} other {#th}}\""));
-        assert!(result.code.contains("values: { count }"));
+        assert!(result.code.contains("{ count }"));
     }
 
     #[test]
@@ -1036,10 +1155,22 @@ mod tests {
         )
         .expect("json should deserialize");
 
-        assert!(result.code.contains("getI18n()._({ id:"));
+        assert!(result.code.contains("getI18n()._(\""));
         assert!(result
             .code
             .contains("message: \"{count, plural, one {# item} other {# items}}\""));
-        assert!(result.code.contains("values: { count }"));
+        assert!(result.code.contains("{ count }"));
+    }
+
+    #[test]
+    fn rejects_explicit_ids() {
+        let error = transform_macros_json(
+            "import { t } from \"@lingui/macro\";\nconst msg = t({ id: \"greeting\", message: \"Hello\" });\n",
+            "test.ts",
+            None,
+        )
+        .expect_err("explicit ids should fail");
+
+        assert!(error.contains("Explicit message ids"));
     }
 }

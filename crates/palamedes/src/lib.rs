@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
-mod extract;
 mod catalog_module;
+mod catalog_update;
+mod extract;
 mod transform;
 
 use pofile::{parse_po, PoFile, PoItem};
@@ -9,6 +10,7 @@ use serde::Serialize;
 
 pub use extract::extract_messages_json;
 pub use catalog_module::get_catalog_module_json;
+pub use catalog_update::{parse_catalog_json, update_catalog_file_json};
 pub use transform::transform_macros_json;
 
 pub const POFILE_VERSION: &str = "5.0.0-beta.0";
@@ -92,7 +94,7 @@ pub fn get_native_info_json() -> Result<String, serde_json::Error> {
 }
 
 #[must_use]
-pub fn generate_message_id(message: &str, context: Option<&str>) -> String {
+pub(crate) fn lookup_key(message: &str, context: Option<&str>) -> String {
     pofile::generate_message_id(message, context)
 }
 
@@ -103,18 +105,18 @@ pub fn parse_po_json(source: &str) -> Result<String, serde_json::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_message_id, get_native_info, parse_po_json, POFILE_VERSION};
-
-    #[test]
-    fn generates_message_ids_via_pofile() {
-        assert_eq!(generate_message_id("Hello", None), "GF-NsyJx");
-    }
+    use super::{get_native_info, lookup_key, parse_po_json, POFILE_VERSION};
 
     #[test]
     fn exposes_native_info() {
         let info = get_native_info();
         assert_eq!(info.pofile_version, POFILE_VERSION);
         assert_eq!(info.palamedes_version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn generates_internal_lookup_keys_via_pofile() {
+        assert_eq!(lookup_key("Hello", None), "GF-NsyJx");
     }
 
     #[test]

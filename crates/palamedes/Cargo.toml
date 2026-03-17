@@ -8,6 +8,7 @@ rust-version.workspace = true
 description = "Rust core for Palamedes."
 
 [dependencies]
+ferrocat = { path = "/Users/sebastian/Workspace/oss-released/ferrocat/crates/ferrocat" }
 oxc_allocator = "0.117.0"
 oxc_ast = "0.117.0"
 oxc_ast_visit = "0.117.0"

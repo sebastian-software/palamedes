@@ -7,7 +7,7 @@
 
 The Node.js wrapper around Palamedes' native core.
 
-Use this package when you are building tooling on top of Palamedes and want direct access to native message ID generation, `.po` parsing, extraction, or macro transformation.
+Use this package when you are building tooling on top of Palamedes and want direct access to native catalog updates, `.po` parsing, extraction, or macro transformation.
 
 ## When To Use This Package
 
@@ -39,26 +39,31 @@ The package loads one of these platform packages behind the scenes:
 ## Example
 
 ```ts
-import { getNativeInfo, parsePo, generateMessageId } from "@palamedes/core-node"
+import { getNativeInfo, parsePo, updateCatalogFile } from "@palamedes/core-node"
 
 const info = getNativeInfo()
-const id = generateMessageId("Hello {name}")
 const po = parsePo(`
 msgid ""
 msgstr ""
 "Language: en\\n"
 `)
+updateCatalogFile({
+  targetPath: "src/locales/en.po",
+  locale: "en",
+  sourceLocale: "en",
+  clean: false,
+  messages: [{ message: "Hello {name}", extractedComments: [], origins: [] }],
+})
 
 console.log(info.palamedesVersion)
-console.log(id)
 console.log(po.headers.Language)
 ```
 
 ## Available APIs
 
 - `getNativeInfo()`
-- `generateMessageId(message, context?)`
 - `parsePo(source)`
+- `updateCatalogFile(request)`
 - `extractMessagesNative(source, filename)`
 - `transformMacrosNative(source, filename, options?)`
 

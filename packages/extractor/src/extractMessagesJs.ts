@@ -2,8 +2,6 @@
  * Core message extraction logic using oxc AST
  */
 
-import { generateMessageId } from "@palamedes/core-node"
-
 /**
  * Helper to calculate line number from byte offset
  */
@@ -48,8 +46,7 @@ const JSX_MACROS = ["Trans", "Plural", "Select", "SelectOrdinal"] as const
 const JS_MACROS = ["t", "msg", "defineMessage", "plural", "select", "selectOrdinal"] as const
 
 export interface ExtractedMessageInfo {
-  id?: string
-  message?: string
+  message: string
   comment?: string
   context?: string
   placeholders?: Record<string, string>
@@ -145,10 +142,10 @@ export function extractMessages(
         const macro = isLinguiMacro(tagName, JSX_MACROS)
         if (!macro) return
 
-        const extracted = extractFromJSXElement(node, macro.importedName, filename, getLine)
-        if (extracted) {
-          messages.push(extracted)
-        }
+          const extracted = extractFromJSXElement(node, macro.importedName, filename, getLine)
+          if (extracted) {
+            messages.push(extracted)
+          }
       }
 
       // Tagged Template: t`...`, msg`...`
@@ -177,10 +174,10 @@ export function extractMessages(
           const macro = isLinguiMacro(calleeName, JS_MACROS)
 
           if (macro) {
-            const extracted = extractFromCallExpression(node, macro.importedName, filename, getLine)
-            if (extracted) {
-              messages.push(extracted)
-            }
+          const extracted = extractFromCallExpression(node, macro.importedName, filename, getLine)
+          if (extracted) {
+            messages.push(extracted)
+          }
           }
         }
 
@@ -225,19 +222,17 @@ function extractFromJSXElement(
   const column = undefined // Column calculation would be expensive
 
   if (macroName === "Trans") {
-    // <Trans>children</Trans> or <Trans id="..." message="...">...</Trans>
-    const explicitId = attrs.id
+    if (attrs.id) {
+      throw new Error(unsupportedExplicitIdMessage())
+    }
+
     const message = attrs.message || extractJSXChildrenAsMessage(node.children)
     const comment = attrs.comment
     const context = attrs.context
 
-    if (!message && !explicitId) return null
-
-    // If no explicit ID, generate one from message + context (same as Babel macro)
-    const id = explicitId || generateMessageId(message, context)
+    if (!message) return null
 
     return {
-      id,
       message,
       comment,
       context,
@@ -246,8 +241,10 @@ function extractFromJSXElement(
   }
 
   if (macroName === "Plural" || macroName === "Select" || macroName === "SelectOrdinal") {
-    // <Plural value={count} one="# item" other="# items" />
-    const explicitId = attrs.id
+    if (attrs.id) {
+      throw new Error(unsupportedExplicitIdMessage())
+    }
+
     const format = macroName.toLowerCase()
     const valueName = extractValueName(node.openingElement)
     const options = extractChoiceOptions(attrs)
@@ -257,11 +254,7 @@ function extractFromJSXElement(
     const message = buildICUMessage(format, valueName, options, attrs.offset)
     const context = attrs.context
 
-    // If no explicit ID, generate one from message + context
-    const id = explicitId || generateMessageId(message, context)
-
     return {
-      id,
       message,
       comment: attrs.comment,
       context,
@@ -291,11 +284,7 @@ function extractFromTaggedTemplate(
 
   if (!message) return null
 
-  // Generate ID from message (no context for tagged templates)
-  const id = generateMessageId(message, "")
-
   return {
-    id,
     message,
     placeholders,
     origin: [filename, line, column],
@@ -321,10 +310,8 @@ function extractFromRuntimeTaggedTemplate(
 
   if (!message) return null
 
-  // For runtime calls, the message IS the ID (no hash)
   return {
-    id: message,
-    message: undefined,
+    message,
     placeholders,
     origin: [filename, line, column],
   }
@@ -344,26 +331,21 @@ function extractFromCallExpression(
   const column = undefined
 
   if (macroName === "t" || macroName === "defineMessage" || macroName === "msg") {
-    // t({id: "...", message: "..."}) or defineMessage({...})
     const firstArg = args[0]
 
     if (firstArg?.type === "ObjectExpression") {
       const props = extractObjectProperties(firstArg)
 
-      const explicitId = props.id
+      if (props.id) {
+        throw new Error(unsupportedExplicitIdMessage())
+      }
       const message = props.message
       const comment = props.comment
       const context = props.context
 
-      if (!explicitId && !message) return null
-
-      // If no explicit ID, generate one from message + context
-      const id = explicitId ?? (message ? generateMessageId(message, context) : null)
-
-      if (!id) return null
+      if (!message) return null
 
       return {
-        id,
         message,
         comment,
         context,
@@ -386,11 +368,8 @@ function extractFromCallExpression(
     if (!valueName || Object.keys(options).length === 0) return null
 
     const message = buildICUMessage(format, valueName, options)
-    // Generate ID from ICU message
-    const id = generateMessageId(message, "")
 
     return {
-      id,
       message,
       origin: [filename, line, column],
     }
@@ -746,9 +725,9 @@ function isI18nRuntimeCall(node: any, allowT = false): boolean {
 
 /**
  * Extract message from i18n runtime call:
- * - i18n._("id")
- * - i18n._({ id: "...", message: "..." })
- * - i18n._("id", values, { message: "..." })
+ * - i18n._("Hello")
+ * - i18n._({ message: "Hello" })
+ * - i18n._("hash", values, { message: "Hello" }) for transformed code
  */
 function extractFromI18nRuntimeCall(
   node: any,
@@ -762,14 +741,15 @@ function extractFromI18nRuntimeCall(
 
   const firstArg = args[0]
 
-  // i18n._({ id: "...", message: "..." })
   if (firstArg?.type === "ObjectExpression") {
     const props = extractObjectProperties(firstArg)
 
-    if (!props.id) return null
+    if (props.id) {
+      throw new Error(unsupportedExplicitIdMessage())
+    }
+    if (!props.message) return null
 
     return {
-      id: props.id,
       message: props.message,
       comment: props.comment,
       context: props.context,
@@ -777,28 +757,34 @@ function extractFromI18nRuntimeCall(
     }
   }
 
-  // i18n._("id") or i18n._("id", values) or i18n._("id", values, { message: "..." })
-  const id = getStringValue(firstArg)
-  if (!id) return null
+  const firstValue = getStringValue(firstArg)
+  if (!firstValue) return null
 
-  let message: string | undefined
+  let message: string | undefined = firstValue
   let comment: string | undefined
   let context: string | undefined
 
-  // Check for third argument with descriptor
   const thirdArg = args[2]
   if (thirdArg?.type === "ObjectExpression") {
     const props = extractObjectProperties(thirdArg)
-    message = props.message
+    if (props.id) {
+      throw new Error(unsupportedExplicitIdMessage())
+    }
+    message = props.message || message
     comment = props.comment
     context = props.context
   }
 
+  if (!message) return null
+
   return {
-    id,
     message,
     comment,
     context,
     origin: [filename, line, undefined],
   }
+}
+
+function unsupportedExplicitIdMessage(): string {
+  return "Explicit message ids are no longer supported. Remove `id` and rely on message/context instead."
 }

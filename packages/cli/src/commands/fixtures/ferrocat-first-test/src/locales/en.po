@@ -1,0 +1,5 @@
+msgid "Simple hello"
+msgstr ""
+
+#~ msgid "Old only"
+#~ msgstr ""

@@ -29,9 +29,44 @@ export interface ParsedPoFile {
   items: ParsedPoItem[]
 }
 
+export interface CatalogOrigin {
+  file: string
+  line: number
+}
+
+export interface CatalogUpdateMessage {
+  message: string
+  context?: string
+  extractedComments: string[]
+  origins: CatalogOrigin[]
+}
+
+export interface CatalogUpdateRequest {
+  targetPath: string
+  locale: string
+  sourceLocale: string
+  clean: boolean
+  messages: CatalogUpdateMessage[]
+}
+
+export interface CatalogUpdateStats {
+  total: number
+  added: number
+  changed: number
+  unchanged: number
+  obsoleteMarked: number
+  obsoleteRemoved: number
+}
+
+export interface CatalogUpdateResult {
+  created: boolean
+  updated: boolean
+  stats: CatalogUpdateStats
+  diagnostics: string[]
+}
+
 export interface NativeExtractedMessage {
-  id: string
-  message?: string
+  message: string
   comment?: string
   context?: string
   placeholders?: Record<string, string>
@@ -76,13 +111,13 @@ export interface CatalogModuleConfig {
 }
 
 export interface CatalogModuleMissingTranslation {
-  id: string
-  source: string
+  message: string
+  context?: string
 }
 
 export interface CatalogModuleCompilationError {
   message: string
-  id?: string
+  context?: string
 }
 
 export interface CatalogModuleResult {
@@ -95,8 +130,9 @@ export interface CatalogModuleResult {
 
 interface NativeBindings {
   getNativeInfoJson(): string
-  generateMessageId(message: string, context?: string): string
   parsePoJson(source: string): string
+  updateCatalogFileJson(requestJson: string): string
+  parseCatalogJson(requestJson: string): string
   getCatalogModuleJson(requestJson: string): string
   extractMessagesJson(source: string, filename: string): string
   transformMacrosJson(
@@ -170,12 +206,27 @@ export function getNativeInfo(): NativeInfo {
   return JSON.parse(native.getNativeInfoJson()) as NativeInfo
 }
 
-export function generateMessageId(message: string, context?: string): string {
-  return native.generateMessageId(message, context)
-}
-
 export function parsePo(source: string): ParsedPoFile {
   return JSON.parse(native.parsePoJson(source)) as ParsedPoFile
+}
+
+export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult {
+  return JSON.parse(native.updateCatalogFileJson(JSON.stringify(request))) as CatalogUpdateResult
+}
+
+export function parseCatalog(request: CatalogUpdateRequest) {
+  return JSON.parse(native.parseCatalogJson(JSON.stringify(request))) as {
+    locale?: string
+    headers: Record<string, string>
+    messages: Array<{
+      message: string
+      context?: string
+      comments: string[]
+      origins: CatalogOrigin[]
+      obsolete: boolean
+    }>
+    diagnostics: string[]
+  }
 }
 
 export function getCatalogModule(

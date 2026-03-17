@@ -74,18 +74,22 @@ export interface PalamedesPluginOptions {
 
 function createMissingErrorMessage(
   locale: string,
-  missingMessages: Array<{ id: string; source: string }>
+  missingMessages: Array<{ message: string; context?: string }>
 ): string {
-  const lines = missingMessages.map((missing) => `${missing.id}: ${missing.source}`)
+  const lines = missingMessages.map((missing) =>
+    missing.context ? `${missing.message} [context: ${missing.context}]` : missing.message
+  )
   return `Failed to compile catalog for locale ${locale}!\n\nMissing ${missingMessages.length} translation(s):\n${lines.join("\n")}`
 }
 
 function createCompilationErrorMessage(
   locale: string,
-  errors: Array<{ id?: string; message: string }>
+  errors: Array<{ message: string; context?: string }>
 ): string {
   const lines = errors.map((error) =>
-    error.id ? `${error.id}\nReason: ${error.message}` : error.message
+    error.context
+      ? `${error.message}\nContext: ${error.context}`
+      : error.message
   )
   return `Failed to compile catalog for locale ${locale}!\n\nCompilation error for ${errors.length} translation(s):\n${lines.join("\n\n")}`
 }

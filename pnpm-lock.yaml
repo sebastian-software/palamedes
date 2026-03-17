@@ -112,6 +112,9 @@ importers:
       '@palamedes/config':
         specifier: workspace:^
         version: link:../config
+      '@palamedes/core-node':
+        specifier: workspace:^
+        version: link:../core-node
       '@palamedes/extractor':
         specifier: workspace:^
         version: link:../extractor
@@ -130,9 +133,6 @@ importers:
       oxc-parser:
         specifier: ^0.117.0
         version: 0.117.0
-      pofile-ts:
-        specifier: ^4.0.0
-        version: 4.0.0
     devDependencies:
       '@types/node':
         specifier: ^25.4.0
@@ -143,6 +143,9 @@ importers:
       unbuild:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@25.4.0)(jiti@2.6.1)
 
   packages/config:
     dependencies:
@@ -206,9 +209,6 @@ importers:
       oxc-parser:
         specifier: ^0.117.0
         version: 0.117.0
-      pofile-ts:
-        specifier: ^4.0.0
-        version: 4.0.0
     devDependencies:
       typescript:
         specifier: ^5.9.3
@@ -273,9 +273,6 @@ importers:
       oxc-parser:
         specifier: ^0.117.0
         version: 0.117.0
-      pofile-ts:
-        specifier: ^4.0.0
-        version: 4.0.0
     devDependencies:
       typescript:
         specifier: ^5.9.3
@@ -1927,10 +1924,6 @@ packages:
 
   pkg-types@2.3.0:
     resolution: {integrity: sha512-SIqCzDRg0s9npO5XQ3tNZioRY1uK06lA41ynBC1YmFTmnY6FjUjVt6s4LoADmwoig1qqD0oK8h1p/8mlMx8Oig==}
-
-  pofile-ts@4.0.0:
-    resolution: {integrity: sha512-S2p4wGpmeG0pwmoGDSKsETRs6yqnJQbYAb+pfO4sPe0vDoO6K0FYDu0BJfdcQ2MG0j9sON4u+SkrMF1yI0GYOw==}
-    engines: {node: '>=20'}
 
   pofile@1.1.4:
     resolution: {integrity: sha512-r6Q21sKsY1AjTVVjOuU02VYKVNQGJNQHjTIvs4dEbeuuYfxgYk/DGD2mqqq4RDaVkwdSq0VEtmQUOPe/wH8X3g==}
@@ -3714,8 +3707,6 @@ snapshots:
       confbox: 0.2.4
       exsolve: 1.0.8
       pathe: 2.0.3
-
-  pofile-ts@4.0.0: {}
 
   pofile@1.1.4: {}
 

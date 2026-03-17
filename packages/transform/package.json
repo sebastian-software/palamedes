@@ -49,8 +49,7 @@
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "magic-string": "^0.30.21",
-    "oxc-parser": "^0.117.0",
-    "pofile-ts": "^4.0.0"
+    "oxc-parser": "^0.117.0"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

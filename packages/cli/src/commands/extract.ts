@@ -1,5 +1,4 @@
-import { readFile, writeFile, mkdir } from "fs/promises"
-import { existsSync } from "fs"
+import { readFile, mkdir } from "fs/promises"
 import path from "path"
 import chalk from "chalk"
 import { glob } from "glob"
@@ -11,18 +10,9 @@ import {
   type LoadedPalamedesConfig,
   type PalamedesCatalogConfig,
 } from "@palamedes/config"
+import { updateCatalogFile, type CatalogUpdateMessage } from "@palamedes/core-node"
 import { parseSync } from "oxc-parser"
 import { extractMessages } from "@palamedes/extractor"
-import {
-  parsePo,
-  stringifyPo,
-  catalogToItems,
-  itemsToCatalog,
-  createDefaultHeaders,
-  mergeCatalogs,
-  type Catalog,
-  type SourceReference,
-} from "pofile-ts"
 
 interface ExtractOptions {
   config?: string
@@ -30,6 +20,17 @@ interface ExtractOptions {
   clean?: boolean
   verbose?: boolean
 }
+
+const TIMING_MARKER = "__PALAMEDES_TIMINGS__"
+
+interface AggregatedCatalogEntry {
+  message: string
+  context?: string
+  extractedComments: string[]
+  origins: Array<{ file: string; line: number }>
+}
+
+type AggregatedCatalog = Record<string, AggregatedCatalogEntry>
 
 export async function extract(options: ExtractOptions): Promise<void> {
   const config = await loadPalamedesConfig({ configPath: options.config })
@@ -50,6 +51,7 @@ async function runExtraction(
   options: ExtractOptions
 ): Promise<void> {
   const startTime = Date.now()
+  let totalWriteMs = 0
   let totalMessages = 0
   let totalFiles = 0
   const catalogs = config.catalogs ?? []
@@ -61,7 +63,7 @@ async function runExtraction(
 
     // Write catalogs for each locale
     for (const locale of config.locales) {
-      await writeCatalog(catalog, locale, messages, config, options)
+      totalWriteMs += await writeCatalog(catalog, locale, messages, config, options)
     }
   }
 
@@ -71,14 +73,26 @@ async function runExtraction(
     `Extracted ${chalk.bold(totalMessages)} messages from ${chalk.bold(totalFiles)} files`,
     chalk.gray(`(${duration}ms)`)
   )
+
+  if (shouldEmitTimingJson()) {
+    console.log(
+      `${TIMING_MARKER}${JSON.stringify({
+        engine: "ferrocat",
+        totalMs: duration,
+        writeMs: totalWriteMs,
+        totalMessages,
+        totalFiles,
+      })}`
+    )
+  }
 }
 
 async function extractFromCatalog(
   catalog: PalamedesCatalogConfig,
   config: LoadedPalamedesConfig,
   options: ExtractOptions
-): Promise<{ messages: Catalog; fileCount: number }> {
-  const messages: Catalog = {}
+): Promise<{ messages: AggregatedCatalog; fileCount: number }> {
+  const messages: AggregatedCatalog = {}
   const rootDir = config.rootDir
 
   const includePatterns = catalog.include.map((pattern) => {
@@ -116,15 +130,14 @@ async function extractFromCatalog(
       const extractedMessages = extractMessages(result.program, file, code)
 
       for (const msg of extractedMessages) {
-        const key = msg.id || msg.message || ""
-        if (!key) {
+        if (!msg.message) {
           continue
         }
+        const key = createCatalogKey(msg.message, msg.context)
 
         if (!messages[key]) {
           messages[key] = {
-            message: msg.id ? msg.message : undefined,
-            translation: "",
+            message: msg.message,
             context: msg.context,
             extractedComments: msg.comment ? [msg.comment] : [],
             origins: [],
@@ -132,15 +145,23 @@ async function extractFromCatalog(
         }
 
         if (msg.origin) {
-          const origin: SourceReference = {
+          const origin = {
             file: relativePath,
             line: msg.origin[1],
           }
-          messages[key].origins = messages[key].origins || []
-          messages[key].origins.push(origin)
+          if (!messages[key].origins.some((entry) => entry.file === origin.file && entry.line === origin.line)) {
+            messages[key].origins.push(origin)
+          }
         }
       }
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("Explicit message ids are no longer supported")
+      ) {
+        throw error
+      }
+
       if (options.verbose) {
         console.warn(chalk.yellow("Warning:"), `Failed to extract from ${file}:`, error)
       }
@@ -153,59 +174,30 @@ async function extractFromCatalog(
 async function writeCatalog(
   catalog: PalamedesCatalogConfig,
   locale: string,
-  extractedMessages: Catalog,
+  extractedMessages: AggregatedCatalog,
   config: LoadedPalamedesConfig,
   options: ExtractOptions
-): Promise<void> {
+): Promise<number> {
+  const startedAt = Date.now()
   const catalogPath = resolveCatalogPath(config, catalog.path, locale)
   const poPath = `${catalogPath}.po`
 
-  // Load existing catalog if it exists
-  let existingCatalog: Catalog = {}
-  if (existsSync(poPath)) {
-    try {
-      const content = await readFile(poPath, "utf-8")
-      const poFile = parsePo(content)
-      existingCatalog = itemsToCatalog(poFile.items)
-    } catch {
-      // Ignore parse errors, start fresh
-    }
-  }
-
-  // Merge: extracted messages take precedence, but preserve translations from existing
-  // Note: mergeCatalogs preserves translations from 'updates' (second arg) that match keys in 'base'
-  const mergedCatalog = mergeCatalogs(extractedMessages, existingCatalog)
-
-  // If cleaning, remove obsolete entries
-  if (options.clean) {
-    for (const [id, entry] of Object.entries(mergedCatalog)) {
-      if (entry.obsolete) {
-        delete mergedCatalog[id]
-      }
-    }
-  }
-
-  // Ensure directory exists
   const dir = path.dirname(poPath)
   await mkdir(dir, { recursive: true })
 
-  // Convert to PO and serialize
-  const items = catalogToItems(mergedCatalog, {
-    includeOrigins: true,
-    includeLineNumbers: true,
+  updateCatalogFile({
+    targetPath: poPath,
+    locale,
+    sourceLocale: config.sourceLocale,
+    clean: Boolean(options.clean),
+    messages: catalogToMessages(extractedMessages),
   })
-
-  const headers = createDefaultHeaders({
-    language: locale,
-    generator: "palamedes",
-  })
-
-  const content = stringifyPo({ headers, items })
-  await writeFile(poPath, content)
 
   if (options.verbose) {
     console.log(chalk.gray(`  → ${poPath}`))
   }
+
+  return Date.now() - startedAt
 }
 
 async function runWatchMode(
@@ -242,4 +234,24 @@ async function runWatchMode(
     watcher.close()
     process.exit(0)
   })
+}
+
+function shouldEmitTimingJson(): boolean {
+  return process.env.PALAMEDES_TIMING_JSON === "1"
+}
+
+function catalogToMessages(catalog: AggregatedCatalog): CatalogUpdateMessage[] {
+  return Object.values(catalog).map((entry) => ({
+    message: entry.message,
+    context: entry.context,
+    extractedComments: entry.extractedComments ?? [],
+    origins: (entry.origins ?? []).map((origin) => ({
+      file: origin.file,
+      line: origin.line ?? 0,
+    })),
+  }))
+}
+
+function createCatalogKey(message: string, context?: string): string {
+  return `${context ?? ""}\u0004${message}`
 }

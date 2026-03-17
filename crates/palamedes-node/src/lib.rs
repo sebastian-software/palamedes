@@ -12,13 +12,18 @@ pub fn get_native_info_json() -> Result<String> {
 }
 
 #[napi]
-pub fn generate_message_id(message: String, context: Option<String>) -> String {
-    palamedes::generate_message_id(&message, context.as_deref())
+pub fn parse_po_json(source: String) -> Result<String> {
+    palamedes::parse_po_json(&source).map_err(to_napi_error)
 }
 
 #[napi]
-pub fn parse_po_json(source: String) -> Result<String> {
-    palamedes::parse_po_json(&source).map_err(to_napi_error)
+pub fn update_catalog_file_json(request_json: String) -> Result<String> {
+    palamedes::update_catalog_file_json(&request_json).map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn parse_catalog_json(request_json: String) -> Result<String> {
+    palamedes::parse_catalog_json(&request_json).map_err(Error::from_reason)
 }
 
 #[napi]

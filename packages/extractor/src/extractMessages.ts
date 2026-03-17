@@ -6,8 +6,7 @@ import {
 import { extractMessagesJs } from "./extractMessagesJs"
 
 export interface ExtractedMessageInfo {
-  id?: string
-  message?: string
+  message: string
   comment?: string
   context?: string
   placeholders?: Record<string, string>
@@ -33,7 +32,13 @@ export function extractMessages(
 
   try {
     return normalizeNativeMessages(extractMessagesNative(code, filename))
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Explicit message ids are no longer supported")
+    ) {
+      throw error
+    }
     return extractMessagesJs(program, filename, code)
   }
 }
