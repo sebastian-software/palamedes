@@ -2,8 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ferrocat::{CatalogMessage, ParseCatalogOptions, PluralEncoding, TranslationShape, parse_catalog};
-use pofile::{IcuParserOptions, validate_icu};
+use ferrocat::{
+    parse_catalog, parse_icu_with_options, CatalogMessageKey, EffectiveTranslation,
+    EffectiveTranslationRef, IcuParserOptions, NormalizedParsedCatalog, ParseCatalogOptions,
+    PluralEncoding,
+};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -70,8 +73,7 @@ struct ResolvedCatalogRequest {
     primary_file: PathBuf,
 }
 
-type SourceCatalog = BTreeMap<String, CatalogMessage>;
-type LocaleCatalogs = BTreeMap<String, SourceCatalog>;
+type LocaleCatalogs = BTreeMap<String, NormalizedParsedCatalog>;
 
 pub fn get_catalog_module_json(request_json: &str) -> Result<String, String> {
     let request = serde_json::from_str::<CatalogModuleRequest>(request_json)
@@ -85,11 +87,13 @@ fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResu
     let root_dir = PathBuf::from(&request.config.root_dir);
     let resolved = resolve_catalog_request(&request.config, &resource_path)?;
 
-    let fallback_chain = resolve_locale_chain(
+    let fallback_chain = resolve_locale_chain(&request.config, &resolved.locale);
+    let watch_files = collect_watch_files(
+        &root_dir,
+        &resolved.primary_file,
         &request.config,
-        &resolved.locale,
+        &fallback_chain,
     );
-    let watch_files = collect_watch_files(&root_dir, &resolved.primary_file, &request.config, &fallback_chain);
     let loaded = load_catalogs(&watch_files, &request.config)?;
     let source_catalog = loaded.get(&request.config.source_locale);
     let primary_catalog = loaded
@@ -97,9 +101,9 @@ fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResu
         .ok_or_else(|| format!("Missing catalog data for locale {}", resolved.locale))?;
 
     let mut keys = BTreeSet::new();
-    keys.extend(primary_catalog.keys().cloned());
+    keys.extend(primary_catalog.iter().map(|(key, _)| key.clone()));
     if let Some(source_catalog) = source_catalog {
-        keys.extend(source_catalog.keys().cloned());
+        keys.extend(source_catalog.iter().map(|(key, _)| key.clone()));
     }
 
     let mut messages = BTreeMap::new();
@@ -121,10 +125,11 @@ fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResu
         let source_message = source_entry
             .map(|entry| entry.msgid.clone())
             .or_else(|| locale_entry.map(|entry| entry.msgid.clone()))
-            .unwrap_or_else(|| key.clone());
+            .unwrap_or_else(|| key.msgid.clone());
         let source_context = source_entry
             .and_then(|entry| entry.msgctxt.clone())
-            .or_else(|| locale_entry.and_then(|entry| entry.msgctxt.clone()));
+            .or_else(|| locale_entry.and_then(|entry| entry.msgctxt.clone()))
+            .or_else(|| key.msgctxt.clone());
 
         if translation.is_none() && resolved.locale != request.config.source_locale {
             missing.push(MissingTranslation {
@@ -140,23 +145,23 @@ fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResu
             &resolved.locale,
         );
 
-        let validation = validate_icu(
+        if let Err(error) = parse_icu_with_options(
             &effective,
-            IcuParserOptions {
+            &IcuParserOptions {
                 requires_other_clause: false,
                 ..IcuParserOptions::default()
             },
-        );
-        if !validation.valid {
-            for error in validation.errors {
-                errors.push(CompilationError {
-                    message: error.message,
-                    context: source_context.clone(),
-                });
-            }
+        ) {
+            errors.push(CompilationError {
+                message: error.message,
+                context: source_context.clone(),
+            });
         }
 
-        messages.insert(lookup_key(&source_message, source_context.as_deref()), effective);
+        messages.insert(
+            lookup_key(&source_message, source_context.as_deref()),
+            effective,
+        );
     }
 
     Ok(CatalogModuleResult {
@@ -189,8 +194,14 @@ fn resolve_catalog_request(
             let locale = captures
                 .get(1)
                 .map(|value| value.as_str().to_owned())
-                .ok_or_else(|| format!("Could not resolve locale from {}", resource_path.display()))?;
-            if !config.locales.iter().any(|configured| configured == &locale) {
+                .ok_or_else(|| {
+                    format!("Could not resolve locale from {}", resource_path.display())
+                })?;
+            if !config
+                .locales
+                .iter()
+                .any(|configured| configured == &locale)
+            {
                 return Err(format!(
                     "Resolved locale {locale} for {} is not listed in palamedes.config locales.",
                     resource_path.display()
@@ -215,11 +226,21 @@ fn resolve_locale_chain(config: &CatalogModuleConfig, locale: &str) -> Vec<Strin
 
     match &config.fallback_locales {
         Some(FallbackLocales::Shared(shared)) => {
-            chain.extend(shared.iter().filter(|fallback| fallback.as_str() != locale).cloned());
+            chain.extend(
+                shared
+                    .iter()
+                    .filter(|fallback| fallback.as_str() != locale)
+                    .cloned(),
+            );
         }
         Some(FallbackLocales::PerLocale(map)) => {
             if let Some(fallbacks) = map.get(locale) {
-                chain.extend(fallbacks.iter().filter(|fallback| fallback.as_str() != locale).cloned());
+                chain.extend(
+                    fallbacks
+                        .iter()
+                        .filter(|fallback| fallback.as_str() != locale)
+                        .cloned(),
+                );
             }
             if let Some(defaults) = map.get("default") {
                 for fallback in defaults {
@@ -261,7 +282,9 @@ fn collect_watch_files(
 
         if matcher.is_match(&primary_pattern) {
             for locale in locale_chain {
-                let candidate = root_dir.join(catalog.path.replace("{locale}", locale)).with_extension("po");
+                let candidate = root_dir
+                    .join(catalog.path.replace("{locale}", locale))
+                    .with_extension("po");
                 if !files.contains(&candidate) {
                     files.push(candidate);
                 }
@@ -303,10 +326,8 @@ fn load_catalogs(
         loaded.insert(
             locale,
             parsed
-                .messages
-                .into_iter()
-                .map(|message| (source_identity_key(&message.msgid, message.msgctxt.as_deref()), message))
-                .collect(),
+                .into_normalized_view()
+                .map_err(|error| format!("Failed to normalize {}: {error}", file.display()))?,
         );
     }
 
@@ -316,7 +337,9 @@ fn load_catalogs(
 fn infer_locale_from_path(path: &Path, config: &CatalogModuleConfig) -> Option<String> {
     let normalized_resource = normalize_path(path);
     for catalog in &config.catalogs {
-        let absolute_catalog_path = Path::new(&config.root_dir).join(&catalog.path).with_extension("po");
+        let absolute_catalog_path = Path::new(&config.root_dir)
+            .join(&catalog.path)
+            .with_extension("po");
         let pattern = normalize_path(&absolute_catalog_path);
         let escaped = regex::escape(&pattern);
         let regex_pattern = escaped.replace("\\{locale\\}", "([^/]+)");
@@ -333,9 +356,12 @@ fn select_translation(
     locale: &str,
     locale_chain: &[String],
     source_locale: &str,
-    key: &str,
+    key: &CatalogMessageKey,
 ) -> Option<String> {
-    if let Some(translation) = loaded.get(locale).and_then(|catalog| translation_for_key(catalog, key)) {
+    if let Some(translation) = loaded
+        .get(locale)
+        .and_then(|catalog| translation_for_key(catalog, key))
+    {
         return Some(translation);
     }
 
@@ -354,35 +380,63 @@ fn select_translation(
     if locale == source_locale {
         return loaded
             .get(source_locale)
-            .and_then(|catalog| catalog.get(key))
-            .and_then(source_locale_fallback);
+            .and_then(|catalog| source_locale_fallback(catalog, key, source_locale));
     }
 
     None
 }
 
-fn translation_for_key(catalog: &SourceCatalog, key: &str) -> Option<String> {
-    catalog.get(key).and_then(translation_for_entry)
+fn translation_for_key(
+    catalog: &NormalizedParsedCatalog,
+    key: &CatalogMessageKey,
+) -> Option<String> {
+    catalog
+        .effective_translation(key)
+        .and_then(effective_translation_ref_to_string)
 }
 
-fn source_locale_fallback(entry: &CatalogMessage) -> Option<String> {
-    translation_for_entry(entry).or_else(|| Some(entry.msgid.clone()))
+fn source_locale_fallback(
+    catalog: &NormalizedParsedCatalog,
+    key: &CatalogMessageKey,
+    source_locale: &str,
+) -> Option<String> {
+    catalog
+        .effective_translation_with_source_fallback(key, source_locale)
+        .and_then(effective_translation_to_string)
 }
 
-fn translation_for_entry(entry: &CatalogMessage) -> Option<String> {
-    match &entry.translation {
-        TranslationShape::Singular { value } if !value.is_empty() => Some(value.clone()),
-        TranslationShape::Plural { translation, .. } => translation
+fn effective_translation_ref_to_string(translation: EffectiveTranslationRef<'_>) -> Option<String> {
+    match translation {
+        EffectiveTranslationRef::Singular(value) if !value.is_empty() => Some(value.to_owned()),
+        EffectiveTranslationRef::Plural(translation) => translation
             .get("other")
             .filter(|value| !value.is_empty())
             .cloned()
-            .or_else(|| translation.values().find(|value| !value.is_empty()).cloned()),
+            .or_else(|| {
+                translation
+                    .values()
+                    .find(|value| !value.is_empty())
+                    .cloned()
+            }),
         _ => None,
     }
 }
 
-fn source_identity_key(message: &str, context: Option<&str>) -> String {
-    format!("{}\u{4}{}", context.unwrap_or_default(), message)
+fn effective_translation_to_string(translation: EffectiveTranslation) -> Option<String> {
+    match translation {
+        EffectiveTranslation::Singular(value) if !value.is_empty() => Some(value),
+        EffectiveTranslation::Plural(translation) => translation
+            .get("other")
+            .filter(|value| !value.is_empty())
+            .cloned()
+            .or_else(|| {
+                translation
+                    .values()
+                    .find(|value| !value.is_empty())
+                    .cloned()
+            }),
+        _ => None,
+    }
 }
 
 fn maybe_pseudolocalize(message: &str, pseudo_locale: Option<&str>, locale: &str) -> String {

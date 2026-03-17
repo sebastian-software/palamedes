@@ -2,10 +2,9 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use ferrocat::{
-    CatalogOrigin, CatalogStats, CatalogUpdateResult, Diagnostic, ExtractedMessage,
-    ExtractedPluralMessage, ExtractedSingularMessage, IcuNode, IcuPluralKind, ObsoleteStrategy,
-    ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, PluralEncoding, PluralSource,
-    UpdateCatalogFileOptions, parse_catalog, parse_icu, update_catalog_file,
+    parse_catalog, update_catalog_file, CatalogOrigin, CatalogStats, CatalogUpdateInput,
+    CatalogUpdateResult, Diagnostic, ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog,
+    PlaceholderCommentMode, PluralEncoding, SourceExtractedMessage, UpdateCatalogFileOptions,
 };
 use serde::{Deserialize, Serialize};
 
@@ -90,7 +89,11 @@ pub fn update_catalog_file_json(request_json: &str) -> Result<String, String> {
 pub fn parse_catalog_json(request_json: &str) -> Result<String, String> {
     let request = serde_json::from_str::<CatalogUpdateRequest>(request_json)
         .map_err(|error| format!("Invalid catalog parse request: {error}"))?;
-    let parsed = parse_catalog_source_first(&request.target_path, &request.locale, &request.source_locale)?;
+    let parsed = parse_catalog_source_first(
+        &request.target_path,
+        &request.locale,
+        &request.source_locale,
+    )?;
     serde_json::to_string(&parsed).map_err(|error| error.to_string())
 }
 
@@ -116,17 +119,19 @@ pub fn parse_catalog_source_first(
 fn update_catalog_file_source_first(
     request: CatalogUpdateRequest,
 ) -> Result<CatalogUpdateResponse, String> {
-    let extracted = request
-        .messages
-        .into_iter()
-        .map(project_message)
-        .collect::<Result<Vec<_>, _>>()?;
+    let input = CatalogUpdateInput::SourceFirst(
+        request
+            .messages
+            .into_iter()
+            .map(project_message)
+            .collect::<Result<Vec<_>, _>>()?,
+    );
 
     let result = update_catalog_file(UpdateCatalogFileOptions {
         target_path: PathBuf::from(request.target_path),
         locale: Some(request.locale),
         source_locale: request.source_locale,
-        extracted,
+        input,
         plural_encoding: PluralEncoding::Icu,
         obsolete_strategy: if request.clean {
             ObsoleteStrategy::Delete
@@ -148,7 +153,7 @@ fn update_catalog_file_source_first(
     Ok(public_update_result(result))
 }
 
-fn project_message(message: CatalogUpdateMessage) -> Result<ExtractedMessage, String> {
+fn project_message(message: CatalogUpdateMessage) -> Result<SourceExtractedMessage, String> {
     if message.message.trim().is_empty() {
         return Err("Catalog messages must not be empty".to_owned());
     }
@@ -162,123 +167,13 @@ fn project_message(message: CatalogUpdateMessage) -> Result<ExtractedMessage, St
         })
         .collect::<Vec<_>>();
 
-    if let Some(source) = project_plural_source(&message.message)? {
-        return Ok(ExtractedMessage::Plural(ExtractedPluralMessage {
-            msgid: message.message,
-            msgctxt: message.context,
-            source,
-            comments: message.extracted_comments,
-            origin: origins,
-            placeholders: BTreeMap::new(),
-        }));
-    }
-
-    Ok(ExtractedMessage::Singular(ExtractedSingularMessage {
+    Ok(SourceExtractedMessage {
         msgid: message.message,
         msgctxt: message.context,
         comments: message.extracted_comments,
         origin: origins,
         placeholders: BTreeMap::new(),
-    }))
-}
-
-fn project_plural_source(message: &str) -> Result<Option<PluralSource>, String> {
-    if !message.contains("{") {
-        return Ok(None);
-    }
-
-    let parsed = match parse_icu(message) {
-        Ok(parsed) => parsed,
-        Err(_) => return Ok(None),
-    };
-
-    let Some(IcuNode::Plural {
-        kind: IcuPluralKind::Cardinal,
-        offset,
-        options,
-        ..
-    }) = parsed.nodes.as_slice().first()
-    else {
-        return Ok(None);
-    };
-
-    if parsed.nodes.len() != 1 || *offset != 0 {
-        return Ok(None);
-    }
-
-    let mut one = None;
-    let mut other = None;
-    for option in options {
-        if option.selector.starts_with('=') {
-            return Ok(None);
-        }
-        let rendered = render_projectable_icu_nodes(&option.value)?;
-        match option.selector.as_str() {
-            "one" => one = Some(rendered),
-            "other" => other = Some(rendered),
-            _ => {}
-        }
-    }
-
-    Ok(other.map(|other| PluralSource { one, other }))
-}
-
-fn render_projectable_icu_nodes(nodes: &[IcuNode]) -> Result<String, String> {
-    let mut out = String::new();
-    for node in nodes {
-        render_projectable_icu_node(node, &mut out)?;
-    }
-    Ok(out)
-}
-
-fn render_projectable_icu_node(node: &IcuNode, out: &mut String) -> Result<(), String> {
-    match node {
-        IcuNode::Literal(value) => out.push_str(value),
-        IcuNode::Argument { name } => {
-            out.push('{');
-            out.push_str(name);
-            out.push('}');
-        }
-        IcuNode::Number { name, style } => render_formatter("number", name, style.as_deref(), out),
-        IcuNode::Date { name, style } => render_formatter("date", name, style.as_deref(), out),
-        IcuNode::Time { name, style } => render_formatter("time", name, style.as_deref(), out),
-        IcuNode::List { name, style } => render_formatter("list", name, style.as_deref(), out),
-        IcuNode::Duration { name, style } => render_formatter("duration", name, style.as_deref(), out),
-        IcuNode::Ago { name, style } => render_formatter("ago", name, style.as_deref(), out),
-        IcuNode::Name { name, style } => render_formatter("name", name, style.as_deref(), out),
-        IcuNode::Pound => out.push('#'),
-        IcuNode::Tag { name, children } => {
-            out.push('<');
-            out.push_str(name);
-            out.push('>');
-            for child in children {
-                render_projectable_icu_node(child, out)?;
-            }
-            out.push_str("</");
-            out.push_str(name);
-            out.push('>');
-        }
-        IcuNode::Select { .. } | IcuNode::Plural { .. } => {
-            return Err(
-                "Nested ICU select/plural structures are not projected into catalog plural sources."
-                    .to_owned(),
-            );
-        }
-    }
-
-    Ok(())
-}
-
-fn render_formatter(kind: &str, name: &str, style: Option<&str>, out: &mut String) {
-    out.push('{');
-    out.push_str(name);
-    out.push_str(", ");
-    out.push_str(kind);
-    if let Some(style) = style {
-        out.push_str(", ");
-        out.push_str(style);
-    }
-    out.push('}');
+    })
 }
 
 fn public_update_result(result: CatalogUpdateResult) -> CatalogUpdateResponse {
@@ -341,13 +236,18 @@ fn format_diagnostic(diagnostic: Diagnostic) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, update_catalog_file_json};
+    use super::{
+        update_catalog_file_json, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
+    };
     use crate::parse_po_json;
     use serde_json::Value;
 
     fn temp_file(name: &str) -> String {
         std::env::temp_dir()
-            .join(format!("palamedes-catalog-update-{name}-{}.po", std::process::id()))
+            .join(format!(
+                "palamedes-catalog-update-{name}-{}.po",
+                std::process::id()
+            ))
             .to_string_lossy()
             .into_owned()
     }
@@ -378,7 +278,8 @@ mod tests {
         let parsed: Value = serde_json::from_str(&result).expect("response json");
         assert_eq!(parsed["created"], true);
 
-        let po = parse_po_json(&std::fs::read_to_string(&path).expect("read output")).expect("parse po");
+        let po =
+            parse_po_json(&std::fs::read_to_string(&path).expect("read output")).expect("parse po");
         assert!(po.contains(r#""msgid":"Hello""#));
         assert!(po.contains(r#""Hello""#));
     }

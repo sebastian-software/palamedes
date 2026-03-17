@@ -431,7 +431,9 @@ fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
     }
 }
 
-fn extract_choice_options_from_jsx(opening_element: &JSXOpeningElement<'_>) -> Vec<(String, String)> {
+fn extract_choice_options_from_jsx(
+    opening_element: &JSXOpeningElement<'_>,
+) -> Vec<(String, String)> {
     let mut options = Vec::new();
 
     for attr in &opening_element.attributes {
@@ -526,9 +528,14 @@ fn extract_jsx_children_parts(
 
                 let (inner_message, inner_values, inner_components) =
                     extract_jsx_children_parts(&element.children, source, next_component_index);
-                parts.push(format!("<{current_index}>{inner_message}</{current_index}>"));
+                parts.push(format!(
+                    "<{current_index}>{inner_message}</{current_index}>"
+                ));
                 values.extend(inner_values);
-                components.push(opening_element_to_component(&element.opening_element, source));
+                components.push(opening_element_to_component(
+                    &element.opening_element,
+                    source,
+                ));
                 components.extend(inner_components);
             }
             JSXChild::Fragment(fragment) => {
@@ -852,7 +859,10 @@ fn build_runtime_call(
         .map(|values| format!("{{ {} }}", values.join(", ")));
 
     match (values_text, descriptor) {
-        (None, None) => format!("{runtime_import_name}()._(\"{}\")", escape_string(lookup_key)),
+        (None, None) => format!(
+            "{runtime_import_name}()._(\"{}\")",
+            escape_string(lookup_key)
+        ),
         (Some(values), None) => {
             format!(
                 "{runtime_import_name}()._(\"{}\", {values})",
@@ -910,7 +920,9 @@ fn build_icu_message(
         .map(|(key, value)| format!("{key} {{{value}}}"))
         .collect::<Vec<_>>()
         .join(" ");
-    let offset_part = offset.map(|value| format!(" offset:{value}")).unwrap_or_default();
+    let offset_part = offset
+        .map(|value| format!(" offset:{value}"))
+        .unwrap_or_default();
 
     format!("{{{value_name}, {format},{offset_part} {option_parts}}}")
 }
@@ -1135,9 +1147,7 @@ mod tests {
         assert!(result
             .code
             .contains("import { Trans } from \"@lingui/react\";"));
-        assert!(result
-            .code
-            .contains("<Trans id=\""));
+        assert!(result.code.contains("<Trans id=\""));
         assert!(result.code.contains("message=\"Hello {name}\""));
         assert!(result.code.contains("values={{ name }}"));
         assert!(!result.code.contains("@palamedes/runtime"));

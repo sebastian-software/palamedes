@@ -3,9 +3,8 @@ use std::collections::{BTreeMap, HashMap};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
-    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
-    MemberExpression, ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression,
-    TemplateLiteral,
+    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, MemberExpression,
+    ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression, TemplateLiteral,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -88,7 +87,6 @@ impl<'a> Visit<'a> for MacroCollector {
             }
         }
     }
-
 }
 
 struct ExtractionVisitor<'a> {
@@ -218,13 +216,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 ],
             ) {
                 let message = match macro_name {
-                    "plural" | "select" | "selectOrdinal" => {
-                        Ok(extract_from_choice_call(
-                            it,
-                            macro_name,
-                            self.origin(it.span.start as usize),
-                        ))
-                    }
+                    "plural" | "select" | "selectOrdinal" => Ok(extract_from_choice_call(
+                        it,
+                        macro_name,
+                        self.origin(it.span.start as usize),
+                    )),
                     _ => extract_from_descriptor_call(
                         it,
                         macro_name,
@@ -836,11 +832,7 @@ pub fn extract_messages_json(source: &str, filename: &str) -> Result<String, Str
     let mut collector = MacroCollector::new();
     collector.visit_program(&parsed.program);
 
-    let mut extractor = ExtractionVisitor::new(
-        filename,
-        &line_locator,
-        &collector.imported_macros,
-    );
+    let mut extractor = ExtractionVisitor::new(filename, &line_locator, &collector.imported_macros);
     extractor.visit_program(&parsed.program);
 
     if let Some(error) = extractor.error {
