@@ -65,6 +65,27 @@ export interface CatalogUpdateResult {
   diagnostics: string[]
 }
 
+export interface CatalogParseRequest {
+  targetPath: string
+  locale: string
+  sourceLocale: string
+}
+
+export interface ParsedCatalogMessage {
+  message: string
+  context?: string
+  comments: string[]
+  origins: CatalogOrigin[]
+  obsolete: boolean
+}
+
+export interface CatalogParseResult {
+  locale?: string
+  headers: Record<string, string>
+  messages: ParsedCatalogMessage[]
+  diagnostics: string[]
+}
+
 export interface NativeExtractedMessage {
   message: string
   comment?: string
@@ -128,18 +149,37 @@ export interface CatalogModuleResult {
   resolvedLocaleChain?: string[]
 }
 
+interface NativeExtractedMessageOrigin {
+  filename: string
+  line: number
+  column?: number
+}
+
+interface NativeBindingsExtractedMessage {
+  message: string
+  comment?: string
+  context?: string
+  placeholders?: Record<string, string>
+  origin: NativeExtractedMessageOrigin
+}
+
+interface NativeCatalogModuleRequest {
+  config: CatalogModuleConfig
+  resourcePath: string
+}
+
 interface NativeBindings {
-  getNativeInfoJson(): string
-  parsePoJson(source: string): string
-  updateCatalogFileJson(requestJson: string): string
-  parseCatalogJson(requestJson: string): string
-  getCatalogModuleJson(requestJson: string): string
-  extractMessagesJson(source: string, filename: string): string
-  transformMacrosJson(
+  getNativeInfo(): NativeInfo
+  parsePo(source: string): ParsedPoFile
+  updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult
+  parseCatalog(request: CatalogParseRequest): CatalogParseResult
+  getCatalogModule(request: NativeCatalogModuleRequest): CatalogModuleResult
+  extractMessages(source: string, filename: string): NativeBindingsExtractedMessage[]
+  transformMacros(
     source: string,
     filename: string,
-    optionsJson?: string
-  ): string
+    options?: NativeTransformOptions
+  ): NativeTransformResult
 }
 
 function detectLinuxLibc(): "gnu" | "musl" | null {
@@ -203,51 +243,39 @@ function loadNativeBindings(): NativeBindings {
 const native = loadNativeBindings()
 
 export function getNativeInfo(): NativeInfo {
-  return JSON.parse(native.getNativeInfoJson()) as NativeInfo
+  return native.getNativeInfo()
 }
 
 export function parsePo(source: string): ParsedPoFile {
-  return JSON.parse(native.parsePoJson(source)) as ParsedPoFile
+  return native.parsePo(source)
 }
 
 export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult {
-  return JSON.parse(native.updateCatalogFileJson(JSON.stringify(request))) as CatalogUpdateResult
+  return native.updateCatalogFile(request)
 }
 
-export function parseCatalog(request: CatalogUpdateRequest) {
-  return JSON.parse(native.parseCatalogJson(JSON.stringify(request))) as {
-    locale?: string
-    headers: Record<string, string>
-    messages: Array<{
-      message: string
-      context?: string
-      comments: string[]
-      origins: CatalogOrigin[]
-      obsolete: boolean
-    }>
-    diagnostics: string[]
-  }
+export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
+  return native.parseCatalog(request)
 }
 
 export function getCatalogModule(
   config: CatalogModuleConfig,
   resourcePath: string
 ): CatalogModuleResult {
-  return JSON.parse(
-    native.getCatalogModuleJson(
-      JSON.stringify({
-        config,
-        resourcePath,
-      })
-    )
-  ) as CatalogModuleResult
+  return native.getCatalogModule({
+    config,
+    resourcePath,
+  })
 }
 
 export function extractMessagesNative(
   source: string,
   filename: string
 ): NativeExtractedMessage[] {
-  return JSON.parse(native.extractMessagesJson(source, filename)) as NativeExtractedMessage[]
+  return native.extractMessages(source, filename).map((message) => ({
+    ...message,
+    origin: [message.origin.filename, message.origin.line, message.origin.column],
+  }))
 }
 
 export function transformMacrosNative(
@@ -255,11 +283,5 @@ export function transformMacrosNative(
   filename: string,
   options?: NativeTransformOptions
 ): NativeTransformResult {
-  return JSON.parse(
-    native.transformMacrosJson(
-      source,
-      filename,
-      options ? JSON.stringify(options) : undefined
-    )
-  ) as NativeTransformResult
+  return native.transformMacros(source, filename, options)
 }

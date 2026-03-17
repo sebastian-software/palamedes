@@ -5,13 +5,22 @@ mod catalog_update;
 mod extract;
 mod transform;
 
-use ferrocat::{parse_po, MsgStr, PoFile, PoItem};
+use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
 use serde::Serialize;
 
-pub use catalog_module::get_catalog_module_json;
-pub use catalog_update::{parse_catalog_json, update_catalog_file_json};
-pub use extract::extract_messages_json;
-pub use transform::transform_macros_json;
+pub use catalog_module::{
+    get_catalog_module, CatalogConfig, CatalogModuleConfig, CatalogModuleRequest,
+    CatalogModuleResult, CompilationError, FallbackLocales, MissingTranslation,
+};
+pub use catalog_update::{
+    parse_catalog, update_catalog_file, CatalogParseRequest, CatalogParseResult,
+    CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, CatalogUpdateResponse,
+    CatalogUpdateStats, ParsedCatalogMessage,
+};
+pub use extract::{extract_messages, ExtractedMessageRecord};
+pub use transform::{
+    transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,
+};
 
 pub const FERROCAT_VERSION: &str = "0.5.2";
 
@@ -37,31 +46,31 @@ pub struct NativeInfo {
 }
 
 #[derive(Debug, Serialize)]
-struct JsPoFile {
-    comments: Vec<String>,
+pub struct JsPoFile {
+    pub comments: Vec<String>,
     #[serde(rename = "extractedComments")]
-    extracted_comments: Vec<String>,
-    headers: BTreeMap<String, String>,
+    pub extracted_comments: Vec<String>,
+    pub headers: BTreeMap<String, String>,
     #[serde(rename = "headerOrder")]
-    header_order: Vec<String>,
-    items: Vec<JsPoItem>,
+    pub header_order: Vec<String>,
+    pub items: Vec<JsPoItem>,
 }
 
 #[derive(Debug, Serialize)]
-struct JsPoItem {
-    msgid: String,
-    msgctxt: Option<String>,
-    references: Vec<String>,
+pub struct JsPoItem {
+    pub msgid: String,
+    pub msgctxt: Option<String>,
+    pub references: Vec<String>,
     #[serde(rename = "msgidPlural")]
-    msgid_plural: Option<String>,
-    msgstr: Vec<String>,
-    comments: Vec<String>,
+    pub msgid_plural: Option<String>,
+    pub msgstr: Vec<String>,
+    pub comments: Vec<String>,
     #[serde(rename = "extractedComments")]
-    extracted_comments: Vec<String>,
-    flags: BTreeMap<String, bool>,
-    metadata: BTreeMap<String, String>,
-    obsolete: bool,
-    nplurals: usize,
+    pub extracted_comments: Vec<String>,
+    pub flags: BTreeMap<String, bool>,
+    pub metadata: BTreeMap<String, String>,
+    pub obsolete: bool,
+    pub nplurals: usize,
 }
 
 impl From<PoFile> for JsPoFile {
@@ -121,10 +130,6 @@ pub fn get_native_info() -> NativeInfo {
     }
 }
 
-pub fn get_native_info_json() -> Result<String, serde_json::Error> {
-    serde_json::to_string(&get_native_info())
-}
-
 #[must_use]
 pub(crate) fn lookup_key(message: &str, context: Option<&str>) -> String {
     let mut input = String::new();
@@ -137,9 +142,9 @@ pub(crate) fn lookup_key(message: &str, context: Option<&str>) -> String {
     bytes_to_base64url(&digest)
 }
 
-pub fn parse_po_json(source: &str) -> Result<String, String> {
-    let po = parse_po(source).map_err(|error| error.to_string())?;
-    serde_json::to_string(&JsPoFile::from(po)).map_err(|error| error.to_string())
+pub fn parse_po(source: &str) -> Result<JsPoFile, String> {
+    let po = ferrocat_parse_po(source).map_err(|error| error.to_string())?;
+    Ok(JsPoFile::from(po))
 }
 
 fn bytes_to_base64url(bytes: &[u8]) -> String {
@@ -254,7 +259,7 @@ fn sha256(bytes: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use super::{get_native_info, lookup_key, parse_po_json, FERROCAT_VERSION};
+    use super::{get_native_info, lookup_key, parse_po, FERROCAT_VERSION};
 
     #[test]
     fn exposes_native_info() {
@@ -269,8 +274,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_po_to_json() {
-        let json = parse_po_json(
+    fn parses_po() {
+        let po = parse_po(
             r#"msgid ""
 msgstr ""
 "Language: de\n"
@@ -279,9 +284,9 @@ msgid "Hello"
 msgstr "Hallo"
 "#,
         )
-        .expect("PO should serialize to JSON");
+        .expect("PO should parse");
 
-        assert!(json.contains(r#""Language":"de""#));
-        assert!(json.contains(r#""msgid":"Hello""#));
+        assert_eq!(po.headers.get("Language").map(String::as_str), Some("de"));
+        assert_eq!(po.items[0].msgid, "Hello");
     }
 }

@@ -927,16 +927,12 @@ fn build_icu_message(
     format!("{{{value_name}, {format},{offset_part} {option_parts}}}")
 }
 
-pub fn transform_macros_json(
+pub fn transform_macros(
     source: &str,
     filename: &str,
-    options_json: Option<&str>,
-) -> Result<String, String> {
-    let options = options_json
-        .map(serde_json::from_str::<NativeTransformOptions>)
-        .transpose()
-        .map_err(|error| error.to_string())?
-        .unwrap_or_default();
+    options: Option<NativeTransformOptions>,
+) -> Result<NativeTransformResult, String> {
+    let options = options.unwrap_or_default();
 
     let runtime_module = options
         .runtime_module
@@ -965,13 +961,12 @@ pub fn transform_macros_json(
     collector.visit_program(&parsed.program);
 
     if collector.macro_imports.is_empty() {
-        return serde_json::to_string(&NativeTransformResult {
+        return Ok(NativeTransformResult {
             code: source.to_string(),
             has_changed: false,
             edits: Vec::new(),
             prepend_text: None,
-        })
-        .map_err(|error| error.to_string());
+        });
     }
 
     let mut visitor = TransformVisitor::new(source, &collector.macro_imports, &options);
@@ -982,13 +977,12 @@ pub fn transform_macros_json(
     }
 
     if visitor.replacements.is_empty() {
-        return serde_json::to_string(&NativeTransformResult {
+        return Ok(NativeTransformResult {
             code: source.to_string(),
             has_changed: false,
             edits: Vec::new(),
             prepend_text: None,
-        })
-        .map_err(|error| error.to_string());
+        });
     }
 
     let mut replacements = visitor.replacements;
@@ -1001,13 +995,12 @@ pub fn transform_macros_json(
     }
 
     if replacements.is_empty() {
-        return serde_json::to_string(&NativeTransformResult {
+        return Ok(NativeTransformResult {
             code: source.to_string(),
             has_changed: false,
             edits: Vec::new(),
             prepend_text: None,
-        })
-        .map_err(|error| error.to_string());
+        });
     }
 
     replacements.sort_by(|a, b| b.start.cmp(&a.start).then(b.end.cmp(&a.end)));
@@ -1041,13 +1034,12 @@ pub fn transform_macros_json(
         code = format!("{prefix}{code}");
     }
 
-    serde_json::to_string(&NativeTransformResult {
+    Ok(NativeTransformResult {
         has_changed: code != source,
         code,
         edits,
         prepend_text: (!prefix.is_empty()).then_some(prefix),
     })
-    .map_err(|error| error.to_string())
 }
 
 fn unsupported_explicit_id_message() -> String {
@@ -1057,19 +1049,16 @@ fn unsupported_explicit_id_message() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{transform_macros_json, NativeTransformResult};
+    use super::{transform_macros, NativeTransformOptions};
 
     #[test]
     fn transforms_tagged_templates() {
-        let result = serde_json::from_str::<NativeTransformResult>(
-            &transform_macros_json(
-                "import { t } from \"@lingui/macro\";\nconst msg = t`Hello ${name}`;\n",
-                "test.ts",
-                None,
-            )
-            .expect("transform should succeed"),
+        let result = transform_macros(
+            "import { t } from \"@lingui/macro\";\nconst msg = t`Hello ${name}`;\n",
+            "test.ts",
+            None,
         )
-        .expect("json should deserialize");
+        .expect("transform should succeed");
 
         assert!(result.code.contains("getI18n()._(\""));
         assert!(result.code.contains("message: \"Hello {name}\""));
@@ -1081,13 +1070,12 @@ mod tests {
 
     #[test]
     fn transforms_define_message_without_runtime_import() {
-        let result = serde_json::from_str::<NativeTransformResult>(&transform_macros_json(
+        let result = transform_macros(
             "import { defineMessage } from \"@lingui/macro\";\nconst msg = defineMessage({ message: \"Hello\" });\n",
             "test.ts",
             None,
         )
-        .expect("transform should succeed"))
-        .expect("json should deserialize");
+        .expect("transform should succeed");
 
         assert!(result.code.contains("id:"));
         assert!(result.code.contains("message: \"Hello\""));
@@ -1096,15 +1084,12 @@ mod tests {
 
     #[test]
     fn transforms_plural_choice_macros() {
-        let result = serde_json::from_str::<NativeTransformResult>(
-            &transform_macros_json(
-                "import { plural } from \"@lingui/macro\";\nconst msg = plural(count, { one: \"# item\", other: \"# items\" });\n",
-                "test.ts",
-                None,
-            )
-            .expect("transform should succeed"),
+        let result = transform_macros(
+            "import { plural } from \"@lingui/macro\";\nconst msg = plural(count, { one: \"# item\", other: \"# items\" });\n",
+            "test.ts",
+            None,
         )
-        .expect("json should deserialize");
+        .expect("transform should succeed");
 
         assert!(result.code.contains("getI18n()._(\""));
         assert!(result
@@ -1115,15 +1100,12 @@ mod tests {
 
     #[test]
     fn transforms_select_ordinal_choice_macros() {
-        let result = serde_json::from_str::<NativeTransformResult>(
-            &transform_macros_json(
-                "import { selectOrdinal } from \"@lingui/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",
-                "test.ts",
-                None,
-            )
-            .expect("transform should succeed"),
+        let result = transform_macros(
+            "import { selectOrdinal } from \"@lingui/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",
+            "test.ts",
+            None,
         )
-        .expect("json should deserialize");
+        .expect("transform should succeed");
 
         assert!(result.code.contains("getI18n()._(\""));
         assert!(result
@@ -1134,15 +1116,12 @@ mod tests {
 
     #[test]
     fn transforms_trans_jsx_macro() {
-        let result = serde_json::from_str::<NativeTransformResult>(
-            &transform_macros_json(
-                "import { Trans } from \"@lingui/react/macro\";\nconst el = <Trans>Hello {name}</Trans>;\n",
-                "test.tsx",
-                None,
-            )
-            .expect("transform should succeed"),
+        let result = transform_macros(
+            "import { Trans } from \"@lingui/react/macro\";\nconst el = <Trans>Hello {name}</Trans>;\n",
+            "test.tsx",
+            None,
         )
-        .expect("json should deserialize");
+        .expect("transform should succeed");
 
         assert!(result
             .code
@@ -1155,15 +1134,12 @@ mod tests {
 
     #[test]
     fn transforms_plural_jsx_macro() {
-        let result = serde_json::from_str::<NativeTransformResult>(
-            &transform_macros_json(
-                "import { Plural } from \"@lingui/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",
-                "test.tsx",
-                None,
-            )
-            .expect("transform should succeed"),
+        let result = transform_macros(
+            "import { Plural } from \"@lingui/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",
+            "test.tsx",
+            None,
         )
-        .expect("json should deserialize");
+        .expect("transform should succeed");
 
         assert!(result.code.contains("getI18n()._(\""));
         assert!(result
@@ -1173,8 +1149,24 @@ mod tests {
     }
 
     #[test]
+    fn strips_message_field_when_requested() {
+        let result = transform_macros(
+            "import { t } from \"@lingui/macro\";\nconst msg = t({ message: \"Hello\", comment: \"Greeting\" });\n",
+            "test.ts",
+            Some(NativeTransformOptions {
+                strip_message_field: Some(true),
+                ..NativeTransformOptions::default()
+            }),
+        )
+        .expect("transform should succeed");
+
+        assert!(!result.code.contains("message:"));
+        assert!(result.code.contains("comment: \"Greeting\""));
+    }
+
+    #[test]
     fn rejects_explicit_ids() {
-        let error = transform_macros_json(
+        let error = transform_macros(
             "import { t } from \"@lingui/macro\";\nconst msg = t({ id: \"greeting\", message: \"Hello\" });\n",
             "test.ts",
             None,

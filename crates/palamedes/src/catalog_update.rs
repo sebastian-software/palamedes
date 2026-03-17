@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use ferrocat::{
-    parse_catalog, update_catalog_file, CatalogOrigin, CatalogStats, CatalogUpdateInput,
-    CatalogUpdateResult, Diagnostic, ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog,
-    PlaceholderCommentMode, PluralEncoding, SourceExtractedMessage, UpdateCatalogFileOptions,
+    parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
+    CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, Diagnostic,
+    ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, PluralEncoding,
+    SourceExtractedMessage, UpdateCatalogFileOptions,
 };
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,14 @@ pub struct CatalogUpdateRequest {
     pub source_locale: String,
     pub clean: bool,
     pub messages: Vec<CatalogUpdateMessage>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogParseRequest {
+    pub target_path: String,
+    pub locale: String,
+    pub source_locale: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -79,35 +88,17 @@ pub struct ParsedCatalogMessage {
     pub obsolete: bool,
 }
 
-pub fn update_catalog_file_json(request_json: &str) -> Result<String, String> {
-    let request = serde_json::from_str::<CatalogUpdateRequest>(request_json)
-        .map_err(|error| format!("Invalid catalog update request: {error}"))?;
-    let response = update_catalog_file_source_first(request)?;
-    serde_json::to_string(&response).map_err(|error| error.to_string())
+pub fn update_catalog_file(request: CatalogUpdateRequest) -> Result<CatalogUpdateResponse, String> {
+    update_catalog_file_source_first(request)
 }
 
-pub fn parse_catalog_json(request_json: &str) -> Result<String, String> {
-    let request = serde_json::from_str::<CatalogUpdateRequest>(request_json)
-        .map_err(|error| format!("Invalid catalog parse request: {error}"))?;
-    let parsed = parse_catalog_source_first(
-        &request.target_path,
-        &request.locale,
-        &request.source_locale,
-    )?;
-    serde_json::to_string(&parsed).map_err(|error| error.to_string())
-}
-
-pub fn parse_catalog_source_first(
-    target_path: &str,
-    locale: &str,
-    source_locale: &str,
-) -> Result<CatalogParseResult, String> {
-    let content = std::fs::read_to_string(target_path)
-        .map_err(|error| format!("Failed to read {target_path}: {error}"))?;
-    let parsed = parse_catalog(ParseCatalogOptions {
+pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult, String> {
+    let content = std::fs::read_to_string(&request.target_path)
+        .map_err(|error| format!("Failed to read {}: {error}", request.target_path))?;
+    let parsed = ferrocat_parse_catalog(ParseCatalogOptions {
         content,
-        locale: Some(locale.to_owned()),
-        source_locale: source_locale.to_owned(),
+        locale: Some(request.locale),
+        source_locale: request.source_locale,
         plural_encoding: PluralEncoding::Icu,
         strict: false,
     })
@@ -127,7 +118,7 @@ fn update_catalog_file_source_first(
             .collect::<Result<Vec<_>, _>>()?,
     );
 
-    let result = update_catalog_file(UpdateCatalogFileOptions {
+    let result = ferrocat_update_catalog_file(UpdateCatalogFileOptions {
         target_path: PathBuf::from(request.target_path),
         locale: Some(request.locale),
         source_locale: request.source_locale,
@@ -237,10 +228,9 @@ fn format_diagnostic(diagnostic: Diagnostic) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        update_catalog_file_json, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
+        update_catalog_file, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
     };
-    use crate::parse_po_json;
-    use serde_json::Value;
+    use crate::parse_po;
 
     fn temp_file(name: &str) -> String {
         std::env::temp_dir()
@@ -255,33 +245,28 @@ mod tests {
     #[test]
     fn updates_source_locale_catalogs() {
         let path = temp_file("source");
-        let result = update_catalog_file_json(
-            &serde_json::to_string(&CatalogUpdateRequest {
-                target_path: path.clone(),
-                locale: "en".to_owned(),
-                source_locale: "en".to_owned(),
-                clean: false,
-                messages: vec![CatalogUpdateMessage {
-                    message: "Hello".to_owned(),
-                    context: None,
-                    extracted_comments: vec![],
-                    origins: vec![CatalogUpdateOrigin {
-                        file: "src/App.tsx".to_owned(),
-                        line: 3,
-                    }],
+        let result = update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            messages: vec![CatalogUpdateMessage {
+                message: "Hello".to_owned(),
+                context: None,
+                extracted_comments: vec![],
+                origins: vec![CatalogUpdateOrigin {
+                    file: "src/App.tsx".to_owned(),
+                    line: 3,
                 }],
-            })
-            .expect("request"),
-        )
+            }],
+        })
         .expect("update");
 
-        let parsed: Value = serde_json::from_str(&result).expect("response json");
-        assert_eq!(parsed["created"], true);
+        assert!(result.created);
 
-        let po =
-            parse_po_json(&std::fs::read_to_string(&path).expect("read output")).expect("parse po");
-        assert!(po.contains(r#""msgid":"Hello""#));
-        assert!(po.contains(r#""Hello""#));
+        let po = parse_po(&std::fs::read_to_string(&path).expect("read output")).expect("parse po");
+        assert_eq!(po.items.len(), 1);
+        assert_eq!(po.items[0].msgid, "Hello");
     }
 
     #[test]
@@ -298,21 +283,18 @@ mod tests {
         )
         .expect("write existing");
 
-        update_catalog_file_json(
-            &serde_json::to_string(&CatalogUpdateRequest {
-                target_path: path.clone(),
-                locale: "de".to_owned(),
-                source_locale: "en".to_owned(),
-                clean: false,
-                messages: vec![CatalogUpdateMessage {
-                    message: "Hello".to_owned(),
-                    context: None,
-                    extracted_comments: vec![],
-                    origins: vec![],
-                }],
-            })
-            .expect("request"),
-        )
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            messages: vec![CatalogUpdateMessage {
+                message: "Hello".to_owned(),
+                context: None,
+                extracted_comments: vec![],
+                origins: vec![],
+            }],
+        })
         .expect("update");
 
         let output = std::fs::read_to_string(&path).expect("read");
@@ -334,21 +316,18 @@ mod tests {
         )
         .expect("write existing");
 
-        update_catalog_file_json(
-            &serde_json::to_string(&CatalogUpdateRequest {
-                target_path: path.clone(),
-                locale: "en".to_owned(),
-                source_locale: "en".to_owned(),
-                clean: true,
-                messages: vec![CatalogUpdateMessage {
-                    message: "Keep".to_owned(),
-                    context: None,
-                    extracted_comments: vec![],
-                    origins: vec![],
-                }],
-            })
-            .expect("request"),
-        )
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: true,
+            messages: vec![CatalogUpdateMessage {
+                message: "Keep".to_owned(),
+                context: None,
+                extracted_comments: vec![],
+                origins: vec![],
+            }],
+        })
         .expect("update");
 
         let output = std::fs::read_to_string(&path).expect("read");
@@ -359,21 +338,18 @@ mod tests {
     fn projects_simple_icu_plurals() {
         let path = temp_file("plural");
 
-        update_catalog_file_json(
-            &serde_json::to_string(&CatalogUpdateRequest {
-                target_path: path.clone(),
-                locale: "en".to_owned(),
-                source_locale: "en".to_owned(),
-                clean: false,
-                messages: vec![CatalogUpdateMessage {
-                    message: "{count, plural, one {# item} other {# items}}".to_owned(),
-                    context: None,
-                    extracted_comments: vec![],
-                    origins: vec![],
-                }],
-            })
-            .expect("request"),
-        )
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            messages: vec![CatalogUpdateMessage {
+                message: "{count, plural, one {# item} other {# items}}".to_owned(),
+                context: None,
+                extracted_comments: vec![],
+                origins: vec![],
+            }],
+        })
         .expect("update");
 
         let output = std::fs::read_to_string(&path).expect("read");

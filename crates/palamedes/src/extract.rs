@@ -813,7 +813,10 @@ fn getter_name(name: &str) -> Option<String> {
     })
 }
 
-pub fn extract_messages_json(source: &str, filename: &str) -> Result<String, String> {
+pub fn extract_messages(
+    source: &str,
+    filename: &str,
+) -> Result<Vec<ExtractedMessageRecord>, String> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
     let parsed = Parser::new(&allocator, source, source_type).parse();
@@ -839,7 +842,7 @@ pub fn extract_messages_json(source: &str, filename: &str) -> Result<String, Str
         return Err(error);
     }
 
-    serde_json::to_string(&extractor.messages).map_err(|error| error.to_string())
+    Ok(extractor.messages)
 }
 
 fn unsupported_explicit_id_message() -> String {
@@ -849,38 +852,38 @@ fn unsupported_explicit_id_message() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_messages_json;
+    use super::extract_messages;
 
     #[test]
     fn extracts_tagged_templates() {
-        let json = extract_messages_json(
+        let messages = extract_messages(
             r#"
               import { t } from "@lingui/core/macro"
               const message = t`Hello ${name}`
             "#,
             "test.tsx",
         )
-        .expect("messages should serialize");
+        .expect("messages should extract");
 
-        assert!(json.contains(r#""message":"Hello {name}""#));
+        assert_eq!(messages[0].message, "Hello {name}");
     }
 
     #[test]
     fn extracts_runtime_calls() {
-        let json = extract_messages_json(
+        let messages = extract_messages(
             r#"
               const message = i18n._("lookup-key", { name }, { message: "Hello {name}" })
             "#,
             "test.tsx",
         )
-        .expect("messages should serialize");
+        .expect("messages should extract");
 
-        assert!(json.contains(r#""message":"Hello {name}""#));
+        assert_eq!(messages[0].message, "Hello {name}");
     }
 
     #[test]
     fn rejects_explicit_ids() {
-        let error = extract_messages_json(
+        let error = extract_messages(
             r#"
               import { t } from "@lingui/core/macro"
               const message = t({ id: "greeting", message: "Hello" })

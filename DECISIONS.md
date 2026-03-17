@@ -26,6 +26,7 @@ Finally read the host integration decisions:
 
 7. [ADR-007: Native Boundary and Distribution](./adr/007-native-boundary-and-distribution.md)
 8. [ADR-008: Framework Adapter Architecture](./adr/008-framework-adapter-architecture.md)
+9. [ADR-009: Typed N-API Boundary with Workflow-First Native Operations](./adr/009-typed-napi-boundary-with-workflow-first-native-operations.md)
 
 ## ADR Policy
 

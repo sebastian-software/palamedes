@@ -75,14 +75,7 @@ struct ResolvedCatalogRequest {
 
 type LocaleCatalogs = BTreeMap<String, NormalizedParsedCatalog>;
 
-pub fn get_catalog_module_json(request_json: &str) -> Result<String, String> {
-    let request = serde_json::from_str::<CatalogModuleRequest>(request_json)
-        .map_err(|error| format!("Invalid catalog module request: {error}"))?;
-    let result = get_catalog_module(request)?;
-    serde_json::to_string(&result).map_err(|error| error.to_string())
-}
-
-fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResult, String> {
+pub fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResult, String> {
     let resource_path = PathBuf::from(&request.resource_path);
     let root_dir = PathBuf::from(&request.config.root_dir);
     let resolved = resolve_catalog_request(&request.config, &resource_path)?;
@@ -518,7 +511,7 @@ fn normalize_path(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::get_catalog_module_json;
+    use super::{get_catalog_module, CatalogConfig, CatalogModuleConfig, CatalogModuleRequest};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -556,25 +549,24 @@ msgstr "Hallo"
         )
         .expect("write de");
 
-        let request = serde_json::json!({
-            "config": {
-                "rootDir": fixture.to_string_lossy(),
-                "locales": ["en", "de"],
-                "sourceLocale": "en",
-                "catalogs": [
-                    {
-                        "path": "src/locales/{locale}",
-                        "include": ["src"]
-                    }
-                ]
+        let result = get_catalog_module(CatalogModuleRequest {
+            config: CatalogModuleConfig {
+                root_dir: fixture.to_string_lossy().into_owned(),
+                locales: vec!["en".to_owned(), "de".to_owned()],
+                source_locale: "en".to_owned(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: "src/locales/{locale}".to_owned(),
+                }],
             },
-            "resourcePath": locale_dir.join("de.po").to_string_lossy()
-        });
+            resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+        })
+        .expect("catalog module");
 
-        let result = get_catalog_module_json(&request.to_string()).expect("catalog module json");
-        assert!(result.contains("\"watchFiles\""));
-        assert!(result.contains("Hallo"));
-        assert!(result.contains("Only source"));
+        assert!(!result.watch_files.is_empty());
+        assert!(result.code.contains("Hallo"));
+        assert!(result.code.contains("Only source"));
     }
 
     fn create_fixture_dir(prefix: &str) -> PathBuf {
