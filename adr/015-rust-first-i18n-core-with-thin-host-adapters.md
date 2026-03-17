@@ -9,7 +9,7 @@ Palamedes already relies heavily on Rust-backed building blocks:
 
 - OXC for parsing and transform-heavy work
 - native Palamedes core logic for extraction and macro transformation
-- Rust-backed PO handling through the surrounding `pofile` ecosystem
+- Rust-backed PO and catalog handling through `ferrocat`
 
 At the same time, the remaining architecture is still split across Rust and TypeScript in a way that keeps key semantic work in the host layer:
 

@@ -1,17 +1,17 @@
 # Palamedes Status
 
-**Last updated:** 2026-03-10
+**Last updated:** 2026-03-17
 **Branch:** `main`
-**HEAD:** `9de22c4` (`refactor: rename package surface to palamedes`)
-**Worktree before this document:** dirty during active follow-up work
+**HEAD:** `5f5582c` (`refactor: remove pofile from palamedes core`)
+**Worktree before this document:** clean
 
 ## Summary
 
-Der Branch hat den ersten größeren Umbau von Palamedes auf ein Rust-Core-Modell bereits gestartet.
+Der größere Umbau von Palamedes auf ein Rust-Core-Modell ist inzwischen klar im aktiven Codepfad angekommen.
 
-Im aktuellen Stand sind Rust-Workspace, Node-Bindings, `pofile`-Integration, ein nativer Extractor, ein erweiterter nativer Transform-Slice, das neue `getI18n()`-Runtime-Modell, die `pnpm`-Migration, die reparierte Next-Loader-Auslieferung und die Umbenennung der öffentlichen Paketoberfläche auf Palamedes-Namen umgesetzt.
+Im aktuellen Stand sind Rust-Workspace, Node-Bindings, ein nativer Extractor, ein source-string-first Transform-/Catalog-Modell, das neue `getI18n()`-Runtime-Modell, die `pnpm`-Migration, die reparierte Next-Loader-Auslieferung und die Umbenennung der öffentlichen Paketoberfläche auf Palamedes-Namen umgesetzt.
 
-Die größten offenen Baustellen liegen jetzt nicht mehr bei der Grundarchitektur, sondern bei Parität und Aufräumen: vollständige Rust-Transform-Abdeckung, Sourcemaps, Entfernen alter Kompatibilitätspfade und native Distribution.
+Die größten offenen Baustellen liegen jetzt nicht mehr bei der Grundarchitektur, sondern bei weiterer Delegation nach `ferrocat`, Parität, Distribution und Doku-Hygiene.
 
 ## Was erledigt ist
 
@@ -31,15 +31,18 @@ Die größten offenen Baustellen liegen jetzt nicht mehr bei der Grundarchitektu
 - `crates/palamedes` als Rust-Core angelegt
 - `crates/palamedes-node` als Node-Binding-Crate angelegt
 - `packages/core-node` als dünner TS-Wrapper über die native `.node`-Bindung angelegt
-- `pofile` auf die veröffentlichte Beta umgestellt: `5.0.0-beta.0`
+- `ferrocat` ist jetzt die aktive Foundation für PO-/Catalog-/ICU-Semantik
+- `pofile` und `pofile-ts` sind aus den aktiven Palamedes-Codepfaden entfernt
 
 ### Native Foundation APIs
 
 Aktuell aus Rust bzw. über `@palamedes/core-node` verfügbar:
 
-- `generateMessageId`
 - `parsePo`
 - `getNativeInfo`
+- `updateCatalogFile`
+- `parseCatalog`
+- `getCatalogModule`
 - `extractMessagesNative`
 - `transformMacrosNative`
 
@@ -118,21 +121,22 @@ Begleitende Design-Dokumente:
 
 Heute erneut geprüft:
 
-- `pnpm build` ✅
-- `pnpm test` ✅
-- `pnpm check-types` ✅
+- `cargo test --workspace` ✅
+- `pnpm --filter @palamedes/core-node-darwin-arm64 build` ✅
+- `pnpm --filter @palamedes/core-node build` ✅
+- `pnpm --filter @palamedes/cli test` ✅
 
 ## Offene TODOs
 
 ### Kurzfristig
 
-1. Den nativen Transform weiter Richtung Parität bringen
-2. Den Verifikationsstand für Beispiel-Builds und Cargo-Workspace wieder ausdrücklich auffrischen
-3. Alte accessor-spezifische Spuren außerhalb des Transforms gezielt aus Doku und verbleibenden Implementierungen entfernen
+1. Die verbliebene Catalog-Compile-/Export-Lücke gegenüber `ferrocat` schließen
+2. Den nativen Transform weiter Richtung Parität bringen
+3. Alte historische Doku- und Plan-Spuren gezielt archivieren oder als überholt markieren
 
 ### Mittelfristig
 
-1. CLI-, Vite- und Next-Pfade noch konsequenter auf den nativen Core ausrichten
+1. CLI-, Vite- und Next-Pfade weiter auf coarse native operations ausrichten
 2. Alte Transform-/Extractor-Spuren aus Doku und Restcode weiter abbauen
 3. Native Packaging-/Release-Strategie dokumentieren und automatisieren
 4. Benchmarks für Extract/Transform vor und nach der Migration ergänzen
@@ -144,12 +148,15 @@ Heute erneut geprüft:
 
 ## Empfohlene nächste Schritte
 
-1. Beispiel-Builds und Cargo-Workspace gemeinsam wieder ausdrücklich verifizieren
-2. Verbleibende Altspuren alter Zugriffspfade außerhalb des Transforms abbauen
+1. `ferrocat#11` als letzte größere Delegationslücke für Catalog-Compilation/Runtime-Export weiterverfolgen
+2. Beispiel-Builds und End-to-End-Plugin-Flows ausdrücklich verifizieren
 3. Danach native Packaging-/Release-Fluss weiter härten
 
 ## Letzte relevante Commits
 
+- `5f5582c` refactor: remove pofile from palamedes core
+- `4f172a1` refactor: adopt ferrocat 0.5.2 high-level catalog APIs
+- `61d8ff6` refactor: reset palamedes to source-string-first catalogs
 - `9de22c4` refactor: rename package surface to palamedes
 - `78c1cce` chore: updated deps
 - `c1aaa28` fix(cli): make workspace bin resilient
@@ -161,7 +168,6 @@ Heute erneut geprüft:
 - `881cdc7` feat: add native transform slice
 - `09619af` feat: make native extractor the default
 - `ec7efb9` feat: add native extractor slice
-- `9e7a43e` chore: use published pofile beta crate
 - `cb9e126` feat: add initial rust core spike
 - `ff8aafc` docs: split adrs into separate files
 - `8f27604` docs: add rust core migration design

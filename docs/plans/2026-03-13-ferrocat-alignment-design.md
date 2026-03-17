@@ -2,6 +2,24 @@
 
 Date: 2026-03-13
 
+## Outcome
+
+Most of this migration is now complete in the main branch.
+
+Implemented since this design was written:
+
+- Palamedes Rust depends on `ferrocat`, not `pofile`
+- `pofile-ts` is removed from the active implementation
+- catalog updates run through `ferrocat` high-level APIs
+- parsed catalog reads use `ferrocat` normalized views
+- surfaced metadata no longer refers to `pofile`
+
+The main remaining gap is now narrower:
+
+- `ferrocat` does not yet own the final catalog compilation/export step for runtime lookup maps
+
+That remaining delegation target is tracked in [ferrocat#11](https://github.com/sebastian-software/ferrocat/issues/11).
+
 ## Goal
 
 Align Palamedes with a strict Rust-first ownership model:

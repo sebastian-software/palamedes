@@ -34,9 +34,9 @@ palamedes extract --watch --verbose
 │  (extract command, watch mode)          │
 ├─────────────────────────────────────────┤
 │  @palamedes/extractor                   │
-│  (extractor, extractMessages)        │
+│  (extractor, extractMessages)           │
 ├─────────────────────────────────────────┤
-│  oxc-parser + pofile-ts                 │
+│  native Palamedes core + ferrocat       │
 └─────────────────────────────────────────┘
 ```
 
@@ -44,7 +44,7 @@ palamedes extract --watch --verbose
 
 - **~20-100x faster** than Babel-based extraction
 - **Watch mode** with chokidar
-- **Direct PO output** via pofile-ts
+- **Direct catalog updates** via native Rust workflows backed by `ferrocat`
 - **Preserves translations** when merging
 
 ### Consequences

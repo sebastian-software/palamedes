@@ -1,7 +1,21 @@
 # ADR-009: pofile-ts as Central PO Library
 
-**Status:** Accepted
+**Status:** Superseded
 **Date:** 2025-12
+
+**Superseded by:** current `ferrocat`-based Rust core architecture as described in [ADR-011](./011-rust-core-with-thin-node-typescript-wrappers.md) and [ADR-015](./015-rust-first-i18n-core-with-thin-host-adapters.md)
+
+## Note
+
+This ADR records an intermediate step in the migration away from Lingui's older PO stack.
+
+It no longer describes the current Palamedes architecture:
+
+- `pofile-ts` is no longer used in the active implementation
+- `pofile` is no longer part of the Palamedes Rust core
+- `ferrocat` is now the active foundation for PO parsing, catalog updates, parsed-catalog access, and ICU handling
+
+Keep this ADR only as historical context.
 
 ### Context
 
