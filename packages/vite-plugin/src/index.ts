@@ -94,6 +94,10 @@ function createCompilationErrorMessage(
   return `Failed to compile catalog for locale ${locale}!\n\nCompilation error for ${errors.length} translation(s):\n${lines.join("\n\n")}`
 }
 
+function renderCatalogModule(messages: Record<string, string>): string {
+  return `export const messages=${JSON.stringify(messages)};export default { messages };`
+}
+
 /**
  * Create the Palamedes Vite plugin
  */
@@ -273,7 +277,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         return {
-          code: result.code,
+          code: renderCatalogModule(result.messages),
           map: null,
         }
       },

@@ -100,7 +100,7 @@ export interface CatalogModuleCompilationError {
   context?: string;
 }
 export interface CatalogModuleResult {
-  code: string;
+  messages: Record<string, string>;
   watchFiles: Array<string>;
   missing: Array<CatalogModuleMissingTranslation>;
   errors: Array<CatalogModuleCompilationError>;

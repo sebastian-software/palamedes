@@ -18,6 +18,10 @@ function createCompilationErrorMessage(locale, errors) {
   return `Failed to compile catalog for locale ${locale}!\n\nCompilation error for ${errors.length} translation(s):\n${lines.join("\n\n")}`;
 }
 
+function renderCatalogModule(messages) {
+  return `export const messages=${JSON.stringify(messages)};export default { messages };`;
+}
+
 module.exports = function palamedesPoLoader() {
   const callback = this.async();
   const options = typeof this.getOptions === "function" ? this.getOptions() : {};
@@ -58,7 +62,7 @@ module.exports = function palamedesPoLoader() {
       console.warn(message);
     }
 
-    callback(null, result.code, null);
+    callback(null, renderCatalogModule(result.messages), null);
   })().catch((error) => {
     callback(error);
   });

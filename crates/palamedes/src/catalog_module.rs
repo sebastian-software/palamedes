@@ -45,7 +45,7 @@ pub struct CatalogConfig {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogModuleResult {
-    pub code: String,
+    pub messages: BTreeMap<String, String>,
     pub watch_files: Vec<String>,
     pub missing: Vec<MissingTranslation>,
     pub errors: Vec<CompilationError>,
@@ -158,7 +158,7 @@ pub fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModule
     }
 
     Ok(CatalogModuleResult {
-        code: build_catalog_module_code(&messages)?,
+        messages,
         watch_files: watch_files
             .into_iter()
             .map(|file| file.to_string_lossy().into_owned())
@@ -497,14 +497,6 @@ fn maybe_pseudolocalize(message: &str, pseudo_locale: Option<&str>, locale: &str
         .collect()
 }
 
-fn build_catalog_module_code(messages: &BTreeMap<String, String>) -> Result<String, String> {
-    let json = serde_json::to_string(messages).map_err(|error| error.to_string())?;
-    let encoded = serde_json::to_string(&json).map_err(|error| error.to_string())?;
-    Ok(format!(
-        "export const messages=JSON.parse({encoded});export default {{ messages }};"
-    ))
-}
-
 fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
@@ -565,8 +557,8 @@ msgstr "Hallo"
         .expect("catalog module");
 
         assert!(!result.watch_files.is_empty());
-        assert!(result.code.contains("Hallo"));
-        assert!(result.code.contains("Only source"));
+        assert!(result.messages.values().any(|value| value == "Hallo"));
+        assert!(result.messages.values().any(|value| value == "Only source"));
     }
 
     fn create_fixture_dir(prefix: &str) -> PathBuf {

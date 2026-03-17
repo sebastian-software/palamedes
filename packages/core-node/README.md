@@ -67,7 +67,7 @@ console.log(po.headers.Language)
 - `parsePo(source)`
 - `updateCatalogFile(request)`
 - `parseCatalog(source, locale, sourceLocale)`
-- `getCatalogModule(source, locale, sourceLocale, options?)`
+- `getCatalogModule(config, resourcePath)`
 - `extractMessagesNative(source, filename)`
 - `transformMacrosNative(source, filename, options?)`
 

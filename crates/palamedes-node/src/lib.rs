@@ -140,7 +140,7 @@ pub struct CatalogModuleCompilationError {
 
 #[napi(object)]
 pub struct CatalogModuleResult {
-    pub code: String,
+    pub messages: HashMap<String, String>,
     pub watch_files: Vec<String>,
     pub missing: Vec<CatalogModuleMissingTranslation>,
     pub errors: Vec<CatalogModuleCompilationError>,
@@ -397,7 +397,7 @@ impl From<palamedes::CompilationError> for CatalogModuleCompilationError {
 impl From<palamedes::CatalogModuleResult> for CatalogModuleResult {
     fn from(value: palamedes::CatalogModuleResult) -> Self {
         Self {
-            code: value.code,
+            messages: value.messages.into_iter().collect(),
             watch_files: value.watch_files,
             missing: value
                 .missing

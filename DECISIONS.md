@@ -28,6 +28,7 @@ Finally read the host integration decisions:
 8. [ADR-008: Framework Adapter Architecture](./adr/008-framework-adapter-architecture.md)
 9. [ADR-009: Typed N-API Boundary with Workflow-First Native Operations](./adr/009-typed-napi-boundary-with-workflow-first-native-operations.md)
 10. [ADR-010: Generated TypeScript Types Derived from the Native Binding Surface](./adr/010-generated-typescript-types-derived-from-the-native-binding-surface.md)
+11. [ADR-011: Host Adapters Render Module Source from Compiled Catalog Artifacts](./adr/011-host-adapters-render-module-source-from-compiled-catalog-artifacts.md)
 
 ## ADR Policy
 
