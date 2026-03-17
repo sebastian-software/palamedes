@@ -19,10 +19,10 @@ Die größten offenen Baustellen liegen jetzt nicht mehr bei der Grundarchitektu
 
 - ADR-Struktur auf einzelne Dateien unter [adr/](/Users/sebastian/Workspace/business/palamedes/adr) umgestellt
 - Zentrale ADRs ergänzt:
-  - [ADR-011 Rust Core with Thin Node/TypeScript Wrappers](/Users/sebastian/Workspace/business/palamedes/adr/011-rust-core-with-thin-node-typescript-wrappers.md)
-  - [ADR-012 Native Node Bindings via napi-rs](/Users/sebastian/Workspace/business/palamedes/adr/012-native-node-bindings-via-napi-rs.md)
-  - [ADR-013 Hybrid Native Extractor Rollout](/Users/sebastian/Workspace/business/palamedes/adr/013-hybrid-native-extractor-rollout.md)
-  - [ADR-014 Universal `getI18n()` Runtime Primitive](/Users/sebastian/Workspace/business/palamedes/adr/014-universal-geti18n-runtime-primitive.md)
+  - [ADR-002 Rust-First Core with Thin Host Adapters](/Users/sebastian/Workspace/business/palamedes/adr/002-rust-first-core-with-thin-host-adapters.md)
+  - [ADR-003 Source-String-First Message Identity](/Users/sebastian/Workspace/business/palamedes/adr/003-source-string-first-message-identity.md)
+  - [ADR-005 Universal `getI18n()` Runtime Model](/Users/sebastian/Workspace/business/palamedes/adr/005-universal-geti18n-runtime-model.md)
+  - [ADR-006 Ferrocat as Catalog and ICU Foundation](/Users/sebastian/Workspace/business/palamedes/adr/006-ferrocat-as-catalog-and-icu-foundation.md)
 
 ### Rust-Core und Bindings
 
