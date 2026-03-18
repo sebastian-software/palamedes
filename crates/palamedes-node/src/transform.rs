@@ -1,7 +1,7 @@
 use napi::bindgen_prelude::Result;
 use napi_derive::napi;
 
-use crate::shared::to_napi_error;
+use crate::shared::{checked_u32, to_napi_error};
 
 #[napi(object)]
 pub struct NativeTransformOptions {
@@ -38,33 +38,44 @@ impl From<NativeTransformOptions> for palamedes::NativeTransformOptions {
     }
 }
 
-impl From<palamedes::NativeTransformEdit> for NativeTransformEdit {
-    fn from(value: palamedes::NativeTransformEdit) -> Self {
-        Self {
-            start: value.start as u32,
-            end: value.end as u32,
+impl TryFrom<palamedes::NativeTransformEdit> for NativeTransformEdit {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::NativeTransformEdit) -> Result<Self> {
+        Ok(Self {
+            start: checked_u32(value.start, "edits.start")?,
+            end: checked_u32(value.end, "edits.end")?,
             text: value.text,
-        }
+        })
     }
 }
 
-impl From<palamedes::NativeTransformResult> for NativeTransformResult {
-    fn from(value: palamedes::NativeTransformResult) -> Self {
-        Self {
+impl TryFrom<palamedes::NativeTransformResult> for NativeTransformResult {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::NativeTransformResult) -> Result<Self> {
+        Ok(Self {
             code: value.code,
             has_changed: value.has_changed,
             compiled_ids: value.compiled_ids,
             edits: value
                 .edits
                 .into_iter()
-                .map(NativeTransformEdit::from)
-                .collect(),
+                .map(NativeTransformEdit::try_from)
+                .collect::<Result<Vec<_>>>()?,
             prepend_text: value.prepend_text,
-        }
+        })
     }
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Transforms Lingui-style macros into Palamedes runtime calls.
+///
+/// # Errors
+///
+/// Returns an error when parsing or transformation fails, or when edit offsets
+/// exceed the Node binding range.
 pub fn transform_macros(
     source: String,
     filename: String,
@@ -75,6 +86,6 @@ pub fn transform_macros(
         &filename,
         options.map(palamedes::NativeTransformOptions::from),
     )
-    .map(NativeTransformResult::from)
     .map_err(to_napi_error)
+    .and_then(NativeTransformResult::try_from)
 }

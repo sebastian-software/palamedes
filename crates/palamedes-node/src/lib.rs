@@ -1,4 +1,5 @@
 mod catalog;
+mod catalog_config;
 mod extract;
 mod po;
 mod shared;

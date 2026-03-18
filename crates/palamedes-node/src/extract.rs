@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use napi::bindgen_prelude::Result;
 use napi_derive::napi;
 
-use crate::shared::to_napi_error;
+use crate::shared::{checked_optional_u32, checked_u32, to_napi_error};
 
 #[napi(object)]
 pub struct ExtractedMessageOrigin {
@@ -21,9 +21,11 @@ pub struct NativeExtractedMessage {
     pub origin: ExtractedMessageOrigin,
 }
 
-impl From<palamedes::ExtractedMessageRecord> for NativeExtractedMessage {
-    fn from(value: palamedes::ExtractedMessageRecord) -> Self {
-        Self {
+impl TryFrom<palamedes::ExtractedMessageRecord> for NativeExtractedMessage {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::ExtractedMessageRecord) -> Result<Self> {
+        Ok(Self {
             message: value.message,
             comment: value.comment,
             context: value.context,
@@ -32,21 +34,28 @@ impl From<palamedes::ExtractedMessageRecord> for NativeExtractedMessage {
                 .map(|placeholders| placeholders.into_iter().collect()),
             origin: ExtractedMessageOrigin {
                 filename: value.origin.0,
-                line: value.origin.1 as u32,
-                column: value.origin.2.map(|column| column as u32),
+                line: checked_u32(value.origin.1, "origin.line")?,
+                column: checked_optional_u32(value.origin.2, "origin.column")?,
             },
-        }
+        })
     }
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Extracts source-first messages from a JavaScript or TypeScript module.
+///
+/// # Errors
+///
+/// Returns an error when the source cannot be parsed or when extracted origin
+/// offsets exceed the Node binding range.
 pub fn extract_messages(source: String, filename: String) -> Result<Vec<NativeExtractedMessage>> {
     palamedes::extract_messages(&source, &filename)
-        .map(|messages| {
+        .map_err(to_napi_error)
+        .and_then(|messages| {
             messages
                 .into_iter()
-                .map(NativeExtractedMessage::from)
+                .map(NativeExtractedMessage::try_from)
                 .collect()
         })
-        .map_err(to_napi_error)
 }

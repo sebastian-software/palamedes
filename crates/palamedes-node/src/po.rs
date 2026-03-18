@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use napi::bindgen_prelude::Result;
 use napi_derive::napi;
 
-use crate::shared::to_napi_error;
+use crate::shared::{checked_u32, to_napi_error};
 
 #[napi(object)]
 pub struct NativeInfo {
@@ -44,9 +44,11 @@ impl From<palamedes::NativeInfo> for NativeInfo {
     }
 }
 
-impl From<palamedes::JsPoItem> for ParsedPoItem {
-    fn from(value: palamedes::JsPoItem) -> Self {
-        Self {
+impl TryFrom<palamedes::JsPoItem> for ParsedPoItem {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::JsPoItem) -> Result<Self> {
+        Ok(Self {
             msgid: value.msgid,
             msgctxt: value.msgctxt,
             references: value.references,
@@ -57,31 +59,46 @@ impl From<palamedes::JsPoItem> for ParsedPoItem {
             flags: value.flags.into_iter().collect(),
             metadata: value.metadata.into_iter().collect(),
             obsolete: value.obsolete,
-            nplurals: value.nplurals as u32,
-        }
+            nplurals: checked_u32(value.nplurals, "item.nplurals")?,
+        })
     }
 }
 
-impl From<palamedes::JsPoFile> for ParsedPoFile {
-    fn from(value: palamedes::JsPoFile) -> Self {
-        Self {
+impl TryFrom<palamedes::JsPoFile> for ParsedPoFile {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::JsPoFile) -> Result<Self> {
+        Ok(Self {
             comments: value.comments,
             extracted_comments: value.extracted_comments,
             headers: value.headers.into_iter().collect(),
             header_order: value.header_order,
-            items: value.items.into_iter().map(ParsedPoItem::from).collect(),
-        }
+            items: value
+                .items
+                .into_iter()
+                .map(ParsedPoItem::try_from)
+                .collect::<Result<Vec<_>>>()?,
+        })
     }
 }
 
 #[napi]
+#[must_use]
+/// Returns the version metadata for the loaded native binding.
 pub fn get_native_info() -> NativeInfo {
     palamedes::get_native_info().into()
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Parses raw PO source text into the public host-facing PO shape.
+///
+/// # Errors
+///
+/// Returns an error when the PO source cannot be parsed or when parsed
+/// metadata cannot be represented safely in the Node binding shape.
 pub fn parse_po(source: String) -> Result<ParsedPoFile> {
     palamedes::parse_po(&source)
-        .map(ParsedPoFile::from)
         .map_err(to_napi_error)
+        .and_then(ParsedPoFile::try_from)
 }

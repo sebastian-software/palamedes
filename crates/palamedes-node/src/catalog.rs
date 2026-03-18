@@ -1,12 +1,10 @@
-#![allow(clippy::type_complexity)]
-// `napi-rs` needs the public union shape directly on this binding module.
-
 use std::collections::HashMap;
 
-use napi::bindgen_prelude::{Either, Result};
+use napi::bindgen_prelude::Result;
 use napi_derive::napi;
 
-use crate::shared::to_napi_error;
+use crate::catalog_config::{CatalogArtifactRequest, CatalogArtifactSelectedRequest};
+use crate::shared::{checked_u32, to_napi_error};
 
 #[napi(object)]
 pub struct CatalogOrigin {
@@ -71,36 +69,6 @@ pub struct CatalogParseResult {
     pub headers: HashMap<String, String>,
     pub messages: Vec<ParsedCatalogMessage>,
     pub diagnostics: Vec<String>,
-}
-
-#[napi(object)]
-pub struct CatalogArtifactCatalogConfig {
-    pub path: String,
-    pub include: Vec<String>,
-    pub exclude: Option<Vec<String>>,
-}
-
-#[napi(object)]
-pub struct CatalogArtifactConfig {
-    pub root_dir: String,
-    pub locales: Vec<String>,
-    pub source_locale: String,
-    pub fallback_locales: Option<Either<Vec<String>, HashMap<String, Vec<String>>>>,
-    pub pseudo_locale: Option<String>,
-    pub catalogs: Vec<CatalogArtifactCatalogConfig>,
-}
-
-#[napi(object)]
-pub struct CatalogArtifactRequest {
-    pub config: CatalogArtifactConfig,
-    pub resource_path: String,
-}
-
-#[napi(object)]
-pub struct CatalogArtifactSelectedRequest {
-    pub config: CatalogArtifactConfig,
-    pub resource_path: String,
-    pub compiled_ids: Vec<String>,
 }
 
 #[napi(object)]
@@ -192,27 +160,31 @@ impl From<palamedes::CatalogUpdateOrigin> for CatalogOrigin {
     }
 }
 
-impl From<palamedes::CatalogUpdateStats> for CatalogUpdateStats {
-    fn from(value: palamedes::CatalogUpdateStats) -> Self {
-        Self {
-            total: value.total as u32,
-            added: value.added as u32,
-            changed: value.changed as u32,
-            unchanged: value.unchanged as u32,
-            obsolete_marked: value.obsolete_marked as u32,
-            obsolete_removed: value.obsolete_removed as u32,
-        }
+impl TryFrom<palamedes::CatalogUpdateStats> for CatalogUpdateStats {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::CatalogUpdateStats) -> Result<Self> {
+        Ok(Self {
+            total: checked_u32(value.total, "stats.total")?,
+            added: checked_u32(value.added, "stats.added")?,
+            changed: checked_u32(value.changed, "stats.changed")?,
+            unchanged: checked_u32(value.unchanged, "stats.unchanged")?,
+            obsolete_marked: checked_u32(value.obsolete_marked, "stats.obsoleteMarked")?,
+            obsolete_removed: checked_u32(value.obsolete_removed, "stats.obsoleteRemoved")?,
+        })
     }
 }
 
-impl From<palamedes::CatalogUpdateResponse> for CatalogUpdateResult {
-    fn from(value: palamedes::CatalogUpdateResponse) -> Self {
-        Self {
+impl TryFrom<palamedes::CatalogUpdateResponse> for CatalogUpdateResult {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::CatalogUpdateResponse) -> Result<Self> {
+        Ok(Self {
             created: value.created,
             updated: value.updated,
-            stats: value.stats.into(),
+            stats: value.stats.try_into()?,
             diagnostics: value.diagnostics,
-        }
+        })
     }
 }
 
@@ -249,57 +221,6 @@ impl From<palamedes::CatalogParseResult> for CatalogParseResult {
                 .map(ParsedCatalogMessage::from)
                 .collect(),
             diagnostics: value.diagnostics,
-        }
-    }
-}
-
-impl From<CatalogArtifactCatalogConfig> for palamedes::CatalogConfig {
-    fn from(value: CatalogArtifactCatalogConfig) -> Self {
-        let _ = value.include;
-        let _ = value.exclude;
-        Self { path: value.path }
-    }
-}
-
-impl From<CatalogArtifactConfig> for palamedes::CatalogArtifactConfig {
-    fn from(value: CatalogArtifactConfig) -> Self {
-        let fallback_locales = value.fallback_locales.map(|fallbacks| match fallbacks {
-            Either::A(shared) => palamedes::FallbackLocales::Shared(shared),
-            Either::B(per_locale) => {
-                palamedes::FallbackLocales::PerLocale(per_locale.into_iter().collect())
-            }
-        });
-
-        Self {
-            root_dir: value.root_dir,
-            locales: value.locales,
-            source_locale: value.source_locale,
-            fallback_locales,
-            pseudo_locale: value.pseudo_locale,
-            catalogs: value
-                .catalogs
-                .into_iter()
-                .map(palamedes::CatalogConfig::from)
-                .collect(),
-        }
-    }
-}
-
-impl From<CatalogArtifactRequest> for palamedes::CatalogArtifactRequest {
-    fn from(value: CatalogArtifactRequest) -> Self {
-        Self {
-            config: value.config.into(),
-            resource_path: value.resource_path,
-        }
-    }
-}
-
-impl From<CatalogArtifactSelectedRequest> for palamedes::CatalogArtifactSelectedRequest {
-    fn from(value: CatalogArtifactSelectedRequest) -> Self {
-        Self {
-            config: value.config.into(),
-            resource_path: value.resource_path,
-            compiled_ids: value.compiled_ids,
         }
     }
 }
@@ -368,31 +289,62 @@ impl From<palamedes::CatalogArtifactResult> for CatalogArtifactResult {
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Updates a PO catalog file from source-first extracted messages.
+///
+/// # Errors
+///
+/// Returns an error when the Rust core update fails or when update statistics
+/// cannot be represented safely in the Node binding shape.
 pub fn update_catalog_file(request: CatalogUpdateRequest) -> Result<CatalogUpdateResult> {
     palamedes::update_catalog_file(request.into())
-        .map(CatalogUpdateResult::from)
         .map_err(to_napi_error)
+        .and_then(CatalogUpdateResult::try_from)
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Parses a PO catalog file into the public semantic catalog shape.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be read or when Ferrocat rejects the
+/// catalog contents.
 pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult> {
-    palamedes::parse_catalog(request.into())
+    let request = request.into();
+    palamedes::parse_catalog(&request)
         .map(CatalogParseResult::from)
         .map_err(to_napi_error)
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Compiles a full host-neutral catalog artifact for a requested locale.
+///
+/// # Errors
+///
+/// Returns an error when config resolution, catalog loading, or artifact
+/// compilation fails.
 pub fn compile_catalog_artifact(request: CatalogArtifactRequest) -> Result<CatalogArtifactResult> {
-    palamedes::compile_catalog_artifact(request.into())
+    let request = request.into();
+    palamedes::compile_catalog_artifact(&request)
         .map(CatalogArtifactResult::from)
         .map_err(to_napi_error)
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Compiles a selected subset of runtime IDs for a requested locale.
+///
+/// # Errors
+///
+/// Returns an error when config resolution, catalog loading, or artifact
+/// compilation fails.
 pub fn compile_catalog_artifact_selected(
     request: CatalogArtifactSelectedRequest,
 ) -> Result<CatalogArtifactResult> {
-    palamedes::compile_catalog_artifact_selected(request.into())
+    let request = request.into();
+    palamedes::compile_catalog_artifact_selected(&request)
         .map(CatalogArtifactResult::from)
         .map_err(to_napi_error)
 }

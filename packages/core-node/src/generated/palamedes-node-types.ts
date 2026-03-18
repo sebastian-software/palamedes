@@ -50,28 +50,6 @@ export interface CatalogParseResult {
   messages: Array<ParsedCatalogMessage>;
   diagnostics: Array<string>;
 }
-export interface CatalogArtifactCatalogConfig {
-  path: string;
-  include: Array<string>;
-  exclude?: Array<string>;
-}
-export interface CatalogArtifactConfig {
-  rootDir: string;
-  locales: Array<string>;
-  sourceLocale: string;
-  fallbackLocales?: Array<string> | Record<string, Array<string>>;
-  pseudoLocale?: string;
-  catalogs: Array<CatalogArtifactCatalogConfig>;
-}
-export interface CatalogArtifactRequest {
-  config: CatalogArtifactConfig;
-  resourcePath: string;
-}
-export interface CatalogArtifactSelectedRequest {
-  config: CatalogArtifactConfig;
-  resourcePath: string;
-  compiledIds: Array<string>;
-}
 export interface CatalogArtifactSourceKey {
   message: string;
   context?: string;
@@ -97,6 +75,28 @@ export interface CatalogArtifactResult {
   missing: Array<CatalogArtifactMissingMessage>;
   diagnostics: Array<CatalogArtifactDiagnostic>;
   resolvedLocaleChain?: Array<string>;
+}
+export interface CatalogArtifactCatalogConfig {
+  path: string;
+  include: Array<string>;
+  exclude?: Array<string>;
+}
+export interface CatalogArtifactConfig {
+  rootDir: string;
+  locales: Array<string>;
+  sourceLocale: string;
+  fallbackLocales?: Array<string> | Record<string, Array<string>>;
+  pseudoLocale?: string;
+  catalogs: Array<CatalogArtifactCatalogConfig>;
+}
+export interface CatalogArtifactRequest {
+  config: CatalogArtifactConfig;
+  resourcePath: string;
+}
+export interface CatalogArtifactSelectedRequest {
+  config: CatalogArtifactConfig;
+  resourcePath: string;
+  compiledIds: Array<string>;
 }
 export interface ExtractedMessageOrigin {
   filename: string;
