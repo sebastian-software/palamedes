@@ -1,30 +1,6 @@
 // This file is generated from crates/palamedes-node via napi-rs typegen.
 // Do not edit by hand. Run `pnpm --filter @palamedes/core-node generate-native-types`.
 
-export interface NativeInfo {
-  palamedesVersion: string;
-  ferrocatVersion: string;
-}
-export interface ParsedPoItem {
-  msgid: string;
-  msgctxt?: string;
-  references: Array<string>;
-  msgidPlural?: string;
-  msgstr: Array<string>;
-  comments: Array<string>;
-  extractedComments: Array<string>;
-  flags: Record<string, boolean>;
-  metadata: Record<string, string>;
-  obsolete: boolean;
-  nplurals: number;
-}
-export interface ParsedPoFile {
-  comments: Array<string>;
-  extractedComments: Array<string>;
-  headers: Record<string, string>;
-  headerOrder: Array<string>;
-  items: Array<ParsedPoItem>;
-}
 export interface CatalogOrigin {
   file: string;
   line: number;
@@ -134,6 +110,30 @@ export interface NativeExtractedMessage {
   placeholders?: Record<string, string>;
   origin: ExtractedMessageOrigin;
 }
+export interface NativeInfo {
+  palamedesVersion: string;
+  ferrocatVersion: string;
+}
+export interface ParsedPoItem {
+  msgid: string;
+  msgctxt?: string;
+  references: Array<string>;
+  msgidPlural?: string;
+  msgstr: Array<string>;
+  comments: Array<string>;
+  extractedComments: Array<string>;
+  flags: Record<string, boolean>;
+  metadata: Record<string, string>;
+  obsolete: boolean;
+  nplurals: number;
+}
+export interface ParsedPoFile {
+  comments: Array<string>;
+  extractedComments: Array<string>;
+  headers: Record<string, string>;
+  headerOrder: Array<string>;
+  items: Array<ParsedPoItem>;
+}
 export interface NativeTransformOptions {
   runtimeModule?: string;
   runtimeImportName?: string;
@@ -154,12 +154,12 @@ export interface NativeTransformResult {
 }
 
 export interface NativeBindings {
-  getNativeInfo(): NativeInfo;
-  parsePo(source: string): ParsedPoFile;
   updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult;
   parseCatalog(request: CatalogParseRequest): CatalogParseResult;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;
+  getNativeInfo(): NativeInfo;
+  parsePo(source: string): ParsedPoFile;
   transformMacros(source: string, filename: string, options?: NativeTransformOptions | undefined | null): NativeTransformResult;
 }

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
+use crate::error::{PalamedesError, PalamedesResult};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
@@ -20,15 +21,21 @@ struct ImportedMacro {
     imported_name: String,
 }
 
+/// Extracted source-first message record emitted by the JS/TS extractor.
 #[derive(Debug, Serialize)]
 pub struct ExtractedMessageRecord {
+    /// Extracted source message.
     pub message: String,
+    /// Optional extracted comment.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
+    /// Optional extracted context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// Optional placeholder metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholders: Option<BTreeMap<String, String>>,
+    /// Source origin as `(filename, line, column)`.
     pub origin: (String, usize, Option<usize>),
 }
 
@@ -94,7 +101,7 @@ struct ExtractionVisitor<'a> {
     line_locator: &'a LineLocator,
     imported_macros: &'a HashMap<String, ImportedMacro>,
     messages: Vec<ExtractedMessageRecord>,
-    error: Option<String>,
+    error: Option<PalamedesError>,
 }
 
 impl<'a> ExtractionVisitor<'a> {
@@ -116,7 +123,7 @@ impl<'a> ExtractionVisitor<'a> {
         self.messages.push(message);
     }
 
-    fn fail(&mut self, message: String) {
+    fn fail(&mut self, message: PalamedesError) {
         if self.error.is_none() {
             self.error = Some(message);
         }
@@ -329,12 +336,12 @@ fn extract_from_jsx_element(
     element: &JSXElement<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
-) -> Result<Option<ExtractedMessageRecord>, String> {
+) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let attrs = jsx_attributes(&element.opening_element);
 
     if macro_name == "Trans" {
         if attrs.contains_key("id") {
-            return Err(unsupported_explicit_id_message());
+            return Err(PalamedesError::ExplicitMessageIdsUnsupported);
         }
         let message = attrs
             .get("message")
@@ -359,7 +366,7 @@ fn extract_from_jsx_element(
 
     if matches!(macro_name, "Plural" | "Select" | "SelectOrdinal") {
         if attrs.contains_key("id") {
-            return Err(unsupported_explicit_id_message());
+            return Err(PalamedesError::ExplicitMessageIdsUnsupported);
         }
         let Some(value_name) = extract_jsx_value_name(&element.opening_element) else {
             return Ok(None);
@@ -419,7 +426,7 @@ fn extract_from_descriptor_call(
     call: &CallExpression<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
-) -> Result<Option<ExtractedMessageRecord>, String> {
+) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(first_arg) = call.arguments.first() else {
         return Ok(None);
     };
@@ -429,7 +436,7 @@ fn extract_from_descriptor_call(
 
     let props = extract_object_properties(object);
     if props.contains_key("id") {
-        return Err(unsupported_explicit_id_message());
+        return Err(PalamedesError::ExplicitMessageIdsUnsupported);
     }
     let message = props.get("message").cloned();
     let comment = props.get("comment").cloned();
@@ -459,19 +466,13 @@ fn extract_from_choice_call(
     macro_name: &str,
     origin: (String, usize, Option<usize>),
 ) -> Option<ExtractedMessageRecord> {
-    let Some(value_arg) = call.arguments.first() else {
-        return None;
-    };
-    let Some(options_arg) = call.arguments.get(1) else {
-        return None;
-    };
+    let value_arg = call.arguments.first()?;
+    let options_arg = call.arguments.get(1)?;
     let Argument::ObjectExpression(object) = options_arg else {
         return None;
     };
 
-    let Some(value_name) = argument_expression_name(value_arg) else {
-        return None;
-    };
+    let value_name = argument_expression_name(value_arg)?;
     let options = extract_choice_options_from_object(object);
     if options.is_empty() {
         return None;
@@ -523,7 +524,7 @@ fn is_i18n_runtime_call(expr: &Expression<'_>, allow_t: bool) -> bool {
 fn extract_from_runtime_call(
     call: &CallExpression<'_>,
     origin: (String, usize, Option<usize>),
-) -> Result<Option<ExtractedMessageRecord>, String> {
+) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(first_arg) = call.arguments.first() else {
         return Ok(None);
     };
@@ -531,7 +532,7 @@ fn extract_from_runtime_call(
     if let Argument::ObjectExpression(object) = first_arg {
         let props = extract_object_properties(object);
         if props.contains_key("id") {
-            return Err(unsupported_explicit_id_message());
+            return Err(PalamedesError::ExplicitMessageIdsUnsupported);
         }
         let Some(message) = props.get("message").cloned() else {
             return Ok(None);
@@ -552,7 +553,7 @@ fn extract_from_runtime_call(
     if let Some(Argument::ObjectExpression(object)) = call.arguments.get(2) {
         let props = extract_object_properties(object);
         if props.contains_key("id") {
-            return Err(unsupported_explicit_id_message());
+            return Err(PalamedesError::ExplicitMessageIdsUnsupported);
         }
         message = props.get("message").cloned().or(message);
         comment = props.get("comment").cloned();
@@ -813,10 +814,11 @@ fn getter_name(name: &str) -> Option<String> {
     })
 }
 
+/// Extracts source-string-first messages from a JavaScript or TypeScript module.
 pub fn extract_messages(
     source: &str,
     filename: &str,
-) -> Result<Vec<ExtractedMessageRecord>, String> {
+) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
     let parsed = Parser::new(&allocator, source, source_type).parse();
@@ -828,7 +830,7 @@ pub fn extract_messages(
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(", ");
-        return Err(format!("Parse error: {messages}"));
+        return Err(PalamedesError::ParseSource { messages });
     }
 
     let line_locator = LineLocator::new(source);
@@ -843,11 +845,6 @@ pub fn extract_messages(
     }
 
     Ok(extractor.messages)
-}
-
-fn unsupported_explicit_id_message() -> String {
-    "Explicit message ids are no longer supported. Remove `id` and rely on message/context instead."
-        .to_owned()
 }
 
 #[cfg(test)]
@@ -892,6 +889,6 @@ mod tests {
         )
         .expect_err("explicit ids should fail");
 
-        assert!(error.contains("Explicit message ids"));
+        assert!(error.to_string().contains("Explicit message ids"));
     }
 }

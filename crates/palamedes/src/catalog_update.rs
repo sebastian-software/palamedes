@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::{
     parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
     CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, Diagnostic,
@@ -9,92 +10,141 @@ use ferrocat::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Source origin used for catalog updates and parsed catalog messages.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogUpdateOrigin {
+    /// Source filename.
     pub file: String,
+    /// 1-based source line.
     pub line: u32,
 }
 
+/// Source-first extracted message used for catalog updates.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogUpdateMessage {
+    /// Source message string.
     pub message: String,
+    /// Optional gettext context.
     #[serde(default)]
     pub context: Option<String>,
+    /// Extracted comments refreshed into the catalog.
     #[serde(default)]
     pub extracted_comments: Vec<String>,
+    /// Source origins attached to the message.
     #[serde(default)]
     pub origins: Vec<CatalogUpdateOrigin>,
 }
 
+/// Request for updating a catalog file from source-first messages.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogUpdateRequest {
+    /// Target catalog file path.
     pub target_path: String,
+    /// Locale of the target catalog.
     pub locale: String,
+    /// Source locale used for source translation behavior.
     pub source_locale: String,
+    /// Whether obsolete messages should be deleted instead of marked.
     pub clean: bool,
+    /// Extracted messages to project into the catalog.
     pub messages: Vec<CatalogUpdateMessage>,
 }
 
+/// Request for parsing a catalog file into the public semantic shape.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogParseRequest {
+    /// Target catalog file path.
     pub target_path: String,
+    /// Locale of the parsed catalog.
     pub locale: String,
+    /// Source locale used for parsing semantics.
     pub source_locale: String,
 }
 
+/// Result of updating a catalog file.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogUpdateResponse {
+    /// Whether the catalog file was created.
     pub created: bool,
+    /// Whether the catalog file changed on disk.
     pub updated: bool,
+    /// Aggregate update statistics.
     pub stats: CatalogUpdateStats,
+    /// Human-readable diagnostics emitted during the update.
     pub diagnostics: Vec<String>,
 }
 
+/// Aggregate statistics from a catalog update.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogUpdateStats {
+    /// Total message count after the update.
     pub total: usize,
+    /// Newly added messages.
     pub added: usize,
+    /// Messages whose serialized form changed.
     pub changed: usize,
+    /// Messages that stayed unchanged.
     pub unchanged: usize,
+    /// Messages newly marked obsolete.
     pub obsolete_marked: usize,
+    /// Messages removed because `clean` was enabled.
     pub obsolete_removed: usize,
 }
 
+/// Parsed semantic view of a catalog file.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogParseResult {
+    /// Parsed locale if present in the catalog headers.
     pub locale: Option<String>,
+    /// Parsed header map.
     pub headers: BTreeMap<String, String>,
+    /// Parsed catalog messages.
     pub messages: Vec<ParsedCatalogMessage>,
+    /// Human-readable diagnostics emitted during parsing.
     pub diagnostics: Vec<String>,
 }
 
+/// Parsed semantic catalog message.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsedCatalogMessage {
+    /// Source message string.
     pub message: String,
+    /// Optional gettext context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// Translator comments.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<String>,
+    /// Source origins attached to the message.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub origins: Vec<CatalogUpdateOrigin>,
+    /// Whether the message is obsolete.
     pub obsolete: bool,
 }
 
-pub fn update_catalog_file(request: CatalogUpdateRequest) -> Result<CatalogUpdateResponse, String> {
+/// Updates a catalog file using Palamedes' source-first semantics.
+pub fn update_catalog_file(
+    request: CatalogUpdateRequest,
+) -> PalamedesResult<CatalogUpdateResponse> {
     update_catalog_file_source_first(request)
 }
 
-pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult, String> {
-    let content = std::fs::read_to_string(&request.target_path)
-        .map_err(|error| format!("Failed to read {}: {error}", request.target_path))?;
+/// Parses a catalog file into the public semantic result shape.
+pub fn parse_catalog(request: CatalogParseRequest) -> PalamedesResult<CatalogParseResult> {
+    let target_path = PathBuf::from(&request.target_path);
+    let content =
+        std::fs::read_to_string(&target_path).map_err(|source| PalamedesError::ReadFile {
+            path: target_path,
+            source,
+        })?;
     let parsed = ferrocat_parse_catalog(ParseCatalogOptions {
         content: &content,
         locale: Some(&request.locale),
@@ -102,14 +152,14 @@ pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult,
         plural_encoding: PluralEncoding::Icu,
         strict: false,
     })
-    .map_err(|error| error.to_string())?;
+    .map_err(PalamedesError::from)?;
 
     Ok(public_parse_result(parsed))
 }
 
 fn update_catalog_file_source_first(
     request: CatalogUpdateRequest,
-) -> Result<CatalogUpdateResponse, String> {
+) -> PalamedesResult<CatalogUpdateResponse> {
     let target_path = PathBuf::from(&request.target_path);
     let custom_header_attributes =
         BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
@@ -139,14 +189,14 @@ fn update_catalog_file_source_first(
         print_placeholders_in_comments: PlaceholderCommentMode::Enabled { limit: 3 },
         ..UpdateCatalogFileOptions::default()
     })
-    .map_err(|error| error.to_string())?;
+    .map_err(PalamedesError::from)?;
 
     Ok(public_update_result(result))
 }
 
-fn project_message(message: CatalogUpdateMessage) -> Result<SourceExtractedMessage, String> {
+fn project_message(message: CatalogUpdateMessage) -> PalamedesResult<SourceExtractedMessage> {
     if message.message.trim().is_empty() {
-        return Err("Catalog messages must not be empty".to_owned());
+        return Err(PalamedesError::EmptyCatalogMessage);
     }
 
     let origins = message

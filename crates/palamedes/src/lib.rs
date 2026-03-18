@@ -1,14 +1,18 @@
+#![warn(missing_docs, rustdoc::broken_intra_doc_links)]
+//! Rust core for Palamedes.
+
 use std::collections::BTreeMap;
 
-mod catalog_module;
+mod catalog_artifact;
 mod catalog_update;
+mod error;
 mod extract;
 mod transform;
 
 use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
 use serde::Serialize;
 
-pub use catalog_module::{
+pub use catalog_artifact::{
     compile_catalog_artifact, compile_catalog_artifact_selected, CatalogArtifactConfig,
     CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity, CatalogArtifactMissingMessage,
     CatalogArtifactRequest, CatalogArtifactResult, CatalogArtifactSelectedRequest,
@@ -19,46 +23,69 @@ pub use catalog_update::{
     CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, CatalogUpdateResponse,
     CatalogUpdateStats, ParsedCatalogMessage,
 };
+pub use error::{PalamedesError, PalamedesResult};
 pub use extract::{extract_messages, ExtractedMessageRecord};
 pub use transform::{
     transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,
 };
 
+/// Published `ferrocat` version used by the Rust core.
 pub const FERROCAT_VERSION: &str = "0.8.0";
 
+/// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]
 pub struct NativeInfo {
+    /// Current Palamedes crate version.
     #[serde(rename = "palamedesVersion")]
     pub palamedes_version: &'static str,
+    /// Current linked `ferrocat` version.
     #[serde(rename = "ferrocatVersion")]
     pub ferrocat_version: &'static str,
 }
 
+/// JSON-serializable PO file representation used by host bindings.
 #[derive(Debug, Serialize)]
 pub struct JsPoFile {
+    /// File-level translator comments.
     pub comments: Vec<String>,
+    /// File-level extracted comments.
     #[serde(rename = "extractedComments")]
     pub extracted_comments: Vec<String>,
+    /// Parsed header map.
     pub headers: BTreeMap<String, String>,
+    /// Original header ordering.
     #[serde(rename = "headerOrder")]
     pub header_order: Vec<String>,
+    /// Catalog items in source order.
     pub items: Vec<JsPoItem>,
 }
 
+/// JSON-serializable PO message representation used by host bindings.
 #[derive(Debug, Serialize)]
 pub struct JsPoItem {
+    /// Source gettext identifier.
     pub msgid: String,
+    /// Optional gettext context.
     pub msgctxt: Option<String>,
+    /// Source references such as file locations.
     pub references: Vec<String>,
+    /// Optional plural source identifier.
     #[serde(rename = "msgidPlural")]
     pub msgid_plural: Option<String>,
+    /// Translation slots in plural order.
     pub msgstr: Vec<String>,
+    /// Translator comments.
     pub comments: Vec<String>,
+    /// Extracted comments.
     #[serde(rename = "extractedComments")]
     pub extracted_comments: Vec<String>,
+    /// Boolean flags keyed by flag name.
     pub flags: BTreeMap<String, bool>,
+    /// Additional metadata entries.
     pub metadata: BTreeMap<String, String>,
+    /// Whether the message is obsolete.
     pub obsolete: bool,
+    /// Number of plural forms expected for the locale.
     pub nplurals: usize,
 }
 
@@ -111,6 +138,7 @@ impl From<PoItem> for JsPoItem {
     }
 }
 
+/// Returns runtime version information for the core.
 #[must_use]
 pub fn get_native_info() -> NativeInfo {
     NativeInfo {
@@ -119,8 +147,9 @@ pub fn get_native_info() -> NativeInfo {
     }
 }
 
-pub fn parse_po(source: &str) -> Result<JsPoFile, String> {
-    let po = ferrocat_parse_po(source).map_err(|error| error.to_string())?;
+/// Parses a PO file into a JSON-serializable representation for host bindings.
+pub fn parse_po(source: &str) -> PalamedesResult<JsPoFile> {
+    let po = ferrocat_parse_po(source)?;
     Ok(JsPoFile::from(po))
 }
 
