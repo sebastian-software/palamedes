@@ -1,5 +1,20 @@
 #![warn(missing_docs, rustdoc::broken_intra_doc_links)]
 //! Rust core for Palamedes.
+//!
+//! ```rust
+//! let po = palamedes::parse_po(
+//!     r#"msgid ""
+//! msgstr ""
+//! "Language: en\n"
+//!
+//! msgid "Hello"
+//! msgstr "Hello"
+//! "#,
+//! )
+//! .expect("PO source should parse");
+//!
+//! assert_eq!(po.items[0].msgid, "Hello");
+//! ```
 
 use std::collections::BTreeMap;
 
@@ -148,6 +163,10 @@ pub fn get_native_info() -> NativeInfo {
 }
 
 /// Parses a PO file into a JSON-serializable representation for host bindings.
+///
+/// # Errors
+///
+/// Returns an error when the provided PO source cannot be parsed by Ferrocat.
 pub fn parse_po(source: &str) -> PalamedesResult<JsPoFile> {
     let po = ferrocat_parse_po(source)?;
     Ok(JsPoFile::from(po))

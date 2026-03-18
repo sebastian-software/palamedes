@@ -131,6 +131,11 @@ pub struct ParsedCatalogMessage {
 }
 
 /// Updates a catalog file using Palamedes' source-first semantics.
+///
+/// # Errors
+///
+/// Returns an error when the target file cannot be updated, when Ferrocat
+/// rejects the projected messages, or when any extracted message is empty.
 pub fn update_catalog_file(
     request: CatalogUpdateRequest,
 ) -> PalamedesResult<CatalogUpdateResponse> {
@@ -138,7 +143,12 @@ pub fn update_catalog_file(
 }
 
 /// Parses a catalog file into the public semantic result shape.
-pub fn parse_catalog(request: CatalogParseRequest) -> PalamedesResult<CatalogParseResult> {
+///
+/// # Errors
+///
+/// Returns an error when the target file cannot be read or when Ferrocat fails
+/// to parse the catalog into its semantic representation.
+pub fn parse_catalog(request: &CatalogParseRequest) -> PalamedesResult<CatalogParseResult> {
     let target_path = PathBuf::from(&request.target_path);
     let content =
         std::fs::read_to_string(&target_path).map_err(|source| PalamedesError::ReadFile {
@@ -221,11 +231,11 @@ fn public_update_result(result: CatalogUpdateResult) -> CatalogUpdateResponse {
     CatalogUpdateResponse {
         created: result.created,
         updated: result.updated,
-        stats: public_stats(result.stats),
+        stats: public_stats(&result.stats),
         diagnostics: result
             .diagnostics
             .into_iter()
-            .map(format_diagnostic)
+            .map(|diagnostic| format_diagnostic(&diagnostic))
             .collect(),
     }
 }
@@ -255,12 +265,12 @@ fn public_parse_result(parsed: ParsedCatalog) -> CatalogParseResult {
         diagnostics: parsed
             .diagnostics
             .into_iter()
-            .map(format_diagnostic)
+            .map(|diagnostic| format_diagnostic(&diagnostic))
             .collect(),
     }
 }
 
-fn public_stats(stats: CatalogStats) -> CatalogUpdateStats {
+fn public_stats(stats: &CatalogStats) -> CatalogUpdateStats {
     CatalogUpdateStats {
         total: stats.total,
         added: stats.added,
@@ -271,7 +281,7 @@ fn public_stats(stats: CatalogStats) -> CatalogUpdateStats {
     }
 }
 
-fn format_diagnostic(diagnostic: Diagnostic) -> String {
+fn format_diagnostic(diagnostic: &Diagnostic) -> String {
     format!("{}: {}", diagnostic.code, diagnostic.message)
 }
 

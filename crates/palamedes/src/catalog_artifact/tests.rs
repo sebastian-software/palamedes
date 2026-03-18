@@ -41,7 +41,7 @@ msgstr "Hallo"
     )
     .expect("write de");
 
-    let result = compile_catalog_artifact(CatalogArtifactRequest {
+    let request = CatalogArtifactRequest {
         config: CatalogArtifactConfig {
             root_dir: fixture.to_string_lossy().into_owned(),
             locales: vec!["en".to_owned(), "de".to_owned()],
@@ -53,8 +53,8 @@ msgstr "Hallo"
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
-    })
-    .expect("catalog artifact");
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
 
     assert!(!result.watch_files.is_empty());
     assert_eq!(
@@ -105,7 +105,7 @@ msgstr "{name"
     )
     .expect("write de");
 
-    let result = compile_catalog_artifact(CatalogArtifactRequest {
+    let request = CatalogArtifactRequest {
         config: CatalogArtifactConfig {
             root_dir: fixture.to_string_lossy().into_owned(),
             locales: vec!["en".to_owned(), "de".to_owned()],
@@ -117,8 +117,8 @@ msgstr "{name"
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
-    })
-    .expect("catalog artifact");
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
 
     assert_eq!(result.diagnostics.len(), 1);
     assert_eq!(
@@ -166,7 +166,7 @@ msgstr "Hallo"
     )
     .expect("write de");
 
-    let result = compile_catalog_artifact_selected(CatalogArtifactSelectedRequest {
+    let request = CatalogArtifactSelectedRequest {
         config: CatalogArtifactConfig {
             root_dir: fixture.to_string_lossy().into_owned(),
             locales: vec!["en".to_owned(), "de".to_owned()],
@@ -179,8 +179,8 @@ msgstr "Hallo"
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
         compiled_ids: vec![compiled_key("Hello", None)],
-    })
-    .expect("selected catalog artifact");
+    };
+    let result = compile_catalog_artifact_selected(&request).expect("selected catalog artifact");
 
     assert_eq!(result.messages.len(), 1);
     assert_eq!(

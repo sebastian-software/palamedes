@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use crate::error::PalamedesResult;
-
 use super::types::{
     CatalogArtifactDiagnostic, CatalogArtifactMissingMessage, CatalogArtifactResult,
 };
@@ -12,14 +10,14 @@ pub(super) fn build_artifact_result(
     fallback_chain: Vec<String>,
     pseudo_locale: Option<&str>,
     locale: &str,
-) -> PalamedesResult<CatalogArtifactResult> {
+) -> CatalogArtifactResult {
     if pseudo_locale == Some(locale) {
         for value in artifact.messages.values_mut() {
             *value = pseudolocalize_message(value);
         }
     }
 
-    Ok(CatalogArtifactResult {
+    CatalogArtifactResult {
         messages: artifact.messages,
         watch_files: watch_files
             .into_iter()
@@ -36,7 +34,7 @@ pub(super) fn build_artifact_result(
             .map(CatalogArtifactDiagnostic::from)
             .collect(),
         resolved_locale_chain: Some(fallback_chain),
-    })
+    }
 }
 
 fn pseudolocalize_message(message: &str) -> String {

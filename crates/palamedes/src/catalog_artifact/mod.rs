@@ -34,8 +34,14 @@ struct PreparedCompilation {
 }
 
 /// Compiles a host-neutral catalog artifact for the requested locale.
+///
+/// # Errors
+///
+/// Returns an error when Palamedes cannot resolve the request to configured
+/// catalog files, when any catalog file cannot be loaded, or when Ferrocat
+/// fails to compile the effective artifact.
 pub fn compile_catalog_artifact(
-    request: CatalogArtifactRequest,
+    request: &CatalogArtifactRequest,
 ) -> PalamedesResult<CatalogArtifactResult> {
     let prepared = prepare_compilation(&request.config, &request.resource_path)?;
     let catalogs = prepared.loaded.values().collect::<Vec<_>>();
@@ -57,18 +63,24 @@ pub fn compile_catalog_artifact(
     )
     .map_err(PalamedesError::CompileCatalogArtifact)?;
 
-    build_artifact_result(
+    Ok(build_artifact_result(
         artifact,
         prepared.watch_files,
         prepared.fallback_chain,
         request.config.pseudo_locale.as_deref(),
         &prepared.locale,
-    )
+    ))
 }
 
 /// Compiles a selected subset of runtime IDs for the requested locale.
+///
+/// # Errors
+///
+/// Returns an error when Palamedes cannot resolve the request to configured
+/// catalog files, when the compiled-ID index cannot be built, or when Ferrocat
+/// fails to compile the selected artifact.
 pub fn compile_catalog_artifact_selected(
-    request: CatalogArtifactSelectedRequest,
+    request: &CatalogArtifactSelectedRequest,
 ) -> PalamedesResult<CatalogArtifactResult> {
     let prepared = prepare_compilation(&request.config, &request.resource_path)?;
     let catalogs = prepared.loaded.values().collect::<Vec<_>>();
@@ -94,11 +106,11 @@ pub fn compile_catalog_artifact_selected(
     )
     .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
 
-    build_artifact_result(
+    Ok(build_artifact_result(
         artifact,
         prepared.watch_files,
         prepared.fallback_chain,
         request.config.pseudo_locale.as_deref(),
         &prepared.locale,
-    )
+    ))
 }

@@ -351,12 +351,12 @@ fn extract_from_jsx_element(
         let comment = attrs.get("comment").cloned();
         let context = attrs.get("context").cloned();
 
-        if message.is_none() {
+        let Some(message) = message else {
             return Ok(None);
-        }
+        };
 
         return Ok(Some(ExtractedMessageRecord {
-            message: message.expect("message checked"),
+            message,
             comment,
             context,
             placeholders: None,
@@ -815,6 +815,11 @@ fn getter_name(name: &str) -> Option<String> {
 }
 
 /// Extracts source-string-first messages from a JavaScript or TypeScript module.
+///
+/// # Errors
+///
+/// Returns an error when the source cannot be parsed or when the module uses
+/// unsupported author-facing explicit message IDs.
 pub fn extract_messages(
     source: &str,
     filename: &str,

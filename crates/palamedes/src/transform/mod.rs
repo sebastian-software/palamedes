@@ -6,6 +6,8 @@ mod visitor;
 #[cfg(test)]
 mod tests;
 
+use std::fmt::Write as _;
+
 use oxc_allocator::Allocator;
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
@@ -66,6 +68,11 @@ pub struct NativeTransformResult {
 }
 
 /// Transforms Lingui-style macros into Palamedes runtime calls.
+///
+/// # Errors
+///
+/// Returns an error when the source cannot be parsed or when the module uses
+/// unsupported author-facing explicit message IDs.
 pub fn transform_macros(
     source: &str,
     filename: &str,
@@ -148,9 +155,10 @@ pub fn transform_macros(
     let mut prefix = String::new();
 
     if visitor.needs_runtime_import && !collector.has_runtime_import {
-        prefix.push_str(&format!(
-            "import {{ {runtime_import_name} }} from \"{runtime_module}\";\n"
-        ));
+        let _ = writeln!(
+            prefix,
+            "import {{ {runtime_import_name} }} from \"{runtime_module}\";"
+        );
     }
 
     if visitor.needs_trans_import && !collector.has_trans_import {
