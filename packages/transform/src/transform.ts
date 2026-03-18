@@ -46,6 +46,7 @@ function buildTransformOutput(
   return {
     code,
     hasChanged: true,
+    compiledIds: nativeResult.compiledIds,
     map,
   }
 }
@@ -65,12 +66,12 @@ export function transformLinguiMacros(
   options: TransformOptions = {}
 ): TransformResult {
   if (!mightContainLinguiMacros(code)) {
-    return { code, hasChanged: false, map: null }
+    return { code, hasChanged: false, compiledIds: [], map: null }
   }
 
   const result = transformMacrosNative(code, filename, options)
   if (!result.hasChanged) {
-    return { code, hasChanged: false, map: null }
+    return { code, hasChanged: false, compiledIds: [], map: null }
   }
 
   return buildTransformOutput(code, filename, result)

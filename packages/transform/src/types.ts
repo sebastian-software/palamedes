@@ -32,6 +32,11 @@ export interface TransformResult {
   hasChanged: boolean
 
   /**
+   * Stable compiled runtime IDs referenced by the transformed module.
+   */
+  compiledIds: string[]
+
+  /**
    * Source map for the transformation.
    */
   map: SourceMap | null

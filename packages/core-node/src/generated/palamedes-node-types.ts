@@ -74,36 +74,52 @@ export interface CatalogParseResult {
   messages: Array<ParsedCatalogMessage>;
   diagnostics: Array<string>;
 }
-export interface CatalogModuleCatalogConfig {
+export interface CatalogArtifactCatalogConfig {
   path: string;
   include: Array<string>;
   exclude?: Array<string>;
 }
-export interface CatalogModuleConfig {
+export interface CatalogArtifactConfig {
   rootDir: string;
   locales: Array<string>;
   sourceLocale: string;
   fallbackLocales?: Array<string> | Record<string, Array<string>>;
   pseudoLocale?: string;
-  catalogs: Array<CatalogModuleCatalogConfig>;
+  catalogs: Array<CatalogArtifactCatalogConfig>;
 }
-export interface CatalogModuleRequest {
-  config: CatalogModuleConfig;
+export interface CatalogArtifactRequest {
+  config: CatalogArtifactConfig;
   resourcePath: string;
 }
-export interface CatalogModuleMissingTranslation {
+export interface CatalogArtifactSelectedRequest {
+  config: CatalogArtifactConfig;
+  resourcePath: string;
+  compiledIds: Array<string>;
+}
+export interface CatalogArtifactSourceKey {
   message: string;
   context?: string;
 }
-export interface CatalogModuleCompilationError {
-  message: string;
-  context?: string;
+export type CatalogArtifactDiagnosticSeverity = "Info" | "Warning" | "Error"
+export interface CatalogArtifactMissingMessage {
+  compiledId: string;
+  sourceKey: CatalogArtifactSourceKey;
+  requestedLocale: string;
+  resolvedLocale?: string;
 }
-export interface CatalogModuleResult {
+export interface CatalogArtifactDiagnostic {
+  severity: CatalogArtifactDiagnosticSeverity;
+  code: string;
+  message: string;
+  compiledId: string;
+  sourceKey: CatalogArtifactSourceKey;
+  locale: string;
+}
+export interface CatalogArtifactResult {
   messages: Record<string, string>;
   watchFiles: Array<string>;
-  missing: Array<CatalogModuleMissingTranslation>;
-  errors: Array<CatalogModuleCompilationError>;
+  missing: Array<CatalogArtifactMissingMessage>;
+  diagnostics: Array<CatalogArtifactDiagnostic>;
   resolvedLocaleChain?: Array<string>;
 }
 export interface ExtractedMessageOrigin {
@@ -132,6 +148,7 @@ export interface NativeTransformEdit {
 export interface NativeTransformResult {
   code: string;
   hasChanged: boolean;
+  compiledIds: Array<string>;
   edits: Array<NativeTransformEdit>;
   prependText?: string;
 }
@@ -141,7 +158,8 @@ export interface NativeBindings {
   parsePo(source: string): ParsedPoFile;
   updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult;
   parseCatalog(request: CatalogParseRequest): CatalogParseResult;
-  getCatalogModule(request: CatalogModuleRequest): CatalogModuleResult;
+  compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
+  compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;
   transformMacros(source: string, filename: string, options?: NativeTransformOptions | undefined | null): NativeTransformResult;
 }

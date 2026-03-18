@@ -70,4 +70,4 @@ Rejected because it recreates the fragmentation that the Rust-first architecture
 - Palamedes should prefer high-level `ferrocat` APIs over bespoke catalog glue whenever the semantic fit is good.
 - Remaining local catalog logic in Palamedes should be treated as candidate delegation material, not as a permanent second foundation.
 - New generic catalog or ICU helpers should default to `ferrocat` unless they are clearly product-specific.
-- The current open edge is the final catalog compilation/export step for runtime maps; until `ferrocat` owns that cleanly, Palamedes may retain a minimal local compile/export layer.
+- Catalog compilation/export for runtime maps can now be delegated to Ferrocat's artifact APIs and compiled-key contract, while Palamedes remains responsible for host-side module rendering and config-aware orchestration.

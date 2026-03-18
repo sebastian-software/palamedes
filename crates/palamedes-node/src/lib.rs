@@ -104,46 +104,72 @@ pub struct CatalogParseResult {
 }
 
 #[napi(object)]
-pub struct CatalogModuleCatalogConfig {
+pub struct CatalogArtifactCatalogConfig {
     pub path: String,
     pub include: Vec<String>,
     pub exclude: Option<Vec<String>>,
 }
 
 #[napi(object)]
-pub struct CatalogModuleConfig {
+pub struct CatalogArtifactConfig {
     pub root_dir: String,
     pub locales: Vec<String>,
     pub source_locale: String,
     pub fallback_locales: Option<Either<Vec<String>, HashMap<String, Vec<String>>>>,
     pub pseudo_locale: Option<String>,
-    pub catalogs: Vec<CatalogModuleCatalogConfig>,
+    pub catalogs: Vec<CatalogArtifactCatalogConfig>,
 }
 
 #[napi(object)]
-pub struct CatalogModuleRequest {
-    pub config: CatalogModuleConfig,
+pub struct CatalogArtifactRequest {
+    pub config: CatalogArtifactConfig,
     pub resource_path: String,
 }
 
 #[napi(object)]
-pub struct CatalogModuleMissingTranslation {
+pub struct CatalogArtifactSelectedRequest {
+    pub config: CatalogArtifactConfig,
+    pub resource_path: String,
+    pub compiled_ids: Vec<String>,
+}
+
+#[napi(object)]
+pub struct CatalogArtifactSourceKey {
     pub message: String,
     pub context: Option<String>,
 }
 
-#[napi(object)]
-pub struct CatalogModuleCompilationError {
-    pub message: String,
-    pub context: Option<String>,
+#[napi(string_enum)]
+pub enum CatalogArtifactDiagnosticSeverity {
+    Info,
+    Warning,
+    Error,
 }
 
 #[napi(object)]
-pub struct CatalogModuleResult {
+pub struct CatalogArtifactMissingMessage {
+    pub compiled_id: String,
+    pub source_key: CatalogArtifactSourceKey,
+    pub requested_locale: String,
+    pub resolved_locale: Option<String>,
+}
+
+#[napi(object)]
+pub struct CatalogArtifactDiagnostic {
+    pub severity: CatalogArtifactDiagnosticSeverity,
+    pub code: String,
+    pub message: String,
+    pub compiled_id: String,
+    pub source_key: CatalogArtifactSourceKey,
+    pub locale: String,
+}
+
+#[napi(object)]
+pub struct CatalogArtifactResult {
     pub messages: HashMap<String, String>,
     pub watch_files: Vec<String>,
-    pub missing: Vec<CatalogModuleMissingTranslation>,
-    pub errors: Vec<CatalogModuleCompilationError>,
+    pub missing: Vec<CatalogArtifactMissingMessage>,
+    pub diagnostics: Vec<CatalogArtifactDiagnostic>,
     pub resolved_locale_chain: Option<Vec<String>>,
 }
 
@@ -182,6 +208,7 @@ pub struct NativeTransformEdit {
 pub struct NativeTransformResult {
     pub code: String,
     pub has_changed: bool,
+    pub compiled_ids: Vec<String>,
     pub edits: Vec<NativeTransformEdit>,
     pub prepend_text: Option<String>,
 }
@@ -335,16 +362,16 @@ impl From<palamedes::CatalogParseResult> for CatalogParseResult {
     }
 }
 
-impl From<CatalogModuleCatalogConfig> for palamedes::CatalogConfig {
-    fn from(value: CatalogModuleCatalogConfig) -> Self {
+impl From<CatalogArtifactCatalogConfig> for palamedes::CatalogConfig {
+    fn from(value: CatalogArtifactCatalogConfig) -> Self {
         let _ = value.include;
         let _ = value.exclude;
         Self { path: value.path }
     }
 }
 
-impl From<CatalogModuleConfig> for palamedes::CatalogModuleConfig {
-    fn from(value: CatalogModuleConfig) -> Self {
+impl From<CatalogArtifactConfig> for palamedes::CatalogArtifactConfig {
+    fn from(value: CatalogArtifactConfig) -> Self {
         let fallback_locales = value.fallback_locales.map(|fallbacks| match fallbacks {
             Either::A(shared) => palamedes::FallbackLocales::Shared(shared),
             Either::B(per_locale) => {
@@ -367,8 +394,8 @@ impl From<CatalogModuleConfig> for palamedes::CatalogModuleConfig {
     }
 }
 
-impl From<CatalogModuleRequest> for palamedes::CatalogModuleRequest {
-    fn from(value: CatalogModuleRequest) -> Self {
+impl From<CatalogArtifactRequest> for palamedes::CatalogArtifactRequest {
+    fn from(value: CatalogArtifactRequest) -> Self {
         Self {
             config: value.config.into(),
             resource_path: value.resource_path,
@@ -376,8 +403,18 @@ impl From<CatalogModuleRequest> for palamedes::CatalogModuleRequest {
     }
 }
 
-impl From<palamedes::MissingTranslation> for CatalogModuleMissingTranslation {
-    fn from(value: palamedes::MissingTranslation) -> Self {
+impl From<CatalogArtifactSelectedRequest> for palamedes::CatalogArtifactSelectedRequest {
+    fn from(value: CatalogArtifactSelectedRequest) -> Self {
+        Self {
+            config: value.config.into(),
+            resource_path: value.resource_path,
+            compiled_ids: value.compiled_ids,
+        }
+    }
+}
+
+impl From<palamedes::CatalogArtifactSourceKey> for CatalogArtifactSourceKey {
+    fn from(value: palamedes::CatalogArtifactSourceKey) -> Self {
         Self {
             message: value.message,
             context: value.context,
@@ -385,29 +422,54 @@ impl From<palamedes::MissingTranslation> for CatalogModuleMissingTranslation {
     }
 }
 
-impl From<palamedes::CompilationError> for CatalogModuleCompilationError {
-    fn from(value: palamedes::CompilationError) -> Self {
-        Self {
-            message: value.message,
-            context: value.context,
+impl From<palamedes::CatalogArtifactDiagnosticSeverity> for CatalogArtifactDiagnosticSeverity {
+    fn from(value: palamedes::CatalogArtifactDiagnosticSeverity) -> Self {
+        match value {
+            palamedes::CatalogArtifactDiagnosticSeverity::Info => Self::Info,
+            palamedes::CatalogArtifactDiagnosticSeverity::Warning => Self::Warning,
+            palamedes::CatalogArtifactDiagnosticSeverity::Error => Self::Error,
         }
     }
 }
 
-impl From<palamedes::CatalogModuleResult> for CatalogModuleResult {
-    fn from(value: palamedes::CatalogModuleResult) -> Self {
+impl From<palamedes::CatalogArtifactMissingMessage> for CatalogArtifactMissingMessage {
+    fn from(value: palamedes::CatalogArtifactMissingMessage) -> Self {
+        Self {
+            compiled_id: value.compiled_id,
+            source_key: value.source_key.into(),
+            requested_locale: value.requested_locale,
+            resolved_locale: value.resolved_locale,
+        }
+    }
+}
+
+impl From<palamedes::CatalogArtifactDiagnostic> for CatalogArtifactDiagnostic {
+    fn from(value: palamedes::CatalogArtifactDiagnostic) -> Self {
+        Self {
+            severity: value.severity.into(),
+            code: value.code,
+            message: value.message,
+            compiled_id: value.compiled_id,
+            source_key: value.source_key.into(),
+            locale: value.locale,
+        }
+    }
+}
+
+impl From<palamedes::CatalogArtifactResult> for CatalogArtifactResult {
+    fn from(value: palamedes::CatalogArtifactResult) -> Self {
         Self {
             messages: value.messages.into_iter().collect(),
             watch_files: value.watch_files,
             missing: value
                 .missing
                 .into_iter()
-                .map(CatalogModuleMissingTranslation::from)
+                .map(CatalogArtifactMissingMessage::from)
                 .collect(),
-            errors: value
-                .errors
+            diagnostics: value
+                .diagnostics
                 .into_iter()
-                .map(CatalogModuleCompilationError::from)
+                .map(CatalogArtifactDiagnostic::from)
                 .collect(),
             resolved_locale_chain: value.resolved_locale_chain,
         }
@@ -458,6 +520,7 @@ impl From<palamedes::NativeTransformResult> for NativeTransformResult {
         Self {
             code: value.code,
             has_changed: value.has_changed,
+            compiled_ids: value.compiled_ids,
             edits: value
                 .edits
                 .into_iter()
@@ -495,9 +558,18 @@ pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult>
 }
 
 #[napi]
-pub fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResult> {
-    palamedes::get_catalog_module(request.into())
-        .map(CatalogModuleResult::from)
+pub fn compile_catalog_artifact(request: CatalogArtifactRequest) -> Result<CatalogArtifactResult> {
+    palamedes::compile_catalog_artifact(request.into())
+        .map(CatalogArtifactResult::from)
+        .map_err(to_napi_error)
+}
+
+#[napi]
+pub fn compile_catalog_artifact_selected(
+    request: CatalogArtifactSelectedRequest,
+) -> Result<CatalogArtifactResult> {
+    palamedes::compile_catalog_artifact_selected(request.into())
+        .map(CatalogArtifactResult::from)
         .map_err(to_napi_error)
 }
 

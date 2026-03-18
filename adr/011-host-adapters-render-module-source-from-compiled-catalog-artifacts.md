@@ -22,7 +22,7 @@ The Rust core returns compiled catalog artifacts, not JavaScript module source.
 
 The rules are:
 
-- `get_catalog_module` returns compiled messages plus diagnostics and watch metadata
+- `compile_catalog_artifact` returns compiled messages plus diagnostics and watch metadata
 - it does not render ESM or CJS source code
 - host adapters such as the Vite plugin and Next loader render the final module source from that compiled artifact
 - simple host-side rendering duplication is acceptable when it keeps JavaScript code generation out of the Rust core
@@ -46,6 +46,6 @@ Rejected for now because the rendering logic is small and duplication in the hos
 ## Consequences
 
 - The Rust core no longer needs `serde_json` for catalog module generation.
-- `CatalogModuleResult` exposes `messages` instead of `code`.
+- `CatalogArtifactResult` exposes `messages` instead of `code`.
 - Host adapters are responsible for rendering their own module source.
 - The core becomes more host-neutral and easier to reuse outside the current Vite/Next integrations.

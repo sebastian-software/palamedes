@@ -96,9 +96,9 @@ pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult,
     let content = std::fs::read_to_string(&request.target_path)
         .map_err(|error| format!("Failed to read {}: {error}", request.target_path))?;
     let parsed = ferrocat_parse_catalog(ParseCatalogOptions {
-        content,
-        locale: Some(request.locale),
-        source_locale: request.source_locale,
+        content: &content,
+        locale: Some(&request.locale),
+        source_locale: &request.source_locale,
         plural_encoding: PluralEncoding::Icu,
         strict: false,
     })
@@ -110,6 +110,9 @@ pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult,
 fn update_catalog_file_source_first(
     request: CatalogUpdateRequest,
 ) -> Result<CatalogUpdateResponse, String> {
+    let target_path = PathBuf::from(&request.target_path);
+    let custom_header_attributes =
+        BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
     let input = CatalogUpdateInput::SourceFirst(
         request
             .messages
@@ -119,9 +122,9 @@ fn update_catalog_file_source_first(
     );
 
     let result = ferrocat_update_catalog_file(UpdateCatalogFileOptions {
-        target_path: PathBuf::from(request.target_path),
-        locale: Some(request.locale),
-        source_locale: request.source_locale,
+        target_path: &target_path,
+        locale: Some(&request.locale),
+        source_locale: &request.source_locale,
         input,
         plural_encoding: PluralEncoding::Icu,
         obsolete_strategy: if request.clean {
@@ -130,10 +133,7 @@ fn update_catalog_file_source_first(
             ObsoleteStrategy::Mark
         },
         overwrite_source_translations: true,
-        custom_header_attributes: BTreeMap::from([(
-            "X-Generator".to_owned(),
-            "palamedes".to_owned(),
-        )]),
+        custom_header_attributes: Some(&custom_header_attributes),
         include_origins: true,
         include_line_numbers: true,
         print_placeholders_in_comments: PlaceholderCommentMode::Enabled { limit: 3 },

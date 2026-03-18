@@ -23,7 +23,7 @@ Palamedes needs both of these statements to be true at the same time:
 
 ## Decision
 
-Palamedes may derive a stable short lookup key from `message + context`, but only as an internal compile/runtime artifact.
+Palamedes may derive a stable compact lookup key from `message + context`, but only as an internal compile/runtime artifact.
 
 This key:
 
@@ -33,7 +33,7 @@ This key:
 - is not the conceptual message identity
 - is not an author-facing API concept
 
-The derivation strategy is fixed and product-owned. It is not a configurable application-level feature.
+The derivation strategy is fixed and not a configurable application-level feature. Palamedes follows Ferrocat's public `FerrocatV1` compiled-key contract for this purpose rather than owning a separate private algorithm.
 
 Source code, extraction, catalog updates, parsed catalog data, and user-facing diagnostics remain source-string-first.
 
@@ -56,4 +56,4 @@ Rejected because it adds policy surface where Palamedes benefits from a single c
 - Palamedes can keep runtime payloads compact without reintroducing an author-facing ID model.
 - Transformed code and compiled catalogs may contain opaque short keys without changing the public authoring contract.
 - Documentation must describe the keys as implementation detail, not as product identity.
-- If the compiled catalog/export step eventually moves fully into `ferrocat`, the same distinction must remain intact there: source identity in, compiled lookup key out.
+- The runtime key contract can be shared cleanly between transformed code and compiled catalog artifacts without turning those keys into a public authoring concept.

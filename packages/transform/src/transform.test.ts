@@ -22,6 +22,7 @@ const msg = t\`Hello \${name}\`;
     expect(result.code).toContain('message: "Hello {name}"')
     expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
     expect(result.code).not.toContain('@lingui/macro')
+    expect(result.compiledIds).toHaveLength(1)
   })
 
   it("transforms descriptor macros without preserving public ids", () => {
@@ -49,6 +50,7 @@ const msg = defineMessage({ message: "Hello" });
     expect(result.code).toContain('id: "')
     expect(result.code).toContain('message: "Hello"')
     expect(result.code).not.toContain('getI18n()._')
+    expect(result.compiledIds).toHaveLength(1)
   })
 
   it("transforms <Trans> with generated internal ids", () => {

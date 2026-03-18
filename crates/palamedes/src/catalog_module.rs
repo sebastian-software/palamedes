@@ -1,33 +1,41 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use ferrocat::{
-    parse_catalog, parse_icu_with_options, CatalogMessageKey, EffectiveTranslation,
-    EffectiveTranslationRef, IcuParserOptions, NormalizedParsedCatalog, ParseCatalogOptions,
-    PluralEncoding,
+    compile_catalog_artifact as ferrocat_compile_catalog_artifact,
+    compile_catalog_artifact_selected as ferrocat_compile_catalog_artifact_selected, compiled_key,
+    parse_catalog, CompileCatalogArtifactOptions, CompileSelectedCatalogArtifactOptions,
+    CompiledCatalogIdIndex, CompiledKeyStrategy, DiagnosticSeverity as FerrocatDiagnosticSeverity,
+    NormalizedParsedCatalog, ParseCatalogOptions, PluralEncoding,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::lookup_key;
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CatalogModuleRequest {
-    pub config: CatalogModuleConfig,
+pub struct CatalogArtifactRequest {
+    pub config: CatalogArtifactConfig,
     pub resource_path: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CatalogModuleConfig {
+pub struct CatalogArtifactConfig {
     pub root_dir: String,
     pub locales: Vec<String>,
     pub source_locale: String,
     pub fallback_locales: Option<FallbackLocales>,
     pub pseudo_locale: Option<String>,
     pub catalogs: Vec<CatalogConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogArtifactSelectedRequest {
+    pub config: CatalogArtifactConfig,
+    pub resource_path: String,
+    pub compiled_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,27 +52,50 @@ pub struct CatalogConfig {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CatalogModuleResult {
+pub struct CatalogArtifactResult {
     pub messages: BTreeMap<String, String>,
     pub watch_files: Vec<String>,
-    pub missing: Vec<MissingTranslation>,
-    pub errors: Vec<CompilationError>,
+    pub missing: Vec<CatalogArtifactMissingMessage>,
+    pub diagnostics: Vec<CatalogArtifactDiagnostic>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_locale_chain: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct MissingTranslation {
+#[serde(rename_all = "camelCase")]
+pub struct CatalogArtifactSourceKey {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CatalogArtifactDiagnosticSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
 #[derive(Debug, Serialize)]
-pub struct CompilationError {
-    pub message: String,
+#[serde(rename_all = "camelCase")]
+pub struct CatalogArtifactMissingMessage {
+    pub compiled_id: String,
+    pub source_key: CatalogArtifactSourceKey,
+    pub requested_locale: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
+    pub resolved_locale: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogArtifactDiagnostic {
+    pub severity: CatalogArtifactDiagnosticSeverity,
+    pub code: String,
+    pub message: String,
+    pub compiled_id: String,
+    pub source_key: CatalogArtifactSourceKey,
+    pub locale: String,
 }
 
 #[derive(Debug, Clone)]
@@ -75,102 +106,137 @@ struct ResolvedCatalogRequest {
 
 type LocaleCatalogs = BTreeMap<String, NormalizedParsedCatalog>;
 
-pub fn get_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResult, String> {
-    let resource_path = PathBuf::from(&request.resource_path);
-    let root_dir = PathBuf::from(&request.config.root_dir);
-    let resolved = resolve_catalog_request(&request.config, &resource_path)?;
-
-    let fallback_chain = resolve_locale_chain(&request.config, &resolved.locale);
-    let watch_files = collect_watch_files(
-        &root_dir,
-        &resolved.primary_file,
-        &request.config,
-        &fallback_chain,
+pub fn compile_catalog_artifact(
+    request: CatalogArtifactRequest,
+) -> Result<CatalogArtifactResult, String> {
+    let prepared = prepare_compilation(&request.config, &request.resource_path)?;
+    let catalogs = prepared.loaded.values().collect::<Vec<_>>();
+    let ferrocat_fallback_chain = ferrocat_fallback_chain(
+        &prepared.fallback_chain,
+        &prepared.locale,
+        &request.config.source_locale,
     );
-    let loaded = load_catalogs(&watch_files, &request.config)?;
-    let source_catalog = loaded.get(&request.config.source_locale);
-    let primary_catalog = loaded
-        .get(&resolved.locale)
-        .ok_or_else(|| format!("Missing catalog data for locale {}", resolved.locale))?;
+    let artifact = ferrocat_compile_catalog_artifact(
+        &catalogs,
+        &CompileCatalogArtifactOptions {
+            requested_locale: &prepared.locale,
+            source_locale: &request.config.source_locale,
+            fallback_chain: &ferrocat_fallback_chain,
+            key_strategy: CompiledKeyStrategy::FerrocatV1,
+            source_fallback: true,
+            strict_icu: false,
+        },
+    )
+    .map_err(|error| format!("Failed to compile catalog artifact: {error}"))?;
 
-    let mut keys = BTreeSet::new();
-    keys.extend(primary_catalog.iter().map(|(key, _)| key.clone()));
-    if let Some(source_catalog) = source_catalog {
-        keys.extend(source_catalog.iter().map(|(key, _)| key.clone()));
+    build_artifact_result(
+        artifact,
+        prepared.watch_files,
+        prepared.fallback_chain,
+        request.config.pseudo_locale.as_deref(),
+        &prepared.locale,
+    )
+}
+
+pub fn compile_catalog_artifact_selected(
+    request: CatalogArtifactSelectedRequest,
+) -> Result<CatalogArtifactResult, String> {
+    let prepared = prepare_compilation(&request.config, &request.resource_path)?;
+    let catalogs = prepared.loaded.values().collect::<Vec<_>>();
+    let compiled_id_index = CompiledCatalogIdIndex::new(&catalogs, CompiledKeyStrategy::FerrocatV1)
+        .map_err(|error| format!("Failed to build compiled ID index: {error}"))?;
+    let ferrocat_fallback_chain = ferrocat_fallback_chain(
+        &prepared.fallback_chain,
+        &prepared.locale,
+        &request.config.source_locale,
+    );
+    let artifact = ferrocat_compile_catalog_artifact_selected(
+        &catalogs,
+        &compiled_id_index,
+        &CompileSelectedCatalogArtifactOptions {
+            requested_locale: &prepared.locale,
+            source_locale: &request.config.source_locale,
+            fallback_chain: &ferrocat_fallback_chain,
+            key_strategy: CompiledKeyStrategy::FerrocatV1,
+            source_fallback: true,
+            strict_icu: false,
+            compiled_ids: &request.compiled_ids,
+        },
+    )
+    .map_err(|error| format!("Failed to compile selected catalog artifact: {error}"))?;
+
+    build_artifact_result(
+        artifact,
+        prepared.watch_files,
+        prepared.fallback_chain,
+        request.config.pseudo_locale.as_deref(),
+        &prepared.locale,
+    )
+}
+
+struct PreparedCompilation {
+    locale: String,
+    fallback_chain: Vec<String>,
+    watch_files: Vec<PathBuf>,
+    loaded: LocaleCatalogs,
+}
+
+fn prepare_compilation(
+    config: &CatalogArtifactConfig,
+    resource_path: &str,
+) -> Result<PreparedCompilation, String> {
+    let resource_path = PathBuf::from(resource_path);
+    let root_dir = PathBuf::from(&config.root_dir);
+    let resolved = resolve_catalog_request(config, &resource_path)?;
+
+    let fallback_chain = resolve_locale_chain(config, &resolved.locale);
+    let watch_files =
+        collect_watch_files(&root_dir, &resolved.primary_file, config, &fallback_chain);
+    let loaded = load_catalogs(&watch_files, config)?;
+
+    Ok(PreparedCompilation {
+        locale: resolved.locale,
+        fallback_chain,
+        watch_files,
+        loaded,
+    })
+}
+
+fn build_artifact_result(
+    mut artifact: ferrocat::CompiledCatalogArtifact,
+    watch_files: Vec<PathBuf>,
+    fallback_chain: Vec<String>,
+    pseudo_locale: Option<&str>,
+    locale: &str,
+) -> Result<CatalogArtifactResult, String> {
+    if pseudo_locale == Some(locale) {
+        for value in artifact.messages.values_mut() {
+            *value = maybe_pseudolocalize(value, pseudo_locale, locale);
+        }
     }
 
-    let mut messages = BTreeMap::new();
-    let mut missing = Vec::new();
-    let mut errors = Vec::new();
-
-    for key in keys {
-        let locale_entry = primary_catalog.get(&key);
-        let source_entry = source_catalog.and_then(|catalog| catalog.get(&key));
-
-        let translation = select_translation(
-            &loaded,
-            &resolved.locale,
-            &fallback_chain,
-            &request.config.source_locale,
-            &key,
-        );
-
-        let source_message = source_entry
-            .map(|entry| entry.msgid.clone())
-            .or_else(|| locale_entry.map(|entry| entry.msgid.clone()))
-            .unwrap_or_else(|| key.msgid.clone());
-        let source_context = source_entry
-            .and_then(|entry| entry.msgctxt.clone())
-            .or_else(|| locale_entry.and_then(|entry| entry.msgctxt.clone()))
-            .or_else(|| key.msgctxt.clone());
-
-        if translation.is_none() && resolved.locale != request.config.source_locale {
-            missing.push(MissingTranslation {
-                message: source_message.clone(),
-                context: source_context.clone(),
-            });
-        }
-
-        let effective = translation.unwrap_or_else(|| source_message.clone());
-        let effective = maybe_pseudolocalize(
-            &effective,
-            request.config.pseudo_locale.as_deref(),
-            &resolved.locale,
-        );
-
-        if let Err(error) = parse_icu_with_options(
-            &effective,
-            &IcuParserOptions {
-                requires_other_clause: false,
-                ..IcuParserOptions::default()
-            },
-        ) {
-            errors.push(CompilationError {
-                message: error.message,
-                context: source_context.clone(),
-            });
-        }
-
-        messages.insert(
-            lookup_key(&source_message, source_context.as_deref()),
-            effective,
-        );
-    }
-
-    Ok(CatalogModuleResult {
-        messages,
+    Ok(CatalogArtifactResult {
+        messages: artifact.messages,
         watch_files: watch_files
             .into_iter()
             .map(|file| file.to_string_lossy().into_owned())
             .collect(),
-        missing,
-        errors,
+        missing: artifact
+            .missing
+            .into_iter()
+            .map(CatalogArtifactMissingMessage::from)
+            .collect(),
+        diagnostics: artifact
+            .diagnostics
+            .into_iter()
+            .map(CatalogArtifactDiagnostic::from)
+            .collect(),
         resolved_locale_chain: Some(fallback_chain),
     })
 }
 
 fn resolve_catalog_request(
-    config: &CatalogModuleConfig,
+    config: &CatalogArtifactConfig,
     resource_path: &Path,
 ) -> Result<ResolvedCatalogRequest, String> {
     for catalog in &config.catalogs {
@@ -213,7 +279,7 @@ fn resolve_catalog_request(
     ))
 }
 
-fn resolve_locale_chain(config: &CatalogModuleConfig, locale: &str) -> Vec<String> {
+fn resolve_locale_chain(config: &CatalogArtifactConfig, locale: &str) -> Vec<String> {
     let mut chain = Vec::new();
     chain.push(locale.to_owned());
 
@@ -253,10 +319,22 @@ fn resolve_locale_chain(config: &CatalogModuleConfig, locale: &str) -> Vec<Strin
     chain
 }
 
+fn ferrocat_fallback_chain(
+    resolved_locale_chain: &[String],
+    requested_locale: &str,
+    source_locale: &str,
+) -> Vec<String> {
+    resolved_locale_chain
+        .iter()
+        .filter(|locale| locale.as_str() != requested_locale && locale.as_str() != source_locale)
+        .cloned()
+        .collect()
+}
+
 fn collect_watch_files(
     root_dir: &Path,
     primary_file: &Path,
-    config: &CatalogModuleConfig,
+    config: &CatalogArtifactConfig,
     locale_chain: &[String],
 ) -> Vec<PathBuf> {
     let mut files = vec![primary_file.to_path_buf()];
@@ -291,7 +369,7 @@ fn collect_watch_files(
 
 fn load_catalogs(
     files: &[PathBuf],
-    config: &CatalogModuleConfig,
+    config: &CatalogArtifactConfig,
 ) -> Result<LocaleCatalogs, String> {
     let mut loaded = LocaleCatalogs::new();
 
@@ -308,9 +386,9 @@ fn load_catalogs(
         let content = fs::read_to_string(file)
             .map_err(|error| format!("Failed to read {}: {error}", file.display()))?;
         let parsed = parse_catalog(ParseCatalogOptions {
-            content,
-            locale: Some(locale.clone()),
-            source_locale: config.source_locale.clone(),
+            content: &content,
+            locale: Some(locale.as_str()),
+            source_locale: &config.source_locale,
             plural_encoding: PluralEncoding::Icu,
             strict: false,
         })
@@ -327,7 +405,7 @@ fn load_catalogs(
     Ok(loaded)
 }
 
-fn infer_locale_from_path(path: &Path, config: &CatalogModuleConfig) -> Option<String> {
+fn infer_locale_from_path(path: &Path, config: &CatalogArtifactConfig) -> Option<String> {
     let normalized_resource = normalize_path(path);
     for catalog in &config.catalogs {
         let absolute_catalog_path = Path::new(&config.root_dir)
@@ -344,91 +422,46 @@ fn infer_locale_from_path(path: &Path, config: &CatalogModuleConfig) -> Option<S
     None
 }
 
-fn select_translation(
-    loaded: &LocaleCatalogs,
-    locale: &str,
-    locale_chain: &[String],
-    source_locale: &str,
-    key: &CatalogMessageKey,
-) -> Option<String> {
-    if let Some(translation) = loaded
-        .get(locale)
-        .and_then(|catalog| translation_for_key(catalog, key))
-    {
-        return Some(translation);
+impl CatalogArtifactSourceKey {
+    fn new(message: String, context: Option<String>) -> Self {
+        Self { message, context }
     }
+}
 
-    for fallback in locale_chain {
-        if fallback == locale || fallback == source_locale {
-            continue;
-        }
-        if let Some(translation) = loaded
-            .get(fallback)
-            .and_then(|catalog| translation_for_key(catalog, key))
-        {
-            return Some(translation);
+impl From<ferrocat::CompiledCatalogMissingMessage> for CatalogArtifactMissingMessage {
+    fn from(value: ferrocat::CompiledCatalogMissingMessage) -> Self {
+        Self {
+            compiled_id: compiled_key(&value.source_key.msgid, value.source_key.msgctxt.as_deref()),
+            source_key: CatalogArtifactSourceKey::new(
+                value.source_key.msgid,
+                value.source_key.msgctxt,
+            ),
+            requested_locale: value.requested_locale,
+            resolved_locale: value.resolved_locale,
         }
     }
-
-    if locale == source_locale {
-        return loaded
-            .get(source_locale)
-            .and_then(|catalog| source_locale_fallback(catalog, key, source_locale));
-    }
-
-    None
 }
 
-fn translation_for_key(
-    catalog: &NormalizedParsedCatalog,
-    key: &CatalogMessageKey,
-) -> Option<String> {
-    catalog
-        .effective_translation(key)
-        .and_then(effective_translation_ref_to_string)
-}
-
-fn source_locale_fallback(
-    catalog: &NormalizedParsedCatalog,
-    key: &CatalogMessageKey,
-    source_locale: &str,
-) -> Option<String> {
-    catalog
-        .effective_translation_with_source_fallback(key, source_locale)
-        .and_then(effective_translation_to_string)
-}
-
-fn effective_translation_ref_to_string(translation: EffectiveTranslationRef<'_>) -> Option<String> {
-    match translation {
-        EffectiveTranslationRef::Singular(value) if !value.is_empty() => Some(value.to_owned()),
-        EffectiveTranslationRef::Plural(translation) => translation
-            .get("other")
-            .filter(|value| !value.is_empty())
-            .cloned()
-            .or_else(|| {
-                translation
-                    .values()
-                    .find(|value| !value.is_empty())
-                    .cloned()
-            }),
-        _ => None,
+impl From<FerrocatDiagnosticSeverity> for CatalogArtifactDiagnosticSeverity {
+    fn from(value: FerrocatDiagnosticSeverity) -> Self {
+        match value {
+            FerrocatDiagnosticSeverity::Info => Self::Info,
+            FerrocatDiagnosticSeverity::Warning => Self::Warning,
+            FerrocatDiagnosticSeverity::Error => Self::Error,
+        }
     }
 }
 
-fn effective_translation_to_string(translation: EffectiveTranslation) -> Option<String> {
-    match translation {
-        EffectiveTranslation::Singular(value) if !value.is_empty() => Some(value),
-        EffectiveTranslation::Plural(translation) => translation
-            .get("other")
-            .filter(|value| !value.is_empty())
-            .cloned()
-            .or_else(|| {
-                translation
-                    .values()
-                    .find(|value| !value.is_empty())
-                    .cloned()
-            }),
-        _ => None,
+impl From<ferrocat::CompiledCatalogDiagnostic> for CatalogArtifactDiagnostic {
+    fn from(value: ferrocat::CompiledCatalogDiagnostic) -> Self {
+        Self {
+            severity: value.severity.into(),
+            code: value.code,
+            message: value.message,
+            compiled_id: compiled_key(&value.msgid, value.msgctxt.as_deref()),
+            source_key: CatalogArtifactSourceKey::new(value.msgid, value.msgctxt),
+            locale: value.locale,
+        }
     }
 }
 
@@ -503,14 +536,19 @@ fn normalize_path(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{get_catalog_module, CatalogConfig, CatalogModuleConfig, CatalogModuleRequest};
+    use super::{
+        compile_catalog_artifact, compile_catalog_artifact_selected, CatalogArtifactConfig,
+        CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
+        CatalogConfig,
+    };
+    use ferrocat::compiled_key;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
-    fn builds_catalog_module_with_fallbacks() {
-        let fixture = create_fixture_dir("catalog-module");
+    fn compiles_catalog_artifact_with_ferrocat_v1_keys() {
+        let fixture = create_fixture_dir("catalog-artifact");
         let locale_dir = fixture.join("src/locales");
         fs::create_dir_all(&locale_dir).expect("locale dir");
 
@@ -541,8 +579,8 @@ msgstr "Hallo"
         )
         .expect("write de");
 
-        let result = get_catalog_module(CatalogModuleRequest {
-            config: CatalogModuleConfig {
+        let result = compile_catalog_artifact(CatalogArtifactRequest {
+            config: CatalogArtifactConfig {
                 root_dir: fixture.to_string_lossy().into_owned(),
                 locales: vec!["en".to_owned(), "de".to_owned()],
                 source_locale: "en".to_owned(),
@@ -554,11 +592,146 @@ msgstr "Hallo"
             },
             resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
         })
-        .expect("catalog module");
+        .expect("catalog artifact");
 
         assert!(!result.watch_files.is_empty());
-        assert!(result.messages.values().any(|value| value == "Hallo"));
+        assert_eq!(
+            result
+                .messages
+                .get(&compiled_key("Hello", None))
+                .map(String::as_str),
+            Some("Hallo")
+        );
         assert!(result.messages.values().any(|value| value == "Only source"));
+        assert_eq!(result.missing.len(), 1);
+        assert_eq!(
+            result.missing[0].compiled_id,
+            compiled_key("Only source", None)
+        );
+        assert_eq!(result.missing[0].source_key.message, "Only source");
+        assert_eq!(result.missing[0].requested_locale, "de");
+        assert_eq!(result.missing[0].resolved_locale.as_deref(), Some("en"));
+    }
+
+    #[test]
+    fn compile_catalog_artifact_collects_diagnostics() {
+        let fixture = create_fixture_dir("catalog-artifact-diagnostics");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+
+        fs::write(
+            locale_dir.join("en.po"),
+            r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Hello"
+msgstr ""
+"#,
+        )
+        .expect("write en");
+
+        fs::write(
+            locale_dir.join("de.po"),
+            r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Hello"
+msgstr "{name"
+"#,
+        )
+        .expect("write de");
+
+        let result = compile_catalog_artifact(CatalogArtifactRequest {
+            config: CatalogArtifactConfig {
+                root_dir: fixture.to_string_lossy().into_owned(),
+                locales: vec!["en".to_owned(), "de".to_owned()],
+                source_locale: "en".to_owned(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: "src/locales/{locale}".to_owned(),
+                }],
+            },
+            resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+        })
+        .expect("catalog artifact");
+
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(
+            result.diagnostics[0].severity,
+            CatalogArtifactDiagnosticSeverity::Error
+        );
+        assert_eq!(
+            result.diagnostics[0].compiled_id,
+            compiled_key("Hello", None)
+        );
+        assert_eq!(result.diagnostics[0].source_key.message, "Hello");
+        assert_eq!(result.diagnostics[0].locale, "de");
+    }
+
+    #[test]
+    fn compile_catalog_artifact_selected_returns_requested_ids_only() {
+        let fixture = create_fixture_dir("catalog-artifact-selected");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+
+        fs::write(
+            locale_dir.join("en.po"),
+            r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Hello"
+msgstr ""
+
+msgid "Only source"
+msgstr ""
+"#,
+        )
+        .expect("write en");
+
+        fs::write(
+            locale_dir.join("de.po"),
+            r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Hello"
+msgstr "Hallo"
+"#,
+        )
+        .expect("write de");
+
+        let result = compile_catalog_artifact_selected(CatalogArtifactSelectedRequest {
+            config: CatalogArtifactConfig {
+                root_dir: fixture.to_string_lossy().into_owned(),
+                locales: vec!["en".to_owned(), "de".to_owned()],
+                source_locale: "en".to_owned(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: "src/locales/{locale}".to_owned(),
+                }],
+            },
+            resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+            compiled_ids: vec![compiled_key("Hello", None)],
+        })
+        .expect("selected catalog artifact");
+
+        assert_eq!(result.messages.len(), 1);
+        assert_eq!(
+            result
+                .messages
+                .get(&compiled_key("Hello", None))
+                .map(String::as_str),
+            Some("Hallo")
+        );
+        assert!(result
+            .messages
+            .get(&compiled_key("Only source", None))
+            .is_none());
     }
 
     fn create_fixture_dir(prefix: &str) -> PathBuf {

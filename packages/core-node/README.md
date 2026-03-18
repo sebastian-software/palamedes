@@ -67,7 +67,8 @@ console.log(po.headers.Language)
 - `parsePo(source)`
 - `updateCatalogFile(request)`
 - `parseCatalog(source, locale, sourceLocale)`
-- `getCatalogModule(config, resourcePath)`
+- `compileCatalogArtifact(config, resourcePath)`
+- `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `extractMessagesNative(source, filename)`
 - `transformMacrosNative(source, filename, options?)`
 

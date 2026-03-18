@@ -2,12 +2,13 @@ import path from "node:path"
 import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 import type {
-  CatalogModuleCatalogConfig as GeneratedCatalogModuleCatalogConfig,
-  CatalogModuleCompilationError as GeneratedCatalogModuleCompilationError,
-  CatalogModuleConfig as GeneratedCatalogModuleConfig,
-  CatalogModuleMissingTranslation as GeneratedCatalogModuleMissingTranslation,
-  CatalogModuleRequest as GeneratedCatalogModuleRequest,
-  CatalogModuleResult as GeneratedCatalogModuleResult,
+  CatalogArtifactConfig as GeneratedCatalogArtifactConfig,
+  CatalogArtifactDiagnostic as GeneratedCatalogArtifactDiagnostic,
+  CatalogArtifactMissingMessage as GeneratedCatalogArtifactMissingMessage,
+  CatalogArtifactRequest as GeneratedCatalogArtifactRequest,
+  CatalogArtifactResult as GeneratedCatalogArtifactResult,
+  CatalogArtifactSelectedRequest as GeneratedCatalogArtifactSelectedRequest,
+  CatalogArtifactSourceKey as GeneratedCatalogArtifactSourceKey,
   CatalogOrigin as GeneratedCatalogOrigin,
   CatalogParseRequest as GeneratedCatalogParseRequest,
   CatalogParseResult as GeneratedCatalogParseResult,
@@ -46,16 +47,24 @@ export type NativeExtractedMessage =
 export type NativeTransformOptions = GeneratedNativeTransformOptions
 export type NativeTransformEdit = GeneratedNativeTransformEdit
 export type NativeTransformResult = GeneratedNativeTransformResult
-export type CatalogModuleCatalogConfig = GeneratedCatalogModuleCatalogConfig
-export type CatalogModuleFallbackLocales =
-  NonNullable<GeneratedCatalogModuleConfig["fallbackLocales"]>
-export type CatalogModuleConfig = GeneratedCatalogModuleConfig
-export type CatalogModuleMissingTranslation = GeneratedCatalogModuleMissingTranslation
-export type CatalogModuleCompilationError = GeneratedCatalogModuleCompilationError
-export type CatalogModuleResult = GeneratedCatalogModuleResult
+export type CatalogArtifactSourceKey = GeneratedCatalogArtifactSourceKey
+export type CatalogArtifactMissingMessage = GeneratedCatalogArtifactMissingMessage
+export type CatalogArtifactDiagnosticSeverity = "info" | "warning" | "error"
+export type CatalogArtifactDiagnostic =
+  Omit<GeneratedCatalogArtifactDiagnostic, "severity"> & {
+  severity: CatalogArtifactDiagnosticSeverity
+  }
+export type CatalogArtifactFallbackLocales =
+  NonNullable<GeneratedCatalogArtifactConfig["fallbackLocales"]>
+export type CatalogArtifactConfig = GeneratedCatalogArtifactConfig
+export type CatalogArtifactResult =
+  Omit<GeneratedCatalogArtifactResult, "diagnostics"> & {
+  diagnostics: CatalogArtifactDiagnostic[]
+  }
 
 type NativeBindings = GeneratedNativeBindings
-type NativeCatalogModuleRequest = GeneratedCatalogModuleRequest
+type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
+type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
 
 function detectLinuxLibc(): "gnu" | "musl" | null {
   if (process.platform !== "linux") {
@@ -117,6 +126,19 @@ function loadNativeBindings(): NativeBindings {
 
 const native = loadNativeBindings()
 
+function mapDiagnosticSeverity(
+  severity: GeneratedCatalogArtifactDiagnostic["severity"]
+): CatalogArtifactDiagnosticSeverity {
+  switch (severity) {
+    case "Info":
+      return "info"
+    case "Warning":
+      return "warning"
+    case "Error":
+      return "error"
+  }
+}
+
 export function getNativeInfo(): NativeInfo {
   return native.getNativeInfo()
 }
@@ -133,14 +155,44 @@ export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
   return native.parseCatalog(request)
 }
 
-export function getCatalogModule(
-  config: CatalogModuleConfig,
+export function compileCatalogArtifact(
+  config: CatalogArtifactConfig,
   resourcePath: string
-): CatalogModuleResult {
-  return native.getCatalogModule({
+): CatalogArtifactResult {
+  const request: NativeCatalogArtifactRequest = {
     config,
     resourcePath,
-  })
+  }
+  const result = native.compileCatalogArtifact(request)
+
+  return {
+    ...result,
+    diagnostics: result.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      severity: mapDiagnosticSeverity(diagnostic.severity),
+    })),
+  }
+}
+
+export function compileCatalogArtifactSelected(
+  config: CatalogArtifactConfig,
+  resourcePath: string,
+  compiledIds: string[]
+): CatalogArtifactResult {
+  const request: NativeCatalogArtifactSelectedRequest = {
+    config,
+    resourcePath,
+    compiledIds,
+  }
+  const result = native.compileCatalogArtifactSelected(request)
+
+  return {
+    ...result,
+    diagnostics: result.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      severity: mapDiagnosticSeverity(diagnostic.severity),
+    })),
+  }
 }
 
 export function extractMessagesNative(

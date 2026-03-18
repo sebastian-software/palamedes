@@ -43,6 +43,22 @@ function generateSource() {
         continue
       }
 
+      if (entry.kind === "string_enum") {
+        const members = String(entry.def)
+          .split(",")
+          .map((member) => member.trim())
+          .filter(Boolean)
+          .map((member) => {
+            const match = /^[A-Za-z0-9_]+\s*=\s*'([^']+)'$/.exec(member)
+            if (!match) {
+              throw new Error(`Unsupported string enum definition: ${entry.def}`)
+            }
+            return JSON.stringify(match[1])
+          })
+        interfaces.push(`export type ${entry.name} = ${members.join(" | ")}`)
+        continue
+      }
+
       if (entry.kind === "fn") {
         const match = /^function\s+([^(]+)\((.*)\):\s*(.+)$/.exec(String(entry.def))
         if (!match) {

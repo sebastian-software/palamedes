@@ -79,7 +79,7 @@ describe("extractMessages", () => {
 
     it("prefers descriptor message for transformed runtime output", () => {
       const code = `
-        const x = i18n._("GF-NsyJx", { name }, { message: "Hello {name}", context: "greeting" })
+        const x = i18n._("compiled-id", { name }, { message: "Hello {name}", context: "greeting" })
       `
       const messages = extract(code)
       expect(messages).toHaveLength(1)
