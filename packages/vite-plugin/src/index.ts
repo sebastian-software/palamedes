@@ -17,6 +17,11 @@ import { transformPalamedesMacros } from "@palamedes/transform"
 import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
+const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:"
+
+function stripQuery(id: string): string {
+  return id.split("?")[0] ?? id
+}
 
 export interface PalamedesPluginOptions {
   /**
@@ -185,11 +190,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     resolveId(id) {
       const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES)
       if (ids.has(id)) {
-        throw new Error(
-          `The macro you imported from "${id}" is being executed outside the context of compilation.\n` +
-            `This indicates that @palamedes/vite-plugin is not transforming the file.\n` +
-            `Please ensure the plugin is configured correctly in your vite.config.ts`
-        )
+        return `${VIRTUAL_MACRO_ERROR_PREFIX}${id}`
       }
     },
 
@@ -201,6 +202,19 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             `Palamedes macros must be statically imported.`
         )
       }
+    },
+
+    load(id) {
+      if (!id.startsWith(VIRTUAL_MACRO_ERROR_PREFIX)) {
+        return null
+      }
+
+      const macroId = id.slice(VIRTUAL_MACRO_ERROR_PREFIX.length)
+      throw new Error(
+        `The macro you imported from "${macroId}" is being executed outside the context of compilation.\n` +
+          `This indicates that @palamedes/vite-plugin is not transforming the file.\n` +
+          `Please ensure the plugin is configured correctly in your vite.config.ts`
+      )
     },
   })
 
@@ -226,8 +240,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
 
     transform(code, id) {
+      const cleanId = stripQuery(id)
+
       // Check file extension and filter
-      if (!getFilterLazy()(id)) {
+      if (!getFilterLazy()(cleanId)) {
         return null
       }
 
@@ -241,7 +257,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       }
 
       try {
-        const result = transformPalamedesMacros(code, id, {
+        const result = transformPalamedesMacros(code, cleanId, {
           runtimeModule,
         })
 
@@ -255,7 +271,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
       } catch (error) {
         const err = error as Error
-        this.error(`Palamedes transform error in ${id}: ${err.message}`)
+        this.error(`Palamedes transform error in ${cleanId}: ${err.message}`)
       }
     },
   })
@@ -271,7 +287,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         const cfg = await getConfigLazy()
-        const cleanId = id.split("?")[0] ?? id
+        const cleanId = stripQuery(id)
         const result = compileCatalogArtifact(
           {
             rootDir: cfg.rootDir,
