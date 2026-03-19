@@ -22,3 +22,4 @@ packages/core-node/palamedes-node.node
 # Benchmark outputs
 benchmarks/*/results/*
 !benchmarks/*/results/.gitkeep
+benchmarks/*/.swc/

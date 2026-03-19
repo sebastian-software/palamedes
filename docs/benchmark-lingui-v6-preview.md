@@ -46,6 +46,8 @@ Generated outputs are written to:
 
 Timestamped snapshots are written alongside those files on every run.
 
+Validate-only runs still write timestamped outputs, but they do not replace the latest full benchmark result.
+
 ## What The Harness Measures
 
 Tracks:
@@ -54,6 +56,8 @@ Tracks:
 - macro transform via SWC
 - extract
 - compile-from-catalog
+
+For the two macro tracks, Palamedes intentionally reports the same single native transform baseline against both Lingui lanes. Palamedes does not have separate Babel and SWC implementations, so duplicating the comparison rows is a reporting choice, not a claim that Palamedes ran two different transform engines.
 
 Profiles:
 

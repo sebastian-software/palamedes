@@ -6,17 +6,16 @@ export const DEFAULT_SEED = 20260318
 export const PROFILE_DEFINITIONS = {
   small: {
     fileCount: 100,
-    messagesPerFile: 10,
   },
   medium: {
     fileCount: 400,
-    messagesPerFile: 10,
   },
   large: {
     fileCount: 1200,
-    messagesPerFile: 10,
   },
 }
+
+const FIXTURE_MESSAGES_PER_FILE = 10
 
 const AREAS = [
   "queue",
@@ -80,6 +79,12 @@ export async function createSyntheticProfile({ profileName, rootDir, seed = DEFA
     const fixture = isTsx
       ? createTsxFixture(fileIndex, relativePath, seed)
       : createTsFixture(fileIndex, relativePath, seed)
+
+    if (fixture.entries.length !== FIXTURE_MESSAGES_PER_FILE) {
+      throw new Error(
+        `Fixture ${relativePath} produced ${fixture.entries.length} messages, expected ${FIXTURE_MESSAGES_PER_FILE}`
+      )
+    }
 
     await mkdir(path.dirname(absolutePath), { recursive: true })
     await writeFile(absolutePath, fixture.source, "utf8")
@@ -364,7 +369,7 @@ function renderPo(locale, manifest) {
   for (const entry of manifest) {
     lines.push(`#: ${entry.file}`)
     if (entry.context) {
-      lines.push(`msgctx ${quotePo(entry.context)}`)
+      lines.push(`msgctxt ${quotePo(entry.context)}`)
     }
     lines.push(`msgid ${quotePo(entry.message)}`)
     lines.push(`msgstr ${quotePo(entry.message)}`)

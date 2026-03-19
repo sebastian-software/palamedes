@@ -48,6 +48,8 @@ const TRACK_LABELS = {
   extract: "Extract",
   "compile-from-catalog": "Compile from Catalog",
 }
+const PALAMEDES_SHARED_MACRO_BASELINE_NOTE =
+  "Palamedes has a single native macro transform path, so the same measured baseline is intentionally reported against both Lingui transform lanes."
 const EXAMPLE_FIXTURE_FILES = [
   path.join(repoRoot, "examples", "vite-react", "src", "App.tsx"),
   path.join(repoRoot, "examples", "vite-react", "src", "main.tsx"),
@@ -164,6 +166,7 @@ async function main() {
           warmup: args.warmup,
           runs: args.runs,
           measurement: transformPalamedes,
+          note: PALAMEDES_SHARED_MACRO_BASELINE_NOTE,
         }),
         toResultEntry({
           tool: "lingui",
@@ -186,6 +189,7 @@ async function main() {
           warmup: args.warmup,
           runs: args.runs,
           measurement: transformPalamedes,
+          note: PALAMEDES_SHARED_MACRO_BASELINE_NOTE,
         }),
         toResultEntry({
           tool: "lingui",
@@ -294,14 +298,15 @@ async function main() {
       validateOnly: args.validateOnly,
       environment,
       versions,
+      trackDefinitions: createTrackDefinitions(),
       smokeChecks,
       profiles: profileReports,
       results: flatResults,
       comparisons,
     }
 
-    await writeOutputs(report)
-    printConsoleSummary(report)
+    const outputPaths = await writeOutputs(report)
+    printConsoleSummary(report, outputPaths)
   } finally {
     if (!args.keepTemp) {
       await rm(tempRoot, { recursive: true, force: true })
@@ -421,6 +426,37 @@ function buildPalamedesCompileConfig(rootDir, locales, sourceLocale) {
       },
     ],
   }
+}
+
+function createTrackDefinitions() {
+  return [
+    {
+      track: "macro-transform-babel",
+      label: formatTrackLabel("macro-transform-babel"),
+      palamedesPath: "single native macro transform path",
+      comparatorPath: "Lingui Babel macro plugin",
+      note: PALAMEDES_SHARED_MACRO_BASELINE_NOTE,
+    },
+    {
+      track: "macro-transform-swc",
+      label: formatTrackLabel("macro-transform-swc"),
+      palamedesPath: "single native macro transform path",
+      comparatorPath: "Lingui SWC plugin",
+      note: PALAMEDES_SHARED_MACRO_BASELINE_NOTE,
+    },
+    {
+      track: "extract",
+      label: formatTrackLabel("extract"),
+      palamedesPath: "native source extraction",
+      comparatorPath: "Lingui Babel extractor",
+    },
+    {
+      track: "compile-from-catalog",
+      label: formatTrackLabel("compile-from-catalog"),
+      palamedesPath: "catalog artifact assembly",
+      comparatorPath: "PO parse plus compiled catalog payload",
+    },
+  ]
 }
 
 async function runSmokeChecks() {
@@ -768,6 +804,7 @@ function toResultEntry({
   measurement,
   catalogBytes,
   locale,
+  note,
 }) {
   return {
     tool,
@@ -785,6 +822,7 @@ function toResultEntry({
     rawSamplesMs: measurement.samplesMs,
     outputBytes: measurement.lastOutcome?.outputBytes,
     locale,
+    note,
   }
 }
 
@@ -877,8 +915,20 @@ async function writeOutputs(report) {
 
   await writeFile(jsonFilename, json, "utf8")
   await writeFile(markdownFilename, markdown, "utf8")
-  await writeFile(latestJson, json, "utf8")
-  await writeFile(latestMarkdown, markdown, "utf8")
+
+  if (!report.validateOnly) {
+    await writeFile(latestJson, json, "utf8")
+    await writeFile(latestMarkdown, markdown, "utf8")
+  }
+
+  return {
+    jsonFilename,
+    markdownFilename,
+    latestJson: report.validateOnly ? null : latestJson,
+    latestMarkdown: report.validateOnly ? null : latestMarkdown,
+    primaryJson: report.validateOnly ? jsonFilename : latestJson,
+    primaryMarkdown: report.validateOnly ? markdownFilename : latestMarkdown,
+  }
 }
 
 function renderMarkdown(report) {
@@ -904,13 +954,28 @@ function renderMarkdown(report) {
     `- Lingui SWC plugin: ${report.versions.lingui.swcPlugin}`,
     `- Lingui format-po: ${report.versions.lingui.formatPo}`,
     "",
+    "## Track Definitions",
+    "",
+  ]
+
+  for (const definition of report.trackDefinitions) {
+    lines.push(
+      `- ${definition.label}: Palamedes ${definition.palamedesPath}; comparator ${definition.comparatorPath}`
+    )
+    if (definition.note) {
+      lines.push(`  Note: ${definition.note}`)
+    }
+  }
+
+  lines.push(
+    "",
     "## Smoke Checks",
     "",
     `- Example files checked: ${report.smokeChecks.exampleFileCount}`,
     `- Example transform parity: palamedes=${report.smokeChecks.transform.palamedesFiles}, lingui-babel=${report.smokeChecks.transform.linguiBabelFiles}, lingui-swc=${report.smokeChecks.transform.linguiSwcFiles}`,
     `- Example extract parity: ${report.smokeChecks.extract.palamedesMessages} messages`,
-    "",
-  ]
+    ""
+  )
 
   for (const compileTarget of report.smokeChecks.compile) {
     lines.push(
@@ -948,17 +1013,21 @@ function renderMarkdown(report) {
   lines.push("")
   lines.push("## Notes")
   lines.push("")
+  lines.push(`- ${PALAMEDES_SHARED_MACRO_BASELINE_NOTE}`)
   lines.push("- Results are machine-local and should not be treated as universal cross-machine claims.")
   lines.push("- Build-system integration, watch mode, and catalog update are intentionally excluded from this head-to-head comparison.")
   lines.push("- Raw samples are stored in the accompanying JSON output.")
+  if (report.validateOnly) {
+    lines.push("- Validate-only runs write timestamped outputs but do not replace the latest full benchmark result.")
+  }
 
   return lines.join("\n")
 }
 
-function printConsoleSummary(report) {
+function printConsoleSummary(report, outputPaths) {
   console.log("# Palamedes vs. Lingui v6 Preview")
   console.log(`Generated: ${report.generatedAt}`)
-  console.log(`Results: ${path.join(resultsDir, "latest.json")}`)
+  console.log(`Results: ${outputPaths.primaryJson}`)
 
   for (const profile of report.profiles) {
     if (!profile.comparisons.length) {
