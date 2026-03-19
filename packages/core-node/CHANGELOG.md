@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/sebastian-software/palamedes/compare/core-node-v0.1.1...core-node-v0.2.0) (2026-03-19)
+
+
+### Features
+
+* **core-node:** add native po catalog loading ([b190e01](https://github.com/sebastian-software/palamedes/commit/b190e015a233c40a6be6a29d47d881eac1537404))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * optionalDependencies
+    * @palamedes/core-node-darwin-arm64 bumped to 0.2.0
+    * @palamedes/core-node-linux-arm64-gnu bumped to 0.2.0
+    * @palamedes/core-node-linux-x64-gnu bumped to 0.2.0
+    * @palamedes/core-node-win32-x64-msvc bumped to 0.2.0
+
 ## [0.1.1](https://github.com/sebastian-software/palamedes/compare/core-node-v0.1.0...core-node-v0.1.1) (2026-03-11)
 
 

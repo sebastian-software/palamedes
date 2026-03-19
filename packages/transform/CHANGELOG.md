@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/sebastian-software/palamedes/compare/transform-v0.1.1...transform-v0.2.0) (2026-03-19)
+
+
+### Miscellaneous Chores
+
+* **transform:** Synchronize palamedes versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/core-node bumped to 0.2.0
+    * @palamedes/runtime bumped to 0.2.0
+
 ## [0.1.1](https://github.com/sebastian-software/palamedes/compare/transform-v0.1.0...transform-v0.1.1) (2026-03-11)
 
 

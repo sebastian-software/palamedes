@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/sebastian-software/palamedes/compare/cli-v0.1.1...cli-v0.2.0) (2026-03-19)
+
+
+### Features
+
+* **config:** add palamedes config loading ([ff5d356](https://github.com/sebastian-software/palamedes/commit/ff5d3560881903e5371497a6a67ccf2032978fd7))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/core-node bumped to 0.2.0
+    * @palamedes/extractor bumped to 0.2.0
+
 ## [0.1.1](https://github.com/sebastian-software/palamedes/compare/cli-v0.1.0...cli-v0.1.1) (2026-03-11)
 
 
