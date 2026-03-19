@@ -18,3 +18,8 @@ packages/core-node/palamedes-node.node
 
 # Lingui
 .lingui/
+
+# Benchmark outputs
+benchmarks/*/results/*
+!benchmarks/*/results/.gitkeep
+benchmarks/*/.swc/

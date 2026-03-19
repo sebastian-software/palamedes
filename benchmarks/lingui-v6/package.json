@@ -1,0 +1,24 @@
+{
+  "name": "@palamedes/benchmark-lingui-v6",
+  "private": true,
+  "type": "module",
+  "description": "Synthetic hot-path benchmark harness for Palamedes vs Lingui v6 preview",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "benchmark": "node ./src/run.mjs",
+    "benchmark:quick": "node ./src/run.mjs --warmup 1 --runs 3 --profile small",
+    "validate": "node ./src/run.mjs --validate-only --profile small"
+  },
+  "dependencies": {
+    "@babel/core": "^7.29.0",
+    "@lingui/babel-plugin-lingui-macro": "6.0.0-next.1",
+    "@lingui/cli": "6.0.0-next.1",
+    "@lingui/conf": "6.0.0-next.1",
+    "@lingui/format-po": "6.0.0-next.1",
+    "@lingui/swc-plugin": "6.0.0-next.1",
+    "@palamedes/core-node": "workspace:^",
+    "@swc/core": "1.15.11"
+  }
+}
