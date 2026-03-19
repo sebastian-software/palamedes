@@ -102,8 +102,15 @@ export function withPalamedes(
       ...baseConfig.turbopack,
       rules: {
         ...baseConfig.turbopack?.rules,
-        // Transform JS/TS files with OXC loader
-        "*.{js,jsx,ts,tsx}": {
+        // Transform local JS/TS files that actually import Palamedes macros.
+        "*": {
+          condition: {
+            all: [
+              { not: "foreign" },
+              { path: /\.[jt]sx?$/ },
+              { content: /@palamedes\/(?:core|react)\/macro/ },
+            ],
+          },
           loaders: [
             {
               loader: oxcLoaderPath,
@@ -111,9 +118,12 @@ export function withPalamedes(
             },
           ],
         },
-        // Compile .po files
+        // Compile local .po files
         ...(enablePoLoader && {
           "*.po": {
+            condition: {
+              not: "foreign",
+            },
             loaders: [
               {
                 loader: poLoaderPath,

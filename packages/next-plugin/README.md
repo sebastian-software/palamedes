@@ -5,27 +5,29 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The fast path to Palamedes in Next.js.
+The recommended Palamedes entry point for Next.js applications.
 
-`@palamedes/next-plugin` wires Palamedes into webpack and Turbopack so message macros are transformed at speed before they leak into runtime, and `.po` files can be loaded as part of the application build.
+`@palamedes/next-plugin` wires Palamedes into Next.js so message macros are transformed before they leak into runtime, and `.po` files can be loaded as part of the application build.
 
-## When To Use This Package
+## Status
 
-Use this package when you want Palamedes wired cleanly into a Next.js application.
+- Recommended for Next.js applications using App Router and Palamedes macros
+- Supports `.po` imports and source-string-first catalog semantics
+- Uses webpack as the currently verified production path on Next.js 16
+- Includes Turbopack wiring, but the stable documented path remains webpack for now
+- Not a full Next.js starter or scaffolding tool
 
-It is the right starting point if you want:
+## Start Here
 
-- brutally fast message macro transforms without adding Babel back to the project
-- `.po` file loading as part of the app build
-- one supported integration point for both webpack and Turbopack
+Use the full copy-paste setup guide:
 
-If you are on Vite, use [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) instead.
+- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 
 ## Installation
 
 ```bash
-pnpm add @palamedes/next-plugin @palamedes/runtime @lingui/core @lingui/react
-pnpm add -D @palamedes/cli
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plugin
+pnpm add -D @palamedes/cli @palamedes/config
 ```
 
 ## Minimal Setup
@@ -35,10 +37,6 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 
 module.exports = withPalamedes({})
 ```
-
-Transformed code expects a runtime getter from `@palamedes/runtime`, so make sure you register your active i18n instance on the client and server before translated code runs.
-
-Add a `palamedes.config.ts` file to define locales and catalog locations:
 
 ```ts
 import { defineConfig } from "@palamedes/config"
@@ -54,6 +52,8 @@ export default defineConfig({
   ],
 })
 ```
+
+Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure the active i18n instance is available on both the client and the server before translated code executes.
 
 ## Options
 
@@ -71,19 +71,18 @@ module.exports = withPalamedes({}, {
 })
 ```
 
-## What It Handles
+## What This Package Handles
 
 - transforms supported message macros in JavaScript and TypeScript sources
 - compiles imported `.po` files into JavaScript modules
 - keeps source-string-first catalog semantics aligned with the native core
-- integrates with both webpack and Turbopack
+- integrates with webpack and includes Turbopack wiring for future parity
 
-## Related Packages
+## Related Docs
 
-- [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)
-- [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)
-- [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)
-- [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin)
+- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
+- [Migration from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
+- [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 
 ## License
 

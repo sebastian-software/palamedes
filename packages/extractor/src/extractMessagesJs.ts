@@ -32,11 +32,10 @@ function createLineLocator(code: string) {
   }
 }
 
-// Lingui macro package names
-const LINGUI_MACRO_PACKAGES = [
-  "@lingui/macro",
-  "@lingui/core/macro",
-  "@lingui/react/macro",
+// Palamedes macro package names
+const PALAMEDES_MACRO_PACKAGES = [
+  "@palamedes/core/macro",
+  "@palamedes/react/macro",
 ] as const
 
 // JSX macro names
@@ -93,12 +92,12 @@ export function extractMessages(
   const importedMacros = new Map<string, ImportedMacro>()
   const getLine = code ? createLineLocator(code) : () => 0
 
-  // First pass: collect imports from Lingui packages
+  // First pass: collect imports from Palamedes macro packages
   walk(program, {
     enter(node) {
       if (node.type === "ImportDeclaration") {
         const source = node.source?.value
-        if (!LINGUI_MACRO_PACKAGES.some(pkg => source === pkg)) {
+        if (!PALAMEDES_MACRO_PACKAGES.some(pkg => source === pkg)) {
           return
         }
 
@@ -122,8 +121,8 @@ export function extractMessages(
   // Note: We don't skip extraction if there are no macro imports,
   // because we also want to extract i18n._() runtime calls which don't require imports
 
-  // Helper to check if an identifier is a Lingui macro from a direct import.
-  function isLinguiMacro(name: string, expectedMacros: readonly string[]): ImportedMacro | undefined {
+  // Helper to check if an identifier is a Palamedes macro from a direct import.
+  function isPalamedesMacro(name: string, expectedMacros: readonly string[]): ImportedMacro | undefined {
     const macro = importedMacros.get(name)
     if (macro && expectedMacros.includes(macro.importedName as any)) {
       return macro
@@ -139,7 +138,7 @@ export function extractMessages(
         const openingElement = node.openingElement
         const tagName = openingElement?.name?.name
 
-        const macro = isLinguiMacro(tagName, JSX_MACROS)
+        const macro = isPalamedesMacro(tagName, JSX_MACROS)
         if (!macro) return
 
           const extracted = extractFromJSXElement(node, macro.importedName, filename, getLine)
@@ -151,7 +150,7 @@ export function extractMessages(
       // Tagged Template: t`...`, msg`...`
       if (node.type === "TaggedTemplateExpression") {
         const tagName = node.tag?.name
-        const macro = isLinguiMacro(tagName, JS_MACROS)
+        const macro = isPalamedesMacro(tagName, JS_MACROS)
 
         if (macro && (macro.importedName === "t" || macro.importedName === "msg")) {
           const extracted = extractFromTaggedTemplate(node, filename, getLine)
@@ -171,7 +170,7 @@ export function extractMessages(
         }
 
         if (calleeName) {
-          const macro = isLinguiMacro(calleeName, JS_MACROS)
+          const macro = isPalamedesMacro(calleeName, JS_MACROS)
 
           if (macro) {
           const extracted = extractFromCallExpression(node, macro.importedName, filename, getLine)

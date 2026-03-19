@@ -13,7 +13,7 @@ export interface SourceMap {
 }
 
 /**
- * Configuration options for the Lingui OXC transform
+ * Configuration options for the Palamedes OXC transform
  */
 export type TransformOptions = NativeTransformOptions
 
@@ -43,12 +43,11 @@ export interface TransformResult {
 }
 
 /**
- * Lingui macro package names that we recognize
+ * Palamedes macro package names that we recognize
  */
-export const LINGUI_MACRO_PACKAGES = [
-  "@lingui/macro",
-  "@lingui/core/macro",
-  "@lingui/react/macro",
+export const PALAMEDES_MACRO_PACKAGES = [
+  "@palamedes/core/macro",
+  "@palamedes/react/macro",
 ] as const
 
 /**

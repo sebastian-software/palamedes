@@ -5,27 +5,28 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The fast path to Palamedes in Vite.
+The recommended Palamedes entry point for Vite applications.
 
-`@palamedes/vite-plugin` gives Vite projects brutally fast message macro transforms, `.po` loading, and a much cleaner path than bolting Babel back onto a modern frontend stack.
+`@palamedes/vite-plugin` gives Vite projects fast macro transforms, `.po` loading, and a cleaner path than bolting Babel-oriented i18n tooling back onto a modern frontend stack.
 
-## When To Use This Package
+## Status
 
-Use this package when you want Palamedes to feel native inside a Vite application.
+- Recommended for Vite projects using React and Palamedes macros
+- Supports `.po` imports and source-string-first catalog semantics
+- Best paired with `@palamedes/runtime` and `@palamedes/cli`
+- Not a framework generator or top-level app scaffold
 
-It is the right starting point if you want:
+## Start Here
 
-- brutally fast message macro transforms before the rest of your Vite pipeline runs
-- `.po` file loading during development and build
-- a supported integration that stays close to normal Vite behavior
+Use the full copy-paste setup guide:
 
-If you are on Next.js, use [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) instead.
+- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 
 ## Installation
 
 ```bash
-pnpm add @palamedes/vite-plugin @palamedes/runtime @lingui/core @lingui/react
-pnpm add -D @palamedes/cli
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
+pnpm add -D @palamedes/cli @palamedes/config
 ```
 
 ## Minimal Setup
@@ -39,10 +40,6 @@ export default defineConfig({
   plugins: [palamedes(), react()],
 })
 ```
-
-Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure your app registers the active i18n instance before translated code executes.
-
-Add a `palamedes.config.ts` file to define locales and catalog locations:
 
 ```ts
 import { defineConfig } from "@palamedes/config"
@@ -58,6 +55,8 @@ export default defineConfig({
   ],
 })
 ```
+
+Transformed code expects `getI18n()` from `@palamedes/runtime`, so register the active client i18n instance before translated code executes.
 
 ## Options
 
@@ -75,19 +74,18 @@ palamedes({
 })
 ```
 
-## What It Handles
+## What This Package Handles
 
-- transforms supported message macros in JavaScript and TypeScript files
+- transforms supported message macros before the rest of the Vite pipeline runs
 - compiles imported `.po` files into JavaScript modules
 - keeps source-string-first catalog semantics aligned with the native core
-- reports common macro-resolution mistakes early in Vite
+- reports common macro and catalog issues during dev and build
 
-## Related Packages
+## Related Docs
 
-- [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)
-- [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)
-- [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)
-- [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin)
+- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
+- [Migration from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
+- [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 
 ## License
 

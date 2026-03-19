@@ -27,9 +27,10 @@ pnpm add @palamedes/runtime
 ## Minimal Example
 
 ```ts
-import { i18n } from "@lingui/core"
+import { createI18n } from "@palamedes/core"
 import { setClientI18n } from "@palamedes/runtime"
 
+const i18n = createI18n()
 setClientI18n(i18n)
 ```
 

@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use oxc_ast::ast::{ImportDeclaration, ImportDeclarationSpecifier};
 use oxc_ast_visit::{walk, Visit};
 
-pub(super) const LINGUI_MACRO_PACKAGES: [&str; 3] =
-    ["@lingui/macro", "@lingui/core/macro", "@lingui/react/macro"];
+pub(super) const PALAMEDES_MACRO_PACKAGES: [&str; 2] =
+    ["@palamedes/core/macro", "@palamedes/react/macro"];
 
 #[derive(Debug, Clone)]
 pub(super) struct ImportedMacro {
@@ -37,7 +37,7 @@ impl<'a> Visit<'a> for ImportCollector {
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         let source = it.source.value.as_str();
 
-        if LINGUI_MACRO_PACKAGES.contains(&source) {
+        if PALAMEDES_MACRO_PACKAGES.contains(&source) {
             self.macro_import_ranges
                 .push((it.span.start as usize, it.span.end as usize));
 
@@ -67,7 +67,7 @@ impl<'a> Visit<'a> for ImportCollector {
             }
         }
 
-        if source == "@lingui/react" {
+        if source == "@palamedes/react" {
             if let Some(specifiers) = &it.specifiers {
                 for specifier in specifiers {
                     if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {

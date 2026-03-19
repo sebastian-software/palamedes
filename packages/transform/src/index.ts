@@ -1,11 +1,11 @@
 /**
  * @palamedes/transform
  *
- * OXC-based macro transformer for Lingui.
- * Transforms Lingui macros to runtime calls without Babel.
+ * OXC-based macro transformer for Palamedes.
+ * Transforms Palamedes macros to runtime calls without Babel.
  */
 
-export { transformLinguiMacros } from "./transform"
+export { transformPalamedesMacros } from "./transform"
 export type { TransformOptions, TransformResult, SourceMap } from "./types"
-export { LINGUI_MACRO_PACKAGES, JS_MACROS, JSX_MACROS } from "./types"
-export { mightContainLinguiMacros, findMacroImports } from "./detect"
+export { PALAMEDES_MACRO_PACKAGES, JS_MACROS, JSX_MACROS } from "./types"
+export { mightContainPalamedesMacros, findMacroImports } from "./detect"

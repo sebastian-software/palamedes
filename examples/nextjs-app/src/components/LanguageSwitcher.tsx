@@ -1,7 +1,7 @@
 "use client"
 
-import { useTransition } from "react"
-import { useLocale } from "./I18nClientProvider"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { setLocaleAction } from "@/lib/actions"
 import type { Locale } from "@/lib/i18n"
 
@@ -18,16 +18,21 @@ const buttonStyle = {
   cursor: "pointer",
 }
 
-export function LanguageSwitcher() {
-  const { locale, setLocale, locales } = useLocale()
+interface LanguageSwitcherProps {
+  locale: Locale
+  locales: readonly Locale[]
+}
+
+export function LanguageSwitcher({ locale, locales }: LanguageSwitcherProps) {
+  const [activeLocale, setActiveLocale] = useState(locale)
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
 
   function handleLocaleChange(newLocale: Locale) {
     startTransition(async () => {
-      // Update client-side state immediately
-      setLocale(newLocale)
-      // Server Action: set cookie + revalidate
+      setActiveLocale(newLocale)
       await setLocaleAction(newLocale)
+      router.refresh()
     })
   }
 
@@ -40,8 +45,8 @@ export function LanguageSwitcher() {
           disabled={isPending}
           style={{
             ...buttonStyle,
-            background: locale === loc ? "#0066cc" : "#eee",
-            color: locale === loc ? "white" : "black",
+            background: activeLocale === loc ? "#0066cc" : "#eee",
+            color: activeLocale === loc ? "white" : "black",
           }}
         >
           {LOCALE_NAMES[loc] ?? loc}

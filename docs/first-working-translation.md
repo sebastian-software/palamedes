@@ -12,7 +12,7 @@ It uses Vite because that is the smallest setup today.
 ## 1. Install the packages
 
 ```bash
-pnpm add @palamedes/vite-plugin @palamedes/runtime @lingui/core @lingui/react
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli @palamedes/config @vitejs/plugin-react vite typescript
 ```
 
@@ -50,9 +50,10 @@ export default defineConfig({
 
 ```ts
 // src/i18n.ts
-import { i18n } from "@lingui/core"
+import { createI18n } from "@palamedes/core"
 import { setClientI18n } from "@palamedes/runtime"
 
+const i18n = createI18n()
 setClientI18n(i18n)
 
 export { i18n }
@@ -62,7 +63,7 @@ export { i18n }
 
 ```tsx
 // src/App.tsx
-import { t } from "@lingui/core/macro"
+import { t } from "@palamedes/core/macro"
 
 export function App() {
   return <h1>{t`Welcome to Palamedes`}</h1>

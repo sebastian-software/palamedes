@@ -1,34 +1,48 @@
 # Migration from Lingui to Palamedes
 
-This migration is usually simpler than it looks.
+Palamedes is easiest to understand as a cleaner tooling stack for teams that already like Lingui-style authoring.
 
-The reason is straightforward: Palamedes does not throw away the best parts of Lingui. The macro shapes still feel familiar. What changes is the tooling stack, the runtime model, and the removal of older compatibility paths.
+Most migrations are not about rewriting every translation call. They are about switching framework integration, extraction, and runtime wiring to a stricter end state.
 
-## Short Version
+## Who This Migration Is For
 
-In most projects, the migration looks like this:
+Switch now if you want:
 
-1. Switch framework integration to Palamedes.
-2. Switch extraction to Palamedes.
-3. Move runtime access to `getI18n()`.
-4. Remove explicit authoring `id` paths.
-5. Remove older accessor-specific runtime paths.
-6. Verify build output, extraction, and app behavior.
+- faster transforms and extraction without a Babel-heavy path
+- source-string-first catalogs with `message + context` identity
+- one runtime model via `getI18n()`
+- a cleaner long-term architecture than Lingui's broader historical surface
 
-## Concept Mapping
+Wait if you need:
 
-| Lingui world | Palamedes world |
-| --- | --- |
-| Lingui as the full product surface | Palamedes as the tooling and runtime surface |
-| Mixed historical API surface | Smaller, more opinionated end state |
-| Message identity sometimes mixed with explicit `id` paths | `message + context` as the only semantic identity |
-| Multiple runtime access paths depending on context | One runtime model via `getI18n()` |
-| Framework setup through Lingui adapters | Framework setup through `@palamedes/vite-plugin` or `@palamedes/next-plugin` |
-| Extraction through Lingui CLI and Babel-oriented flows | Extraction through `@palamedes/extractor` and `pmds extract` |
+- maximum compatibility with every older Lingui runtime or authoring path
+- explicit author-facing `id` support to remain untouched
+- a zero-opinion migration with no cleanup decisions
 
-## What Usually Stays the Same
+## Migration Checklist
 
-Most macro forms remain familiar:
+- [ ] Replace Lingui framework integration with `@palamedes/vite-plugin` or `@palamedes/next-plugin`
+- [ ] Add `@palamedes/runtime` and register the active i18n instance
+- [ ] Add `palamedes.config.ts`
+- [ ] Switch extraction to `pnpm exec pmds extract`
+- [ ] Remove explicit authoring `id` usage
+- [ ] Verify `.po` loading and runtime translations
+- [ ] Verify one source locale and one non-source locale end to end
+- [ ] Remove older accessor-specific runtime paths
+
+## Breaking Changes At A Glance
+
+| Topic | Lingui-leaning code | Palamedes target |
+| --- | --- | --- |
+| Runtime access | Multiple historical access paths | `getI18n()` |
+| Message identity | Public API may mix source strings and explicit `id` | `message + context` only |
+| Extraction | Lingui CLI / Babel-oriented flows | `pmds extract` |
+| Catalog semantics | Historically mixed stack responsibilities | Source-first + `ferrocat` |
+| Host integration | Lingui adapters | `@palamedes/vite-plugin` / `@palamedes/next-plugin` |
+
+## What Usually Stays The Same
+
+Most authoring patterns remain familiar:
 
 ```ts
 import { t, msg, defineMessage, plural, select, selectOrdinal } from "@lingui/core/macro"
@@ -38,124 +52,16 @@ import { t, msg, defineMessage, plural, select, selectOrdinal } from "@lingui/co
 import { Trans, Plural, Select, SelectOrdinal } from "@lingui/react/macro"
 ```
 
-The day-to-day workflow also stays recognizable:
+That continuity is the point. The migration is primarily a tooling and runtime cleanup, not an authoring reset.
 
-- define messages with macros
-- extract messages
-- maintain catalogs
-- keep runtime resolution centralized
+## Before / After
 
-## What You Should Change Deliberately
-
-### 1. Move off older access paths
-
-Palamedes does not keep multiple accessor-specific runtime paths as the preferred model.
-
-If your code still assumes an older context-specific access pattern, move it to the runtime target model:
-
-```ts
-import { getI18n } from "@palamedes/runtime"
-```
-
-That aligns the rest of the system around one assumption.
-
-### 2. Remove explicit authoring `id` paths
-
-Palamedes is source-string-first. If your codebase still contains patterns like these, they need to go away during migration:
-
-```ts
-t({ id: "checkout.cta", message: "Buy now" })
-defineMessage({ id: "checkout.cta", message: "Buy now" })
-```
-
-In Palamedes:
-
-- `message` is the source string
-- `context` disambiguates when needed
-- `message + context` is the semantic identity
-
-That keeps catalogs, diagnostics, and transform behavior aligned with gettext instead of splitting identity across two public concepts.
-
-### 3. Replace framework integration
-
-#### Vite
+### 1. Runtime access
 
 Before:
 
 ```ts
-// vite.config.ts
-// Lingui-specific setup
-```
-
-After:
-
-```ts
-import { palamedes } from "@palamedes/vite-plugin"
-
-export default defineConfig({
-  plugins: [palamedes()],
-})
-```
-
-#### Next.js
-
-Before:
-
-```ts
-// next.config.ts
-// Lingui-specific setup
-```
-
-After:
-
-```ts
-import { withPalamedes } from "@palamedes/next-plugin"
-
-export default withPalamedes(nextConfig)
-```
-
-### 4. Switch extraction
-
-With Palamedes, extraction runs through the Palamedes toolchain:
-
-```bash
-pnpm exec pmds extract
-```
-
-For watch mode:
-
-```bash
-pnpm exec pmds extract --watch
-```
-
-## Typical Before/After Examples
-
-### Direct macro stays a direct macro
-
-Before:
-
-```ts
-import { t } from "@lingui/core/macro"
-
-const title = t`Hello`
-```
-
-After:
-
-```ts
-import { t } from "@lingui/core/macro"
-
-const title = t`Hello`
-```
-
-The difference is not at the callsite. It is in the tooling stack underneath.
-
-### Move runtime access to the new model
-
-Before:
-
-```ts
-// old context-specific access path
+// older context-specific runtime access path
 ```
 
 After:
@@ -166,106 +72,151 @@ import { getI18n } from "@palamedes/runtime"
 const locale = getI18n().locale
 ```
 
-### JSX macros still feel familiar
+### 2. Explicit IDs
 
 Before:
 
-```tsx
-import { Trans, Plural } from "@lingui/react/macro"
-
-export function Example() {
-  return (
-    <>
-      <Trans>Hello {name}</Trans>
-      <Plural value={count} one="# item" other="# items" />
-    </>
-  )
-}
+```ts
+t({ id: "checkout.cta", message: "Buy now" })
+defineMessage({ id: "checkout.cta", message: "Buy now" })
 ```
 
 After:
 
-```tsx
-import { Trans, Plural } from "@lingui/react/macro"
-
-export function Example() {
-  return (
-    <>
-      <Trans>Hello {name}</Trans>
-      <Plural value={count} one="# item" other="# items" />
-    </>
-  )
-}
+```ts
+t({ message: "Buy now" })
+defineMessage({ message: "Buy now", context: "checkout button" })
 ```
 
-Again, the visible surface often stays the same. The stack under it changes.
+### 3. Framework integration
 
-## Breaking Changes To Plan For
+Before:
 
-### `getI18n()` is the target runtime model
+```ts
+// Lingui-specific Vite or Next wiring
+```
 
-Palamedes is opinionated here. If your project relies heavily on multiple historical runtime access patterns, plan that consolidation explicitly.
+After for Vite:
 
-### Explicit authoring IDs are no longer carried forward
+```ts
+import { palamedes } from "@palamedes/vite-plugin"
 
-Palamedes does not treat explicit `id` fields as a normal authoring model anymore.
+export default defineConfig({
+  plugins: [palamedes()],
+})
+```
 
-If your existing code uses them, plan a real migration instead of expecting silent compatibility.
+After for Next.js:
 
-### Tooling names change
+```js
+const { withPalamedes } = require("@palamedes/next-plugin")
 
-You are not just swapping internals. You are also moving to Palamedes package surfaces:
+module.exports = withPalamedes({})
+```
 
-- `@palamedes/extractor`
-- `@palamedes/transform`
-- `@palamedes/vite-plugin`
-- `@palamedes/next-plugin`
-- `@palamedes/runtime`
-- `pmds` for the CLI
+## Recommended Migration Order
 
-### Less compatibility ballast
+### 1. Get one app path working
 
-Palamedes is not trying to preserve every older shape forever. That is good for the final system, but it means migration should be done deliberately instead of relying on accidental compatibility.
+Do not start by cleaning every edge case in the codebase.
 
-## Recommended Order For Real Projects
+Start by wiring:
 
-### Small or new projects
+- one framework adapter
+- one runtime registration path
+- one extraction run
+- one translated route or component
 
-1. Swap the tooling packages.
-2. Move runtime access to `getI18n()`.
-3. Run extraction.
-4. Validate the build and app behavior.
+The [first working translation guide](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md) is the best way to establish that baseline.
 
-### Larger existing projects
+### 2. Migrate runtime wiring
 
-1. Replace framework integration.
-2. Inventory runtime access paths.
-3. Remove older accessor-specific patterns.
-4. Validate extraction.
-5. Test app behavior by route or feature.
+Make the active i18n instance available through `@palamedes/runtime`.
 
-## Done Checklist
+Client-side:
 
-- The build runs with the Palamedes plugin.
-- Extraction runs through `pmds`.
-- Runtime access uses `getI18n()`.
-- There are no explicit authoring `id` paths left in the codebase.
-- Catalogs are created or updated correctly.
-- Error locations and source maps work in development tooling.
-- Older accessor-specific runtime patterns are gone.
+```ts
+import { i18n } from "@lingui/core"
+import { setClientI18n } from "@palamedes/runtime"
 
-## Why The Migration Is Worth It
+setClientI18n(i18n)
+```
 
-If you are coming from Lingui, Palamedes is not "less Lingui." It is the next, more focused version of the same good core idea:
+Server-side:
 
-- native core
-- smaller transform stack
-- source maps by default
-- clearer runtime model
-- less historical baggage
+```ts
+import { setServerI18nGetter } from "@palamedes/runtime"
 
-If you are already thinking about tooling speed, build clarity, maintainability, or runtime simplicity, this is a good moment to switch.
+setServerI18nGetter(() => getRequestScopedI18n())
+```
 
-Continue here:
+### 3. Remove explicit IDs
 
-- [Palamedes vs. Lingui](./comparison-with-lingui.md)
+This is the most important semantic cleanup.
+
+Palamedes treats:
+
+- `message` as the source string
+- `context` as the disambiguator
+- `message + context` as the only public identity
+
+If your existing codebase still has explicit authoring IDs, remove them deliberately instead of expecting compatibility shims.
+
+### 4. Switch extraction and catalogs
+
+Run extraction through Palamedes:
+
+```bash
+pnpm exec pmds extract
+```
+
+That moves catalogs onto the source-first path and aligns updates with the current native core and `ferrocat`.
+
+## Common Migration Errors
+
+### “No active client i18n instance”
+
+Cause:
+- transformed code is running before `setClientI18n(...)`
+
+Fix:
+- register the active client instance during app startup before translated UI renders
+
+### “No active server i18n instance”
+
+Cause:
+- server-side translated code runs before `setServerI18nGetter(...)`
+
+Fix:
+- expose the request-local i18n instance through `@palamedes/runtime`
+
+### Extraction works, but translations do not render
+
+Cause:
+- catalogs exist, but the active locale has not loaded messages into the runtime instance
+
+Fix:
+- explicitly load and activate locale messages before rendering
+
+### Explicit `id` usage now fails
+
+Cause:
+- Palamedes no longer supports author-facing explicit IDs as a normal path
+
+Fix:
+- move to source-string-first descriptors and use `context` when disambiguation is needed
+
+## What Gets Better After The Move
+
+- transforms and extraction move to a native core
+- runtime assumptions get simpler
+- catalog identity gets cleaner
+- the hot path carries fewer historical branches
+
+That is why the migration is worth doing. The visible authoring surface stays familiar, but the stack under it gets substantially cleaner.
+
+## Next Steps
+
+- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [Palamedes vs. Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
+- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)

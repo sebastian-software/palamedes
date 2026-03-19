@@ -1,9 +1,9 @@
-import { transformLinguiMacros } from "./transform"
+import { transformPalamedesMacros } from "./transform"
 
-describe("transformLinguiMacros", () => {
-  it("returns unchanged code without Lingui imports", () => {
+describe("transformPalamedesMacros", () => {
+  it("returns unchanged code without Palamedes macro imports", () => {
     const code = `const x = 1;`
-    const result = transformLinguiMacros(code, "test.ts")
+    const result = transformPalamedesMacros(code, "test.ts")
 
     expect(result.hasChanged).toBe(false)
     expect(result.code).toBe(code)
@@ -11,26 +11,26 @@ describe("transformLinguiMacros", () => {
 
   it("transforms tagged templates into compact runtime lookups", () => {
     const code = `
-import { t } from "@lingui/macro";
+import { t } from "@palamedes/core/macro";
 const msg = t\`Hello \${name}\`;
 `
-    const result = transformLinguiMacros(code, "test.ts")
+    const result = transformPalamedesMacros(code, "test.ts")
 
     expect(result.hasChanged).toBe(true)
     expect(result.code).toContain('getI18n()._("')
     expect(result.code).toContain('{ name }')
     expect(result.code).toContain('message: "Hello {name}"')
     expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
-    expect(result.code).not.toContain('@lingui/macro')
+    expect(result.code).not.toContain("@palamedes/core/macro")
     expect(result.compiledIds).toHaveLength(1)
   })
 
   it("transforms descriptor macros without preserving public ids", () => {
     const code = `
-import { t } from "@lingui/macro";
+import { t } from "@palamedes/core/macro";
 const msg = t({ message: "Hello", context: "informal", comment: "A greeting" });
 `
-    const result = transformLinguiMacros(code, "test.ts")
+    const result = transformPalamedesMacros(code, "test.ts")
 
     expect(result.code).toContain('getI18n()._("')
     expect(result.code).toContain('message: "Hello"')
@@ -41,10 +41,10 @@ const msg = t({ message: "Hello", context: "informal", comment: "A greeting" });
 
   it("transforms defineMessage to a descriptor with an internal lookup key", () => {
     const code = `
-import { defineMessage } from "@lingui/macro";
+import { defineMessage } from "@palamedes/core/macro";
 const msg = defineMessage({ message: "Hello" });
 `
-    const result = transformLinguiMacros(code, "test.ts")
+    const result = transformPalamedesMacros(code, "test.ts")
 
     expect(result.hasChanged).toBe(true)
     expect(result.code).toContain('id: "')
@@ -55,11 +55,12 @@ const msg = defineMessage({ message: "Hello" });
 
   it("transforms <Trans> with generated internal ids", () => {
     const code = `
-import { Trans } from "@lingui/react/macro";
+import { Trans } from "@palamedes/react/macro";
 const el = <Trans>Hello {name}</Trans>;
 `
-    const result = transformLinguiMacros(code, "test.tsx")
+    const result = transformPalamedesMacros(code, "test.tsx")
 
+    expect(result.code).toContain('import { Trans } from "@palamedes/react"')
     expect(result.code).toContain('<Trans id="')
     expect(result.code).toContain('message="Hello {name}"')
     expect(result.code).toContain('values={{ name }}')
@@ -67,10 +68,10 @@ const el = <Trans>Hello {name}</Trans>;
 
   it("strips the message field when requested", () => {
     const code = `
-import { t } from "@lingui/macro";
+import { t } from "@palamedes/core/macro";
 const msg = t({ message: "Hello" });
 `
-    const result = transformLinguiMacros(code, "test.ts", {
+    const result = transformPalamedesMacros(code, "test.ts", {
       stripMessageField: true,
     })
 
@@ -80,19 +81,31 @@ const msg = t({ message: "Hello" });
 
   it("rejects explicit ids in macro authoring", () => {
     const code = `
-import { t } from "@lingui/macro";
+import { t } from "@palamedes/core/macro";
 const msg = t({ id: "greeting", message: "Hello" });
 `
 
-    expect(() => transformLinguiMacros(code, "test.ts")).toThrow(/Explicit message ids/)
+    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/Explicit message ids/)
   })
 
   it("rejects explicit ids on <Trans>", () => {
     const code = `
-import { Trans } from "@lingui/react/macro";
+import { Trans } from "@palamedes/react/macro";
 const el = <Trans id="greeting">Hello</Trans>;
 `
 
-    expect(() => transformLinguiMacros(code, "test.tsx")).toThrow(/Explicit message ids/)
+    expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(/Explicit message ids/)
+  })
+
+  it("leaves legacy Lingui macro imports untouched", () => {
+    const code = `
+import { t } from "@lingui/macro";
+const msg = t\`Hello\`;
+`
+
+    const result = transformPalamedesMacros(code, "test.ts")
+
+    expect(result.hasChanged).toBe(false)
+    expect(result.code).toBe(code)
   })
 })

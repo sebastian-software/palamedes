@@ -48,7 +48,7 @@ pub struct NativeTransformEdit {
     pub text: String,
 }
 
-/// Result of transforming a module containing Lingui-style macros.
+/// Result of transforming a module containing Palamedes macros.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct NativeTransformResult {
     /// Final transformed module source.
@@ -67,7 +67,7 @@ pub struct NativeTransformResult {
     pub prepend_text: Option<String>,
 }
 
-/// Transforms Lingui-style macros into Palamedes runtime calls.
+/// Transforms Palamedes macros into Palamedes runtime calls.
 ///
 /// # Errors
 ///
@@ -137,21 +137,7 @@ pub fn transform_macros(
         return Ok(unchanged_result(source));
     }
 
-    replacements.sort_by(|a, b| b.start.cmp(&a.start).then(b.end.cmp(&a.end)));
-    let edits = replacements
-        .iter()
-        .map(|replacement| NativeTransformEdit {
-            start: replacement.start,
-            end: replacement.end,
-            text: replacement.text.clone(),
-        })
-        .collect::<Vec<_>>();
-
     let mut code = source.to_string();
-    for replacement in &replacements {
-        code.replace_range(replacement.start..replacement.end, &replacement.text);
-    }
-
     let mut prefix = String::new();
 
     if visitor.needs_runtime_import && !collector.has_runtime_import {
@@ -162,11 +148,36 @@ pub fn transform_macros(
     }
 
     if visitor.needs_trans_import && !collector.has_trans_import {
-        prefix.push_str("import { Trans } from \"@lingui/react\";\n");
+        prefix.push_str("import { Trans } from \"@palamedes/react\";\n");
     }
 
     if !prefix.is_empty() {
-        code = format!("{prefix}{code}");
+        let insertion_offset = import_insertion_offset(&parsed.program);
+        let prefix = if insertion_offset == 0 {
+            prefix
+        } else {
+            format!("\n{prefix}")
+        };
+
+        replacements.push(Replacement {
+            start: insertion_offset,
+            end: insertion_offset,
+            text: prefix,
+        });
+    }
+
+    replacements.sort_by(|a, b| b.start.cmp(&a.start).then(b.end.cmp(&a.end)));
+    let edits = replacements
+        .iter()
+        .map(|replacement| NativeTransformEdit {
+            start: replacement.start,
+            end: replacement.end,
+            text: replacement.text.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    for replacement in &replacements {
+        code.replace_range(replacement.start..replacement.end, &replacement.text);
     }
 
     Ok(NativeTransformResult {
@@ -174,8 +185,18 @@ pub fn transform_macros(
         code,
         compiled_ids: visitor.compiled_ids,
         edits,
-        prepend_text: (!prefix.is_empty()).then_some(prefix),
+        prepend_text: None,
     })
+}
+
+fn import_insertion_offset(program: &oxc_ast::ast::Program<'_>) -> usize {
+    if let Some(directive) = program.directives.last() {
+        directive.span.end as usize
+    } else if let Some(hashbang) = &program.hashbang {
+        hashbang.span.end as usize
+    } else {
+        0
+    }
 }
 
 fn unchanged_result(source: &str) -> NativeTransformResult {

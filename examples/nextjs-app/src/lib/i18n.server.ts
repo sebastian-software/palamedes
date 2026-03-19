@@ -1,9 +1,8 @@
 import "server-only"
 
 import { cookies } from "next/headers"
-import { setI18n } from "@lingui/react/server"
 import { setServerI18nGetter } from "@palamedes/runtime"
-import { i18n, Locale, LOCALES, DEFAULT_LOCALE, loadMessages } from "./i18n"
+import { createExampleI18n, Locale, LOCALES, DEFAULT_LOCALE, loadMessages } from "./i18n"
 
 /**
  * Get the current locale from cookies (server-side only)
@@ -15,19 +14,16 @@ export async function getLocale(): Promise<Locale> {
 }
 
 /**
- * Initialize i18n for server-side rendering
- * Sets up both i18n.activate() and setI18n() for RSC support
+ * Initialize i18n for server-side rendering and register the request-local instance.
  */
 export async function initI18nServer(): Promise<Locale> {
   const locale = await getLocale()
   const messages = await loadMessages(locale)
+  const i18n = createExampleI18n()
 
   i18n.load(locale, messages)
   i18n.activate(locale)
   setServerI18nGetter(() => i18n)
-
-  // Required for <Trans> and other Lingui React APIs in Server Components
-  setI18n(i18n)
 
   return locale
 }

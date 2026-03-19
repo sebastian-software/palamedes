@@ -1,12 +1,25 @@
 # Palamedes Examples
 
-Examples using the current Palamedes package family.
+These examples are the fastest way to see the current product shape working end to end.
 
-## Examples
+If you want the shortest setup path first, start with:
+
+- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+
+If you want full example applications, use the repos below.
+
+## Current Example Apps
 
 ### `vite-react/`
 
-Vite + React 19 example with hot module replacement.
+The best proof asset for the current Vite path.
+
+It demonstrates:
+
+- macro transforms in a React app
+- `.po` imports
+- runtime locale switching
+- extraction through `pmds extract`
 
 ```bash
 cd examples/vite-react
@@ -16,7 +29,15 @@ pnpm dev
 
 ### `nextjs-app/`
 
-Next.js 15 App Router example.
+The best proof asset for the current Next.js path.
+
+It demonstrates:
+
+- App Router integration
+- server and client runtime wiring
+- `.po` imports
+- request-aware language switching
+- verified with the webpack build path on Next.js 16
 
 ```bash
 cd examples/nextjs-app
@@ -24,17 +45,22 @@ pnpm install
 pnpm dev
 ```
 
+## What These Examples Prove
+
+- Palamedes works today as a real app-team integration, not just as isolated low-level packages
+- Vite and Next.js are the primary supported framework paths
+- the current runtime model is `getI18n()` via `@palamedes/runtime`
+- source-string-first catalogs and `.po` loading are part of the real app flow
+
 ## Packages Used
 
-- `@palamedes/transform` - Core macro transformer
-- `@palamedes/vite-plugin` - Vite plugin
-- `@palamedes/next-plugin` - Next.js integration
-- `@palamedes/runtime` - `getI18n()` runtime contract
+- `@palamedes/vite-plugin`
+- `@palamedes/next-plugin`
+- `@palamedes/core`
+- `@palamedes/react`
+- `@palamedes/runtime`
+- `@palamedes/cli`
 
-## Features Demonstrated
+For broader project status and benchmark methodology, see:
 
-- `t`...`` tagged template macros
-- `<Trans>` component
-- `plural()` for pluralization
-- Language switching at runtime
-- `.po` file loading (no compile step needed)
+- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)

@@ -1,10 +1,9 @@
 {
   "name": "palamedes",
   "version": "0.1.1",
-  "description": "Placeholder package for the Palamedes toolchain",
+  "description": "Reserved top-level package name for the future Palamedes entry point",
   "keywords": [
     "palamedes",
-    "lingui",
     "i18n"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",

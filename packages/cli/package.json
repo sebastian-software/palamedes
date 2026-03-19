@@ -3,7 +3,6 @@
   "version": "0.1.1",
   "description": "Palamedes CLI for fast message extraction workflows",
   "keywords": [
-    "lingui",
     "i18n",
     "internationalization",
     "cli",

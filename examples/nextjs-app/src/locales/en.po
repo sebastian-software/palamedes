@@ -1,25 +1,45 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: \n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-12-13 14:04+0100\n"
-"PO-Revision-Date: 2025-12-13 14:04+0100\n"
-"Last-Translator: \n"
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
 "Language: en\n"
 "Language-Team: \n"
+"Last-Translator: \n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: 2025-12-13 14:04+0100\n"
+"POT-Creation-Date: 2025-12-13 14:04+0100\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
 "X-Generator: palamedes\n"
 
-#: src/components/Counter.tsx:14
-msgid "Counter Example"
-msgstr ""
-
-#: src/components/Counter.tsx:34
+#: src/components/Counter.tsx:40
 msgid "Click me"
-msgstr ""
+msgstr "Click me"
 
-#: src/app/page.tsx:37
+#: src/components/Counter.tsx:20
+msgid "Counter Example"
+msgstr "Counter Example"
+
+#: src/app/page.tsx:25
+msgid "Language"
+msgstr "Language"
+
+#: src/app/page.tsx:33
 msgid "Powered by <0>@palamedes/next-plugin</0>"
+msgstr "Powered by <0>@palamedes/next-plugin</0>"
+
+#: src/app/page.tsx:21
+msgid ""
+"This example demonstrates the Palamedes-owned runtime with the OXC-based macro"
+" transformer in a Next.js App Router project. No Babel required!"
 msgstr ""
+"This example demonstrates the Palamedes-owned runtime with the OXC-based macro"
+" transformer in a Next.js App Router project. No Babel required!"
+
+#: src/app/page.tsx:18
+msgid "Welcome to Palamedes"
+msgstr "Welcome to Palamedes"
+
+#: src/components/Counter.tsx:23
+msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"
+msgstr "{count, plural, one {You clicked # time} other {You clicked # times}}"

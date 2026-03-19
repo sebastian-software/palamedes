@@ -5,19 +5,21 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The canonical npm home for Palamedes.
+The reserved top-level npm home for Palamedes.
 
-Today this package is intentionally small. It secures the name now so Palamedes can grow into a first-class top-level entry point later without a confusing rename or a split identity.
+Today this package is intentionally small. It secures the name so Palamedes can grow into a first-class top-level entry point later without a rename or split identity.
 
 ## When To Use This Package
 
-Right now, mainly as a marker that the canonical package name is taken, maintained, and ready for future expansion.
+Right now, mainly as a marker that the canonical package name is taken, maintained, and reserved for future expansion.
 
 If you want to use Palamedes today, install the scoped packages directly:
 
 - [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin)
 - [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin)
 - [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)
+- [`@palamedes/core`](https://www.npmjs.com/package/@palamedes/core)
+- [`@palamedes/react`](https://www.npmjs.com/package/@palamedes/react)
 - [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)
 
 ## Current Status
@@ -29,9 +31,13 @@ If you want to use Palamedes today, install the scoped packages directly:
 ## Recommended Starting Point Today
 
 ```bash
-pnpm add @palamedes/vite-plugin @palamedes/runtime @lingui/core @lingui/react
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli
 ```
+
+For the real starting path, use:
+
+- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 
 ## Related Packages
 

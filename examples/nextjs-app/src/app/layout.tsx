@@ -1,10 +1,9 @@
 import type { Metadata } from "next"
-import { I18nClientProvider } from "@/components/I18nClientProvider"
 import { initI18nServer } from "@/lib/i18n.server"
 
 export const metadata: Metadata = {
-  title: "Next.js + Lingui (Palamedes)",
-  description: "Example using the OXC-based Lingui transformer",
+  title: "Next.js + Palamedes",
+  description: "Example using the OXC-based Palamedes transformer",
 }
 
 export default async function RootLayout({
@@ -17,11 +16,7 @@ export default async function RootLayout({
 
   return (
     <html lang={locale}>
-      <body style={{ fontFamily: "system-ui", margin: 0 }}>
-        <I18nClientProvider initialLocale={locale}>
-          {children}
-        </I18nClientProvider>
-      </body>
+      <body style={{ fontFamily: "system-ui", margin: 0 }}>{children}</body>
     </html>
   )
 }

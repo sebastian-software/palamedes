@@ -13,8 +13,8 @@ import {
   type LoadedPalamedesConfig,
 } from "@palamedes/config"
 import { compileCatalogArtifact } from "@palamedes/core-node"
-import { transformLinguiMacros } from "@palamedes/transform"
-import { LINGUI_MACRO_PACKAGES } from "@palamedes/transform"
+import { transformPalamedesMacros } from "@palamedes/transform"
+import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
 
@@ -163,7 +163,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   async function getConfigLazy() {
     if (!config) {
       config = await loadPalamedesConfig(configLoaderOptions)
-      macroIds = new Set(LINGUI_MACRO_PACKAGES)
+      macroIds = new Set(PALAMEDES_MACRO_PACKAGES)
     }
     return config
   }
@@ -183,7 +183,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre" as const,
 
     resolveId(id) {
-      const ids = macroIds ?? new Set(LINGUI_MACRO_PACKAGES)
+      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES)
       if (ids.has(id)) {
         throw new Error(
           `The macro you imported from "${id}" is being executed outside the context of compilation.\n` +
@@ -194,7 +194,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
 
     resolveDynamicImport(id) {
-      const ids = macroIds ?? new Set(LINGUI_MACRO_PACKAGES)
+      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES)
       if (ids.has(id as string)) {
         throw new Error(
           `The macro you imported from "${id}" cannot be dynamically imported.\n` +
@@ -210,7 +210,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre" as const,
 
     config(viteConfig) {
-      const ids = new Set(LINGUI_MACRO_PACKAGES)
+      const ids = new Set(PALAMEDES_MACRO_PACKAGES)
       macroIds = ids
 
       // Exclude macro packages from optimization
@@ -232,7 +232,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       }
 
       // Quick check: skip if no macro imports
-      const ids = macroIds ?? new Set(LINGUI_MACRO_PACKAGES)
+      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES)
       const hasAnyMacroImport = Array.from(ids).some((macroId) =>
         code.includes(macroId)
       )
@@ -241,7 +241,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       }
 
       try {
-        const result = transformLinguiMacros(code, id, {
+        const result = transformPalamedesMacros(code, id, {
           runtimeModule,
         })
 

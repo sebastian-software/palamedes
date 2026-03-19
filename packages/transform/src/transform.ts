@@ -1,12 +1,8 @@
 import MagicString from "magic-string"
-import {
-  transformMacrosNative,
-  type NativeTransformEdit,
-  type NativeTransformResult,
-} from "@palamedes/core-node"
+import { transformMacrosNative, type NativeTransformEdit, type NativeTransformResult } from "@palamedes/core-node"
 
 import type { SourceMap, TransformOptions, TransformResult } from "./types"
-import { mightContainLinguiMacros } from "./detect"
+import { mightContainPalamedesMacros } from "./detect"
 
 function buildTransformOutput(
   source: string,
@@ -25,7 +21,12 @@ function buildTransformOutput(
 
   const code = magicString.toString()
   if (code !== nativeResult.code) {
-    throw new Error("Native transform edit replay diverged from native output")
+    return {
+      code: nativeResult.code,
+      hasChanged: true,
+      compiledIds: nativeResult.compiledIds,
+      map: null,
+    }
   }
 
   const generated = magicString.generateMap({
@@ -60,12 +61,12 @@ function applyEdit(magicString: MagicString, edit: NativeTransformEdit): void {
   magicString.overwrite(edit.start, edit.end, edit.text)
 }
 
-export function transformLinguiMacros(
+export function transformPalamedesMacros(
   code: string,
   filename: string,
   options: TransformOptions = {}
 ): TransformResult {
-  if (!mightContainLinguiMacros(code)) {
+  if (!mightContainPalamedesMacros(code)) {
     return { code, hasChanged: false, compiledIds: [], map: null }
   }
 

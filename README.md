@@ -38,12 +38,14 @@ There is no top-level `palamedes` install path yet. If you are trying Palamedes 
 | [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) | Recommended Vite entry point | App teams |
 | [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) | Recommended Next.js entry point | App teams |
 | [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) | Extraction CLI | App teams, CI |
+| [`@palamedes/core`](https://www.npmjs.com/package/@palamedes/core) | App-facing i18n instance | App teams |
+| [`@palamedes/react`](https://www.npmjs.com/package/@palamedes/react) | React translation components | React app teams |
 | [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime) | Runtime bridge for transformed code | App teams |
 
 ## Quick Start With Vite
 
 ```bash
-pnpm add @palamedes/vite-plugin @palamedes/runtime @lingui/core @lingui/react
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli @palamedes/config
 ```
 
@@ -76,9 +78,10 @@ export default defineConfig({
 
 ```ts
 // src/i18n.ts
-import { i18n } from "@lingui/core"
+import { createI18n } from "@palamedes/core"
 import { setClientI18n } from "@palamedes/runtime"
 
+const i18n = createI18n()
 setClientI18n(i18n)
 ```
 

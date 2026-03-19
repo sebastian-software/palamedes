@@ -31,7 +31,7 @@ pnpm add -D @palamedes/extractor
 import { parseSync } from "oxc-parser"
 import { extractMessages } from "@palamedes/extractor"
 
-const source = 'import { t } from "@lingui/macro"; const message = t`Hello ${name}`'
+const source = 'import { t } from "@palamedes/core/macro"; const message = t`Hello ${name}`'
 const result = parseSync("example.ts", source, { sourceType: "module" })
 const messages = extractMessages(result.program, "example.ts", source)
 

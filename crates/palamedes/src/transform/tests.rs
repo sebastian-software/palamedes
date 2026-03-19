@@ -4,7 +4,7 @@ use ferrocat::compiled_key;
 #[test]
 fn transforms_tagged_templates() {
     let result = transform_macros(
-        "import { t } from \"@lingui/macro\";\nconst msg = t`Hello ${name}`;\n",
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t`Hello ${name}`;\n",
         "test.ts",
         None,
     )
@@ -25,7 +25,7 @@ fn transforms_tagged_templates() {
 #[test]
 fn transforms_define_message_without_runtime_import() {
     let result = transform_macros(
-        "import { defineMessage } from \"@lingui/macro\";\nconst msg = defineMessage({ message: \"Hello\" });\n",
+        "import { defineMessage } from \"@palamedes/core/macro\";\nconst msg = defineMessage({ message: \"Hello\" });\n",
         "test.ts",
         None,
     )
@@ -40,7 +40,7 @@ fn transforms_define_message_without_runtime_import() {
 #[test]
 fn transforms_plural_choice_macros() {
     let result = transform_macros(
-        "import { plural } from \"@lingui/macro\";\nconst msg = plural(count, { one: \"# item\", other: \"# items\" });\n",
+        "import { plural } from \"@palamedes/core/macro\";\nconst msg = plural(count, { one: \"# item\", other: \"# items\" });\n",
         "test.ts",
         None,
     )
@@ -56,7 +56,7 @@ fn transforms_plural_choice_macros() {
 #[test]
 fn transforms_select_ordinal_choice_macros() {
     let result = transform_macros(
-        "import { selectOrdinal } from \"@lingui/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",
+        "import { selectOrdinal } from \"@palamedes/core/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",
         "test.ts",
         None,
     )
@@ -72,7 +72,7 @@ fn transforms_select_ordinal_choice_macros() {
 #[test]
 fn transforms_trans_jsx_macro() {
     let result = transform_macros(
-        "import { Trans } from \"@lingui/react/macro\";\nconst el = <Trans>Hello {name}</Trans>;\n",
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello {name}</Trans>;\n",
         "test.tsx",
         None,
     )
@@ -80,7 +80,7 @@ fn transforms_trans_jsx_macro() {
 
     assert!(result
         .code
-        .contains("import { Trans } from \"@lingui/react\";"));
+        .contains("import { Trans } from \"@palamedes/react\";"));
     assert!(result.code.contains("<Trans id=\""));
     assert!(result.code.contains("message=\"Hello {name}\""));
     assert!(result.code.contains("values={{ name }}"));
@@ -88,9 +88,31 @@ fn transforms_trans_jsx_macro() {
 }
 
 #[test]
+fn preserves_use_client_directive_before_injected_imports() {
+    let result = transform_macros(
+        "\"use client\";\nimport { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    let first_import = result
+        .code
+        .find("import { Trans } from \"@palamedes/react\";")
+        .expect("trans import should be injected");
+    let directive = result
+        .code
+        .find("\"use client\";")
+        .expect("use client directive should remain");
+
+    assert!(directive < first_import);
+    assert!(result.code.starts_with("\"use client\";\n"));
+}
+
+#[test]
 fn transforms_plural_jsx_macro() {
     let result = transform_macros(
-        "import { Plural } from \"@lingui/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",
+        "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",
         "test.tsx",
         None,
     )
@@ -106,7 +128,7 @@ fn transforms_plural_jsx_macro() {
 #[test]
 fn strips_message_field_when_requested() {
     let result = transform_macros(
-        "import { t } from \"@lingui/macro\";\nconst msg = t({ message: \"Hello\", comment: \"Greeting\" });\n",
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello\", comment: \"Greeting\" });\n",
         "test.ts",
         Some(NativeTransformOptions {
             strip_message_field: Some(true),
@@ -122,7 +144,7 @@ fn strips_message_field_when_requested() {
 #[test]
 fn rejects_explicit_ids() {
     let error = transform_macros(
-        "import { t } from \"@lingui/macro\";\nconst msg = t({ id: \"greeting\", message: \"Hello\" });\n",
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ id: \"greeting\", message: \"Hello\" });\n",
         "test.ts",
         None,
     )

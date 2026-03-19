@@ -1,0 +1,55 @@
+{
+  "name": "@palamedes/core",
+  "version": "0.1.1",
+  "description": "Palamedes-owned i18n instance and macro entry points",
+  "keywords": [
+    "palamedes",
+    "i18n",
+    "runtime"
+  ],
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/core"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./macro": {
+      "types": "./dist/macro.d.ts",
+      "import": "./dist/macro.mjs",
+      "require": "./dist/macro.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "README.md",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "test": "vitest run --globals src/index.test.ts",
+    "stub": "unbuild --stub"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.0.18"
+  }
+}

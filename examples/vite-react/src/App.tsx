@@ -1,10 +1,10 @@
 import { useState } from "react"
-import { t, plural } from "@lingui/core/macro"
-import { Trans } from "@lingui/react/macro"
-import { i18n } from "@lingui/core"
+import { t, plural } from "@palamedes/core/macro"
+import { Trans } from "@palamedes/react/macro"
 import { messages as enMessages } from "./locales/en.po"
 import { messages as deMessages } from "./locales/de.po"
 import { messages as esMessages } from "./locales/es.po"
+import { i18n } from "./i18n"
 
 const locales = {
   en: { name: "English", messages: enMessages },
@@ -32,8 +32,8 @@ export function App() {
 
       <p style={{ color: "#666" }}>
         <Trans>
-          This example demonstrates Lingui with the new OXC-based macro transformer.
-          No Babel required!
+          This example demonstrates the Palamedes-owned runtime with the OXC-based macro
+          transformer. No Babel required!
         </Trans>
       </p>
 

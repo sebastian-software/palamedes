@@ -11,7 +11,7 @@ describe("extractMessages", () => {
   describe("JSX Trans", () => {
     it("extracts simple Trans", () => {
       const code = `
-        import { Trans } from "@lingui/react/macro"
+        import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Hello World</Trans>
       `
       const messages = extract(code)
@@ -21,7 +21,7 @@ describe("extractMessages", () => {
 
     it("extracts Trans with interpolation", () => {
       const code = `
-        import { Trans } from "@lingui/react/macro"
+        import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Hello {name}</Trans>
       `
       const messages = extract(code)
@@ -31,7 +31,7 @@ describe("extractMessages", () => {
 
     it("extracts Trans with nested elements", () => {
       const code = `
-        import { Trans } from "@lingui/react/macro"
+        import { Trans } from "@palamedes/react/macro"
         const x = <Trans>Hello <b>World</b></Trans>
       `
       const messages = extract(code)
@@ -43,7 +43,7 @@ describe("extractMessages", () => {
   describe("macro calls", () => {
     it("extracts descriptor messages", () => {
       const code = `
-        import { defineMessage, t } from "@lingui/core/macro"
+        import { defineMessage, t } from "@palamedes/core/macro"
         const one = t({ message: "Hello" })
         const two = defineMessage({ message: "Hello {name}", context: "email.subject" })
       `
@@ -56,7 +56,7 @@ describe("extractMessages", () => {
 
     it("extracts plural and select messages", () => {
       const code = `
-        import { plural, select } from "@lingui/core/macro"
+        import { plural, select } from "@palamedes/core/macro"
         const one = plural(count, { one: "# item", other: "# items" })
         const two = select(gender, { male: "He", female: "She", other: "They" })
       `
@@ -100,7 +100,7 @@ describe("extractMessages", () => {
   describe("breaking changes", () => {
     it("rejects explicit ids in macros", () => {
       const code = `
-        import { t } from "@lingui/core/macro"
+        import { t } from "@palamedes/core/macro"
         const x = t({ id: "greeting", message: "Hello" })
       `
 
