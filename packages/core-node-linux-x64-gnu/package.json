@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/core-node-linux-x64-gnu",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Linux x64 glibc native bindings for @palamedes/core-node",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {
