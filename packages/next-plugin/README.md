@@ -13,8 +13,9 @@ The recommended Palamedes entry point for Next.js applications.
 
 - Recommended for Next.js applications using App Router and Palamedes macros
 - Supports `.po` imports and source-string-first catalog semantics
-- Uses webpack as the currently verified production path on Next.js 16
-- Includes Turbopack wiring, but the stable documented path remains webpack for now
+- Uses Turbopack as the verified default path on Next.js 16.2
+- The shipped example proves both server-rendered i18n and localized `"use server"` action output
+- Also supports webpack as an opt-out / fallback path
 - Not a full Next.js starter or scaffolding tool
 
 ## Start Here
@@ -76,7 +77,7 @@ module.exports = withPalamedes({}, {
 - transforms supported message macros in JavaScript and TypeScript sources
 - compiles imported `.po` files into JavaScript modules
 - keeps source-string-first catalog semantics aligned with the native core
-- integrates with webpack and includes Turbopack wiring for future parity
+- integrates with both webpack and Turbopack
 
 ## Related Docs
 

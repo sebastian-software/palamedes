@@ -16,17 +16,67 @@ msgstr ""
 msgid "Click me"
 msgstr "Click me"
 
+#: src/components/ServerActionProbe.tsx:45
+msgid "Ask server for localized status"
+msgstr "Ask server for localized status"
+
 #: src/components/Counter.tsx:20
 msgid "Counter Example"
 msgstr "Counter Example"
+
+#: src/components/ServerActionProbe.tsx:31
+msgid ""
+"This button calls a dedicated server action that reads the active locale"
+" from the request cookie and returns localized text from the server."
+msgstr ""
+"This button calls a dedicated server action that reads the active locale"
+" from the request cookie and returns localized text from the server."
+
+#: src/components/ServerActionProbe.tsx:75
+msgid "Run the action to fetch a server-localized result."
+msgstr "Run the action to fetch a server-localized result."
 
 #: src/app/page.tsx:25
 msgid "Language"
 msgstr "Language"
 
+#: src/components/ServerActionProbe.tsx:32
+msgid "Server Action Proof"
+msgstr "Server Action Proof"
+
+#: src/app/page.tsx:31
+msgid "Server Component Proof"
+msgstr "Server Component Proof"
+
+#: src/components/ServerActionProbe.tsx:65
+#: src/app/page.tsx:42
+msgid "Server locale"
+msgstr "Server locale"
+
+#: src/components/ServerActionProbe.tsx:69
+#: src/app/page.tsx:44
+msgid "Handled at"
+msgstr "Handled at"
+
+#: src/components/ServerActionProbe.tsx:73
+msgid "Localized message"
+msgstr "Localized message"
+
+#: src/app/page.tsx:47
+msgid "Rendered on server"
+msgstr "Rendered on server"
+
+#: src/app/page.tsx:36
+msgid "This section was rendered on the server for locale {localeLabel}."
+msgstr "This section was rendered on the server for locale {localeLabel}."
+
 #: src/app/page.tsx:33
 msgid "Powered by <0>@palamedes/next-plugin</0>"
 msgstr "Powered by <0>@palamedes/next-plugin</0>"
+
+#: src/app/page.tsx:33
+msgid "Powered by @palamedes/next-plugin"
+msgstr "Powered by @palamedes/next-plugin"
 
 #: src/app/page.tsx:21
 msgid ""
@@ -39,6 +89,10 @@ msgstr ""
 #: src/app/page.tsx:18
 msgid "Welcome to Palamedes"
 msgstr "Welcome to Palamedes"
+
+#: src/lib/actions.ts:29
+msgid "Server action confirmed locale {locale}."
+msgstr "Server action confirmed locale {locale}."
 
 #: src/components/Counter.tsx:23
 msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"

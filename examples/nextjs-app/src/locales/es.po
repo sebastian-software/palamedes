@@ -14,30 +14,87 @@ msgstr ""
 
 #: src/components/Counter.tsx:40
 msgid "Click me"
-msgstr ""
+msgstr "Haz clic"
+
+#: src/components/ServerActionProbe.tsx:45
+msgid "Ask server for localized status"
+msgstr "Pedir al servidor un estado localizado"
 
 #: src/components/Counter.tsx:20
 msgid "Counter Example"
+msgstr "Ejemplo del contador"
+
+#: src/components/ServerActionProbe.tsx:31
+msgid ""
+"This button calls a dedicated server action that reads the active locale"
+" from the request cookie and returns localized text from the server."
 msgstr ""
+"Este boton llama a una accion dedicada del servidor que lee el idioma"
+" activo desde la cookie de la solicitud y devuelve texto localizado desde el"
+" servidor."
+
+#: src/components/ServerActionProbe.tsx:75
+msgid "Run the action to fetch a server-localized result."
+msgstr "Ejecuta la accion para obtener un resultado localizado del servidor."
 
 #: src/app/page.tsx:25
 msgid "Language"
-msgstr ""
+msgstr "Idioma"
+
+#: src/components/ServerActionProbe.tsx:32
+msgid "Server Action Proof"
+msgstr "Prueba de la accion del servidor"
+
+#: src/app/page.tsx:31
+msgid "Server Component Proof"
+msgstr "Prueba del componente del servidor"
+
+#: src/components/ServerActionProbe.tsx:65
+#: src/app/page.tsx:42
+msgid "Server locale"
+msgstr "Idioma del servidor"
+
+#: src/components/ServerActionProbe.tsx:69
+#: src/app/page.tsx:44
+msgid "Handled at"
+msgstr "Atendido en"
+
+#: src/components/ServerActionProbe.tsx:73
+msgid "Localized message"
+msgstr "Mensaje localizado"
+
+#: src/app/page.tsx:47
+msgid "Rendered on server"
+msgstr "Renderizado en el servidor"
+
+#: src/app/page.tsx:36
+msgid "This section was rendered on the server for locale {localeLabel}."
+msgstr "Esta seccion se renderizo en el servidor para el idioma {localeLabel}."
 
 #: src/app/page.tsx:33
 msgid "Powered by <0>@palamedes/next-plugin</0>"
-msgstr ""
+msgstr "Impulsado por <0>@palamedes/next-plugin</0>"
+
+#: src/app/page.tsx:33
+msgid "Powered by @palamedes/next-plugin"
+msgstr "Impulsado por @palamedes/next-plugin"
 
 #: src/app/page.tsx:21
 msgid ""
 "This example demonstrates the Palamedes-owned runtime with the OXC-based macro"
 " transformer in a Next.js App Router project. No Babel required!"
 msgstr ""
+"Este ejemplo muestra la runtime propia de Palamedes con el transformador de"
+" macros basado en OXC en un proyecto Next.js App Router. No se necesita Babel."
 
 #: src/app/page.tsx:18
 msgid "Welcome to Palamedes"
-msgstr ""
+msgstr "Bienvenido a Palamedes"
+
+#: src/lib/actions.ts:29
+msgid "Server action confirmed locale {locale}."
+msgstr "La accion del servidor confirmo el idioma {locale}."
 
 #: src/components/Counter.tsx:23
 msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"
-msgstr "{count, plural, one {} many {} other {}}"
+msgstr "{count, plural, one {Has hecho clic # vez} other {Has hecho clic # veces}}"

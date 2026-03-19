@@ -16,6 +16,12 @@ packages/core-node/palamedes-node.node
 # Next.js
 .next/
 
+# TanStack Start
+.tanstack/
+.vinxi/
+.nitro/
+.output/
+
 # Lingui
 .lingui/
 

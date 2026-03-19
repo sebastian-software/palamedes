@@ -37,7 +37,9 @@ It demonstrates:
 - server and client runtime wiring
 - `.po` imports
 - request-aware language switching
-- verified with the webpack build path on Next.js 16
+- visible server-rendered i18n proof
+- localized `"use server"` action output driven by the request cookie
+- verified on the default Turbopack path on Next.js 16.2
 
 ```bash
 cd examples/nextjs-app
@@ -45,10 +47,28 @@ pnpm install
 pnpm dev
 ```
 
+### `tanstack-start/`
+
+The best proof asset for the current TanStack Start path.
+
+It demonstrates:
+
+- Palamedes macros in a TanStack Start app
+- `.po` imports through the existing Vite plugin path
+- SSR with a request-local Palamedes i18n instance
+- search-param-driven locale switching
+- localized TanStack Start server function output
+
+```bash
+cd examples/tanstack-start
+pnpm install
+pnpm dev
+```
+
 ## What These Examples Prove
 
 - Palamedes works today as a real app-team integration, not just as isolated low-level packages
-- Vite and Next.js are the primary supported framework paths
+- Vite, Next.js, and TanStack Start are the primary proof paths
 - the current runtime model is `getI18n()` via `@palamedes/runtime`
 - source-string-first catalogs and `.po` loading are part of the real app flow
 

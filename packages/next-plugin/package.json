@@ -56,10 +56,10 @@
     "@palamedes/transform": "workspace:^"
   },
   "peerDependencies": {
-    "next": "^13 || ^14 || ^15"
+    "next": "^13 || ^14 || ^15 || ^16"
   },
   "devDependencies": {
-    "next": "^16.1.6",
+    "next": "^16.2.0",
     "typescript": "^5.9.3",
     "unbuild": "^3.6.1"
   }

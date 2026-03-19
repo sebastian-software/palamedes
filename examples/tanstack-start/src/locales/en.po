@@ -1,0 +1,99 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: en\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"MIME-Version: 1.0\n"
+"PO-Revision-Date: 2026-03-19 12:00+0100\n"
+"POT-Creation-Date: 2026-03-19 12:00+0100\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"X-Generator: palamedes\n"
+
+msgid "Click me"
+msgstr "Click me"
+
+msgid "Client interaction"
+msgstr "Client interaction"
+
+msgid "Counter Example"
+msgstr "Counter Example"
+
+msgid "Current locale:"
+msgstr "Current locale:"
+
+msgid "Handled at"
+msgstr "Handled at"
+
+msgid "Loaded through the Palamedes Vite plugin"
+msgstr "Loaded through the Palamedes Vite plugin"
+
+msgid "Localized message"
+msgstr "Localized message"
+
+msgid "Localized server function result"
+msgstr "Localized server function result"
+
+msgid "No Lingui-owned runtime package is required here."
+msgstr "No Lingui-owned runtime package is required here."
+
+msgid "Palamedes without framework-specific runtime wrappers."
+msgstr "Palamedes without framework-specific runtime wrappers."
+
+msgid "Refresh server result"
+msgstr "Refresh server result"
+
+msgid "Rendered on server"
+msgstr "Rendered on server"
+
+msgid "SSR translation happens before the page reaches the browser."
+msgstr "SSR translation happens before the page reaches the browser."
+
+msgid "Server function proof"
+msgstr "Server function proof"
+
+msgid "Server locale"
+msgstr "Server locale"
+
+msgid "Server function confirmed locale {locale}."
+msgstr "Server function confirmed locale {locale}."
+
+msgid "Server-rendered proof"
+msgstr "Server-rendered proof"
+
+msgid ""
+"This example proves the existing Vite-based Palamedes setup works in TanStack"
+" Start with SSR, locale switching, .po imports, and localized server functions."
+msgstr ""
+"This example proves the existing Vite-based Palamedes setup works in TanStack"
+" Start with SSR, locale switching, .po imports, and localized server functions."
+
+msgid "This panel was rendered on the server for locale {localeLabel}."
+msgstr "This panel was rendered on the server for locale {localeLabel}."
+
+msgid ""
+"The text below is returned from a TanStack Start server function after the"
+" server activates the Palamedes locale for the current request."
+msgstr ""
+"The text below is returned from a TanStack Start server function after the"
+" server activates the Palamedes locale for the current request."
+
+msgid "Waiting for the first server roundtrip..."
+msgstr "Waiting for the first server roundtrip..."
+
+msgid "What this proves"
+msgstr "What this proves"
+
+msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"
+msgstr "{count, plural, one {You clicked # time} other {You clicked # times}}"
+
+msgid "Macros come from @palamedes/core/macro and @palamedes/react/macro."
+msgstr "Macros come from @palamedes/core/macro and @palamedes/react/macro."
+
+msgid "SSR uses a request-local i18n instance via setServerI18nGetter()."
+msgstr "SSR uses a request-local i18n instance via setServerI18nGetter()."
+
+msgid "Client interactions reuse the same provider-free runtime model."
+msgstr "Client interactions reuse the same provider-free runtime model."

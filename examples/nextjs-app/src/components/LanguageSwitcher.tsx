@@ -3,13 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { setLocaleAction } from "@/lib/actions"
-import type { Locale } from "@/lib/i18n"
-
-const LOCALE_NAMES: Record<string, string> = {
-  en: "English",
-  de: "Deutsch",
-  es: "Español",
-}
+import { LOCALE_LABELS, type Locale } from "@/lib/i18n"
 
 const buttonStyle = {
   padding: "0.5rem 1rem",
@@ -49,7 +43,7 @@ export function LanguageSwitcher({ locale, locales }: LanguageSwitcherProps) {
             color: activeLocale === loc ? "white" : "black",
           }}
         >
-          {LOCALE_NAMES[loc] ?? loc}
+          {LOCALE_LABELS[loc] ?? loc}
         </button>
       ))}
     </div>
