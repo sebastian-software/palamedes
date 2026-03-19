@@ -1,140 +1,126 @@
 # Palamedes vs. Lingui
 
-Lingui is one of the better i18n systems in the JavaScript ecosystem. A lot of what matters in Palamedes was shaped by the same instincts: macro-based authoring, extracted catalogs, and pragmatic framework integration.
+Palamedes is not trying to be a universal rebuttal to Lingui. It is a sharper default for teams that already like macro-based i18n and want a cleaner stack underneath it.
 
-Palamedes is not "Lingui with a new coat of paint," though. It takes the same core direction and pushes it to a clearer end state: a native core, thinner JavaScript layers, a stricter runtime model, and less historical API drag.
+If you want the broader architectural comparison, including `next-intl` and General Translation, read [Comparing Modern i18n Approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md).
 
-If you are starting fresh or already doing architecture cleanup, Palamedes is the better default in our view.
+The real difference is not “Rust vs. JavaScript.” It is the end state:
 
-## Quick Comparison
+- one runtime model
+- one message identity model
+- thinner host adapters
+- less duplicated semantics across the stack
+
+## Short Answer
+
+Choose Palamedes if you want:
+
+- faster transforms and extraction
+- a cleaner migration target than Lingui's broader historical API surface
+- source-string-first catalogs with `message + context`
+- an architecture that is easier to reason about over time
+
+Stay on Lingui if you want:
+
+- maximum compatibility with the existing Lingui ecosystem
+- the most established docs/community surface today
+- the broadest accommodation of older patterns
+
+## Outcome-First Comparison
 
 | Topic | Lingui | Palamedes |
 | --- | --- | --- |
-| Core idea | Strong macro-based i18n workflow | Same core idea, but with a tighter architecture |
-| Transform core | More historically shaped by JS and Babel | Native Rust core with thin TypeScript wrappers |
-| Message identity | Broader historical API surface | Strictly source-string-first: `message + context` |
-| Runtime model | Multiple grown-over-time access paths | One public model: `getI18n()` |
-| Framework integration | Good, but more shaped by Lingui's existing model | Thin Vite and Next.js adapters over the native core |
-| Source maps | Part of the toolchain stack | Always part of transform output |
-| Product direction | Broad compatibility pressure | Opinionated, narrower, cleaner end state |
+| Authoring feel | Familiar macro-based i18n | Intentionally familiar macro-based i18n |
+| Dev/build hot path | Historically more JS/Babel-shaped | Native core + OXC + thin adapters |
+| Message identity | Broader historical surface | Strictly `message + context` |
+| Runtime model | More than one historical access path | One public model: `getI18n()` |
+| Catalog semantics | Mixed legacy and ecosystem pressure | Source-first with `ferrocat` underneath |
+| Long-term shape | Broad compatibility pressure | Opinionated, narrower, cleaner |
 
-## Why We Think Palamedes Is the Better Default
+## What Gets Cleaner In Palamedes
 
-### 1. Same strong idea, cleaner architecture
+### 1. The runtime model
 
-Lingui got the big idea right early: macros, extracted messages, and catalog-driven workflows are better than scattering translation strings across an app by hand.
+Palamedes standardizes on `getI18n()`.
 
-Palamedes keeps that part. What it drops is a lot of the architectural weight that builds up over time in mature ecosystems. The semantic core lives in Rust, the TypeScript layer stays thinner, and the transform story is no longer spread across multiple partially overlapping implementations.
+That sounds small, but it removes a lot of ambiguity:
 
-That makes the system easier to understand, easier to maintain, and easier to evolve.
-
-### 2. One runtime model instead of several
-
-Palamedes standardizes on one runtime access model: `getI18n()`.
-
-That is not just a rename. It removes the old split between multiple access styles and makes the real question explicit: how does this environment provide the active i18n instance?
-
-The result is straightforward:
-
-- fewer mental branches
+- fewer special cases between environments
 - clearer transform output
-- fewer client/server special cases
+- less runtime API sprawl
 
-### 3. Native core instead of growing JavaScript side paths
+### 2. Message identity
 
-Palamedes now does transform, extraction, and catalog work through a native core. TypeScript still matters, but it is no longer carrying a second copy of product semantics.
-
-That pays off in a few ways:
-
-- less duplicated logic
-- less drift between "main path" and fallback behavior
-- clearer ownership in the codebase
-- a cleaner path to packaging, benchmarking, and release work
-
-### 4. Better end-state discipline
-
-Lingui has to account for a large existing ecosystem. That is normal, and often the right trade-off.
-
-Palamedes does not have the same historical burden. That gives it room to finish decisions instead of carrying half-migrated states indefinitely:
-
-- old access paths do not need to live forever
-- transform and extractor behavior can be designed toward a single target state
-- API surfaces can get smaller instead of only growing
-
-If you want a modern i18n toolchain for a new codebase, that is an advantage.
-
-## Where Palamedes Is Concretely Better
-
-### Native transform and extraction core
-
-Palamedes uses Rust for:
-
-- macro transforms
-- message extraction
-- PO parsing and catalog updates
-- catalog parsing and normalization through `ferrocat`
-
-That removes a lot of JavaScript infrastructure from the hottest part of the toolchain.
-
-### Cleaner message model
-
-Palamedes treats `message + context` as the only semantic identity.
+Palamedes treats `message + context` as the public identity.
 
 That means:
 
 - no author-facing explicit IDs
-- source-string-first catalogs and diagnostics
-- compact hash keys only as internal compile/runtime artifacts
+- source-string-first catalogs
+- cleaner diagnostics
+- less identity drift between authoring, extraction, and catalog compilation
 
-That is closer to gettext, and cleaner than mixing source strings with a second public ID model.
+### 3. Semantic ownership
 
-### Source maps by default
+Palamedes deliberately delegates catalog semantics to `ferrocat` instead of carrying duplicate PO logic in multiple layers.
 
-Source maps are not an optional side concern in Palamedes. If the transform rewrites code, it emits source maps.
+That makes the system easier to trust:
 
-That matters for:
+- less bespoke glue
+- clearer ownership boundaries
+- fewer duplicated semantics between core and adapters
 
-- Vite integration
-- debuggable error locations
-- clean downstream toolchains after transformation
+### 4. The adapter boundary
 
-### Smaller product surface
+Palamedes keeps host adapters thin.
 
-Palamedes is not trying to preserve every historical shape forever. It prefers:
+The core compiles host-neutral artifacts. Vite and Next.js render what they need on the adapter side. That separation is part of the product, not an implementation accident.
 
-- one runtime path
-- fewer edge-case APIs
-- fewer "just in case" compatibility branches
+## What Gets Faster
 
-That makes the system stricter, but also more legible.
+Palamedes is designed to speed up the parts of the workflow that hurt most in real projects:
 
-## What Still Feels Familiar
+- macro transforms
+- message extraction
+- catalog update and compile hot paths
 
-Palamedes is not a total reset with zero continuity. If you are coming from Lingui, a lot will still look familiar:
+The performance story is not just “native is faster.” It is also that Palamedes tries to carry fewer layers and fewer historical compatibility branches through the hot path.
 
-- macro-oriented authoring
-- `t`, `msg`, and `defineMessage`
-- `plural`, `select`, and `selectOrdinal`
-- `<Trans>`, `<Plural>`, `<Select>`, and `<SelectOrdinal>`
-- extracted catalogs instead of ad hoc inline translation calls
+See the benchmark and proof material here:
 
-That is exactly why migration is practical: a lot of the day-to-day authoring model stays recognizable while the underlying stack gets cleaner.
+- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
+- [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
 
-## When Lingui Still Makes Sense
+## Who Should Switch Now
 
-Lingui is still a strong choice, especially if:
+Palamedes is a better default if:
 
-- you are already deeply invested in Lingui
-- you want maximum compatibility with existing Lingui documentation
-- you intentionally want to stay inside the established Lingui ecosystem
+- you are starting a new Vite or Next.js codebase
+- you already like Lingui-style authoring
+- you are doing architecture cleanup anyway
+- you care about toolchain discipline, not just feature count
 
-Palamedes is not an argument that Lingui is bad. It is an argument that the same core ideas can now be pushed into a clearer, more native, more opinionated architecture.
+## Who Should Probably Wait
 
-## Recommendation
+Stay on Lingui for now if:
 
-- If you want to minimally disturb a large existing Lingui setup, staying on Lingui can be reasonable.
-- If you are starting fresh or already doing architectural cleanup, Palamedes is the better default.
+- you need the broadest compatibility with older Lingui paths
+- you are not willing to remove explicit authoring IDs
+- you want the most established ecosystem surface today more than the cleanest architecture
 
-Continue here:
+## The Real Positioning
 
-- [Migration from Lingui](./migrate-from-lingui.md)
+Lingui got the core instinct right early: macros, extracted catalogs, and pragmatic framework integration are better than ad hoc translation sprawl.
+
+Palamedes keeps that instinct and removes more of the historical baggage around it.
+
+That is the best way to think about the project:
+
+**Palamedes brings Rust-like discipline to JavaScript i18n tooling: fewer legacy branches, clearer semantic ownership, and faster hot paths.**
+
+## Continue Here
+
+- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [Migration from Lingui to Palamedes](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
+- [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
+- [Comparing modern i18n approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)

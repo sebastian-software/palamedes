@@ -5,53 +5,46 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Palamedes is brutally fast i18n tooling for modern JavaScript and TypeScript apps.
+Palamedes is i18n tooling for modern JavaScript and TypeScript apps with Lingui-style authoring and a cleaner, stricter architecture underneath.
 
-It combines a native core, OXC-powered transforms, and first-party adapters for Vite and Next.js into a package family built to move fast in real codebases, not just benchmark demos.
+It combines a native Rust core, OXC-powered transforms, and first-party Vite and Next.js adapters into a stack built for fast hot paths, clear semantic ownership, and less historical baggage.
 
-## Why Palamedes
+## Why Teams Pick Palamedes
 
-- Brutally fast macro transforms without dragging Babel back into the stack
-- Shockingly fast message extraction for large TypeScript and React codebases
-- Source-string-first catalogs with gettext-style `message + context` identity
-- First-party adapters for Vite and Next.js
-- A small runtime layer instead of framework lock-in
-- Native packaging underneath, but straightforward setup at the package level
-- Catalog parsing and updating delegated to `ferrocat` instead of bespoke PO glue
+- Faster dev and build loops without dragging Babel back into the stack
+- A cleaner migration target than Lingui's older, broader API surface
+- Fewer moving parts in the hot path: one runtime model, one message identity model, thin adapters
+
+## Current Status
+
+- Recommended for new projects and teams already doing architecture cleanup
+- Supported today for Vite and Next.js applications on Node.js `>=22`
+- Source-string-first catalogs are stable and powered by `ferrocat`
+- Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 
 ## Start Here
 
-If you are adopting Palamedes in an application, start with one of these:
-
+- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 - [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) for Vite projects
 - [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) for Next.js projects
 - [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) for extraction workflows and CI
 
-The lower-level packages are there when you want to build custom integrations, tooling, or runtime wiring yourself.
+There is no top-level `palamedes` install path yet. If you are trying Palamedes today, start with the scoped packages above.
 
-## Package Guide
+## Recommended Packages
 
 | Package | Role | Typical audience |
 | --- | --- | --- |
 | [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) | Recommended Vite entry point | App teams |
 | [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) | Recommended Next.js entry point | App teams |
 | [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) | Extraction CLI | App teams, CI |
-| [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime) | Runtime bridge for transformed code | App teams, infra |
-| [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform) | Low-level macro transform | Tool builders |
-| [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor) | Low-level message extractor | Tool builders |
-| [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node) | Node wrapper around the native core | Tool builders |
-| [`@palamedes/core-node-darwin-arm64`](https://www.npmjs.com/package/@palamedes/core-node-darwin-arm64) | Internal native package | Do not install directly |
-| [`@palamedes/core-node-linux-x64-gnu`](https://www.npmjs.com/package/@palamedes/core-node-linux-x64-gnu) | Internal native package | Do not install directly |
-| [`@palamedes/core-node-linux-arm64-gnu`](https://www.npmjs.com/package/@palamedes/core-node-linux-arm64-gnu) | Internal native package | Do not install directly |
-| [`@palamedes/core-node-win32-x64-msvc`](https://www.npmjs.com/package/@palamedes/core-node-win32-x64-msvc) | Internal native package | Do not install directly |
-| [`palamedes`](https://www.npmjs.com/package/palamedes) | Reserved top-level package | Placeholder today |
-| [`create-palamedes`](https://www.npmjs.com/package/create-palamedes) | Reserved scaffold entry point | Placeholder today |
+| [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime) | Runtime bridge for transformed code | App teams |
 
 ## Quick Start With Vite
 
 ```bash
 pnpm add @palamedes/vite-plugin @palamedes/runtime @lingui/core @lingui/react
-pnpm add -D @palamedes/cli
+pnpm add -D @palamedes/cli @palamedes/config
 ```
 
 ```ts
@@ -63,18 +56,6 @@ import { palamedes } from "@palamedes/vite-plugin"
 export default defineConfig({
   plugins: [palamedes(), react()],
 })
-```
-
-```ts
-// src/i18n.ts
-import { i18n } from "@lingui/core"
-import { setClientI18n } from "@palamedes/runtime"
-
-setClientI18n(i18n)
-```
-
-```bash
-pnpm exec pmds extract
 ```
 
 ```ts
@@ -93,43 +74,57 @@ export default defineConfig({
 })
 ```
 
-## Quick Start With Next.js
+```ts
+// src/i18n.ts
+import { i18n } from "@lingui/core"
+import { setClientI18n } from "@palamedes/runtime"
+
+setClientI18n(i18n)
+```
 
 ```bash
-pnpm add @palamedes/next-plugin @palamedes/runtime @lingui/core @lingui/react
-pnpm add -D @palamedes/cli
+pnpm exec pmds extract
 ```
 
-```js
-// next.config.js
-const { withPalamedes } = require("@palamedes/next-plugin")
+For the full copy-paste path, including `.po` loading and the first translated component, use the [5-minute quickstart](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md).
 
-module.exports = withPalamedes({})
-```
+## Why The Architecture Matters
 
-Use `@palamedes/runtime` to expose the active i18n instance on the client and server before translated code runs.
+Palamedes is opinionated in a few places on purpose:
 
-## How The Packages Fit Together
+- `message + context` is the semantic identity
+- `getI18n()` is the public runtime model
+- catalog semantics live in `ferrocat`, not in duplicate PO glue
+- host adapters render modules, while the core stays host-neutral
 
-Palamedes is split deliberately:
+That is the real promise behind the performance claims: less duplicated logic, clearer ownership, and a toolchain that is easier to trust over time.
 
-- framework adapters handle integration and `.po` loading
-- the CLI handles extraction workflows
-- the transform and extractor packages are the low-level building blocks
-- the runtime package provides the `getI18n()` contract that transformed code expects
-- the native core packages carry extraction, transform, and catalog semantics behind the scenes
+## Proof And Adoption Docs
 
-That gives most application teams a simple starting point, while still leaving room for custom tooling and deeper integration work.
-
-## Examples
-
-- [Vite React example](https://github.com/sebastian-software/palamedes/tree/main/examples/vite-react)
-- [Next.js App Router example](https://github.com/sebastian-software/palamedes/tree/main/examples/nextjs-app)
-
-## Docs
-
+- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
+- [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
+- [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
+- [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
 - [Comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
-- [Migration guide from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
+- [Migration playbook from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
+- [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
+
+## Advanced Packages
+
+These are useful when you are building custom tooling rather than adopting Palamedes as an app team:
+
+- [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)
+- [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor)
+- [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node)
+
+Internal native packages exist behind `@palamedes/core-node`, but they are implementation detail and not part of the normal install story.
+
+## Reserved Package Names
+
+- [`palamedes`](https://www.npmjs.com/package/palamedes)
+- [`create-palamedes`](https://www.npmjs.com/package/create-palamedes)
+
+These names are reserved for future top-level entry points. They are not the recommended starting point today.
 
 ## Development
 
@@ -139,8 +134,6 @@ pnpm build
 pnpm test
 pnpm check-types
 ```
-
-Palamedes currently targets Node.js `>=22`.
 
 ## License
 

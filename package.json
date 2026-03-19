@@ -1,7 +1,7 @@
 {
   "name": "palamedes",
   "private": true,
-  "description": "Next-generation Lingui tooling powered by OXC",
+  "description": "Rust-powered i18n tooling for JavaScript and TypeScript with a cleaner Lingui-style architecture",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {
     "type": "git",
@@ -15,6 +15,9 @@
   "scripts": {
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
+    "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
+    "benchmark:lingui-v6": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark",
+    "benchmark:lingui-v6:quick": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark:quick",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check-types": "pnpm check:native-types && pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",
