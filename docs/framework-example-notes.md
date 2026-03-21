@@ -73,3 +73,7 @@ Current tooling note:
   the underlying Vite/Rollup build. The example configs now filter that known
   warning so example builds stay clean while the underlying behavior remains
   documented here.
+- React Router's current dev/build toolchain still declares Vite support only
+  through v7. The Palamedes Vite plugin and the direct TanStack examples are on
+  Vite 8, but the React Router examples stay on Vite 7 until upstream metadata
+  catches up.

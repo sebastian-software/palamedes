@@ -28,6 +28,6 @@
   "devDependencies": {
     "typescript": "^5.9.3",
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.0"
   }
 }
