@@ -74,6 +74,6 @@ Current tooling note:
   warning so example builds stay clean while the underlying behavior remains
   documented here.
 - React Router's current dev/build toolchain still declares Vite support only
-  through v7. The Palamedes Vite plugin and the direct TanStack examples are on
-  Vite 8, but the React Router examples stay on Vite 7 until upstream metadata
-  catches up.
+  through v7 in peer metadata, but the examples are intentionally verified on
+  Vite 8. This is treated as an upstream maintenance lag, not as a blocker for
+  the Palamedes example matrix.
