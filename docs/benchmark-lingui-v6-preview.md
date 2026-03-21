@@ -91,7 +91,7 @@ Before any timing run, the harness validates:
 
 There are also smoke checks against checked-in repo sources:
 
-- transform parity for Palamedes, Lingui Babel, and Lingui SWC on the existing Vite and Next.js example source files
+- transform parity for Palamedes, Lingui Babel, and Lingui SWC on the checked-in benchmark proof fixtures
 - extract sanity on the same example source files
 - compile sanity on `packages/cli/src/commands/fixtures/ferrocat-first-test`
 

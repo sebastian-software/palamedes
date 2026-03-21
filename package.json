@@ -15,6 +15,9 @@
   "scripts": {
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
+    "verify:examples": "node ./scripts/verify-examples-all.mjs",
+    "verify:examples:smoke": "node ./scripts/verify-examples.mjs",
+    "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
     "benchmark:lingui-v6": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark",
     "benchmark:lingui-v6:quick": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark:quick",
@@ -26,6 +29,8 @@
     "test:rust": "cargo test --workspace"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "@playwright/test": "^1.51.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
   }
 }

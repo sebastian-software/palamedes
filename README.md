@@ -7,7 +7,7 @@
 
 Palamedes is i18n tooling for modern JavaScript and TypeScript apps with Lingui-style authoring and a cleaner, stricter architecture underneath.
 
-It combines a native Rust core, OXC-powered transforms, and first-party Vite and Next.js adapters into a stack built for fast hot paths, clear semantic ownership, and less historical baggage.
+It combines a native Rust core, OXC-powered transforms, and thin framework adapters into a stack built for fast hot paths, clear semantic ownership, and less historical baggage.
 
 ## Why Teams Pick Palamedes
 
@@ -18,7 +18,7 @@ It combines a native Rust core, OXC-powered transforms, and first-party Vite and
 ## Current Status
 
 - Recommended for new projects and teams already doing architecture cleanup
-- Supported today for Vite and Next.js applications on Node.js `>=22`
+- Supported today through verified examples for Next.js, TanStack Start, Waku, and React Router on Node.js `>=22`
 - Source-string-first catalogs are stable and powered by `ferrocat`
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 

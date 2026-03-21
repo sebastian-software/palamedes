@@ -51,11 +51,11 @@ const TRACK_LABELS = {
 const PALAMEDES_SHARED_MACRO_BASELINE_NOTE =
   "Palamedes has a single native macro transform path, so the same measured baseline is intentionally reported against both Lingui transform lanes."
 const EXAMPLE_FIXTURE_FILES = [
-  path.join(repoRoot, "examples", "vite-react", "src", "App.tsx"),
-  path.join(repoRoot, "examples", "vite-react", "src", "main.tsx"),
-  path.join(repoRoot, "examples", "nextjs-app", "src", "app", "page.tsx"),
-  path.join(repoRoot, "examples", "nextjs-app", "src", "components", "Counter.tsx"),
-  path.join(repoRoot, "examples", "nextjs-app", "src", "components", "LanguageSwitcher.tsx"),
+  path.join(repoRoot, "benchmarks", "proof-fixtures", "src", "client-app.tsx"),
+  path.join(repoRoot, "benchmarks", "proof-fixtures", "src", "client-entry.tsx"),
+  path.join(repoRoot, "benchmarks", "proof-fixtures", "src", "server-page.tsx"),
+  path.join(repoRoot, "benchmarks", "proof-fixtures", "src", "counter-widget.tsx"),
+  path.join(repoRoot, "benchmarks", "proof-fixtures", "src", "locale-switcher.tsx"),
 ]
 const EXAMPLE_COMPILE_TARGETS = [
   {
@@ -468,7 +468,7 @@ async function runSmokeChecks() {
       catalogs: [
         {
           path: "examples/shared/{locale}",
-          include: ["examples/vite-react/src", "examples/nextjs-app/src"],
+          include: ["benchmarks/proof-fixtures/src"],
         },
       ],
     },

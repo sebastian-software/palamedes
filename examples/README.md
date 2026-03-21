@@ -1,86 +1,98 @@
-# Palamedes Examples
+# Palamedes Example Matrix
 
-These examples are the fastest way to see the current product shape working end to end.
+These examples prove the current Palamedes integration story across four
+framework families and two locale strategies.
 
-If you want the shortest setup path first, start with:
+## Locale Strategy Matrix
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+### Cookie-Derived Locale
 
-If you want full example applications, use the repos below.
+- [examples/nextjs-cookie](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-cookie)
+- [examples/tanstack-cookie](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-cookie)
+- [examples/waku-cookie](/Users/sebastian/Workspace/business/palamedes/examples/waku-cookie)
+- [examples/react-router-cookie](/Users/sebastian/Workspace/business/palamedes/examples/react-router-cookie)
 
-## Current Example Apps
+These examples prove:
 
-### `vite-react/`
-
-The best proof asset for the current Vite path.
-
-It demonstrates:
-
-- macro transforms in a React app
-- `.po` imports
-- runtime locale switching
-- extraction through `pmds extract`
-
-```bash
-cd examples/vite-react
-pnpm install
-pnpm dev
-```
-
-### `nextjs-app/`
-
-The best proof asset for the current Next.js path.
-
-It demonstrates:
-
-- App Router integration
-- server and client runtime wiring
-- `.po` imports
-- request-aware language switching
-- visible server-rendered i18n proof
-- localized `"use server"` action output driven by the request cookie
-- verified on the default Turbopack path on Next.js 16.2
-
-```bash
-cd examples/nextjs-app
-pnpm install
-pnpm dev
-```
-
-### `tanstack-start/`
-
-The best proof asset for the current TanStack Start path.
-
-It demonstrates:
-
-- Palamedes macros in a TanStack Start app
-- `.po` imports through the existing Vite plugin path
+- first-visit locale detection from `Accept-Language`
+- cookie persistence after an explicit locale switch
 - SSR with a request-local Palamedes i18n instance
-- search-param-driven locale switching
-- localized TanStack Start server function output
+- `.po` imports in real app builds
+- localized server-side actions or server functions
 
-```bash
-cd examples/tanstack-start
-pnpm install
-pnpm dev
-```
+### Route-Derived Locale
 
-## What These Examples Prove
+- [examples/nextjs-route](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-route)
+- [examples/tanstack-route](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-route)
+- [examples/waku-route](/Users/sebastian/Workspace/business/palamedes/examples/waku-route)
+- [examples/react-router-route](/Users/sebastian/Workspace/business/palamedes/examples/react-router-route)
 
-- Palamedes works today as a real app-team integration, not just as isolated low-level packages
-- Vite, Next.js, and TanStack Start are the primary proof paths
-- the current runtime model is `getI18n()` via `@palamedes/runtime`
-- source-string-first catalogs and `.po` loading are part of the real app flow
+These examples prove:
 
-## Packages Used
+- locale in the URL via `/:locale/...`
+- host/domain mapping as an extension of the route model
+- wrong-locale or wrong-domain detection via a visible info bar
+- redirect/switch CTA generation without automatic redirects
+- SSR with localized server actions or server functions
 
-- `@palamedes/vite-plugin`
-- `@palamedes/next-plugin`
+## Shared Runtime Model
+
+All matrix examples use the same public Palamedes stack:
+
 - `@palamedes/core`
 - `@palamedes/react`
 - `@palamedes/runtime`
-- `@palamedes/cli`
+- `@palamedes/vite-plugin` or `@palamedes/next-plugin`
 
-For broader project status and benchmark methodology, see:
+Shared locale and routing proof logic lives in the internal package:
 
-- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
+- [packages/example-locale-shared](/Users/sebastian/Workspace/business/palamedes/packages/example-locale-shared)
+
+## Verification
+
+Workspace-level example builds:
+
+```bash
+pnpm build:examples
+```
+
+Central example verification:
+
+```bash
+pnpm verify:examples
+pnpm verify:examples -- --framework nextjs
+pnpm verify:examples -- --strategy route
+```
+
+The verifier runs in two layers:
+
+- fast Node-based smoke checks from [scripts/verify-examples.mjs](/Users/sebastian/Workspace/business/palamedes/scripts/verify-examples.mjs)
+- browser interaction checks from `Vitest` using direct `Playwright` automation against the running apps
+
+Together they cover:
+
+- SSR output
+- first-visit `Accept-Language` handling
+- route-locale rendering
+- host/domain mismatch banners
+- canonical redirect/switch targets
+- locale switching
+- localized server action or server function output after interaction
+
+For the decision model behind cookie, route, and domain handling, see:
+
+- [docs/locale-strategies.md](/Users/sebastian/Workspace/business/palamedes/docs/locale-strategies.md)
+- [docs/framework-example-notes.md](/Users/sebastian/Workspace/business/palamedes/docs/framework-example-notes.md)
+
+## Default Dev Ports
+
+The example scripts use a fixed port layout so the apps can run in parallel:
+
+- `4010` `nextjs-cookie`
+- `4011` `nextjs-route`
+- `4020` `tanstack-cookie`
+- `4021` `tanstack-route`
+- `4030` `waku-cookie`
+- `4031` `waku-route`
+- `4040` `react-router-cookie`
+- `4041` `react-router-route`
