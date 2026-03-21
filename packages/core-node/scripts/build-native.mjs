@@ -93,3 +93,12 @@ if (!existsSync(sourcePath)) {
 }
 
 copyFileSync(sourcePath, targetPath)
+
+if (process.platform === "darwin") {
+  // The copied N-API module can carry an invalid embedded signature after the
+  // cargo build/copy step. Re-sign it ad hoc so Node can dlopen it reliably.
+  execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", targetPath], {
+    cwd: packageDir,
+    stdio: "inherit",
+  })
+}

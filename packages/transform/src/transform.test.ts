@@ -25,6 +25,17 @@ const msg = t\`Hello \${name}\`;
     expect(result.compiledIds).toHaveLength(1)
   })
 
+  it("preserves member expression values in tagged templates", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+const msg = t\`Locale \${resolved.locale}\`;
+`
+    const result = transformPalamedesMacros(code, "test.ts")
+
+    expect(result.code).toContain('message: "Locale {locale}"')
+    expect(result.code).toContain("{ locale: resolved.locale }")
+  })
+
   it("transforms descriptor macros without preserving public ids", () => {
     const code = `
 import { t } from "@palamedes/core/macro";

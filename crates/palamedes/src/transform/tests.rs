@@ -23,6 +23,19 @@ fn transforms_tagged_templates() {
 }
 
 #[test]
+fn preserves_member_expression_values_in_tagged_templates() {
+    let result = transform_macros(
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t`Locale ${resolved.locale}`;\n",
+        "test.ts",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("message: \"Locale {locale}\""));
+    assert!(result.code.contains("{ locale: resolved.locale }"));
+}
+
+#[test]
 fn transforms_define_message_without_runtime_import() {
     let result = transform_macros(
         "import { defineMessage } from \"@palamedes/core/macro\";\nconst msg = defineMessage({ message: \"Hello\" });\n",

@@ -4,17 +4,19 @@ use oxc_ast::ast::{CallExpression, JSXElement, ObjectExpression, TemplateLiteral
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::messages::{
-    build_icu_message, escape_string, expression_name, extract_choice_options,
-    extract_choice_options_from_jsx, extract_jsx_children_parts, extract_jsx_value_name,
+    build_icu_message, escape_string, expression_binding, extract_choice_options,
+    extract_choice_options_from_jsx, extract_jsx_children_parts, extract_jsx_value_binding,
     extract_object_properties, first_argument_object, jsx_attributes, template_to_message,
+    ValueBinding,
 };
 use super::NativeTransformOptions;
 
 pub(super) fn transform_tagged_template(
     template: &TemplateLiteral<'_>,
+    source: &str,
     options: &NativeTransformOptions,
 ) -> Option<(String, String)> {
-    let (message, values) = template_to_message(template);
+    let (message, values) = template_to_message(template, source);
     if message.is_empty() {
         return None;
     }
@@ -97,6 +99,7 @@ fn transform_descriptor_object(
 
 pub(super) fn transform_choice_call(
     call: &CallExpression<'_>,
+    source: &str,
     macro_name: &str,
     options: &NativeTransformOptions,
 ) -> Option<(String, String)> {
@@ -108,7 +111,9 @@ pub(super) fn transform_choice_call(
         return None;
     };
 
-    let value_name = expression_name(value_expr).unwrap_or_else(|| "0".to_string());
+    let mut used_value_names = std::collections::HashMap::new();
+    let value_binding = expression_binding(value_expr, source, 0, &mut used_value_names);
+    let value_name = value_binding.name.clone();
     let choice_options = extract_choice_options(choice_object);
 
     if choice_options.is_empty() {
@@ -122,7 +127,7 @@ pub(super) fn transform_choice_call(
     };
     let message = build_icu_message(format, &value_name, &choice_options, None);
     let lookup_key = compiled_key(&message, None);
-    let values = [value_name];
+    let values = [value_binding];
     Some((
         build_runtime_call(
             &lookup_key,
@@ -174,7 +179,7 @@ pub(super) fn transform_trans_element(
     }
 
     if !values.is_empty() {
-        attrs.push(format!("values={{{{ {} }}}}", values.join(", ")));
+        attrs.push(format!("values={{{{ {} }}}}", render_value_bindings(&values)));
     }
 
     Ok(Some((format!("<Trans {} />", attrs.join(" ")), lookup_key)))
@@ -182,6 +187,7 @@ pub(super) fn transform_trans_element(
 
 pub(super) fn transform_choice_jsx_element(
     element: &JSXElement<'_>,
+    source: &str,
     macro_name: &str,
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
@@ -191,9 +197,10 @@ pub(super) fn transform_choice_jsx_element(
     }
     let context = attrs.get("context").cloned();
     let comment = attrs.get("comment").cloned();
-    let Some(value_name) = extract_jsx_value_name(&element.opening_element) else {
+    let Some(value_binding) = extract_jsx_value_binding(&element.opening_element, source) else {
         return Ok(None);
     };
+    let value_name = value_binding.name.clone();
     let choice_options = extract_choice_options_from_jsx(&element.opening_element);
 
     if choice_options.is_empty() {
@@ -213,7 +220,7 @@ pub(super) fn transform_choice_jsx_element(
         attrs.get("offset").map(String::as_str),
     );
     let lookup_key = compiled_key(&message, context.as_deref());
-    let values = [value_name];
+    let values = [value_binding];
     Ok(Some((
         build_runtime_call(
             &lookup_key,
@@ -267,7 +274,7 @@ fn build_message_descriptor(
 fn build_runtime_call(
     lookup_key: &str,
     message: Option<&str>,
-    values: Option<&[String]>,
+    values: Option<&[ValueBinding]>,
     context: Option<&str>,
     comment: Option<&str>,
     options: &NativeTransformOptions,
@@ -276,7 +283,7 @@ fn build_runtime_call(
     let descriptor = build_runtime_descriptor(message, context, comment, options);
     let values_text = values
         .filter(|values| !values.is_empty())
-        .map(|values| format!("{{ {} }}", values.join(", ")));
+        .map(|values| format!("{{ {} }}", render_value_bindings(values)));
 
     match (values_text, descriptor) {
         (None, None) => format!(
@@ -298,6 +305,20 @@ fn build_runtime_call(
             escape_string(lookup_key)
         ),
     }
+}
+
+fn render_value_bindings(values: &[ValueBinding]) -> String {
+    values
+        .iter()
+        .map(|binding| {
+            if binding.name == binding.expression {
+                binding.name.clone()
+            } else {
+                format!("{}: {}", binding.name, binding.expression)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn build_runtime_descriptor(
