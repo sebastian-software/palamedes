@@ -49,12 +49,6 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
-      - name: Set up pnpm cache
-        uses: actions/setup-node@v6
-        with:
-          cache: pnpm
-          node-version: 24
-
       - name: Select deployment targets
         id: select
         shell: bash
