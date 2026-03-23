@@ -9,6 +9,8 @@ export const EXAMPLE_MATRIX = [
     framework: "nextjs",
     strategy: "cookie",
     port: 4010,
+    vercelProject: "palamedes-nextjs-cookie",
+    publicHost: "palamedes-nextjs-cookie.vercel.app",
     cwd: path.join(ROOT, "examples/nextjs-cookie"),
     build: ["build"],
     start: ["start"],
@@ -25,6 +27,8 @@ export const EXAMPLE_MATRIX = [
     framework: "nextjs",
     strategy: "route",
     port: 4011,
+    vercelProject: "palamedes-nextjs-route",
+    publicHost: "palamedes-nextjs-route.vercel.app",
     cwd: path.join(ROOT, "examples/nextjs-route"),
     build: ["build"],
     start: ["start"],
@@ -46,6 +50,8 @@ export const EXAMPLE_MATRIX = [
     framework: "tanstack",
     strategy: "cookie",
     port: 4020,
+    vercelProject: "palamedes-tanstack-cookie",
+    publicHost: "palamedes-tanstack-cookie.vercel.app",
     cwd: path.join(ROOT, "examples/tanstack-cookie"),
     build: ["build"],
     start: ["preview"],
@@ -62,6 +68,8 @@ export const EXAMPLE_MATRIX = [
     framework: "tanstack",
     strategy: "route",
     port: 4021,
+    vercelProject: "palamedes-tanstack-route",
+    publicHost: "palamedes-tanstack-route.vercel.app",
     cwd: path.join(ROOT, "examples/tanstack-route"),
     build: ["build"],
     start: ["preview"],
@@ -91,6 +99,8 @@ export const EXAMPLE_MATRIX = [
     framework: "waku",
     strategy: "cookie",
     port: 4030,
+    vercelProject: "palamedes-waku-cookie",
+    publicHost: "palamedes-waku-cookie.vercel.app",
     cwd: path.join(ROOT, "examples/waku-cookie"),
     build: ["build"],
     start: ["start"],
@@ -107,6 +117,8 @@ export const EXAMPLE_MATRIX = [
     framework: "waku",
     strategy: "route",
     port: 4031,
+    vercelProject: "palamedes-waku-route",
+    publicHost: "palamedes-waku-route.vercel.app",
     cwd: path.join(ROOT, "examples/waku-route"),
     build: ["build"],
     start: ["start"],
@@ -128,6 +140,8 @@ export const EXAMPLE_MATRIX = [
     framework: "react-router",
     strategy: "cookie",
     port: 4040,
+    vercelProject: "palamedes-reactrouter-cookie",
+    publicHost: "palamedes-reactrouter-cookie.vercel.app",
     cwd: path.join(ROOT, "examples/react-router-cookie"),
     build: ["build"],
     start: ["start"],
@@ -144,6 +158,8 @@ export const EXAMPLE_MATRIX = [
     framework: "react-router",
     strategy: "route",
     port: 4041,
+    vercelProject: "palamedes-reactrouter-route",
+    publicHost: "palamedes-reactrouter-route.vercel.app",
     cwd: path.join(ROOT, "examples/react-router-route"),
     build: ["build"],
     start: ["start"],
@@ -166,6 +182,11 @@ export function parseExampleArgs(argv) {
   const filters = {}
   for (let index = 2; index < argv.length; index += 1) {
     const value = argv[index]
+    if (value === "--id") {
+      filters.id = argv[index + 1]
+      index += 1
+      continue
+    }
     if (value === "--framework") {
       filters.framework = argv[index + 1]
       index += 1
@@ -181,6 +202,9 @@ export function parseExampleArgs(argv) {
 
 export function selectExamples(filters) {
   return EXAMPLE_MATRIX.filter((example) => {
+    if (filters.id && example.id !== filters.id) {
+      return false
+    }
     if (filters.framework && example.framework !== filters.framework) {
       return false
     }

@@ -8,6 +8,7 @@ dist/
 .env.local
 target/
 packages/core-node/palamedes-node.node
+.vercel/
 
 # Build output
 *.js.map
