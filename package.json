@@ -17,7 +17,7 @@
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "examples:matrix": "node ./scripts/print-example-matrix.mjs",
     "deploy:examples": "node ./scripts/deploy-examples.mjs",
-    "verify:examples": "node ./scripts/verify-examples-all.mjs",
+    "verify:examples": "pnpm build && node ./scripts/verify-examples-all.mjs",
     "verify:examples:smoke": "node ./scripts/verify-examples.mjs",
     "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
