@@ -1,4 +1,4 @@
-import { access, appendFile } from "node:fs/promises"
+import { access, appendFile, readFile } from "node:fs/promises"
 import { spawn } from "node:child_process"
 import { parseExampleArgs, selectExamples } from "./example-matrix.mjs"
 
@@ -121,6 +121,20 @@ async function ensureVercelLink(example, env, token) {
   await runCommand("pnpm", args, { cwd: example.cwd, env })
 }
 
+async function logDownloadedProjectSettings(example) {
+  try {
+    const projectSettingsPath = `${example.cwd}/.vercel/project.json`
+    const projectSettings = JSON.parse(await readFile(projectSettingsPath, "utf8"))
+    const settings = projectSettings.settings ?? {}
+    console.log(
+      `[vercel-settings] ${example.id} rootDirectory=${JSON.stringify(settings.rootDirectory ?? null)} buildCommand=${JSON.stringify(settings.buildCommand ?? null)} outputDirectory=${JSON.stringify(settings.outputDirectory ?? null)} framework=${JSON.stringify(settings.framework ?? null)}`
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.log(`[vercel-settings] ${example.id} could not read project settings: ${message}`)
+  }
+}
+
 async function writeSummaryLine(summaryFile, line) {
   if (!summaryFile) {
     return
@@ -178,6 +192,7 @@ async function deployExample(example, options) {
 
   console.log(`\n[deploy] ${example.id} -> ${example.vercelProject}`)
   await runCommand("pnpm", [...baseArgs, "pull", ...environmentArgs], { cwd: example.cwd, env })
+  await logDownloadedProjectSettings(example)
   await runCommand("pnpm", [...baseArgs, ...buildArgs], { cwd: example.cwd, env })
   const result = await runCommand("pnpm", [...baseArgs, ...deployArgs], { cwd: example.cwd, env })
   const url = extractDeploymentUrl(result.stdout + result.stderr)
