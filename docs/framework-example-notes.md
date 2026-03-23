@@ -37,6 +37,7 @@ Current framework note:
 
 The `waku-cookie` and `waku-route` examples prove:
 
+- Waku file-based `src/pages` routing with the default adapter path
 - Waku-native SSR with provider-free Palamedes rendering
 - localized server actions
 - `.po` loading through the Vite plugin path exposed via `waku.config.ts`
@@ -46,12 +47,6 @@ Palamedes-side fixes already baked into these examples:
 
 - server-side activation for client widgets rendered during SSR, so no
   locale-local fallback copy maps are needed
-
-Current tooling notes:
-
-- the example build emits a known Waku/Vite chunking warning when the root app
-  component is both statically referenced by the server entry and dynamically
-  referenced by Waku's generated server-reference layer
 
 ## React Router
 

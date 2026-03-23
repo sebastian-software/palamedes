@@ -5,7 +5,7 @@ import {
   LOCALES,
   LOCALE_LABELS,
   createRouteLocaleBanner,
-  getPreferredLocale,
+  isLocale,
   normalizeLocale,
   type HostLocaleConfig,
   type Locale,
@@ -18,6 +18,7 @@ export {
   DEFAULT_LOCALE,
   LOCALES,
   LOCALE_LABELS,
+  isLocale,
   normalizeLocale,
   type Locale,
 }
@@ -63,16 +64,15 @@ export function syncClientI18n(locale: Locale) {
   return clientI18n
 }
 
-export function getInitialRouteLocale(request: Request) {
-  return getPreferredLocale(request.headers.get("accept-language"))
-}
-
-export function getRouteBanner(request: Request, locale: Locale) {
+export function createBanner(
+  headers: Record<string, string | undefined>,
+  locale: Locale
+) {
   return createRouteLocaleBanner({
-    acceptLanguageHeader: request.headers.get("accept-language"),
+    acceptLanguageHeader: headers["accept-language"],
     currentLocale: locale,
     hostConfig: HOSTS,
     pathname: `/${locale}`,
-    requestHost: request.headers.get("host"),
+    requestHost: headers.host,
   })
 }
