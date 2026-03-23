@@ -10,6 +10,12 @@ function getLocaleFromPath(pathname: string): Locale | null {
 
 export default adapter({
   handleRequest: async (input, { renderRsc, renderHtml }) => {
+    if (input.type === "function") {
+      return renderRsc({
+        _value: await input.fn(...input.args),
+      })
+    }
+
     if (input.type === "custom" && input.pathname === "/") {
       const locale = getInitialRouteLocale(input.req)
       return Response.redirect(new URL(`/${locale}`, input.req.url), 302)

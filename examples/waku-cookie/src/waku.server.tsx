@@ -6,6 +6,12 @@ import App from "./components/App"
 export default adapter(
   {
     handleRequest: async (input, { renderRsc, renderHtml }) => {
+      if (input.type === "function") {
+        return renderRsc({
+          _value: await input.fn(...input.args),
+        })
+      }
+
       if (input.type === "custom" && input.pathname === "/set-locale" && input.req.method === "POST") {
         const formData = await input.req.formData()
         const locale = String(formData.get("locale") ?? "en")

@@ -65,10 +65,6 @@ test("matrix example browser contract", async () => {
 
   await expect.poll(() => currentServerLocale(page)).toContain("English")
 
-  if (example.framework === "waku" && example.strategy === "route") {
-    return
-  }
-
   if (example.strategy === "cookie") {
     await page.getByTestId("locale-switch-de").click({ force: true, noWaitAfter: true, timeout: 15_000 })
 
@@ -83,9 +79,6 @@ test("matrix example browser contract", async () => {
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
 
     await waitForClientReady(page)
-    if (example.framework === "waku") {
-      return
-    }
     await page.evaluate(() => {
       document.querySelector('[data-testid="server-proof-trigger"]')?.click()
     })
@@ -100,14 +93,12 @@ test("matrix example browser contract", async () => {
   expect(page.url()).toContain("/de")
 
   await waitForClientReady(page)
-  if (example.framework !== "waku") {
-    await page.evaluate(() => {
-      document.querySelector('[data-testid="server-proof-trigger"]')?.click()
-    })
-    await expect
-      .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
-      .toContain("de")
-  }
+  await page.evaluate(() => {
+    document.querySelector('[data-testid="server-proof-trigger"]')?.click()
+  })
+  await expect
+    .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
+    .toContain("de")
 
   if (!example.hostMismatchUrl) {
     throw new Error(`Missing host mismatch URL for route example ${example.id}`)

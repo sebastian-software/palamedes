@@ -52,12 +52,6 @@ Current tooling notes:
 - the example build emits a known Waku/Vite chunking warning when the root app
   component is both statically referenced by the server entry and dynamically
   referenced by Waku's generated server-reference layer
-- the central browser verifier currently skips the in-browser server-action
-  assertion for Waku, and for the route variant it limits itself to the initial
-  SSR/render proof instead of driving the interactive route switch in-browser;
-  smoke checks still cover route/cookie behavior and mismatch banners, while
-  the live examples remain the manual proof surface for those Waku-specific
-  interactions
 
 ## React Router
 
