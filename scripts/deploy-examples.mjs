@@ -199,7 +199,7 @@ async function deployExample(example, options) {
   if (usesRootScopedVercelCommands) {
     await prepareRootRepoLink(example)
   }
-  const vercelCwd = usesRootScopedVercelCommands ? ROOT : example.cwd
+  const vercelCwd = example.cwd
 
   const baseArgs = ["exec", "vercel"]
   const environmentArgs = ["--yes", `--environment=${options.environment}`, `--token=${token}`]
