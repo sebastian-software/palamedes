@@ -105,9 +105,11 @@ async function ensureVercelLink(example, env, token) {
     return
   }
 
+  const vercelCwdArgs = getVercelCwdArgs(example)
   const args = [
     "exec",
     "vercel",
+    ...vercelCwdArgs,
     "link",
     "--yes",
     `--project=${example.vercelProject}`,
@@ -118,7 +120,7 @@ async function ensureVercelLink(example, env, token) {
     args.push(`--scope=${process.env.VERCEL_SCOPE}`)
   }
 
-  await runCommand("pnpm", args, { cwd: example.cwd, env })
+  await runCommand("pnpm", args, { cwd: getCommandCwd(example), env })
 }
 
 async function logDownloadedProjectSettings(example) {
@@ -133,6 +135,18 @@ async function logDownloadedProjectSettings(example) {
     const message = error instanceof Error ? error.message : String(error)
     console.log(`[vercel-settings] ${example.id} could not read project settings: ${message}`)
   }
+}
+
+function isNextExample(example) {
+  return example.framework === "nextjs"
+}
+
+function getCommandCwd(example) {
+  return isNextExample(example) ? process.cwd() : example.cwd
+}
+
+function getVercelCwdArgs(example) {
+  return isNextExample(example) ? [`--cwd=${example.cwd}`] : []
 }
 
 async function writeSummaryLine(summaryFile, line) {
@@ -180,10 +194,11 @@ async function deployExample(example, options) {
 
   await ensureVercelLink(example, env, token)
 
-  const baseArgs = ["exec", "vercel"]
+  const baseArgs = ["exec", "vercel", ...getVercelCwdArgs(example)]
   const environmentArgs = ["--yes", `--environment=${options.environment}`, `--token=${token}`]
   const buildArgs = ["build", `--token=${token}`]
   const deployArgs = ["deploy", "--prebuilt", "--yes", `--token=${token}`]
+  const commandCwd = getCommandCwd(example)
 
   if (options.environment === "production") {
     buildArgs.push("--prod")
@@ -191,10 +206,10 @@ async function deployExample(example, options) {
   }
 
   console.log(`\n[deploy] ${example.id} -> ${example.vercelProject}`)
-  await runCommand("pnpm", [...baseArgs, "pull", ...environmentArgs], { cwd: example.cwd, env })
+  await runCommand("pnpm", [...baseArgs, "pull", ...environmentArgs], { cwd: commandCwd, env })
   await logDownloadedProjectSettings(example)
-  await runCommand("pnpm", [...baseArgs, ...buildArgs], { cwd: example.cwd, env })
-  const result = await runCommand("pnpm", [...baseArgs, ...deployArgs], { cwd: example.cwd, env })
+  await runCommand("pnpm", [...baseArgs, ...buildArgs], { cwd: commandCwd, env })
+  const result = await runCommand("pnpm", [...baseArgs, ...deployArgs], { cwd: commandCwd, env })
   const url = extractDeploymentUrl(result.stdout + result.stderr)
 
   if (!url) {
