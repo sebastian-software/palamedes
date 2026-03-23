@@ -150,6 +150,10 @@ async function prepareRootRepoLink(example) {
   await writeFile(repoConfigPath, `${JSON.stringify(repoConfig, null, 2)}\n`, "utf8")
 }
 
+async function removeExampleProjectLink(example) {
+  await rm(path.join(example.cwd, ".vercel", "project.json"), { force: true })
+}
+
 async function writeSummaryLine(summaryFile, line) {
   if (!summaryFile) {
     return
@@ -198,6 +202,7 @@ async function deployExample(example, options) {
   const usesRootScopedVercelCommands = example.framework === "nextjs"
   if (usesRootScopedVercelCommands) {
     await prepareRootRepoLink(example)
+    await removeExampleProjectLink(example)
   }
   const vercelCwd = example.cwd
 
@@ -213,7 +218,13 @@ async function deployExample(example, options) {
 
   console.log(`\n[deploy] ${example.id} -> ${example.vercelProject}`)
   await runCommand("pnpm", [...baseArgs, "pull", ...environmentArgs], { cwd: vercelCwd, env })
+  if (usesRootScopedVercelCommands) {
+    await removeExampleProjectLink(example)
+  }
   await runCommand("pnpm", [...baseArgs, ...buildArgs], { cwd: vercelCwd, env })
+  if (usesRootScopedVercelCommands) {
+    await removeExampleProjectLink(example)
+  }
   const result = await runCommand("pnpm", [...baseArgs, ...deployArgs], { cwd: vercelCwd, env })
   const url = extractDeploymentUrl(result.stdout + result.stderr)
 
