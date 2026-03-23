@@ -5,7 +5,7 @@
  * No Babel required!
  */
 
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { createRequire } from "node:module"
 import type { NextConfig } from "next"
@@ -71,8 +71,11 @@ function resolveWorkspaceRoot(explicitRoot?: string) {
   const initialDir = currentDir
 
   while (true) {
+    const packageJsonPath = path.join(currentDir, "package.json")
+
     if (
-      existsSync(path.join(currentDir, "pnpm-workspace.yaml"))
+      hasWorkspaces(packageJsonPath)
+      || existsSync(path.join(currentDir, "pnpm-workspace.yaml"))
       || existsSync(path.join(currentDir, "pnpm-workspace.yml"))
       || existsSync(path.join(currentDir, "turbo.json"))
       || existsSync(path.join(currentDir, ".git"))
@@ -85,6 +88,34 @@ function resolveWorkspaceRoot(explicitRoot?: string) {
       return undefined
     }
     currentDir = parentDir
+  }
+}
+
+function hasWorkspaces(packageJsonPath: string) {
+  if (!existsSync(packageJsonPath)) {
+    return false
+  }
+
+  try {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      workspaces?: unknown
+    }
+
+    if (Array.isArray(packageJson.workspaces)) {
+      return packageJson.workspaces.length > 0
+    }
+
+    if (
+      packageJson.workspaces
+      && typeof packageJson.workspaces === "object"
+      && Array.isArray((packageJson.workspaces as { packages?: unknown }).packages)
+    ) {
+      return (packageJson.workspaces as { packages: unknown[] }).packages.length > 0
+    }
+
+    return false
+  } catch {
+    return false
   }
 }
 
