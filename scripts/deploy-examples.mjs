@@ -1,5 +1,4 @@
-import { mkdir, appendFile, writeFile } from "node:fs/promises"
-import path from "node:path"
+import { access, appendFile } from "node:fs/promises"
 import { spawn } from "node:child_process"
 import { parseExampleArgs, selectExamples } from "./example-matrix.mjs"
 
@@ -42,20 +41,6 @@ function parseArgs(argv) {
   }
 
   return result
-}
-
-function getProjectIdMap() {
-  const raw = process.env.VERCEL_PROJECT_IDS_JSON
-  if (!raw) {
-    throw new Error("Missing VERCEL_PROJECT_IDS_JSON")
-  }
-
-  const parsed = JSON.parse(raw)
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("VERCEL_PROJECT_IDS_JSON must be an object keyed by example id")
-  }
-
-  return parsed
 }
 
 function requireEnv(name) {
@@ -106,13 +91,34 @@ function extractDeploymentUrl(output) {
   return matches.at(-1) ?? null
 }
 
-async function ensureVercelLink(example, orgId, projectId) {
-  const targetDir = path.join(example.cwd, ".vercel")
-  await mkdir(targetDir, { recursive: true })
-  await writeFile(
-    path.join(targetDir, "project.json"),
-    JSON.stringify({ orgId, projectId }, null, 2),
-  )
+async function hasCommittedProjectLink(example) {
+  try {
+    await access(`${example.cwd}/.vercel/project.json`)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function ensureVercelLink(example, env, token) {
+  if (await hasCommittedProjectLink(example)) {
+    return
+  }
+
+  const args = [
+    "exec",
+    "vercel",
+    "link",
+    "--yes",
+    `--project=${example.vercelProject}`,
+    `--token=${token}`,
+  ]
+
+  if (process.env.VERCEL_SCOPE) {
+    args.push(`--scope=${process.env.VERCEL_SCOPE}`)
+  }
+
+  await runCommand("pnpm", args, { cwd: example.cwd, env })
 }
 
 async function writeSummaryLine(summaryFile, line) {
@@ -150,23 +156,15 @@ async function deployExample(example, options) {
     }
   }
 
-  const orgId = requireEnv("VERCEL_ORG_ID")
   const token = requireEnv("VERCEL_TOKEN")
-  const projectId = getProjectIdMap()[example.id]
-
-  if (!projectId) {
-    throw new Error(`Missing Vercel project id mapping for ${example.id}`)
-  }
-
-  await ensureVercelLink(example, orgId, projectId)
 
   const env = {
     ...process.env,
     VERCEL_DISABLE_AUTO_UPDATE: "1",
-    VERCEL_ORG_ID: orgId,
-    VERCEL_PROJECT_ID: projectId,
     VERCEL_TOKEN: token,
   }
+
+  await ensureVercelLink(example, env, token)
 
   const baseArgs = ["exec", "vercel"]
   const environmentArgs = ["--yes", `--environment=${options.environment}`, `--token=${token}`]

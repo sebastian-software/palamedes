@@ -40,26 +40,16 @@ For each project in `Vercel`:
 Repository setup in `GitHub`:
 
 - add `VERCEL_TOKEN`
-- add `VERCEL_ORG_ID`
-- add `VERCEL_PROJECT_IDS_JSON`
+- optionally add `VERCEL_SCOPE` as a repo or environment variable if the token can access multiple Vercel scopes
 
-Recommended shape for `VERCEL_PROJECT_IDS_JSON`:
+Preferred repository setup:
 
-```json
-{
-  "nextjs-cookie": "prj_xxx",
-  "nextjs-route": "prj_xxx",
-  "tanstack-cookie": "prj_xxx",
-  "tanstack-route": "prj_xxx",
-  "waku-cookie": "prj_xxx",
-  "waku-route": "prj_xxx",
-  "react-router-cookie": "prj_xxx",
-  "react-router-route": "prj_xxx"
-}
-```
+- run `vercel link --yes --project <project-name>` once inside each example directory
+- commit the resulting `examples/<app>/.vercel/project.json` if you want the link to stay explicit in the repo
+- if the file is not committed, the deploy helper links the project by name at runtime
 
-`VERCEL_PROJECT_IDS_JSON` intentionally maps by the Palamedes example id, not by
-filesystem path, so the workflow can stay anchored to the matrix metadata.
+The deploy helper uses the matrix project names as the source of truth, so no
+repo-wide JSON mapping secret is required anymore.
 
 ## Workflow Shape
 
@@ -90,6 +80,13 @@ The deploy helper supports selection filters and a dry-run mode:
 ```bash
 pnpm deploy:examples -- --dry-run --id nextjs-cookie --environment preview
 pnpm deploy:examples -- --dry-run --framework waku
+```
+
+To materialize the committed Vercel link file for one example:
+
+```bash
+cd examples/nextjs-cookie
+pnpm exec vercel link --yes --project palamedes-nextjs-cookie
 ```
 
 ## Future Phase
