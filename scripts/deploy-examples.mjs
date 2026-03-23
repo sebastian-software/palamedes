@@ -1,6 +1,6 @@
-import { access, appendFile } from "node:fs/promises"
+import { appendFile } from "node:fs/promises"
 import { spawn } from "node:child_process"
-import { parseExampleArgs, selectExamples } from "./example-matrix.mjs"
+import { ROOT, parseExampleArgs, selectExamples } from "./example-matrix.mjs"
 
 function parseArgs(argv) {
   const result = {
@@ -91,20 +91,7 @@ function extractDeploymentUrl(output) {
   return matches.at(-1) ?? null
 }
 
-async function hasCommittedProjectLink(example) {
-  try {
-    await access(`${example.cwd}/.vercel/project.json`)
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function ensureVercelLink(example, env, token) {
-  if (await hasCommittedProjectLink(example)) {
-    return
-  }
-
   const args = [
     "exec",
     "vercel",
@@ -118,7 +105,7 @@ async function ensureVercelLink(example, env, token) {
     args.push(`--scope=${process.env.VERCEL_SCOPE}`)
   }
 
-  await runCommand("pnpm", args, { cwd: example.cwd, env })
+  await runCommand("pnpm", args, { cwd: ROOT, env })
 }
 
 async function writeSummaryLine(summaryFile, line) {
@@ -177,9 +164,9 @@ async function deployExample(example, options) {
   }
 
   console.log(`\n[deploy] ${example.id} -> ${example.vercelProject}`)
-  await runCommand("pnpm", [...baseArgs, "pull", ...environmentArgs], { cwd: example.cwd, env })
-  await runCommand("pnpm", [...baseArgs, ...buildArgs], { cwd: example.cwd, env })
-  const result = await runCommand("pnpm", [...baseArgs, ...deployArgs], { cwd: example.cwd, env })
+  await runCommand("pnpm", [...baseArgs, "pull", ...environmentArgs], { cwd: ROOT, env })
+  await runCommand("pnpm", [...baseArgs, ...buildArgs], { cwd: ROOT, env })
+  const result = await runCommand("pnpm", [...baseArgs, ...deployArgs], { cwd: ROOT, env })
   const url = extractDeploymentUrl(result.stdout + result.stderr)
 
   if (!url) {
