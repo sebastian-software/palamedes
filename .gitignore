@@ -8,6 +8,7 @@ dist/
 .env.local
 target/
 packages/core-node/palamedes-node.node
+.vercel/
 
 # Build output
 *.js.map
@@ -16,6 +17,12 @@ packages/core-node/palamedes-node.node
 # Next.js
 .next/
 
+# TanStack Start
+.tanstack/
+.vinxi/
+.nitro/
+.output/
+
 # Lingui
 .lingui/
 
@@ -23,3 +30,6 @@ packages/core-node/palamedes-node.node
 benchmarks/*/results/*
 !benchmarks/*/results/.gitkeep
 benchmarks/*/.swc/
+
+# Browser verification artifacts
+.vitest-attachments/

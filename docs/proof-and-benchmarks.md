@@ -9,7 +9,7 @@ This page exists to make those claims easier to verify.
 | Topic | Current state |
 | --- | --- |
 | Recommended use cases | New projects, architecture cleanup, teams already comfortable with Lingui-style authoring |
-| Supported frameworks | Vite, Next.js |
+| Supported frameworks | Verified examples for Next.js, TanStack Start, Waku, and React Router |
 | Runtime model | `@palamedes/runtime` with `getI18n()` |
 | Catalog model | Source-string-first, `.po`, `message + context` identity |
 | Native core | Rust + `napi-rs` |
@@ -19,7 +19,7 @@ This page exists to make those claims easier to verify.
 
 ## What Counts As Proof In This Repo
 
-- first-party Vite and Next.js example applications
+- first-party multi-framework example matrix with cookie and route locale strategies
 - a native core with typed bindings and a documented architecture
 - source-string-first catalog semantics backed by `ferrocat`
 - reproducible local benchmark commands
@@ -33,7 +33,9 @@ The benchmark flow here focuses on the hot paths Palamedes claims to improve:
 - catalog update
 - catalog artifact compile
 
-It uses the checked-in example apps and catalogs as a small, public fixture corpus.
+It uses a checked-in fixture corpus under
+[`benchmarks/proof-fixtures`](/Users/sebastian/Workspace/business/palamedes/benchmarks/proof-fixtures),
+not runnable demo applications.
 
 ## Exact Commands
 
@@ -89,17 +91,20 @@ This is meant to be reproducible and honest, not a “best possible marketing nu
 
 ## Fixture Corpus
 
-The current public corpus uses:
+The current benchmark corpus uses a dedicated fixture set:
 
-- `examples/vite-react`
-- `examples/nextjs-app`
+- `benchmarks/proof-fixtures/src/client-app.tsx`
+- `benchmarks/proof-fixtures/src/client-entry.tsx`
+- `benchmarks/proof-fixtures/src/server-page.tsx`
+- `benchmarks/proof-fixtures/src/counter-widget.tsx`
+- `benchmarks/proof-fixtures/src/locale-switcher.tsx`
 
 That gives the benchmark:
 
 - React macros
 - JSX and tagged template paths
-- `.po` catalogs for multiple locales
-- catalog artifact compilation on real example files
+- client-oriented and server-oriented render shapes
+- catalog artifact compilation on plain checked-in source fixtures
 
 ## Local Baseline
 
@@ -140,5 +145,6 @@ show the work, show the architecture, and make local verification easy.
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
+- [Framework example notes](https://github.com/sebastian-software/palamedes/blob/main/docs/framework-example-notes.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
 - [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)

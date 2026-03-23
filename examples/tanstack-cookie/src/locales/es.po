@@ -1,0 +1,100 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: es\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"MIME-Version: 1.0\n"
+"PO-Revision-Date: 2026-03-19 12:00+0100\n"
+"POT-Creation-Date: 2026-03-19 12:00+0100\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"X-Generator: palamedes\n"
+
+msgid "Click me"
+msgstr "Haz clic"
+
+msgid "Client interaction"
+msgstr "Interaccion del cliente"
+
+msgid "Counter Example"
+msgstr "Ejemplo del contador"
+
+msgid "Current locale:"
+msgstr "Idioma actual:"
+
+msgid "Handled at"
+msgstr "Atendido en"
+
+msgid "Loaded through the Palamedes Vite plugin"
+msgstr "Cargado mediante el plugin Vite de Palamedes"
+
+msgid "Localized message"
+msgstr "Mensaje localizado"
+
+msgid "Localized server function result"
+msgstr "Resultado localizado de la funcion del servidor"
+
+msgid "No Lingui-owned runtime package is required here."
+msgstr "Aqui no se necesita ningun paquete runtime de Lingui."
+
+msgid "Palamedes without framework-specific runtime wrappers."
+msgstr "Palamedes sin wrappers runtime especificos del framework."
+
+msgid "Refresh server result"
+msgstr "Actualizar resultado del servidor"
+
+msgid "Rendered on server"
+msgstr "Renderizado en el servidor"
+
+msgid "SSR translation happens before the page reaches the browser."
+msgstr "La traduccion SSR ocurre antes de que la pagina llegue al navegador."
+
+msgid "Server function proof"
+msgstr "Prueba de la funcion del servidor"
+
+msgid "Server locale"
+msgstr "Idioma del servidor"
+
+msgid "Server function confirmed locale {locale}."
+msgstr "La funcion del servidor confirmo el idioma {locale}."
+
+msgid "Server-rendered proof"
+msgstr "Prueba de renderizado del servidor"
+
+msgid ""
+"This example proves the existing Vite-based Palamedes setup works in TanStack"
+" Start with SSR, locale switching, .po imports, and localized server functions."
+msgstr ""
+"Este ejemplo demuestra que la integracion existente de Palamedes sobre Vite"
+" funciona en TanStack Start con SSR, cambio de idioma, imports .po y"
+" funciones de servidor localizadas."
+
+msgid "This panel was rendered on the server for locale {localeLabel}."
+msgstr "Este panel se renderizo en el servidor para el idioma {localeLabel}."
+
+msgid ""
+"The text below is returned from a TanStack Start server function after the"
+" server activates the Palamedes locale for the current request."
+msgstr ""
+"El texto de abajo vuelve desde una funcion de servidor de TanStack Start"
+" despues de que el servidor activa el idioma de Palamedes para esta solicitud."
+
+msgid "Waiting for the first server roundtrip..."
+msgstr "Esperando el primer viaje de ida y vuelta al servidor..."
+
+msgid "What this proves"
+msgstr "Que demuestra esto"
+
+msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"
+msgstr "{count, plural, one {Has hecho clic # vez} other {Has hecho clic # veces}}"
+
+msgid "Macros come from @palamedes/core/macro and @palamedes/react/macro."
+msgstr "Los macros vienen de @palamedes/core/macro y @palamedes/react/macro."
+
+msgid "SSR uses a request-local i18n instance via setServerI18nGetter()."
+msgstr "SSR usa una instancia i18n local de la solicitud via setServerI18nGetter()."
+
+msgid "Client interactions reuse the same provider-free runtime model."
+msgstr "Las interacciones del cliente reutilizan el mismo modelo runtime sin provider."

@@ -28,6 +28,7 @@
   ],
   "scripts": {
     "build": "unbuild",
+    "test": "vitest run --globals src/index.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {
@@ -37,8 +38,10 @@
     "access": "public"
   },
   "devDependencies": {
+    "@palamedes/core": "workspace:^",
     "@types/node": "^25.4.0",
     "typescript": "^5.9.3",
-    "unbuild": "^3.6.1"
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.0"
   }
 }

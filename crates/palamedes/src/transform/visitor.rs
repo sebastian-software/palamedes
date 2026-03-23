@@ -85,7 +85,12 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         let replacement = match macro_info.imported_name.as_str() {
             "Trans" => transform_trans_element(it, self.source),
             "Plural" | "Select" | "SelectOrdinal" => {
-                transform_choice_jsx_element(it, &macro_info.imported_name, self.options)
+                transform_choice_jsx_element(
+                    it,
+                    self.source,
+                    &macro_info.imported_name,
+                    self.options,
+                )
             }
             _ => Ok(None),
         };
@@ -136,7 +141,9 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         }
 
-        if let Some((text, compiled_id)) = transform_tagged_template(&it.quasi, self.options) {
+        if let Some((text, compiled_id)) =
+            transform_tagged_template(&it.quasi, self.source, self.options)
+        {
             self.replacements.push(Replacement {
                 start: it.span.start as usize,
                 end: it.span.end as usize,
@@ -187,7 +194,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             }
             "plural" | "select" | "selectOrdinal" => {
                 if let Some((text, compiled_id)) =
-                    transform_choice_call(it, &macro_info.imported_name, self.options)
+                    transform_choice_call(it, self.source, &macro_info.imported_name, self.options)
                 {
                     self.replacements.push(Replacement {
                         start: it.span.start as usize,

@@ -7,7 +7,7 @@
 
 Palamedes is i18n tooling for modern JavaScript and TypeScript apps with Lingui-style authoring and a cleaner, stricter architecture underneath.
 
-It combines a native Rust core, OXC-powered transforms, and first-party Vite and Next.js adapters into a stack built for fast hot paths, clear semantic ownership, and less historical baggage.
+It combines a native Rust core, OXC-powered transforms, and thin framework adapters into a stack built for fast hot paths, clear semantic ownership, and less historical baggage.
 
 ## Why Teams Pick Palamedes
 
@@ -18,7 +18,7 @@ It combines a native Rust core, OXC-powered transforms, and first-party Vite and
 ## Current Status
 
 - Recommended for new projects and teams already doing architecture cleanup
-- Supported today for Vite and Next.js applications on Node.js `>=22`
+- Supported today through verified examples for Next.js, TanStack Start, Waku, and React Router on Node.js `>=22`
 - Source-string-first catalogs are stable and powered by `ferrocat`
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 
@@ -38,12 +38,14 @@ There is no top-level `palamedes` install path yet. If you are trying Palamedes 
 | [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) | Recommended Vite entry point | App teams |
 | [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) | Recommended Next.js entry point | App teams |
 | [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) | Extraction CLI | App teams, CI |
+| [`@palamedes/core`](https://www.npmjs.com/package/@palamedes/core) | App-facing i18n instance | App teams |
+| [`@palamedes/react`](https://www.npmjs.com/package/@palamedes/react) | React translation components | React app teams |
 | [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime) | Runtime bridge for transformed code | App teams |
 
 ## Quick Start With Vite
 
 ```bash
-pnpm add @palamedes/vite-plugin @palamedes/runtime @lingui/core @lingui/react
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli @palamedes/config
 ```
 
@@ -76,9 +78,10 @@ export default defineConfig({
 
 ```ts
 // src/i18n.ts
-import { i18n } from "@lingui/core"
+import { createI18n } from "@palamedes/core"
 import { setClientI18n } from "@palamedes/runtime"
 
+const i18n = createI18n()
 setClientI18n(i18n)
 ```
 
@@ -102,6 +105,7 @@ That is the real promise behind the performance claims: less duplicated logic, c
 ## Proof And Adoption Docs
 
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
+- [Demo deployment model for the example matrix](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
 - [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
 - [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)

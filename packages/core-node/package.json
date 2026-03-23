@@ -7,7 +7,7 @@
     "rust",
     "napi",
     "i18n",
-    "lingui"
+    "native"
   ],
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {

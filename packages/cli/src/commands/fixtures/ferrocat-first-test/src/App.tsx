@@ -1,4 +1,4 @@
-import { defineMessage, plural, t } from "@lingui/core/macro"
+import { defineMessage, plural, t } from "@palamedes/core/macro"
 
 export const simple = t`Simple hello`
 export const generated = t`Hello ${name}`

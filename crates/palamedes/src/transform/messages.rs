@@ -4,6 +4,13 @@ use oxc_ast::ast::{
     Argument, Expression, JSXAttributeValue, JSXChild, JSXExpression, JSXOpeningElement,
     ObjectExpression, ObjectPropertyKind, TemplateLiteral,
 };
+use oxc_span::GetSpan;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ValueBinding {
+    pub expression: String,
+    pub name: String,
+}
 
 pub(super) fn identifier_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
     match expr.without_parentheses() {
@@ -103,7 +110,10 @@ pub(super) fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> HashMap
     attrs
 }
 
-pub(super) fn extract_jsx_value_name(opening_element: &JSXOpeningElement<'_>) -> Option<String> {
+pub(super) fn extract_jsx_value_binding(
+    opening_element: &JSXOpeningElement<'_>,
+    source: &str,
+) -> Option<ValueBinding> {
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
             continue;
@@ -115,7 +125,13 @@ pub(super) fn extract_jsx_value_name(opening_element: &JSXOpeningElement<'_>) ->
             continue;
         };
 
-        return jsx_expression_name(&container.expression);
+        let mut used_value_names = HashMap::<String, String>::new();
+        return Some(jsx_value_binding(
+            &container.expression,
+            source,
+            0,
+            &mut used_value_names,
+        ));
     }
 
     None
@@ -205,10 +221,11 @@ pub(super) fn extract_jsx_children_parts(
     children: &[JSXChild<'_>],
     source: &str,
     next_component_index: &mut usize,
-) -> (String, Vec<String>, Vec<String>) {
+) -> (String, Vec<ValueBinding>, Vec<String>) {
     let mut parts = Vec::new();
     let mut values = Vec::new();
     let mut components = Vec::new();
+    let mut used_value_names = HashMap::<String, String>::new();
 
     for child in children {
         match child {
@@ -221,10 +238,9 @@ pub(super) fn extract_jsx_children_parts(
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
                 expr => {
-                    if let Some(name) = jsx_expression_name(expr) {
-                        parts.push(format!("{{{name}}}"));
-                        values.push(name);
-                    }
+                    let binding = jsx_value_binding(expr, source, values.len(), &mut used_value_names);
+                    parts.push(format!("{{{}}}", binding.name));
+                    values.push(binding);
                 }
             },
             JSXChild::Element(element) => {
@@ -273,9 +289,84 @@ pub(super) fn expression_name(expr: &Expression<'_>) -> Option<String> {
     None
 }
 
-pub(super) fn template_to_message(template: &TemplateLiteral<'_>) -> (String, Option<Vec<String>>) {
+pub(super) fn expression_source(expr: &Expression<'_>, source: &str) -> String {
+    let span = expr.span();
+    source[span.start as usize..span.end as usize].to_string()
+}
+
+fn make_unique_binding_name(
+    preferred_name: String,
+    expression: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> String {
+    if let Some(existing_expression) = used_value_names.get(&preferred_name) {
+        if existing_expression == expression {
+            return preferred_name;
+        }
+    } else {
+        used_value_names.insert(preferred_name.clone(), expression.to_string());
+        return preferred_name;
+    }
+
+    let mut suffix = 1usize;
+    loop {
+        let candidate = format!("{preferred_name}_{suffix}");
+        match used_value_names.get(&candidate) {
+            Some(existing_expression) if existing_expression != expression => {
+                suffix += 1;
+            }
+            _ => {
+                used_value_names.insert(candidate.clone(), expression.to_string());
+                return candidate;
+            }
+        }
+    }
+}
+
+pub(super) fn expression_binding(
+    expr: &Expression<'_>,
+    source: &str,
+    fallback_index: usize,
+    used_value_names: &mut HashMap<String, String>,
+) -> ValueBinding {
+    let expression = expression_source(expr, source);
+    let preferred_name = expression_name(expr).unwrap_or_else(|| fallback_index.to_string());
+    let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
+
+    ValueBinding { expression, name }
+}
+
+fn jsx_expression_source(expr: &JSXExpression<'_>, source: &str) -> Option<String> {
+    match expr {
+        JSXExpression::EmptyExpression(_) => None,
+        _ => {
+            let span = expr.span();
+            Some(source[span.start as usize..span.end as usize].to_string())
+        }
+    }
+}
+
+pub(super) fn jsx_value_binding(
+    expr: &JSXExpression<'_>,
+    source: &str,
+    fallback_index: usize,
+    used_value_names: &mut HashMap<String, String>,
+) -> ValueBinding {
+    let expression = jsx_expression_source(expr, source)
+        .unwrap_or_else(|| fallback_index.to_string());
+    let preferred_name = jsx_expression_name(expr).unwrap_or_else(|| fallback_index.to_string());
+    let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
+
+    ValueBinding { expression, name }
+}
+
+pub(super) fn template_to_message(
+    template: &TemplateLiteral<'_>,
+    source: &str,
+) -> (String, Option<Vec<ValueBinding>>) {
     let mut message = String::new();
     let mut values = Vec::new();
+    let mut used_value_names = HashMap::<String, String>::new();
 
     for (index, quasi) in template.quasis.iter().enumerate() {
         if let Some(value) = quasi.value.cooked {
@@ -285,11 +376,11 @@ pub(super) fn template_to_message(template: &TemplateLiteral<'_>) -> (String, Op
         }
 
         if let Some(expr) = template.expressions.get(index) {
-            let name = expression_name(expr).unwrap_or_else(|| index.to_string());
+            let binding = expression_binding(expr, source, index, &mut used_value_names);
             message.push('{');
-            message.push_str(&name);
+            message.push_str(&binding.name);
             message.push('}');
-            values.push(name);
+            values.push(binding);
         }
     }
 

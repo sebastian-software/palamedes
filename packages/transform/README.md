@@ -30,10 +30,10 @@ pnpm add -D @palamedes/transform
 ## Minimal Example
 
 ```ts
-import { transformLinguiMacros } from "@palamedes/transform"
+import { transformPalamedesMacros } from "@palamedes/transform"
 
-const result = transformLinguiMacros(
-  'import { t } from "@lingui/macro"; const message = t`Hello ${name}`',
+const result = transformPalamedesMacros(
+  'import { t } from "@palamedes/core/macro"; const message = t`Hello ${name}`',
   "example.ts",
   {
     runtimeModule: "@palamedes/runtime",
@@ -45,10 +45,10 @@ console.log(result.code)
 
 ## Key Exports
 
-- `transformLinguiMacros(code, filename, options?)`
-- `mightContainLinguiMacros(code)`
+- `transformPalamedesMacros(code, filename, options?)`
+- `mightContainPalamedesMacros(code)`
 - `findMacroImports(program)`
-- `LINGUI_MACRO_PACKAGES`
+- `PALAMEDES_MACRO_PACKAGES`
 - `JS_MACROS`
 - `JSX_MACROS`
 

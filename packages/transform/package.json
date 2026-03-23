@@ -1,9 +1,8 @@
 {
   "name": "@palamedes/transform",
   "version": "0.1.1",
-  "description": "OXC-based macro transformer for Lingui - transforms Lingui macros to runtime calls without Babel",
+  "description": "OXC-based macro transformer for Palamedes macros without Babel",
   "keywords": [
-    "lingui",
     "i18n",
     "oxc",
     "macro",
@@ -54,6 +53,6 @@
   "devDependencies": {
     "typescript": "^5.9.3",
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.0"
   }
 }

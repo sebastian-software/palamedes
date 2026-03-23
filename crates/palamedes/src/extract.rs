@@ -12,8 +12,8 @@ use oxc_parser::Parser;
 use oxc_span::SourceType;
 use serde::Serialize;
 
-const LINGUI_MACRO_PACKAGES: [&str; 3] =
-    ["@lingui/macro", "@lingui/core/macro", "@lingui/react/macro"];
+const PALAMEDES_MACRO_PACKAGES: [&str; 2] =
+    ["@palamedes/core/macro", "@palamedes/react/macro"];
 type ChoiceOptions = Vec<(String, String)>;
 
 #[derive(Debug, Clone)]
@@ -77,7 +77,7 @@ impl MacroCollector {
 impl<'a> Visit<'a> for MacroCollector {
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         let source = it.source.value.as_str();
-        if !LINGUI_MACRO_PACKAGES.contains(&source) {
+        if !PALAMEDES_MACRO_PACKAGES.contains(&source) {
             return;
         }
 
@@ -860,7 +860,7 @@ mod tests {
     fn extracts_tagged_templates() {
         let messages = extract_messages(
             r#"
-              import { t } from "@lingui/core/macro"
+              import { t } from "@palamedes/core/macro"
               const message = t`Hello ${name}`
             "#,
             "test.tsx",
@@ -887,7 +887,7 @@ mod tests {
     fn rejects_explicit_ids() {
         let error = extract_messages(
             r#"
-              import { t } from "@lingui/core/macro"
+              import { t } from "@palamedes/core/macro"
               const message = t({ id: "greeting", message: "Hello" })
             "#,
             "test.tsx",

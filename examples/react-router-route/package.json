@@ -1,0 +1,36 @@
+{
+  "name": "@palamedes/example-react-router-route",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "react-router build",
+    "dev": "react-router dev --port 4041",
+    "start": "PORT=4041 react-router-serve ./build/server/index.js",
+    "typecheck": "react-router typegen && tsc",
+    "extract": "pmds extract"
+  },
+  "dependencies": {
+    "@palamedes/core": "workspace:^",
+    "@palamedes/example-locale-shared": "workspace:^",
+    "@palamedes/react": "workspace:^",
+    "@palamedes/runtime": "workspace:^",
+    "@react-router/node": "7.13.1",
+    "@react-router/serve": "7.13.1",
+    "isbot": "^5.1.36",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router": "7.13.1"
+  },
+  "devDependencies": {
+    "@palamedes/cli": "workspace:^",
+    "@palamedes/config": "workspace:^",
+    "@palamedes/vite-plugin": "workspace:^",
+    "@react-router/dev": "7.13.1",
+    "@types/node": "^25.4.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.1",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}

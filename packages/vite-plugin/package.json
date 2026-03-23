@@ -11,7 +11,6 @@
     "vite-plugin",
     "i18n",
     "vite",
-    "linguijs",
     "oxc",
     "internationalization",
     "localization",
@@ -53,11 +52,11 @@
     "@palamedes/transform": "workspace:^"
   },
   "peerDependencies": {
-    "vite": "^3 || ^4 || ^5 || ^6 || ^7"
+    "vite": "^3 || ^4 || ^5 || ^6 || ^7 || ^8"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
     "unbuild": "^3.6.1",
-    "vite": "^7.3.1"
+    "vite": "^8.0.1"
   }
 }

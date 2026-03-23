@@ -4,7 +4,7 @@
  * High-performance message extractor using oxc-parser.
  * This extractor is ~20-100x faster than the Babel-based extractor.
  *
- * It directly extracts messages from Lingui macro syntax without
+ * It directly extracts messages from Palamedes macro syntax without
  * requiring Babel transformation first.
  */
 

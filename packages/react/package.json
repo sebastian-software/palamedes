@@ -1,0 +1,67 @@
+{
+  "name": "@palamedes/react",
+  "version": "0.1.1",
+  "description": "React runtime components and macro entry points for Palamedes",
+  "keywords": [
+    "palamedes",
+    "react",
+    "i18n"
+  ],
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/react"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./macro": {
+      "types": "./dist/macro.d.ts",
+      "import": "./dist/macro.mjs",
+      "require": "./dist/macro.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "README.md",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "test": "vitest run --globals src/index.test.tsx",
+    "stub": "unbuild --stub"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@palamedes/core": "workspace:^",
+    "@palamedes/runtime": "workspace:^"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "^5.9.3",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.0"
+  }
+}

@@ -5,15 +5,14 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, "..")
-const viteRoot = path.join(repoRoot, "examples", "vite-react")
-const nextRoot = path.join(repoRoot, "examples", "nextjs-app")
+const fixtureRoot = path.join(repoRoot, "benchmarks", "proof-fixtures")
 
 const fixtureFiles = [
-  path.join(viteRoot, "src", "App.tsx"),
-  path.join(viteRoot, "src", "main.tsx"),
-  path.join(nextRoot, "src", "app", "page.tsx"),
-  path.join(nextRoot, "src", "components", "Counter.tsx"),
-  path.join(nextRoot, "src", "components", "LanguageSwitcher.tsx"),
+  path.join(fixtureRoot, "src", "client-app.tsx"),
+  path.join(fixtureRoot, "src", "client-entry.tsx"),
+  path.join(fixtureRoot, "src", "server-page.tsx"),
+  path.join(fixtureRoot, "src", "counter-widget.tsx"),
+  path.join(fixtureRoot, "src", "locale-switcher.tsx"),
 ]
 
 const catalogShape = {

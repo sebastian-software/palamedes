@@ -1,8 +1,8 @@
 /**
- * Detection utilities to check if a file contains Lingui macros
+ * Detection utilities to check if a file contains Palamedes macros
  */
 
-import { LINGUI_MACRO_PACKAGES } from "./types"
+import { PALAMEDES_MACRO_PACKAGES } from "./types"
 import { walk } from "./ast"
 
 interface ImportInfo {
@@ -12,16 +12,16 @@ interface ImportInfo {
 }
 
 /**
- * Quickly check if code might contain Lingui macro imports.
+ * Quickly check if code might contain Palamedes macro imports.
  * This is a fast pre-check before parsing to avoid unnecessary work.
  */
-export function mightContainLinguiMacros(code: string): boolean {
+export function mightContainPalamedesMacros(code: string): boolean {
   // Quick string check for any of our macro packages
-  return LINGUI_MACRO_PACKAGES.some((pkg) => code.includes(pkg))
+  return PALAMEDES_MACRO_PACKAGES.some((pkg) => code.includes(pkg))
 }
 
 /**
- * Find all Lingui macro imports in an AST
+ * Find all Palamedes macro imports in an AST
  */
 export function findMacroImports(program: unknown): Map<string, ImportInfo> {
   const imports = new Map<string, ImportInfo>()
@@ -40,7 +40,7 @@ export function findMacroImports(program: unknown): Map<string, ImportInfo> {
 
       const source = (record.source as Record<string, unknown>)?.value as string | undefined
 
-      if (!source || !LINGUI_MACRO_PACKAGES.some((pkg) => source === pkg)) {
+      if (!source || !PALAMEDES_MACRO_PACKAGES.some((pkg) => source === pkg)) {
         return
       }
 
@@ -72,6 +72,7 @@ export function findMacroImports(program: unknown): Map<string, ImportInfo> {
 
   return imports
 }
+
 
 /**
  * Find the import declaration node for a given source

@@ -20,9 +20,13 @@ Right now, you probably should not.
 You do not need to add this package to a project today. If you are setting up Palamedes now, install the specific packages you need:
 
 ```bash
-pnpm add @palamedes/runtime @palamedes/vite-plugin @lingui/core @lingui/react
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli
 ```
+
+For the actual setup flow today, use:
+
+- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 
 ## Current Status
 
