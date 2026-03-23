@@ -8,8 +8,10 @@ overrides:
   "waku>@vitejs/plugin-react": "^6.0.1"
 
 onlyBuiltDependencies:
+  - "@swc/core"
   - esbuild
   - sharp
 allowBuilds:
+  "@swc/core": true
   esbuild: true
   sharp: true

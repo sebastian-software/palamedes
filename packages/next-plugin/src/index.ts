@@ -5,6 +5,8 @@
  * No Babel required!
  */
 
+import { existsSync } from "node:fs"
+import path from "node:path"
 import { createRequire } from "node:module"
 import type { NextConfig } from "next"
 
@@ -52,6 +54,38 @@ export interface WithPalamedesOptions {
    * @default "@palamedes/runtime"
    */
   runtimeModule?: string
+
+  /**
+   * Monorepo workspace root to use for Turbopack and output file tracing.
+   * If omitted, Palamedes will try to detect a workspace root from process.cwd().
+   */
+  workspaceRoot?: string
+}
+
+function resolveWorkspaceRoot(explicitRoot?: string) {
+  if (explicitRoot) {
+    return explicitRoot
+  }
+
+  let currentDir = process.cwd()
+  const initialDir = currentDir
+
+  while (true) {
+    if (
+      existsSync(path.join(currentDir, "pnpm-workspace.yaml"))
+      || existsSync(path.join(currentDir, "pnpm-workspace.yml"))
+      || existsSync(path.join(currentDir, "turbo.json"))
+      || existsSync(path.join(currentDir, ".git"))
+    ) {
+      return currentDir === initialDir ? undefined : currentDir
+    }
+
+    const parentDir = path.dirname(currentDir)
+    if (parentDir === currentDir) {
+      return undefined
+    }
+    currentDir = parentDir
+  }
 }
 
 /**
@@ -79,7 +113,14 @@ export function withPalamedes(
     failOnMissing = false,
     failOnCompileError = false,
     runtimeModule = "@palamedes/runtime",
+    workspaceRoot: explicitWorkspaceRoot,
   } = options
+
+  const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)
+  const configuredTurbopackRoot = baseConfig.turbopack?.root ?? workspaceRoot
+  const outputFileTracingRoot =
+    baseConfig.outputFileTracingRoot
+    ?? (typeof configuredTurbopackRoot === "string" ? configuredTurbopackRoot : undefined)
 
   // Resolve loader paths
   const oxcLoaderPath = require.resolve(
@@ -96,10 +137,12 @@ export function withPalamedes(
 
   return {
     ...baseConfig,
+    ...(outputFileTracingRoot ? { outputFileTracingRoot } : {}),
 
     // Turbopack configuration
     turbopack: {
       ...baseConfig.turbopack,
+      ...(configuredTurbopackRoot ? { root: configuredTurbopackRoot } : {}),
       rules: {
         ...baseConfig.turbopack?.rules,
         // Transform local JS/TS files that actually import Palamedes macros.
