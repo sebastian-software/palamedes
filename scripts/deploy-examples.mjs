@@ -1,7 +1,6 @@
-import { access, appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { access, appendFile } from "node:fs/promises"
 import { spawn } from "node:child_process"
-import path from "node:path"
-import { ROOT, parseExampleArgs, selectExamples } from "./example-matrix.mjs"
+import { parseExampleArgs, selectExamples } from "./example-matrix.mjs"
 
 function parseArgs(argv) {
   const result = {
@@ -122,38 +121,6 @@ async function ensureVercelLink(example, env, token) {
   await runCommand("pnpm", args, { cwd: example.cwd, env })
 }
 
-async function readProjectLink(example) {
-  return JSON.parse(await readFile(`${example.cwd}/.vercel/project.json`, "utf8"))
-}
-
-async function prepareRootRepoLink(example) {
-  const projectLink = await readProjectLink(example)
-  const repoDirectory = path.join(ROOT, ".vercel")
-  const repoConfigPath = path.join(repoDirectory, "repo.json")
-  const rootProjectLinkPath = path.join(repoDirectory, "project.json")
-
-  await mkdir(repoDirectory, { recursive: true })
-  await rm(rootProjectLinkPath, { force: true })
-
-  const repoConfig = {
-    remoteName: "origin",
-    projects: [
-      {
-        id: projectLink.projectId,
-        name: example.vercelProject,
-        directory: path.relative(ROOT, example.cwd).replaceAll(path.sep, "/"),
-        orgId: projectLink.orgId,
-      },
-    ],
-  }
-
-  await writeFile(repoConfigPath, `${JSON.stringify(repoConfig, null, 2)}\n`, "utf8")
-}
-
-async function removeExampleProjectLink(example) {
-  await rm(path.join(example.cwd, ".vercel", "project.json"), { force: true })
-}
-
 async function writeSummaryLine(summaryFile, line) {
   if (!summaryFile) {
     return
@@ -199,13 +166,6 @@ async function deployExample(example, options) {
 
   await ensureVercelLink(example, env, token)
 
-  const usesRootScopedVercelCommands = example.framework === "nextjs"
-  if (usesRootScopedVercelCommands) {
-    await prepareRootRepoLink(example)
-    await removeExampleProjectLink(example)
-  }
-  const vercelCwd = example.cwd
-
   const baseArgs = ["exec", "vercel"]
   const environmentArgs = ["--yes", `--environment=${options.environment}`, `--token=${token}`]
   const buildArgs = ["build", `--token=${token}`]
@@ -217,15 +177,9 @@ async function deployExample(example, options) {
   }
 
   console.log(`\n[deploy] ${example.id} -> ${example.vercelProject}`)
-  await runCommand("pnpm", [...baseArgs, "pull", ...environmentArgs], { cwd: vercelCwd, env })
-  if (usesRootScopedVercelCommands) {
-    await removeExampleProjectLink(example)
-  }
-  await runCommand("pnpm", [...baseArgs, ...buildArgs], { cwd: vercelCwd, env })
-  if (usesRootScopedVercelCommands) {
-    await removeExampleProjectLink(example)
-  }
-  const result = await runCommand("pnpm", [...baseArgs, ...deployArgs], { cwd: vercelCwd, env })
+  await runCommand("pnpm", [...baseArgs, "pull", ...environmentArgs], { cwd: example.cwd, env })
+  await runCommand("pnpm", [...baseArgs, ...buildArgs], { cwd: example.cwd, env })
+  const result = await runCommand("pnpm", [...baseArgs, ...deployArgs], { cwd: example.cwd, env })
   const url = extractDeploymentUrl(result.stdout + result.stderr)
 
   if (!url) {
