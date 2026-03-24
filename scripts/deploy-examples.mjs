@@ -137,16 +137,12 @@ async function logDownloadedProjectSettings(example) {
   }
 }
 
-function isNextExample(example) {
-  return example.framework === "nextjs"
-}
-
 function getCommandCwd(example) {
-  return isNextExample(example) ? process.cwd() : example.cwd
+  return example.cwd
 }
 
 function getVercelCwdArgs(example) {
-  return isNextExample(example) ? [`--cwd=${example.cwd}`] : []
+  return []
 }
 
 async function writeSummaryLine(summaryFile, line) {
