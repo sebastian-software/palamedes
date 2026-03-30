@@ -33,7 +33,7 @@
   "devDependencies": {
     "@playwright/test": "^1.51.1",
     "typescript": "^5.9.3",
-    "vercel": "^50.13.2",
+    "vercel": "^50.37.3",
     "vitest": "^4.1.0"
   }
 }

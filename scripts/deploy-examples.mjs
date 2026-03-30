@@ -149,6 +149,10 @@ function shouldUseStandaloneBuild(example) {
   return example.framework === "nextjs"
 }
 
+function shouldUseHoistedNodeModules(example) {
+  return example.framework === "nextjs"
+}
+
 async function writeSummaryLine(summaryFile, line) {
   if (!summaryFile) {
     return
@@ -190,6 +194,11 @@ async function deployExample(example, options) {
     ...process.env,
     VERCEL_DISABLE_AUTO_UPDATE: "1",
     VERCEL_TOKEN: token,
+  }
+
+  if (shouldUseHoistedNodeModules(example)) {
+    env.npm_config_node_linker = "hoisted"
+    env.pnpm_config_node_linker = "hoisted"
   }
 
   await ensureVercelLink(example, env, token)
