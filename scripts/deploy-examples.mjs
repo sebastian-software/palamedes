@@ -145,6 +145,10 @@ function getVercelCwdArgs(example) {
   return []
 }
 
+function shouldUseStandaloneBuild(example) {
+  return example.framework === "nextjs"
+}
+
 async function writeSummaryLine(summaryFile, line) {
   if (!summaryFile) {
     return
@@ -195,6 +199,10 @@ async function deployExample(example, options) {
   const buildArgs = ["build", `--token=${token}`]
   const deployArgs = ["deploy", "--prebuilt", "--yes", `--token=${token}`]
   const commandCwd = getCommandCwd(example)
+
+  if (shouldUseStandaloneBuild(example)) {
+    buildArgs.push("--standalone")
+  }
 
   if (options.environment === "production") {
     buildArgs.push("--prod")
