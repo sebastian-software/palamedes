@@ -1,0 +1,81 @@
+# Proof Narrative
+
+Palamedes should be presented as a tool with visible proof, not as a thesis
+looking for validation afterward.
+
+## What We Can Safely Claim
+
+- the stack stays consistent across verified integrations for Next.js, TanStack
+  Start, Waku, and React Router
+- the runtime model is stable around `getI18n()`
+- message identity is stable around `message + context`
+- macro transform, extraction, and catalog hot paths are benchmarked locally and
+  reproducibly
+- the example matrix is exercised in CI with browser interaction checks
+
+## What The Proof Stack Looks Like
+
+### 1. The example matrix
+
+The strongest repo-level proof is the framework matrix:
+
+- four framework families
+- cookie and route locale strategies
+- SSR-visible output
+- localized server actions or server functions
+- browser-driven interaction verification
+
+This is the clearest evidence that Palamedes is not only "good in one adapter."
+
+### 2. Versioned screenshots
+
+The screenshot set turns CI proof into a visible artifact. It makes the
+cross-framework claim easier to communicate without relying on hosted demos.
+
+### 3. Benchmarks
+
+Benchmarks matter, but only in the scope the repo can honestly support:
+
+- transform
+- extract
+- catalog update
+- catalog artifact compile
+
+The benchmark language should stay disciplined:
+
+- no universal performance claims
+- no "Rust means fast" shortcut
+- no benchmark charts without methodology
+
+### 4. Architectural evidence
+
+The design docs and ADRs matter because they explain why the proof is credible:
+
+- native core
+- host-neutral compiled artifacts
+- delegated catalog semantics via `ferrocat`
+- thin framework adapters
+
+## Approved Proof Language
+
+Use language like:
+
+- "verified across four framework families"
+- "one runtime model across modern frameworks"
+- "proof-backed, not demo-only"
+- "reproducible local benchmark commands"
+- "browser-verified example matrix"
+
+Avoid language like:
+
+- "works everywhere"
+- "best-in-class"
+- "fastest"
+- "universal results"
+
+## Core Links
+
+- [Example matrix](../../examples/README.md)
+- [Example screenshots](../example-screenshots/README.md)
+- [Proof and benchmarks](../proof-and-benchmarks.md)
+- [Framework notes](../framework-example-notes.md)

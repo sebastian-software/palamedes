@@ -1,8 +1,23 @@
 # Proof, Benchmarks, and Current Maturity
 
-Palamedes makes strong claims about speed and architectural cleanliness.
+Palamedes makes a simple public claim:
 
-This page exists to make those claims easier to verify.
+it keeps a coherent i18n model across multiple modern frameworks without
+changing the core mental model underneath.
+
+This page exists to show the work behind that claim.
+
+## What This Repo Can Prove
+
+This repo can credibly prove four things:
+
+- Palamedes is verified across Next.js, TanStack Start, Waku, and React Router
+- the runtime model stays centered on `getI18n()`
+- the message identity model stays centered on `message + context`
+- transform, extract, catalog update, and catalog compile hot paths are measured locally and reproducibly
+
+This page is not here to manufacture marketing numbers. It is here to make the
+architecture and the evidence easy to inspect.
 
 ## Current Maturity
 
@@ -23,6 +38,10 @@ This page exists to make those claims easier to verify.
 - a native core with typed bindings and a documented architecture
 - source-string-first catalog semantics backed by `ferrocat`
 - reproducible local benchmark commands
+- versioned browser screenshots generated from the same CI browser flows
+
+Together, these assets make the cross-framework story visible instead of
+leaving it as a slogan.
 
 ## Benchmark Scope
 
@@ -77,7 +96,8 @@ For the broader architectural picture, including `next-intl` and General Transla
 
 - [Comparing modern i18n approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
 
-That separate harness measures Lingui macro rewrite through distinct Babel and SWC lanes instead of folding them into one number.
+That separate harness measures Lingui macro rewrite through distinct Babel and
+SWC lanes instead of folding them into one number.
 
 ## Methodology
 
@@ -87,7 +107,12 @@ That separate harness measures Lingui macro rewrite through distinct Babel and S
 - median reported for each operation
 - operations measured independently, not as a blended total
 
-This is meant to be reproducible and honest, not a “best possible marketing number.”
+This is meant to be reproducible and honest, not a “best possible marketing
+number.”
+
+That distinction matters. The performance story in Palamedes is not just
+"native is faster." It is that a cleaner architecture can keep more of the hot
+path in one place, with less duplicated semantic work across layers.
 
 ## Fixture Corpus
 
@@ -129,7 +154,8 @@ Median results from that run:
 - catalog update: `0.64 ms`
 - catalog artifact compile: `4.04 ms`
 
-The benchmark script also prints the raw sample series so the checked median is easy to verify.
+The benchmark script also prints the raw sample series so the checked median is
+easy to verify.
 
 ## What This Page Does Not Claim
 
@@ -145,6 +171,7 @@ show the work, show the architecture, and make local verification easy.
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
+- [Example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
 - [Framework example notes](https://github.com/sebastian-software/palamedes/blob/main/docs/framework-example-notes.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
 - [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)

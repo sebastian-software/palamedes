@@ -5,24 +5,62 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Palamedes is i18n tooling for modern JavaScript and TypeScript apps with Lingui-style authoring and a cleaner, stricter architecture underneath.
+Palamedes is a modern i18n stack for JavaScript and TypeScript apps that stays
+consistent across frameworks.
 
-It combines a native Rust core, OXC-powered transforms, and thin framework adapters into a stack built for fast hot paths, clear semantic ownership, and less historical baggage.
+It keeps one runtime model, one message identity model, and thin framework
+adapters across verified integrations for Next.js, TanStack Start, Waku, and
+React Router.
 
-It is also the intended local substrate for higher-order translation workflows. Palamedes+ can add authenticated remote translation and managed quality controls on top, while Palamedes keeps the local catalog, context, and QA semantics reusable and open.
+That is the real differentiator: Palamedes does not just try to feel cleaner in
+one framework. It tries to keep the i18n model architecturally coherent as the
+host framework changes.
+
+Underneath that public model is a native Rust core, OXC-powered transforms, and
+deliberately thin adapters built for fast hot paths, clear semantic ownership,
+and less historical baggage.
+
+It is also the intended local substrate for higher-order translation workflows.
+Palamedes+ can add authenticated remote translation and managed quality controls
+on top, while Palamedes keeps the local catalog, context, and QA semantics
+reusable and open.
+
+## Why Palamedes Is Unusual
+
+Most i18n tools force one of three tradeoffs:
+
+- framework-native convenience with a narrow portability story
+- broader compatibility with more historical surface area
+- runtime-first dictionary workflows that change the authoring model
+
+Palamedes takes a different position:
+
+- one authoring feel close to Lingui-style macros
+- one public runtime model through `getI18n()`
+- one message identity model through `message + context`
+- one architecture with a native core and thin adapters
+- one verified proof surface across four framework families
 
 ## Why Teams Pick Palamedes
 
-- Faster dev and build loops without dragging Babel back into the stack
-- A cleaner migration target than Lingui's older, broader API surface
-- Fewer moving parts in the hot path: one runtime model, one message identity model, thin adapters
+- Cross-framework consistency without relearning i18n every time the framework changes
+- Faster transform, extraction, and catalog hot paths without dragging Babel back into the stack
+- A cleaner migration target than Lingui's broader historical API surface
+- A host-neutral local substrate for future translation workflows
 
 ## Current Status
 
 - Recommended for new projects and teams already doing architecture cleanup
-- Supported today through verified examples for Next.js, TanStack Start, Waku, and React Router on Node.js `>=22`
+- Verified today across Next.js, TanStack Start, Waku, and React Router on Node.js `>=22`
 - Source-string-first catalogs are stable and powered by `ferrocat`
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
+
+## What Exists Today As Proof
+
+- A browser-verified example matrix across four framework families
+- Versioned screenshots generated from the same Playwright-based verifier used in CI
+- Reproducible benchmark commands for transform, extract, catalog update, and compile hot paths
+- ADRs and architecture docs that make the ownership model explicit
 
 ## Start Here
 
@@ -31,7 +69,8 @@ It is also the intended local substrate for higher-order translation workflows. 
 - [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) for Next.js projects
 - [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) for extraction workflows and CI
 
-There is no top-level `palamedes` install path yet. If you are trying Palamedes today, start with the scoped packages above.
+There is no top-level `palamedes` install path yet. If you are trying
+Palamedes today, start with the scoped packages above.
 
 ## Recommended Packages
 
@@ -91,9 +130,13 @@ setClientI18n(i18n)
 pnpm exec pmds extract
 ```
 
-For the full copy-paste path, including `.po` loading and the first translated component, use the [5-minute quickstart](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md).
+For the full copy-paste path, including `.po` loading and the first translated
+component, use the [5-minute quickstart](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md).
 
-## Why The Architecture Matters
+## The Core Architecture Claim
+
+The point is not only that Palamedes is fast. The point is that the i18n hot
+path is owned more coherently.
 
 Palamedes is opinionated in a few places on purpose:
 
@@ -102,9 +145,14 @@ Palamedes is opinionated in a few places on purpose:
 - catalog semantics live in `ferrocat`, not in duplicate PO glue
 - host adapters render modules, while the core stays host-neutral
 
-That is the real promise behind the performance claims: less duplicated logic, clearer ownership, and a toolchain that is easier to trust over time.
+That gives teams something stronger than a benchmark number:
 
-The same ownership model matters for future translation workflows:
+- less duplicated logic
+- clearer adapter boundaries
+- less runtime API sprawl
+- a toolchain that is easier to trust over time
+
+The same ownership model also matters for future translation workflows:
 
 - Palamedes owns local, host-neutral translation workflow primitives
 - higher-order products can own remote execution, account controls, and premium policies
@@ -112,6 +160,7 @@ The same ownership model matters for future translation workflows:
 
 ## Proof And Adoption Docs
 
+- [MDX-ready messaging source for homepage/docs](https://github.com/sebastian-software/palamedes/blob/main/docs/site/index.mdx)
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
 - [Example matrix and local/CI verification story](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 - [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
@@ -125,23 +174,27 @@ The same ownership model matters for future translation workflows:
 - [Comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
 - [Migration playbook from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
+- [Internal storyline for a later deck](https://github.com/sebastian-software/palamedes/blob/main/docs/site/internal-storyline.md)
 
 ## Advanced Packages
 
-These are useful when you are building custom tooling rather than adopting Palamedes as an app team:
+These are useful when you are building custom tooling rather than adopting
+Palamedes as an app team:
 
 - [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)
 - [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor)
 - [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node)
 
-Internal native packages exist behind `@palamedes/core-node`, but they are implementation detail and not part of the normal install story.
+Internal native packages exist behind `@palamedes/core-node`, but they are
+implementation detail and not part of the normal install story.
 
 ## Reserved Package Names
 
 - [`palamedes`](https://www.npmjs.com/package/palamedes)
 - [`create-palamedes`](https://www.npmjs.com/package/create-palamedes)
 
-These names are reserved for future top-level entry points. They are not the recommended starting point today.
+These names are reserved for future top-level entry points. They are not the
+recommended starting point today.
 
 ## Development
 

@@ -1,10 +1,24 @@
 # Palamedes Example Matrix
 
-These examples prove the current Palamedes integration story across four
-framework families and two locale strategies.
+These examples are the strongest visible proof that Palamedes is more than a
+single-framework integration.
+
+They prove the current Palamedes story across four framework families and two
+locale strategies while preserving the same underlying runtime and identity
+model.
 
 The matrix is intended to be run locally and validated in CI. Public hosting is
 optional and not part of the default example story.
+
+## What This Matrix Proves
+
+- one i18n mental model across Next.js, TanStack Start, Waku, and React Router
+- one runtime story with request-local server i18n plus client interaction
+- one message identity story through source-string-first `.po` workflows
+- one proof surface with browser verification, screenshots, and SSR checks
+
+That is the real point of the matrix. It is not a pile of demos. It is the
+evidence behind the claim that Palamedes stays coherent across frameworks.
 
 ## Locale Strategy Matrix
 

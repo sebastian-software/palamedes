@@ -1,8 +1,11 @@
 # Palamedes vs. Lingui
 
-Palamedes is not trying to be a universal rebuttal to Lingui. It is a sharper default for teams that already like macro-based i18n and want a cleaner stack underneath it.
+Palamedes is not trying to be a universal rebuttal to Lingui. It is a sharper
+default for teams that already like macro-based i18n and want a cleaner, more
+coherent architecture underneath it.
 
-If you want the broader architectural comparison, including `next-intl` and General Translation, read [Comparing Modern i18n Approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md).
+If you want the broader architectural comparison, including `next-intl` and
+General Translation, read [Comparing Modern i18n Approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md).
 
 The real difference is not “Rust vs. JavaScript.” It is the end state:
 
@@ -19,6 +22,7 @@ Choose Palamedes if you want:
 - a cleaner migration target than Lingui's broader historical API surface
 - source-string-first catalogs with `message + context`
 - an architecture that is easier to reason about over time
+- one runtime model that stays stable across verified framework integrations
 - a local foundation that can support managed translation layers later without giving up repo ownership
 
 Stay on Lingui if you want:
@@ -39,11 +43,11 @@ Stay on Lingui if you want:
 | Future translation layering | Usually solved outside the core | Clean local substrate for higher-order workflows |
 | Long-term shape | Broad compatibility pressure | Opinionated, narrower, cleaner |
 
-## What Gets Cleaner In Palamedes
+## Why The End State Gets Cleaner
 
 ### 1. The runtime model
 
-Palamedes standardizes on `getI18n()`.
+Palamedes standardizes on `getI18n()` across the framework surfaces it verifies.
 
 That sounds small, but it removes a lot of ambiguity:
 
@@ -64,7 +68,8 @@ That means:
 
 ### 3. Semantic ownership
 
-Palamedes deliberately delegates catalog semantics to `ferrocat` instead of carrying duplicate PO logic in multiple layers.
+Palamedes deliberately delegates catalog semantics to `ferrocat` instead of
+carrying duplicate PO logic in multiple layers.
 
 That makes the system easier to trust:
 
@@ -76,17 +81,35 @@ That makes the system easier to trust:
 
 Palamedes keeps host adapters thin.
 
-The core compiles host-neutral artifacts. Vite and Next.js render what they need on the adapter side. That separation is part of the product, not an implementation accident.
+The core compiles host-neutral artifacts. The host adapters render what they
+need on the adapter side. That separation is part of the product, not an
+implementation accident.
+
+## Why That Matters Beyond Migration
+
+This is not only a Lingui migration story.
+
+It is also a story about what happens when a team wants the same i18n mental
+model to survive across different application shapes and framework decisions.
+
+That matters because:
+
+- teams do not want framework-specific i18n glue to own semantics
+- architecture cleanup gets easier when the runtime and identity model stay stable
+- a cleaner local substrate is easier to extend into future translation workflows
 
 ## What Gets Faster
 
-Palamedes is designed to speed up the parts of the workflow that hurt most in real projects:
+Palamedes is designed to speed up the parts of the workflow that hurt most in
+real projects:
 
 - macro transforms
 - message extraction
 - catalog update and compile hot paths
 
-The performance story is not just “native is faster.” It is also that Palamedes tries to carry fewer layers and fewer historical compatibility branches through the hot path.
+The performance story is not just “native is faster.” It is also that
+Palamedes tries to carry fewer layers and fewer historical compatibility
+branches through the hot path.
 
 See the benchmark and proof material here:
 
@@ -97,10 +120,10 @@ See the benchmark and proof material here:
 
 Palamedes is a better default if:
 
-- you are starting a new Vite or Next.js codebase
+- you are starting a new codebase or doing architecture cleanup
 - you already like Lingui-style authoring
-- you are doing architecture cleanup anyway
 - you care about toolchain discipline, not just feature count
+- you want a cleaner stack that can stay coherent across framework boundaries
 
 ## Who Should Probably Wait
 
@@ -112,15 +135,20 @@ Stay on Lingui for now if:
 
 ## The Real Positioning
 
-Lingui got the core instinct right early: macros, extracted catalogs, and pragmatic framework integration are better than ad hoc translation sprawl.
+Lingui got the core instinct right early: macros, extracted catalogs, and
+pragmatic framework integration are better than ad hoc translation sprawl.
 
-Palamedes keeps that instinct and removes more of the historical baggage around it.
+Palamedes keeps that instinct and removes more of the historical baggage around
+it.
 
-It also creates a cleaner base for future translation products that need local catalog and QA semantics without re-implementing them in a parallel stack.
+It also creates a cleaner base for future translation products that need local
+catalog and QA semantics without re-implementing them in a parallel stack.
 
 That is the best way to think about the project:
 
-**Palamedes brings Rust-like discipline to JavaScript i18n tooling: fewer legacy branches, clearer semantic ownership, and faster hot paths.**
+**Palamedes brings Rust-like discipline to JavaScript i18n tooling: fewer
+legacy branches, clearer semantic ownership, faster hot paths, and a more
+coherent cross-framework end state.**
 
 ## Continue Here
 

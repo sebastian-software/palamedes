@@ -1,0 +1,55 @@
+# Cross-Framework Story
+
+The strongest differentiator in Palamedes is not any single adapter. It is that
+the same mental model survives across very different framework families.
+
+## The Claim
+
+Palamedes keeps the important parts of i18n stable while the host framework
+changes:
+
+- authoring stays macro-oriented and source-string-first
+- runtime access stays centered on `getI18n()`
+- message identity stays centered on `message + context`
+- adapters stay thin instead of re-owning semantics
+
+## Why This Matters
+
+Teams do not want their i18n strategy to become framework-specific glue.
+
+The more a team spans:
+
+- multiple products
+- a migration from one framework to another
+- SSR and client-heavy surfaces
+- future translation workflow requirements
+
+the more valuable a stable i18n substrate becomes.
+
+## Verified Framework Families
+
+The current repo verifies Palamedes across:
+
+- Next.js
+- TanStack Start
+- Waku
+- React Router
+
+That matters because these are not minor variants of the same integration
+surface. They exercise different server, routing, and rendering assumptions
+while preserving the same underlying Palamedes model.
+
+## The Real Competitive Contrast
+
+Many i18n tools are strong in one framework, one runtime style, or one product
+shape.
+
+Palamedes is unusual because it combines:
+
+- framework breadth
+- one core architecture
+- one runtime model
+- one identity model
+- visible proof instead of hand-wavy compatibility language
+
+That is the cross-framework story to repeat.

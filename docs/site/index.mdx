@@ -1,0 +1,83 @@
+# Palamedes
+
+**A modern i18n stack that stays consistent across frameworks.**
+
+Palamedes is for teams that like compile-time authoring, want source-string-first
+catalogs, and do not want their i18n model to splinter every time the framework
+changes.
+
+It keeps one runtime model, one message identity model, and thin host adapters
+across verified integrations for Next.js, TanStack Start, Waku, and React
+Router.
+
+## Why This Is Unusual
+
+Most i18n tools force one of three tradeoffs:
+
+- framework-native convenience with a narrow portability story
+- broad compatibility with more historical surface area
+- runtime-first dictionary workflows that change the authoring model
+
+Palamedes takes a different position:
+
+- one authoring feel close to Lingui-style macros
+- one public runtime model through `getI18n()`
+- one message identity model based on `message + context`
+- one architecture with a native core and thin framework adapters
+
+That combination is what makes Palamedes interesting. The point is not just
+"written in Rust." The point is that the i18n hot path stays architecturally
+coherent as framework boundaries change.
+
+## Why Teams Care
+
+Cross-framework consistency matters because teams do not want to relearn i18n
+every time the application shape changes.
+
+When the runtime model, message identity, and catalog semantics stay stable:
+
+- architecture cleanup gets easier
+- migrations carry less conceptual overhead
+- performance work lands in one hot path instead of several
+- future translation workflows can build on a cleaner local substrate
+
+## Proof, Not Just Positioning
+
+Palamedes makes strong claims, but the repo also shows the work.
+
+Current proof assets:
+
+- verified example matrix across four framework families
+- two locale strategies per framework
+- browser screenshots generated from the same Playwright-based verifier used in CI
+- benchmark fixtures and documented methodology
+- architecture and ADR docs that explain semantic ownership
+
+Useful proof links:
+
+- [Example matrix](../../examples/README.md)
+- [Example screenshots](../example-screenshots/README.md)
+- [Proof and benchmarks](../proof-and-benchmarks.md)
+- [Framework notes](../framework-example-notes.md)
+
+## Competitive Frame
+
+The cleanest direct comparison is still Lingui: similar authoring feel, but a
+cleaner end state underneath.
+
+The broader market picture matters too:
+
+- Lingui is the closest authoring-model neighbor
+- `next-intl` is stronger when a team wants a Next.js-native message-file center
+- General Translation solves a broader translation-system problem
+
+Palamedes sits in a narrower but cleaner place: compile-time authoring, stable
+source-string-first semantics, and a host-neutral architecture that stays usable
+across frameworks.
+
+## Start Here
+
+- [First working translation in 5 minutes](../first-working-translation.md)
+- [Proof and benchmarks](../proof-and-benchmarks.md)
+- [Comparison with Lingui](../comparison-with-lingui.md)
+- [Comparing modern i18n approaches](../approach-comparison.md)
