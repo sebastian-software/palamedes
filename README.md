@@ -9,6 +9,8 @@ Palamedes is i18n tooling for modern JavaScript and TypeScript apps with Lingui-
 
 It combines a native Rust core, OXC-powered transforms, and thin framework adapters into a stack built for fast hot paths, clear semantic ownership, and less historical baggage.
 
+It is also the intended local substrate for higher-order translation workflows. Palamedes+ can add authenticated remote translation and managed quality controls on top, while Palamedes keeps the local catalog, context, and QA semantics reusable and open.
+
 ## Why Teams Pick Palamedes
 
 - Faster dev and build loops without dragging Babel back into the stack
@@ -102,6 +104,12 @@ Palamedes is opinionated in a few places on purpose:
 
 That is the real promise behind the performance claims: less duplicated logic, clearer ownership, and a toolchain that is easier to trust over time.
 
+The same ownership model matters for future translation workflows:
+
+- Palamedes owns local, host-neutral translation workflow primitives
+- higher-order products can own remote execution, account controls, and premium policies
+- the repo keeps its catalogs either way
+
 ## Proof And Adoption Docs
 
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
@@ -109,6 +117,8 @@ That is the real promise behind the performance claims: less duplicated logic, c
 - [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
 - [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
+- [Translation workflow surface](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-workflow-surface.md)
+- [ADR-012: Translation augmentation boundary](https://github.com/sebastian-software/palamedes/blob/main/adr/012-translation-augmentation-boundary.md)
 - [Comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
 - [Migration playbook from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)

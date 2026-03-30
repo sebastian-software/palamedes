@@ -60,3 +60,27 @@ The point is that Palamedes applies Rust-like discipline to JavaScript i18n tool
 - strong ownership
 - fewer duplicated semantics
 - faster hot paths
+
+## 8. Keep Translation Control Surfaces Separate
+
+When Palamedes grows translation-support primitives, it should not collapse every quality concern into one layer.
+
+Keep separate:
+
+- request-shaping behavior
+- glossary and domain terminology
+- protected names and standards
+- deterministic QA
+- retry hints and review routing
+
+That separation keeps the system easier to evolve and harder to overfit.
+
+## 9. Reviewability Beats Blind Automation
+
+The goal is not "zero unresolved at all costs."
+
+The better default is:
+
+- detect structural risk deterministically
+- retry only what deserves another pass
+- make review needs visible in reports and catalog artifacts

@@ -19,6 +19,7 @@ Choose Palamedes if you want:
 - a cleaner migration target than Lingui's broader historical API surface
 - source-string-first catalogs with `message + context`
 - an architecture that is easier to reason about over time
+- a local foundation that can support managed translation layers later without giving up repo ownership
 
 Stay on Lingui if you want:
 
@@ -35,6 +36,7 @@ Stay on Lingui if you want:
 | Message identity | Broader historical surface | Strictly `message + context` |
 | Runtime model | More than one historical access path | One public model: `getI18n()` |
 | Catalog semantics | Mixed legacy and ecosystem pressure | Source-first with `ferrocat` underneath |
+| Future translation layering | Usually solved outside the core | Clean local substrate for higher-order workflows |
 | Long-term shape | Broad compatibility pressure | Opinionated, narrower, cleaner |
 
 ## What Gets Cleaner In Palamedes
@@ -113,6 +115,8 @@ Stay on Lingui for now if:
 Lingui got the core instinct right early: macros, extracted catalogs, and pragmatic framework integration are better than ad hoc translation sprawl.
 
 Palamedes keeps that instinct and removes more of the historical baggage around it.
+
+It also creates a cleaner base for future translation products that need local catalog and QA semantics without re-implementing them in a parallel stack.
 
 That is the best way to think about the project:
 

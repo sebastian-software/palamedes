@@ -12,6 +12,7 @@ Switch now if you want:
 - source-string-first catalogs with `message + context` identity
 - one runtime model via `getI18n()`
 - a cleaner long-term architecture than Lingui's broader historical surface
+- the local foundation that managed translation workflows can build on later
 
 Wait if you need:
 
@@ -53,6 +54,8 @@ import { Trans, Plural, Select, SelectOrdinal } from "@lingui/react/macro"
 ```
 
 That continuity is the point. The migration is primarily a tooling and runtime cleanup, not an authoring reset.
+
+It is also the path from "Lingui as the old base" to "Palamedes as the base, with optional managed translation on top later".
 
 ## Before / After
 
