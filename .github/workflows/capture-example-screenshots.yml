@@ -1,0 +1,75 @@
+name: Capture Example Screenshots
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      example_id:
+        description: Example to capture
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - nextjs-cookie
+          - nextjs-route
+          - tanstack-cookie
+          - tanstack-route
+          - waku-cookie
+          - waku-route
+          - react-router-cookie
+          - react-router-route
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up pnpm cache
+        uses: actions/setup-node@v6
+        with:
+          cache: pnpm
+          node-version: 24
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Capture screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ inputs.example_id }}" != "all" ]; then
+            pnpm capture:example-screenshots -- --id "${{ inputs.example_id }}"
+          else
+            pnpm capture:example-screenshots
+          fi
+
+      - name: Upload screenshot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: example-screenshots
+          path: docs/example-screenshots

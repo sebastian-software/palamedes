@@ -1,12 +1,9 @@
-name: Deploy Examples
+name: Optional Example Deployments
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       example_id:
@@ -16,8 +13,6 @@ on:
         type: choice
         options:
           - all
-          - nextjs-cookie
-          - nextjs-route
           - tanstack-cookie
           - tanstack-route
           - waku-cookie

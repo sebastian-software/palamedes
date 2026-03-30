@@ -3,22 +3,8 @@
 These examples prove the current Palamedes integration story across four
 framework families and two locale strategies.
 
-## Published Hosts
-
-The intended phase-1 public hosts are:
-
-- [palamedes-nextjs-cookie.vercel.app](https://palamedes-nextjs-cookie.vercel.app)
-- [palamedes-nextjs-route.vercel.app](https://palamedes-nextjs-route.vercel.app)
-- [palamedes-tanstack-cookie.vercel.app](https://palamedes-tanstack-cookie.vercel.app)
-- [palamedes-tanstack-route.vercel.app](https://palamedes-tanstack-route.vercel.app)
-- [palamedes-waku-cookie.vercel.app](https://palamedes-waku-cookie.vercel.app)
-- [palamedes-waku-route.vercel.app](https://palamedes-waku-route.vercel.app)
-- [palamedes-reactrouter-cookie.vercel.app](https://palamedes-reactrouter-cookie.vercel.app)
-- [palamedes-reactrouter-route.vercel.app](https://palamedes-reactrouter-route.vercel.app)
-
-Publishing and runtime operations are documented in:
-
-- [docs/demo-deployments.md](/Users/sebastian/Workspace/business/palamedes/docs/demo-deployments.md)
+The matrix is intended to be run locally and validated in CI. Public hosting is
+optional and not part of the default example story.
 
 ## Locale Strategy Matrix
 
@@ -81,6 +67,13 @@ pnpm verify:examples -- --framework nextjs
 pnpm verify:examples -- --strategy route
 ```
 
+Versioned browser screenshots:
+
+```bash
+pnpm capture:example-screenshots
+pnpm capture:example-screenshots -- --id nextjs-cookie
+```
+
 The verifier runs in two layers:
 
 - fast Node-based smoke checks from [scripts/verify-examples.mjs](/Users/sebastian/Workspace/business/palamedes/scripts/verify-examples.mjs)
@@ -100,6 +93,7 @@ For the decision model behind cookie, route, and domain handling, see:
 
 - [docs/locale-strategies.md](/Users/sebastian/Workspace/business/palamedes/docs/locale-strategies.md)
 - [docs/framework-example-notes.md](/Users/sebastian/Workspace/business/palamedes/docs/framework-example-notes.md)
+- [docs/example-screenshots/README.md](/Users/sebastian/Workspace/business/palamedes/docs/example-screenshots/README.md)
 - [docs/demo-deployments.md](/Users/sebastian/Workspace/business/palamedes/docs/demo-deployments.md)
 
 ## Default Dev Ports

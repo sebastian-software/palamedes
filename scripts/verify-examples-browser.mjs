@@ -1,6 +1,14 @@
 import { execFileSync, spawn } from "node:child_process"
 import http from "node:http"
+import path from "node:path"
 import { parseExampleArgs, ROOT, selectExamples } from "./example-matrix.mjs"
+
+function parseBrowserArgs(argv) {
+  return {
+    captureScreenshots: argv.includes("--capture-screenshots"),
+    screenshotDir: path.join(ROOT, "docs/example-screenshots"),
+  }
+}
 
 function startCommand({ args, cwd, env }) {
   return spawn("pnpm", args, {
@@ -98,7 +106,7 @@ async function stopCommand(child) {
   await waitForExit(child)
 }
 
-function runVitest(example) {
+function runVitest(example, options) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "pnpm",
@@ -122,6 +130,8 @@ function runVitest(example) {
               ? `http://de.lvh.me:${example.port}/en`
               : "",
           PALAMEDES_VERIFY_STRATEGY: example.strategy,
+          PALAMEDES_CAPTURE_SCREENSHOTS: options.captureScreenshots ? "1" : "0",
+          PALAMEDES_SCREENSHOT_DIR: options.screenshotDir,
         },
         stdio: "inherit",
       },
@@ -179,7 +189,7 @@ async function waitForServer(port, pathToCheck = "/") {
   throw new Error(`Timed out waiting for server on port ${port}`)
 }
 
-async function verifyExample(example) {
+async function verifyExample(example, options) {
   await ensurePortFree(example.port)
   const child = startCommand({
     args: example.start,
@@ -188,7 +198,7 @@ async function verifyExample(example) {
 
   try {
     await waitForServer(example.port, example.strategy === "route" ? "/en" : "/")
-    await runVitest(example)
+    await runVitest(example, options)
   } finally {
     await stopCommand(child)
     await ensurePortFree(example.port)
@@ -196,6 +206,7 @@ async function verifyExample(example) {
 }
 
 async function main() {
+  const browserOptions = parseBrowserArgs(process.argv)
   const selected = selectExamples(parseExampleArgs(process.argv))
 
   if (selected.length === 0) {
@@ -204,7 +215,7 @@ async function main() {
 
   for (const example of selected) {
     console.log(`\n[verify:browser] ${example.id} on port ${example.port}`)
-    await verifyExample(example)
+    await verifyExample(example, browserOptions)
   }
 }
 

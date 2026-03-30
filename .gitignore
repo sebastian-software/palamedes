@@ -9,9 +9,7 @@ dist/
 target/
 packages/core-node/palamedes-node.node
 .vercel/
-!examples/**/.vercel/
-examples/**/.vercel/*
-!examples/**/.vercel/project.json
+examples/**/.vercel/
 
 # Build output
 *.js.map

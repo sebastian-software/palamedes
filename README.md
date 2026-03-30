@@ -113,7 +113,9 @@ The same ownership model matters for future translation workflows:
 ## Proof And Adoption Docs
 
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
-- [Demo deployment model for the example matrix](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
+- [Example matrix and local/CI verification story](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
+- [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
+- [Optional demo deployment note](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
 - [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
 - [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)

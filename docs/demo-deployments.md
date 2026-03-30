@@ -1,96 +1,48 @@
-# Demo Deployments
+# Optional Demo Deployments
 
-Palamedes publishes the example matrix through `Vercel`, but the builds run in
-`GitHub Actions`, not on Vercel.
+The Palamedes example matrix is verified primarily through local runs and CI.
+Public hosting is optional and is not part of the default merge or release path.
 
-## Deployment Model
+## Current Policy
 
-- 8 separate `Vercel` projects, one per example app
-- default public hosts stay on `*.vercel.app` in phase 1
-- production deploys run on `push` to `main`
-- preview deploys run only through manual `workflow_dispatch`
-- Vercel Git deployments must stay disabled for these projects
+- the canonical proof surface is `pnpm build:examples` plus `pnpm verify:examples`
+- example deployments do not run automatically on `main`
+- `nextjs-cookie` and `nextjs-route` are CI-only in the standard workflow
+- the remaining examples can still be deployed manually if a hosted URL is useful for debugging or ad hoc sharing
 
-The canonical deployment metadata lives in:
+## Optional Manual Deployments
 
-- [scripts/example-matrix.mjs](/Users/sebastian/Workspace/business/palamedes/scripts/example-matrix.mjs)
-
-## Vercel Projects
-
-| Example | Project | Default host |
-| --- | --- | --- |
-| `nextjs-cookie` | `palamedes-nextjs-cookie` | [palamedes-nextjs-cookie.vercel.app](https://palamedes-nextjs-cookie.vercel.app) |
-| `nextjs-route` | `palamedes-nextjs-route` | [palamedes-nextjs-route.vercel.app](https://palamedes-nextjs-route.vercel.app) |
-| `tanstack-cookie` | `palamedes-tanstack-cookie` | [palamedes-tanstack-cookie.vercel.app](https://palamedes-tanstack-cookie.vercel.app) |
-| `tanstack-route` | `palamedes-tanstack-route` | [palamedes-tanstack-route.vercel.app](https://palamedes-tanstack-route.vercel.app) |
-| `waku-cookie` | `palamedes-waku-cookie` | [palamedes-waku-cookie.vercel.app](https://palamedes-waku-cookie.vercel.app) |
-| `waku-route` | `palamedes-waku-route` | [palamedes-waku-route.vercel.app](https://palamedes-waku-route.vercel.app) |
-| `react-router-cookie` | `palamedes-reactrouter-cookie` | [palamedes-reactrouter-cookie.vercel.app](https://palamedes-reactrouter-cookie.vercel.app) |
-| `react-router-route` | `palamedes-reactrouter-route` | [palamedes-reactrouter-route.vercel.app](https://palamedes-reactrouter-route.vercel.app) |
-
-## One-Time Setup
-
-For each project in `Vercel`:
-
-1. Create a separate project with the exact project name from the table above.
-2. Point the project root at the matching example directory under `examples/`.
-3. Disable Vercel Git deployments for the project.
-4. Keep the default `vercel.app` domain in phase 1.
-
-Repository setup in `GitHub`:
-
-- add `VERCEL_TOKEN`
-- optionally add `VERCEL_SCOPE` as a repo or environment variable if the token can access multiple Vercel scopes
-
-Preferred repository setup:
-
-- run `vercel link --yes --project <project-name>` once inside each example directory
-- commit the resulting `examples/<app>/.vercel/project.json` if you want the link to stay explicit in the repo
-- if the file is not committed, the deploy helper links the project by name at runtime
-
-The deploy helper uses the matrix project names as the source of truth, so no
-repo-wide JSON mapping secret is required anymore.
-
-## Workflow Shape
-
-The deployment workflow lives at:
+The optional deployment workflow lives at:
 
 - [deploy-examples.yml](/Users/sebastian/Workspace/business/palamedes/.github/workflows/deploy-examples.yml)
 
-It runs in three stages:
+It is `workflow_dispatch` only and intentionally excludes the Next.js examples.
+If used, it runs:
 
-1. target selection from the example matrix
+1. target selection
 2. full example verification with `pnpm verify:examples`
-3. per-example deployment with:
+3. manual per-example deployment for the selected non-Next example
 
-```bash
-vercel pull --yes --environment=<preview|production>
-vercel build
-vercel deploy --prebuilt
-```
+Supported deployment targets:
 
-The actual repository-side deploy helper is:
+- `tanstack-cookie`
+- `tanstack-route`
+- `waku-cookie`
+- `waku-route`
+- `react-router-cookie`
+- `react-router-route`
 
-- [deploy-examples.mjs](/Users/sebastian/Workspace/business/palamedes/scripts/deploy-examples.mjs)
+## Why Next.js Is Not In The Deploy Path
 
-## Local Dry Run
+The Next.js examples are part of the verified matrix, but they are not part of
+the standard Vercel deployment workflow for this repository.
 
-The deploy helper supports selection filters and a dry-run mode:
+For this OSS setup, the useful guarantee is:
 
-```bash
-pnpm deploy:examples -- --dry-run --id nextjs-cookie --environment preview
-pnpm deploy:examples -- --dry-run --framework waku
-```
+- the examples build
+- the examples run locally
+- SSR, locale routing, cookie handling, and localized server actions are covered in browser tests
 
-To materialize the committed Vercel link file for one example:
-
-```bash
-cd examples/nextjs-cookie
-pnpm exec vercel link --yes --project palamedes-nextjs-cookie
-```
-
-## Future Phase
-
-Phase 2 can replace the `vercel.app` hosts with project-specific subdomains, but
-that is intentionally outside the first rollout. The phase-1 priority is to
-make the full example matrix public without paying for Vercel-side builds.
+If hosted Next.js demos become important later, they should be treated as a
+separate operational track using Vercel's normal remote-build path rather than
+the current CI-first example baseline.

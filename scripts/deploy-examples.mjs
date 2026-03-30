@@ -145,14 +145,6 @@ function getVercelCwdArgs(example) {
   return []
 }
 
-function shouldUseStandaloneBuild(example) {
-  return example.framework === "nextjs"
-}
-
-function shouldUseHoistedNodeModules(example) {
-  return example.framework === "nextjs"
-}
-
 async function writeSummaryLine(summaryFile, line) {
   if (!summaryFile) {
     return
@@ -178,6 +170,10 @@ async function writeGithubOutputs(outputFile, deployment) {
 }
 
 async function deployExample(example, options) {
+  if (example.deployable === false) {
+    throw new Error(`Example ${example.id} is CI-only and not part of the deploy workflow`)
+  }
+
   if (options.dryRun) {
     return {
       environment: options.environment,
@@ -196,11 +192,6 @@ async function deployExample(example, options) {
     VERCEL_TOKEN: token,
   }
 
-  if (shouldUseHoistedNodeModules(example)) {
-    env.npm_config_node_linker = "hoisted"
-    env.pnpm_config_node_linker = "hoisted"
-  }
-
   await ensureVercelLink(example, env, token)
 
   const baseArgs = ["exec", "vercel", ...getVercelCwdArgs(example)]
@@ -208,10 +199,6 @@ async function deployExample(example, options) {
   const buildArgs = ["build", `--token=${token}`]
   const deployArgs = ["deploy", "--prebuilt", "--yes", `--token=${token}`]
   const commandCwd = getCommandCwd(example)
-
-  if (shouldUseStandaloneBuild(example)) {
-    buildArgs.push("--standalone")
-  }
 
   if (options.environment === "production") {
     buildArgs.push("--prod")

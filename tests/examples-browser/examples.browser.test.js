@@ -1,4 +1,6 @@
 import fs from "node:fs"
+import { mkdir } from "node:fs/promises"
+import path from "node:path"
 import { chromium } from "@playwright/test"
 import { afterEach, expect, test } from "vitest"
 
@@ -20,9 +22,11 @@ function resolveChromiumExecutable() {
 function activeExample() {
   return {
     baseUrl: process.env.PALAMEDES_VERIFY_BASE_URL ?? "",
+    captureScreenshots: process.env.PALAMEDES_CAPTURE_SCREENSHOTS === "1",
     framework: process.env.PALAMEDES_VERIFY_FRAMEWORK ?? "",
     hostMismatchUrl: process.env.PALAMEDES_VERIFY_HOST_MISMATCH_URL ?? "",
     id: process.env.PALAMEDES_VERIFY_EXAMPLE_ID ?? "",
+    screenshotDir: process.env.PALAMEDES_SCREENSHOT_DIR ?? "",
     strategy: process.env.PALAMEDES_VERIFY_STRATEGY ?? "",
   }
 }
@@ -37,7 +41,12 @@ async function launchPage() {
     headless: true,
   })
   const context = await browser.newContext({
+    colorScheme: "light",
     locale: "en-US",
+    viewport: {
+      width: 1440,
+      height: 1200,
+    },
   })
   return context.newPage()
 }
@@ -55,6 +64,33 @@ async function waitForClientReady(page) {
   await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 }).catch(() => {})
 }
 
+async function stabilizePage(page) {
+  await page.addStyleTag({
+    content: `
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+        caret-color: transparent !important;
+      }
+    `,
+  }).catch(() => {})
+}
+
+async function captureScreenshot(page, example, state) {
+  if (!example.captureScreenshots || !example.screenshotDir) {
+    return
+  }
+
+  await mkdir(example.screenshotDir, { recursive: true })
+  await stabilizePage(page)
+  await page.screenshot({
+    fullPage: true,
+    path: path.join(example.screenshotDir, `${example.id}-${state}.png`),
+  })
+}
+
 test("matrix example browser contract", async () => {
   const example = activeExample()
   expect(example.id).not.toBe("")
@@ -64,6 +100,7 @@ test("matrix example browser contract", async () => {
   await page.goto(initialUrl, { waitUntil: "domcontentloaded" })
 
   await expect.poll(() => currentServerLocale(page)).toContain("English")
+  await captureScreenshot(page, example, "initial")
 
   if (example.strategy === "cookie") {
     await page.getByTestId("locale-switch-de").click({ force: true, noWaitAfter: true, timeout: 15_000 })
@@ -85,6 +122,7 @@ test("matrix example browser contract", async () => {
     await expect
       .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
       .toContain("de")
+    await captureScreenshot(page, example, "interactive")
     return
   }
 
@@ -99,6 +137,7 @@ test("matrix example browser contract", async () => {
   await expect
     .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
     .toContain("de")
+  await captureScreenshot(page, example, "interactive")
 
   if (!example.hostMismatchUrl) {
     throw new Error(`Missing host mismatch URL for route example ${example.id}`)

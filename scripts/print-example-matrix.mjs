@@ -13,7 +13,9 @@ function toDeployRecord(example) {
 }
 
 function main() {
-  const selected = selectExamples(parseExampleArgs(process.argv)).map(toDeployRecord)
+  const selected = selectExamples(parseExampleArgs(process.argv))
+    .filter((example) => example.deployable !== false)
+    .map(toDeployRecord)
   if (selected.length === 0) {
     throw new Error("No examples matched the provided filters")
   }
