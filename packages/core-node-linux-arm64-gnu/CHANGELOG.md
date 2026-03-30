@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/sebastian-software/palamedes/compare/core-node-linux-arm64-gnu-v0.1.1...core-node-linux-arm64-gnu-v0.2.0) (2026-03-30)
+
+
+### Miscellaneous Chores
+
+* **core-node-linux-arm64-gnu:** Synchronize palamedes versions
+
 ## [0.1.1](https://github.com/sebastian-software/palamedes/compare/core-node-linux-arm64-gnu-v0.1.0...core-node-linux-arm64-gnu-v0.1.1) (2026-03-11)
 
 

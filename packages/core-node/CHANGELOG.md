@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0](https://github.com/sebastian-software/palamedes/compare/core-node-v0.1.1...core-node-v0.2.0) (2026-03-30)
+
+
+### Features
+
+* complete palamedes-first lingui migration ([fc1ac6f](https://github.com/sebastian-software/palamedes/commit/fc1ac6f9c7b8b8a3e609f72715f04b452243126a))
+* **core-node:** add native po catalog loading ([b190e01](https://github.com/sebastian-software/palamedes/commit/b190e015a233c40a6be6a29d47d881eac1537404))
+
+
+### Bug Fixes
+
+* **native:** stabilize darwin binding and placeholder lowering ([9a57b5f](https://github.com/sebastian-software/palamedes/commit/9a57b5fcddac29cf94dcc3f580bb581e4120eba4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * optionalDependencies
+    * @palamedes/core-node-darwin-arm64 bumped to 0.2.0
+    * @palamedes/core-node-linux-arm64-gnu bumped to 0.2.0
+    * @palamedes/core-node-linux-x64-gnu bumped to 0.2.0
+    * @palamedes/core-node-win32-x64-msvc bumped to 0.2.0
+
 ## [0.1.1](https://github.com/sebastian-software/palamedes/compare/core-node-v0.1.0...core-node-v0.1.1) (2026-03-11)
 
 
