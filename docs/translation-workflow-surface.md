@@ -2,6 +2,8 @@
 
 This document describes the local translation-support surface Palamedes should provide as a reusable substrate for higher-order products such as Palamedes+.
 
+For the first concrete module split, see [Translation Module Boundaries](./translation-module-boundaries.md).
+
 ## Purpose
 
 Palamedes should make it unnecessary for downstream translation products to rebuild repo-local catalog semantics, QA primitives, and metadata handling in parallel stacks.
@@ -55,6 +57,19 @@ The goal is not to make Palamedes itself a hosted translation product. The goal 
 - retry-oriented local decision support
 
 These helpers belong in Core only when they stay host-neutral and do not depend on account or provider concerns.
+
+## First implementable module split
+
+The first recommended module map is:
+
+- `translation_candidates`
+- `terminology`
+- `qa`
+- `po_metadata`
+- `reports`
+- `workflow`
+
+Those module boundaries are described in more detail in the follow-on module document so a Rust implementation does not have to invent the split from scratch.
 
 ## What belongs outside Palamedes
 
