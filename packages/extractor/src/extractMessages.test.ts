@@ -38,6 +38,16 @@ describe("extractMessages", () => {
       expect(messages).toHaveLength(1)
       expect(messages[0].message).toBe("Hello <0>World</0>")
     })
+
+    it("extracts Solid Trans macros with the same semantics", () => {
+      const code = `
+        import { Trans } from "@palamedes/solid/macro"
+        const x = <Trans>Hello {name}</Trans>
+      `
+      const messages = extract(code)
+      expect(messages).toHaveLength(1)
+      expect(messages[0].message).toBe("Hello {name}")
+    })
   })
 
   describe("macro calls", () => {

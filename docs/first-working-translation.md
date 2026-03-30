@@ -7,13 +7,22 @@ This guide is the shortest path to a real Palamedes success case:
 - one `.po` import
 - one active runtime instance
 
-It uses Vite because that is the smallest setup today.
+It uses Vite plus React because that is the smallest copy-paste setup today.
+The same Vite plugin, runtime model, and `.po` flow now also work with Solid
+through `@palamedes/solid` and `vite-plugin-solid`.
 
 ## 1. Install the packages
 
 ```bash
 pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli @palamedes/config @vitejs/plugin-react vite typescript
+```
+
+For Solid, swap the host package pair:
+
+```bash
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
+pnpm add -D @palamedes/cli @palamedes/config vite-plugin-solid vite typescript
 ```
 
 ## 2. Add `palamedes.config.ts`

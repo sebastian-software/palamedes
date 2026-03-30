@@ -9,8 +9,8 @@ Palamedes is a modern i18n stack for JavaScript and TypeScript apps that stays
 consistent across frameworks.
 
 It keeps one runtime model, one message identity model, and thin framework
-adapters across verified integrations for Next.js, TanStack Start, Waku, and
-React Router.
+adapters across verified integrations for Next.js, TanStack Start, SolidStart,
+Waku, and React Router.
 
 That is the real differentiator: Palamedes does not just try to feel cleaner in
 one framework. It tries to keep the i18n model architecturally coherent as the
@@ -39,7 +39,7 @@ Palamedes takes a different position:
 - one public runtime model through `getI18n()`
 - one message identity model through `message + context`
 - one architecture with a native core and thin adapters
-- one verified proof surface across four framework families
+- one verified proof surface across five framework families
 
 ## Why Teams Pick Palamedes
 
@@ -51,13 +51,13 @@ Palamedes takes a different position:
 ## Current Status
 
 - Recommended for new projects and teams already doing architecture cleanup
-- Verified today across Next.js, TanStack Start, Waku, and React Router on Node.js `>=22`
+- Verified today across Next.js, TanStack Start, SolidStart, Waku, and React Router on Node.js `>=22`
 - Source-string-first catalogs are stable and powered by `ferrocat`
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 
 ## What Exists Today As Proof
 
-- A browser-verified example matrix across four framework families
+- A browser-verified example matrix across five framework families
 - Versioned screenshots generated from the same Playwright-based verifier used in CI
 - Reproducible benchmark commands for transform, extract, catalog update, and compile hot paths
 - ADRs and architecture docs that make the ownership model explicit
@@ -82,23 +82,53 @@ Palamedes today, start with the scoped packages above.
 | [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) | Extraction CLI | App teams, CI |
 | [`@palamedes/core`](https://www.npmjs.com/package/@palamedes/core) | App-facing i18n instance | App teams |
 | [`@palamedes/react`](https://www.npmjs.com/package/@palamedes/react) | React translation components | React app teams |
+| [`@palamedes/solid`](https://www.npmjs.com/package/@palamedes/solid) | Solid translation components | Solid app teams |
 | [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime) | Runtime bridge for transformed code | App teams |
 
 ## Quick Start With Vite
 
+Palamedes keeps the Vite-side integration stable across React and Solid.
+
+Base install:
+
 ```bash
-pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
+pnpm add @palamedes/core @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli @palamedes/config
 ```
 
+Then add the host-specific package pair:
+
+```bash
+pnpm add @palamedes/react react react-dom
+pnpm add -D @vitejs/plugin-react
+```
+
+or
+
+```bash
+pnpm add @palamedes/solid solid-js
+pnpm add -D vite-plugin-solid
+```
+
 ```ts
-// vite.config.ts
+// vite.config.ts (React)
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
   plugins: [palamedes(), react()],
+})
+```
+
+```ts
+// vite.config.ts (Solid)
+import { defineConfig } from "vite"
+import solid from "vite-plugin-solid"
+import { palamedes } from "@palamedes/vite-plugin"
+
+export default defineConfig({
+  plugins: [palamedes(), solid()],
 })
 ```
 
@@ -133,6 +163,8 @@ pnpm exec pmds extract
 
 For the full copy-paste path, including `.po` loading and the first translated
 component, use the [5-minute quickstart](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md).
+That walkthrough uses React for the shortest path, but the same Vite plugin,
+runtime model, and catalog flow now also back Solid.
 
 ## The Core Architecture Claim
 

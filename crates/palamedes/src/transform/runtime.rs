@@ -144,16 +144,23 @@ pub(super) fn transform_choice_call(
 pub(super) fn transform_trans_element(
     element: &JSXElement<'_>,
     source: &str,
+    jsx_runtime_module: &str,
 ) -> PalamedesResult<Option<(String, String)>> {
     let attrs = jsx_attributes(&element.opening_element);
     if attrs.contains_key("id") {
         return Err(PalamedesError::ExplicitMessageIdsUnsupported);
     }
     let context = attrs.get("context").cloned();
+    let solid_wrappers = jsx_runtime_module == "@palamedes/solid";
 
     let mut next_component_index = 0usize;
     let (children_message, values, components) =
-        extract_jsx_children_parts(&element.children, source, &mut next_component_index);
+        extract_jsx_children_parts(
+            &element.children,
+            source,
+            &mut next_component_index,
+            solid_wrappers,
+        );
     let message = attrs
         .get("message")
         .cloned()

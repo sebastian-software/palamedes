@@ -21,6 +21,8 @@ Each example has two screenshots:
 - `nextjs-route`: [initial](./nextjs-route-initial.png), [interactive](./nextjs-route-interactive.png)
 - `tanstack-cookie`: [initial](./tanstack-cookie-initial.png), [interactive](./tanstack-cookie-interactive.png)
 - `tanstack-route`: [initial](./tanstack-route-initial.png), [interactive](./tanstack-route-interactive.png)
+- `solidstart-cookie`: [initial](./solidstart-cookie-initial.png), [interactive](./solidstart-cookie-interactive.png)
+- `solidstart-route`: [initial](./solidstart-route-initial.png), [interactive](./solidstart-route-interactive.png)
 - `waku-cookie`: [initial](./waku-cookie-initial.png), [interactive](./waku-cookie-interactive.png)
 - `waku-route`: [initial](./waku-route-initial.png), [interactive](./waku-route-interactive.png)
 - `react-router-cookie`: [initial](./react-router-cookie-initial.png), [interactive](./react-router-cookie-interactive.png)

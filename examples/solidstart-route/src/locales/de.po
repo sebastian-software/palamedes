@@ -1,0 +1,73 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: palamedes-solidstart-route\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Palamedes in SolidStart with one runtime model."
+msgstr "Palamedes in SolidStart mit einem Laufzeitmodell."
+
+msgid "This example proves a route-based locale flow in SolidStart with SSR, locale segments, host-mapping suggestions, .po imports, and localized server queries."
+msgstr "Dieses Beispiel zeigt einen routenbasierten Sprachfluss in SolidStart mit SSR, Sprachsegmenten in der URL, Host-Mapping-Hinweisen, .po-Importen und lokalisierten Server-Abfragen."
+
+msgid "Locale suggestion"
+msgstr "Sprachempfehlung"
+
+msgid "Switch to the recommended locale"
+msgstr "Zur empfohlenen Sprache wechseln"
+
+msgid "Current locale:"
+msgstr "Aktuelle Sprache:"
+
+msgid "Server-rendered proof"
+msgstr "Serverseitiger Beweis"
+
+msgid "SSR translation happens before the page reaches the browser."
+msgstr "Die SSR-Uebersetzung passiert, bevor die Seite den Browser erreicht."
+
+msgid "This panel was rendered on the server for locale {localeLabel}."
+msgstr "Dieses Panel wurde auf dem Server fuer die Sprache {localeLabel} gerendert."
+
+msgid "Rendered on server"
+msgstr "Auf dem Server gerendert"
+
+msgid "Client interaction"
+msgstr "Client-Interaktion"
+
+msgid "Counter example"
+msgstr "Zaehlerbeispiel"
+
+msgid "You clicked # time"
+msgstr "Du hast # Mal geklickt"
+
+msgid "You clicked # times"
+msgstr "Du hast # Mal geklickt"
+
+msgid "Click me"
+msgstr "Klick mich"
+
+msgid "Server query proof"
+msgstr "Server-Abfrage-Beweis"
+
+msgid "Localized server query result"
+msgstr "Lokalisiertes Ergebnis der Server-Abfrage"
+
+msgid "Run the request to fetch a server-localized result."
+msgstr "Fuehre die Anfrage aus, um ein serverlokalisiertes Ergebnis zu holen."
+
+msgid "Ask server for localized status"
+msgstr "Server nach lokalisiertem Status fragen"
+
+msgid "Server locale"
+msgstr "Server-Sprache"
+
+msgid "Handled at"
+msgstr "Bearbeitet um"
+
+msgid "Localized message"
+msgstr "Lokalisierte Nachricht"
+
+msgid "Server query confirmed locale {locale}."
+msgstr "Die Server-Abfrage hat die Sprache {locale} bestaetigt."

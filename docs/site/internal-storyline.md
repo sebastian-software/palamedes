@@ -10,7 +10,7 @@ without reinventing the narrative.
 3. Why this is rare: most alternatives optimize for one framework or carry more historical surface
 4. The architectural core: native hot path, thin adapters, delegated semantics
 5. The runtime story: one runtime model, one identity model
-6. The proof story: verified example matrix across four framework families
+6. The proof story: verified example matrix across five framework families
 7. The evidence story: screenshots, CI flows, benchmarks, ADRs
 8. The comparison story: Lingui closest, `next-intl` different center, GT broader category
 9. Why it matters commercially: cleaner migrations, clearer architecture, better substrate for higher-order workflows

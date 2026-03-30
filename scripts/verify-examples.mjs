@@ -168,11 +168,13 @@ async function verifyExample(example) {
   await runCommand({
     args: example.build,
     cwd: example.cwd,
+    env: example.buildEnv,
   })
 
   const child = startCommand({
     args: example.start,
     cwd: example.cwd,
+    env: example.startEnv,
   })
 
   try {

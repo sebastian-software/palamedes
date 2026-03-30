@@ -194,6 +194,7 @@ async function verifyExample(example, options) {
   const child = startCommand({
     args: example.start,
     cwd: example.cwd,
+    env: example.startEnv,
   })
 
   try {

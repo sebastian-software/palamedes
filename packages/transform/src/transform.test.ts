@@ -77,6 +77,19 @@ const el = <Trans>Hello {name}</Trans>;
     expect(result.code).toContain('values={{ name }}')
   })
 
+  it("transforms Solid <Trans> macros to @palamedes/solid imports", () => {
+    const code = `
+import { Trans } from "@palamedes/solid/macro";
+const el = <Trans>Hello <strong>{name}</strong></Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('import { Trans } from "@palamedes/solid"')
+    expect(result.code).toContain('<Trans id="')
+    expect(result.code).toContain('message="Hello <0>{name}</0>"')
+    expect(result.code).toContain('components={{ 0: (children) => <strong>{children}</strong> }}')
+  })
+
   it("strips the message field when requested", () => {
     const code = `
 import { t } from "@palamedes/core/macro";

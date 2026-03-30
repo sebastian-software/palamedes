@@ -11,7 +11,7 @@ This page exists to show the work behind that claim.
 
 This repo can credibly prove four things:
 
-- Palamedes is verified across Next.js, TanStack Start, Waku, and React Router
+- Palamedes is verified across Next.js, TanStack Start, SolidStart, Waku, and React Router
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, catalog update, and catalog compile hot paths are measured locally and reproducibly
@@ -24,7 +24,7 @@ architecture and the evidence easy to inspect.
 | Topic | Current state |
 | --- | --- |
 | Recommended use cases | New projects, architecture cleanup, teams already comfortable with Lingui-style authoring |
-| Supported frameworks | Verified examples for Next.js, TanStack Start, Waku, and React Router |
+| Supported frameworks | Verified examples for Next.js, TanStack Start, SolidStart, Waku, and React Router |
 | Runtime model | `@palamedes/runtime` with `getI18n()` |
 | Catalog model | Source-string-first, `.po`, `message + context` identity |
 | Native core | Rust + `napi-rs` |

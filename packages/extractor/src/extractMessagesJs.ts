@@ -36,6 +36,7 @@ function createLineLocator(code: string) {
 const PALAMEDES_MACRO_PACKAGES = [
   "@palamedes/core/macro",
   "@palamedes/react/macro",
+  "@palamedes/solid/macro",
 ] as const
 
 // JSX macro names

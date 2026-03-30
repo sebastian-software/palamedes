@@ -217,10 +217,32 @@ pub(super) fn opening_element_to_component(
     }
 }
 
+pub(super) fn opening_element_to_component_wrapper(
+    opening_element: &JSXOpeningElement<'_>,
+    source: &str,
+) -> String {
+    let start = opening_element.span.start as usize;
+    let end = opening_element.span.end as usize;
+    let markup = source[start..end].trim().to_string();
+    let name_span = opening_element.name.span();
+    let name = source[name_span.start as usize..name_span.end as usize].to_string();
+
+    let opening = if let Some(prefix) = markup.strip_suffix("/>") {
+        format!("{}>", prefix.trim_end())
+    } else if markup.ends_with('>') {
+        markup
+    } else {
+        format!("{markup}>")
+    };
+
+    format!("(children) => {opening}{{children}}</{name}>")
+}
+
 pub(super) fn extract_jsx_children_parts(
     children: &[JSXChild<'_>],
     source: &str,
     next_component_index: &mut usize,
+    solid_wrappers: bool,
 ) -> (String, Vec<ValueBinding>, Vec<String>) {
     let mut parts = Vec::new();
     let mut values = Vec::new();
@@ -248,20 +270,31 @@ pub(super) fn extract_jsx_children_parts(
                 *next_component_index += 1;
 
                 let (inner_message, inner_values, inner_components) =
-                    extract_jsx_children_parts(&element.children, source, next_component_index);
+                    extract_jsx_children_parts(
+                        &element.children,
+                        source,
+                        next_component_index,
+                        solid_wrappers,
+                    );
                 parts.push(format!(
                     "<{current_index}>{inner_message}</{current_index}>"
                 ));
                 values.extend(inner_values);
-                components.push(opening_element_to_component(
-                    &element.opening_element,
-                    source,
-                ));
+                components.push(if solid_wrappers {
+                    opening_element_to_component_wrapper(&element.opening_element, source)
+                } else {
+                    opening_element_to_component(&element.opening_element, source)
+                });
                 components.extend(inner_components);
             }
             JSXChild::Fragment(fragment) => {
                 let (inner_message, inner_values, inner_components) =
-                    extract_jsx_children_parts(&fragment.children, source, next_component_index);
+                    extract_jsx_children_parts(
+                        &fragment.children,
+                        source,
+                        next_component_index,
+                        solid_wrappers,
+                    );
                 if !inner_message.is_empty() {
                     parts.push(inner_message);
                 }

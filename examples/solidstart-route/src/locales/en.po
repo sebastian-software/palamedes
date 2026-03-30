@@ -1,0 +1,73 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: palamedes-solidstart-route\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Palamedes in SolidStart with one runtime model."
+msgstr "Palamedes in SolidStart with one runtime model."
+
+msgid "This example proves a route-based locale flow in SolidStart with SSR, locale segments, host-mapping suggestions, .po imports, and localized server queries."
+msgstr "This example proves a route-based locale flow in SolidStart with SSR, locale segments, host-mapping suggestions, .po imports, and localized server queries."
+
+msgid "Locale suggestion"
+msgstr "Locale suggestion"
+
+msgid "Switch to the recommended locale"
+msgstr "Switch to the recommended locale"
+
+msgid "Current locale:"
+msgstr "Current locale:"
+
+msgid "Server-rendered proof"
+msgstr "Server-rendered proof"
+
+msgid "SSR translation happens before the page reaches the browser."
+msgstr "SSR translation happens before the page reaches the browser."
+
+msgid "This panel was rendered on the server for locale {localeLabel}."
+msgstr "This panel was rendered on the server for locale {localeLabel}."
+
+msgid "Rendered on server"
+msgstr "Rendered on server"
+
+msgid "Client interaction"
+msgstr "Client interaction"
+
+msgid "Counter example"
+msgstr "Counter example"
+
+msgid "You clicked # time"
+msgstr "You clicked # time"
+
+msgid "You clicked # times"
+msgstr "You clicked # times"
+
+msgid "Click me"
+msgstr "Click me"
+
+msgid "Server query proof"
+msgstr "Server query proof"
+
+msgid "Localized server query result"
+msgstr "Localized server query result"
+
+msgid "Run the request to fetch a server-localized result."
+msgstr "Run the request to fetch a server-localized result."
+
+msgid "Ask server for localized status"
+msgstr "Ask server for localized status"
+
+msgid "Server locale"
+msgstr "Server locale"
+
+msgid "Handled at"
+msgstr "Handled at"
+
+msgid "Localized message"
+msgstr "Localized message"
+
+msgid "Server query confirmed locale {locale}."
+msgstr "Server query confirmed locale {locale}."

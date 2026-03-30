@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use oxc_ast::ast::{CallExpression, JSXElement, TaggedTemplateExpression};
 use oxc_ast_visit::{walk, Visit};
@@ -27,7 +27,7 @@ pub(super) struct TransformVisitor<'a> {
     pub replacements: Vec<Replacement>,
     pub compiled_ids: Vec<String>,
     pub needs_runtime_import: bool,
-    pub needs_trans_import: bool,
+    pub trans_import_modules: HashSet<String>,
     pub error: Option<PalamedesError>,
 }
 
@@ -44,7 +44,7 @@ impl<'a> TransformVisitor<'a> {
             replacements: Vec::new(),
             compiled_ids: Vec::new(),
             needs_runtime_import: false,
-            needs_trans_import: false,
+            trans_import_modules: HashSet::new(),
             error: None,
         }
     }
@@ -83,7 +83,14 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         };
 
         let replacement = match macro_info.imported_name.as_str() {
-            "Trans" => transform_trans_element(it, self.source),
+            "Trans" => transform_trans_element(
+                it,
+                self.source,
+                macro_info
+                    .source
+                    .strip_suffix("/macro")
+                    .unwrap_or("@palamedes/react"),
+            ),
             "Plural" | "Select" | "SelectOrdinal" => {
                 transform_choice_jsx_element(
                     it,
@@ -105,7 +112,9 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 self.push_compiled_id(&compiled_id);
 
                 if macro_info.imported_name == "Trans" {
-                    self.needs_trans_import = true;
+                    if let Some(module) = macro_info.source.strip_suffix("/macro") {
+                        self.trans_import_modules.insert(module.to_string());
+                    }
                 } else {
                     self.needs_runtime_import = true;
                 }

@@ -184,6 +184,60 @@ export const EXAMPLE_MATRIX = [
       },
     ],
   },
+  {
+    id: "solidstart-cookie",
+    framework: "solidstart",
+    strategy: "cookie",
+    port: 4050,
+    deployable: false,
+    vercelProject: "",
+    publicHost: "",
+    cwd: path.join(ROOT, "examples/solidstart-cookie"),
+    build: ["build"],
+    start: ["start"],
+    startEnv: {
+      HOST: "127.0.0.1",
+      PORT: "4050",
+    },
+    smokeChecks: [
+      {
+        headers: { "accept-language": "de" },
+        path: "/",
+        substrings: ["Aktuelle Sprache:", "Deutsch"],
+      },
+    ],
+  },
+  {
+    id: "solidstart-route",
+    framework: "solidstart",
+    strategy: "route",
+    port: 4051,
+    deployable: false,
+    vercelProject: "",
+    publicHost: "",
+    cwd: path.join(ROOT, "examples/solidstart-route"),
+    build: ["build"],
+    start: ["start"],
+    startEnv: {
+      HOST: "127.0.0.1",
+      PORT: "4051",
+    },
+    smokeChecks: [
+      {
+        headers: { "accept-language": "de" },
+        path: "/en",
+        substrings: [
+          "Locale suggestion",
+          "Switch to the recommended locale",
+        ],
+      },
+      {
+        headers: { host: "de.lvh.me:4051" },
+        path: "/en",
+        substrings: ["This host is mapped to Deutsch"],
+      },
+    ],
+  },
 ]
 
 export function parseExampleArgs(argv) {

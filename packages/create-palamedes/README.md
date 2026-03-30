@@ -20,9 +20,12 @@ Right now, you probably should not.
 You do not need to add this package to a project today. If you are setting up Palamedes now, install the specific packages you need:
 
 ```bash
-pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
+pnpm add @palamedes/core @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli
 ```
+
+Then add either `@palamedes/react` or `@palamedes/solid`, depending on your
+host framework.
 
 For the actual setup flow today, use:
 

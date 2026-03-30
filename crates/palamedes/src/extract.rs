@@ -12,8 +12,11 @@ use oxc_parser::Parser;
 use oxc_span::SourceType;
 use serde::Serialize;
 
-const PALAMEDES_MACRO_PACKAGES: [&str; 2] =
-    ["@palamedes/core/macro", "@palamedes/react/macro"];
+const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
+    "@palamedes/core/macro",
+    "@palamedes/react/macro",
+    "@palamedes/solid/macro",
+];
 type ChoiceOptions = Vec<(String, String)>;
 
 #[derive(Debug, Clone)]

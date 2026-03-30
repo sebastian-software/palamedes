@@ -147,8 +147,16 @@ pub fn transform_macros(
         );
     }
 
-    if visitor.needs_trans_import && !collector.has_trans_import {
-        prefix.push_str("import { Trans } from \"@palamedes/react\";\n");
+    let mut trans_modules = visitor
+        .trans_import_modules
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    trans_modules.sort();
+    for module in trans_modules {
+        if !collector.trans_import_sources.contains(&module) {
+            let _ = writeln!(prefix, "import {{ Trans }} from \"{module}\";");
+        }
     }
 
     if !prefix.is_empty() {

@@ -3,7 +3,7 @@
 These examples are the strongest visible proof that Palamedes is more than a
 single-framework integration.
 
-They prove the current Palamedes story across four framework families and two
+They prove the current Palamedes story across five framework families and two
 locale strategies while preserving the same underlying runtime and identity
 model.
 
@@ -12,7 +12,7 @@ optional and not part of the default example story.
 
 ## What This Matrix Proves
 
-- one i18n mental model across Next.js, TanStack Start, Waku, and React Router
+- one i18n mental model across Next.js, TanStack Start, SolidStart, Waku, and React Router
 - one runtime story with request-local server i18n plus client interaction
 - one message identity story through source-string-first `.po` workflows
 - one proof surface with browser verification, screenshots, and SSR checks
@@ -26,6 +26,7 @@ evidence behind the claim that Palamedes stays coherent across frameworks.
 
 - [examples/nextjs-cookie](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-cookie)
 - [examples/tanstack-cookie](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-cookie)
+- [examples/solidstart-cookie](/Users/sebastian/Workspace/business/palamedes/examples/solidstart-cookie)
 - [examples/waku-cookie](/Users/sebastian/Workspace/business/palamedes/examples/waku-cookie)
 - [examples/react-router-cookie](/Users/sebastian/Workspace/business/palamedes/examples/react-router-cookie)
 
@@ -41,6 +42,7 @@ These examples prove:
 
 - [examples/nextjs-route](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-route)
 - [examples/tanstack-route](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-route)
+- [examples/solidstart-route](/Users/sebastian/Workspace/business/palamedes/examples/solidstart-route)
 - [examples/waku-route](/Users/sebastian/Workspace/business/palamedes/examples/waku-route)
 - [examples/react-router-route](/Users/sebastian/Workspace/business/palamedes/examples/react-router-route)
 
@@ -57,7 +59,7 @@ These examples prove:
 All matrix examples use the same public Palamedes stack:
 
 - `@palamedes/core`
-- `@palamedes/react`
+- `@palamedes/react` or `@palamedes/solid`
 - `@palamedes/runtime`
 - `@palamedes/vite-plugin` or `@palamedes/next-plugin`
 
@@ -122,3 +124,5 @@ The example scripts use a fixed port layout so the apps can run in parallel:
 - `4031` `waku-route`
 - `4040` `react-router-cookie`
 - `4041` `react-router-route`
+- `4050` `solidstart-cookie`
+- `4051` `solidstart-route`

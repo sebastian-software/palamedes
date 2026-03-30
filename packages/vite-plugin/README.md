@@ -11,7 +11,7 @@ The recommended Palamedes entry point for Vite applications.
 
 ## Status
 
-- Recommended for Vite projects using React and Palamedes macros
+- Recommended for Vite projects using React or Solid and Palamedes macros
 - Supports `.po` imports and source-string-first catalog semantics
 - Best paired with `@palamedes/runtime` and `@palamedes/cli`
 - Not a framework generator or top-level app scaffold
@@ -25,8 +25,22 @@ Use the full copy-paste setup guide:
 ## Installation
 
 ```bash
-pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
+pnpm add @palamedes/core @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli @palamedes/config
+```
+
+Then add the host package pair you want:
+
+```bash
+pnpm add @palamedes/react react react-dom
+pnpm add -D @vitejs/plugin-react
+```
+
+or
+
+```bash
+pnpm add @palamedes/solid solid-js
+pnpm add -D vite-plugin-solid
 ```
 
 ## Minimal Setup
@@ -38,6 +52,16 @@ import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
   plugins: [palamedes(), react()],
+})
+```
+
+```ts
+import { defineConfig } from "vite"
+import solid from "vite-plugin-solid"
+import { palamedes } from "@palamedes/vite-plugin"
+
+export default defineConfig({
+  plugins: [palamedes(), solid()],
 })
 ```
 

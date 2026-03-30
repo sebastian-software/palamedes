@@ -101,6 +101,25 @@ fn transforms_trans_jsx_macro() {
 }
 
 #[test]
+fn transforms_solid_trans_jsx_macro() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/solid/macro\";\nconst el = <Trans>Hello <strong>{name}</strong></Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains("import { Trans } from \"@palamedes/solid\";"));
+    assert!(result.code.contains("<Trans id=\""));
+    assert!(result.code.contains("message=\"Hello <0>{name}</0>\""));
+    assert!(result
+        .code
+        .contains("components={{ 0: (children) => <strong>{children}</strong> }}"));
+}
+
+#[test]
 fn preserves_use_client_directive_before_injected_imports() {
     let result = transform_macros(
         "\"use client\";\nimport { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello</Trans>;\n",

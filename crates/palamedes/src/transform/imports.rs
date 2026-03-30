@@ -1,14 +1,18 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use oxc_ast::ast::{ImportDeclaration, ImportDeclarationSpecifier};
 use oxc_ast_visit::{walk, Visit};
 
-pub(super) const PALAMEDES_MACRO_PACKAGES: [&str; 2] =
-    ["@palamedes/core/macro", "@palamedes/react/macro"];
+pub(super) const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
+    "@palamedes/core/macro",
+    "@palamedes/react/macro",
+    "@palamedes/solid/macro",
+];
 
 #[derive(Debug, Clone)]
 pub(super) struct ImportedMacro {
     pub imported_name: String,
+    pub source: String,
 }
 
 pub(super) struct ImportCollector {
@@ -17,7 +21,7 @@ pub(super) struct ImportCollector {
     pub macro_imports: HashMap<String, ImportedMacro>,
     pub macro_import_ranges: Vec<(usize, usize)>,
     pub has_runtime_import: bool,
-    pub has_trans_import: bool,
+    pub trans_import_sources: HashSet<String>,
 }
 
 impl ImportCollector {
@@ -28,7 +32,7 @@ impl ImportCollector {
             macro_imports: HashMap::new(),
             macro_import_ranges: Vec::new(),
             has_runtime_import: false,
-            has_trans_import: false,
+            trans_import_sources: HashSet::new(),
         }
     }
 }
@@ -48,6 +52,7 @@ impl<'a> Visit<'a> for ImportCollector {
                             specifier.local.name.to_string(),
                             ImportedMacro {
                                 imported_name: specifier.imported.name().to_string(),
+                                source: source.to_string(),
                             },
                         );
                     }
@@ -67,12 +72,12 @@ impl<'a> Visit<'a> for ImportCollector {
             }
         }
 
-        if source == "@palamedes/react" {
+        if matches!(source, "@palamedes/react" | "@palamedes/solid") {
             if let Some(specifiers) = &it.specifiers {
                 for specifier in specifiers {
                     if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
                         if specifier.local.name == "Trans" {
-                            self.has_trans_import = true;
+                            self.trans_import_sources.insert(source.to_string());
                         }
                     }
                 }

@@ -1,0 +1,170 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  background:
+    radial-gradient(circle at top left, rgba(61, 125, 255, 0.14), transparent 28rem),
+    radial-gradient(circle at top right, rgba(13, 148, 136, 0.12), transparent 24rem),
+    #f7fafc;
+  color: #122033;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+}
+
+a {
+  color: inherit;
+}
+
+code {
+  font-family: "SFMono-Regular", ui-monospace, monospace;
+}
+
+.page-shell {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+.hero,
+.panel {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 1.5rem;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(20px);
+}
+
+.hero {
+  padding: 2rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.hero p {
+  max-width: 42rem;
+  color: #46556a;
+}
+
+.grid {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.grid.cols-2 {
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.panel {
+  padding: 1.25rem;
+}
+
+.panel h2,
+.panel h3 {
+  margin-top: 0;
+}
+
+.kicker {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.eyebrow {
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.muted {
+  color: #5b6b7f;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.button,
+.chip {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button {
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  color: white;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+}
+
+.button[disabled] {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.chip {
+  background: rgba(226, 232, 240, 0.9);
+  color: #122033;
+}
+
+.chip.active {
+  background: #122033;
+  color: white;
+}
+
+.stats {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.stats div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.footer-note {
+  margin-top: 2rem;
+  font-size: 0.95rem;
+  color: #5b6b7f;
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
+  }
+
+  .hero {
+    padding: 1.5rem;
+  }
+}

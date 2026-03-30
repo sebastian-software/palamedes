@@ -20,6 +20,7 @@ If you want to use Palamedes today, install the scoped packages directly:
 - [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)
 - [`@palamedes/core`](https://www.npmjs.com/package/@palamedes/core)
 - [`@palamedes/react`](https://www.npmjs.com/package/@palamedes/react)
+- [`@palamedes/solid`](https://www.npmjs.com/package/@palamedes/solid)
 - [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)
 
 ## Current Status
@@ -31,9 +32,12 @@ If you want to use Palamedes today, install the scoped packages directly:
 ## Recommended Starting Point Today
 
 ```bash
-pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
+pnpm add @palamedes/core @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli
 ```
+
+Then add either `@palamedes/react` or `@palamedes/solid`, depending on your
+host framework.
 
 For the real starting path, use:
 
