@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks"
+
 import { afterEach, describe, expect, it } from "vitest"
 
 import { createI18n } from "@palamedes/core"
@@ -32,5 +34,24 @@ describe("@palamedes/runtime", () => {
     setServerI18nGetter(() => i18n)
 
     expect(getI18n()).toBe(i18n)
+  })
+
+  it("supports async request-local server instances", async () => {
+    const storage = new AsyncLocalStorage<ReturnType<typeof createI18n>>()
+    const deI18n = createI18n()
+    const enI18n = createI18n()
+
+    setServerI18nGetter(() => storage.getStore())
+
+    await Promise.all([
+      storage.run(deI18n, async () => {
+        await Promise.resolve()
+        expect(getI18n()).toBe(deI18n)
+      }),
+      storage.run(enI18n, async () => {
+        await Promise.resolve()
+        expect(getI18n()).toBe(enI18n)
+      }),
+    ])
   })
 })

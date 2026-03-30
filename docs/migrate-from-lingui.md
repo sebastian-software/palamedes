@@ -153,6 +153,11 @@ import { setServerI18nGetter } from "@palamedes/runtime"
 setServerI18nGetter(() => getRequestScopedI18n())
 ```
 
+For backend servers outside React frameworks, use the same runtime getter with
+request-local storage. The Hono/Express pattern is documented here:
+
+- [Palamedes in backend servers](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
+
 ### 3. Remove explicit IDs
 
 This is the most important semantic cleanup.

@@ -65,6 +65,7 @@ Palamedes takes a different position:
 ## Start Here
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [Backend servers with Hono, Express, and request-local i18n](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
 - [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) for Vite projects
 - [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) for Next.js projects
 - [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) for extraction workflows and CI
@@ -170,6 +171,7 @@ The same ownership model also matters for future translation workflows:
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
 - [Translation workflow surface](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-workflow-surface.md)
 - [Translation module boundaries](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-module-boundaries.md)
+- [Backend servers with request-local runtime wiring](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
 - [ADR-012: Translation augmentation boundary](https://github.com/sebastian-software/palamedes/blob/main/adr/012-translation-augmentation-boundary.md)
 - [Comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
 - [Migration playbook from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)

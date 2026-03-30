@@ -44,6 +44,31 @@ setServerI18nGetter(() => {
 })
 ```
 
+## Backend Servers
+
+The same runtime model also works in classic backend applications such as Hono,
+Express, or custom Node servers.
+
+The important requirement is request-local access to the active i18n instance.
+The recommended pattern is `AsyncLocalStorage`:
+
+```ts
+import { AsyncLocalStorage } from "node:async_hooks"
+import { createI18n } from "@palamedes/core"
+import { setServerI18nGetter } from "@palamedes/runtime"
+
+const i18nStorage = new AsyncLocalStorage<ReturnType<typeof createI18n>>()
+
+setServerI18nGetter(() => i18nStorage.getStore())
+```
+
+Per request, resolve the locale from `Accept-Language`, cookies, session data,
+or the user profile, then run the request inside `i18nStorage.run(i18n, ...)`.
+
+For a fuller walkthrough, including Hono and Express examples, see:
+
+- [Palamedes in backend servers](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
+
 ## API
 
 - `getI18n()`
