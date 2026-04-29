@@ -12,7 +12,7 @@ ferrocat = "0.8.0"
 oxc_allocator = "0.117.0"
 oxc_ast = "0.117.0"
 oxc_ast_visit = "0.117.0"
-oxc_parser = "0.117.0"
+oxc_parser = "0.123.0"
 oxc_span = "0.117.0"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
