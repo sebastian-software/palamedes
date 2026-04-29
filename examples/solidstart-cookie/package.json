@@ -22,8 +22,8 @@
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vinxi": "^0.5.11",
-    "vite": "^8.0.1"
+    "vite": "^8.0.10"
   }
 }
