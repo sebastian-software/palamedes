@@ -32,9 +32,9 @@
     "test:rust": "cargo test --workspace"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.1",
-    "typescript": "^5.9.3",
-    "vercel": "^50.37.3",
-    "vitest": "^4.1.0"
+    "@playwright/test": "^1.59.1",
+    "typescript": "^6.0.3",
+    "vercel": "^52.0.0",
+    "vitest": "^4.1.5"
   }
 }
