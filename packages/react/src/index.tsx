@@ -32,6 +32,20 @@ export interface SelectProps {
   [key: string]: string | number | undefined
 }
 
+export interface LocaleSwitchItem<TLocale extends string = string> {
+  active: boolean
+  label: string
+  locale: TLocale
+  testId: string
+}
+
+export interface BuildLocaleSwitchItemsOptions<TLocale extends string> {
+  currentLocale: TLocale
+  labels?: Partial<Record<TLocale, string>>
+  locales: readonly TLocale[]
+  testIdPrefix?: string
+}
+
 export function Trans({ id, message, values, components, context, comment }: TransProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
   const pattern = i18n.getMessage(id, {
@@ -56,6 +70,20 @@ export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): ReactN
 export function Select({ value, ...choices }: SelectProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
   return <>{i18n._({ message: buildChoiceMessage("value", "select", choices) }, { value })}</>
+}
+
+export function buildLocaleSwitchItems<TLocale extends string>({
+  currentLocale,
+  labels,
+  locales,
+  testIdPrefix = "locale-switch",
+}: BuildLocaleSwitchItemsOptions<TLocale>): LocaleSwitchItem<TLocale>[] {
+  return locales.map((locale) => ({
+    active: locale === currentLocale,
+    label: labels?.[locale] ?? locale,
+    locale,
+    testId: `${testIdPrefix}-${locale}`,
+  }))
 }
 
 function buildChoiceMessage(

@@ -1,7 +1,8 @@
 # `@palamedes/solid`
 
 Use this package when your app wants Solid-native translation components such as
-`Trans`, `Plural`, `Select`, and `SelectOrdinal`.
+`Trans`, `Plural`, `Select`, and `SelectOrdinal`, plus a small headless
+frontend helper layer for locale-aware UI.
 
 Palamedes keeps the runtime model provider-free. Transformed code resolves the
 active i18n instance through `getI18n()` from
@@ -36,6 +37,45 @@ export function Footer() {
 
 When the Palamedes transform runs, macro imports are rewritten to runtime
 imports from `@palamedes/solid`.
+
+## Headless Frontend Helpers
+
+This package also exposes small Solid-native helpers that stay deliberately
+headless:
+
+- `createClientLocaleEffect(localeAccessor, sync)` from `@palamedes/solid/client`
+- `buildLocaleSwitchItems({ locales, currentLocale, labels, testIdPrefix? })`
+- `LocaleSwitchItem<TLocale>`
+
+They do not own routing, styling, cookie policy, or server decisions. They only
+cover the stable frontend primitives that repeat across apps:
+
+- synchronizing the active client locale
+- building render-ready locale switch models for links, buttons, or forms
+
+```tsx
+import { buildLocaleSwitchItems } from "@palamedes/solid"
+import { createClientLocaleEffect } from "@palamedes/solid/client"
+
+function LocaleToolbar(props: { locale: "en" | "de"; sync: (locale: "en" | "de") => void | Promise<void> }) {
+  createClientLocaleEffect(() => props.locale, props.sync)
+
+  const items = () =>
+    buildLocaleSwitchItems({
+      locales: ["en", "de"] as const,
+      currentLocale: props.locale,
+      labels: { en: "English", de: "Deutsch" },
+    })
+
+  return (
+    <nav>
+      {items().map((item) => (
+        <button data-testid={item.testId}>{item.label}</button>
+      ))}
+    </nav>
+  )
+}
+```
 
 ## Related Docs
 

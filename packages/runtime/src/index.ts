@@ -5,8 +5,14 @@ export interface I18nInstance {
 
 type ServerI18nGetter<T extends I18nInstance = I18nInstance> = () => T | undefined
 
+const CLIENT_I18N_KEY = Symbol.for("palamedes.runtime.clientI18n")
+
 let clientI18n: I18nInstance | undefined
 let serverI18nGetter: ServerI18nGetter | undefined
+
+function globalClientState(): typeof globalThis & { [CLIENT_I18N_KEY]?: I18nInstance } {
+  return globalThis as typeof globalThis & { [CLIENT_I18N_KEY]?: I18nInstance }
+}
 
 function isServerEnvironment(): boolean {
   return typeof window === "undefined"
@@ -14,6 +20,7 @@ function isServerEnvironment(): boolean {
 
 export function setClientI18n<T extends I18nInstance>(i18n: T): T {
   clientI18n = i18n
+  globalClientState()[CLIENT_I18N_KEY] = i18n
   return i18n
 }
 
@@ -34,16 +41,18 @@ export function getI18n<T extends I18nInstance = I18nInstance>(): T {
     return i18n as T
   }
 
-  if (!clientI18n) {
+  const activeClientI18n = globalClientState()[CLIENT_I18N_KEY] ?? clientI18n
+  if (!activeClientI18n) {
     throw new Error(
       "No active client i18n instance. Initialize @palamedes/runtime with setClientI18n() before translated code runs."
     )
   }
 
-  return clientI18n as T
+  return activeClientI18n as T
 }
 
 export function resetI18nRuntime(): void {
   clientI18n = undefined
   serverI18nGetter = undefined
+  delete globalClientState()[CLIENT_I18N_KEY]
 }

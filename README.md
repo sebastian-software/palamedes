@@ -61,6 +61,7 @@ Palamedes takes a different position:
 - Versioned screenshots generated from the same Playwright-based verifier used in CI
 - Reproducible benchmark commands for transform, extract, catalog update, and compile hot paths
 - ADRs and architecture docs that make the ownership model explicit
+- Public headless frontend primitives in `@palamedes/react` and `@palamedes/solid` that the matrix uses directly
 
 ## Start Here
 
@@ -85,6 +86,10 @@ Palamedes today, start with the scoped packages above.
 | [`@palamedes/react`](https://www.npmjs.com/package/@palamedes/react) | React translation components | React app teams |
 | [`@palamedes/solid`](https://www.npmjs.com/package/@palamedes/solid) | Solid translation components | Solid app teams |
 | [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime) | Runtime bridge for transformed code | App teams |
+
+Both UI packages now also expose small headless frontend helpers for locale
+sync and locale-switch modelling. The example matrix uses those public helpers
+directly instead of hiding everything in example-local code.
 
 ## Quick Start With Vite
 
