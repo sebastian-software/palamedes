@@ -2,12 +2,13 @@
 
 import { useState } from "react"
 import { plural } from "@palamedes/core/macro"
+import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "../lib/i18n"
 import { syncClientI18n } from "../lib/i18n"
 
 export const Counter = ({ locale }: { locale: Locale }) => {
-  syncClientI18n(locale)
+  useClientLocale(locale, syncClientI18n)
   const [count, setCount] = useState(0)
 
   return (

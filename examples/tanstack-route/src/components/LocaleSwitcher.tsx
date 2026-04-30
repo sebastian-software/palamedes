@@ -1,3 +1,4 @@
+import { buildLocaleSwitchItems } from "@palamedes/react"
 import type { Locale } from "../lib/i18n"
 import { LOCALES, LOCALE_LABELS } from "../lib/i18n"
 
@@ -6,16 +7,22 @@ interface LocaleSwitcherProps {
 }
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
+  const localeSwitchItems = buildLocaleSwitchItems({
+    locales: LOCALES,
+    currentLocale: locale,
+    labels: LOCALE_LABELS,
+  })
+
   return (
     <div className="button-row">
-      {LOCALES.map((candidate) => (
+      {localeSwitchItems.map((item) => (
         <a
-          key={candidate}
-          data-testid={`locale-switch-${candidate}`}
-          className={`chip${candidate === locale ? " active" : ""}`}
-          href={`/${candidate}`}
+          key={item.locale}
+          data-testid={item.testId}
+          className={`chip${item.active ? " active" : ""}`}
+          href={`/${item.locale}`}
         >
-          {LOCALE_LABELS[candidate]}
+          {item.label}
         </a>
       ))}
     </div>

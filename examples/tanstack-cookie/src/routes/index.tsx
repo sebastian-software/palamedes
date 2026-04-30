@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { t } from "@palamedes/core/macro"
+import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import { Counter } from "../components/Counter"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const { locale, localeLabel, renderedAt, source } = Route.useLoaderData()
-  syncClientI18n(locale)
+  useClientLocale(locale, syncClientI18n)
 
   return (
     <main className="page-shell">

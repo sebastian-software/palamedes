@@ -1,9 +1,7 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
-import { setLocaleAction } from "@/lib/actions"
-import { LOCALE_LABELS, type Locale } from "@/lib/i18n"
+import { buildLocaleSwitchItems } from "@palamedes/react"
+import { LOCALE_COOKIE, LOCALE_LABELS, type Locale } from "@/lib/i18n"
 
 const buttonStyle = {
   padding: "0.5rem 1rem",
@@ -18,33 +16,31 @@ interface LanguageSwitcherProps {
 }
 
 export function LanguageSwitcher({ locale, locales }: LanguageSwitcherProps) {
-  const [activeLocale, setActiveLocale] = useState(locale)
-  const [isPending, startTransition] = useTransition()
-  const router = useRouter()
+  const localeSwitchItems = buildLocaleSwitchItems({
+    locales,
+    currentLocale: locale,
+    labels: LOCALE_LABELS,
+  })
 
   function handleLocaleChange(newLocale: Locale) {
-    startTransition(async () => {
-      setActiveLocale(newLocale)
-      await setLocaleAction(newLocale)
-      router.refresh()
-    })
+    document.cookie = `${LOCALE_COOKIE}=${newLocale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`
+    window.location.assign("/")
   }
 
   return (
-    <div style={{ display: "flex", gap: "0.5rem", opacity: isPending ? 0.7 : 1 }}>
-      {locales.map((loc) => (
+    <div style={{ display: "flex", gap: "0.5rem" }}>
+      {localeSwitchItems.map((item) => (
         <button
-          key={loc}
-          data-testid={`locale-switch-${loc}`}
-          onClick={() => handleLocaleChange(loc)}
-          disabled={isPending}
+          key={item.locale}
+          data-testid={item.testId}
+          onClick={() => handleLocaleChange(item.locale)}
           style={{
             ...buttonStyle,
-            background: activeLocale === loc ? "#0066cc" : "#eee",
-            color: activeLocale === loc ? "white" : "black",
+            background: item.active ? "#0066cc" : "#eee",
+            color: item.active ? "white" : "black",
           }}
         >
-          {LOCALE_LABELS[loc] ?? loc}
+          {item.label}
         </button>
       ))}
     </div>

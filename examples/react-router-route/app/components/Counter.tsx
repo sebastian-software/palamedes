@@ -1,17 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { plural } from "@palamedes/core/macro"
+import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "~/lib/i18n"
 import { syncClientI18n } from "~/lib/i18n"
 
 export function Counter({ locale }: { locale: Locale }) {
   const [count, setCount] = useState(0)
-
-  useEffect(() => {
-    void syncClientI18n(locale)
-  }, [locale])
+  useClientLocale(locale, syncClientI18n)
 
   return (
     <section className="panel">

@@ -1,4 +1,5 @@
 import { For } from "solid-js"
+import { buildLocaleSwitchItems } from "@palamedes/solid"
 import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n"
 
 interface LocaleSwitcherProps {
@@ -6,16 +7,23 @@ interface LocaleSwitcherProps {
 }
 
 export function LocaleSwitcher(props: LocaleSwitcherProps) {
+  const localeSwitchItems = () =>
+    buildLocaleSwitchItems({
+      locales: LOCALES,
+      currentLocale: props.locale,
+      labels: LOCALE_LABELS,
+    })
+
   return (
     <div class="button-row">
-      <For each={LOCALES}>
-        {(candidate) => (
+      <For each={localeSwitchItems()}>
+        {(item) => (
           <a
-            data-testid={`locale-switch-${candidate}`}
-            class={`chip${candidate === props.locale ? " active" : ""}`}
-            href={`/${candidate}`}
+            data-testid={item.testId}
+            class={`chip${item.active ? " active" : ""}`}
+            href={`/${item.locale}`}
           >
-            {LOCALE_LABELS[candidate]}
+            {item.label}
           </a>
         )}
       </For>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useTransition } from "react"
+import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import { syncClientI18n, type Locale } from "../lib/i18n"
 
@@ -18,7 +19,7 @@ export const ServerActionProbe = ({
   locale: Locale
   runProbe: () => Promise<ProbeResult>
 }) => {
-  syncClientI18n(locale)
+  useClientLocale(locale, syncClientI18n)
   const [result, setResult] = useState<ProbeResult>(null)
   const [isHydrated, setIsHydrated] = useState(false)
   const [isPending, startTransition] = useTransition()

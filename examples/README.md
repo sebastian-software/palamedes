@@ -63,6 +63,17 @@ All matrix examples use the same public Palamedes stack:
 - `@palamedes/runtime`
 - `@palamedes/vite-plugin` or `@palamedes/next-plugin`
 
+The matrix does not only prove core/runtime behavior. It also proves small
+public frontend primitives from the UI packages themselves:
+
+- `useClientLocale()` in `@palamedes/react/client`
+- `createClientLocaleEffect()` in `@palamedes/solid/client`
+- `buildLocaleSwitchItems()` in both UI packages
+
+Those helpers stay headless on purpose. The examples still own routing, form
+submission, and locale policy, but they no longer need to reimplement the same
+frontend substrate in each app.
+
 Shared locale and routing proof logic lives in the internal package:
 
 - [packages/example-locale-shared](/Users/sebastian/Workspace/business/palamedes/packages/example-locale-shared)

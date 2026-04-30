@@ -1,6 +1,7 @@
-import { useEffect } from "react"
 import { Form, Link, useActionData } from "react-router"
 import { t } from "@palamedes/core/macro"
+import { buildLocaleSwitchItems } from "@palamedes/react"
+import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import type { Route } from "./+types/locale-home"
 import { Counter } from "~/components/Counter"
@@ -56,10 +57,17 @@ export async function action({ params }: Route.ActionArgs) {
 export default function LocaleHome({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>()
   const localeLabel = loaderData.localeLabel
+  const localeSwitchItems = buildLocaleSwitchItems({
+    locales: LOCALES,
+    currentLocale: loaderData.locale,
+    labels: {
+      de: "Deutsch",
+      en: "English",
+      es: "Espanol",
+    },
+  })
 
-  useEffect(() => {
-    void syncClientI18n(loaderData.locale)
-  }, [loaderData.locale])
+  useClientLocale(loaderData.locale, syncClientI18n)
 
   return (
     <main className="page-shell">
@@ -85,14 +93,14 @@ export default function LocaleHome({ loaderData }: Route.ComponentProps) {
           </section>
         ) : null}
         <div className="button-row">
-          {LOCALES.map((locale) => (
+          {localeSwitchItems.map((item) => (
             <Link
-              key={locale}
-              className={`chip${loaderData.locale === locale ? " active" : ""}`}
-              data-testid={`locale-switch-${locale}`}
-              to={`/${locale}`}
+              key={item.locale}
+              className={`chip${item.active ? " active" : ""}`}
+              data-testid={item.testId}
+              to={`/${item.locale}`}
             >
-              {getLocaleLabel(locale)}
+              {item.label}
             </Link>
           ))}
         </div>

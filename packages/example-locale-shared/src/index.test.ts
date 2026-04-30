@@ -3,7 +3,9 @@ import {
   buildCanonicalUrl,
   createRouteLocaleBanner,
   extractLocaleFromPath,
+  getLocaleLabel,
   getPreferredLocale,
+  LOCALE_LABELS,
   parseCookieLocale,
   replaceLocaleInPath,
   resolveCookieLocale,
@@ -19,6 +21,15 @@ describe("example locale shared", () => {
   it("prefers supported accept-language entries", () => {
     expect(getPreferredLocale("fr-CA, de;q=0.9, en;q=0.8")).toBe("de")
     expect(getPreferredLocale("it, fr")).toBe("en")
+  })
+
+  it("derives stable locale labels from Intl.DisplayNames", () => {
+    expect(LOCALE_LABELS).toEqual({
+      en: "English",
+      de: "Deutsch",
+      es: "español",
+    })
+    expect(getLocaleLabel("es")).toBe("español")
   })
 
   it("resolves cookie locale before accept-language", () => {

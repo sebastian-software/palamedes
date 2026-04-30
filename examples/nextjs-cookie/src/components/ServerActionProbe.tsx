@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react"
 import { Trans } from "@palamedes/react/macro"
 import { getServerActionProof } from "@/lib/actions"
-import { syncClientI18n } from "@/lib/i18n.client"
 import type { Locale } from "@/lib/i18n"
 
 interface ServerActionProof {
@@ -18,7 +17,6 @@ interface ServerActionProbeProps {
 }
 
 export function ServerActionProbe({ locale }: ServerActionProbeProps) {
-  syncClientI18n(locale)
   const [result, setResult] = useState<ServerActionProof | null>(null)
   const [isPending, startTransition] = useTransition()
 

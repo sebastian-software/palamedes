@@ -51,3 +51,20 @@ export function syncClientI18n(locale: Locale) {
   clientI18n.activate(locale)
   setClientI18n(clientI18n)
 }
+
+function bootstrapClientI18n() {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  const cookieValue = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${LOCALE_COOKIE}=`))
+    ?.slice(`${LOCALE_COOKIE}=`.length)
+
+  const preferredLanguage = navigator.language.split("-")[0] ?? DEFAULT_LOCALE
+  syncClientI18n(normalizeLocale(cookieValue ?? preferredLanguage))
+}
+
+bootstrapClientI18n()

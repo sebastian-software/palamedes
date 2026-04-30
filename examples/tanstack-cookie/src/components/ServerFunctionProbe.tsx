@@ -1,6 +1,6 @@
 import { useEffect, useState, useTransition } from "react"
 import { Trans } from "@palamedes/react/macro"
-import { syncClientI18n, type Locale } from "../lib/i18n"
+import type { Locale } from "../lib/i18n"
 import { getLocalizedServerStatus } from "../lib/server-functions"
 
 interface ServerFunctionResult {
@@ -15,7 +15,6 @@ interface ServerFunctionProbeProps {
 }
 
 export function ServerFunctionProbe({ locale }: ServerFunctionProbeProps) {
-  syncClientI18n(locale)
   const [result, setResult] = useState<ServerFunctionResult | null>(null)
   const [isPending, startTransition] = useTransition()
 

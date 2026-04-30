@@ -1,6 +1,7 @@
-import { useEffect } from "react"
 import { Form, redirect, useActionData } from "react-router"
 import { t } from "@palamedes/core/macro"
+import { buildLocaleSwitchItems } from "@palamedes/react"
+import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import type { Route } from "./+types/home"
 import { Counter } from "~/components/Counter"
@@ -60,10 +61,17 @@ export async function action({ request }: Route.ActionArgs) {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>()
   const localeLabel = loaderData.localeLabel
+  const localeSwitchItems = buildLocaleSwitchItems({
+    locales: LOCALES,
+    currentLocale: loaderData.locale,
+    labels: {
+      de: "Deutsch",
+      en: "English",
+      es: "Espanol",
+    },
+  })
 
-  useEffect(() => {
-    void syncClientI18n(loaderData.locale)
-  }, [loaderData.locale])
+  useClientLocale(loaderData.locale, syncClientI18n)
 
   return (
     <main className="page-shell">
@@ -78,17 +86,17 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </Trans>
         </p>
         <div className="button-row">
-          {LOCALES.map((locale) => (
-            <Form key={locale} method="post">
+          {localeSwitchItems.map((item) => (
+            <Form key={item.locale} method="post">
               <input name="intent" type="hidden" value="set-locale" />
               <button
-                className={`chip${loaderData.locale === locale ? " active" : ""}`}
-                data-testid={`locale-switch-${locale}`}
+                className={`chip${item.active ? " active" : ""}`}
+                data-testid={item.testId}
                 name="locale"
                 type="submit"
-                value={locale}
+                value={item.locale}
               >
-                {locale === "de" ? "Deutsch" : locale === "es" ? "Espanol" : "English"}
+                {item.label}
               </button>
             </Form>
           ))}

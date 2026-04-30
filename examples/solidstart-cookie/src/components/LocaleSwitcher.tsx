@@ -1,4 +1,5 @@
 import { createSignal, For } from "solid-js"
+import { buildLocaleSwitchItems } from "@palamedes/solid"
 import { LOCALES, LOCALE_COOKIE, LOCALE_LABELS, type Locale } from "../lib/i18n"
 
 interface LocaleSwitcherProps {
@@ -7,6 +8,12 @@ interface LocaleSwitcherProps {
 
 export function LocaleSwitcher(props: LocaleSwitcherProps) {
   const [isPending, setIsPending] = createSignal(false)
+  const localeSwitchItems = () =>
+    buildLocaleSwitchItems({
+      locales: LOCALES,
+      currentLocale: props.locale,
+      labels: LOCALE_LABELS,
+    })
 
   function handleLocaleChange(nextLocale: Locale) {
     setIsPending(true)
@@ -16,16 +23,16 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
 
   return (
     <div class="button-row">
-      <For each={LOCALES}>
-        {(candidate) => (
+      <For each={localeSwitchItems()}>
+        {(item) => (
           <button
-            data-testid={`locale-switch-${candidate}`}
-            class={`chip${candidate === props.locale ? " active" : ""}`}
+            data-testid={item.testId}
+            class={`chip${item.active ? " active" : ""}`}
             disabled={isPending()}
-            onClick={() => handleLocaleChange(candidate)}
+            onClick={() => handleLocaleChange(item.locale)}
             type="button"
           >
-            {LOCALE_LABELS[candidate]}
+            {item.label}
           </button>
         )}
       </For>

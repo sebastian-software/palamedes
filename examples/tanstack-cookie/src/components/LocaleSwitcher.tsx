@@ -1,4 +1,5 @@
 import { useTransition } from "react"
+import { buildLocaleSwitchItems } from "@palamedes/react"
 import type { Locale } from "../lib/i18n"
 import { LOCALES, LOCALE_LABELS } from "../lib/i18n"
 import { setLocaleCookie } from "../lib/server-functions"
@@ -9,6 +10,11 @@ interface LocaleSwitcherProps {
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
   const [isPending, startTransition] = useTransition()
+  const localeSwitchItems = buildLocaleSwitchItems({
+    locales: LOCALES,
+    currentLocale: locale,
+    labels: LOCALE_LABELS,
+  })
 
   function handleLocaleChange(nextLocale: Locale) {
     startTransition(async () => {
@@ -19,16 +25,16 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
 
   return (
     <div className="button-row">
-      {LOCALES.map((candidate) => (
+      {localeSwitchItems.map((item) => (
         <button
-          key={candidate}
-          data-testid={`locale-switch-${candidate}`}
-          className={`chip${candidate === locale ? " active" : ""}`}
+          key={item.locale}
+          data-testid={item.testId}
+          className={`chip${item.active ? " active" : ""}`}
           disabled={isPending}
-          onClick={() => handleLocaleChange(candidate)}
+          onClick={() => handleLocaleChange(item.locale)}
           type="button"
         >
-          {LOCALE_LABELS[candidate]}
+          {item.label}
         </button>
       ))}
     </div>

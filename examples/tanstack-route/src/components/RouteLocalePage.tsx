@@ -1,4 +1,5 @@
 import { t } from "@palamedes/core/macro"
+import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import type { LocaleBanner } from "@palamedes/example-locale-shared"
 import { Counter } from "./Counter"
@@ -17,7 +18,7 @@ export function RouteLocalePage({
   localeLabel: string
   renderedAt: string
 }) {
-  syncClientI18n(locale)
+  useClientLocale(locale, syncClientI18n)
 
   return (
     <main className="page-shell">

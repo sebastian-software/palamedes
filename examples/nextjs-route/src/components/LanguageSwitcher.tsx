@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { buildLocaleSwitchItems } from "@palamedes/react"
 import { LOCALE_LABELS, type Locale } from "@/lib/i18n"
 
 const buttonStyle = {
@@ -15,20 +16,26 @@ interface LanguageSwitcherProps {
 }
 
 export function LanguageSwitcher({ locale, locales }: LanguageSwitcherProps) {
+  const localeSwitchItems = buildLocaleSwitchItems({
+    locales,
+    currentLocale: locale,
+    labels: LOCALE_LABELS,
+  })
+
   return (
     <div style={{ display: "flex", gap: "0.5rem" }}>
-      {locales.map((loc) => (
+      {localeSwitchItems.map((item) => (
         <Link
-          key={loc}
-          data-testid={`locale-switch-${loc}`}
-          href={`/${loc}`}
+          key={item.locale}
+          data-testid={item.testId}
+          href={`/${item.locale}`}
           style={{
             ...buttonStyle,
-            background: locale === loc ? "#0066cc" : "#eee",
-            color: locale === loc ? "white" : "black",
+            background: item.active ? "#0066cc" : "#eee",
+            color: item.active ? "white" : "black",
           }}
         >
-          {LOCALE_LABELS[loc] ?? loc}
+          {item.label}
         </Link>
       ))}
     </div>

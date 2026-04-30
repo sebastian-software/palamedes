@@ -1,5 +1,6 @@
 import { defineMessage } from "@palamedes/core/macro"
 import type { MessageDescriptor, PalamedesI18n } from "@palamedes/core"
+import { ClientLocaleBoundary } from "@/components/ClientLocaleBoundary"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import { Counter } from "@/components/Counter"
 import { ServerActionProbe } from "@/components/ServerActionProbe"
@@ -87,8 +88,10 @@ export default async function Home() {
         </p>
       </section>
 
-      <Counter locale={locale} />
-      <ServerActionProbe locale={locale} />
+      <ClientLocaleBoundary locale={locale}>
+        <Counter />
+        <ServerActionProbe locale={locale} />
+      </ClientLocaleBoundary>
 
       {/* Footer rendered on server with direct macros / Trans */}
       <footer style={{ marginTop: "3rem", paddingTop: "1rem", borderTop: "1px solid #eee", color: "#999", fontSize: "0.875rem" }}>

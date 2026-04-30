@@ -1,18 +1,25 @@
+import { buildLocaleSwitchItems } from "@palamedes/react"
 import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n"
 
 export const LocaleSwitcher = ({ locale }: { locale: Locale }) => {
+  const localeSwitchItems = buildLocaleSwitchItems({
+    locales: LOCALES,
+    currentLocale: locale,
+    labels: LOCALE_LABELS,
+  })
+
   return (
     <div className="button-row">
-      {LOCALES.map((candidate) => (
-        <form action="/set-locale" key={candidate} method="post">
+      {localeSwitchItems.map((item) => (
+        <form action="/set-locale" key={item.locale} method="post">
           <button
-            className={`chip${candidate === locale ? " active" : ""}`}
-            data-testid={`locale-switch-${candidate}`}
+            className={`chip${item.active ? " active" : ""}`}
+            data-testid={item.testId}
             name="locale"
             type="submit"
-            value={candidate}
+            value={item.locale}
           >
-            {LOCALE_LABELS[candidate]}
+            {item.label}
           </button>
         </form>
       ))}

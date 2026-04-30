@@ -18,11 +18,29 @@ export interface LocaleBanner {
   recommendedUrl: string
 }
 
-export const LOCALE_LABELS: Record<Locale, string> = {
+const FALLBACK_LOCALE_LABELS: Record<Locale, string> = {
   en: "English",
   de: "Deutsch",
-  es: "Espanol",
+  es: "Español",
 }
+
+function createLocaleLabels(): Record<Locale, string> {
+  if (typeof Intl.DisplayNames !== "function") {
+    return FALLBACK_LOCALE_LABELS
+  }
+
+  return Object.fromEntries(
+    LOCALES.map((locale) => {
+      const label = new Intl.DisplayNames([locale], {
+        type: "language",
+      }).of(locale)
+
+      return [locale, label ?? FALLBACK_LOCALE_LABELS[locale]]
+    })
+  ) as Record<Locale, string>
+}
+
+export const LOCALE_LABELS: Record<Locale, string> = createLocaleLabels()
 
 export function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && LOCALES.includes(value as Locale)

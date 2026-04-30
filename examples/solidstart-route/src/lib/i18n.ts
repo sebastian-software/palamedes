@@ -60,3 +60,14 @@ export function syncClientI18n(locale: Locale) {
   clientI18n.activate(locale)
   setClientI18n(clientI18n)
 }
+
+function bootstrapClientI18n() {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  const pathLocale = window.location.pathname.split("/").filter(Boolean)[0] ?? DEFAULT_LOCALE
+  syncClientI18n(normalizeLocale(pathLocale))
+}
+
+bootstrapClientI18n()
