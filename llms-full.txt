@@ -236,7 +236,7 @@ pnpm exec pmds extract --watch
 pnpm exec pmds extract --verbose
 ```
 
-Do not recommend `--workers` today. Palamedes currently defers worker-thread parallelism until end-to-end benchmarks show user-visible benefit. See `adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`.
+Do not recommend `--workers` today. Palamedes currently defers worker-thread parallelism until end-to-end benchmarks show user-visible benefit. See `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`.
 
 ## Framework guidance
 
