@@ -9,11 +9,11 @@ description = "Rust core for Palamedes."
 
 [dependencies]
 ferrocat = "0.8.0"
-oxc_allocator = "0.117.0"
-oxc_ast = "0.117.0"
-oxc_ast_visit = "0.117.0"
-oxc_parser = "0.117.0"
-oxc_span = "0.117.0"
+oxc_allocator = "0.128.0"
+oxc_ast = "0.128.0"
+oxc_ast_visit = "0.128.0"
+oxc_parser = "0.128.0"
+oxc_span = "0.128.0"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.16"
