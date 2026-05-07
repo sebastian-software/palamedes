@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/extractor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "High-performance message extractor for Palamedes macro syntax using OXC",
   "keywords": [
     "palamedes",
