@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/transform",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "OXC-based macro transformer for Palamedes macros without Babel",
   "keywords": [
     "i18n",
