@@ -3,7 +3,8 @@
   "separate-pull-requests": false,
   "plugins": [
     {
-      "type": "node-workspace"
+      "type": "node-workspace",
+      "merge": false
     },
     {
       "type": "linked-versions",
@@ -11,6 +12,8 @@
       "merge": true,
       "components": [
         "cli",
+        "config",
+        "core",
         "core-node",
         "core-node-darwin-arm64",
         "core-node-linux-arm64-gnu",
@@ -18,7 +21,9 @@
         "core-node-win32-x64-msvc",
         "extractor",
         "next-plugin",
+        "react",
         "runtime",
+        "solid",
         "transform",
         "vite-plugin",
         "create-palamedes",
@@ -31,6 +36,16 @@
       "release-type": "node",
       "package-name": "@palamedes/cli",
       "component": "cli"
+    },
+    "packages/config": {
+      "release-type": "node",
+      "package-name": "@palamedes/config",
+      "component": "config"
+    },
+    "packages/core": {
+      "release-type": "node",
+      "package-name": "@palamedes/core",
+      "component": "core"
     },
     "packages/core-node": {
       "release-type": "node",
@@ -67,10 +82,20 @@
       "package-name": "@palamedes/next-plugin",
       "component": "next-plugin"
     },
+    "packages/react": {
+      "release-type": "node",
+      "package-name": "@palamedes/react",
+      "component": "react"
+    },
     "packages/runtime": {
       "release-type": "node",
       "package-name": "@palamedes/runtime",
       "component": "runtime"
+    },
+    "packages/solid": {
+      "release-type": "node",
+      "package-name": "@palamedes/solid",
+      "component": "solid"
     },
     "packages/transform": {
       "release-type": "node",

@@ -26,6 +26,7 @@
     "benchmark:lingui-v6:quick": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark:quick",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
+    "check:release-set": "node ./scripts/check-release-set.mjs",
     "check-types": "pnpm check:native-types && pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",
     "build:native": "cargo build --workspace",
     "check:rust": "cargo check --workspace",

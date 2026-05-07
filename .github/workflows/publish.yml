@@ -124,10 +124,14 @@ jobs:
       - name: Build publishable packages
         run: >
           pnpm -r
+          --filter @palamedes/core
+          --filter @palamedes/config
           --filter @palamedes/runtime
           --filter @palamedes/core-node
           --filter @palamedes/transform
           --filter @palamedes/extractor
+          --filter @palamedes/react
+          --filter @palamedes/solid
           --filter @palamedes/cli
           --filter @palamedes/vite-plugin
           --filter @palamedes/next-plugin
@@ -138,10 +142,14 @@ jobs:
       - name: Publish JavaScript packages
         run: >
           pnpm -r
+          --filter @palamedes/core
+          --filter @palamedes/config
           --filter @palamedes/runtime
           --filter @palamedes/core-node
           --filter @palamedes/transform
           --filter @palamedes/extractor
+          --filter @palamedes/react
+          --filter @palamedes/solid
           --filter @palamedes/cli
           --filter @palamedes/vite-plugin
           --filter @palamedes/next-plugin
