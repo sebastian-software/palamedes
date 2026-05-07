@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/sebastian-software/palamedes/compare/runtime-v0.2.0...runtime-v0.3.0) (2026-05-07)
+
+
+### Miscellaneous Chores
+
+* **runtime:** Synchronize palamedes versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @palamedes/core bumped to 0.3.0
+
 ## [0.2.0](https://github.com/sebastian-software/palamedes/compare/runtime-v0.1.1...runtime-v0.2.0) (2026-05-07)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/sebastian-software/palamedes/compare/core-node-win32-x64-msvc-v0.2.0...core-node-win32-x64-msvc-v0.3.0) (2026-05-07)
+
+
+### Miscellaneous Chores
+
+* **core-node-win32-x64-msvc:** Synchronize palamedes versions
+
 ## [0.2.0](https://github.com/sebastian-software/palamedes/compare/core-node-win32-x64-msvc-v0.1.1...core-node-win32-x64-msvc-v0.2.0) (2026-05-07)
 
 

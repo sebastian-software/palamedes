@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/sebastian-software/palamedes/compare/create-palamedes-v0.2.0...create-palamedes-v0.3.0) (2026-05-07)
+
+
+### Miscellaneous Chores
+
+* **create-palamedes:** Synchronize palamedes versions
+
 ## [0.2.0](https://github.com/sebastian-software/palamedes/compare/create-palamedes-v0.1.1...create-palamedes-v0.2.0) (2026-05-07)
 
 

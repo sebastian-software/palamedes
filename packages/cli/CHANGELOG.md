@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/sebastian-software/palamedes/compare/cli-v0.2.0...cli-v0.3.0) (2026-05-07)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize palamedes versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/config bumped to 0.3.0
+    * @palamedes/core-node bumped to 0.3.0
+    * @palamedes/extractor bumped to 0.3.0
+
 ## [0.2.0](https://github.com/sebastian-software/palamedes/compare/cli-v0.1.1...cli-v0.2.0) (2026-05-07)
 
 
