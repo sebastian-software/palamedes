@@ -18,7 +18,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "pmds": "./bin/pmds.mjs"
+    "pmds": "./dist/cli.mjs"
   },
   "exports": {
     ".": {
@@ -33,11 +33,11 @@
   "files": [
     "LICENSE",
     "README.md",
-    "bin/",
     "dist/"
   ],
   "scripts": {
     "build": "unbuild",
+    "prepack": "pnpm run build",
     "test": "vitest run --globals src/commands/extract.test.ts",
     "stub": "unbuild --stub"
   },
