@@ -8,18 +8,32 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const workspaceRoot = resolve(packageDir, "../..")
 const distCli = resolve(packageDir, "dist/cli.mjs")
-const extractorDist = resolve(packageDir, "node_modules/@palamedes/extractor/dist/index.mjs")
+const isWorkspacePackage = existsSync(resolve(workspaceRoot, "pnpm-workspace.yaml"))
+const workspaceDependencyDists = [
+  "@palamedes/config/dist/index.mjs",
+  "@palamedes/core-node/dist/index.mjs",
+  "@palamedes/extractor/dist/index.mjs",
+].map((dependencyDist) => resolve(packageDir, "node_modules", dependencyDist))
 
-if (!existsSync(distCli) || !existsSync(extractorDist)) {
+const needsWorkspaceBuild =
+  isWorkspacePackage &&
+  (!existsSync(distCli) ||
+    workspaceDependencyDists.some((dependencyDist) => !existsSync(dependencyDist)))
+
+if (!existsSync(distCli) || needsWorkspaceBuild) {
+  if (!isWorkspacePackage) {
+    console.error(
+      "@palamedes/cli is missing dist/cli.mjs. Reinstall the package or report a broken package release.",
+    )
+    process.exit(1)
+  }
+
   const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
-  const isWorkspacePackage = existsSync(resolve(workspaceRoot, "pnpm-workspace.yaml"))
-  const buildCommand = isWorkspacePackage
-    ? ["--dir", workspaceRoot, "--filter", "@palamedes/cli...", "build"]
-    : ["run", "build"]
+  const buildCommand = ["--dir", workspaceRoot, "--filter", "@palamedes/cli...", "build"]
 
   // Workspace installs may link the bin before local package builds exist.
   const buildResult = spawnSync(pnpmCommand, buildCommand, {
-    cwd: isWorkspacePackage ? workspaceRoot : packageDir,
+    cwd: workspaceRoot,
     stdio: "inherit",
   })
 
