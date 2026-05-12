@@ -2,6 +2,11 @@ import path from "node:path"
 import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 import type {
+  CatalogAuditCheckOptions as GeneratedCatalogAuditCheckOptions,
+  CatalogAuditDiagnostic as GeneratedCatalogAuditDiagnostic,
+  CatalogAuditRequest as GeneratedCatalogAuditRequest,
+  CatalogAuditResult as GeneratedCatalogAuditResult,
+  CatalogAuditSummary as GeneratedCatalogAuditSummary,
   CatalogArtifactConfig as GeneratedCatalogArtifactConfig,
   CatalogArtifactDiagnostic as GeneratedCatalogArtifactDiagnostic,
   CatalogArtifactMissingMessage as GeneratedCatalogArtifactMissingMessage,
@@ -16,6 +21,14 @@ import type {
   CatalogUpdateRequest as GeneratedCatalogUpdateRequest,
   CatalogUpdateResult as GeneratedCatalogUpdateResult,
   CatalogUpdateStats as GeneratedCatalogUpdateStats,
+  MessageArgumentFormatMetadata as GeneratedMessageArgumentFormatMetadata,
+  MessageArgumentKind as GeneratedMessageArgumentKind,
+  MessageArgumentMetadata as GeneratedMessageArgumentMetadata,
+  MessageFormatStyleKind as GeneratedMessageFormatStyleKind,
+  MessageMetadataInput as GeneratedMessageMetadataInput,
+  MessageOriginMetadata as GeneratedMessageOriginMetadata,
+  MessageSelectorKind as GeneratedMessageSelectorKind,
+  MessageSelectorMetadata as GeneratedMessageSelectorMetadata,
   NativeBindings as GeneratedNativeBindings,
   NativeExtractedMessage as GeneratedNativeExtractedMessage,
   NativeInfo as GeneratedNativeInfo,
@@ -38,6 +51,30 @@ export type CatalogUpdateResult = GeneratedCatalogUpdateResult
 export type CatalogParseRequest = GeneratedCatalogParseRequest
 export type ParsedCatalogMessage = GeneratedParsedCatalogMessage
 export type CatalogParseResult = GeneratedCatalogParseResult
+export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions
+export type CatalogAuditSummary = GeneratedCatalogAuditSummary
+export type CatalogDiagnosticSeverity = "info" | "warning" | "error"
+export type CatalogAuditDiagnostic =
+  Omit<GeneratedCatalogAuditDiagnostic, "severity"> & {
+  severity: CatalogDiagnosticSeverity
+  }
+export type CatalogAuditResult =
+  Omit<GeneratedCatalogAuditResult, "diagnostics"> & {
+  diagnostics: CatalogAuditDiagnostic[]
+  }
+export interface CatalogAuditOptions {
+  locales?: string[]
+  checks?: CatalogAuditCheckOptions
+  metadata?: MessageMetadataInput[]
+}
+export type MessageMetadataInput = GeneratedMessageMetadataInput
+export type MessageOriginMetadata = GeneratedMessageOriginMetadata
+export type MessageArgumentKind = GeneratedMessageArgumentKind
+export type MessageArgumentMetadata = GeneratedMessageArgumentMetadata
+export type MessageArgumentFormatMetadata = GeneratedMessageArgumentFormatMetadata
+export type MessageFormatStyleKind = GeneratedMessageFormatStyleKind
+export type MessageSelectorKind = GeneratedMessageSelectorKind
+export type MessageSelectorMetadata = GeneratedMessageSelectorMetadata
 
 export type NativeExtractedMessage =
   Omit<GeneratedNativeExtractedMessage, "origin"> & {
@@ -63,6 +100,7 @@ export type CatalogArtifactResult =
   }
 
 type NativeBindings = GeneratedNativeBindings
+type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest
 type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
 type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
 
@@ -126,9 +164,9 @@ function loadNativeBindings(): NativeBindings {
 
 const native = loadNativeBindings()
 
-function mapDiagnosticSeverity(
-  severity: GeneratedCatalogArtifactDiagnostic["severity"]
-): CatalogArtifactDiagnosticSeverity {
+function mapNativeDiagnosticSeverity(
+  severity: GeneratedCatalogArtifactDiagnostic["severity"] | GeneratedCatalogAuditDiagnostic["severity"]
+): CatalogDiagnosticSeverity {
   switch (severity) {
     case "Info":
       return "info"
@@ -155,6 +193,27 @@ export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
   return native.parseCatalog(request)
 }
 
+export function auditCatalogs(
+  config: CatalogArtifactConfig,
+  options: CatalogAuditOptions = {}
+): CatalogAuditResult {
+  const request: NativeCatalogAuditRequest = {
+    config,
+    locales: options.locales,
+    checks: options.checks,
+    metadata: options.metadata,
+  }
+  const result = native.auditCatalogs(request)
+
+  return {
+    ...result,
+    diagnostics: result.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      severity: mapNativeDiagnosticSeverity(diagnostic.severity),
+    })),
+  }
+}
+
 export function compileCatalogArtifact(
   config: CatalogArtifactConfig,
   resourcePath: string
@@ -169,7 +228,7 @@ export function compileCatalogArtifact(
     ...result,
     diagnostics: result.diagnostics.map((diagnostic) => ({
       ...diagnostic,
-      severity: mapDiagnosticSeverity(diagnostic.severity),
+      severity: mapNativeDiagnosticSeverity(diagnostic.severity),
     })),
   }
 }
@@ -190,7 +249,7 @@ export function compileCatalogArtifactSelected(
     ...result,
     diagnostics: result.diagnostics.map((diagnostic) => ({
       ...diagnostic,
-      severity: mapDiagnosticSeverity(diagnostic.severity),
+      severity: mapNativeDiagnosticSeverity(diagnostic.severity),
     })),
   }
 }

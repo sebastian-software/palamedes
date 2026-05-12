@@ -51,6 +51,80 @@ export interface CatalogParseResult {
   messages: Array<ParsedCatalogMessage>;
   diagnostics: Array<string>;
 }
+export type CatalogDiagnosticSeverity = "Info" | "Warning" | "Error"
+export interface CatalogDiagnosticSourceKey {
+  message: string;
+  context?: string;
+}
+export interface CatalogAuditCheckOptions {
+  completeness?: boolean;
+  extraMessages?: boolean;
+  icuSyntax?: boolean;
+  icuCompatibility?: boolean;
+  semanticMetadata?: boolean;
+  fuzzyFlags?: boolean;
+  obsoleteEntries?: boolean;
+}
+export interface CatalogAuditRequest {
+  config: CatalogArtifactConfig;
+  locales?: Array<string>;
+  checks?: CatalogAuditCheckOptions;
+  metadata?: Array<MessageMetadataInput>;
+}
+export interface CatalogAuditSummary {
+  sourceMessages: number;
+  targetLocales: number;
+  diagnostics: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+export interface CatalogAuditDiagnostic {
+  severity: CatalogDiagnosticSeverity;
+  code: string;
+  message: string;
+  catalogPath: string;
+  locale?: string;
+  sourceKey?: CatalogDiagnosticSourceKey;
+  name?: string;
+}
+export interface CatalogAuditResult {
+  summary: CatalogAuditSummary;
+  diagnostics: Array<CatalogAuditDiagnostic>;
+}
+export interface MessageMetadataInput {
+  msgid: string;
+  msgctxt?: string;
+  description?: string;
+  origin: Array<MessageOriginMetadata>;
+  args?: Record<string, MessageArgumentKind | MessageArgumentMetadata>;
+  tags?: Array<string>;
+  selectors?: Record<string, MessageSelectorMetadata>;
+}
+export interface MessageOriginMetadata {
+  file?: string;
+  line?: number;
+  component?: string;
+  route?: string;
+}
+export type MessageArgumentKind = "String" | "Number" | "Date" | "Time" | "Datetime" | "Boolean" | "Enum" | "List" | "Duration" | "RelativeTime" | "Name" | "Unknown"
+export interface MessageArgumentMetadata {
+  kind: MessageArgumentKind;
+  role?: string;
+  values: Array<string>;
+  format?: MessageArgumentFormatMetadata;
+}
+export interface MessageArgumentFormatMetadata {
+  style?: string;
+  styleKind?: MessageFormatStyleKind;
+}
+export type MessageFormatStyleKind = "None" | "Predefined" | "Skeleton" | "Pattern"
+export interface MessageSelectorMetadata {
+  kind: MessageSelectorKind;
+  cases: Array<string>;
+  offset?: number;
+}
+export type MessageSelectorKind = "Select" | "Plural" | "Selectordinal"
 export interface CatalogArtifactSourceKey {
   message: string;
   context?: string;
@@ -157,6 +231,7 @@ export interface NativeTransformResult {
 export interface NativeBindings {
   updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult;
   parseCatalog(request: CatalogParseRequest): CatalogParseResult;
+  auditCatalogs(request: CatalogAuditRequest): CatalogAuditResult;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;

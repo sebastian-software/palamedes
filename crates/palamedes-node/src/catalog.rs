@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use napi::bindgen_prelude::Result;
+use napi::bindgen_prelude::{Either, Result};
 use napi_derive::napi;
 
 use crate::catalog_config::{CatalogArtifactRequest, CatalogArtifactSelectedRequest};
@@ -70,6 +70,136 @@ pub struct CatalogParseResult {
     pub headers: HashMap<String, String>,
     pub messages: Vec<ParsedCatalogMessage>,
     pub diagnostics: Vec<String>,
+}
+
+#[napi(string_enum)]
+pub enum CatalogDiagnosticSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+#[napi(object)]
+pub struct CatalogDiagnosticSourceKey {
+    pub message: String,
+    pub context: Option<String>,
+}
+
+#[napi(object)]
+pub struct CatalogAuditCheckOptions {
+    pub completeness: Option<bool>,
+    pub extra_messages: Option<bool>,
+    pub icu_syntax: Option<bool>,
+    pub icu_compatibility: Option<bool>,
+    pub semantic_metadata: Option<bool>,
+    pub fuzzy_flags: Option<bool>,
+    pub obsolete_entries: Option<bool>,
+}
+
+#[napi(object)]
+pub struct CatalogAuditRequest {
+    pub config: crate::catalog_config::CatalogArtifactConfig,
+    pub locales: Option<Vec<String>>,
+    pub checks: Option<CatalogAuditCheckOptions>,
+    pub metadata: Option<Vec<MessageMetadataInput>>,
+}
+
+#[napi(object)]
+pub struct CatalogAuditSummary {
+    pub source_messages: u32,
+    pub target_locales: u32,
+    pub diagnostics: u32,
+    pub errors: u32,
+    pub warnings: u32,
+    pub infos: u32,
+}
+
+#[napi(object)]
+pub struct CatalogAuditDiagnostic {
+    pub severity: CatalogDiagnosticSeverity,
+    pub code: String,
+    pub message: String,
+    pub catalog_path: String,
+    pub locale: Option<String>,
+    pub source_key: Option<CatalogDiagnosticSourceKey>,
+    pub name: Option<String>,
+}
+
+#[napi(object)]
+pub struct CatalogAuditResult {
+    pub summary: CatalogAuditSummary,
+    pub diagnostics: Vec<CatalogAuditDiagnostic>,
+}
+
+#[napi(object)]
+pub struct MessageMetadataInput {
+    pub msgid: String,
+    pub msgctxt: Option<String>,
+    pub description: Option<String>,
+    pub origin: Vec<MessageOriginMetadata>,
+    pub args: Option<HashMap<String, Either<MessageArgumentKind, MessageArgumentMetadata>>>,
+    pub tags: Option<Vec<String>>,
+    pub selectors: Option<HashMap<String, MessageSelectorMetadata>>,
+}
+
+#[napi(object)]
+pub struct MessageOriginMetadata {
+    pub file: Option<String>,
+    pub line: Option<u32>,
+    pub component: Option<String>,
+    pub route: Option<String>,
+}
+
+#[napi(string_enum)]
+pub enum MessageArgumentKind {
+    String,
+    Number,
+    Date,
+    Time,
+    Datetime,
+    Boolean,
+    Enum,
+    List,
+    Duration,
+    RelativeTime,
+    Name,
+    Unknown,
+}
+
+#[napi(object)]
+pub struct MessageArgumentMetadata {
+    pub kind: MessageArgumentKind,
+    pub role: Option<String>,
+    pub values: Vec<String>,
+    pub format: Option<MessageArgumentFormatMetadata>,
+}
+
+#[napi(object)]
+pub struct MessageArgumentFormatMetadata {
+    pub style: Option<String>,
+    pub style_kind: Option<MessageFormatStyleKind>,
+}
+
+#[napi(string_enum)]
+pub enum MessageFormatStyleKind {
+    None,
+    Predefined,
+    Skeleton,
+    Pattern,
+}
+
+#[napi(object)]
+pub struct MessageSelectorMetadata {
+    pub kind: MessageSelectorKind,
+    pub cases: Vec<String>,
+    pub offset: Option<u32>,
+}
+
+#[napi(string_enum)]
+pub enum MessageSelectorKind {
+    Select,
+    Plural,
+    Selectordinal,
 }
 
 #[napi(object)]
@@ -227,6 +357,224 @@ impl From<palamedes::CatalogParseResult> for CatalogParseResult {
     }
 }
 
+impl From<CatalogAuditCheckOptions> for palamedes::CatalogAuditCheckOptions {
+    fn from(value: CatalogAuditCheckOptions) -> Self {
+        Self {
+            completeness: value.completeness,
+            extra_messages: value.extra_messages,
+            icu_syntax: value.icu_syntax,
+            icu_compatibility: value.icu_compatibility,
+            semantic_metadata: value.semantic_metadata,
+            fuzzy_flags: value.fuzzy_flags,
+            obsolete_entries: value.obsolete_entries,
+        }
+    }
+}
+
+impl From<CatalogAuditRequest> for palamedes::CatalogAuditRequest {
+    fn from(value: CatalogAuditRequest) -> Self {
+        Self {
+            config: value.config.into(),
+            locales: value.locales.unwrap_or_default(),
+            checks: value.checks.map_or_else(
+                palamedes::CatalogAuditCheckOptions::default,
+                palamedes::CatalogAuditCheckOptions::from,
+            ),
+            metadata: value
+                .metadata
+                .unwrap_or_default()
+                .into_iter()
+                .map(palamedes::MessageMetadataInput::from)
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<palamedes::CatalogAuditSummary> for CatalogAuditSummary {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::CatalogAuditSummary) -> Result<Self> {
+        Ok(Self {
+            source_messages: checked_u32(value.source_messages, "summary.sourceMessages")?,
+            target_locales: checked_u32(value.target_locales, "summary.targetLocales")?,
+            diagnostics: checked_u32(value.diagnostics, "summary.diagnostics")?,
+            errors: checked_u32(value.errors, "summary.errors")?,
+            warnings: checked_u32(value.warnings, "summary.warnings")?,
+            infos: checked_u32(value.infos, "summary.infos")?,
+        })
+    }
+}
+
+impl From<palamedes::CatalogDiagnosticSeverity> for CatalogDiagnosticSeverity {
+    fn from(value: palamedes::CatalogDiagnosticSeverity) -> Self {
+        match value {
+            palamedes::CatalogDiagnosticSeverity::Info => Self::Info,
+            palamedes::CatalogDiagnosticSeverity::Warning => Self::Warning,
+            palamedes::CatalogDiagnosticSeverity::Error => Self::Error,
+        }
+    }
+}
+
+impl From<palamedes::CatalogDiagnosticSourceKey> for CatalogDiagnosticSourceKey {
+    fn from(value: palamedes::CatalogDiagnosticSourceKey) -> Self {
+        Self {
+            message: value.message,
+            context: value.context,
+        }
+    }
+}
+
+impl From<palamedes::CatalogAuditDiagnostic> for CatalogAuditDiagnostic {
+    fn from(value: palamedes::CatalogAuditDiagnostic) -> Self {
+        Self {
+            severity: value.severity.into(),
+            code: value.code,
+            message: value.message,
+            catalog_path: value.catalog_path,
+            locale: value.locale,
+            source_key: value.source_key.map(CatalogDiagnosticSourceKey::from),
+            name: value.name,
+        }
+    }
+}
+
+impl TryFrom<palamedes::CatalogAuditResult> for CatalogAuditResult {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::CatalogAuditResult) -> Result<Self> {
+        Ok(Self {
+            summary: value.summary.try_into()?,
+            diagnostics: value
+                .diagnostics
+                .into_iter()
+                .map(CatalogAuditDiagnostic::from)
+                .collect(),
+        })
+    }
+}
+
+impl From<MessageMetadataInput> for palamedes::MessageMetadataInput {
+    fn from(value: MessageMetadataInput) -> Self {
+        Self {
+            msgid: value.msgid,
+            msgctxt: value.msgctxt,
+            description: value.description,
+            origin: value
+                .origin
+                .into_iter()
+                .map(palamedes::MessageOriginMetadata::from)
+                .collect(),
+            args: value.args.map(|args| {
+                args.into_iter()
+                    .map(|(name, argument)| {
+                        let argument = match argument {
+                            Either::A(kind) => {
+                                palamedes::MessageArgumentMetadataInput::Kind(kind.into())
+                            }
+                            Either::B(metadata) => {
+                                palamedes::MessageArgumentMetadataInput::Details(metadata.into())
+                            }
+                        };
+                        (name, argument)
+                    })
+                    .collect()
+            }),
+            tags: value.tags,
+            selectors: value.selectors.map(|selectors| {
+                selectors
+                    .into_iter()
+                    .map(|(name, selector)| (name, selector.into()))
+                    .collect()
+            }),
+        }
+    }
+}
+
+impl From<MessageOriginMetadata> for palamedes::MessageOriginMetadata {
+    fn from(value: MessageOriginMetadata) -> Self {
+        Self {
+            file: value.file,
+            line: value.line,
+            component: value.component,
+            route: value.route,
+        }
+    }
+}
+
+impl From<MessageArgumentKind> for palamedes::MessageArgumentKind {
+    fn from(value: MessageArgumentKind) -> Self {
+        match value {
+            MessageArgumentKind::String => Self::String,
+            MessageArgumentKind::Number => Self::Number,
+            MessageArgumentKind::Date => Self::Date,
+            MessageArgumentKind::Time => Self::Time,
+            MessageArgumentKind::Datetime => Self::Datetime,
+            MessageArgumentKind::Boolean => Self::Boolean,
+            MessageArgumentKind::Enum => Self::Enum,
+            MessageArgumentKind::List => Self::List,
+            MessageArgumentKind::Duration => Self::Duration,
+            MessageArgumentKind::RelativeTime => Self::RelativeTime,
+            MessageArgumentKind::Name => Self::Name,
+            MessageArgumentKind::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<MessageArgumentMetadata> for palamedes::MessageArgumentMetadata {
+    fn from(value: MessageArgumentMetadata) -> Self {
+        Self {
+            kind: value.kind.into(),
+            role: value.role,
+            values: value.values,
+            format: value
+                .format
+                .map(palamedes::MessageArgumentFormatMetadata::from),
+        }
+    }
+}
+
+impl From<MessageArgumentFormatMetadata> for palamedes::MessageArgumentFormatMetadata {
+    fn from(value: MessageArgumentFormatMetadata) -> Self {
+        Self {
+            style: value.style,
+            style_kind: value
+                .style_kind
+                .map(palamedes::MessageFormatStyleKind::from),
+        }
+    }
+}
+
+impl From<MessageFormatStyleKind> for palamedes::MessageFormatStyleKind {
+    fn from(value: MessageFormatStyleKind) -> Self {
+        match value {
+            MessageFormatStyleKind::None => Self::None,
+            MessageFormatStyleKind::Predefined => Self::Predefined,
+            MessageFormatStyleKind::Skeleton => Self::Skeleton,
+            MessageFormatStyleKind::Pattern => Self::Pattern,
+        }
+    }
+}
+
+impl From<MessageSelectorMetadata> for palamedes::MessageSelectorMetadata {
+    fn from(value: MessageSelectorMetadata) -> Self {
+        Self {
+            kind: value.kind.into(),
+            cases: value.cases,
+            offset: value.offset,
+        }
+    }
+}
+
+impl From<MessageSelectorKind> for palamedes::MessageSelectorKind {
+    fn from(value: MessageSelectorKind) -> Self {
+        match value {
+            MessageSelectorKind::Select => Self::Select,
+            MessageSelectorKind::Plural => Self::Plural,
+            MessageSelectorKind::Selectordinal => Self::SelectOrdinal,
+        }
+    }
+}
+
 impl From<palamedes::CatalogArtifactSourceKey> for CatalogArtifactSourceKey {
     fn from(value: palamedes::CatalogArtifactSourceKey) -> Self {
         Self {
@@ -317,6 +665,21 @@ pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult>
     palamedes::parse_catalog(&request)
         .map(CatalogParseResult::from)
         .map_err(to_napi_error)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Audits configured catalogs with Ferrocat catalog QA checks.
+///
+/// # Errors
+///
+/// Returns an error when a catalog file cannot be read or parsed, when the
+/// audit options are invalid, or when audit counters cannot be represented
+/// safely in the Node binding shape.
+pub fn audit_catalogs(request: CatalogAuditRequest) -> Result<CatalogAuditResult> {
+    palamedes::audit_catalogs(request.into())
+        .map_err(to_napi_error)
+        .and_then(CatalogAuditResult::try_from)
 }
 
 #[napi]

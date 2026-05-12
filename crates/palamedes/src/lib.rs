@@ -19,9 +19,12 @@
 use std::collections::BTreeMap;
 
 mod catalog_artifact;
+mod catalog_audit;
 mod catalog_update;
+mod diagnostic;
 mod error;
 mod extract;
+mod message_metadata;
 mod transform;
 
 use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
@@ -33,13 +36,23 @@ pub use catalog_artifact::{
     CatalogArtifactRequest, CatalogArtifactResult, CatalogArtifactSelectedRequest,
     CatalogArtifactSourceKey, CatalogConfig, FallbackLocales,
 };
+pub use catalog_audit::{
+    audit_catalogs, CatalogAuditCheckOptions, CatalogAuditDiagnostic, CatalogAuditRequest,
+    CatalogAuditResult, CatalogAuditSummary,
+};
 pub use catalog_update::{
     parse_catalog, update_catalog_file, CatalogParseRequest, CatalogParseResult,
     CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, CatalogUpdateResponse,
     CatalogUpdateStats, ParsedCatalogMessage,
 };
+pub use diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
 pub use extract::{extract_messages, ExtractedMessageRecord};
+pub use message_metadata::{
+    MessageArgumentFormatMetadata, MessageArgumentKind, MessageArgumentMetadata,
+    MessageArgumentMetadataInput, MessageFormatStyleKind, MessageMetadataInput,
+    MessageOriginMetadata, MessageSelectorKind, MessageSelectorMetadata,
+};
 pub use transform::{
     transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,
 };
