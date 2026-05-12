@@ -13,8 +13,8 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "3.4.0", default-features = false, features = ["napi9"] }
-napi-derive = "3.3.0"
+napi = { version = "3.8.6", default-features = false, features = ["napi9"] }
+napi-derive = "3.5.5"
 palamedes = { path = "../palamedes" }
 
 [build-dependencies]
