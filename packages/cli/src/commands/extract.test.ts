@@ -43,17 +43,21 @@ describe("extract", () => {
     const deCatalog = normalizePo(await readCatalog(fixtureDir, "de"))
     expect(findItem(deCatalog.items, "Simple hello")?.msgstr).toEqual(["Einfach hallo"])
     expect(findItem(deCatalog.items, "Hello descriptor")).toBeDefined()
+    expect(findItem(deCatalog.items, "Computed {0}")).toBeDefined()
     expect(findItem(deCatalog.items, "Context hello", "email.subject")).toBeDefined()
     expect(
       findItem(deCatalog.items, "{count, plural, one {# item} other {# items}}")
     ).toBeDefined()
     expect(findItem(deCatalog.items, "Repeated origin")?.references).toEqual([
-      "src/App.tsx:14",
+      "src/App.tsx:15",
       "src/More.tsx:3",
     ])
 
     const enCatalog = normalizePo(await readCatalog(fixtureDir, "en"))
     expect(findItem(enCatalog.items, "Hello descriptor")?.msgstr).toEqual(["Hello descriptor"])
+    expect(await readCatalog(fixtureDir, "en")).toContain(
+      "#. placeholder {0}: first + last"
+    )
   })
 
   it("marks obsolete entries by default and removes them when clean is enabled", async () => {

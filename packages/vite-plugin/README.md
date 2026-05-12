@@ -103,7 +103,7 @@ palamedes({
 - transforms supported message macros before the rest of the Vite pipeline runs
 - compiles imported `.po` files into JavaScript modules
 - keeps source-string-first catalog semantics aligned with the native core
-- reports common macro and catalog issues during dev and build
+- reports common macro, catalog, placeholder, and ICU compatibility issues during dev and build
 
 ## Related Docs
 

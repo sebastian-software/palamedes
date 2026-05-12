@@ -154,13 +154,12 @@ pub(super) fn transform_trans_element(
     let solid_wrappers = jsx_runtime_module == "@palamedes/solid";
 
     let mut next_component_index = 0usize;
-    let (children_message, values, components) =
-        extract_jsx_children_parts(
-            &element.children,
-            source,
-            &mut next_component_index,
-            solid_wrappers,
-        );
+    let (children_message, values, components) = extract_jsx_children_parts(
+        &element.children,
+        source,
+        &mut next_component_index,
+        solid_wrappers,
+    );
     let message = attrs
         .get("message")
         .cloned()
@@ -186,7 +185,10 @@ pub(super) fn transform_trans_element(
     }
 
     if !values.is_empty() {
-        attrs.push(format!("values={{{{ {} }}}}", render_value_bindings(&values)));
+        attrs.push(format!(
+            "values={{{{ {} }}}}",
+            render_value_bindings(&values)
+        ));
     }
 
     Ok(Some((format!("<Trans {} />", attrs.join(" ")), lookup_key)))

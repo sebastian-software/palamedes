@@ -59,6 +59,8 @@ pub fn compile_catalog_artifact(
             key_strategy: CompiledKeyStrategy::FerrocatV1,
             source_fallback: true,
             strict_icu: false,
+            icu_compatibility: true,
+            ..CompileCatalogArtifactOptions::default()
         },
     )
     .map_err(PalamedesError::CompileCatalogArtifact)?;
@@ -101,7 +103,9 @@ pub fn compile_catalog_artifact_selected(
             key_strategy: CompiledKeyStrategy::FerrocatV1,
             source_fallback: true,
             strict_icu: false,
+            icu_compatibility: true,
             compiled_ids: &request.compiled_ids,
+            ..CompileSelectedCatalogArtifactOptions::default()
         },
     )
     .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;

@@ -72,6 +72,10 @@ console.log(po.headers.Language)
 - `extractMessagesNative(source, filename)`
 - `transformMacrosNative(source, filename, options?)`
 
+Catalog artifact compilation uses Ferrocat's ICU authoring diagnostics to report
+source/translation argument and tag mismatches without taking over runtime
+number, date, or locale formatting.
+
 ## Related Packages
 
 - [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)

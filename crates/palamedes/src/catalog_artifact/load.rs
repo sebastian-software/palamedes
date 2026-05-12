@@ -37,6 +37,7 @@ pub(super) fn load_catalogs(
             source_locale: &config.source_locale,
             plural_encoding: PluralEncoding::Icu,
             strict: false,
+            ..ParseCatalogOptions::default()
         })
         .map_err(|source| PalamedesError::ParseCatalog {
             path: file.clone(),

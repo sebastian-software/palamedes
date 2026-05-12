@@ -8,6 +8,7 @@ export interface CatalogOrigin {
 export interface CatalogUpdateMessage {
   message: string;
   context?: string;
+  placeholders?: Record<string, Array<string>>;
   extractedComments: Array<string>;
   origins: Array<CatalogOrigin>;
 }

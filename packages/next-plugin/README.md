@@ -77,6 +77,7 @@ module.exports = withPalamedes({}, {
 - transforms supported message macros in JavaScript and TypeScript sources
 - compiles imported `.po` files into JavaScript modules
 - keeps source-string-first catalog semantics aligned with the native core
+- reports placeholder and ICU compatibility diagnostics from the native catalog compiler
 - integrates with both webpack and Turbopack
 
 ## Related Docs
