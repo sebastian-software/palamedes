@@ -2,6 +2,7 @@
 
 import { program } from "commander"
 import chalk from "chalk"
+import { audit } from "./commands/audit"
 import { extract } from "./commands/extract"
 
 const VERSION = "0.0.1"
@@ -21,6 +22,22 @@ program
   .action(async (options) => {
     try {
       await extract(options)
+    } catch (error) {
+      console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
+      process.exit(1)
+    }
+  })
+
+program
+  .command("audit")
+  .description("Audit catalogs for translation and ICU authoring issues")
+  .option("-c, --config <path>", "Path to palamedes.config.ts")
+  .option("--locale <locale...>", "Only audit selected target locale(s)")
+  .option("--json", "Print the machine-readable audit result as JSON")
+  .option("--fail-on <level>", "Fail on error or warning diagnostics", "error")
+  .action(async (options) => {
+    try {
+      await audit(options)
     } catch (error) {
       console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
       process.exit(1)

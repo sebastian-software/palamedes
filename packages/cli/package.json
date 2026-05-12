@@ -38,7 +38,7 @@
   "scripts": {
     "build": "unbuild",
     "prepack": "pnpm run build",
-    "test": "vitest run --globals src/commands/extract.test.ts",
+    "test": "vitest run --globals src/commands/*.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {
