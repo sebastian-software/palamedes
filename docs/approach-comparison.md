@@ -66,13 +66,12 @@ translation sprawl. That is the main reason Palamedes can feel familiar to
 Lingui users while still taking a stricter architectural position underneath.
 
 As of March 19, 2026, Lingui v6 Preview exposes both a Babel macro path and an
-SWC plugin path. That matters for benchmarking because Lingui and Palamedes are
-not just similar in API flavor, they both spend real time in compile-time
-rewrite and extract flows. In this repo's current machine-local runs, Palamedes
-remains clearly ahead on both Lingui transform lanes as well as extraction,
-which reinforces the broader architectural point: centralizing the expensive
-work in a tighter native core changes real developer-facing latency, not just
-implementation aesthetics.
+SWC plugin path. That matters for benchmarking because Lingui and Palamedes
+share more than API flavor: both spend real time in compile-time rewrite and
+extract flows. In this repo's current machine-local runs, Palamedes remains
+clearly ahead on both Lingui transform lanes as well as extraction, which
+reinforces the broader architectural point: centralizing the expensive work in
+a tighter native core changes real developer-facing latency.
 
 The exact methodology and current machine-local outputs live in the dedicated
 Lingui benchmark page, because the numbers only make sense when read together
@@ -117,7 +116,7 @@ the stack is actually shared.
 
 ## General Translation (GT)
 
-GT is interesting precisely because it is not just an i18n library.
+GT is interesting precisely because it is broader than an i18n library.
 
 It includes a Rust-based SWC compiler for analysis and optional compile-time
 hashes, but that is only one part of the picture. Its bigger idea is build-time
@@ -149,9 +148,8 @@ the answer.
 If a team wants a Next.js-native message-file workflow with newer compile-time
 conveniences layered in, `next-intl` is a better mental model.
 
-If a team wants not just i18n runtime behavior but also a broader
-translation-generation workflow, GT is solving a bigger and more
-service-oriented problem.
+If a team wants i18n runtime behavior plus a broader translation-generation
+workflow, GT is solving a bigger and more service-oriented problem.
 
 Palamedes sits in a more specific place than all three:
 
@@ -163,9 +161,9 @@ framework-fragmented as the application evolves.
 
 That is the right way to read the benchmark story as well. The Lingui benchmark
 is not meant to imply that every i18n library should be forced into the same
-race. It exists because Lingui and Palamedes actually run on comparable hot
-paths. The broader comparison with `next-intl` and GT is better handled as an
-explanation of product shape, semantic choices, and architectural tradeoffs.
+race. It exists because Lingui and Palamedes actually run on comparable
+operations. The broader comparison with `next-intl` and GT is better handled as
+an explanation of product shape, semantic choices, and architectural tradeoffs.
 
 ## Further Reading
 

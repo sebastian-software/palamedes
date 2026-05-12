@@ -134,8 +134,8 @@ instance through the runtime getter.
 
 ## What This Means For The Product Story
 
-This matters for positioning because Palamedes is not only "frontend framework
-tooling."
+This matters for positioning because Palamedes covers more than frontend
+framework tooling.
 
 The same runtime model already covers:
 

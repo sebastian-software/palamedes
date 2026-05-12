@@ -2,9 +2,9 @@
 
 These are the product principles that shape Palamedes today.
 
-They matter because Palamedes is not only trying to make i18n faster. It is
-trying to make translation work feel calmer: fewer moving parts, clearer
-ownership, and one model that teams can carry across frameworks.
+They matter because Palamedes aims for more than speed. Translation work should
+feel calmer: fewer moving parts, clearer ownership, and one model that teams
+can carry across frameworks.
 
 ## 1. Source Strings Come First
 
@@ -33,9 +33,8 @@ That means:
 
 Palamedes uses `ferrocat` for catalog and ICU semantics instead of carrying bespoke PO glue in multiple places.
 
-That is a product decision, not only an implementation detail. Catalogs should
-be predictable enough for engineers, translators, and future automation to
-trust.
+That product decision matters. Catalogs should be predictable enough for
+engineers, translators, and future automation to trust.
 
 ## 5. Host-Neutral Artifacts, Host-Specific Rendering
 

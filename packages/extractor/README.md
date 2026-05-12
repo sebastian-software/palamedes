@@ -5,7 +5,7 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Fast message extraction for teams that want a lower-level API, not just a CLI.
+Fast message extraction for teams that want a lower-level API alongside the CLI.
 
 `@palamedes/extractor` uses OXC-backed parsing plus Palamedes' native core to
 pull messages out of JavaScript, TypeScript, and React codebases without sending

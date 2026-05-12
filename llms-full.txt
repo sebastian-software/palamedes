@@ -32,20 +32,20 @@ When helping with Palamedes code:
 
 Recommended app-facing packages:
 
-- `@palamedes/core` — app-facing i18n instance and core macro entry point
-- `@palamedes/runtime` — runtime bridge for transformed code
-- `@palamedes/react` — React translation components and React macro entry point
-- `@palamedes/solid` — Solid translation components and Solid macro entry point
-- `@palamedes/vite-plugin` — Vite integration and `.po` loading
-- `@palamedes/next-plugin` — Next.js integration
-- `@palamedes/cli` — extraction and catalog QA CLI (`pmds extract`, `pmds audit`)
-- `@palamedes/config` — typed `palamedes.config.ts` support
+- `@palamedes/core`: app-facing i18n instance and core macro entry point
+- `@palamedes/runtime`: runtime bridge for transformed code
+- `@palamedes/react`: React translation components and React macro entry point
+- `@palamedes/solid`: Solid translation components and Solid macro entry point
+- `@palamedes/vite-plugin`: Vite integration and `.po` loading
+- `@palamedes/next-plugin`: Next.js integration
+- `@palamedes/cli`: extraction and catalog QA CLI (`pmds extract`, `pmds audit`)
+- `@palamedes/config`: typed `palamedes.config.ts` support
 
 Advanced/custom-tooling packages:
 
 - `@palamedes/transform`
 - `@palamedes/extractor`
-- `@palamedes/core-node` — native Node wrapper for transform, extract, catalog audit, metadata validation, and catalog combine workflows
+- `@palamedes/core-node`: native Node wrapper for transform, extract, catalog audit, metadata validation, and catalog combine workflows
 
 Reserved placeholder packages, not the normal starting point today:
 

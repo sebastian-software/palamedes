@@ -41,9 +41,8 @@ Palamedes is built around a calmer default:
 - keep catalog and ICU semantics in one dedicated engine
 - let framework adapters stay small
 
-The result is not just a faster toolchain. It is a translation workflow that is
-easier to explain, easier to review, and easier to carry from one framework to
-the next.
+In daily work, that means a translation workflow that is easier to explain,
+easier to review, and easier to carry from one framework to the next.
 
 ## Current Status
 

@@ -106,13 +106,13 @@ pnpm exec pmds audit
 
 ## Recommended docs
 
-- `/README.md` — product overview and package map
-- `/docs/first-working-translation.md` — shortest working setup
-- `/docs/principles.md` — architectural principles
-- `/docs/migrate-from-lingui.md` — migration guidance for Lingui-shaped projects
-- `/docs/comparison-with-lingui.md` — positioning against Lingui
-- `/docs/proof-and-benchmarks.md` — maturity, examples, and benchmark story
-- `/examples/README.md` — verified example matrix
-- `/adr/003-source-string-first-message-identity.md` — source-string-first identity
-- `/adr/005-universal-geti18n-runtime-model.md` — runtime access model
-- `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md` — why CLI workers are deferred until benchmarks justify them
+- `/README.md`: product overview and package map
+- `/docs/first-working-translation.md`: shortest working setup
+- `/docs/principles.md`: architectural principles
+- `/docs/migrate-from-lingui.md`: migration guidance for Lingui-shaped projects
+- `/docs/comparison-with-lingui.md`: positioning against Lingui
+- `/docs/proof-and-benchmarks.md`: maturity, examples, and benchmark story
+- `/examples/README.md`: verified example matrix
+- `/adr/003-source-string-first-message-identity.md`: source-string-first identity
+- `/adr/005-universal-geti18n-runtime-model.md`: runtime access model
+- `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`: why CLI workers are deferred until benchmarks justify them

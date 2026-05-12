@@ -87,7 +87,7 @@ implementation accident.
 
 ## Why That Matters Beyond Migration
 
-This is not only a Lingui migration story.
+The story reaches beyond Lingui migration.
 
 It is also a story about what happens when a team wants the same i18n mental
 model to survive across different application shapes and framework decisions.
@@ -107,9 +107,9 @@ real projects:
 - message extraction
 - catalog update and compile steps
 
-The performance story is not just "native is faster." It is also that
-Palamedes tries to carry fewer layers and fewer historical compatibility
-branches through the work developers feel every day.
+Native code helps, but the larger performance story is simpler: Palamedes
+carries fewer layers and fewer historical compatibility branches through the
+work developers feel every day.
 
 See the benchmark and proof material here:
 
@@ -122,7 +122,7 @@ Palamedes is a better default if:
 
 - you are starting a new codebase or doing architecture cleanup
 - you already like Lingui-style authoring
-- you care about toolchain discipline, not just feature count
+- you care about toolchain discipline more than feature count
 - you want a cleaner stack that can stay coherent across framework boundaries
 
 ## Who Should Probably Wait

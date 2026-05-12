@@ -109,9 +109,9 @@ SWC lanes instead of folding them into one number.
 This is meant to be reproducible and honest, not a "best possible marketing
 number."
 
-That distinction matters. The performance story in Palamedes is not just
-"native is faster." It is that a cleaner architecture can keep more of the hot
-path in one place, with less duplicated semantic work across layers.
+That distinction matters. Native code helps, but Palamedes also keeps more of
+the expensive work in one place, with less duplicated semantic work across
+layers.
 
 ## Fixture Corpus
 
