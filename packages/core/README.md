@@ -2,7 +2,9 @@
 
 Palamedes-owned i18n instance creation and macro entry points.
 
-Use this package when you want to create an app-facing i18n instance that Palamedes owns end to end.
+Use this package when you want the app-facing runtime piece of Palamedes: create
+an i18n instance, author messages with macros, and let the surrounding tooling
+handle extraction and catalogs.
 
 ## Installation
 

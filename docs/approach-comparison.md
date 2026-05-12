@@ -2,18 +2,17 @@
 
 Not every modern JavaScript i18n library should be compared in the same way.
 
-Some tools share the same authoring model and the same build-time hot paths.
+Some tools share the same authoring model and the same build-time work.
 Others solve more of the translation workflow, stay closer to runtime
 dictionary lookup, or lean heavily on framework-specific loaders and plugins.
 
 This page exists to make that distinction explicit and to explain where
-Palamedes actually sits in the market.
+Palamedes actually sits.
 
 The shortest answer is this:
 
 Palamedes is for teams that want compile-time authoring, source-string-first
-semantics, and a cleaner architecture that stays coherent across framework
-boundaries.
+catalogs, and one i18n model that stays steady across framework boundaries.
 
 ## Why Lingui Gets The Head-to-Head Benchmark
 
@@ -36,7 +35,7 @@ timing chart.
 
 ## Palamedes
 
-Palamedes is built around a simple claim: the more important the i18n hot path
+Palamedes is built around a simple claim: the more important translation work
 becomes, the less it should be scattered across unrelated layers.
 
 In practice, that means most of the semantic heavy lifting lives in a native
@@ -54,8 +53,8 @@ because it has more than one adapter. It is unusual because the same runtime
 and identity model survive across verified integrations for Next.js, TanStack
 Start, Waku, and React Router.
 
-The performance story follows from that architectural discipline more than from
-“Rust” as a branding point.
+The performance story follows from that discipline more than from "Rust" as a
+branding point.
 
 ## Lingui
 
@@ -71,21 +70,21 @@ SWC plugin path. That matters for benchmarking because Lingui and Palamedes are
 not just similar in API flavor, they both spend real time in compile-time
 rewrite and extract flows. In this repo's current machine-local runs, Palamedes
 remains clearly ahead on both Lingui transform lanes as well as extraction,
-which reinforces the broader architectural point: centralizing the hot path in
-a tighter native core changes real developer-facing latency, not just
+which reinforces the broader architectural point: centralizing the expensive
+work in a tighter native core changes real developer-facing latency, not just
 implementation aesthetics.
 
 The exact methodology and current machine-local outputs live in the dedicated
 Lingui benchmark page, because the numbers only make sense when read together
 with their scope and validation rules.
 
-The practical difference is less “Lingui is old, Palamedes is new” and more
+The practical difference is less "Lingui is old, Palamedes is new" and more
 this: Lingui has broader compatibility pressure, while Palamedes is willing to
 be narrower so the core can stay cleaner.
 
 ## next-intl
 
-`next-intl` should not be framed as “basically Lingui for Next.js.” Its default
+`next-intl` should not be framed as "basically Lingui for Next.js." Its default
 model is different.
 
 The main `next-intl` path is runtime- and message-file-first. You keep
@@ -157,8 +156,7 @@ service-oriented problem.
 Palamedes sits in a more specific place than all three:
 
 it is for teams that like compile-time authoring, want source-string-first
-semantics, and care enough about toolchain architecture that they are willing
-to prefer a narrower but cleaner system.
+catalogs, and prefer a narrower system that stays easier to trust.
 
 It is also for teams that care about not having their i18n strategy become
 framework-fragmented as the application evolves.

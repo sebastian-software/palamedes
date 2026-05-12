@@ -1,8 +1,8 @@
 # Example Screenshots
 
 These screenshots are generated from the same Playwright-based browser verifier
-used by the example matrix. They are versioned proof artifacts, not manually
-curated mockups.
+used by the example matrix. They are versioned verification artifacts, not
+manually curated mockups.
 
 Refresh them with:
 
@@ -13,7 +13,7 @@ pnpm capture:example-screenshots
 Each example has two screenshots:
 
 - `*-initial.png`: initial SSR-visible state
-- `*-interactive.png`: post-interaction state after locale switching and the localized server proof flow
+- `*-interactive.png`: post-interaction state after locale switching and the localized server interaction flow
 
 ## Screenshot Set
 

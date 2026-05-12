@@ -1,27 +1,27 @@
 # Palamedes vs. Lingui
 
-Palamedes is not trying to be a universal rebuttal to Lingui. It is a sharper
-default for teams that already like macro-based i18n and want a cleaner, more
-coherent architecture underneath it.
+Palamedes is not trying to be a universal rebuttal to Lingui. It is a focused
+path for teams that already like macro-based i18n and want the stack underneath
+to feel smaller, steadier, and easier to trust.
 
 If you want the broader architectural comparison, including `next-intl` and
 General Translation, read [Comparing Modern i18n Approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md).
 
-The real difference is not “Rust vs. JavaScript.” It is the end state:
+The real difference is not "Rust vs. JavaScript." It is the end state:
 
 - one runtime model
 - one message identity model
-- thinner host adapters
-- less duplicated semantics across the stack
+- small host adapters
+- catalog and ICU semantics owned in one place
 
 ## Short Answer
 
 Choose Palamedes if you want:
 
 - faster transforms and extraction
-- a cleaner migration target than Lingui's broader historical API surface
+- a calmer migration target than Lingui's broader historical API surface
 - source-string-first catalogs with `message + context`
-- an architecture that is easier to reason about over time
+- a stack that is easier to reason about over time
 - one runtime model that stays stable across verified framework integrations
 - a local foundation that can support managed translation layers later without giving up repo ownership
 
@@ -36,12 +36,12 @@ Stay on Lingui if you want:
 | Topic | Lingui | Palamedes |
 | --- | --- | --- |
 | Authoring feel | Familiar macro-based i18n | Intentionally familiar macro-based i18n |
-| Dev/build hot path | Historically more JS/Babel-shaped | Native core + OXC + thin adapters |
+| Dev/build work | Historically more JS/Babel-shaped | Rust core + OXC + small adapters |
 | Message identity | Broader historical surface | Strictly `message + context` |
 | Runtime model | More than one historical access path | One public model: `getI18n()` |
 | Catalog semantics | Mixed legacy and ecosystem pressure | Source-first with `ferrocat` underneath |
-| Future translation layering | Usually solved outside the core | Clean local substrate for higher-order workflows |
-| Long-term shape | Broad compatibility pressure | Opinionated, narrower, cleaner |
+| Future translation layering | Usually solved outside the core | Local catalog and QA foundation |
+| Long-term shape | Broad compatibility pressure | Opinionated, narrower, easier to trust |
 
 ## Why The End State Gets Cleaner
 
@@ -96,7 +96,7 @@ That matters because:
 
 - teams do not want framework-specific i18n glue to own semantics
 - architecture cleanup gets easier when the runtime and identity model stay stable
-- a cleaner local substrate is easier to extend into future translation workflows
+- a cleaner local foundation is easier to extend into future translation workflows
 
 ## What Gets Faster
 
@@ -105,11 +105,11 @@ real projects:
 
 - macro transforms
 - message extraction
-- catalog update and compile hot paths
+- catalog update and compile steps
 
-The performance story is not just “native is faster.” It is also that
+The performance story is not just "native is faster." It is also that
 Palamedes tries to carry fewer layers and fewer historical compatibility
-branches through the hot path.
+branches through the work developers feel every day.
 
 See the benchmark and proof material here:
 
@@ -138,17 +138,17 @@ Stay on Lingui for now if:
 Lingui got the core instinct right early: macros, extracted catalogs, and
 pragmatic framework integration are better than ad hoc translation sprawl.
 
-Palamedes keeps that instinct and removes more of the historical baggage around
-it.
+Palamedes keeps that instinct and makes the underlying system smaller and
+easier to understand.
 
 It also creates a cleaner base for future translation products that need local
 catalog and QA semantics without re-implementing them in a parallel stack.
 
 That is the best way to think about the project:
 
-**Palamedes brings Rust-like discipline to JavaScript i18n tooling: fewer
-legacy branches, clearer semantic ownership, faster hot paths, and a more
-coherent cross-framework end state.**
+**Palamedes brings the discipline of a native catalog engine to JavaScript
+i18n: fewer legacy branches, clearer ownership, faster daily workflows, and a
+translation model that keeps working across frameworks.**
 
 ## Continue Here
 

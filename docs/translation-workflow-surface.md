@@ -1,14 +1,18 @@
 # Translation Workflow Surface
 
-This document describes the local translation-support surface Palamedes should provide as a reusable substrate for higher-order products such as Palamedes+.
+This document describes the local translation-support surface Palamedes should
+provide as a reusable foundation for higher-level products such as Palamedes+.
 
 For the first concrete module split, see [Translation Module Boundaries](./translation-module-boundaries.md).
 
 ## Purpose
 
-Palamedes should make it unnecessary for downstream translation products to rebuild repo-local catalog semantics, QA primitives, and metadata handling in parallel stacks.
+Palamedes should make it unnecessary for downstream translation products to
+rebuild repo-local catalog semantics, QA primitives, and metadata handling in
+parallel stacks.
 
-The goal is not to make Palamedes itself a hosted translation product. The goal is to provide the local workflow substrate cleanly.
+The goal is not to make Palamedes itself a hosted translation product. The goal
+is to give that product layer a calm, reliable local base.
 
 ## What belongs in Palamedes
 
@@ -95,7 +99,7 @@ Those concerns are product-layer responsibilities.
 
 The target split is:
 
-- **Palamedes**: local Rust-first substrate
+- **Palamedes**: local native-core foundation
 - **Palamedes+**: remote translation product
 
 Palamedes+ should be able to use this workflow surface without re-implementing the underlying local semantics in a separate stack.

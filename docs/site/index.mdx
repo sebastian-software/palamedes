@@ -1,45 +1,46 @@
 # Palamedes
 
-**A modern i18n stack that stays consistent across frameworks.**
+**Modern i18n tooling that keeps the translation model steady as your app changes.**
 
-Palamedes is for teams that like compile-time authoring, want source-string-first
-catalogs, and do not want their i18n model to splinter every time the framework
-changes.
+Palamedes is for teams that like writing messages close to the code, want
+source-string-first catalogs, and do not want their i18n setup to splinter
+every time the framework changes.
 
-It keeps one runtime model, one message identity model, and thin host adapters
-across verified integrations for Next.js, TanStack Start, SolidStart, Waku,
-and React Router.
+It gives you one runtime model, one message identity model, and one catalog
+workflow across verified integrations for Next.js, TanStack Start, SolidStart,
+Waku, React Router, Vite, and backend servers.
 
-## Why This Is Unusual
+## Why It Feels Different
 
-Most i18n tools force one of three tradeoffs:
+Most i18n tools eventually make teams choose between:
 
-- framework-native convenience with a narrow portability story
-- broad compatibility with more historical surface area
-- runtime-first dictionary workflows that change the authoring model
+- convenience in one framework
+- broad compatibility with a lot of older surface area
+- runtime dictionary workflows that move messages away from the source
 
-Palamedes takes a different position:
+Palamedes keeps the day-to-day model simpler:
 
-- one authoring feel close to Lingui-style macros
-- one public runtime model through `getI18n()`
-- one message identity model based on `message + context`
-- one architecture with a native core and thin framework adapters
+- write messages where the UI happens
+- identify messages with `message + context`
+- resolve the active runtime through `getI18n()`
+- let `ferrocat` own catalog parsing, updates, audits, and ICU diagnostics
+- keep framework adapters small
 
-That combination is what makes Palamedes interesting. The point is not just
-"written in Rust." The point is that the i18n hot path stays architecturally
-coherent as framework boundaries change.
+The point is not just that part of the stack is written in Rust. The point is
+that the careful work has one clear home, so the app-level experience stays
+calm.
 
 ## Why Teams Care
 
 Cross-framework consistency matters because teams do not want to relearn i18n
 every time the application shape changes.
 
-When the runtime model, message identity, and catalog semantics stay stable:
+When the runtime model, message identity, and catalog workflow stay stable:
 
 - architecture cleanup gets easier
 - migrations carry less conceptual overhead
-- performance work lands in one hot path instead of several
-- future translation workflows can build on a cleaner local substrate
+- performance work lands in one native core instead of several adapter layers
+- future translation workflows can build on local catalogs your team still owns
 
 ## Proof, Not Just Positioning
 
@@ -51,7 +52,8 @@ Current proof assets:
 - two locale strategies per framework
 - browser screenshots generated from the same Playwright-based verifier used in CI
 - benchmark fixtures and documented methodology
-- architecture and ADR docs that explain semantic ownership
+- structured catalog audits and ICU metadata validation
+- architecture and ADR docs that explain the underlying decisions
 
 Useful proof links:
 
@@ -62,8 +64,8 @@ Useful proof links:
 
 ## Competitive Frame
 
-The cleanest direct comparison is still Lingui: similar authoring feel, but a
-cleaner end state underneath.
+The cleanest direct comparison is still Lingui: similar authoring feel, with a
+stricter end state underneath.
 
 The broader market picture matters too:
 
@@ -71,8 +73,8 @@ The broader market picture matters too:
 - `next-intl` is stronger when a team wants a Next.js-native message-file center
 - General Translation solves a broader translation-system problem
 
-Palamedes sits in a narrower but cleaner place: compile-time authoring, stable
-source-string-first semantics, and a host-neutral architecture that stays usable
+Palamedes sits in a narrower place on purpose: compile-time authoring,
+source-string-first semantics, and a local catalog workflow that stays usable
 across frameworks.
 
 ## Start Here

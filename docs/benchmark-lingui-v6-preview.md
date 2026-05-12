@@ -1,12 +1,13 @@
 # Benchmarking Against Lingui v6 Preview
 
-This repo now includes a separate head-to-head benchmark harness for Palamedes vs. Lingui `6.0.0-next.1`.
+This repo includes a separate head-to-head benchmark harness for Palamedes vs.
+Lingui `6.0.0-next.1`.
 
-It is intentionally separate from the small Palamedes-only proof benchmark:
+It is intentionally separate from the smaller Palamedes-only benchmark:
 
 - the Lingui comparison has its own isolated workspace package
 - Lingui preview versions are pinned exactly
-- the measurement scope is narrower and more explicitly normalized
+- the measurement scope is narrow and explicitly normalized
 
 ## Versions
 
@@ -91,7 +92,7 @@ Before any timing run, the harness validates:
 
 There are also smoke checks against checked-in repo sources:
 
-- transform parity for Palamedes, Lingui Babel, and Lingui SWC on the checked-in benchmark proof fixtures
+- transform parity for Palamedes, Lingui Babel, and Lingui SWC on the checked-in benchmark fixtures
 - extract sanity on the same example source files
 - compile sanity on `packages/cli/src/commands/fixtures/ferrocat-first-test`
 

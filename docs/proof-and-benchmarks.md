@@ -1,11 +1,9 @@
 # Proof, Benchmarks, and Current Maturity
 
-Palamedes makes a simple public claim:
+Palamedes makes a simple public claim: the same i18n model should keep working
+as an app moves across modern frameworks.
 
-it keeps a coherent i18n model across multiple modern frameworks without
-changing the core mental model underneath.
-
-This page exists to show the work behind that claim.
+This page shows the work behind that claim. The goal is confidence, not hype.
 
 ## What This Repo Can Prove
 
@@ -14,29 +12,30 @@ This repo can credibly prove four things:
 - Palamedes is verified across Next.js, TanStack Start, SolidStart, Waku, and React Router
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
-- transform, extract, catalog update, and catalog compile hot paths are measured locally and reproducibly
+- transform, extract, catalog update, and catalog compile steps are measured locally and reproducibly
 
-This page is not here to manufacture marketing numbers. It is here to make the
-architecture and the evidence easy to inspect.
+This page is not here to manufacture headline numbers. It is here to make the
+evidence easy to inspect.
 
 ## Current Maturity
 
 | Topic | Current state |
 | --- | --- |
-| Recommended use cases | New projects, architecture cleanup, teams already comfortable with Lingui-style authoring |
+| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring |
 | Supported frameworks | Verified examples for Next.js, TanStack Start, SolidStart, Waku, and React Router |
 | Runtime model | `@palamedes/runtime` with `getI18n()` |
 | Catalog model | Source-string-first, `.po`, `message + context` identity |
 | Native core | Rust + `napi-rs` |
-| Catalog semantics | Delegated to `ferrocat` |
+| Catalog semantics | Delegated to `ferrocat`, including audit and ICU diagnostics |
 | Node requirement | `>=22` |
 | Not yet productized | Top-level `palamedes` install, `create-palamedes` scaffold |
 
 ## What Counts As Proof In This Repo
 
 - first-party multi-framework example matrix with cookie and route locale strategies
-- a native core with typed bindings and a documented architecture
+- a native core with typed bindings
 - source-string-first catalog semantics backed by `ferrocat`
+- structured catalog audits and ICU metadata validation
 - reproducible local benchmark commands
 - versioned browser screenshots generated from the same CI browser flows
 
@@ -45,7 +44,7 @@ leaving it as a slogan.
 
 ## Benchmark Scope
 
-The benchmark flow here focuses on the hot paths Palamedes claims to improve:
+The benchmark flow here focuses on the operations Palamedes claims to improve:
 
 - transform
 - extract
@@ -107,8 +106,8 @@ SWC lanes instead of folding them into one number.
 - median reported for each operation
 - operations measured independently, not as a blended total
 
-This is meant to be reproducible and honest, not a “best possible marketing
-number.”
+This is meant to be reproducible and honest, not a "best possible marketing
+number."
 
 That distinction matters. The performance story in Palamedes is not just
 "native is faster." It is that a cleaner architecture can keep more of the hot
@@ -133,7 +132,7 @@ That gives the benchmark:
 
 ## Local Baseline
 
-Current checked local sample, captured on March 18, 2026 with:
+Checked local sample, captured on March 18, 2026 with:
 
 ```bash
 node ./scripts/benchmark-proof.mjs --warmup 1 --runs 3
@@ -154,18 +153,18 @@ Median results from that run:
 - catalog update: `0.64 ms`
 - catalog artifact compile: `4.04 ms`
 
-The benchmark script also prints the raw sample series so the checked median is
-easy to verify.
+This sample is a historical reference point. Current Palamedes builds use
+Ferrocat `0.11.0`; rerun the command above when you need fresh numbers for the
+current release line. The benchmark script also prints the raw sample series so
+the checked median is easy to verify.
 
 ## What This Page Does Not Claim
 
 - It does not claim universal results across every machine or every codebase.
 - It does not claim that Palamedes already covers every possible Lingui compatibility path.
-- It does not treat “written in Rust” as proof by itself.
+- It does not treat "written in Rust" as proof by itself.
 
-The goal is simpler:
-
-show the work, show the architecture, and make local verification easy.
+The goal is simpler: show the work and make local verification easy.
 
 ## Related Proof Assets
 

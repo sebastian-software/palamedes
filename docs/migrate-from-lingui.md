@@ -1,8 +1,11 @@
 # Migration from Lingui to Palamedes
 
-Palamedes is easiest to understand as a cleaner tooling stack for teams that already like Lingui-style authoring.
+Palamedes is easiest to understand as a steadier path for teams that already
+like Lingui-style authoring.
 
-Most migrations are not about rewriting every translation call. They are about switching framework integration, extraction, and runtime wiring to a stricter end state.
+Most migrations are not about rewriting every translation call. They are about
+moving framework integration, extraction, catalog QA, and runtime wiring onto a
+smaller model.
 
 ## Who This Migration Is For
 
@@ -11,8 +14,8 @@ Switch now if you want:
 - faster transforms and extraction without a Babel-heavy path
 - source-string-first catalogs with `message + context` identity
 - one runtime model via `getI18n()`
-- a cleaner long-term architecture than Lingui's broader historical surface
-- the local foundation that managed translation workflows can build on later
+- a calmer long-term foundation than Lingui's broader historical surface
+- local catalogs and QA semantics that managed translation workflows can build on later
 
 Wait if you need:
 
@@ -53,9 +56,11 @@ import { t, msg, defineMessage, plural, select, selectOrdinal } from "@lingui/co
 import { Trans, Plural, Select, SelectOrdinal } from "@lingui/react/macro"
 ```
 
-That continuity is the point. The migration is primarily a tooling and runtime cleanup, not an authoring reset.
+That continuity is the point. The migration is primarily a tooling, catalog,
+and runtime cleanup, not an authoring reset.
 
-It is also the path from "Lingui as the old base" to "Palamedes as the base, with optional managed translation on top later".
+It is also the path from "Lingui as the old base" to "Palamedes as the local
+base, with optional managed translation on top later".
 
 ## Before / After
 
@@ -178,11 +183,12 @@ Run extraction through Palamedes:
 pnpm exec pmds extract
 ```
 
-That moves catalogs onto the source-first path and aligns updates with the current native core and `ferrocat`.
+That moves catalogs onto the source-first path and aligns updates, audits, and
+ICU diagnostics with the current native core and `ferrocat`.
 
 ## Common Migration Errors
 
-### “No active client i18n instance”
+### "No active client i18n instance"
 
 Cause:
 - transformed code is running before `setClientI18n(...)`
@@ -190,7 +196,7 @@ Cause:
 Fix:
 - register the active client instance during app startup before translated UI renders
 
-### “No active server i18n instance”
+### "No active server i18n instance"
 
 Cause:
 - server-side translated code runs before `setServerI18nGetter(...)`
@@ -216,12 +222,13 @@ Fix:
 
 ## What Gets Better After The Move
 
-- transforms and extraction move to a native core
+- transforms, extraction, catalog updates, and audits move to a native core
 - runtime assumptions get simpler
 - catalog identity gets cleaner
-- the hot path carries fewer historical branches
+- the work is easier to reason about when something breaks
 
-That is why the migration is worth doing. The visible authoring surface stays familiar, but the stack under it gets substantially cleaner.
+That is why the migration is worth doing. The visible authoring surface stays
+familiar, but the stack under it gets easier to understand and easier to trust.
 
 ## Next Steps
 

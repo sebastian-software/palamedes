@@ -7,7 +7,9 @@
 
 Fast message extraction for teams that want a lower-level API, not just a CLI.
 
-`@palamedes/extractor` uses OXC-backed parsing plus Palamedes' native core to extract messages from JavaScript, TypeScript, and React codebases with less overhead than Babel-based extraction paths.
+`@palamedes/extractor` uses OXC-backed parsing plus Palamedes' native core to
+pull messages out of JavaScript, TypeScript, and React codebases without sending
+the workflow through a Babel-heavy path.
 
 ## When To Use This Package
 

@@ -5,7 +5,7 @@ Public hosting is optional and is not part of the default merge or release path.
 
 ## Current Policy
 
-- the canonical proof surface is `pnpm build:examples` plus `pnpm verify:examples`
+- the canonical verification path is `pnpm build:examples` plus `pnpm verify:examples`
 - example deployments do not run automatically on `main`
 - `nextjs-cookie` and `nextjs-route` are CI-only in the standard workflow
 - the remaining examples can still be deployed manually if a hosted URL is useful for debugging or ad hoc sharing

@@ -5,62 +5,60 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Palamedes is a modern i18n stack for JavaScript and TypeScript apps that stays
-consistent across frameworks.
+Palamedes is i18n tooling for JavaScript and TypeScript teams that want the
+authoring experience to feel good and the system underneath to stay simple.
 
-It keeps one runtime model, one message identity model, and thin framework
-adapters across verified integrations for Next.js, TanStack Start, SolidStart,
-Waku, and React Router.
+You write messages close to the code, keep source-string-first `.po` catalogs,
+and use the same runtime model across Next.js, TanStack Start, SolidStart,
+Waku, React Router, Vite, and backend servers.
 
-That is the real differentiator: Palamedes does not just try to feel cleaner in
-one framework. It tries to keep the i18n model architecturally coherent as the
-host framework changes.
+The promise is practical: translations should not become a nest of
+framework-specific glue. Palamedes keeps the important pieces steady as an app
+changes shape.
 
-Underneath that public model is a native Rust core, OXC-powered transforms, and
-deliberately thin adapters built for fast hot paths, clear semantic ownership,
-and less historical baggage.
-
-It is also the intended local substrate for higher-order translation workflows.
-Palamedes+ can add authenticated remote translation and managed quality controls
-on top, while Palamedes keeps the local catalog, context, and QA semantics
-reusable and open.
-
-## Why Palamedes Is Unusual
-
-Most i18n tools force one of three tradeoffs:
-
-- framework-native convenience with a narrow portability story
-- broader compatibility with more historical surface area
-- runtime-first dictionary workflows that change the authoring model
-
-Palamedes takes a different position:
-
-- one authoring feel close to Lingui-style macros
-- one public runtime model through `getI18n()`
-- one message identity model through `message + context`
-- one architecture with a native core and thin adapters
-- one verified proof surface across five framework families
+Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
+semantics handle the careful work: parsing, extraction, updates, audits,
+diagnostics, and runtime artifact compilation.
 
 ## Why Teams Pick Palamedes
 
-- Cross-framework consistency without relearning i18n every time the framework changes
-- Faster transform, extraction, and catalog hot paths without dragging Babel back into the stack
-- A cleaner migration target than Lingui's broader historical API surface
-- A host-neutral local substrate for future translation workflows
+- One i18n mental model across modern frameworks
+- Familiar macro-style authoring without carrying older compatibility paths forward
+- Fast transforms, extraction, catalog updates, audits, and compile steps
+- Source-string-first catalogs that translators can inspect and teams can trust
+- A local foundation for future managed translation workflows without giving up repo ownership
+
+## What Makes It Feel Better
+
+Most i18n stacks eventually ask teams to choose between convenience, speed, and
+clarity.
+
+Palamedes is built around a calmer default:
+
+- write the message where the UI happens
+- identify messages by `message + context`
+- access the active runtime through `getI18n()`
+- keep catalog and ICU semantics in one dedicated engine
+- let framework adapters stay small
+
+The result is not just a faster toolchain. It is a translation workflow that is
+easier to explain, easier to review, and easier to carry from one framework to
+the next.
 
 ## Current Status
 
-- Recommended for new projects and teams already doing architecture cleanup
+- Recommended for new projects and teams that want cleaner i18n foundations
 - Verified today across Next.js, TanStack Start, SolidStart, Waku, and React Router on Node.js `>=22`
-- Source-string-first catalogs are stable and powered by `ferrocat`, including ICU authoring diagnostics for compiled catalogs
+- Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 
-## What Exists Today As Proof
+## What Exists Today
 
 - A browser-verified example matrix across five framework families
 - Versioned screenshots generated from the same Playwright-based verifier used in CI
-- Reproducible benchmark commands for transform, extract, catalog update, and compile hot paths
-- ADRs and architecture docs that make the ownership model explicit
+- Reproducible benchmark commands for transform, extract, catalog update, and compile steps
+- Structured catalog audit and metadata validation APIs backed by `ferrocat`
+- ADRs and architecture docs that explain the decisions behind the product
 - Public headless frontend primitives in `@palamedes/react` and `@palamedes/solid` that the matrix uses directly
 
 ## Start Here
@@ -172,29 +170,29 @@ component, use the [5-minute quickstart](https://github.com/sebastian-software/p
 That walkthrough uses React for the shortest path, but the same Vite plugin,
 runtime model, and catalog flow now also back Solid.
 
-## The Core Architecture Claim
+## The Technical Foundation
 
-The point is not only that Palamedes is fast. The point is that the i18n hot
-path is owned more coherently.
+The technical story is there to support the product story: teams should get a
+translation stack that feels predictable in daily work.
 
-Palamedes is opinionated in a few places on purpose:
+Palamedes is opinionated in a few places:
 
 - `message + context` is the semantic identity
 - `getI18n()` is the public runtime model
-- catalog semantics, placeholder comments, and ICU source/translation QA live in `ferrocat`, not in duplicate PO glue
-- host adapters render modules, while the core stays host-neutral
+- catalog parsing, updates, audits, and ICU QA live in `ferrocat`
+- host adapters render modules while the core stays portable
 
-That gives teams something stronger than a benchmark number:
+That gives teams more than a benchmark number:
 
 - less duplicated logic
 - clearer adapter boundaries
 - less runtime API sprawl
-- a toolchain that is easier to trust over time
+- a toolchain that is easier to trust during migrations and reviews
 
-The same ownership model also matters for future translation workflows:
+The same foundation also matters for future translation workflows:
 
-- Palamedes owns local, host-neutral translation workflow primitives
-- higher-order products can own remote execution, account controls, and premium policies
+- Palamedes owns the local catalog, context, and QA semantics
+- higher-level products can add remote execution, account controls, and review policies
 - the repo keeps its catalogs either way
 
 ## Proof And Adoption Docs

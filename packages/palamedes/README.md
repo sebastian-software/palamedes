@@ -7,11 +7,14 @@
 
 The reserved top-level npm home for Palamedes.
 
-Today this package is intentionally small. It secures the name so Palamedes can grow into a first-class top-level entry point later without a rename or split identity.
+Today this package is intentionally small. It keeps the canonical name ready
+for a future first-class entry point while the scoped packages remain the best
+way to use Palamedes.
 
 ## When To Use This Package
 
-Right now, mainly as a marker that the canonical package name is taken, maintained, and reserved for future expansion.
+Right now, mainly as a marker that the canonical package name is taken,
+maintained, and reserved for future expansion.
 
 If you want to use Palamedes today, install the scoped packages directly:
 

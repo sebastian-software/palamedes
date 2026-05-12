@@ -1,8 +1,8 @@
 # `@palamedes/solid`
 
-Use this package when your app wants Solid-native translation components such as
-`Trans`, `Plural`, `Select`, and `SelectOrdinal`, plus a small headless
-frontend helper layer for locale-aware UI.
+Use this package when your Solid app wants translated JSX that feels native to
+Solid: `Trans`, `Plural`, `Select`, and `SelectOrdinal`, plus a small headless
+helper layer for locale-aware UI.
 
 Palamedes keeps the runtime model provider-free. Transformed code resolves the
 active i18n instance through `getI18n()` from
@@ -12,7 +12,7 @@ before translated code runs.
 
 This package is part of the verified SolidStart story in the example matrix. It
 shares the same catalog model, runtime semantics, and Vite plugin path as the
-React integrations while swapping only the thin JSX adapter layer.
+React integrations while swapping only the JSX adapter layer.
 
 ## Install
 

@@ -5,15 +5,18 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The Palamedes command-line interface for extracting message catalogs quickly and predictably.
+The Palamedes command-line interface for keeping local catalogs healthy.
 
-This is the package behind the `pmds` binary. Use it when you want extraction in local development, CI, or custom scripts without wiring the lower-level extractor yourself.
+This is the package behind the `pmds` binary. Use it when you want extraction,
+catalog updates, and catalog QA in local development or CI without wiring the
+lower-level APIs yourself.
 
 ## When To Use This Package
 
 Use `@palamedes/cli` when you want:
 
 - a supported extraction command for Palamedes projects
+- structured catalog audits in CI
 - watch mode during development
 - a clean way to update `.po` catalogs in CI
 
@@ -39,7 +42,14 @@ pnpm exec pmds extract --watch
 pnpm exec pmds extract --clean
 pnpm exec pmds extract --config ./palamedes.config.ts
 pnpm exec pmds extract --verbose
+pnpm exec pmds audit
+pnpm exec pmds audit --json
+pnpm exec pmds audit --fail-on warning
 ```
+
+`pmds audit` reports missing translations, extra catalog entries, fuzzy or
+obsolete messages, and ICU compatibility issues through the same `ferrocat`
+catalog engine that powers Palamedes builds.
 
 ## Configuration
 

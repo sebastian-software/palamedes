@@ -15,7 +15,7 @@ Cookie examples follow this rule set:
 - locale switches update the cookie and the next request renders with that
   locale
 
-This is the proof path for apps that do not encode locale in the URL.
+This is the verified path for apps that do not encode locale in the URL.
 
 ## Route Strategy
 
@@ -32,7 +32,7 @@ Route examples follow this rule set:
 - unsupported locale values fall back to the default locale in app-specific
   framework code
 
-This is the proof path for SEO-oriented or shareable locale URLs.
+This is the verified path for SEO-oriented or shareable locale URLs.
 
 ## Domain And Host Mapping
 
@@ -56,10 +56,10 @@ differently. The example matrix is therefore intentionally explicit:
 - one cookie app per framework
 - one route app per framework
 
-This keeps the integration legible and gives Palamedes a real regression-proof
-surface for:
+This keeps the integration legible and gives Palamedes a real regression
+baseline for:
 
 - tests
 - docs
-- benchmark-style proof artifacts
+- benchmark-style verification artifacts
 - future extraction of shared public helper APIs

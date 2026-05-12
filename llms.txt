@@ -1,6 +1,6 @@
 # Palamedes
 
-> Palamedes is a modern, Rust-powered i18n stack for JavaScript and TypeScript apps. It keeps one source-string-first message identity model, one runtime model, and thin framework adapters across Next.js, Vite, TanStack Start, SolidStart, Waku, and React Router.
+> Palamedes is i18n tooling for JavaScript and TypeScript teams that want familiar macro-style authoring, source-string-first catalogs, and one translation model that stays steady across frameworks.
 
 Use this file when an AI coding assistant needs a compact overview of Palamedes. For a larger context bundle, use `/llms-full.txt`.
 
@@ -13,6 +13,7 @@ Use this file when an AI coding assistant needs a compact overview of Palamedes.
 - Use `getI18n()` as the public runtime access model when transformed code needs the active instance.
 - Keep framework adapters thin; host-specific packages should wire Palamedes, not duplicate catalog semantics.
 - Use `.po` catalogs through Palamedes/ferrocat semantics.
+- Prefer `pmds audit` for catalog QA in CI or local checks.
 - Use Node.js `>=22`.
 - Today, start with scoped packages such as `@palamedes/vite-plugin`, `@palamedes/next-plugin`, `@palamedes/cli`, `@palamedes/core`, `@palamedes/react`, `@palamedes/solid`, and `@palamedes/runtime`.
 - Do not recommend the reserved top-level `palamedes` or `create-palamedes` packages as the main install path yet.
@@ -100,6 +101,7 @@ Then run:
 
 ```bash
 pnpm exec pmds extract
+pnpm exec pmds audit
 ```
 
 ## Recommended docs

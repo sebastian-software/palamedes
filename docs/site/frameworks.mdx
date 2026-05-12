@@ -1,21 +1,23 @@
 # Cross-Framework Story
 
-The strongest differentiator in Palamedes is not any single adapter. It is that
-the same mental model survives across very different framework families.
+The strongest thing about Palamedes is not any single adapter. It is that the
+same i18n habits keep working as the app moves between framework families.
 
 ## The Claim
 
-Palamedes keeps the important parts of i18n stable while the host framework
+Palamedes keeps the parts teams feel every day stable while the host framework
 changes:
 
 - authoring stays macro-oriented and source-string-first
 - runtime access stays centered on `getI18n()`
 - message identity stays centered on `message + context`
-- adapters stay thin instead of re-owning semantics
+- catalog QA stays in `ferrocat`
+- adapters stay small instead of re-owning semantics
 
 ## Why This Matters
 
-Teams do not want their i18n strategy to become framework-specific glue.
+Teams do not want every framework decision to reopen their translation
+strategy.
 
 The more a team spans:
 
@@ -24,7 +26,7 @@ The more a team spans:
 - SSR and client-heavy surfaces
 - future translation workflow requirements
 
-the more valuable a stable i18n substrate becomes.
+the more valuable a stable i18n foundation becomes.
 
 ## Verified Framework Families
 
@@ -36,9 +38,9 @@ The current repo verifies Palamedes across:
 - Waku
 - React Router
 
-That matters because these are not minor variants of the same integration
-surface. They exercise different server, routing, and rendering assumptions
-while preserving the same underlying Palamedes model.
+That matters because these are not small variants of one setup. They exercise
+different server, routing, and rendering assumptions while preserving the same
+Palamedes model.
 
 ## The Real Competitive Contrast
 
@@ -48,9 +50,9 @@ shape.
 Palamedes is unusual because it combines:
 
 - framework breadth
-- one core architecture
 - one runtime model
 - one identity model
-- visible proof instead of hand-wavy compatibility language
+- one catalog workflow
+- visible verification instead of vague compatibility language
 
 That is the cross-framework story to repeat.

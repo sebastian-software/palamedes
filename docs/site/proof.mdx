@@ -1,7 +1,7 @@
-# Proof Narrative
+# Confidence Narrative
 
-Palamedes should be presented as a tool with visible proof, not as a thesis
-looking for validation afterward.
+Palamedes should be presented as a tool that earns confidence visibly: the
+message is positive, but the repo still shows the work behind it.
 
 ## What We Can Safely Claim
 
@@ -9,15 +9,15 @@ looking for validation afterward.
   Start, SolidStart, Waku, and React Router
 - the runtime model is stable around `getI18n()`
 - message identity is stable around `message + context`
-- macro transform, extraction, and catalog hot paths are benchmarked locally and
-  reproducibly
+- macro transform, extraction, catalog update, audit, and compile paths are
+  backed by native tooling
 - the example matrix is exercised in CI with browser interaction checks
 
-## What The Proof Stack Looks Like
+## What The Confidence Stack Looks Like
 
 ### 1. The example matrix
 
-The strongest repo-level proof is the framework matrix:
+The strongest repo-level evidence is the framework matrix:
 
 - five framework families
 - cookie and route locale strategies
@@ -29,8 +29,9 @@ This is the clearest evidence that Palamedes is not only "good in one adapter."
 
 ### 2. Versioned screenshots
 
-The screenshot set turns CI proof into a visible artifact. It makes the
-cross-framework claim easier to communicate without relying on hosted demos.
+The screenshot set turns CI verification into something people can see. It
+makes the cross-framework claim easier to communicate without relying on hosted
+demos.
 
 ### 3. Benchmarks
 
@@ -49,20 +50,20 @@ The benchmark language should stay disciplined:
 
 ### 4. Architectural evidence
 
-The design docs and ADRs matter because they explain why the proof is credible:
+The design docs and ADRs matter because they explain why the product is credible:
 
-- native core
+- Rust core
 - host-neutral compiled artifacts
-- delegated catalog semantics via `ferrocat`
-- thin framework adapters
+- catalog semantics delegated to `ferrocat`
+- small framework adapters
 
-## Approved Proof Language
+## Approved Confidence Language
 
 Use language like:
 
 - "verified across five framework families"
 - "one runtime model across modern frameworks"
-- "proof-backed, not demo-only"
+- "verified, not demo-only"
 - "reproducible local benchmark commands"
 - "browser-verified example matrix"
 

@@ -7,7 +7,9 @@
 
 Lean config loading for Palamedes projects.
 
-Use `@palamedes/config` when you want to author or load `palamedes.config.ts` files without pulling in a larger historical config surface.
+Use `@palamedes/config` when you want to author or load `palamedes.config.ts`
+files with a small, predictable shape: locales, source locale, fallback policy,
+and catalog locations.
 
 ## Minimal Example
 

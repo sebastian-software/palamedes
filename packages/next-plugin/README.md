@@ -7,12 +7,15 @@
 
 The recommended Palamedes entry point for Next.js applications.
 
-`@palamedes/next-plugin` wires Palamedes into Next.js so message macros are transformed before they leak into runtime, and `.po` files can be loaded as part of the application build.
+`@palamedes/next-plugin` wires Palamedes into Next.js so message macros are
+compiled before they leak into runtime, `.po` files load as part of the build,
+and catalog problems show up while the app is still easy to fix.
 
 ## Status
 
 - Recommended for Next.js applications using App Router and Palamedes macros
 - Supports `.po` imports and source-string-first catalog semantics
+- Reports missing translations and ICU compatibility diagnostics during builds
 - Uses Turbopack as the verified default path on Next.js 16.2
 - The shipped example proves both server-rendered i18n and localized `"use server"` action output
 - Also supports webpack as an opt-out / fallback path

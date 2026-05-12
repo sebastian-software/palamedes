@@ -3,7 +3,8 @@
 Provider-free React components, macro entry points, and headless frontend
 primitives for Palamedes.
 
-Use this package when your app wants JSX translation components such as `Trans` with Palamedes-owned React runtime behavior.
+Use this package when your React app wants translated JSX that stays close to
+the component, without making translation state another provider tree to manage.
 
 ## Installation
 

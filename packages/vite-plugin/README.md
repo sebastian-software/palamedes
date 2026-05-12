@@ -7,12 +7,15 @@
 
 The recommended Palamedes entry point for Vite applications.
 
-`@palamedes/vite-plugin` gives Vite projects fast macro transforms, `.po` loading, and a cleaner path than bolting Babel-oriented i18n tooling back onto a modern frontend stack.
+`@palamedes/vite-plugin` gives Vite projects fast macro transforms, `.po`
+loading, and a translation workflow that feels native to modern frontend
+tooling instead of bolted on from an older Babel path.
 
 ## Status
 
 - Recommended for Vite projects using React or Solid and Palamedes macros
 - Supports `.po` imports and source-string-first catalog semantics
+- Reports missing translations and ICU compatibility diagnostics during builds
 - Best paired with `@palamedes/runtime` and `@palamedes/cli`
 - Not a framework generator or top-level app scaffold
 

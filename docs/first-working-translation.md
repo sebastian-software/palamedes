@@ -1,6 +1,7 @@
 # First Working Translation In 5 Minutes
 
-This guide is the shortest path to a real Palamedes success case:
+This guide is the shortest path to the good Palamedes feeling: write a message,
+extract it, translate it, and see it render without changing the mental model.
 
 - one translated component
 - one extraction run
@@ -125,13 +126,17 @@ After `pnpm dev`, the page should render:
 Willkommen bei Palamedes
 ```
 
-That proves the full path is working:
+That proves the full local loop is working:
 
 - macros transform correctly
 - extraction works
 - catalogs update correctly
 - `.po` imports compile
 - the runtime model is wired
+
+From there, the same catalog flow can grow into CI audits, richer ICU
+diagnostics, and framework-specific app wiring without changing how messages
+are identified.
 
 ## What To Read Next
 

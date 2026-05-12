@@ -1,8 +1,10 @@
 # Translation Module Boundaries
 
-This document turns the translation workflow surface into concrete first modules and types for a Rust-first implementation.
+This document turns the translation workflow surface into concrete first modules
+and types for a native-core implementation.
 
-It is not the hosted translation product contract. It is the local semantic substrate that a higher-order product can build on.
+It is not the hosted translation product contract. It is the local semantic
+foundation that a higher-level product can build on.
 
 ## Purpose
 
@@ -153,7 +155,8 @@ The first public or semi-public Core surface should include:
 - `AiMetadata`
 - `TranslationReport`
 
-The purpose is not to freeze every field forever. The purpose is to prevent the rewrite from losing the current behavioral seams.
+The purpose is not to freeze every field forever. The purpose is to keep the
+rewrite from losing the behavior downstream workflows already rely on.
 
 ## Boundary rules
 
@@ -171,9 +174,9 @@ The following stay outside Core:
 - billing and entitlement logic
 - product-tier policy packs
 
-## Relationship to the higher-order product
+## Relationship to the higher-level product
 
-The higher-order product should be able to compose these Core modules into:
+The higher-level product should be able to compose these Core modules into:
 
 - project discovery
 - request building

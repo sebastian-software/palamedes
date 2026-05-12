@@ -1,12 +1,12 @@
 # Framework Example Notes
 
-This document records what each framework family in the example matrix proves,
+This document records what each framework family in the example matrix verifies,
 which quirks were fixed in Palamedes, and which remaining edges belong to the
 framework/tooling layer rather than the Palamedes runtime model.
 
 ## Next.js
 
-The `nextjs-cookie` and `nextjs-route` examples prove:
+The `nextjs-cookie` and `nextjs-route` examples verify:
 
 - Turbopack-based Next.js 16.2 integration
 - provider-free Palamedes rendering in server components and client widgets
@@ -21,7 +21,7 @@ Palamedes-side fixes already baked into these examples:
 
 ## TanStack Start
 
-The `tanstack-cookie` and `tanstack-route` examples prove:
+The `tanstack-cookie` and `tanstack-route` examples verify:
 
 - Vite-based Palamedes integration in TanStack Start
 - SSR plus localized server functions
@@ -35,7 +35,7 @@ Current framework note:
 
 ## Waku
 
-The `waku-cookie` and `waku-route` examples prove:
+The `waku-cookie` and `waku-route` examples verify:
 
 - Waku file-based `src/pages` routing with the default adapter path
 - Waku-native SSR with provider-free Palamedes rendering
@@ -50,7 +50,7 @@ Palamedes-side fixes already baked into these examples:
 
 ## React Router
 
-The `react-router-cookie` and `react-router-route` examples prove:
+The `react-router-cookie` and `react-router-route` examples verify:
 
 - React Router framework mode with SSR and route actions
 - `.po` loading through `@palamedes/vite-plugin`

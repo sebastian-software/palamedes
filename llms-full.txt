@@ -1,13 +1,15 @@
 # Palamedes: AI Assistant Context
 
-Palamedes is a modern i18n stack for JavaScript and TypeScript applications. It is inspired by the good parts of Lingui-style macro authoring, but it is intentionally narrower and more opinionated.
+Palamedes is i18n tooling for JavaScript and TypeScript teams that want
+familiar macro-style authoring, source-string-first catalogs, and one
+translation model that stays steady across frameworks.
 
-The important design goal is architectural coherence across frameworks:
+The important design goal is a calmer i18n model across frameworks:
 
 - one public message identity model: `message + context`
 - one public runtime access model: `getI18n()`
 - one catalog semantic layer powered by `ferrocat`
-- one native/Rust-first core with OXC-powered transforms and extraction
+- one native core with OXC-powered transforms and extraction
 - thin host adapters for frameworks and bundlers
 
 Verified integrations currently include Next.js, Vite, TanStack Start, SolidStart, Waku, and React Router.
@@ -36,14 +38,14 @@ Recommended app-facing packages:
 - `@palamedes/solid` — Solid translation components and Solid macro entry point
 - `@palamedes/vite-plugin` — Vite integration and `.po` loading
 - `@palamedes/next-plugin` — Next.js integration
-- `@palamedes/cli` — extraction CLI (`pmds extract`)
+- `@palamedes/cli` — extraction and catalog QA CLI (`pmds extract`, `pmds audit`)
 - `@palamedes/config` — typed `palamedes.config.ts` support
 
 Advanced/custom-tooling packages:
 
 - `@palamedes/transform`
 - `@palamedes/extractor`
-- `@palamedes/core-node`
+- `@palamedes/core-node` — native Node wrapper for transform, extract, catalog audit, metadata validation, and catalog combine workflows
 
 Reserved placeholder packages, not the normal starting point today:
 
@@ -118,6 +120,7 @@ Extract catalogs:
 
 ```bash
 pnpm exec pmds extract
+pnpm exec pmds audit
 ```
 
 Load `.po` messages:
@@ -219,6 +222,7 @@ Important consequences:
 - `message + context` is the stable identity users should think about
 - generated internal compiled lookup keys are implementation details
 - source control diffs should stay reviewable and gettext-adjacent
+- catalog health checks should use `pmds audit` or the `auditCatalogs(...)` API
 
 ## CLI model
 
@@ -226,6 +230,7 @@ Current core command:
 
 ```bash
 pnpm exec pmds extract
+pnpm exec pmds audit
 ```
 
 Useful options include:
@@ -234,6 +239,8 @@ Useful options include:
 pnpm exec pmds extract --clean
 pnpm exec pmds extract --watch
 pnpm exec pmds extract --verbose
+pnpm exec pmds audit --json
+pnpm exec pmds audit --fail-on warning
 ```
 
 Do not recommend `--workers` today. Palamedes currently defers worker-thread parallelism until end-to-end benchmarks show user-visible benefit. See `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`.
@@ -261,7 +268,7 @@ When migrating Lingui-style code:
 - prefer `message + context`
 - avoid carrying deprecated Lingui configuration or macro package patterns forward
 - keep runtime setup explicit and aligned with Palamedes' runtime bridge
-- validate catalog output with `pmds extract`
+- validate catalog output with `pmds extract` and `pmds audit`
 
 ## What not to add casually
 

@@ -7,17 +7,22 @@
 
 Reserved package name for the future `pnpm create palamedes` experience.
 
-Today this package is intentionally minimal. It exists so Palamedes can grow into a proper first-run scaffold without losing the canonical npm entry point later.
+Today this package is intentionally minimal. It keeps the future
+`pnpm create palamedes` path available while the scoped packages remain the
+right way to start.
 
 ## When To Use This Package
 
 Right now, you probably should not.
 
-`create-palamedes` is a placeholder package that prints a short status message and exits. Once scaffolding lands, this will become the natural starting point for `pnpm create palamedes`.
+`create-palamedes` is a placeholder package that prints a short status message
+and exits. Once scaffolding lands, this will become the natural starting point
+for `pnpm create palamedes`.
 
 ## Installation
 
-You do not need to add this package to a project today. If you are setting up Palamedes now, install the specific packages you need:
+You do not need to add this package to a project today. If you are setting up
+Palamedes now, install the specific packages you need:
 
 ```bash
 pnpm add @palamedes/core @palamedes/runtime @palamedes/vite-plugin

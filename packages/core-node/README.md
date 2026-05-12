@@ -7,9 +7,13 @@
 
 The Node.js wrapper around Palamedes' native core.
 
-Use this package when you are building tooling on top of Palamedes and want direct access to native catalog updates, `.po` parsing, extraction, or macro transformation.
+Use this package when you are building tooling on top of Palamedes and want
+direct access to the careful parts of the system: catalog updates, audits,
+metadata validation, `.po` parsing, extraction, and macro transformation.
 
-The public catalog model is source-string-first: `message + context` is the semantic identity, while any compact lookup key remains an internal compile/runtime detail.
+The public catalog model is source-string-first: `message + context` is the
+semantic identity, while compact lookup keys remain internal compile/runtime
+details.
 
 ## When To Use This Package
 
@@ -67,14 +71,20 @@ console.log(po.headers.Language)
 - `parsePo(source)`
 - `updateCatalogFile(request)`
 - `parseCatalog(source, locale, sourceLocale)`
+- `auditCatalogs(config, options?)`
+- `deriveMessageMetadata(message, context?)`
+- `normalizeMessageMetadata(input)`
+- `validateMessageMetadata(input)`
+- `combineCatalogs(request)`
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `extractMessagesNative(source, filename)`
 - `transformMacrosNative(source, filename, options?)`
 
-Catalog artifact compilation uses Ferrocat's ICU authoring diagnostics to report
-source/translation argument and tag mismatches without taking over runtime
-number, date, or locale formatting.
+Catalog operations use Ferrocat for parsing, updates, audits, ICU authoring
+diagnostics, metadata validation, and deterministic combine workflows. That
+keeps custom tooling close to the same semantics used by the official CLI and
+framework plugins.
 
 ## Related Packages
 

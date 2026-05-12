@@ -2,6 +2,10 @@
 
 Palamedes is not limited to React frameworks.
 
+The same steady runtime model also works in regular request/response servers.
+That matters when translations need to appear in emails, API-rendered HTML,
+server actions, or small backend services that sit next to the frontend.
+
 If transformed code can resolve the active i18n instance through
 `@palamedes/runtime`, the same model also works in backend applications such as:
 
@@ -130,8 +134,8 @@ instance through the runtime getter.
 
 ## What This Means For The Product Story
 
-This matters for positioning because Palamedes is not only “for frontend
-framework adapters.”
+This matters for positioning because Palamedes is not only "frontend framework
+tooling."
 
 The same runtime model already covers:
 

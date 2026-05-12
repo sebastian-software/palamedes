@@ -2,19 +2,21 @@
 
 This backlog turns real engineering work in Palamedes into outward-facing proof and positioning.
 
-The goal is not “talk about Rust.” The goal is to show why Palamedes feels cleaner, faster, and easier to trust.
+The goal is not "talk about Rust." The goal is to show why Palamedes feels
+cleaner, faster, and easier to trust.
 
 ## Core Positioning Line
 
-**Palamedes brings Rust-like discipline to JavaScript i18n tooling: fewer legacy branches, clearer semantic ownership, and faster hot paths.**
+**Palamedes is i18n tooling for JavaScript teams that want a familiar authoring
+flow and a calmer system underneath.**
 
 ## First 5 Assets
 
 ### 1. Flagship essay
 
-- **Title**: Rust-like discipline for JavaScript i18n tooling
-- **Goal**: establish the product philosophy and the difference between “written in Rust” and “architected with discipline”
-- **Key message**: Palamedes removes historical branches and duplicate semantics instead of only chasing speed
+- **Title**: A calmer path for JavaScript i18n
+- **Goal**: establish the product philosophy and the difference between native implementation detail and product experience
+- **Key message**: Palamedes keeps authoring familiar while making the underlying system easier to understand, verify, and trust
 
 ### 2. Case study
 
@@ -26,7 +28,7 @@ The goal is not “talk about Rust.” The goal is to show why Palamedes feels c
 
 - **Title**: Measuring Palamedes honestly
 - **Goal**: support speed claims with reproducible methodology
-- **Key message**: the important story is not hype, but visible hot-path wins with exact commands and fixtures
+- **Key message**: the important story is not hype, but visible wins with exact commands and fixtures
 
 ### 4. Migration post
 
@@ -51,7 +53,7 @@ Suggested topics:
 - why compiled artifacts should be host-neutral
 - why fewer legacy branches is a product feature
 - why delegating semantics can make a tool feel more mature, not less
-- why “faster” matters less than “clearer ownership”
+- why "faster" matters less than "easier to trust"
 
 ## Tone Rules
 

@@ -2,13 +2,16 @@
 
 These are the product principles that shape Palamedes today.
 
-They matter because the point of Palamedes is not only raw speed. It is a cleaner long-term i18n stack for JavaScript and TypeScript applications.
+They matter because Palamedes is not only trying to make i18n faster. It is
+trying to make translation work feel calmer: fewer moving parts, clearer
+ownership, and one model that teams can carry across frameworks.
 
 ## 1. Source Strings Come First
 
 Palamedes treats `message + context` as the public identity.
 
-That keeps authoring, extraction, diagnostics, and catalogs aligned with gettext-style semantics instead of splitting identity across multiple public concepts.
+That keeps authoring, extraction, diagnostics, and catalogs aligned instead of
+splitting identity across multiple public concepts.
 
 ## 2. One Runtime Model
 
@@ -30,7 +33,9 @@ That means:
 
 Palamedes uses `ferrocat` for catalog and ICU semantics instead of carrying bespoke PO glue in multiple places.
 
-That is a product decision, not only an implementation detail.
+That is a product decision, not only an implementation detail. Catalogs should
+be predictable enough for engineers, translators, and future automation to
+trust.
 
 ## 5. Host-Neutral Artifacts, Host-Specific Rendering
 
@@ -52,14 +57,15 @@ That makes the product narrower, but easier to trust.
 
 ## 7. Rust Is Evidence, Not The Headline
 
-The point is not “this is written in Rust.”
+The point is not "this is written in Rust."
 
-The point is that Palamedes applies Rust-like discipline to JavaScript i18n tooling:
+The point is that Palamedes uses the Rust core to make JavaScript i18n feel
+more dependable:
 
 - clear boundaries
-- strong ownership
+- clear ownership
 - fewer duplicated semantics
-- faster hot paths
+- faster everyday operations
 
 ## 8. Keep Translation Control Surfaces Separate
 
