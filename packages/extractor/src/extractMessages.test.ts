@@ -107,6 +107,23 @@ describe("extractMessages", () => {
     })
   })
 
+  describe("placeholder metadata", () => {
+    it("keeps source expressions for template literal placeholder hints", () => {
+      const code = `
+        import { t } from "@palamedes/core/macro"
+        const message = t\`Hello \${name}, \${first + last}\`
+      `
+      const messages = extract(code)
+
+      expect(messages).toHaveLength(1)
+      expect(messages[0].message).toBe("Hello {name}, {1}")
+      expect(messages[0].placeholders).toEqual({
+        name: "name",
+        "1": "first + last",
+      })
+    })
+  })
+
   describe("breaking changes", () => {
     it("rejects explicit ids in macros", () => {
       const code = `

@@ -56,7 +56,7 @@ describe("extract", () => {
     const enCatalog = normalizePo(await readCatalog(fixtureDir, "en"))
     expect(findItem(enCatalog.items, "Hello descriptor")?.msgstr).toEqual(["Hello descriptor"])
     expect(await readCatalog(fixtureDir, "en")).toContain(
-      "#. placeholder {0}: 0"
+      "#. placeholder {0}: first + last"
     )
   })
 

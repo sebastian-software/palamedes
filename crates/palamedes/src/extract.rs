@@ -9,7 +9,7 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
-use oxc_span::SourceType;
+use oxc_span::{GetSpan, SourceType};
 use serde::Serialize;
 
 const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
@@ -101,6 +101,7 @@ impl<'a> Visit<'a> for MacroCollector {
 
 struct ExtractionVisitor<'a> {
     filename: String,
+    source: &'a str,
     line_locator: &'a LineLocator,
     imported_macros: &'a HashMap<String, ImportedMacro>,
     messages: Vec<ExtractedMessageRecord>,
@@ -110,11 +111,13 @@ struct ExtractionVisitor<'a> {
 impl<'a> ExtractionVisitor<'a> {
     fn new(
         filename: &str,
+        source: &'a str,
         line_locator: &'a LineLocator,
         imported_macros: &'a HashMap<String, ImportedMacro>,
     ) -> Self {
         Self {
             filename: filename.to_string(),
+            source,
             line_locator,
             imported_macros,
             messages: Vec::new(),
@@ -190,6 +193,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 if let Some(message) = extract_from_tagged_template(
                     &it.quasi,
                     self.origin(it.span.start as usize),
+                    self.source,
                     false,
                 ) {
                     self.push(message);
@@ -198,9 +202,12 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
         }
 
         if is_i18n_runtime_call(&it.tag, true) {
-            if let Some(message) =
-                extract_from_tagged_template(&it.quasi, self.origin(it.span.start as usize), true)
-            {
+            if let Some(message) = extract_from_tagged_template(
+                &it.quasi,
+                self.origin(it.span.start as usize),
+                self.source,
+                true,
+            ) {
                 self.push(message);
             }
         }
@@ -409,9 +416,10 @@ fn extract_from_jsx_element(
 fn extract_from_tagged_template(
     template: &TemplateLiteral<'_>,
     origin: (String, usize, Option<usize>),
+    source: &str,
     _runtime: bool,
 ) -> Option<ExtractedMessageRecord> {
-    let (message, placeholders) = template_to_message(template);
+    let (message, placeholders) = template_to_message(template, source);
     if message.is_empty() {
         return None;
     }
@@ -572,7 +580,10 @@ fn extract_from_runtime_call(
     }))
 }
 
-fn template_to_message(template: &TemplateLiteral<'_>) -> (String, BTreeMap<String, String>) {
+fn template_to_message(
+    template: &TemplateLiteral<'_>,
+    source: &str,
+) -> (String, BTreeMap<String, String>) {
     let mut message = String::new();
     let mut placeholders = BTreeMap::new();
 
@@ -585,14 +596,24 @@ fn template_to_message(template: &TemplateLiteral<'_>) -> (String, BTreeMap<Stri
 
         if let Some(expr) = template.expressions.get(index) {
             let placeholder = expression_name(expr).unwrap_or_else(|| index.to_string());
+            let expression = expression_source(expr, source).unwrap_or_else(|| placeholder.clone());
             message.push('{');
             message.push_str(&placeholder);
             message.push('}');
-            placeholders.insert(placeholder.clone(), placeholder);
+            placeholders.insert(placeholder, expression);
         }
     }
 
     (message, placeholders)
+}
+
+fn expression_source(expr: &Expression<'_>, source: &str) -> Option<String> {
+    let span = expr.span();
+    source
+        .get(span.start as usize..span.end as usize)
+        .map(str::trim)
+        .filter(|expression| !expression.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> BTreeMap<String, String> {
@@ -845,7 +866,8 @@ pub fn extract_messages(
     let mut collector = MacroCollector::new();
     collector.visit_program(&parsed.program);
 
-    let mut extractor = ExtractionVisitor::new(filename, &line_locator, &collector.imported_macros);
+    let mut extractor =
+        ExtractionVisitor::new(filename, source, &line_locator, &collector.imported_macros);
     extractor.visit_program(&parsed.program);
 
     if let Some(error) = extractor.error {
@@ -864,13 +886,22 @@ mod tests {
         let messages = extract_messages(
             r#"
               import { t } from "@palamedes/core/macro"
-              const message = t`Hello ${name}`
+              const message = t`Hello ${name} and ${first + last}`
             "#,
             "test.tsx",
         )
         .expect("messages should extract");
 
-        assert_eq!(messages[0].message, "Hello {name}");
+        assert_eq!(messages[0].message, "Hello {name} and {1}");
+        let placeholders = messages[0]
+            .placeholders
+            .as_ref()
+            .expect("placeholder metadata");
+        assert_eq!(placeholders.get("name").map(String::as_str), Some("name"));
+        assert_eq!(
+            placeholders.get("1").map(String::as_str),
+            Some("first + last")
+        );
     }
 
     #[test]

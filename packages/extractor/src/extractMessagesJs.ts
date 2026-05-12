@@ -154,7 +154,7 @@ export function extractMessages(
         const macro = isPalamedesMacro(tagName, JS_MACROS)
 
         if (macro && (macro.importedName === "t" || macro.importedName === "msg")) {
-          const extracted = extractFromTaggedTemplate(node, filename, getLine)
+          const extracted = extractFromTaggedTemplate(node, filename, getLine, code)
           if (extracted) {
             messages.push(extracted)
           }
@@ -194,7 +194,7 @@ export function extractMessages(
       if (node.type === "TaggedTemplateExpression") {
         // Check for i18n.t`...`
         if (isI18nRuntimeCall(node.tag, true)) {
-          const extracted = extractFromRuntimeTaggedTemplate(node, filename, getLine)
+          const extracted = extractFromRuntimeTaggedTemplate(node, filename, getLine, code)
           if (extracted) {
             messages.push(extracted)
           }
@@ -272,7 +272,8 @@ function extractFromJSXElement(
 function extractFromTaggedTemplate(
   node: any,
   filename: string,
-  getLine: (offset: number) => number
+  getLine: (offset: number) => number,
+  code?: string
 ): ExtractedMessageInfo | null {
   const quasi = node.quasi
   if (!quasi) return null
@@ -280,7 +281,7 @@ function extractFromTaggedTemplate(
   const line = getLine(node.start || 0)
   const column = undefined
 
-  const { message, placeholders } = extractFromTemplateLiteral(quasi)
+  const { message, placeholders } = extractFromTemplateLiteral(quasi, code)
 
   if (!message) return null
 
@@ -298,7 +299,8 @@ function extractFromTaggedTemplate(
 function extractFromRuntimeTaggedTemplate(
   node: any,
   filename: string,
-  getLine: (offset: number) => number
+  getLine: (offset: number) => number,
+  code?: string
 ): ExtractedMessageInfo | null {
   const quasi = node.quasi
   if (!quasi) return null
@@ -306,7 +308,7 @@ function extractFromRuntimeTaggedTemplate(
   const line = getLine(node.start || 0)
   const column = undefined
 
-  const { message, placeholders } = extractFromTemplateLiteral(quasi)
+  const { message, placeholders } = extractFromTemplateLiteral(quasi, code)
 
   if (!message) return null
 
@@ -640,7 +642,7 @@ function getStringValue(node: any): string | undefined {
 /**
  * Extract message and placeholders from template literal
  */
-function extractFromTemplateLiteral(quasi: any): {
+function extractFromTemplateLiteral(quasi: any, code?: string): {
   message: string
   placeholders: Record<string, string>
 } {
@@ -657,8 +659,7 @@ function extractFromTemplateLiteral(quasi: any): {
       const expr = expressions[i]
       const name = extractExpressionName(expr) || String(i)
       parts.push(`{${name}}`)
-      // Store the original expression as placeholder
-      placeholders[name] = name
+      placeholders[name] = extractExpressionSource(expr, code) || name
     }
   }
 
@@ -666,6 +667,15 @@ function extractFromTemplateLiteral(quasi: any): {
     message: parts.join(""),
     placeholders,
   }
+}
+
+function extractExpressionSource(expr: any, code?: string): string | undefined {
+  if (!code || typeof expr?.start !== "number" || typeof expr?.end !== "number") {
+    return undefined
+  }
+
+  const expression = code.slice(expr.start, expr.end).trim()
+  return expression || undefined
 }
 
 /**
