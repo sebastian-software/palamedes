@@ -26,7 +26,10 @@ import type {
   MessageArgumentKind as GeneratedMessageArgumentKind,
   MessageArgumentMetadata as GeneratedMessageArgumentMetadata,
   MessageFormatStyleKind as GeneratedMessageFormatStyleKind,
+  MessageMetadata as GeneratedMessageMetadata,
+  MessageMetadataDiagnostic as GeneratedMessageMetadataDiagnostic,
   MessageMetadataInput as GeneratedMessageMetadataInput,
+  MessageMetadataValidationReport as GeneratedMessageMetadataValidationReport,
   MessageOriginMetadata as GeneratedMessageOriginMetadata,
   MessageSelectorKind as GeneratedMessageSelectorKind,
   MessageSelectorMetadata as GeneratedMessageSelectorMetadata,
@@ -86,6 +89,15 @@ export type MessageArgumentFormatMetadata = GeneratedMessageArgumentFormatMetada
 export type MessageFormatStyleKind = GeneratedMessageFormatStyleKind
 export type MessageSelectorKind = GeneratedMessageSelectorKind
 export type MessageSelectorMetadata = GeneratedMessageSelectorMetadata
+export type MessageMetadata = GeneratedMessageMetadata
+export type MessageMetadataDiagnostic =
+  Omit<GeneratedMessageMetadataDiagnostic, "severity"> & {
+  severity: CatalogDiagnosticSeverity
+  }
+export type MessageMetadataValidationReport =
+  Omit<GeneratedMessageMetadataValidationReport, "diagnostics"> & {
+  diagnostics: MessageMetadataDiagnostic[]
+  }
 
 export type NativeExtractedMessage =
   Omit<GeneratedNativeExtractedMessage, "origin"> & {
@@ -226,6 +238,31 @@ export function auditCatalogs(
 
   return {
     ...result,
+    diagnostics: result.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      severity: mapNativeDiagnosticSeverity(diagnostic.severity),
+    })),
+  }
+}
+
+export function deriveMessageMetadata(
+  message: string,
+  context?: string
+): MessageMetadata {
+  return native.deriveMessageMetadata(message, context)
+}
+
+export function normalizeMessageMetadata(
+  input: MessageMetadataInput
+): MessageMetadata {
+  return native.normalizeMessageMetadata(input)
+}
+
+export function validateMessageMetadata(
+  input: MessageMetadataInput
+): MessageMetadataValidationReport {
+  const result = native.validateMessageMetadata(input)
+  return {
     diagnostics: result.diagnostics.map((diagnostic) => ({
       ...diagnostic,
       severity: mapNativeDiagnosticSeverity(diagnostic.severity),

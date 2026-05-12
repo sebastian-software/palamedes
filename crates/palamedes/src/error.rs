@@ -14,6 +14,9 @@ pub enum PalamedesError {
     /// A higher-level `ferrocat` catalog API failed.
     #[error(transparent)]
     CatalogApi(#[from] ferrocat::ApiError),
+    /// An ICU MessageFormat v1 payload could not be parsed.
+    #[error(transparent)]
+    ParseIcu(#[from] ferrocat::IcuParseError),
     /// Reading a file from disk failed.
     #[error("Failed to read {path}: {source}")]
     ReadFile {

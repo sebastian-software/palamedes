@@ -107,6 +107,24 @@ export interface MessageMetadataInput {
   tags?: Array<string>;
   selectors?: Record<string, MessageSelectorMetadata>;
 }
+export interface MessageMetadata {
+  msgid: string;
+  msgctxt?: string;
+  description?: string;
+  origin: Array<MessageOriginMetadata>;
+  args: Record<string, MessageArgumentMetadata>;
+  tags: Array<string>;
+  selectors: Record<string, MessageSelectorMetadata>;
+}
+export interface MessageMetadataDiagnostic {
+  severity: CatalogDiagnosticSeverity;
+  code: string;
+  message: string;
+  name?: string;
+}
+export interface MessageMetadataValidationReport {
+  diagnostics: Array<MessageMetadataDiagnostic>;
+}
 export interface MessageOriginMetadata {
   file?: string;
   line?: number;
@@ -238,6 +256,9 @@ export interface NativeBindings {
   updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult;
   parseCatalog(request: CatalogParseRequest): CatalogParseResult;
   auditCatalogs(request: CatalogAuditRequest): CatalogAuditResult;
+  deriveMessageMetadata(message: string, context?: string | undefined | null): MessageMetadata;
+  normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata;
+  validateMessageMetadata(input: MessageMetadataInput): MessageMetadataValidationReport;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;

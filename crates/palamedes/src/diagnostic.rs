@@ -48,6 +48,16 @@ impl From<ferrocat::DiagnosticSeverity> for CatalogDiagnosticSeverity {
     }
 }
 
+impl From<ferrocat::IcuDiagnosticSeverity> for CatalogDiagnosticSeverity {
+    fn from(value: ferrocat::IcuDiagnosticSeverity) -> Self {
+        match value {
+            ferrocat::IcuDiagnosticSeverity::Info => Self::Info,
+            ferrocat::IcuDiagnosticSeverity::Warning => Self::Warning,
+            ferrocat::IcuDiagnosticSeverity::Error => Self::Error,
+        }
+    }
+}
+
 impl From<ferrocat::Diagnostic> for CatalogDiagnostic {
     fn from(value: ferrocat::Diagnostic) -> Self {
         let source_key = value.msgid.map(|message| CatalogDiagnosticSourceKey {

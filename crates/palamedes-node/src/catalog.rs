@@ -151,6 +151,30 @@ pub struct MessageMetadataInput {
 }
 
 #[napi(object)]
+pub struct MessageMetadata {
+    pub msgid: String,
+    pub msgctxt: Option<String>,
+    pub description: Option<String>,
+    pub origin: Vec<MessageOriginMetadata>,
+    pub args: HashMap<String, MessageArgumentMetadata>,
+    pub tags: Vec<String>,
+    pub selectors: HashMap<String, MessageSelectorMetadata>,
+}
+
+#[napi(object)]
+pub struct MessageMetadataDiagnostic {
+    pub severity: CatalogDiagnosticSeverity,
+    pub code: String,
+    pub message: String,
+    pub name: Option<String>,
+}
+
+#[napi(object)]
+pub struct MessageMetadataValidationReport {
+    pub diagnostics: Vec<MessageMetadataDiagnostic>,
+}
+
+#[napi(object)]
 pub struct MessageOriginMetadata {
     pub file: Option<String>,
     pub line: Option<u32>,
@@ -517,8 +541,45 @@ impl From<MessageMetadataInput> for palamedes::MessageMetadataInput {
     }
 }
 
+impl From<palamedes::MessageMetadata> for MessageMetadata {
+    fn from(value: palamedes::MessageMetadata) -> Self {
+        Self {
+            msgid: value.msgid,
+            msgctxt: value.msgctxt,
+            description: value.description,
+            origin: value
+                .origin
+                .into_iter()
+                .map(MessageOriginMetadata::from)
+                .collect(),
+            args: value
+                .args
+                .into_iter()
+                .map(|(name, argument)| (name, argument.into()))
+                .collect(),
+            tags: value.tags,
+            selectors: value
+                .selectors
+                .into_iter()
+                .map(|(name, selector)| (name, selector.into()))
+                .collect(),
+        }
+    }
+}
+
 impl From<MessageOriginMetadata> for palamedes::MessageOriginMetadata {
     fn from(value: MessageOriginMetadata) -> Self {
+        Self {
+            file: value.file,
+            line: value.line,
+            component: value.component,
+            route: value.route,
+        }
+    }
+}
+
+impl From<palamedes::MessageOriginMetadata> for MessageOriginMetadata {
+    fn from(value: palamedes::MessageOriginMetadata) -> Self {
         Self {
             file: value.file,
             line: value.line,
@@ -547,6 +608,25 @@ impl From<MessageArgumentKind> for palamedes::MessageArgumentKind {
     }
 }
 
+impl From<palamedes::MessageArgumentKind> for MessageArgumentKind {
+    fn from(value: palamedes::MessageArgumentKind) -> Self {
+        match value {
+            palamedes::MessageArgumentKind::String => Self::String,
+            palamedes::MessageArgumentKind::Number => Self::Number,
+            palamedes::MessageArgumentKind::Date => Self::Date,
+            palamedes::MessageArgumentKind::Time => Self::Time,
+            palamedes::MessageArgumentKind::Datetime => Self::Datetime,
+            palamedes::MessageArgumentKind::Boolean => Self::Boolean,
+            palamedes::MessageArgumentKind::Enum => Self::Enum,
+            palamedes::MessageArgumentKind::List => Self::List,
+            palamedes::MessageArgumentKind::Duration => Self::Duration,
+            palamedes::MessageArgumentKind::RelativeTime => Self::RelativeTime,
+            palamedes::MessageArgumentKind::Name => Self::Name,
+            palamedes::MessageArgumentKind::Unknown => Self::Unknown,
+        }
+    }
+}
+
 impl From<MessageArgumentMetadata> for palamedes::MessageArgumentMetadata {
     fn from(value: MessageArgumentMetadata) -> Self {
         Self {
@@ -556,6 +636,17 @@ impl From<MessageArgumentMetadata> for palamedes::MessageArgumentMetadata {
             format: value
                 .format
                 .map(palamedes::MessageArgumentFormatMetadata::from),
+        }
+    }
+}
+
+impl From<palamedes::MessageArgumentMetadata> for MessageArgumentMetadata {
+    fn from(value: palamedes::MessageArgumentMetadata) -> Self {
+        Self {
+            kind: value.kind.into(),
+            role: value.role,
+            values: value.values,
+            format: value.format.map(MessageArgumentFormatMetadata::from),
         }
     }
 }
@@ -571,6 +662,15 @@ impl From<MessageArgumentFormatMetadata> for palamedes::MessageArgumentFormatMet
     }
 }
 
+impl From<palamedes::MessageArgumentFormatMetadata> for MessageArgumentFormatMetadata {
+    fn from(value: palamedes::MessageArgumentFormatMetadata) -> Self {
+        Self {
+            style: value.style,
+            style_kind: value.style_kind.map(MessageFormatStyleKind::from),
+        }
+    }
+}
+
 impl From<MessageFormatStyleKind> for palamedes::MessageFormatStyleKind {
     fn from(value: MessageFormatStyleKind) -> Self {
         match value {
@@ -578,6 +678,17 @@ impl From<MessageFormatStyleKind> for palamedes::MessageFormatStyleKind {
             MessageFormatStyleKind::Predefined => Self::Predefined,
             MessageFormatStyleKind::Skeleton => Self::Skeleton,
             MessageFormatStyleKind::Pattern => Self::Pattern,
+        }
+    }
+}
+
+impl From<palamedes::MessageFormatStyleKind> for MessageFormatStyleKind {
+    fn from(value: palamedes::MessageFormatStyleKind) -> Self {
+        match value {
+            palamedes::MessageFormatStyleKind::None => Self::None,
+            palamedes::MessageFormatStyleKind::Predefined => Self::Predefined,
+            palamedes::MessageFormatStyleKind::Skeleton => Self::Skeleton,
+            palamedes::MessageFormatStyleKind::Pattern => Self::Pattern,
         }
     }
 }
@@ -592,12 +703,55 @@ impl From<MessageSelectorMetadata> for palamedes::MessageSelectorMetadata {
     }
 }
 
+impl From<palamedes::MessageSelectorMetadata> for MessageSelectorMetadata {
+    fn from(value: palamedes::MessageSelectorMetadata) -> Self {
+        Self {
+            kind: value.kind.into(),
+            cases: value.cases,
+            offset: value.offset,
+        }
+    }
+}
+
 impl From<MessageSelectorKind> for palamedes::MessageSelectorKind {
     fn from(value: MessageSelectorKind) -> Self {
         match value {
             MessageSelectorKind::Select => Self::Select,
             MessageSelectorKind::Plural => Self::Plural,
             MessageSelectorKind::Selectordinal => Self::SelectOrdinal,
+        }
+    }
+}
+
+impl From<palamedes::MessageSelectorKind> for MessageSelectorKind {
+    fn from(value: palamedes::MessageSelectorKind) -> Self {
+        match value {
+            palamedes::MessageSelectorKind::Select => Self::Select,
+            palamedes::MessageSelectorKind::Plural => Self::Plural,
+            palamedes::MessageSelectorKind::SelectOrdinal => Self::Selectordinal,
+        }
+    }
+}
+
+impl From<palamedes::MessageMetadataDiagnostic> for MessageMetadataDiagnostic {
+    fn from(value: palamedes::MessageMetadataDiagnostic) -> Self {
+        Self {
+            severity: value.severity.into(),
+            code: value.code,
+            message: value.message,
+            name: value.name,
+        }
+    }
+}
+
+impl From<palamedes::MessageMetadataValidationReport> for MessageMetadataValidationReport {
+    fn from(value: palamedes::MessageMetadataValidationReport) -> Self {
+        Self {
+            diagnostics: value
+                .diagnostics
+                .into_iter()
+                .map(MessageMetadataDiagnostic::from)
+                .collect(),
         }
     }
 }
@@ -707,6 +861,42 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> Result<CatalogAuditResult
     palamedes::audit_catalogs(request.into())
         .map_err(to_napi_error)
         .and_then(CatalogAuditResult::try_from)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Derives normalized semantic metadata from an ICU MessageFormat v1 message.
+///
+/// # Errors
+///
+/// Returns an error when the message is not valid ICU MessageFormat v1.
+pub fn derive_message_metadata(
+    message: String,
+    context: Option<String>,
+) -> Result<MessageMetadata> {
+    palamedes::derive_message_metadata(&message, context.as_deref())
+        .map(MessageMetadata::from)
+        .map_err(to_napi_error)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Normalizes progressive semantic metadata into canonical object form.
+///
+/// # Errors
+///
+/// Returns an error when the metadata `msgid` is not valid ICU MessageFormat v1.
+pub fn normalize_message_metadata(input: MessageMetadataInput) -> Result<MessageMetadata> {
+    palamedes::normalize_message_metadata(input.into())
+        .map(MessageMetadata::from)
+        .map_err(to_napi_error)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Validates progressive semantic metadata against its `msgid`.
+pub fn validate_message_metadata(input: MessageMetadataInput) -> MessageMetadataValidationReport {
+    palamedes::validate_message_metadata(input.into()).into()
 }
 
 #[napi]

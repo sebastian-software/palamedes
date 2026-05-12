@@ -49,8 +49,10 @@ pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagno
 pub use error::{PalamedesError, PalamedesResult};
 pub use extract::{extract_messages, ExtractedMessageRecord};
 pub use message_metadata::{
+    derive_message_metadata, normalize_message_metadata, validate_message_metadata,
     MessageArgumentFormatMetadata, MessageArgumentKind, MessageArgumentMetadata,
-    MessageArgumentMetadataInput, MessageFormatStyleKind, MessageMetadataInput,
+    MessageArgumentMetadataInput, MessageFormatStyleKind, MessageMetadata,
+    MessageMetadataDiagnostic, MessageMetadataInput, MessageMetadataValidationReport,
     MessageOriginMetadata, MessageSelectorKind, MessageSelectorMetadata,
 };
 pub use transform::{
