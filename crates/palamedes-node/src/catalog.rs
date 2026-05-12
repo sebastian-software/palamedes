@@ -16,6 +16,7 @@ pub struct CatalogOrigin {
 pub struct CatalogUpdateMessage {
     pub message: String,
     pub context: Option<String>,
+    pub placeholders: Option<HashMap<String, Vec<String>>>,
     pub extracted_comments: Vec<String>,
     pub origins: Vec<CatalogOrigin>,
 }
@@ -125,6 +126,7 @@ impl From<CatalogUpdateMessage> for palamedes::CatalogUpdateMessage {
         Self {
             message: value.message,
             context: value.context,
+            placeholders: value.placeholders.unwrap_or_default().into_iter().collect(),
             extracted_comments: value.extracted_comments,
             origins: value
                 .origins

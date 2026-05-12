@@ -29,6 +29,9 @@ pub struct CatalogUpdateMessage {
     /// Optional gettext context.
     #[serde(default)]
     pub context: Option<String>,
+    /// Placeholder hints keyed by placeholder name.
+    #[serde(default)]
+    pub placeholders: BTreeMap<String, Vec<String>>,
     /// Extracted comments refreshed into the catalog.
     #[serde(default)]
     pub extracted_comments: Vec<String>,
@@ -223,7 +226,7 @@ fn project_message(message: CatalogUpdateMessage) -> PalamedesResult<SourceExtra
         msgctxt: message.context,
         comments: message.extracted_comments,
         origin: origins,
-        placeholders: BTreeMap::new(),
+        placeholders: message.placeholders,
     })
 }
 
@@ -287,6 +290,8 @@ fn format_diagnostic(diagnostic: &Diagnostic) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::{
         update_catalog_file, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
     };
@@ -313,6 +318,7 @@ mod tests {
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
+                placeholders: BTreeMap::new(),
                 extracted_comments: vec![],
                 origins: vec![CatalogUpdateOrigin {
                     file: "src/App.tsx".to_owned(),
@@ -351,6 +357,7 @@ mod tests {
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
+                placeholders: BTreeMap::new(),
                 extracted_comments: vec![],
                 origins: vec![],
             }],
@@ -384,6 +391,7 @@ mod tests {
             messages: vec![CatalogUpdateMessage {
                 message: "Keep".to_owned(),
                 context: None,
+                placeholders: BTreeMap::new(),
                 extracted_comments: vec![],
                 origins: vec![],
             }],
@@ -406,6 +414,7 @@ mod tests {
             messages: vec![CatalogUpdateMessage {
                 message: "{count, plural, one {# item} other {# items}}".to_owned(),
                 context: None,
+                placeholders: BTreeMap::new(),
                 extracted_comments: vec![],
                 origins: vec![],
             }],
@@ -414,5 +423,28 @@ mod tests {
 
         let output = std::fs::read_to_string(&path).expect("read");
         assert!(output.contains("{count, plural, one {# item} other {# items}}"));
+    }
+
+    #[test]
+    fn forwards_extracted_placeholders_to_ferrocat_update() {
+        let path = temp_file("placeholders");
+
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            messages: vec![CatalogUpdateMessage {
+                message: "Hello {0}".to_owned(),
+                context: None,
+                placeholders: BTreeMap::from([("0".to_owned(), vec!["user.name".to_owned()])]),
+                extracted_comments: vec![],
+                origins: vec![],
+            }],
+        })
+        .expect("update");
+
+        let output = std::fs::read_to_string(&path).expect("read");
+        assert!(output.contains("#. placeholder {0}: user.name"));
     }
 }

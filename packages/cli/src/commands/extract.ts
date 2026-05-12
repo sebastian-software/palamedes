@@ -26,6 +26,7 @@ const TIMING_MARKER = "__PALAMEDES_TIMINGS__"
 interface AggregatedCatalogEntry {
   message: string
   context?: string
+  placeholders: Record<string, string[]>
   extractedComments: string[]
   origins: Array<{ file: string; line: number }>
 }
@@ -139,10 +140,13 @@ async function extractFromCatalog(
           messages[key] = {
             message: msg.message,
             context: msg.context,
+            placeholders: {},
             extractedComments: msg.comment ? [msg.comment] : [],
             origins: [],
           }
         }
+
+        mergePlaceholders(messages[key].placeholders, msg.placeholders)
 
         if (msg.origin) {
           const origin = {
@@ -244,6 +248,7 @@ function catalogToMessages(catalog: AggregatedCatalog): CatalogUpdateMessage[] {
   return Object.values(catalog).map((entry) => ({
     message: entry.message,
     context: entry.context,
+    placeholders: entry.placeholders,
     extractedComments: entry.extractedComments ?? [],
     origins: (entry.origins ?? []).map((origin) => ({
       file: origin.file,
@@ -254,4 +259,21 @@ function catalogToMessages(catalog: AggregatedCatalog): CatalogUpdateMessage[] {
 
 function createCatalogKey(message: string, context?: string): string {
   return `${context ?? ""}\u0004${message}`
+}
+
+function mergePlaceholders(
+  target: Record<string, string[]>,
+  source?: Record<string, string>
+): void {
+  if (!source) {
+    return
+  }
+
+  for (const [name, expression] of Object.entries(source)) {
+    const values = target[name] ?? []
+    if (!values.includes(expression)) {
+      values.push(expression)
+    }
+    target[name] = values
+  }
 }
