@@ -31,7 +31,7 @@ export interface CatalogUpdateResult {
   created: boolean;
   updated: boolean;
   stats: CatalogUpdateStats;
-  diagnostics: Array<string>;
+  diagnostics: Array<CatalogDiagnostic>;
 }
 export interface CatalogParseRequest {
   targetPath: string;
@@ -49,12 +49,18 @@ export interface CatalogParseResult {
   locale?: string;
   headers: Record<string, string>;
   messages: Array<ParsedCatalogMessage>;
-  diagnostics: Array<string>;
+  diagnostics: Array<CatalogDiagnostic>;
 }
 export type CatalogDiagnosticSeverity = "Info" | "Warning" | "Error"
 export interface CatalogDiagnosticSourceKey {
   message: string;
   context?: string;
+}
+export interface CatalogDiagnostic {
+  severity: CatalogDiagnosticSeverity;
+  code: string;
+  message: string;
+  sourceKey?: CatalogDiagnosticSourceKey;
 }
 export interface CatalogAuditCheckOptions {
   completeness?: boolean;

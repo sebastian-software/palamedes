@@ -189,7 +189,7 @@ async function writeCatalog(
   const dir = path.dirname(poPath)
   await mkdir(dir, { recursive: true })
 
-  updateCatalogFile({
+  const result = updateCatalogFile({
     targetPath: poPath,
     locale,
     sourceLocale: config.sourceLocale,
@@ -199,6 +199,12 @@ async function writeCatalog(
 
   if (options.verbose) {
     console.log(chalk.gray(`  → ${poPath}`))
+    for (const diagnostic of result.diagnostics) {
+      console.warn(
+        chalk.yellow("Warning:"),
+        `${diagnostic.code}: ${diagnostic.message}`
+      )
+    }
   }
 
   return Date.now() - startedAt

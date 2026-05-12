@@ -45,7 +45,7 @@ pub use catalog_update::{
     CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, CatalogUpdateResponse,
     CatalogUpdateStats, ParsedCatalogMessage,
 };
-pub use diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
+pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
 pub use extract::{extract_messages, ExtractedMessageRecord};
 pub use message_metadata::{

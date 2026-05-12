@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::{
     parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
-    CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, Diagnostic,
-    ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, PluralEncoding,
+    CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, ObsoleteStrategy,
+    ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, PluralEncoding,
     SourceExtractedMessage, UpdateCatalogFileOptions,
 };
 use serde::{Deserialize, Serialize};
@@ -78,8 +79,8 @@ pub struct CatalogUpdateResponse {
     pub updated: bool,
     /// Aggregate update statistics.
     pub stats: CatalogUpdateStats,
-    /// Human-readable diagnostics emitted during the update.
-    pub diagnostics: Vec<String>,
+    /// Diagnostics emitted during the update.
+    pub diagnostics: Vec<CatalogDiagnostic>,
 }
 
 /// Aggregate statistics from a catalog update.
@@ -110,8 +111,8 @@ pub struct CatalogParseResult {
     pub headers: BTreeMap<String, String>,
     /// Parsed catalog messages.
     pub messages: Vec<ParsedCatalogMessage>,
-    /// Human-readable diagnostics emitted during parsing.
-    pub diagnostics: Vec<String>,
+    /// Diagnostics emitted during parsing.
+    pub diagnostics: Vec<CatalogDiagnostic>,
 }
 
 /// Parsed semantic catalog message.
@@ -239,7 +240,7 @@ fn public_update_result(result: CatalogUpdateResult) -> CatalogUpdateResponse {
         diagnostics: result
             .diagnostics
             .into_iter()
-            .map(|diagnostic| format_diagnostic(&diagnostic))
+            .map(CatalogDiagnostic::from)
             .collect(),
     }
 }
@@ -269,7 +270,7 @@ fn public_parse_result(parsed: ParsedCatalog) -> CatalogParseResult {
         diagnostics: parsed
             .diagnostics
             .into_iter()
-            .map(|diagnostic| format_diagnostic(&diagnostic))
+            .map(CatalogDiagnostic::from)
             .collect(),
     }
 }
@@ -283,10 +284,6 @@ fn public_stats(stats: &CatalogStats) -> CatalogUpdateStats {
         obsolete_marked: stats.obsolete_marked,
         obsolete_removed: stats.obsolete_removed,
     }
-}
-
-fn format_diagnostic(diagnostic: &Diagnostic) -> String {
-    format!("{}: {}", diagnostic.code, diagnostic.message)
 }
 
 #[cfg(test)]

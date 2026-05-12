@@ -45,7 +45,7 @@ pub struct CatalogUpdateResult {
     pub created: bool,
     pub updated: bool,
     pub stats: CatalogUpdateStats,
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<CatalogDiagnostic>,
 }
 
 #[napi(object)]
@@ -69,7 +69,7 @@ pub struct CatalogParseResult {
     pub locale: Option<String>,
     pub headers: HashMap<String, String>,
     pub messages: Vec<ParsedCatalogMessage>,
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<CatalogDiagnostic>,
 }
 
 #[napi(string_enum)]
@@ -83,6 +83,14 @@ pub enum CatalogDiagnosticSeverity {
 pub struct CatalogDiagnosticSourceKey {
     pub message: String,
     pub context: Option<String>,
+}
+
+#[napi(object)]
+pub struct CatalogDiagnostic {
+    pub severity: CatalogDiagnosticSeverity,
+    pub code: String,
+    pub message: String,
+    pub source_key: Option<CatalogDiagnosticSourceKey>,
 }
 
 #[napi(object)]
@@ -315,7 +323,11 @@ impl TryFrom<palamedes::CatalogUpdateResponse> for CatalogUpdateResult {
             created: value.created,
             updated: value.updated,
             stats: value.stats.try_into()?,
-            diagnostics: value.diagnostics,
+            diagnostics: value
+                .diagnostics
+                .into_iter()
+                .map(CatalogDiagnostic::from)
+                .collect(),
         })
     }
 }
@@ -352,7 +364,11 @@ impl From<palamedes::CatalogParseResult> for CatalogParseResult {
                 .into_iter()
                 .map(ParsedCatalogMessage::from)
                 .collect(),
-            diagnostics: value.diagnostics,
+            diagnostics: value
+                .diagnostics
+                .into_iter()
+                .map(CatalogDiagnostic::from)
+                .collect(),
         }
     }
 }
@@ -420,6 +436,17 @@ impl From<palamedes::CatalogDiagnosticSourceKey> for CatalogDiagnosticSourceKey 
         Self {
             message: value.message,
             context: value.context,
+        }
+    }
+}
+
+impl From<palamedes::CatalogDiagnostic> for CatalogDiagnostic {
+    fn from(value: palamedes::CatalogDiagnostic) -> Self {
+        Self {
+            severity: value.severity.into(),
+            code: value.code,
+            message: value.message,
+            source_key: value.source_key.map(CatalogDiagnosticSourceKey::from),
         }
     }
 }

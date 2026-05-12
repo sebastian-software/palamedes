@@ -14,6 +14,7 @@ import type {
   CatalogArtifactResult as GeneratedCatalogArtifactResult,
   CatalogArtifactSelectedRequest as GeneratedCatalogArtifactSelectedRequest,
   CatalogArtifactSourceKey as GeneratedCatalogArtifactSourceKey,
+  CatalogDiagnostic as GeneratedCatalogDiagnostic,
   CatalogOrigin as GeneratedCatalogOrigin,
   CatalogParseRequest as GeneratedCatalogParseRequest,
   CatalogParseResult as GeneratedCatalogParseResult,
@@ -47,13 +48,23 @@ export type CatalogOrigin = GeneratedCatalogOrigin
 export type CatalogUpdateMessage = GeneratedCatalogUpdateMessage
 export type CatalogUpdateRequest = GeneratedCatalogUpdateRequest
 export type CatalogUpdateStats = GeneratedCatalogUpdateStats
-export type CatalogUpdateResult = GeneratedCatalogUpdateResult
 export type CatalogParseRequest = GeneratedCatalogParseRequest
 export type ParsedCatalogMessage = GeneratedParsedCatalogMessage
-export type CatalogParseResult = GeneratedCatalogParseResult
 export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions
 export type CatalogAuditSummary = GeneratedCatalogAuditSummary
 export type CatalogDiagnosticSeverity = "info" | "warning" | "error"
+export type CatalogDiagnostic =
+  Omit<GeneratedCatalogDiagnostic, "severity"> & {
+  severity: CatalogDiagnosticSeverity
+  }
+export type CatalogUpdateResult =
+  Omit<GeneratedCatalogUpdateResult, "diagnostics"> & {
+  diagnostics: CatalogDiagnostic[]
+  }
+export type CatalogParseResult =
+  Omit<GeneratedCatalogParseResult, "diagnostics"> & {
+  diagnostics: CatalogDiagnostic[]
+  }
 export type CatalogAuditDiagnostic =
   Omit<GeneratedCatalogAuditDiagnostic, "severity"> & {
   severity: CatalogDiagnosticSeverity
@@ -186,11 +197,19 @@ export function parsePo(source: string): ParsedPoFile {
 }
 
 export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult {
-  return native.updateCatalogFile(request)
+  const result = native.updateCatalogFile(request)
+  return {
+    ...result,
+    diagnostics: mapCatalogDiagnostics(result.diagnostics),
+  }
 }
 
 export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
-  return native.parseCatalog(request)
+  const result = native.parseCatalog(request)
+  return {
+    ...result,
+    diagnostics: mapCatalogDiagnostics(result.diagnostics),
+  }
 }
 
 export function auditCatalogs(
@@ -212,6 +231,13 @@ export function auditCatalogs(
       severity: mapNativeDiagnosticSeverity(diagnostic.severity),
     })),
   }
+}
+
+function mapCatalogDiagnostics(diagnostics: GeneratedCatalogDiagnostic[]): CatalogDiagnostic[] {
+  return diagnostics.map((diagnostic) => ({
+    ...diagnostic,
+    severity: mapNativeDiagnosticSeverity(diagnostic.severity),
+  }))
 }
 
 export function compileCatalogArtifact(
