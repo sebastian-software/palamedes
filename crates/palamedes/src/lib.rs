@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 
 mod catalog_artifact;
 mod catalog_audit;
+mod catalog_combine;
 mod catalog_update;
 mod diagnostic;
 mod error;
@@ -39,6 +40,10 @@ pub use catalog_artifact::{
 pub use catalog_audit::{
     audit_catalogs, CatalogAuditCheckOptions, CatalogAuditDiagnostic, CatalogAuditRequest,
     CatalogAuditResult, CatalogAuditSummary,
+};
+pub use catalog_combine::{
+    combine_catalogs, CatalogCombineConflictStrategy, CatalogCombineInput, CatalogCombineRequest,
+    CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats,
 };
 pub use catalog_update::{
     parse_catalog, update_catalog_file, CatalogParseRequest, CatalogParseResult,

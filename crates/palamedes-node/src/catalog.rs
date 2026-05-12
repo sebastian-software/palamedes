@@ -72,6 +72,58 @@ pub struct CatalogParseResult {
     pub diagnostics: Vec<CatalogDiagnostic>,
 }
 
+#[napi(object)]
+pub struct CatalogCombineInput {
+    pub content: String,
+    pub label: Option<String>,
+}
+
+#[napi(string_enum)]
+pub enum CatalogCombineConflictStrategy {
+    UseFirst,
+    UseLast,
+    Error,
+}
+
+#[napi(string_enum)]
+pub enum CatalogCombineSelectionName {
+    All,
+    Unique,
+}
+
+#[napi(object)]
+pub struct CatalogCombineSelectionThreshold {
+    pub more_than: Option<u32>,
+    pub less_than: Option<u32>,
+}
+
+#[napi(object)]
+pub struct CatalogCombineRequest {
+    pub inputs: Vec<CatalogCombineInput>,
+    pub source_locale: String,
+    pub locale: Option<String>,
+    pub conflict_strategy: Option<CatalogCombineConflictStrategy>,
+    pub selection: Option<Either<CatalogCombineSelectionName, CatalogCombineSelectionThreshold>>,
+    pub include_obsolete: Option<bool>,
+}
+
+#[napi(object)]
+pub struct CatalogCombineStats {
+    pub inputs: u32,
+    pub definitions: u32,
+    pub selected: u32,
+    pub skipped: u32,
+    pub conflicts_resolved: u32,
+    pub total: u32,
+}
+
+#[napi(object)]
+pub struct CatalogCombineResult {
+    pub content: String,
+    pub stats: CatalogCombineStats,
+    pub diagnostics: Vec<CatalogDiagnostic>,
+}
+
 #[napi(string_enum)]
 pub enum CatalogDiagnosticSeverity {
     Info,
@@ -394,6 +446,100 @@ impl From<palamedes::CatalogParseResult> for CatalogParseResult {
                 .map(CatalogDiagnostic::from)
                 .collect(),
         }
+    }
+}
+
+impl From<CatalogCombineInput> for palamedes::CatalogCombineInput {
+    fn from(value: CatalogCombineInput) -> Self {
+        Self {
+            content: value.content,
+            label: value.label,
+        }
+    }
+}
+
+impl From<CatalogCombineConflictStrategy> for palamedes::CatalogCombineConflictStrategy {
+    fn from(value: CatalogCombineConflictStrategy) -> Self {
+        match value {
+            CatalogCombineConflictStrategy::UseFirst => Self::UseFirst,
+            CatalogCombineConflictStrategy::UseLast => Self::UseLast,
+            CatalogCombineConflictStrategy::Error => Self::Error,
+        }
+    }
+}
+
+impl TryFrom<CatalogCombineRequest> for palamedes::CatalogCombineRequest {
+    type Error = napi::Error;
+
+    fn try_from(value: CatalogCombineRequest) -> Result<Self> {
+        Ok(Self {
+            inputs: value
+                .inputs
+                .into_iter()
+                .map(palamedes::CatalogCombineInput::from)
+                .collect(),
+            source_locale: value.source_locale,
+            locale: value.locale,
+            conflict_strategy: value.conflict_strategy.map_or(
+                palamedes::CatalogCombineConflictStrategy::UseFirst,
+                palamedes::CatalogCombineConflictStrategy::from,
+            ),
+            selection: combine_selection(value.selection)?,
+            include_obsolete: value.include_obsolete.unwrap_or(false),
+        })
+    }
+}
+
+impl TryFrom<palamedes::CatalogCombineStats> for CatalogCombineStats {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::CatalogCombineStats) -> Result<Self> {
+        Ok(Self {
+            inputs: checked_u32(value.inputs, "stats.inputs")?,
+            definitions: checked_u32(value.definitions, "stats.definitions")?,
+            selected: checked_u32(value.selected, "stats.selected")?,
+            skipped: checked_u32(value.skipped, "stats.skipped")?,
+            conflicts_resolved: checked_u32(value.conflicts_resolved, "stats.conflictsResolved")?,
+            total: checked_u32(value.total, "stats.total")?,
+        })
+    }
+}
+
+impl TryFrom<palamedes::CatalogCombineResult> for CatalogCombineResult {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::CatalogCombineResult) -> Result<Self> {
+        Ok(Self {
+            content: value.content,
+            stats: value.stats.try_into()?,
+            diagnostics: value
+                .diagnostics
+                .into_iter()
+                .map(CatalogDiagnostic::from)
+                .collect(),
+        })
+    }
+}
+
+fn combine_selection(
+    selection: Option<Either<CatalogCombineSelectionName, CatalogCombineSelectionThreshold>>,
+) -> Result<palamedes::CatalogCombineSelection> {
+    let Some(selection) = selection else {
+        return Ok(palamedes::CatalogCombineSelection::All);
+    };
+
+    match selection {
+        Either::A(CatalogCombineSelectionName::All) => Ok(palamedes::CatalogCombineSelection::All),
+        Either::A(CatalogCombineSelectionName::Unique) => {
+            Ok(palamedes::CatalogCombineSelection::Unique)
+        }
+        Either::B(threshold) => match (threshold.more_than, threshold.less_than) {
+            (Some(limit), None) => Ok(palamedes::CatalogCombineSelection::MoreThan(limit as usize)),
+            (None, Some(limit)) => Ok(palamedes::CatalogCombineSelection::LessThan(limit as usize)),
+            _ => Err(napi::Error::from_reason(
+                "Catalog combine selection must set exactly one of moreThan or lessThan.",
+            )),
+        },
     }
 }
 
@@ -897,6 +1043,21 @@ pub fn normalize_message_metadata(input: MessageMetadataInput) -> Result<Message
 /// Validates progressive semantic metadata against its `msgid`.
 pub fn validate_message_metadata(input: MessageMetadataInput) -> MessageMetadataValidationReport {
     palamedes::validate_message_metadata(input.into()).into()
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Combines multiple catalog contents into one deterministic catalog.
+///
+/// # Errors
+///
+/// Returns an error when inputs are invalid, cannot be parsed, contain rejected
+/// conflicts, or when result counters cannot be represented safely.
+pub fn combine_catalogs(request: CatalogCombineRequest) -> Result<CatalogCombineResult> {
+    let request = request.try_into()?;
+    palamedes::combine_catalogs(request)
+        .map_err(to_napi_error)
+        .and_then(CatalogCombineResult::try_from)
 }
 
 #[napi]

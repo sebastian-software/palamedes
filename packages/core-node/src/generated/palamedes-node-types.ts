@@ -51,6 +51,37 @@ export interface CatalogParseResult {
   messages: Array<ParsedCatalogMessage>;
   diagnostics: Array<CatalogDiagnostic>;
 }
+export interface CatalogCombineInput {
+  content: string;
+  label?: string;
+}
+export type CatalogCombineConflictStrategy = "UseFirst" | "UseLast" | "Error"
+export type CatalogCombineSelectionName = "All" | "Unique"
+export interface CatalogCombineSelectionThreshold {
+  moreThan?: number;
+  lessThan?: number;
+}
+export interface CatalogCombineRequest {
+  inputs: Array<CatalogCombineInput>;
+  sourceLocale: string;
+  locale?: string;
+  conflictStrategy?: CatalogCombineConflictStrategy;
+  selection?: CatalogCombineSelectionName | CatalogCombineSelectionThreshold;
+  includeObsolete?: boolean;
+}
+export interface CatalogCombineStats {
+  inputs: number;
+  definitions: number;
+  selected: number;
+  skipped: number;
+  conflictsResolved: number;
+  total: number;
+}
+export interface CatalogCombineResult {
+  content: string;
+  stats: CatalogCombineStats;
+  diagnostics: Array<CatalogDiagnostic>;
+}
 export type CatalogDiagnosticSeverity = "Info" | "Warning" | "Error"
 export interface CatalogDiagnosticSourceKey {
   message: string;
@@ -259,6 +290,7 @@ export interface NativeBindings {
   deriveMessageMetadata(message: string, context?: string | undefined | null): MessageMetadata;
   normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata;
   validateMessageMetadata(input: MessageMetadataInput): MessageMetadataValidationReport;
+  combineCatalogs(request: CatalogCombineRequest): CatalogCombineResult;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;

@@ -7,6 +7,8 @@ import type {
   CatalogAuditRequest as GeneratedCatalogAuditRequest,
   CatalogAuditResult as GeneratedCatalogAuditResult,
   CatalogAuditSummary as GeneratedCatalogAuditSummary,
+  CatalogCombineRequest as GeneratedCatalogCombineRequest,
+  CatalogCombineResult as GeneratedCatalogCombineResult,
   CatalogArtifactConfig as GeneratedCatalogArtifactConfig,
   CatalogArtifactDiagnostic as GeneratedCatalogArtifactDiagnostic,
   CatalogArtifactMissingMessage as GeneratedCatalogArtifactMissingMessage,
@@ -76,6 +78,28 @@ export type CatalogAuditResult =
   Omit<GeneratedCatalogAuditResult, "diagnostics"> & {
   diagnostics: CatalogAuditDiagnostic[]
   }
+export interface CatalogCombineInput {
+  content: string
+  label?: string
+}
+export type CatalogCombineConflictStrategy = "useFirst" | "useLast" | "error"
+export type CatalogCombineSelection =
+  | "all"
+  | "unique"
+  | { moreThan: number }
+  | { lessThan: number }
+export interface CatalogCombineRequest {
+  inputs: CatalogCombineInput[]
+  sourceLocale: string
+  locale?: string
+  conflictStrategy?: CatalogCombineConflictStrategy
+  selection?: CatalogCombineSelection
+  includeObsolete?: boolean
+}
+export type CatalogCombineResult =
+  Omit<GeneratedCatalogCombineResult, "diagnostics"> & {
+  diagnostics: CatalogDiagnostic[]
+  }
 export interface CatalogAuditOptions {
   locales?: string[]
   checks?: CatalogAuditCheckOptions
@@ -124,6 +148,7 @@ export type CatalogArtifactResult =
 
 type NativeBindings = GeneratedNativeBindings
 type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest
+type NativeCatalogCombineRequest = GeneratedCatalogCombineRequest
 type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
 type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
 
@@ -268,6 +293,52 @@ export function validateMessageMetadata(
       severity: mapNativeDiagnosticSeverity(diagnostic.severity),
     })),
   }
+}
+
+export function combineCatalogs(request: CatalogCombineRequest): CatalogCombineResult {
+  const result = native.combineCatalogs(toNativeCombineRequest(request))
+  return {
+    ...result,
+    diagnostics: mapCatalogDiagnostics(result.diagnostics),
+  }
+}
+
+function toNativeCombineRequest(request: CatalogCombineRequest): NativeCatalogCombineRequest {
+  return {
+    inputs: request.inputs,
+    sourceLocale: request.sourceLocale,
+    locale: request.locale,
+    conflictStrategy: request.conflictStrategy
+      ? toNativeConflictStrategy(request.conflictStrategy)
+      : undefined,
+    selection: request.selection ? toNativeSelection(request.selection) : undefined,
+    includeObsolete: request.includeObsolete,
+  }
+}
+
+function toNativeConflictStrategy(
+  strategy: CatalogCombineConflictStrategy
+): NonNullable<NativeCatalogCombineRequest["conflictStrategy"]> {
+  switch (strategy) {
+    case "useFirst":
+      return "UseFirst"
+    case "useLast":
+      return "UseLast"
+    case "error":
+      return "Error"
+  }
+}
+
+function toNativeSelection(
+  selection: CatalogCombineSelection
+): NonNullable<NativeCatalogCombineRequest["selection"]> {
+  if (selection === "all") {
+    return "All"
+  }
+  if (selection === "unique") {
+    return "Unique"
+  }
+  return selection
 }
 
 function mapCatalogDiagnostics(diagnostics: GeneratedCatalogDiagnostic[]): CatalogDiagnostic[] {
