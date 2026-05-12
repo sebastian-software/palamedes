@@ -50,20 +50,15 @@ pub fn compile_catalog_artifact(
         &prepared.locale,
         &request.config.source_locale,
     );
-    let artifact = ferrocat_compile_catalog_artifact(
-        &catalogs,
-        &CompileCatalogArtifactOptions {
-            requested_locale: &prepared.locale,
-            source_locale: &request.config.source_locale,
-            fallback_chain: &ferrocat_fallback_chain,
-            key_strategy: CompiledKeyStrategy::FerrocatV1,
-            source_fallback: true,
-            strict_icu: false,
-            icu_compatibility: true,
-            ..CompileCatalogArtifactOptions::default()
-        },
-    )
-    .map_err(PalamedesError::CompileCatalogArtifact)?;
+    let mut options =
+        CompileCatalogArtifactOptions::new(&prepared.locale, &request.config.source_locale);
+    options.fallback_chain = &ferrocat_fallback_chain;
+    options.key_strategy = CompiledKeyStrategy::FerrocatV1;
+    options.source_fallback = true;
+    options.icu_compatibility = true;
+
+    let artifact = ferrocat_compile_catalog_artifact(&catalogs, &options)
+        .map_err(PalamedesError::CompileCatalogArtifact)?;
 
     Ok(build_artifact_result(
         artifact,
@@ -93,22 +88,19 @@ pub fn compile_catalog_artifact_selected(
         &prepared.locale,
         &request.config.source_locale,
     );
-    let artifact = ferrocat_compile_catalog_artifact_selected(
-        &catalogs,
-        &compiled_id_index,
-        &CompileSelectedCatalogArtifactOptions {
-            requested_locale: &prepared.locale,
-            source_locale: &request.config.source_locale,
-            fallback_chain: &ferrocat_fallback_chain,
-            key_strategy: CompiledKeyStrategy::FerrocatV1,
-            source_fallback: true,
-            strict_icu: false,
-            icu_compatibility: true,
-            compiled_ids: &request.compiled_ids,
-            ..CompileSelectedCatalogArtifactOptions::default()
-        },
-    )
-    .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
+    let mut options = CompileSelectedCatalogArtifactOptions::new(
+        &prepared.locale,
+        &request.config.source_locale,
+        &request.compiled_ids,
+    );
+    options.fallback_chain = &ferrocat_fallback_chain;
+    options.key_strategy = CompiledKeyStrategy::FerrocatV1;
+    options.source_fallback = true;
+    options.icu_compatibility = true;
+
+    let artifact =
+        ferrocat_compile_catalog_artifact_selected(&catalogs, &compiled_id_index, &options)
+            .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
 
     Ok(build_artifact_result(
         artifact,

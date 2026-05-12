@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use ferrocat::{compiled_key, DiagnosticSeverity as FerrocatDiagnosticSeverity};
+use ferrocat::DiagnosticSeverity as FerrocatDiagnosticSeverity;
 use serde::{Deserialize, Serialize};
 
 /// Request for compiling a full catalog artifact.
@@ -142,7 +142,7 @@ impl CatalogArtifactSourceKey {
 impl From<ferrocat::CompiledCatalogMissingMessage> for CatalogArtifactMissingMessage {
     fn from(value: ferrocat::CompiledCatalogMissingMessage) -> Self {
         Self {
-            compiled_id: compiled_key(&value.source_key.msgid, value.source_key.msgctxt.as_deref()),
+            compiled_id: value.key,
             source_key: CatalogArtifactSourceKey::new(
                 value.source_key.msgid,
                 value.source_key.msgctxt,
@@ -169,7 +169,7 @@ impl From<ferrocat::CompiledCatalogDiagnostic> for CatalogArtifactDiagnostic {
             severity: value.severity.into(),
             code: value.code,
             message: value.message,
-            compiled_id: compiled_key(&value.msgid, value.msgctxt.as_deref()),
+            compiled_id: value.key,
             source_key: CatalogArtifactSourceKey::new(value.msgid, value.msgctxt),
             locale: value.locale,
         }
