@@ -260,7 +260,8 @@ pub(super) fn extract_jsx_children_parts(
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
                 expr => {
-                    let binding = jsx_value_binding(expr, source, values.len(), &mut used_value_names);
+                    let binding =
+                        jsx_value_binding(expr, source, values.len(), &mut used_value_names);
                     parts.push(format!("{{{}}}", binding.name));
                     values.push(binding);
                 }
@@ -269,13 +270,12 @@ pub(super) fn extract_jsx_children_parts(
                 let current_index = *next_component_index;
                 *next_component_index += 1;
 
-                let (inner_message, inner_values, inner_components) =
-                    extract_jsx_children_parts(
-                        &element.children,
-                        source,
-                        next_component_index,
-                        solid_wrappers,
-                    );
+                let (inner_message, inner_values, inner_components) = extract_jsx_children_parts(
+                    &element.children,
+                    source,
+                    next_component_index,
+                    solid_wrappers,
+                );
                 parts.push(format!(
                     "<{current_index}>{inner_message}</{current_index}>"
                 ));
@@ -288,13 +288,12 @@ pub(super) fn extract_jsx_children_parts(
                 components.extend(inner_components);
             }
             JSXChild::Fragment(fragment) => {
-                let (inner_message, inner_values, inner_components) =
-                    extract_jsx_children_parts(
-                        &fragment.children,
-                        source,
-                        next_component_index,
-                        solid_wrappers,
-                    );
+                let (inner_message, inner_values, inner_components) = extract_jsx_children_parts(
+                    &fragment.children,
+                    source,
+                    next_component_index,
+                    solid_wrappers,
+                );
                 if !inner_message.is_empty() {
                     parts.push(inner_message);
                 }
@@ -385,8 +384,8 @@ pub(super) fn jsx_value_binding(
     fallback_index: usize,
     used_value_names: &mut HashMap<String, String>,
 ) -> ValueBinding {
-    let expression = jsx_expression_source(expr, source)
-        .unwrap_or_else(|| fallback_index.to_string());
+    let expression =
+        jsx_expression_source(expr, source).unwrap_or_else(|| fallback_index.to_string());
     let preferred_name = jsx_expression_name(expr).unwrap_or_else(|| fallback_index.to_string());
     let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
 
