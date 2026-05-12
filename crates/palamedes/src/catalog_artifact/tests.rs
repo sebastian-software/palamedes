@@ -134,6 +134,63 @@ msgstr "{name"
 }
 
 #[test]
+fn compile_catalog_artifact_reports_icu_compatibility_diagnostics() {
+    let fixture = create_fixture_dir("catalog-artifact-icu-compatibility");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    fs::write(
+        locale_dir.join("en.po"),
+        r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Hello {name}"
+msgstr ""
+"#,
+    )
+    .expect("write en");
+
+    fs::write(
+        locale_dir.join("de.po"),
+        r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Hello {name}"
+msgstr "Hallo {firstName}"
+"#,
+    )
+    .expect("write de");
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
+
+    assert!(result
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.code == "icu.missing_argument"
+            && diagnostic.source_key.message == "Hello {name}"
+            && diagnostic.locale == "de"));
+    assert!(result
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.code == "icu.extra_argument"));
+}
+
+#[test]
 fn compile_catalog_artifact_selected_returns_requested_ids_only() {
     let fixture = create_fixture_dir("catalog-artifact-selected");
     let locale_dir = fixture.join("src/locales");
@@ -193,6 +250,59 @@ msgstr "Hallo"
     assert!(!result
         .messages
         .contains_key(&compiled_key("Only source", None)));
+}
+
+#[test]
+fn compile_catalog_artifact_selected_reports_icu_compatibility_diagnostics() {
+    let fixture = create_fixture_dir("catalog-artifact-selected-icu-compatibility");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    fs::write(
+        locale_dir.join("en.po"),
+        r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Hello {name}"
+msgstr ""
+"#,
+    )
+    .expect("write en");
+
+    fs::write(
+        locale_dir.join("de.po"),
+        r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Hello {name}"
+msgstr "Hallo {firstName}"
+"#,
+    )
+    .expect("write de");
+
+    let request = CatalogArtifactSelectedRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+        compiled_ids: vec![compiled_key("Hello {name}", None)],
+    };
+    let result = compile_catalog_artifact_selected(&request).expect("selected catalog artifact");
+
+    assert_eq!(result.messages.len(), 1);
+    assert!(result
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.code == "icu.missing_argument"));
 }
 
 fn create_fixture_dir(prefix: &str) -> PathBuf {

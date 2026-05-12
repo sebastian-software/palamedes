@@ -52,7 +52,7 @@ Palamedes takes a different position:
 
 - Recommended for new projects and teams already doing architecture cleanup
 - Verified today across Next.js, TanStack Start, SolidStart, Waku, and React Router on Node.js `>=22`
-- Source-string-first catalogs are stable and powered by `ferrocat`
+- Source-string-first catalogs are stable and powered by `ferrocat`, including ICU authoring diagnostics for compiled catalogs
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 
 ## What Exists Today As Proof
@@ -181,7 +181,7 @@ Palamedes is opinionated in a few places on purpose:
 
 - `message + context` is the semantic identity
 - `getI18n()` is the public runtime model
-- catalog semantics live in `ferrocat`, not in duplicate PO glue
+- catalog semantics, placeholder comments, and ICU source/translation QA live in `ferrocat`, not in duplicate PO glue
 - host adapters render modules, while the core stays host-neutral
 
 That gives teams something stronger than a benchmark number:

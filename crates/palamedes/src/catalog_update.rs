@@ -164,6 +164,7 @@ pub fn parse_catalog(request: &CatalogParseRequest) -> PalamedesResult<CatalogPa
         source_locale: &request.source_locale,
         plural_encoding: PluralEncoding::Icu,
         strict: false,
+        ..ParseCatalogOptions::default()
     })
     .map_err(PalamedesError::from)?;
 
