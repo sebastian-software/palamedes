@@ -14,20 +14,20 @@
     "@palamedes/example-locale-shared": "workspace:^",
     "@palamedes/react": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "hono": "^4.12.18",
+    "hono": "^4.12.19",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-server-dom-webpack": "^19.2.6",
-    "waku": "1.0.0-alpha.10"
+    "waku": "1.0.0-beta.0"
   },
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "^6.0.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "typescript": "^6.0.3",
-    "vite": "^8.0.11"
+    "vite": "^8.0.13"
   }
 }
