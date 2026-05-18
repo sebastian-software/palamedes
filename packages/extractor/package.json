@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "@palamedes/core-node": "workspace:^",
-    "oxc-parser": "^0.129.0"
+    "oxc-parser": "^0.131.0"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
