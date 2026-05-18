@@ -16,7 +16,7 @@
     "@palamedes/solid": "workspace:^",
     "@solidjs/router": "^0.16.1",
     "@solidjs/start": "^1.3.2",
-    "solid-js": "^1.9.12"
+    "solid-js": "^1.9.13"
   },
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
@@ -24,6 +24,6 @@
     "@palamedes/vite-plugin": "workspace:^",
     "typescript": "^6.0.3",
     "vinxi": "^0.5.11",
-    "vite": "^8.0.11"
+    "vite": "^8.0.13"
   }
 }
