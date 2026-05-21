@@ -91,6 +91,7 @@ console.log(po.headers.Language)
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `extractMessagesNative(source, filename)`
+- `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
 
 Catalog operations use Ferrocat for parsing, updates, audits, ICU authoring

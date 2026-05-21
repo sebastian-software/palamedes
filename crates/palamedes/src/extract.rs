@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 
+use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
 use crate::error::{PalamedesError, PalamedesResult};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -40,6 +42,46 @@ pub struct ExtractedMessageRecord {
     pub placeholders: Option<BTreeMap<String, String>>,
     /// Source origin as `(filename, line, column)`.
     pub origin: (String, usize, Option<usize>),
+}
+
+/// Request for extracting and aggregating catalog messages from source files.
+#[derive(Debug, Clone)]
+pub struct ExtractCatalogMessagesRequest {
+    /// Root directory used to make extracted origins relative.
+    pub root_dir: String,
+    /// Source files to read and extract in caller-provided order.
+    pub files: Vec<String>,
+}
+
+/// Non-fatal source file extraction failure.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtractCatalogFileFailure {
+    /// File path that failed to read, parse, or extract.
+    pub path: String,
+    /// Human-readable failure message.
+    pub message: String,
+}
+
+/// Aggregated catalog extraction result.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtractCatalogMessagesResult {
+    /// Deduplicated source-first catalog update messages.
+    pub messages: Vec<CatalogUpdateMessage>,
+    /// Number of input files processed.
+    pub file_count: usize,
+    /// Non-fatal file failures skipped during extraction.
+    pub failed_files: Vec<ExtractCatalogFileFailure>,
+}
+
+#[derive(Debug)]
+struct AggregatedCatalogEntry {
+    message: String,
+    context: Option<String>,
+    placeholders: BTreeMap<String, Vec<String>>,
+    extracted_comments: Vec<String>,
+    origins: Vec<CatalogUpdateOrigin>,
 }
 
 struct LineLocator {
@@ -993,9 +1035,146 @@ pub fn extract_messages(
     Ok(extractor.messages)
 }
 
+/// Extracts and aggregates source-first catalog update messages from files.
+///
+/// # Errors
+///
+/// Returns an error only for fatal authoring failures such as explicit message
+/// IDs. Read, parse, and non-fatal extraction failures are returned in
+/// `failed_files` so callers can preserve the CLI's warning-oriented behavior.
+pub fn extract_catalog_messages_from_files(
+    request: ExtractCatalogMessagesRequest,
+) -> PalamedesResult<ExtractCatalogMessagesResult> {
+    let root_dir = PathBuf::from(&request.root_dir);
+    let mut catalog = BTreeMap::<String, AggregatedCatalogEntry>::new();
+    let mut failed_files = Vec::new();
+    let file_count = request.files.len();
+
+    for file in &request.files {
+        let source = match std::fs::read_to_string(file) {
+            Ok(source) => source,
+            Err(source) => {
+                failed_files.push(ExtractCatalogFileFailure {
+                    path: file.clone(),
+                    message: PalamedesError::ReadFile {
+                        path: PathBuf::from(file),
+                        source,
+                    }
+                    .to_string(),
+                });
+                continue;
+            }
+        };
+
+        let extracted = match extract_messages(&source, file) {
+            Ok(messages) => messages,
+            Err(PalamedesError::ExplicitMessageIdsUnsupported) => {
+                return Err(PalamedesError::ExplicitMessageIdsUnsupported);
+            }
+            Err(error) => {
+                failed_files.push(ExtractCatalogFileFailure {
+                    path: file.clone(),
+                    message: error.to_string(),
+                });
+                continue;
+            }
+        };
+
+        let relative_file = relative_origin_file(&root_dir, file);
+        for message in extracted {
+            add_extracted_message(&mut catalog, message, &relative_file);
+        }
+    }
+
+    Ok(ExtractCatalogMessagesResult {
+        messages: catalog
+            .into_values()
+            .map(CatalogUpdateMessage::from)
+            .collect(),
+        file_count,
+        failed_files,
+    })
+}
+
+fn relative_origin_file(root_dir: &Path, file: &str) -> String {
+    let path = Path::new(file);
+    path.strip_prefix(root_dir)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn add_extracted_message(
+    catalog: &mut BTreeMap<String, AggregatedCatalogEntry>,
+    message: ExtractedMessageRecord,
+    relative_file: &str,
+) {
+    if message.message.is_empty() {
+        return;
+    }
+
+    let key = catalog_key(&message.message, message.context.as_deref());
+    let entry = catalog
+        .entry(key)
+        .or_insert_with(|| AggregatedCatalogEntry {
+            message: message.message.clone(),
+            context: message.context.clone(),
+            placeholders: BTreeMap::new(),
+            extracted_comments: Vec::new(),
+            origins: Vec::new(),
+        });
+
+    if let Some(comment) = message.comment {
+        if !entry.extracted_comments.contains(&comment) {
+            entry.extracted_comments.push(comment);
+        }
+    }
+
+    if let Some(placeholders) = message.placeholders {
+        for (name, expression) in placeholders {
+            let values = entry.placeholders.entry(name).or_default();
+            if !values.contains(&expression) {
+                values.push(expression);
+            }
+        }
+    }
+
+    let origin = CatalogUpdateOrigin {
+        file: relative_file.to_string(),
+        line: u32::try_from(message.origin.1).unwrap_or(u32::MAX),
+    };
+    if !entry.origins.contains(&origin) {
+        entry.origins.push(origin);
+    }
+}
+
+fn catalog_key(message: &str, context: Option<&str>) -> String {
+    format!("{}\u{4}{message}", context.unwrap_or_default())
+}
+
+impl From<AggregatedCatalogEntry> for CatalogUpdateMessage {
+    fn from(value: AggregatedCatalogEntry) -> Self {
+        Self {
+            message: value.message,
+            context: value.context,
+            placeholders: value.placeholders,
+            extracted_comments: value.extracted_comments,
+            origins: value.origins,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::extract_messages;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::{
+        extract_catalog_messages_from_files, extract_messages, ExtractCatalogMessagesRequest,
+    };
+
+    static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
     #[test]
     fn extracts_tagged_templates() {
@@ -1090,5 +1269,120 @@ mod tests {
         .expect_err("unnamed JSX placeholders should fail");
 
         assert!(error.to_string().contains("stable placeholder name"));
+    }
+
+    #[test]
+    fn batch_extracts_deduped_catalog_messages_with_relative_origins() {
+        let root = temp_root("batch-relative");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("src dir");
+        let first = src.join("App.tsx");
+        let second = src.join("More.tsx");
+        fs::write(
+            &first,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              const a = t({ message: "Hello {name}", comment: "Greeting" })
+              const b = t`Computed ${user.name}`
+            "#,
+        )
+        .expect("first source");
+        fs::write(
+            &second,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              const a = t({ message: "Hello {name}", comment: "Greeting" })
+            "#,
+        )
+        .expect("second source");
+
+        let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![
+                first.to_string_lossy().into_owned(),
+                second.to_string_lossy().into_owned(),
+            ],
+        })
+        .expect("batch extraction");
+
+        assert_eq!(result.file_count, 2);
+        assert!(result.failed_files.is_empty());
+
+        let hello = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Hello {name}")
+            .expect("hello message");
+        assert_eq!(hello.extracted_comments, vec!["Greeting"]);
+        assert_eq!(hello.origins.len(), 2);
+        assert_eq!(hello.origins[0].file, "src/App.tsx");
+        assert_eq!(hello.origins[1].file, "src/More.tsx");
+
+        let computed = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Computed {name}")
+            .expect("computed message");
+        assert_eq!(
+            computed
+                .placeholders
+                .get("name")
+                .expect("placeholder expression"),
+            &vec!["user.name".to_string()]
+        );
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_reports_non_fatal_file_failures() {
+        let root = temp_root("batch-failure");
+        fs::create_dir_all(&root).expect("root dir");
+        let invalid = root.join("invalid.ts");
+        fs::write(&invalid, "const broken =").expect("invalid source");
+
+        let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![invalid.to_string_lossy().into_owned()],
+        })
+        .expect("batch extraction should continue");
+
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.failed_files.len(), 1);
+        assert!(result.failed_files[0].message.contains("Parse error"));
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_keeps_explicit_ids_fatal() {
+        let root = temp_root("batch-explicit-id");
+        fs::create_dir_all(&root).expect("root dir");
+        let source = root.join("bad.ts");
+        fs::write(
+            &source,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              const message = t({ id: "greeting", message: "Hello" })
+            "#,
+        )
+        .expect("source");
+
+        let error = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![source.to_string_lossy().into_owned()],
+        })
+        .expect_err("explicit IDs should fail");
+
+        assert!(error.to_string().contains("Explicit message ids"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    fn temp_root(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "palamedes-{label}-{}-{}",
+            std::process::id(),
+            TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ))
     }
 }

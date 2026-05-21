@@ -263,6 +263,19 @@ export interface NativeExtractedMessage {
   placeholders?: Record<string, string>;
   origin: ExtractedMessageOrigin;
 }
+export interface ExtractCatalogMessagesRequest {
+  rootDir: string;
+  files: Array<string>;
+}
+export interface ExtractCatalogFileFailure {
+  path: string;
+  message: string;
+}
+export interface ExtractCatalogMessagesResult {
+  messages: Array<CatalogUpdateMessage>;
+  fileCount: number;
+  failedFiles: Array<ExtractCatalogFileFailure>;
+}
 export interface NativeInfo {
   palamedesVersion: string;
   ferrocatVersion: string;
@@ -327,6 +340,7 @@ export interface NativeBindings {
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;
+  extractCatalogMessagesFromFiles(request: ExtractCatalogMessagesRequest): ExtractCatalogMessagesResult;
   getNativeInfo(): NativeInfo;
   parsePo(source: string): ParsedPoFile;
   transformMacros(source: string, filename: string, options?: NativeTransformOptions | undefined | null): NativeTransformResult;

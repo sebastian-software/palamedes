@@ -26,6 +26,9 @@ import type {
   CatalogUpdateRequest as GeneratedCatalogUpdateRequest,
   CatalogUpdateResult as GeneratedCatalogUpdateResult,
   CatalogUpdateStats as GeneratedCatalogUpdateStats,
+  ExtractCatalogFileFailure as GeneratedExtractCatalogFileFailure,
+  ExtractCatalogMessagesRequest as GeneratedExtractCatalogMessagesRequest,
+  ExtractCatalogMessagesResult as GeneratedExtractCatalogMessagesResult,
   MessageArgumentFormatMetadata as GeneratedMessageArgumentFormatMetadata,
   MessageArgumentKind as GeneratedMessageArgumentKind,
   MessageArgumentMetadata as GeneratedMessageArgumentMetadata,
@@ -57,6 +60,9 @@ export type CatalogOrigin = GeneratedCatalogOrigin
 export type CatalogUpdateMessage = GeneratedCatalogUpdateMessage
 export type CatalogUpdateRequest = GeneratedCatalogUpdateRequest
 export type CatalogUpdateStats = GeneratedCatalogUpdateStats
+export type ExtractCatalogFileFailure = GeneratedExtractCatalogFileFailure
+export type ExtractCatalogMessagesRequest = GeneratedExtractCatalogMessagesRequest
+export type ExtractCatalogMessagesResult = GeneratedExtractCatalogMessagesResult
 export type CatalogParseRequest = GeneratedCatalogParseRequest
 export type ParsedCatalogMessage = GeneratedParsedCatalogMessage
 export type MachineTranslationMetadata = GeneratedMachineTranslationMetadata
@@ -469,6 +475,12 @@ export function extractMessagesNative(
     ...message,
     origin: [message.origin.filename, message.origin.line, message.origin.column],
   }))
+}
+
+export function extractCatalogMessagesFromFiles(
+  request: ExtractCatalogMessagesRequest
+): ExtractCatalogMessagesResult {
+  return native.extractCatalogMessagesFromFiles(request)
 }
 
 export function transformMacrosNative(

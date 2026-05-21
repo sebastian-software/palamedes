@@ -53,7 +53,10 @@ pub use catalog_update::{
 };
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
-pub use extract::{extract_messages, ExtractedMessageRecord};
+pub use extract::{
+    extract_catalog_messages_from_files, extract_messages, ExtractCatalogFileFailure,
+    ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult, ExtractedMessageRecord,
+};
 pub use message_metadata::{
     derive_message_metadata, normalize_message_metadata, validate_message_metadata,
     MessageArgumentFormatMetadata, MessageArgumentKind, MessageArgumentMetadata,
