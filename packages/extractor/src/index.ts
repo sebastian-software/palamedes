@@ -1,7 +1,7 @@
 /**
  * @palamedes/extractor
  *
- * High-performance message extractor using oxc-parser.
+ * High-performance message extractor using the native Palamedes core.
  * This extractor is ~20-100x faster than the Babel-based extractor.
  *
  * It directly extracts messages from Palamedes macro syntax without
@@ -9,14 +9,16 @@
  */
 
 import { parseSync } from "oxc-parser"
+import { extractMessagesNative } from "@palamedes/core-node"
 
-import { extractMessages } from "./extractMessages"
+import type { ExtractedMessageInfo } from "./extractMessages"
+import { extractMessagesJs } from "./extractMessagesJs"
 
 const SUPPORTED_EXTENSIONS =
   /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx)$/i
 
 /**
- * OXC-based extractor for Palamedes-compatible message syntax.
+ * Native-first extractor for Palamedes-compatible message syntax.
  *
  * Supports:
  * - JSX: <Trans>, <Plural>, <Select>, <SelectOrdinal>
@@ -52,22 +54,46 @@ export const extractor: PalamedesExtractor = {
     code: string,
     onMessageExtracted: (msg: import("./extractMessages").ExtractedMessageInfo) => void
   ): Promise<void> {
-    const result = parseSync(filename, code, {
-      sourceType: "module",
-    })
+    let messages: ExtractedMessageInfo[]
 
-    if (result.errors.length > 0) {
-      // Throw on parse errors so the CLI can handle them appropriately
-      const errorMessages = result.errors.map((e) => e.message).join(", ")
-      throw new Error(`Parse error: ${errorMessages}`)
+    try {
+      messages = extractMessagesNative(code, filename)
+    } catch (error) {
+      if (isFatalNativeExtractionError(error)) {
+        throw error
+      }
+
+      messages = extractMessagesWithJsFallback(filename, code)
     }
-
-    const messages = extractMessages(result.program, filename, code)
 
     for (const msg of messages) {
       onMessageExtracted(msg)
     }
   },
+}
+
+function extractMessagesWithJsFallback(
+  filename: string,
+  code: string
+): ExtractedMessageInfo[] {
+  const result = parseSync(filename, code, {
+    sourceType: "module",
+  })
+
+  if (result.errors.length > 0) {
+    // Throw on parse errors so the CLI can handle them appropriately
+    const errorMessages = result.errors.map((e) => e.message).join(", ")
+    throw new Error(`Parse error: ${errorMessages}`)
+  }
+
+  return extractMessagesJs(result.program, filename, code)
+}
+
+function isFatalNativeExtractionError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("Explicit message ids are no longer supported")
+  )
 }
 
 export default extractor

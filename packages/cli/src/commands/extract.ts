@@ -11,8 +11,7 @@ import {
   type PalamedesCatalogConfig,
 } from "@palamedes/config"
 import { updateCatalogFile, type CatalogUpdateMessage } from "@palamedes/core-node"
-import { parseSync } from "oxc-parser"
-import { extractMessages } from "@palamedes/extractor"
+import { extractor } from "@palamedes/extractor"
 
 interface ExtractOptions {
   config?: string
@@ -32,6 +31,13 @@ interface AggregatedCatalogEntry {
 }
 
 type AggregatedCatalog = Record<string, AggregatedCatalogEntry>
+
+interface CatalogExtractionResult {
+  messages: AggregatedCatalog
+  fileCount: number
+  globMs: number
+  extractMs: number
+}
 
 export async function extract(options: ExtractOptions): Promise<void> {
   const config = await loadPalamedesConfig({ configPath: options.config })
@@ -53,12 +59,16 @@ async function runExtraction(
 ): Promise<void> {
   const startTime = Date.now()
   let totalWriteMs = 0
+  let totalGlobMs = 0
+  let totalExtractMs = 0
   let totalMessages = 0
   let totalFiles = 0
   const catalogs = config.catalogs ?? []
 
   for (const catalog of catalogs) {
-    const { messages, fileCount } = await extractFromCatalog(catalog, config, options)
+    const { messages, fileCount, globMs, extractMs } = await extractFromCatalog(catalog, config, options)
+    totalGlobMs += globMs
+    totalExtractMs += extractMs
     totalMessages += Object.keys(messages).length
     totalFiles += fileCount
 
@@ -80,6 +90,8 @@ async function runExtraction(
       `${TIMING_MARKER}${JSON.stringify({
         engine: "ferrocat",
         totalMs: duration,
+        globMs: totalGlobMs,
+        extractMs: totalExtractMs,
         writeMs: totalWriteMs,
         totalMessages,
         totalFiles,
@@ -92,7 +104,7 @@ async function extractFromCatalog(
   catalog: PalamedesCatalogConfig,
   config: LoadedPalamedesConfig,
   options: ExtractOptions
-): Promise<{ messages: AggregatedCatalog; fileCount: number }> {
+): Promise<CatalogExtractionResult> {
   const messages: AggregatedCatalog = {}
   const rootDir = config.rootDir
 
@@ -107,32 +119,27 @@ async function extractFromCatalog(
     resolveConfigPattern(config, pattern)
   ) || ["**/node_modules/**"]
 
+  const globStartedAt = Date.now()
   const files = await glob(includePatterns, {
     ignore: excludePatterns,
     absolute: true,
     nodir: true,
   })
+  const globMs = Date.now() - globStartedAt
 
   if (options.verbose) {
     console.log(chalk.gray(`Found ${files.length} files to extract from`))
   }
 
+  const extractStartedAt = Date.now()
   for (const file of files) {
     try {
       const code = await readFile(file, "utf-8")
       const relativePath = path.relative(rootDir, file)
-      const result = parseSync(file, code, { sourceType: "module" })
 
-      if (result.errors.length > 0) {
-        const errorMessages = result.errors.map((error) => error.message).join(", ")
-        throw new Error(`Parse error: ${errorMessages}`)
-      }
-
-      const extractedMessages = extractMessages(result.program, file, code)
-
-      for (const msg of extractedMessages) {
+      await extractor.extract(file, code, (msg) => {
         if (!msg.message) {
-          continue
+          return
         }
         const key = createCatalogKey(msg.message, msg.context)
 
@@ -157,7 +164,7 @@ async function extractFromCatalog(
             messages[key].origins.push(origin)
           }
         }
-      }
+      })
     } catch (error) {
       if (
         error instanceof Error &&
@@ -171,8 +178,9 @@ async function extractFromCatalog(
       }
     }
   }
+  const extractMs = Date.now() - extractStartedAt
 
-  return { messages, fileCount: files.length }
+  return { messages, fileCount: files.length, globMs, extractMs }
 }
 
 async function writeCatalog(
