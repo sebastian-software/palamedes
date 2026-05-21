@@ -1,6 +1,7 @@
 import { parseSync } from "oxc-parser"
 
-import { extractMessages } from "./extractMessages"
+import { extractMessages, type ExtractedMessageInfo } from "./extractMessages"
+import { extractor } from "./index"
 
 function extract(code: string) {
   const result = parseSync("test.tsx", code, { sourceType: "module" })
@@ -131,6 +132,38 @@ describe("extractMessages", () => {
         name: "name",
         locale: "resolved.locale",
       })
+    })
+  })
+
+  describe("source extractor", () => {
+    it("extracts directly from source without a caller-provided AST", async () => {
+      const code = `
+        import { t } from "@palamedes/core/macro"
+        const message = t\`Hello \${name}\`
+      `
+      const messages: ExtractedMessageInfo[] = []
+
+      await extractor.extract("test.ts", code, (message) => {
+        messages.push(message)
+      })
+
+      expect(messages).toHaveLength(1)
+      expect(messages[0].message).toBe("Hello {name}")
+      expect(messages[0].placeholders).toEqual({
+        name: "name",
+      })
+      expect(messages[0].origin[0]).toBe("test.ts")
+    })
+
+    it("does not hide fatal native extraction errors", async () => {
+      const code = `
+        import { t } from "@palamedes/core/macro"
+        const message = t({ id: "greeting", message: "Hello" })
+      `
+
+      await expect(
+        extractor.extract("test.ts", code, () => undefined)
+      ).rejects.toThrow(/Explicit message ids/)
     })
   })
 
