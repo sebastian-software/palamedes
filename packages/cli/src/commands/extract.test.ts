@@ -76,6 +76,33 @@ describe("extract", () => {
     expect(findItem(enCatalog.items, "Old only")).toBeUndefined()
     expect(findItem(deCatalog.items, "Old only")).toBeUndefined()
   })
+
+  it("emits timing JSON with glob and extract buckets", async () => {
+    const fixtureDir = await copyFixture()
+    process.env.PALAMEDES_TIMING_JSON = "1"
+
+    await extract({
+      config: path.join(fixtureDir, "palamedes.config.ts"),
+    })
+
+    const timingCall = vi.mocked(console.log).mock.calls.find(
+      ([first]) => typeof first === "string" && first.startsWith("__PALAMEDES_TIMINGS__")
+    )
+    expect(timingCall).toBeDefined()
+
+    const timing = JSON.parse(
+      String(timingCall?.[0]).slice("__PALAMEDES_TIMINGS__".length)
+    )
+    expect(timing).toMatchObject({
+      engine: "ferrocat",
+      totalMessages: 7,
+      totalFiles: 2,
+    })
+    expect(timing.globMs).toEqual(expect.any(Number))
+    expect(timing.extractMs).toEqual(expect.any(Number))
+    expect(timing.writeMs).toEqual(expect.any(Number))
+    expect(timing.totalMs).toEqual(expect.any(Number))
+  })
 })
 
 async function copyFixture(): Promise<string> {
