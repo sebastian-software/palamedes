@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/sebastian-software/palamedes/compare/extractor-v0.4.0...extractor-v0.5.0) (2026-05-21)
+
+
+### Performance Improvements
+
+* **extractor:** use native source hot path ([b2ba469](https://github.com/sebastian-software/palamedes/commit/b2ba4696b1d5745f8bb97740acda7cfc25654173))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/core-node bumped to 0.5.0
+
 ## [0.4.0](https://github.com/sebastian-software/palamedes/compare/extractor-v0.3.0...extractor-v0.4.0) (2026-05-21)
 
 
