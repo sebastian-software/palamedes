@@ -52,7 +52,7 @@ console.log(result.code)
 
 - `transformPalamedesMacros(code, filename, options?)`
 - `mightContainPalamedesMacros(code)`
-- `findMacroImports(program)`
+- `findMacroImports(program)` for compatibility with callers that already have an OXC AST
 - `PALAMEDES_MACRO_PACKAGES`
 - `JS_MACROS`
 - `JSX_MACROS`

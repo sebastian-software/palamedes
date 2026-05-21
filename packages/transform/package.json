@@ -1,7 +1,7 @@
 {
   "name": "@palamedes/transform",
   "version": "0.4.0",
-  "description": "OXC-based macro transformer for Palamedes macros without Babel",
+  "description": "Native macro transformer for Palamedes macros without Babel",
   "keywords": [
     "i18n",
     "oxc",
@@ -47,8 +47,7 @@
   },
   "dependencies": {
     "@palamedes/core-node": "workspace:^",
-    "@palamedes/runtime": "workspace:^",
-    "oxc-parser": "^0.132.0"
+    "@palamedes/runtime": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

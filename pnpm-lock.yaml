@@ -833,9 +833,6 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../runtime
-      oxc-parser:
-        specifier: ^0.132.0
-        version: 0.132.0
     devDependencies:
       typescript:
         specifier: ^6.0.3

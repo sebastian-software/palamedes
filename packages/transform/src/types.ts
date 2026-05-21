@@ -13,7 +13,7 @@ export interface SourceMap {
 }
 
 /**
- * Configuration options for the Palamedes OXC transform
+ * Configuration options for the Palamedes native transform.
  */
 export type TransformOptions = NativeTransformOptions
 

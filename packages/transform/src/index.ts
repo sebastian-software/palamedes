@@ -1,7 +1,7 @@
 /**
  * @palamedes/transform
  *
- * OXC-based macro transformer for Palamedes.
+ * Native macro transformer for Palamedes.
  * Transforms Palamedes macros to runtime calls without Babel.
  */
 
