@@ -610,9 +610,6 @@ importers:
       glob:
         specifier: ^13.0.6
         version: 13.0.6
-      oxc-parser:
-        specifier: ^0.132.0
-        version: 0.132.0
     devDependencies:
       '@types/node':
         specifier: ^25.9.0
