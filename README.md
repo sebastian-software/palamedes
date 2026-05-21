@@ -209,6 +209,7 @@ The same foundation also matters for future translation workflows:
 - [Backend servers with request-local runtime wiring](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
 - [ADR-012: Translation augmentation boundary](https://github.com/sebastian-software/palamedes/blob/main/adr/012-translation-augmentation-boundary.md)
 - [ADR-013: Defer CLI worker parallelism until benchmarked need](https://github.com/sebastian-software/palamedes/blob/main/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md)
+- [ADR-014: Native transform source maps](https://github.com/sebastian-software/palamedes/blob/main/adr/014-native-transform-source-maps.md)
 - [`llms.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms.txt) and [`llms-full.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms-full.txt) for AI coding assistants
 - [Comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
 - [Migration playbook from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
