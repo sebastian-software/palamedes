@@ -7,6 +7,7 @@ describe("transformPalamedesMacros", () => {
 
     expect(result.hasChanged).toBe(false)
     expect(result.code).toBe(code)
+    expect(result.map).toBeNull()
   })
 
   it("transforms tagged templates into compact runtime lookups", () => {
@@ -23,6 +24,13 @@ const msg = t\`Hello \${name}\`;
     expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
     expect(result.code).not.toContain("@palamedes/core/macro")
     expect(result.compiledIds).toHaveLength(1)
+    expect(result.map).toMatchObject({
+      version: 3,
+      sources: ["test.ts"],
+      sourcesContent: [code],
+      file: "test.ts",
+    })
+    expect(result.map?.mappings).not.toBe("")
   })
 
   it("preserves member expression values in tagged templates", () => {
@@ -88,6 +96,13 @@ const y = <Trans>Hallo Welt</Trans>;
     expect(result.code).toContain('import { Trans } from "@palamedes/react"')
     expect(result.code).toContain('const x = "äöü";')
     expect(result.code).toContain('message="Hallo Welt"')
+    expect(result.map).toMatchObject({
+      version: 3,
+      sources: ["test.tsx"],
+      sourcesContent: [code],
+      file: "test.tsx",
+    })
+    expect(result.map?.mappings).not.toBe("")
   })
 
   it("transforms Solid <Trans> macros to @palamedes/solid imports", () => {

@@ -62,6 +62,7 @@ pub use message_metadata::{
 };
 pub use transform::{
     transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,
+    NativeTransformSourceMap,
 };
 
 /// Published `ferrocat` version used by the Rust core.

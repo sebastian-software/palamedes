@@ -20,6 +20,48 @@ fn transforms_tagged_templates() {
         result.compiled_ids,
         vec![compiled_key("Hello {name}", None)]
     );
+
+    let map = result
+        .map
+        .expect("changed transform should include a source map");
+    assert_eq!(map.file.as_deref(), Some("test.ts"));
+    assert_eq!(map.sources, vec!["test.ts"]);
+    assert_eq!(
+        map.sources_content,
+        Some(vec![
+            "import { t } from \"@palamedes/core/macro\";\nconst msg = t`Hello ${name}`;\n"
+                .to_string()
+        ])
+    );
+    assert!(!map.mappings.is_empty());
+    assert!(map.names.is_empty());
+}
+
+#[test]
+fn unchanged_transform_has_no_source_map() {
+    let result = transform_macros("const msg = \"Hello\";\n", "test.ts", None)
+        .expect("transform should succeed");
+
+    assert!(!result.has_changed);
+    assert!(result.map.is_none());
+}
+
+#[test]
+fn transforms_after_non_ascii_source_text() {
+    let source = "import { Trans } from \"@palamedes/react/macro\";\nconst x = \"äöü\";\nconst y = <Trans>Hallo Welt</Trans>;\n";
+    let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
+
+    assert!(result.has_changed);
+    assert!(result.code.contains("const x = \"äöü\";"));
+    assert!(result.code.contains("message=\"Hallo Welt\""));
+
+    let map = result
+        .map
+        .expect("changed transform should include a source map");
+    assert_eq!(map.file.as_deref(), Some("test.tsx"));
+    assert_eq!(map.sources, vec!["test.tsx"]);
+    assert_eq!(map.sources_content, Some(vec![source.to_string()]));
+    assert!(!map.mappings.is_empty());
 }
 
 #[test]

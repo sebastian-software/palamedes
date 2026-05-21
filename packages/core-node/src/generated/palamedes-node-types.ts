@@ -275,11 +275,20 @@ export interface NativeTransformEdit {
   end: number;
   text: string;
 }
+export interface NativeTransformSourceMap {
+  version: number;
+  sources: Array<string>;
+  sourcesContent?: Array<string>;
+  names: Array<string>;
+  mappings: string;
+  file?: string;
+}
 export interface NativeTransformResult {
   code: string;
   hasChanged: boolean;
   compiledIds: Array<string>;
   edits: Array<NativeTransformEdit>;
+  map?: NativeTransformSourceMap;
   prependText?: string;
 }
 
