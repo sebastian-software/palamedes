@@ -13,7 +13,7 @@ use ferrocat::{
 use serde::{Deserialize, Serialize};
 
 /// Source origin used for catalog updates and parsed catalog messages.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogUpdateOrigin {
     /// Source filename.
@@ -23,7 +23,7 @@ pub struct CatalogUpdateOrigin {
 }
 
 /// Source-first extracted message used for catalog updates.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogUpdateMessage {
     /// Source message string.

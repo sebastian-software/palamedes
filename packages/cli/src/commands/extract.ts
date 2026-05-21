@@ -1,4 +1,4 @@
-import { readFile, mkdir } from "fs/promises"
+import { mkdir } from "fs/promises"
 import path from "path"
 import chalk from "chalk"
 import { glob } from "glob"
@@ -10,8 +10,11 @@ import {
   type LoadedPalamedesConfig,
   type PalamedesCatalogConfig,
 } from "@palamedes/config"
-import { updateCatalogFile, type CatalogUpdateMessage } from "@palamedes/core-node"
-import { extractor } from "@palamedes/extractor"
+import {
+  extractCatalogMessagesFromFiles,
+  updateCatalogFile,
+  type CatalogUpdateMessage,
+} from "@palamedes/core-node"
 
 interface ExtractOptions {
   config?: string
@@ -22,18 +25,8 @@ interface ExtractOptions {
 
 const TIMING_MARKER = "__PALAMEDES_TIMINGS__"
 
-interface AggregatedCatalogEntry {
-  message: string
-  context?: string
-  placeholders: Record<string, string[]>
-  extractedComments: string[]
-  origins: Array<{ file: string; line: number }>
-}
-
-type AggregatedCatalog = Record<string, AggregatedCatalogEntry>
-
 interface CatalogExtractionResult {
-  messages: AggregatedCatalog
+  messages: CatalogUpdateMessage[]
   fileCount: number
   globMs: number
   extractMs: number
@@ -66,10 +59,14 @@ async function runExtraction(
   const catalogs = config.catalogs ?? []
 
   for (const catalog of catalogs) {
-    const { messages, fileCount, globMs, extractMs } = await extractFromCatalog(catalog, config, options)
+    const { messages, fileCount, globMs, extractMs } = await extractFromCatalog(
+      catalog,
+      config,
+      options
+    )
     totalGlobMs += globMs
     totalExtractMs += extractMs
-    totalMessages += Object.keys(messages).length
+    totalMessages += messages.length
     totalFiles += fileCount
 
     // Write catalogs for each locale
@@ -105,7 +102,6 @@ async function extractFromCatalog(
   config: LoadedPalamedesConfig,
   options: ExtractOptions
 ): Promise<CatalogExtractionResult> {
-  const messages: AggregatedCatalog = {}
   const rootDir = config.rootDir
 
   const includePatterns = catalog.include.map((pattern) => {
@@ -132,61 +128,34 @@ async function extractFromCatalog(
   }
 
   const extractStartedAt = Date.now()
-  for (const file of files) {
-    try {
-      const code = await readFile(file, "utf-8")
-      const relativePath = path.relative(rootDir, file)
-
-      await extractor.extract(file, code, (msg) => {
-        if (!msg.message) {
-          return
-        }
-        const key = createCatalogKey(msg.message, msg.context)
-
-        if (!messages[key]) {
-          messages[key] = {
-            message: msg.message,
-            context: msg.context,
-            placeholders: {},
-            extractedComments: msg.comment ? [msg.comment] : [],
-            origins: [],
-          }
-        }
-
-        mergePlaceholders(messages[key].placeholders, msg.placeholders)
-
-        if (msg.origin) {
-          const origin = {
-            file: relativePath,
-            line: msg.origin[1],
-          }
-          if (!messages[key].origins.some((entry) => entry.file === origin.file && entry.line === origin.line)) {
-            messages[key].origins.push(origin)
-          }
-        }
-      })
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes("Explicit message ids are no longer supported")
-      ) {
-        throw error
-      }
-
-      if (options.verbose) {
-        console.warn(chalk.yellow("Warning:"), `Failed to extract from ${file}:`, error)
-      }
-    }
-  }
+  const result = extractCatalogMessagesFromFiles({
+    rootDir,
+    files,
+  })
   const extractMs = Date.now() - extractStartedAt
 
-  return { messages, fileCount: files.length, globMs, extractMs }
+  if (options.verbose) {
+    for (const failure of result.failedFiles) {
+      console.warn(
+        chalk.yellow("Warning:"),
+        `Failed to extract from ${failure.path}:`,
+        failure.message
+      )
+    }
+  }
+
+  return {
+    messages: result.messages,
+    fileCount: result.fileCount,
+    globMs,
+    extractMs,
+  }
 }
 
 async function writeCatalog(
   catalog: PalamedesCatalogConfig,
   locale: string,
-  extractedMessages: AggregatedCatalog,
+  extractedMessages: CatalogUpdateMessage[],
   config: LoadedPalamedesConfig,
   options: ExtractOptions
 ): Promise<number> {
@@ -202,7 +171,7 @@ async function writeCatalog(
     locale,
     sourceLocale: config.sourceLocale,
     clean: Boolean(options.clean),
-    messages: catalogToMessages(extractedMessages),
+    messages: extractedMessages,
   })
 
   if (options.verbose) {
@@ -256,38 +225,4 @@ async function runWatchMode(
 
 function shouldEmitTimingJson(): boolean {
   return process.env.PALAMEDES_TIMING_JSON === "1"
-}
-
-function catalogToMessages(catalog: AggregatedCatalog): CatalogUpdateMessage[] {
-  return Object.values(catalog).map((entry) => ({
-    message: entry.message,
-    context: entry.context,
-    placeholders: entry.placeholders,
-    extractedComments: entry.extractedComments ?? [],
-    origins: (entry.origins ?? []).map((origin) => ({
-      file: origin.file,
-      line: origin.line ?? 0,
-    })),
-  }))
-}
-
-function createCatalogKey(message: string, context?: string): string {
-  return `${context ?? ""}\u0004${message}`
-}
-
-function mergePlaceholders(
-  target: Record<string, string[]>,
-  source?: Record<string, string>
-): void {
-  if (!source) {
-    return
-  }
-
-  for (const [name, expression] of Object.entries(source)) {
-    const values = target[name] ?? []
-    if (!values.includes(expression)) {
-      values.push(expression)
-    }
-    target[name] = values
-  }
 }
