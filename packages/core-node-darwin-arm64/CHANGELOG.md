@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/sebastian-software/palamedes/compare/core-node-darwin-arm64-v0.3.0...core-node-darwin-arm64-v0.4.0) (2026-05-21)
+
+
+### Miscellaneous Chores
+
+* **core-node-darwin-arm64:** Synchronize palamedes versions
+
 ## [0.3.0](https://github.com/sebastian-software/palamedes/compare/core-node-darwin-arm64-v0.2.0...core-node-darwin-arm64-v0.3.0) (2026-05-07)
 
 

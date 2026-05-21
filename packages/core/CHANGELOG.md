@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/sebastian-software/palamedes/compare/core-v0.3.0...core-v0.4.0) (2026-05-21)
+
+
+### Miscellaneous Chores
+
+* **core:** Synchronize palamedes versions
+
 ## [0.3.0](https://github.com/sebastian-software/palamedes/compare/core-v0.2.0...core-v0.3.0) (2026-05-07)
 
 

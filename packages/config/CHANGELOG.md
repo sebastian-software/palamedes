@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/sebastian-software/palamedes/compare/config-v0.3.0...config-v0.4.0) (2026-05-21)
+
+
+### Miscellaneous Chores
+
+* **config:** Synchronize palamedes versions
+
 ## [0.3.0](https://github.com/sebastian-software/palamedes/compare/config-v0.2.0...config-v0.3.0) (2026-05-07)
 
 

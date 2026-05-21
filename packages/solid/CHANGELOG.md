@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/sebastian-software/palamedes/compare/solid-v0.3.0...solid-v0.4.0) (2026-05-21)
+
+
+### Miscellaneous Chores
+
+* **solid:** Synchronize palamedes versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/core bumped to 0.4.0
+    * @palamedes/runtime bumped to 0.4.0
+
 ## [0.3.0](https://github.com/sebastian-software/palamedes/compare/solid-v0.2.0...solid-v0.3.0) (2026-05-07)
 
 

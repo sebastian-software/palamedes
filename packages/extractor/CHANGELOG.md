@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.0](https://github.com/sebastian-software/palamedes/compare/extractor-v0.3.0...extractor-v0.4.0) (2026-05-21)
+
+
+### Features
+
+* reject unnamed placeholders ([efa2c84](https://github.com/sebastian-software/palamedes/commit/efa2c84524e03572d422ee881ff3ba0e5f862a11))
+
+
+### Bug Fixes
+
+* **extractor:** preserve template placeholder source ([a1453dd](https://github.com/sebastian-software/palamedes/commit/a1453ddd89a60ba9b1e703fe3b2752bba5ca8200))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/core-node bumped to 0.4.0
+
 ## [0.3.0](https://github.com/sebastian-software/palamedes/compare/extractor-v0.2.0...extractor-v0.3.0) (2026-05-07)
 
 

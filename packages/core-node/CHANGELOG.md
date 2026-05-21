@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0](https://github.com/sebastian-software/palamedes/compare/core-node-v0.3.0...core-node-v0.4.0) (2026-05-21)
+
+
+### Features
+
+* **core:** add catalog audit API backed by Ferrocat ([0b6e6cb](https://github.com/sebastian-software/palamedes/commit/0b6e6cbba3989b5aaa012dc496d2a608d62670f7))
+* **core:** add catalog combine API backed by Ferrocat ([067d88a](https://github.com/sebastian-software/palamedes/commit/067d88ac6728568e147b8a9266f06e67db97db99))
+* **core:** expose ICU message metadata validation helpers ([0615ecd](https://github.com/sebastian-software/palamedes/commit/0615ecd380af6e5c41a3802c3ac522dd8c33e54c))
+
+
+### Bug Fixes
+
+* **catalog:** preserve extracted placeholders ([3364eb4](https://github.com/sebastian-software/palamedes/commit/3364eb4403a6a561369225a297f3faca1334e10d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * optionalDependencies
+    * @palamedes/core-node-darwin-arm64 bumped to 0.4.0
+    * @palamedes/core-node-linux-arm64-gnu bumped to 0.4.0
+    * @palamedes/core-node-linux-x64-gnu bumped to 0.4.0
+    * @palamedes/core-node-win32-x64-msvc bumped to 0.4.0
+
 ## [0.3.0](https://github.com/sebastian-software/palamedes/compare/core-node-v0.2.0...core-node-v0.3.0) (2026-05-07)
 
 

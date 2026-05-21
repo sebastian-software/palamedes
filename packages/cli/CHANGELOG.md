@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.0](https://github.com/sebastian-software/palamedes/compare/cli-v0.3.0...cli-v0.4.0) (2026-05-21)
+
+
+### Features
+
+* **cli:** add pmds audit command for catalog QA ([25b2f7b](https://github.com/sebastian-software/palamedes/commit/25b2f7b42b0b6e00ddbb9db70fa3556e1699cc27))
+* reject unnamed placeholders ([efa2c84](https://github.com/sebastian-software/palamedes/commit/efa2c84524e03572d422ee881ff3ba0e5f862a11))
+
+
+### Bug Fixes
+
+* **catalog:** preserve extracted placeholders ([3364eb4](https://github.com/sebastian-software/palamedes/commit/3364eb4403a6a561369225a297f3faca1334e10d))
+* **extractor:** preserve template placeholder source ([a1453dd](https://github.com/sebastian-software/palamedes/commit/a1453ddd89a60ba9b1e703fe3b2752bba5ca8200))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/config bumped to 0.4.0
+    * @palamedes/core-node bumped to 0.4.0
+    * @palamedes/extractor bumped to 0.4.0
+
 ## [0.3.0](https://github.com/sebastian-software/palamedes/compare/cli-v0.2.0...cli-v0.3.0) (2026-05-07)
 
 
