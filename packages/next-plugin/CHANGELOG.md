@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/sebastian-software/palamedes/compare/next-plugin-v0.4.0...next-plugin-v0.5.0) (2026-05-21)
+
+
+### Miscellaneous Chores
+
+* **next-plugin:** Synchronize palamedes versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/config bumped to 0.5.0
+    * @palamedes/core-node bumped to 0.5.0
+    * @palamedes/runtime bumped to 0.5.0
+    * @palamedes/transform bumped to 0.5.0
+
 ## [0.4.0](https://github.com/sebastian-software/palamedes/compare/next-plugin-v0.3.0...next-plugin-v0.4.0) (2026-05-21)
 
 

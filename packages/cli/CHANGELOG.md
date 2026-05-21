@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.0](https://github.com/sebastian-software/palamedes/compare/cli-v0.4.0...cli-v0.5.0) (2026-05-21)
+
+
+### Features
+
+* **catalog:** add merge driver support ([6f4757a](https://github.com/sebastian-software/palamedes/commit/6f4757a5ab9b4b5db5ac841ff9c08d071573dd41))
+
+
+### Performance Improvements
+
+* **extractor:** add native batch extraction path ([09106fe](https://github.com/sebastian-software/palamedes/commit/09106fe4a2f579cb488e265f55933dd2457bd98b))
+* **extractor:** use native source hot path ([b2ba469](https://github.com/sebastian-software/palamedes/commit/b2ba4696b1d5745f8bb97740acda7cfc25654173))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/config bumped to 0.5.0
+    * @palamedes/core-node bumped to 0.5.0
+
 ## [0.4.0](https://github.com/sebastian-software/palamedes/compare/cli-v0.3.0...cli-v0.4.0) (2026-05-21)
 
 

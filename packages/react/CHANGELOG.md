@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/sebastian-software/palamedes/compare/react-v0.4.0...react-v0.5.0) (2026-05-21)
+
+
+### Miscellaneous Chores
+
+* **react:** Synchronize palamedes versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/core bumped to 0.5.0
+    * @palamedes/runtime bumped to 0.5.0
+
 ## [0.4.0](https://github.com/sebastian-software/palamedes/compare/react-v0.3.0...react-v0.4.0) (2026-05-21)
 
 
