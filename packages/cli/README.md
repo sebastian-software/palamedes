@@ -53,6 +53,10 @@ pnpm exec pmds catalog merge --output src/locales/de.po src/locales/de.po other.
 obsolete messages, and ICU compatibility issues through the same `ferrocat`
 catalog engine that powers Palamedes builds.
 
+For local performance checks, set `PALAMEDES_TIMING_JSON=1` on `pmds extract`.
+The command prints a machine-readable timing line with total, glob, extract,
+and catalog-write timings.
+
 ### Catalog Merge
 
 `pmds catalog merge` merges exactly two catalog files with V1 `use-first`
