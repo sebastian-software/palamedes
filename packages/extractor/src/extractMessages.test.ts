@@ -36,7 +36,17 @@ describe("extractMessages", () => {
       `
       const messages = extract(code)
       expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello <0>World</0>")
+      expect(messages[0].message).toBe("Hello <b>World</b>")
+    })
+
+    it("deduplicates same-tag component placeholders with different props", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const x = <Trans>Accept <a href="/terms">terms</a> and <a href="/privacy">privacy</a></Trans>
+      `
+      const messages = extract(code)
+      expect(messages).toHaveLength(1)
+      expect(messages[0].message).toBe("Accept <a>terms</a> and <a_1>privacy</a_1>")
     })
 
     it("extracts Solid Trans macros with the same semantics", () => {
@@ -111,15 +121,15 @@ describe("extractMessages", () => {
     it("keeps source expressions for template literal placeholder hints", () => {
       const code = `
         import { t } from "@palamedes/core/macro"
-        const message = t\`Hello \${name}, \${first + last}\`
+        const message = t\`Hello \${name}, \${resolved.locale}\`
       `
       const messages = extract(code)
 
       expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello {name}, {1}")
+      expect(messages[0].message).toBe("Hello {name}, {locale}")
       expect(messages[0].placeholders).toEqual({
         name: "name",
-        "1": "first + last",
+        locale: "resolved.locale",
       })
     })
   })
@@ -140,6 +150,33 @@ describe("extractMessages", () => {
       `
 
       expect(() => extract(code)).toThrow(/Explicit message ids/)
+    })
+
+    it("rejects unnamed template placeholders", () => {
+      const code = [
+        `import { t } from "@palamedes/core/macro"`,
+        "const x = t`Hello ${firstName + lastName}`",
+      ].join("\n")
+
+      expect(() => extract(code)).toThrow(/stable placeholder name/)
+    })
+
+    it("rejects unnamed JSX placeholders", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const x = <Trans>Hello {firstName + lastName}</Trans>
+      `
+
+      expect(() => extract(code)).toThrow(/stable placeholder name/)
+    })
+
+    it("rejects unnamed choice value placeholders", () => {
+      const code = `
+        import { plural } from "@palamedes/core/macro"
+        const x = plural(count + 1, { one: "# item", other: "# items" })
+      `
+
+      expect(() => extract(code)).toThrow(/stable placeholder name/)
     })
   })
 })

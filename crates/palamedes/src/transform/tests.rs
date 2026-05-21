@@ -155,10 +155,29 @@ fn transforms_solid_trans_jsx_macro() {
         .code
         .contains("import { Trans } from \"@palamedes/solid\";"));
     assert!(result.code.contains("<Trans id=\""));
-    assert!(result.code.contains("message=\"Hello <0>{name}</0>\""));
     assert!(result
         .code
-        .contains("components={{ 0: (children) => <strong>{children}</strong> }}"));
+        .contains("message=\"Hello <strong>{name}</strong>\""));
+    assert!(result
+        .code
+        .contains("components={{ strong: (children) => <strong>{children}</strong> }}"));
+}
+
+#[test]
+fn deduplicates_same_tag_component_placeholders() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Accept <a href=\"/terms\">terms</a> and <a href=\"/privacy\">privacy</a></Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains("message=\"Accept <a>terms</a> and <a_1>privacy</a_1>\""));
+    assert!(result
+        .code
+        .contains("components={{ a: <a href=\"/terms\" />, a_1: <a href=\"/privacy\" /> }}"));
 }
 
 #[test]
@@ -225,4 +244,40 @@ fn rejects_explicit_ids() {
     .expect_err("explicit ids should fail");
 
     assert!(error.to_string().contains("Explicit message ids"));
+}
+
+#[test]
+fn rejects_unnamed_template_placeholders() {
+    let error = transform_macros(
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t`Hello ${firstName + lastName}`;\n",
+        "test.ts",
+        None,
+    )
+    .expect_err("unnamed placeholders should fail");
+
+    assert!(error.to_string().contains("stable placeholder name"));
+}
+
+#[test]
+fn rejects_unnamed_jsx_placeholders() {
+    let error = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello {firstName + lastName}</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect_err("unnamed placeholders should fail");
+
+    assert!(error.to_string().contains("stable placeholder name"));
+}
+
+#[test]
+fn rejects_unnamed_choice_value_placeholders() {
+    let error = transform_macros(
+        "import { plural } from \"@palamedes/core/macro\";\nconst msg = plural(count + 1, { one: \"# item\", other: \"# items\" });\n",
+        "test.ts",
+        None,
+    )
+    .expect_err("unnamed choice value should fail");
+
+    assert!(error.to_string().contains("stable placeholder name"));
 }

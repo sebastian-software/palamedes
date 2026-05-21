@@ -142,10 +142,10 @@ export function extractMessages(
         const macro = isPalamedesMacro(tagName, JSX_MACROS)
         if (!macro) return
 
-          const extracted = extractFromJSXElement(node, macro.importedName, filename, getLine)
-          if (extracted) {
-            messages.push(extracted)
-          }
+        const extracted = extractFromJSXElement(node, macro.importedName, filename, getLine, code)
+        if (extracted) {
+          messages.push(extracted)
+        }
       }
 
       // Tagged Template: t`...`, msg`...`
@@ -215,7 +215,8 @@ function extractFromJSXElement(
   node: any,
   macroName: string,
   filename: string,
-  getLine: (offset: number) => number
+  getLine: (offset: number) => number,
+  code?: string
 ): ExtractedMessageInfo | null {
   const attrs = getJSXAttributes(node.openingElement)
   const line = getLine(node.start || 0)
@@ -226,7 +227,7 @@ function extractFromJSXElement(
       throw new Error(unsupportedExplicitIdMessage())
     }
 
-    const message = attrs.message || extractJSXChildrenAsMessage(node.children)
+    const message = attrs.message || extractJSXChildrenAsMessage(node.children, code)
     const comment = attrs.comment
     const context = attrs.context
 
@@ -249,7 +250,10 @@ function extractFromJSXElement(
     const valueName = extractValueName(node.openingElement)
     const options = extractChoiceOptions(attrs)
 
-    if (!valueName || Object.keys(options).length === 0) return null
+    if (Object.keys(options).length === 0) return null
+    if (!valueName) {
+      throw new Error(unnamedPlaceholderMessage("JSX choice value expression"))
+    }
 
     const message = buildICUMessage(format, valueName, options, attrs.offset)
     const context = attrs.context
@@ -367,7 +371,10 @@ function extractFromCallExpression(
     const options = extractChoiceOptionsFromObject(optionsArg)
     const format = macroName === "selectOrdinal" ? "selectordinal" : macroName
 
-    if (!valueName || Object.keys(options).length === 0) return null
+    if (Object.keys(options).length === 0) return null
+    if (!valueName) {
+      throw new Error(unnamedPlaceholderMessage("choice value expression"))
+    }
 
     const message = buildICUMessage(format, valueName, options)
 
@@ -424,11 +431,11 @@ function getJSXAttributeValue(valueNode: any): string | undefined {
 /**
  * Extract text content from JSX children, converting expressions to placeholders
  */
-function extractJSXChildrenAsMessage(children: any[]): string {
+function extractJSXChildrenAsMessage(children: any[], code?: string): string {
   if (!children) return ""
 
-  let placeholderIndex = 0
   const parts: string[] = []
+  const usedComponentNames = new Map<string, string>()
 
   for (const child of children) {
     if (child.type === "JSXText") {
@@ -438,20 +445,87 @@ function extractJSXChildrenAsMessage(children: any[]): string {
       const expr = child.expression
       if (expr?.type === "StringLiteral") {
         parts.push(expr.value)
-      } else if (expr?.type === "Identifier") {
-        parts.push(`{${expr.name}}`)
       } else {
-        parts.push(`{${placeholderIndex++}}`)
+        const name = extractExpressionName(expr)
+        if (!name) {
+          throw new Error(unnamedPlaceholderMessage("JSX expression"))
+        }
+        parts.push(`{${name}}`)
       }
     } else if (child.type === "JSXElement") {
-      // Nested element: <Trans>Hello <b>world</b></Trans> → "Hello <0>world</0>"
-      const innerText = extractJSXChildrenAsMessage(child.children)
-      parts.push(`<${placeholderIndex}>${innerText}</${placeholderIndex}>`)
-      placeholderIndex++
+      const preferredName = extractJSXElementName(child.openingElement)
+      if (!preferredName) {
+        throw new Error(unnamedPlaceholderMessage("JSX element"))
+      }
+      const componentExpression = openingElementToComponent(child.openingElement, code)
+      const name = makeUniqueBindingName(preferredName, componentExpression, usedComponentNames)
+      const innerText = extractJSXChildrenAsMessage(child.children, code)
+      parts.push(`<${name}>${innerText}</${name}>`)
+    } else if (child.type === "JSXSpreadChild") {
+      throw new Error(unnamedPlaceholderMessage("JSX spread child"))
     }
   }
 
   return parts.join("").trim()
+}
+
+function openingElementToComponent(openingElement: any, code?: string): string {
+  if (
+    !code ||
+    typeof openingElement?.start !== "number" ||
+    typeof openingElement?.end !== "number"
+  ) {
+    return extractJSXElementName(openingElement) || ""
+  }
+
+  const markup = code.slice(openingElement.start, openingElement.end)
+  if (markup.trimEnd().endsWith("/>")) {
+    return markup
+  }
+
+  return markup.endsWith(">") ? `${markup.slice(0, -1)} />` : `${markup} />`
+}
+
+function makeUniqueBindingName(
+  preferredName: string,
+  expression: string,
+  usedNames: Map<string, string>
+): string {
+  const existingExpression = usedNames.get(preferredName)
+  if (existingExpression === expression) {
+    return preferredName
+  }
+  if (existingExpression === undefined) {
+    usedNames.set(preferredName, expression)
+    return preferredName
+  }
+
+  let suffix = 1
+  while (true) {
+    const candidate = `${preferredName}_${suffix}`
+    const existingCandidateExpression = usedNames.get(candidate)
+    if (existingCandidateExpression === expression || existingCandidateExpression === undefined) {
+      usedNames.set(candidate, expression)
+      return candidate
+    }
+    suffix += 1
+  }
+}
+
+function extractJSXElementName(openingElement: any): string | undefined {
+  const name = openingElement?.name
+  if (name?.type === "JSXIdentifier") {
+    return isValidTagPlaceholderName(name.name) ? name.name : undefined
+  }
+  if (name?.type === "JSXMemberExpression") {
+    const propertyName = name.property?.name
+    return isValidTagPlaceholderName(propertyName) ? propertyName : undefined
+  }
+  return undefined
+}
+
+function isValidTagPlaceholderName(name: unknown): name is string {
+  return typeof name === "string" && /^[A-Za-z0-9_]+$/.test(name)
 }
 
 /**
@@ -479,13 +553,13 @@ function extractValueName(openingElement: any): string | undefined {
 
 /**
  * Extract a meaningful name from an expression for use as placeholder.
- * Tries to extract something readable before falling back to numeric index.
+ * Tries to extract something readable and returns undefined otherwise.
  *
  * - Identifier: `userName` → "userName"
  * - MemberExpression: `user.name` → "name"
  * - Computed property with string: `user["role"]` → "role"
  * - Getter call: `getUser()` → "user", `getUserName()` → "userName"
- * - Everything else: undefined → caller uses numeric index
+ * - Everything else: undefined → caller rejects with a diagnostic
  */
 function extractExpressionName(expr: any): string | undefined {
   if (!expr) return undefined
@@ -510,7 +584,7 @@ function extractExpressionName(expr: any): string | undefined {
       // user["role"] → "role" (oxc sometimes uses Literal instead of StringLiteral)
       return property.value
     }
-    // user[0] or user[someVar] → undefined (will become numeric index)
+    // user[0] or user[someVar] → undefined (not stable enough for a placeholder name)
   }
 
   // Call expression: getUser() → "user", getUserName() → "userName"
@@ -532,8 +606,12 @@ function extractExpressionName(expr: any): string | undefined {
   }
 
   // BinaryExpression, ConditionalExpression, etc.
-  // → undefined (will become numeric index)
+  // → undefined (not stable enough for a placeholder name)
   return undefined
+}
+
+function unnamedPlaceholderMessage(syntax: string): string {
+  return `Could not infer a stable placeholder name for ${syntax}. Extract the expression into a named variable before translating it.`
 }
 
 /**
@@ -657,7 +735,10 @@ function extractFromTemplateLiteral(quasi: any, code?: string): {
 
     if (i < expressions.length) {
       const expr = expressions[i]
-      const name = extractExpressionName(expr) || String(i)
+      const name = extractExpressionName(expr)
+      if (!name) {
+        throw new Error(unnamedPlaceholderMessage("template expression"))
+      }
       parts.push(`{${name}}`)
       placeholders[name] = extractExpressionSource(expr, code) || name
     }

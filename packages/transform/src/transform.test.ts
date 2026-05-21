@@ -114,8 +114,23 @@ const el = <Trans>Hello <strong>{name}</strong></Trans>;
 
     expect(result.code).toContain('import { Trans } from "@palamedes/solid"')
     expect(result.code).toContain('<Trans id="')
-    expect(result.code).toContain('message="Hello <0>{name}</0>"')
-    expect(result.code).toContain('components={{ 0: (children) => <strong>{children}</strong> }}')
+    expect(result.code).toContain('message="Hello <strong>{name}</strong>"')
+    expect(result.code).toContain(
+      'components={{ strong: (children) => <strong>{children}</strong> }}'
+    )
+  })
+
+  it("deduplicates same-tag component placeholders", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans>Accept <a href="/terms">terms</a> and <a href="/privacy">privacy</a></Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message="Accept <a>terms</a> and <a_1>privacy</a_1>"')
+    expect(result.code).toContain(
+      'components={{ a: <a href="/terms" />, a_1: <a href="/privacy" /> }}'
+    )
   })
 
   it("strips the message field when requested", () => {
@@ -147,6 +162,33 @@ const el = <Trans id="greeting">Hello</Trans>;
 `
 
     expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(/Explicit message ids/)
+  })
+
+  it("rejects unnamed template placeholders", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+const msg = t\`Hello \${firstName + lastName}\`;
+`
+
+    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/stable placeholder name/)
+  })
+
+  it("rejects unnamed JSX placeholders", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans>Hello {firstName + lastName}</Trans>;
+`
+
+    expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(/stable placeholder name/)
+  })
+
+  it("rejects unnamed choice value placeholders", () => {
+    const code = `
+import { plural } from "@palamedes/core/macro";
+const msg = plural(count + 1, { one: "# item", other: "# items" });
+`
+
+    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/stable placeholder name/)
   })
 
   it("leaves legacy Lingui macro imports untouched", () => {

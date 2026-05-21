@@ -2,7 +2,7 @@ import { defineMessage, plural, t } from "@palamedes/core/macro"
 
 export const simple = t`Simple hello`
 export const generated = t`Hello ${name}`
-export const computed = t`Computed ${first + last}`
+export const computed = t`Computed ${user.last}`
 export const plainDescriptor = t({ message: "Hello descriptor" })
 export const contextual = defineMessage({
   message: "Context hello",

@@ -15,14 +15,14 @@ pub(super) fn transform_tagged_template(
     template: &TemplateLiteral<'_>,
     source: &str,
     options: &NativeTransformOptions,
-) -> Option<(String, String)> {
-    let (message, values) = template_to_message(template, source);
+) -> PalamedesResult<Option<(String, String)>> {
+    let (message, values) = template_to_message(template, source)?;
     if message.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let lookup_key = compiled_key(&message, None);
-    Some((
+    Ok(Some((
         build_runtime_call(
             &lookup_key,
             Some(&message),
@@ -32,7 +32,7 @@ pub(super) fn transform_tagged_template(
             options,
         ),
         lookup_key,
-    ))
+    )))
 }
 
 pub(super) fn transform_descriptor_call(
@@ -102,22 +102,33 @@ pub(super) fn transform_choice_call(
     source: &str,
     macro_name: &str,
     options: &NativeTransformOptions,
-) -> Option<(String, String)> {
-    let value_arg = call.arguments.first()?;
-    let options_arg = call.arguments.get(1)?;
+) -> PalamedesResult<Option<(String, String)>> {
+    let Some(value_arg) = call.arguments.first() else {
+        return Ok(None);
+    };
+    let Some(options_arg) = call.arguments.get(1) else {
+        return Ok(None);
+    };
 
-    let value_expr = value_arg.as_expression()?;
+    let Some(value_expr) = value_arg.as_expression() else {
+        return Ok(None);
+    };
     let oxc_ast::ast::Argument::ObjectExpression(choice_object) = options_arg else {
-        return None;
+        return Ok(None);
     };
 
     let mut used_value_names = std::collections::HashMap::new();
-    let value_binding = expression_binding(value_expr, source, 0, &mut used_value_names);
+    let value_binding = expression_binding(
+        value_expr,
+        source,
+        "choice value expression",
+        &mut used_value_names,
+    )?;
     let value_name = value_binding.name.clone();
     let choice_options = extract_choice_options(choice_object);
 
     if choice_options.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let format = if macro_name == "selectOrdinal" {
@@ -128,7 +139,7 @@ pub(super) fn transform_choice_call(
     let message = build_icu_message(format, &value_name, &choice_options, None);
     let lookup_key = compiled_key(&message, None);
     let values = [value_binding];
-    Some((
+    Ok(Some((
         build_runtime_call(
             &lookup_key,
             Some(&message),
@@ -138,7 +149,7 @@ pub(super) fn transform_choice_call(
             options,
         ),
         lookup_key,
-    ))
+    )))
 }
 
 pub(super) fn transform_trans_element(
@@ -159,7 +170,7 @@ pub(super) fn transform_trans_element(
         source,
         &mut next_component_index,
         solid_wrappers,
-    );
+    )?;
     let message = attrs
         .get("message")
         .cloned()
@@ -175,12 +186,7 @@ pub(super) fn transform_trans_element(
     ];
 
     if !components.is_empty() {
-        let components_prop = components
-            .iter()
-            .enumerate()
-            .map(|(index, component)| format!("{index}: {component}"))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let components_prop = render_value_bindings(&components);
         attrs.push(format!("components={{{{ {components_prop} }}}}"));
     }
 
@@ -206,7 +212,7 @@ pub(super) fn transform_choice_jsx_element(
     }
     let context = attrs.get("context").cloned();
     let comment = attrs.get("comment").cloned();
-    let Some(value_binding) = extract_jsx_value_binding(&element.opening_element, source) else {
+    let Some(value_binding) = extract_jsx_value_binding(&element.opening_element, source)? else {
         return Ok(None);
     };
     let value_name = value_binding.name.clone();
