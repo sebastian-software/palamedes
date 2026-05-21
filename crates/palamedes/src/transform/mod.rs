@@ -58,7 +58,7 @@ pub struct NativeTransformSourceMap {
     pub sources: Vec<String>,
     /// Original source content, when embedded.
     #[serde(rename = "sourcesContent", skip_serializing_if = "Option::is_none")]
-    pub sources_content: Option<Vec<String>>,
+    pub sources_content: Option<Vec<Option<String>>>,
     /// Source map symbol names.
     pub names: Vec<String>,
     /// VLQ-encoded source map mappings.
@@ -224,12 +224,7 @@ pub fn transform_macros(
         NativeTransformSourceMap {
             version: json.version,
             sources: json.sources,
-            sources_content: json.sources_content.map(|items| {
-                items
-                    .into_iter()
-                    .map(|item| item.unwrap_or_default())
-                    .collect()
-            }),
+            sources_content: json.sources_content,
             names: json.names,
             mappings: json.mappings,
             file: json.file,

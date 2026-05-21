@@ -26,7 +26,7 @@ function toTransformSourceMap(
   return {
     version: map.version,
     sources: map.sources,
-    sourcesContent: map.sourcesContent,
+    sourcesContent: map.sourcesContent?.map((content) => content ?? null),
     names: map.names,
     mappings: map.mappings,
     file: map.file ?? filename,

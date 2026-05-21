@@ -22,7 +22,7 @@ pub struct NativeTransformEdit {
 pub struct NativeTransformSourceMap {
     pub version: u32,
     pub sources: Vec<String>,
-    pub sources_content: Option<Vec<String>>,
+    pub sources_content: Option<Vec<Option<String>>>,
     pub names: Vec<String>,
     pub mappings: String,
     pub file: Option<String>,

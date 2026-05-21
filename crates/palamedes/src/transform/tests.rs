@@ -28,10 +28,10 @@ fn transforms_tagged_templates() {
     assert_eq!(map.sources, vec!["test.ts"]);
     assert_eq!(
         map.sources_content,
-        Some(vec![
+        Some(vec![Some(
             "import { t } from \"@palamedes/core/macro\";\nconst msg = t`Hello ${name}`;\n"
                 .to_string()
-        ])
+        )])
     );
     assert!(!map.mappings.is_empty());
     assert!(map.names.is_empty());
@@ -60,7 +60,7 @@ fn transforms_after_non_ascii_source_text() {
         .expect("changed transform should include a source map");
     assert_eq!(map.file.as_deref(), Some("test.tsx"));
     assert_eq!(map.sources, vec!["test.tsx"]);
-    assert_eq!(map.sources_content, Some(vec![source.to_string()]));
+    assert_eq!(map.sources_content, Some(vec![Some(source.to_string())]));
     assert!(!map.mappings.is_empty());
 }
 

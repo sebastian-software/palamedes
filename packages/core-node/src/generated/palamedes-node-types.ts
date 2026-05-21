@@ -278,7 +278,7 @@ export interface NativeTransformEdit {
 export interface NativeTransformSourceMap {
   version: number;
   sources: Array<string>;
-  sourcesContent?: Array<string>;
+  sourcesContent?: Array<string | undefined | null>;
   names: Array<string>;
   mappings: string;
   file?: string;
