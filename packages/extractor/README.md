@@ -7,9 +7,9 @@
 
 Fast message extraction for teams that want a lower-level API alongside the CLI.
 
-`@palamedes/extractor` uses OXC-backed parsing plus Palamedes' native core to
-pull messages out of JavaScript, TypeScript, and React codebases without sending
-the workflow through a Babel-heavy path.
+`@palamedes/extractor` uses Palamedes' native core first to pull messages out of
+JavaScript, TypeScript, and React codebases without sending the workflow through
+a Babel-heavy path.
 
 ## When To Use This Package
 
@@ -30,12 +30,14 @@ pnpm add -D @palamedes/extractor
 ## Minimal Example
 
 ```ts
-import { parseSync } from "oxc-parser"
-import { extractMessages } from "@palamedes/extractor"
+import { extractor } from "@palamedes/extractor"
 
 const source = 'import { t } from "@palamedes/core/macro"; const message = t`Hello ${name}`'
-const result = parseSync("example.ts", source, { sourceType: "module" })
-const messages = extractMessages(result.program, "example.ts", source)
+const messages = []
+
+await extractor.extract("example.ts", source, (message) => {
+  messages.push(message)
+})
 
 console.log(messages)
 ```
@@ -50,8 +52,8 @@ console.log(messages)
 ## Key Exports
 
 - `extractor`
-- `extractMessages(program, filename, source)`
-- `extractMessagesJs(source, filename)`
+- `extractMessages(program, filename, source)` for compatibility with callers that already have an OXC AST
+- `extractMessagesJs(program, filename, source)` for the JavaScript fallback extractor
 
 ## Related Packages
 
