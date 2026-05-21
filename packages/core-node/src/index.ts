@@ -41,6 +41,7 @@ import type {
   NativeTransformEdit as GeneratedNativeTransformEdit,
   NativeTransformOptions as GeneratedNativeTransformOptions,
   NativeTransformResult as GeneratedNativeTransformResult,
+  NativeTransformSourceMap as GeneratedNativeTransformSourceMap,
   ParsedCatalogMessage as GeneratedParsedCatalogMessage,
   ParsedPoFile as GeneratedParsedPoFile,
   ParsedPoItem as GeneratedParsedPoItem,
@@ -130,6 +131,7 @@ export type NativeExtractedMessage =
 
 export type NativeTransformOptions = GeneratedNativeTransformOptions
 export type NativeTransformEdit = GeneratedNativeTransformEdit
+export type NativeTransformSourceMap = GeneratedNativeTransformSourceMap
 export type NativeTransformResult = GeneratedNativeTransformResult
 export type CatalogArtifactSourceKey = GeneratedCatalogArtifactSourceKey
 export type CatalogArtifactMissingMessage = GeneratedCatalogArtifactMissingMessage

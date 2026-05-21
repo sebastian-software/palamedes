@@ -19,11 +19,22 @@ pub struct NativeTransformEdit {
 }
 
 #[napi(object)]
+pub struct NativeTransformSourceMap {
+    pub version: u32,
+    pub sources: Vec<String>,
+    pub sources_content: Option<Vec<String>>,
+    pub names: Vec<String>,
+    pub mappings: String,
+    pub file: Option<String>,
+}
+
+#[napi(object)]
 pub struct NativeTransformResult {
     pub code: String,
     pub has_changed: bool,
     pub compiled_ids: Vec<String>,
     pub edits: Vec<NativeTransformEdit>,
+    pub map: Option<NativeTransformSourceMap>,
     pub prepend_text: Option<String>,
 }
 
@@ -50,6 +61,19 @@ impl TryFrom<palamedes::NativeTransformEdit> for NativeTransformEdit {
     }
 }
 
+impl From<palamedes::NativeTransformSourceMap> for NativeTransformSourceMap {
+    fn from(value: palamedes::NativeTransformSourceMap) -> Self {
+        Self {
+            version: value.version,
+            sources: value.sources,
+            sources_content: value.sources_content,
+            names: value.names,
+            mappings: value.mappings,
+            file: value.file,
+        }
+    }
+}
+
 impl TryFrom<palamedes::NativeTransformResult> for NativeTransformResult {
     type Error = napi::Error;
 
@@ -63,6 +87,7 @@ impl TryFrom<palamedes::NativeTransformResult> for NativeTransformResult {
                 .into_iter()
                 .map(NativeTransformEdit::try_from)
                 .collect::<Result<Vec<_>>>()?,
+            map: value.map.map(NativeTransformSourceMap::from),
             prepend_text: value.prepend_text,
         })
     }

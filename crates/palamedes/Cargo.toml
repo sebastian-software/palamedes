@@ -16,4 +16,5 @@ oxc_parser = "0.117.0"
 oxc_span = "0.117.0"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
+string_wizard = "0.0.27"
 thiserror = "2.0.16"

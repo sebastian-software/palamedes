@@ -47,7 +47,6 @@
   "dependencies": {
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "magic-string": "^0.30.21",
     "oxc-parser": "^0.132.0"
   },
   "devDependencies": {

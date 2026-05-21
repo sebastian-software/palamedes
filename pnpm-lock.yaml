@@ -839,9 +839,6 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../runtime
-      magic-string:
-        specifier: ^0.30.21
-        version: 0.30.21
       oxc-parser:
         specifier: ^0.132.0
         version: 0.132.0

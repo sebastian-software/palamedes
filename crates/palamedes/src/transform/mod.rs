@@ -13,6 +13,7 @@ use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
 use serde::{Deserialize, Serialize};
+use string_wizard::{Hires, MagicString, SourceMapOptions};
 
 use crate::error::{PalamedesError, PalamedesResult};
 
@@ -48,6 +49,25 @@ pub struct NativeTransformEdit {
     pub text: String,
 }
 
+/// A standard source map produced for a transformed module.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct NativeTransformSourceMap {
+    /// Source map version.
+    pub version: u32,
+    /// Original source filenames.
+    pub sources: Vec<String>,
+    /// Original source content, when embedded.
+    #[serde(rename = "sourcesContent", skip_serializing_if = "Option::is_none")]
+    pub sources_content: Option<Vec<String>>,
+    /// Source map symbol names.
+    pub names: Vec<String>,
+    /// VLQ-encoded source map mappings.
+    pub mappings: String,
+    /// Generated filename.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+}
+
 /// Result of transforming a module containing Palamedes macros.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct NativeTransformResult {
@@ -62,6 +82,9 @@ pub struct NativeTransformResult {
     /// Applied source edits in descending order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub edits: Vec<NativeTransformEdit>,
+    /// Source map for transformed code.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub map: Option<NativeTransformSourceMap>,
     /// Prepended import block, if emitted separately.
     #[serde(rename = "prependText", skip_serializing_if = "Option::is_none")]
     pub prepend_text: Option<String>,
@@ -137,7 +160,6 @@ pub fn transform_macros(
         return Ok(unchanged_result(source));
     }
 
-    let mut code = source.to_string();
     let mut prefix = String::new();
 
     if visitor.needs_runtime_import && !collector.has_runtime_import {
@@ -184,17 +206,52 @@ pub fn transform_macros(
         })
         .collect::<Vec<_>>();
 
+    let mut magic_string = MagicString::new(source);
     for replacement in &replacements {
-        code.replace_range(replacement.start..replacement.end, &replacement.text);
+        apply_replacement(&mut magic_string, replacement);
     }
 
+    let code = magic_string.to_string();
+    let has_changed = code != source;
+    let map = has_changed.then(|| {
+        let mut map = magic_string.source_map(SourceMapOptions {
+            include_content: true,
+            source: filename.into(),
+            hires: Hires::False,
+        });
+        map.set_file(filename);
+        let json = map.to_json();
+        NativeTransformSourceMap {
+            version: json.version,
+            sources: json.sources,
+            sources_content: json.sources_content.map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| item.unwrap_or_default())
+                    .collect()
+            }),
+            names: json.names,
+            mappings: json.mappings,
+            file: json.file,
+        }
+    });
+
     Ok(NativeTransformResult {
-        has_changed: code != source,
+        has_changed,
         code,
         compiled_ids: visitor.compiled_ids,
         edits,
+        map,
         prepend_text: None,
     })
+}
+
+fn apply_replacement(magic_string: &mut MagicString<'_>, replacement: &Replacement) {
+    if replacement.start == replacement.end {
+        magic_string.append_left(replacement.start, replacement.text.clone());
+    } else {
+        magic_string.update(replacement.start, replacement.end, replacement.text.clone());
+    }
 }
 
 fn import_insertion_offset(program: &oxc_ast::ast::Program<'_>) -> usize {
@@ -213,6 +270,7 @@ fn unchanged_result(source: &str) -> NativeTransformResult {
         has_changed: false,
         compiled_ids: Vec::new(),
         edits: Vec::new(),
+        map: None,
         prepend_text: None,
     }
 }
