@@ -6,6 +6,8 @@ use oxc_ast::ast::{
 };
 use oxc_span::GetSpan;
 
+use crate::error::{PalamedesError, PalamedesResult};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ValueBinding {
     pub expression: String,
@@ -113,7 +115,7 @@ pub(super) fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> HashMap
 pub(super) fn extract_jsx_value_binding(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
-) -> Option<ValueBinding> {
+) -> PalamedesResult<Option<ValueBinding>> {
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
             continue;
@@ -126,15 +128,16 @@ pub(super) fn extract_jsx_value_binding(
         };
 
         let mut used_value_names = HashMap::<String, String>::new();
-        return Some(jsx_value_binding(
+        return jsx_value_binding(
             &container.expression,
             source,
-            0,
+            "JSX choice value expression",
             &mut used_value_names,
-        ));
+        )
+        .map(Some);
     }
 
-    None
+    Ok(None)
 }
 
 pub(super) fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
@@ -241,13 +244,14 @@ pub(super) fn opening_element_to_component_wrapper(
 pub(super) fn extract_jsx_children_parts(
     children: &[JSXChild<'_>],
     source: &str,
-    next_component_index: &mut usize,
+    _next_component_index: &mut usize,
     solid_wrappers: bool,
-) -> (String, Vec<ValueBinding>, Vec<String>) {
+) -> PalamedesResult<(String, Vec<ValueBinding>, Vec<ValueBinding>)> {
     let mut parts = Vec::new();
     let mut values = Vec::new();
     let mut components = Vec::new();
     let mut used_value_names = HashMap::<String, String>::new();
+    let mut used_component_names = HashMap::<String, String>::new();
 
     for child in children {
         match child {
@@ -261,29 +265,37 @@ pub(super) fn extract_jsx_children_parts(
                 JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
                 expr => {
                     let binding =
-                        jsx_value_binding(expr, source, values.len(), &mut used_value_names);
+                        jsx_value_binding(expr, source, "JSX expression", &mut used_value_names)?;
                     parts.push(format!("{{{}}}", binding.name));
                     values.push(binding);
                 }
             },
             JSXChild::Element(element) => {
-                let current_index = *next_component_index;
-                *next_component_index += 1;
+                let component_expression = if solid_wrappers {
+                    opening_element_to_component_wrapper(&element.opening_element, source)
+                } else {
+                    opening_element_to_component(&element.opening_element, source)
+                };
+                let component_name = component_placeholder_name(&element.opening_element, source)?;
+                let component_name = make_unique_binding_name(
+                    component_name,
+                    &component_expression,
+                    &mut used_component_names,
+                );
 
                 let (inner_message, inner_values, inner_components) = extract_jsx_children_parts(
                     &element.children,
                     source,
-                    next_component_index,
+                    _next_component_index,
                     solid_wrappers,
-                );
+                )?;
                 parts.push(format!(
-                    "<{current_index}>{inner_message}</{current_index}>"
+                    "<{component_name}>{inner_message}</{component_name}>"
                 ));
                 values.extend(inner_values);
-                components.push(if solid_wrappers {
-                    opening_element_to_component_wrapper(&element.opening_element, source)
-                } else {
-                    opening_element_to_component(&element.opening_element, source)
+                components.push(ValueBinding {
+                    expression: component_expression,
+                    name: component_name,
                 });
                 components.extend(inner_components);
             }
@@ -291,20 +303,49 @@ pub(super) fn extract_jsx_children_parts(
                 let (inner_message, inner_values, inner_components) = extract_jsx_children_parts(
                     &fragment.children,
                     source,
-                    next_component_index,
+                    _next_component_index,
                     solid_wrappers,
-                );
+                )?;
                 if !inner_message.is_empty() {
                     parts.push(inner_message);
                 }
                 values.extend(inner_values);
                 components.extend(inner_components);
             }
-            JSXChild::Spread(_) => {}
+            JSXChild::Spread(_) => {
+                return Err(PalamedesError::UnnamedPlaceholder {
+                    syntax: "JSX spread child",
+                });
+            }
         }
     }
 
-    (parts.join("").trim().to_string(), values, components)
+    Ok((parts.join("").trim().to_string(), values, components))
+}
+
+fn component_placeholder_name(
+    opening_element: &JSXOpeningElement<'_>,
+    source: &str,
+) -> PalamedesResult<String> {
+    let name_span = opening_element.name.span();
+    let raw_name = source[name_span.start as usize..name_span.end as usize].trim();
+    let name = raw_name
+        .rsplit(['.', ':'])
+        .next()
+        .unwrap_or(raw_name)
+        .trim();
+
+    if !name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        return Ok(name.to_string());
+    }
+
+    Err(PalamedesError::UnnamedPlaceholder {
+        syntax: "JSX element",
+    })
 }
 
 pub(super) fn expression_name(expr: &Expression<'_>) -> Option<String> {
@@ -358,14 +399,16 @@ fn make_unique_binding_name(
 pub(super) fn expression_binding(
     expr: &Expression<'_>,
     source: &str,
-    fallback_index: usize,
+    syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
-) -> ValueBinding {
+) -> PalamedesResult<ValueBinding> {
     let expression = expression_source(expr, source);
-    let preferred_name = expression_name(expr).unwrap_or_else(|| fallback_index.to_string());
+    let Some(preferred_name) = expression_name(expr) else {
+        return Err(PalamedesError::UnnamedPlaceholder { syntax });
+    };
     let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
 
-    ValueBinding { expression, name }
+    Ok(ValueBinding { expression, name })
 }
 
 fn jsx_expression_source(expr: &JSXExpression<'_>, source: &str) -> Option<String> {
@@ -381,21 +424,22 @@ fn jsx_expression_source(expr: &JSXExpression<'_>, source: &str) -> Option<Strin
 pub(super) fn jsx_value_binding(
     expr: &JSXExpression<'_>,
     source: &str,
-    fallback_index: usize,
+    syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
-) -> ValueBinding {
-    let expression =
-        jsx_expression_source(expr, source).unwrap_or_else(|| fallback_index.to_string());
-    let preferred_name = jsx_expression_name(expr).unwrap_or_else(|| fallback_index.to_string());
+) -> PalamedesResult<ValueBinding> {
+    let expression = jsx_expression_source(expr, source).unwrap_or_default();
+    let Some(preferred_name) = jsx_expression_name(expr) else {
+        return Err(PalamedesError::UnnamedPlaceholder { syntax });
+    };
     let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
 
-    ValueBinding { expression, name }
+    Ok(ValueBinding { expression, name })
 }
 
 pub(super) fn template_to_message(
     template: &TemplateLiteral<'_>,
     source: &str,
-) -> (String, Option<Vec<ValueBinding>>) {
+) -> PalamedesResult<(String, Option<Vec<ValueBinding>>)> {
     let mut message = String::new();
     let mut values = Vec::new();
     let mut used_value_names = HashMap::<String, String>::new();
@@ -408,7 +452,8 @@ pub(super) fn template_to_message(
         }
 
         if let Some(expr) = template.expressions.get(index) {
-            let binding = expression_binding(expr, source, index, &mut used_value_names);
+            let binding =
+                expression_binding(expr, source, "template expression", &mut used_value_names)?;
             message.push('{');
             message.push_str(&binding.name);
             message.push('}');
@@ -416,14 +461,14 @@ pub(super) fn template_to_message(
         }
     }
 
-    (
+    Ok((
         message,
         if values.is_empty() {
             None
         } else {
             Some(values)
         },
-    )
+    ))
 }
 
 pub(super) fn build_icu_message(

@@ -17,6 +17,7 @@
   },
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "license": "MIT",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

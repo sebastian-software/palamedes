@@ -118,4 +118,12 @@ pub enum PalamedesError {
         "Explicit message ids are no longer supported. Remove `id` and rely on message/context instead."
     )]
     ExplicitMessageIdsUnsupported,
+    /// A placeholder expression could not be represented with a stable, meaningful name.
+    #[error(
+        "Could not infer a stable placeholder name for {syntax}. Extract the expression into a named variable before translating it."
+    )]
+    UnnamedPlaceholder {
+        /// Human-readable source shape that failed placeholder naming.
+        syntax: &'static str,
+    },
 }

@@ -167,7 +167,12 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             tag_name.as_str(),
             &["Trans", "Plural", "Select", "SelectOrdinal"],
         ) {
-            match extract_from_jsx_element(it, macro_name, self.origin(it.span.start as usize)) {
+            match extract_from_jsx_element(
+                it,
+                macro_name,
+                self.origin(it.span.start as usize),
+                self.source,
+            ) {
                 Ok(Some(message)) => self.push(message),
                 Ok(None) => {}
                 Err(error) => {
@@ -190,25 +195,35 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.imported_macro_name(tag_name, &["t", "msg"]),
                 Some("t" | "msg")
             ) {
-                if let Some(message) = extract_from_tagged_template(
+                match extract_from_tagged_template(
                     &it.quasi,
                     self.origin(it.span.start as usize),
                     self.source,
                     false,
                 ) {
-                    self.push(message);
+                    Ok(Some(message)) => self.push(message),
+                    Ok(None) => {}
+                    Err(error) => {
+                        self.fail(error);
+                        return;
+                    }
                 }
             }
         }
 
         if is_i18n_runtime_call(&it.tag, true) {
-            if let Some(message) = extract_from_tagged_template(
+            match extract_from_tagged_template(
                 &it.quasi,
                 self.origin(it.span.start as usize),
                 self.source,
                 true,
             ) {
-                self.push(message);
+                Ok(Some(message)) => self.push(message),
+                Ok(None) => {}
+                Err(error) => {
+                    self.fail(error);
+                    return;
+                }
             }
         }
 
@@ -233,11 +248,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 ],
             ) {
                 let message = match macro_name {
-                    "plural" | "select" | "selectOrdinal" => Ok(extract_from_choice_call(
+                    "plural" | "select" | "selectOrdinal" => extract_from_choice_call(
                         it,
                         macro_name,
                         self.origin(it.span.start as usize),
-                    )),
+                    ),
                     _ => extract_from_descriptor_call(
                         it,
                         macro_name,
@@ -346,6 +361,7 @@ fn extract_from_jsx_element(
     element: &JSXElement<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
+    source: &str,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let attrs = jsx_attributes(&element.opening_element);
 
@@ -353,11 +369,13 @@ fn extract_from_jsx_element(
         if attrs.contains_key("id") {
             return Err(PalamedesError::ExplicitMessageIdsUnsupported);
         }
-        let message = attrs
-            .get("message")
-            .cloned()
-            .or_else(|| Some(extract_jsx_children_as_message(&element.children)))
-            .filter(|message| !message.is_empty());
+        let message = match attrs.get("message") {
+            Some(message) => Some(message.clone()),
+            None => {
+                let children_message = extract_jsx_children_as_message(&element.children, source)?;
+                (!children_message.is_empty()).then_some(children_message)
+            }
+        };
         let comment = attrs.get("comment").cloned();
         let context = attrs.get("context").cloned();
 
@@ -378,7 +396,7 @@ fn extract_from_jsx_element(
         if attrs.contains_key("id") {
             return Err(PalamedesError::ExplicitMessageIdsUnsupported);
         }
-        let Some(value_name) = extract_jsx_value_name(&element.opening_element) else {
+        let Some(value_name) = extract_jsx_value_name(&element.opening_element)? else {
             return Ok(None);
         };
         let options = extract_choice_options_from_jsx(&element.opening_element);
@@ -418,19 +436,19 @@ fn extract_from_tagged_template(
     origin: (String, usize, Option<usize>),
     source: &str,
     _runtime: bool,
-) -> Option<ExtractedMessageRecord> {
-    let (message, placeholders) = template_to_message(template, source);
+) -> PalamedesResult<Option<ExtractedMessageRecord>> {
+    let (message, placeholders) = template_to_message(template, source)?;
     if message.is_empty() {
-        return None;
+        return Ok(None);
     }
 
-    Some(ExtractedMessageRecord {
+    Ok(Some(ExtractedMessageRecord {
         message,
         comment: None,
         context: None,
         placeholders: (!placeholders.is_empty()).then_some(placeholders),
         origin,
-    })
+    }))
 }
 
 fn extract_from_descriptor_call(
@@ -476,35 +494,43 @@ fn extract_from_choice_call(
     call: &CallExpression<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
-) -> Option<ExtractedMessageRecord> {
-    let value_arg = call.arguments.first()?;
-    let options_arg = call.arguments.get(1)?;
+) -> PalamedesResult<Option<ExtractedMessageRecord>> {
+    let Some(value_arg) = call.arguments.first() else {
+        return Ok(None);
+    };
+    let Some(options_arg) = call.arguments.get(1) else {
+        return Ok(None);
+    };
     let Argument::ObjectExpression(object) = options_arg else {
-        return None;
+        return Ok(None);
     };
 
-    let value_name = argument_expression_name(value_arg)?;
     let options = extract_choice_options_from_object(object);
     if options.is_empty() {
-        return None;
+        return Ok(None);
     }
+    let Some(value_name) = argument_expression_name(value_arg) else {
+        return Err(PalamedesError::UnnamedPlaceholder {
+            syntax: "choice value expression",
+        });
+    };
 
     let format = match macro_name {
         "plural" => "plural",
         "select" => "select",
         "selectOrdinal" => "selectordinal",
-        _ => return None,
+        _ => return Ok(None),
     };
 
     let message = build_icu_message(format, &value_name, &options, None);
 
-    Some(ExtractedMessageRecord {
+    Ok(Some(ExtractedMessageRecord {
         message,
         comment: None,
         context: None,
         placeholders: None,
         origin,
-    })
+    }))
 }
 
 fn is_i18n_runtime_call(expr: &Expression<'_>, allow_t: bool) -> bool {
@@ -583,7 +609,7 @@ fn extract_from_runtime_call(
 fn template_to_message(
     template: &TemplateLiteral<'_>,
     source: &str,
-) -> (String, BTreeMap<String, String>) {
+) -> PalamedesResult<(String, BTreeMap<String, String>)> {
     let mut message = String::new();
     let mut placeholders = BTreeMap::new();
 
@@ -595,7 +621,11 @@ fn template_to_message(
         }
 
         if let Some(expr) = template.expressions.get(index) {
-            let placeholder = expression_name(expr).unwrap_or_else(|| index.to_string());
+            let Some(placeholder) = expression_name(expr) else {
+                return Err(PalamedesError::UnnamedPlaceholder {
+                    syntax: "template expression",
+                });
+            };
             let expression = expression_source(expr, source).unwrap_or_else(|| placeholder.clone());
             message.push('{');
             message.push_str(&placeholder);
@@ -604,7 +634,7 @@ fn template_to_message(
         }
     }
 
-    (message, placeholders)
+    Ok((message, placeholders))
 }
 
 fn expression_source(expr: &Expression<'_>, source: &str) -> Option<String> {
@@ -653,7 +683,9 @@ fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
     }
 }
 
-fn extract_jsx_value_name(opening_element: &JSXOpeningElement<'_>) -> Option<String> {
+fn extract_jsx_value_name(
+    opening_element: &JSXOpeningElement<'_>,
+) -> PalamedesResult<Option<String>> {
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
             continue;
@@ -665,10 +697,14 @@ fn extract_jsx_value_name(opening_element: &JSXOpeningElement<'_>) -> Option<Str
             continue;
         };
 
-        return jsx_expression_name(&container.expression);
+        return jsx_expression_name(&container.expression).map(Some).ok_or(
+            PalamedesError::UnnamedPlaceholder {
+                syntax: "JSX choice value expression",
+            },
+        );
     }
 
-    None
+    Ok(None)
 }
 
 fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
@@ -684,9 +720,12 @@ fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
     }
 }
 
-fn extract_jsx_children_as_message(children: &[JSXChild<'_>]) -> String {
-    let mut placeholder_index = 0usize;
+fn extract_jsx_children_as_message(
+    children: &[JSXChild<'_>],
+    source: &str,
+) -> PalamedesResult<String> {
     let mut parts = Vec::new();
+    let mut used_component_names = HashMap::<String, String>::new();
 
     for child in children {
         match child {
@@ -699,34 +738,111 @@ fn extract_jsx_children_as_message(children: &[JSXChild<'_>]) -> String {
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
                 expr => {
-                    if let Some(name) = jsx_expression_name(expr) {
-                        parts.push(format!("{{{name}}}"));
-                    } else {
-                        parts.push(format!("{{{placeholder_index}}}"));
-                        placeholder_index += 1;
-                    }
+                    let Some(name) = jsx_expression_name(expr) else {
+                        return Err(PalamedesError::UnnamedPlaceholder {
+                            syntax: "JSX expression",
+                        });
+                    };
+                    parts.push(format!("{{{name}}}"));
                 }
             },
             JSXChild::Element(element) => {
-                let current_index = placeholder_index;
-                let inner = extract_jsx_children_as_message(&element.children);
-                parts.push(format!("<{current_index}>{inner}</{current_index}>"));
-                placeholder_index += 1;
+                let component_expression =
+                    opening_element_to_component(&element.opening_element, source);
+                let name = jsx_component_placeholder_name(&element.opening_element, source)?;
+                let name = make_unique_binding_name(
+                    name,
+                    &component_expression,
+                    &mut used_component_names,
+                );
+                let inner = extract_jsx_children_as_message(&element.children, source)?;
+                parts.push(format!("<{name}>{inner}</{name}>"));
             }
             JSXChild::Fragment(fragment) => {
-                let inner = extract_jsx_children_as_message(&fragment.children);
+                let inner = extract_jsx_children_as_message(&fragment.children, source)?;
                 if !inner.is_empty() {
                     parts.push(inner);
                 }
             }
             JSXChild::Spread(_) => {
-                parts.push(format!("{{{placeholder_index}}}"));
-                placeholder_index += 1;
+                return Err(PalamedesError::UnnamedPlaceholder {
+                    syntax: "JSX spread child",
+                });
             }
         }
     }
 
-    parts.join("").trim().to_string()
+    Ok(parts.join("").trim().to_string())
+}
+
+fn opening_element_to_component(opening_element: &JSXOpeningElement<'_>, source: &str) -> String {
+    let start = opening_element.span.start as usize;
+    let end = opening_element.span.end as usize;
+    let markup = &source[start..end];
+
+    if markup.trim_end().ends_with("/>") {
+        return markup.to_string();
+    }
+
+    if let Some(prefix) = markup.strip_suffix('>') {
+        format!("{prefix} />")
+    } else {
+        format!("{markup} />")
+    }
+}
+
+fn make_unique_binding_name(
+    preferred_name: String,
+    expression: &str,
+    used_names: &mut HashMap<String, String>,
+) -> String {
+    if let Some(existing_expression) = used_names.get(&preferred_name) {
+        if existing_expression == expression {
+            return preferred_name;
+        }
+    } else {
+        used_names.insert(preferred_name.clone(), expression.to_string());
+        return preferred_name;
+    }
+
+    let mut suffix = 1usize;
+    loop {
+        let candidate = format!("{preferred_name}_{suffix}");
+        match used_names.get(&candidate) {
+            Some(existing_expression) if existing_expression != expression => {
+                suffix += 1;
+            }
+            _ => {
+                used_names.insert(candidate.clone(), expression.to_string());
+                return candidate;
+            }
+        }
+    }
+}
+
+fn jsx_component_placeholder_name(
+    opening_element: &JSXOpeningElement<'_>,
+    source: &str,
+) -> PalamedesResult<String> {
+    let name_span = opening_element.name.span();
+    let raw_name = source[name_span.start as usize..name_span.end as usize].trim();
+    let name = raw_name
+        .rsplit(['.', ':'])
+        .next()
+        .unwrap_or(raw_name)
+        .trim();
+
+    if !name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        return Ok(name.to_string());
+    }
+
+    Err(PalamedesError::UnnamedPlaceholder {
+        syntax: "JSX element",
+    })
 }
 
 fn clean_jsx_text(text: &str) -> String {
@@ -886,21 +1002,21 @@ mod tests {
         let messages = extract_messages(
             r#"
               import { t } from "@palamedes/core/macro"
-              const message = t`Hello ${name} and ${first + last}`
+              const message = t`Hello ${name} and ${resolved.locale}`
             "#,
             "test.tsx",
         )
         .expect("messages should extract");
 
-        assert_eq!(messages[0].message, "Hello {name} and {1}");
+        assert_eq!(messages[0].message, "Hello {name} and {locale}");
         let placeholders = messages[0]
             .placeholders
             .as_ref()
             .expect("placeholder metadata");
         assert_eq!(placeholders.get("name").map(String::as_str), Some("name"));
         assert_eq!(
-            placeholders.get("1").map(String::as_str),
-            Some("first + last")
+            placeholders.get("locale").map(String::as_str),
+            Some("resolved.locale")
         );
     }
 
@@ -929,5 +1045,50 @@ mod tests {
         .expect_err("explicit ids should fail");
 
         assert!(error.to_string().contains("Explicit message ids"));
+    }
+
+    #[test]
+    fn rejects_unnamed_template_placeholders() {
+        let error = extract_messages(
+            r#"
+              import { t } from "@palamedes/core/macro"
+              const message = t`Hello ${firstName + lastName}`
+            "#,
+            "test.tsx",
+        )
+        .expect_err("unnamed placeholders should fail");
+
+        assert!(error.to_string().contains("stable placeholder name"));
+    }
+
+    #[test]
+    fn uses_stable_jsx_component_placeholder_names() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const message = <Trans>Accept <a href="/terms">terms</a> and <a href="/privacy">privacy</a></Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages[0].message,
+            "Accept <a>terms</a> and <a_1>privacy</a_1>"
+        );
+    }
+
+    #[test]
+    fn rejects_unnamed_jsx_placeholders() {
+        let error = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const message = <Trans>Hello {firstName + lastName}</Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect_err("unnamed JSX placeholders should fail");
+
+        assert!(error.to_string().contains("stable placeholder name"));
     }
 }

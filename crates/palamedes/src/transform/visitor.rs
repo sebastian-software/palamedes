@@ -148,16 +148,21 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         }
 
-        if let Some((text, compiled_id)) =
-            transform_tagged_template(&it.quasi, self.source, self.options)
-        {
-            self.replacements.push(Replacement {
-                start: it.span.start as usize,
-                end: it.span.end as usize,
-                text,
-            });
-            self.push_compiled_id(&compiled_id);
-            self.needs_runtime_import = true;
+        match transform_tagged_template(&it.quasi, self.source, self.options) {
+            Ok(Some((text, compiled_id))) => {
+                self.replacements.push(Replacement {
+                    start: it.span.start as usize,
+                    end: it.span.end as usize,
+                    text,
+                });
+                self.push_compiled_id(&compiled_id);
+                self.needs_runtime_import = true;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.fail(error);
+                return;
+            }
         }
 
         walk::walk_tagged_template_expression(self, it);
@@ -200,16 +205,26 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 }
             }
             "plural" | "select" | "selectOrdinal" => {
-                if let Some((text, compiled_id)) =
-                    transform_choice_call(it, self.source, &macro_info.imported_name, self.options)
-                {
-                    self.replacements.push(Replacement {
-                        start: it.span.start as usize,
-                        end: it.span.end as usize,
-                        text,
-                    });
-                    self.push_compiled_id(&compiled_id);
-                    self.needs_runtime_import = true;
+                match transform_choice_call(
+                    it,
+                    self.source,
+                    &macro_info.imported_name,
+                    self.options,
+                ) {
+                    Ok(Some((text, compiled_id))) => {
+                        self.replacements.push(Replacement {
+                            start: it.span.start as usize,
+                            end: it.span.end as usize,
+                            text,
+                        });
+                        self.push_compiled_id(&compiled_id);
+                        self.needs_runtime_import = true;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        self.fail(error);
+                        return;
+                    }
                 }
             }
             _ => {

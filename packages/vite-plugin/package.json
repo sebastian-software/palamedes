@@ -21,6 +21,7 @@
     "stub": "unbuild --stub"
   },
   "homepage": "https://github.com/sebastian-software/palamedes",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
