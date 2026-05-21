@@ -89,6 +89,22 @@ export interface CatalogCombineResult {
   stats: CatalogCombineStats;
   diagnostics: Array<CatalogDiagnostic>;
 }
+export type CatalogMergeFormat = "Po" | "Json"
+export type CatalogMergeStrategy = "UseFirst"
+export interface CatalogMergeRequest {
+  inputPaths: Array<string>;
+  outputPath: string;
+  format?: CatalogMergeFormat;
+  sourceLocale: string;
+  locale?: string;
+  strategy?: CatalogMergeStrategy;
+}
+export interface CatalogMergeResult {
+  outputPath: string;
+  format: CatalogMergeFormat;
+  stats: CatalogCombineStats;
+  diagnostics: Array<CatalogDiagnostic>;
+}
 export type CatalogDiagnosticSeverity = "Info" | "Warning" | "Error"
 export interface CatalogDiagnosticSourceKey {
   message: string;
@@ -307,6 +323,7 @@ export interface NativeBindings {
   normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata;
   validateMessageMetadata(input: MessageMetadataInput): MessageMetadataValidationReport;
   combineCatalogs(request: CatalogCombineRequest): CatalogCombineResult;
+  mergeCatalogFiles(request: CatalogMergeRequest): CatalogMergeResult;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;
