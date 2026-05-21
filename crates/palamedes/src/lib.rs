@@ -48,7 +48,7 @@ pub use catalog_combine::{
 pub use catalog_update::{
     parse_catalog, update_catalog_file, CatalogParseRequest, CatalogParseResult,
     CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, CatalogUpdateResponse,
-    CatalogUpdateStats, ParsedCatalogMessage,
+    CatalogUpdateStats, MachineTranslationMetadata, ParsedCatalogMessage,
 };
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
@@ -66,7 +66,7 @@ pub use transform::{
 };
 
 /// Published `ferrocat` version used by the Rust core.
-pub const FERROCAT_VERSION: &str = "0.11.0";
+pub const FERROCAT_VERSION: &str = "0.12.0";
 
 /// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]
@@ -225,5 +225,21 @@ msgstr "Hallo"
 
         assert_eq!(po.headers.get("Language").map(String::as_str), Some("de"));
         assert_eq!(po.items[0].msgid, "Hello");
+    }
+
+    #[test]
+    fn parses_po_machine_translation_metadata() {
+        let po = parse_po(
+            r#"#@ ferrocat-mt model=openai/gpt-5.5-high confidence=95 hash=abc
+msgid "Hello"
+msgstr "Hallo"
+"#,
+        )
+        .expect("PO should parse");
+
+        assert_eq!(
+            po.items[0].metadata.get("ferrocat-mt").map(String::as_str),
+            Some("model=openai/gpt-5.5-high confidence=95 hash=abc")
+        );
     }
 }

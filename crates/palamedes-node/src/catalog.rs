@@ -62,6 +62,15 @@ pub struct ParsedCatalogMessage {
     pub comments: Vec<String>,
     pub origins: Vec<CatalogOrigin>,
     pub obsolete: bool,
+    pub machine_translation: Option<MachineTranslationMetadata>,
+}
+
+#[napi(object)]
+pub struct MachineTranslationMetadata {
+    pub model: String,
+    pub modified: Option<String>,
+    pub confidence: Option<u8>,
+    pub hash: String,
 }
 
 #[napi(object)]
@@ -426,6 +435,20 @@ impl From<palamedes::ParsedCatalogMessage> for ParsedCatalogMessage {
             comments: value.comments,
             origins: value.origins.into_iter().map(CatalogOrigin::from).collect(),
             obsolete: value.obsolete,
+            machine_translation: value
+                .machine_translation
+                .map(MachineTranslationMetadata::from),
+        }
+    }
+}
+
+impl From<palamedes::MachineTranslationMetadata> for MachineTranslationMetadata {
+    fn from(value: palamedes::MachineTranslationMetadata) -> Self {
+        Self {
+            model: value.model,
+            modified: value.modified,
+            confidence: value.confidence,
+            hash: value.hash,
         }
     }
 }

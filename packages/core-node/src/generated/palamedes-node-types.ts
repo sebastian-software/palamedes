@@ -44,6 +44,13 @@ export interface ParsedCatalogMessage {
   comments: Array<string>;
   origins: Array<CatalogOrigin>;
   obsolete: boolean;
+  machineTranslation?: MachineTranslationMetadata;
+}
+export interface MachineTranslationMetadata {
+  model: string;
+  modified?: string;
+  confidence?: number;
+  hash: string;
 }
 export interface CatalogParseResult {
   locale?: string;

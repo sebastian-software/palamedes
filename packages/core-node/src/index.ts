@@ -35,6 +35,7 @@ import type {
   MessageOriginMetadata as GeneratedMessageOriginMetadata,
   MessageSelectorKind as GeneratedMessageSelectorKind,
   MessageSelectorMetadata as GeneratedMessageSelectorMetadata,
+  MachineTranslationMetadata as GeneratedMachineTranslationMetadata,
   NativeBindings as GeneratedNativeBindings,
   NativeExtractedMessage as GeneratedNativeExtractedMessage,
   NativeInfo as GeneratedNativeInfo,
@@ -56,6 +57,7 @@ export type CatalogUpdateRequest = GeneratedCatalogUpdateRequest
 export type CatalogUpdateStats = GeneratedCatalogUpdateStats
 export type CatalogParseRequest = GeneratedCatalogParseRequest
 export type ParsedCatalogMessage = GeneratedParsedCatalogMessage
+export type MachineTranslationMetadata = GeneratedMachineTranslationMetadata
 export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions
 export type CatalogAuditSummary = GeneratedCatalogAuditSummary
 export type CatalogDiagnosticSeverity = "info" | "warning" | "error"

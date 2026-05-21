@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
+use ferrocat::MachineTranslationMetadata as FerrocatMachineTranslationMetadata;
 use ferrocat::{
     parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
     CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, ObsoleteStrategy,
@@ -132,6 +133,36 @@ pub struct ParsedCatalogMessage {
     pub origins: Vec<CatalogUpdateOrigin>,
     /// Whether the message is obsolete.
     pub obsolete: bool,
+    /// Machine-translation provenance for the current translation, when present.
+    #[serde(rename = "machineTranslation", skip_serializing_if = "Option::is_none")]
+    pub machine_translation: Option<MachineTranslationMetadata>,
+}
+
+/// Machine-translation metadata attached to one translated catalog entry.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MachineTranslationMetadata {
+    /// Model identifier used to produce the translation.
+    pub model: String,
+    /// Time when the machine-generated translation was last modified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified: Option<String>,
+    /// Optional model confidence from 0 to 100.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<u8>,
+    /// Change-detection hash for the current translation payload.
+    pub hash: String,
+}
+
+impl From<FerrocatMachineTranslationMetadata> for MachineTranslationMetadata {
+    fn from(value: FerrocatMachineTranslationMetadata) -> Self {
+        Self {
+            model: value.model,
+            modified: value.modified,
+            confidence: value.confidence,
+            hash: value.hash,
+        }
+    }
 }
 
 /// Updates a catalog file using Palamedes' source-first semantics.
@@ -265,6 +296,9 @@ fn public_parse_result(parsed: ParsedCatalog) -> CatalogParseResult {
                     })
                     .collect(),
                 obsolete: message.obsolete,
+                machine_translation: message
+                    .machine_translation
+                    .map(MachineTranslationMetadata::from),
             })
             .collect(),
         diagnostics: parsed
@@ -291,9 +325,11 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        update_catalog_file, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
+        parse_catalog, update_catalog_file, CatalogParseRequest, CatalogUpdateMessage,
+        CatalogUpdateOrigin, CatalogUpdateRequest,
     };
     use crate::parse_po;
+    use ferrocat::{machine_translation_hash, EffectiveTranslationRef};
 
     fn temp_file(name: &str) -> String {
         std::env::temp_dir()
@@ -365,6 +401,70 @@ mod tests {
         let output = std::fs::read_to_string(&path).expect("read");
         assert!(output.contains("msgstr \"Hallo\""));
         assert!(output.contains("#~ msgid \"Old\""));
+    }
+
+    #[test]
+    fn parse_catalog_exposes_machine_translation_metadata() {
+        let path = temp_file("machine-translation-parse");
+        let hash = machine_translation_hash(EffectiveTranslationRef::Singular("Hallo"));
+        std::fs::write(
+            &path,
+            format!(
+                "#@ ferrocat-mt model=openai/gpt-5.5-high modified=2026-05-12T10:30:00Z confidence=95 hash={hash}\n\
+                 msgid \"Hello\"\n\
+                 msgstr \"Hallo\"\n"
+            ),
+        )
+        .expect("write existing");
+
+        let parsed = parse_catalog(&CatalogParseRequest {
+            target_path: path,
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+        })
+        .expect("parse catalog");
+
+        let metadata = parsed.messages[0]
+            .machine_translation
+            .as_ref()
+            .expect("machine translation metadata");
+        assert_eq!(metadata.model, "openai/gpt-5.5-high");
+        assert_eq!(metadata.modified.as_deref(), Some("2026-05-12T10:30:00Z"));
+        assert_eq!(metadata.confidence, Some(95));
+        assert_eq!(metadata.hash, hash);
+    }
+
+    #[test]
+    fn preserves_valid_machine_translation_metadata() {
+        let path = temp_file("machine-translation-preserve");
+        let hash = machine_translation_hash(EffectiveTranslationRef::Singular("Hallo"));
+        std::fs::write(
+            &path,
+            format!(
+                "#@ ferrocat-mt model=openai/gpt-5.5-high confidence=95 hash={hash}\n\
+                 msgid \"Hello\"\n\
+                 msgstr \"Hallo\"\n"
+            ),
+        )
+        .expect("write existing");
+
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            messages: vec![CatalogUpdateMessage {
+                message: "Hello".to_owned(),
+                context: None,
+                placeholders: BTreeMap::new(),
+                extracted_comments: vec![],
+                origins: vec![],
+            }],
+        })
+        .expect("update");
+
+        let output = std::fs::read_to_string(&path).expect("read");
+        assert!(output.contains("#@ ferrocat-mt model=openai/gpt-5.5-high confidence=95 hash="));
     }
 
     #[test]
