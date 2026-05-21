@@ -11,7 +11,9 @@ function buildTransformOutput(
 ): TransformResult {
   const magicString = new MagicString(source)
 
-  for (const edit of [...nativeResult.edits].sort((a, b) => b.start - a.start || b.end - a.end)) {
+  const edits = nativeResult.edits.map((edit) => normalizeNativeEditOffsets(source, edit))
+
+  for (const edit of edits.sort((a, b) => b.start - a.start || b.end - a.end)) {
     applyEdit(magicString, edit)
   }
 
@@ -59,6 +61,59 @@ function applyEdit(magicString: MagicString, edit: NativeTransformEdit): void {
   }
 
   magicString.overwrite(edit.start, edit.end, edit.text)
+}
+
+function normalizeNativeEditOffsets(source: string, edit: NativeTransformEdit): NativeTransformEdit {
+  return {
+    ...edit,
+    start: utf8ByteOffsetToCodeUnitOffset(source, edit.start),
+    end: utf8ByteOffsetToCodeUnitOffset(source, edit.end),
+  }
+}
+
+function utf8ByteOffsetToCodeUnitOffset(source: string, byteOffset: number): number {
+  if (byteOffset === 0) {
+    return 0
+  }
+
+  let bytes = 0
+
+  for (let codeUnitOffset = 0; codeUnitOffset < source.length; ) {
+    const codePoint = source.codePointAt(codeUnitOffset)
+    if (codePoint === undefined) {
+      break
+    }
+
+    codeUnitOffset += codePoint > 0xffff ? 2 : 1
+    bytes += utf8ByteLength(codePoint)
+
+    if (bytes === byteOffset) {
+      return codeUnitOffset
+    }
+
+    if (bytes > byteOffset) {
+      break
+    }
+  }
+
+  if (bytes === byteOffset) {
+    return source.length
+  }
+
+  throw new Error(`Native transform returned invalid UTF-8 byte offset: ${byteOffset}`)
+}
+
+function utf8ByteLength(codePoint: number): number {
+  if (codePoint <= 0x7f) {
+    return 1
+  }
+  if (codePoint <= 0x7ff) {
+    return 2
+  }
+  if (codePoint <= 0xffff) {
+    return 3
+  }
+  return 4
 }
 
 export function transformPalamedesMacros(

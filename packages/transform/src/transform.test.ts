@@ -77,6 +77,19 @@ const el = <Trans>Hello {name}</Trans>;
     expect(result.code).toContain('values={{ name }}')
   })
 
+  it("applies native UTF-8 byte edit offsets to JavaScript strings", () => {
+    const code = `import { Trans } from "@palamedes/react/macro";
+const x = "äöü";
+const y = <Trans>Hallo Welt</Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.hasChanged).toBe(true)
+    expect(result.code).toContain('import { Trans } from "@palamedes/react"')
+    expect(result.code).toContain('const x = "äöü";')
+    expect(result.code).toContain('message="Hallo Welt"')
+  })
+
   it("transforms Solid <Trans> macros to @palamedes/solid imports", () => {
     const code = `
 import { Trans } from "@palamedes/solid/macro";
