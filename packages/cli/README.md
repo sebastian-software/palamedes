@@ -19,6 +19,7 @@ Use `@palamedes/cli` when you want:
 - structured catalog audits in CI
 - watch mode during development
 - a clean way to update `.po` catalogs in CI
+- a semantic catalog merge command for Git merge drivers
 
 If you are building your own extraction workflow inside your i18n config or custom tooling, look at [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor) instead.
 
@@ -45,11 +46,45 @@ pnpm exec pmds extract --verbose
 pnpm exec pmds audit
 pnpm exec pmds audit --json
 pnpm exec pmds audit --fail-on warning
+pnpm exec pmds catalog merge --output src/locales/de.po src/locales/de.po other.po
 ```
 
 `pmds audit` reports missing translations, extra catalog entries, fuzzy or
 obsolete messages, and ICU compatibility issues through the same `ferrocat`
 catalog engine that powers Palamedes builds.
+
+### Catalog Merge
+
+`pmds catalog merge` merges exactly two catalog files with V1 `use-first`
+semantics. When both inputs contain the same semantic identity, the first input
+wins for translator-facing content; messages that only exist in the second
+input are added.
+
+```bash
+pnpm exec pmds catalog merge --format=po --strategy=use-first --output %A %A %B
+```
+
+`--format` can be omitted when all input and output extensions are supported
+and match. `.po` maps to `po`; `.json`, `.ndjson`, and `.fcat.ndjson` map to
+`json`. The public `json` format is Ferrocat's source-first
+`ferrocat.ndjson.v1` storage format.
+
+For Git merge-driver usage:
+
+```gitattributes
+*.po merge=palamedes-catalog
+*.fcat.ndjson merge=palamedes-catalog-json
+```
+
+```bash
+git config merge.palamedes-catalog.driver \
+  'pmds catalog merge --format=po --strategy=use-first --output %A %A %B'
+git config merge.palamedes-catalog-json.driver \
+  'pmds catalog merge --format=json --strategy=use-first --output %A %A %B'
+```
+
+`--source-locale` is optional. The command uses an explicit value first, then
+`palamedes.config.*` when available, then `en`.
 
 ## Configuration
 

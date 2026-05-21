@@ -9,6 +9,8 @@ import type {
   CatalogAuditSummary as GeneratedCatalogAuditSummary,
   CatalogCombineRequest as GeneratedCatalogCombineRequest,
   CatalogCombineResult as GeneratedCatalogCombineResult,
+  CatalogMergeRequest as GeneratedCatalogMergeRequest,
+  CatalogMergeResult as GeneratedCatalogMergeResult,
   CatalogArtifactConfig as GeneratedCatalogArtifactConfig,
   CatalogArtifactDiagnostic as GeneratedCatalogArtifactDiagnostic,
   CatalogArtifactMissingMessage as GeneratedCatalogArtifactMissingMessage,
@@ -103,6 +105,21 @@ export type CatalogCombineResult =
   Omit<GeneratedCatalogCombineResult, "diagnostics"> & {
   diagnostics: CatalogDiagnostic[]
   }
+export type CatalogMergeFormat = "po" | "json"
+export type CatalogMergeStrategy = "useFirst"
+export interface CatalogMergeRequest {
+  inputPaths: string[]
+  outputPath: string
+  format?: CatalogMergeFormat
+  sourceLocale: string
+  locale?: string
+  strategy?: CatalogMergeStrategy
+}
+export type CatalogMergeResult =
+  Omit<GeneratedCatalogMergeResult, "format" | "diagnostics"> & {
+  format: CatalogMergeFormat
+  diagnostics: CatalogDiagnostic[]
+  }
 export interface CatalogAuditOptions {
   locales?: string[]
   checks?: CatalogAuditCheckOptions
@@ -153,6 +170,7 @@ export type CatalogArtifactResult =
 type NativeBindings = GeneratedNativeBindings
 type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest
 type NativeCatalogCombineRequest = GeneratedCatalogCombineRequest
+type NativeCatalogMergeRequest = GeneratedCatalogMergeRequest
 type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
 type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
 
@@ -307,6 +325,15 @@ export function combineCatalogs(request: CatalogCombineRequest): CatalogCombineR
   }
 }
 
+export function mergeCatalogFiles(request: CatalogMergeRequest): CatalogMergeResult {
+  const result = native.mergeCatalogFiles(toNativeMergeRequest(request))
+  return {
+    ...result,
+    format: fromNativeMergeFormat(result.format),
+    diagnostics: mapCatalogDiagnostics(result.diagnostics),
+  }
+}
+
 function toNativeCombineRequest(request: CatalogCombineRequest): NativeCatalogCombineRequest {
   return {
     inputs: request.inputs,
@@ -330,6 +357,48 @@ function toNativeConflictStrategy(
       return "UseLast"
     case "error":
       return "Error"
+  }
+}
+
+function toNativeMergeRequest(request: CatalogMergeRequest): NativeCatalogMergeRequest {
+  return {
+    inputPaths: request.inputPaths,
+    outputPath: request.outputPath,
+    format: request.format ? toNativeMergeFormat(request.format) : undefined,
+    sourceLocale: request.sourceLocale,
+    locale: request.locale,
+    strategy: request.strategy ? toNativeMergeStrategy(request.strategy) : undefined,
+  }
+}
+
+function toNativeMergeFormat(
+  format: CatalogMergeFormat
+): NonNullable<NativeCatalogMergeRequest["format"]> {
+  switch (format) {
+    case "po":
+      return "Po"
+    case "json":
+      return "Json"
+  }
+}
+
+function fromNativeMergeFormat(
+  format: GeneratedCatalogMergeResult["format"]
+): CatalogMergeFormat {
+  switch (format) {
+    case "Po":
+      return "po"
+    case "Json":
+      return "json"
+  }
+}
+
+function toNativeMergeStrategy(
+  strategy: CatalogMergeStrategy
+): NonNullable<NativeCatalogMergeRequest["strategy"]> {
+  switch (strategy) {
+    case "useFirst":
+      return "UseFirst"
   }
 }
 

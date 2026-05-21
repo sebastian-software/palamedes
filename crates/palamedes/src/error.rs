@@ -26,6 +26,43 @@ pub enum PalamedesError {
         /// Underlying filesystem error.
         source: std::io::Error,
     },
+    /// Writing a file to disk failed.
+    #[error("Failed to write {path}: {source}")]
+    WriteFile {
+        /// Path that was written.
+        path: PathBuf,
+        #[source]
+        /// Underlying filesystem error.
+        source: std::io::Error,
+    },
+    /// Replacing a file on disk failed.
+    #[error("Failed to replace {path} with {temp_path}: {source}")]
+    ReplaceFile {
+        /// Final path that should have been replaced.
+        path: PathBuf,
+        /// Temporary path that should have been moved into place.
+        temp_path: PathBuf,
+        #[source]
+        /// Underlying filesystem error.
+        source: std::io::Error,
+    },
+    /// A catalog merge request must include exactly two inputs.
+    #[error("Catalog merge requires exactly two input files, received {count}.")]
+    InvalidCatalogMergeInputCount {
+        /// Number of input files provided.
+        count: usize,
+    },
+    /// A catalog merge format could not be inferred from a path.
+    #[error("Could not infer catalog merge format from {path}. Expected .po, .json, .ndjson, or .fcat.ndjson.")]
+    CouldNotInferCatalogMergeFormat {
+        /// Path whose extension was inspected.
+        path: PathBuf,
+    },
+    /// A catalog merge request inferred multiple formats.
+    #[error(
+        "Catalog merge inputs and output must use the same format unless --format is provided."
+    )]
+    MixedCatalogMergeFormats,
     /// A configured catalog glob/path could not be compiled to a matcher.
     #[error("Invalid catalog path pattern {pattern}: {source}")]
     InvalidCatalogPathPattern {

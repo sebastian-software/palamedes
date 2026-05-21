@@ -26,6 +26,7 @@ diagnostics, and runtime artifact compilation.
 - Familiar macro-style authoring without carrying older compatibility paths forward
 - Fast transforms, extraction, catalog updates, audits, and compile steps
 - Source-string-first catalogs that translators can inspect and teams can trust
+- Semantic catalog merging for Git merge-driver workflows without gettext
 - A local foundation for future managed translation workflows without giving up repo ownership
 
 ## What Makes It Feel Better
@@ -162,6 +163,14 @@ setClientI18n(i18n)
 
 ```bash
 pnpm exec pmds extract
+```
+
+For semantic catalog conflict handling, Palamedes can also act as a Git merge
+driver:
+
+```bash
+git config merge.palamedes-catalog.driver \
+  'pmds catalog merge --format=po --strategy=use-first --output %A %A %B'
 ```
 
 For the full copy-paste path, including `.po` loading and the first translated
