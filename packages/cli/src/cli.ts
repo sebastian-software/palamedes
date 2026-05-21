@@ -3,6 +3,7 @@
 import { program } from "commander"
 import chalk from "chalk"
 import { audit } from "./commands/audit"
+import { mergeCatalog } from "./commands/catalog"
 import { extract } from "./commands/extract"
 
 const VERSION = "0.0.1"
@@ -38,6 +39,29 @@ program
   .action(async (options) => {
     try {
       await audit(options)
+    } catch (error) {
+      console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
+      process.exit(1)
+    }
+  })
+
+const catalog = program
+  .command("catalog")
+  .description("Work with Palamedes catalog files")
+
+catalog
+  .command("merge")
+  .description("Merge two catalog files with semantic use-first behavior")
+  .argument("<inputs...>", "Input catalog files in precedence order")
+  .requiredOption("--output <path>", "Output catalog path")
+  .option("-c, --config <path>", "Path to palamedes.config.ts")
+  .option("--format <format>", "Catalog format: po or json")
+  .option("--strategy <strategy>", "Merge strategy", "use-first")
+  .option("--source-locale <locale>", "Source locale for catalog semantics")
+  .option("--locale <locale>", "Locale of the merged catalog")
+  .action(async (inputs: string[], options) => {
+    try {
+      await mergeCatalog(inputs, options)
     } catch (error) {
       console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
       process.exit(1)

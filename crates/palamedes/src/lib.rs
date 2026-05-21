@@ -42,8 +42,9 @@ pub use catalog_audit::{
     CatalogAuditResult, CatalogAuditSummary,
 };
 pub use catalog_combine::{
-    combine_catalogs, CatalogCombineConflictStrategy, CatalogCombineInput, CatalogCombineRequest,
-    CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats,
+    combine_catalogs, merge_catalog_files, CatalogCombineConflictStrategy, CatalogCombineInput,
+    CatalogCombineRequest, CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats,
+    CatalogMergeFormat, CatalogMergeRequest, CatalogMergeResult, CatalogMergeStrategy,
 };
 pub use catalog_update::{
     parse_catalog, update_catalog_file, CatalogParseRequest, CatalogParseResult,

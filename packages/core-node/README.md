@@ -45,7 +45,12 @@ The package loads one of these platform packages behind the scenes:
 ## Example
 
 ```ts
-import { getNativeInfo, parsePo, updateCatalogFile } from "@palamedes/core-node"
+import {
+  getNativeInfo,
+  mergeCatalogFiles,
+  parsePo,
+  updateCatalogFile,
+} from "@palamedes/core-node"
 
 const info = getNativeInfo()
 const po = parsePo(`
@@ -59,6 +64,12 @@ updateCatalogFile({
   sourceLocale: "en",
   clean: false,
   messages: [{ message: "Hello {name}", extractedComments: [], origins: [] }],
+})
+mergeCatalogFiles({
+  inputPaths: ["src/locales/de.po", "incoming/de.po"],
+  outputPath: "src/locales/de.po",
+  format: "po",
+  sourceLocale: "en",
 })
 
 console.log(info.palamedesVersion)
@@ -76,6 +87,7 @@ console.log(po.headers.Language)
 - `normalizeMessageMetadata(input)`
 - `validateMessageMetadata(input)`
 - `combineCatalogs(request)`
+- `mergeCatalogFiles(request)`
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `extractMessagesNative(source, filename)`
