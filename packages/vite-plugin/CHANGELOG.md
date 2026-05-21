@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0](https://github.com/sebastian-software/palamedes/compare/vite-plugin-v0.3.0...vite-plugin-v0.4.0) (2026-05-21)
+
+
+### Features
+
+* reject unnamed placeholders ([efa2c84](https://github.com/sebastian-software/palamedes/commit/efa2c84524e03572d422ee881ff3ba0e5f862a11))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @palamedes/config bumped to 0.4.0
+    * @palamedes/core-node bumped to 0.4.0
+    * @palamedes/runtime bumped to 0.4.0
+    * @palamedes/transform bumped to 0.4.0
+
 ## [0.3.0](https://github.com/sebastian-software/palamedes/compare/vite-plugin-v0.2.0...vite-plugin-v0.3.0) (2026-05-07)
 
 
