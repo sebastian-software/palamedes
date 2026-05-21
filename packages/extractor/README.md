@@ -52,8 +52,8 @@ console.log(messages)
 ## Key Exports
 
 - `extractor`
-- `extractMessages(program, filename, source)` for compatibility with callers that already have an OXC AST
-- `extractMessagesJs(program, filename, source)` for the JavaScript fallback extractor
+- `extractMessages(source, filename)`
+- `ExtractedMessageInfo`
 
 ## Related Packages
 

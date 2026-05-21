@@ -1,11 +1,11 @@
-import { parseSync } from "oxc-parser"
-
-import { extractMessages, type ExtractedMessageInfo } from "./extractMessages"
-import { extractor } from "./index"
+import {
+  extractMessages,
+  extractor,
+  type ExtractedMessageInfo,
+} from "./index"
 
 function extract(code: string) {
-  const result = parseSync("test.tsx", code, { sourceType: "module" })
-  return extractMessages(result.program, "test.tsx", code)
+  return extractMessages(code, "test.tsx")
 }
 
 describe("extractMessages", () => {
