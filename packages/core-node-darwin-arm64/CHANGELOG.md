@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/sebastian-software/palamedes/compare/core-node-darwin-arm64-v0.5.0...core-node-darwin-arm64-v0.6.0) (2026-05-22)
+
+
+### Features
+
+* add trusted publisher release workflows ([676df9d](https://github.com/sebastian-software/palamedes/commit/676df9d1ee1ac592c970544b117e5d502d567bc7))
+
 ## [0.5.0](https://github.com/sebastian-software/palamedes/compare/core-node-darwin-arm64-v0.4.0...core-node-darwin-arm64-v0.5.0) (2026-05-21)
 
 

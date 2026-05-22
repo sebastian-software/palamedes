@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/sebastian-software/palamedes/compare/create-palamedes-v0.5.0...create-palamedes-v0.6.0) (2026-05-22)
+
+
+### Features
+
+* complete palamedes-first lingui migration ([fc1ac6f](https://github.com/sebastian-software/palamedes/commit/fc1ac6f9c7b8b8a3e609f72715f04b452243126a))
+* **solid:** add first-class solidstart support ([767d546](https://github.com/sebastian-software/palamedes/commit/767d546bfa8918181dcc9c23e341b6b8759260d0))
+
 ## [0.5.0](https://github.com/sebastian-software/palamedes/compare/create-palamedes-v0.4.0...create-palamedes-v0.5.0) (2026-05-21)
 
 
