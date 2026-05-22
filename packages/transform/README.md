@@ -67,6 +67,10 @@ console.log(result.code)
 
 Explicit author-facing `id` fields are intentionally not part of the supported end-state model.
 
+Rich JSX children inside `<Trans>` are lowered to numeric component slots. For example,
+`<Trans><strong>A</strong> and <strong>B</strong></Trans>` becomes a message shaped like
+`<0>A</0> and <1>B</1>` with `components={{ 0: <strong />, 1: <strong /> }}`.
+
 ## Related Packages
 
 - [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node)

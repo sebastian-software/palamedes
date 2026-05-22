@@ -114,9 +114,9 @@ const el = <Trans>Hello <strong>{name}</strong></Trans>;
 
     expect(result.code).toContain('import { Trans } from "@palamedes/solid"')
     expect(result.code).toContain('<Trans id="')
-    expect(result.code).toContain('message="Hello <strong>{name}</strong>"')
+    expect(result.code).toContain('message="Hello <0>{name}</0>"')
     expect(result.code).toContain(
-      'components={{ strong: (children) => <strong>{children}</strong> }}'
+      'components={{ 0: (children) => <strong>{children}</strong> }}'
     )
   })
 
@@ -127,9 +127,24 @@ const el = <Trans>Accept <a href="/terms">terms</a> and <a href="/privacy">priva
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
-    expect(result.code).toContain('message="Accept <a>terms</a> and <a_1>privacy</a_1>"')
+    expect(result.code).toContain('message="Accept <0>terms</0> and <1>privacy</1>"')
     expect(result.code).toContain(
-      'components={{ a: <a href="/terms" />, a_1: <a href="/privacy" /> }}'
+      'components={{ 0: <a href="/terms" />, 1: <a href="/privacy" /> }}'
+    )
+  })
+
+  it("deduplicates same-tag component placeholders with identical markup", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain(
+      'message="<0>A</0> and <1>B</1>"'
+    )
+    expect(result.code).toContain(
+      "components={{ 0: <strong />, 1: <strong /> }}"
     )
   })
 

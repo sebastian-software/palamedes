@@ -20,11 +20,16 @@ import { Trans } from "@palamedes/react/macro"
 export function Footer() {
   return (
     <footer>
-      <Trans>Powered by Palamedes</Trans>
+      <Trans>
+        Powered by <strong>Palamedes</strong>
+      </Trans>
     </footer>
   )
 }
 ```
+
+Rich JSX children are transformed to numeric component slots in the message, for
+example `<0>Palamedes</0>`, while the React component is passed separately.
 
 ## Headless Frontend Helpers
 

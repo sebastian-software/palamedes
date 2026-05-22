@@ -164,13 +164,8 @@ pub(super) fn transform_trans_element(
     let context = attrs.get("context").cloned();
     let solid_wrappers = jsx_runtime_module == "@palamedes/solid";
 
-    let mut next_component_index = 0usize;
-    let (children_message, values, components) = extract_jsx_children_parts(
-        &element.children,
-        source,
-        &mut next_component_index,
-        solid_wrappers,
-    )?;
+    let (children_message, values, components) =
+        extract_jsx_children_parts(&element.children, source, solid_wrappers)?;
     let message = attrs
         .get("message")
         .cloned()

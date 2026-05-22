@@ -766,8 +766,17 @@ fn extract_jsx_children_as_message(
     children: &[JSXChild<'_>],
     source: &str,
 ) -> PalamedesResult<String> {
+    let mut next_component_index = 0usize;
+
+    extract_jsx_children_as_message_with_state(children, source, &mut next_component_index)
+}
+
+fn extract_jsx_children_as_message_with_state(
+    children: &[JSXChild<'_>],
+    source: &str,
+    next_component_index: &mut usize,
+) -> PalamedesResult<String> {
     let mut parts = Vec::new();
-    let mut used_component_names = HashMap::<String, String>::new();
 
     for child in children {
         match child {
@@ -789,19 +798,21 @@ fn extract_jsx_children_as_message(
                 }
             },
             JSXChild::Element(element) => {
-                let component_expression =
-                    opening_element_to_component(&element.opening_element, source);
-                let name = jsx_component_placeholder_name(&element.opening_element, source)?;
-                let name = make_unique_binding_name(
-                    name,
-                    &component_expression,
-                    &mut used_component_names,
-                );
-                let inner = extract_jsx_children_as_message(&element.children, source)?;
+                let name = next_component_index.to_string();
+                *next_component_index += 1;
+                let inner = extract_jsx_children_as_message_with_state(
+                    &element.children,
+                    source,
+                    next_component_index,
+                )?;
                 parts.push(format!("<{name}>{inner}</{name}>"));
             }
             JSXChild::Fragment(fragment) => {
-                let inner = extract_jsx_children_as_message(&fragment.children, source)?;
+                let inner = extract_jsx_children_as_message_with_state(
+                    &fragment.children,
+                    source,
+                    next_component_index,
+                )?;
                 if !inner.is_empty() {
                     parts.push(inner);
                 }
@@ -815,76 +826,6 @@ fn extract_jsx_children_as_message(
     }
 
     Ok(parts.join("").trim().to_string())
-}
-
-fn opening_element_to_component(opening_element: &JSXOpeningElement<'_>, source: &str) -> String {
-    let start = opening_element.span.start as usize;
-    let end = opening_element.span.end as usize;
-    let markup = &source[start..end];
-
-    if markup.trim_end().ends_with("/>") {
-        return markup.to_string();
-    }
-
-    if let Some(prefix) = markup.strip_suffix('>') {
-        format!("{prefix} />")
-    } else {
-        format!("{markup} />")
-    }
-}
-
-fn make_unique_binding_name(
-    preferred_name: String,
-    expression: &str,
-    used_names: &mut HashMap<String, String>,
-) -> String {
-    if let Some(existing_expression) = used_names.get(&preferred_name) {
-        if existing_expression == expression {
-            return preferred_name;
-        }
-    } else {
-        used_names.insert(preferred_name.clone(), expression.to_string());
-        return preferred_name;
-    }
-
-    let mut suffix = 1usize;
-    loop {
-        let candidate = format!("{preferred_name}_{suffix}");
-        match used_names.get(&candidate) {
-            Some(existing_expression) if existing_expression != expression => {
-                suffix += 1;
-            }
-            _ => {
-                used_names.insert(candidate.clone(), expression.to_string());
-                return candidate;
-            }
-        }
-    }
-}
-
-fn jsx_component_placeholder_name(
-    opening_element: &JSXOpeningElement<'_>,
-    source: &str,
-) -> PalamedesResult<String> {
-    let name_span = opening_element.name.span();
-    let raw_name = source[name_span.start as usize..name_span.end as usize].trim();
-    let name = raw_name
-        .rsplit(['.', ':'])
-        .next()
-        .unwrap_or(raw_name)
-        .trim();
-
-    if !name.is_empty()
-        && name
-            .chars()
-            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
-    {
-        return Ok(name.to_string());
-    }
-
-    Err(PalamedesError::UnnamedPlaceholder {
-        syntax: "JSX element",
-    })
 }
 
 fn clean_jsx_text(text: &str) -> String {
@@ -1241,7 +1182,7 @@ mod tests {
     }
 
     #[test]
-    fn uses_stable_jsx_component_placeholder_names() {
+    fn uses_numeric_jsx_component_placeholder_names() {
         let messages = extract_messages(
             r#"
               import { Trans } from "@palamedes/react/macro"
@@ -1253,8 +1194,22 @@ mod tests {
 
         assert_eq!(
             messages[0].message,
-            "Accept <a>terms</a> and <a_1>privacy</a_1>"
+            "Accept <0>terms</0> and <1>privacy</1>"
         );
+    }
+
+    #[test]
+    fn uses_numeric_jsx_component_placeholder_names_for_identical_markup() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const message = <Trans><strong>A</strong> and <strong>B</strong></Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(messages[0].message, "<0>A</0> and <1>B</1>");
     }
 
     #[test]

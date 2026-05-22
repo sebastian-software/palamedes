@@ -49,6 +49,10 @@ console.log(messages)
 - `i18n._(...)` and `i18n.t\`...\`` style runtime calls
 - JavaScript, TypeScript, JSX, and TSX sources
 
+Rich JSX children inside `<Trans>` are extracted with numeric component slots. For example,
+`<Trans><strong>A</strong> and <strong>B</strong></Trans>` extracts as
+`<0>A</0> and <1>B</1>`.
+
 ## Key Exports
 
 - `extractor`

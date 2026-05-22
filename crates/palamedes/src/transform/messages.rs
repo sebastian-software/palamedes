@@ -244,14 +244,30 @@ pub(super) fn opening_element_to_component_wrapper(
 pub(super) fn extract_jsx_children_parts(
     children: &[JSXChild<'_>],
     source: &str,
-    _next_component_index: &mut usize,
     solid_wrappers: bool,
+) -> PalamedesResult<(String, Vec<ValueBinding>, Vec<ValueBinding>)> {
+    let mut used_value_names = HashMap::<String, String>::new();
+    let mut next_component_index = 0usize;
+
+    extract_jsx_children_parts_with_state(
+        children,
+        source,
+        solid_wrappers,
+        &mut used_value_names,
+        &mut next_component_index,
+    )
+}
+
+fn extract_jsx_children_parts_with_state(
+    children: &[JSXChild<'_>],
+    source: &str,
+    solid_wrappers: bool,
+    used_value_names: &mut HashMap<String, String>,
+    next_component_index: &mut usize,
 ) -> PalamedesResult<(String, Vec<ValueBinding>, Vec<ValueBinding>)> {
     let mut parts = Vec::new();
     let mut values = Vec::new();
     let mut components = Vec::new();
-    let mut used_value_names = HashMap::<String, String>::new();
-    let mut used_component_names = HashMap::<String, String>::new();
 
     for child in children {
         match child {
@@ -265,9 +281,9 @@ pub(super) fn extract_jsx_children_parts(
                 JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
                 expr => {
                     let binding =
-                        jsx_value_binding(expr, source, "JSX expression", &mut used_value_names)?;
+                        jsx_value_binding(expr, source, "JSX expression", used_value_names)?;
                     parts.push(format!("{{{}}}", binding.name));
-                    values.push(binding);
+                    push_unique_binding(&mut values, binding);
                 }
             },
             JSXChild::Element(element) => {
@@ -276,23 +292,21 @@ pub(super) fn extract_jsx_children_parts(
                 } else {
                     opening_element_to_component(&element.opening_element, source)
                 };
-                let component_name = component_placeholder_name(&element.opening_element, source)?;
-                let component_name = make_unique_binding_name(
-                    component_name,
-                    &component_expression,
-                    &mut used_component_names,
-                );
+                let component_name = next_component_index.to_string();
+                *next_component_index += 1;
 
-                let (inner_message, inner_values, inner_components) = extract_jsx_children_parts(
-                    &element.children,
-                    source,
-                    _next_component_index,
-                    solid_wrappers,
-                )?;
+                let (inner_message, inner_values, inner_components) =
+                    extract_jsx_children_parts_with_state(
+                        &element.children,
+                        source,
+                        solid_wrappers,
+                        used_value_names,
+                        next_component_index,
+                    )?;
                 parts.push(format!(
                     "<{component_name}>{inner_message}</{component_name}>"
                 ));
-                values.extend(inner_values);
+                append_unique_bindings(&mut values, inner_values);
                 components.push(ValueBinding {
                     expression: component_expression,
                     name: component_name,
@@ -300,16 +314,18 @@ pub(super) fn extract_jsx_children_parts(
                 components.extend(inner_components);
             }
             JSXChild::Fragment(fragment) => {
-                let (inner_message, inner_values, inner_components) = extract_jsx_children_parts(
-                    &fragment.children,
-                    source,
-                    _next_component_index,
-                    solid_wrappers,
-                )?;
+                let (inner_message, inner_values, inner_components) =
+                    extract_jsx_children_parts_with_state(
+                        &fragment.children,
+                        source,
+                        solid_wrappers,
+                        used_value_names,
+                        next_component_index,
+                    )?;
                 if !inner_message.is_empty() {
                     parts.push(inner_message);
                 }
-                values.extend(inner_values);
+                append_unique_bindings(&mut values, inner_values);
                 components.extend(inner_components);
             }
             JSXChild::Spread(_) => {
@@ -323,29 +339,21 @@ pub(super) fn extract_jsx_children_parts(
     Ok((parts.join("").trim().to_string(), values, components))
 }
 
-fn component_placeholder_name(
-    opening_element: &JSXOpeningElement<'_>,
-    source: &str,
-) -> PalamedesResult<String> {
-    let name_span = opening_element.name.span();
-    let raw_name = source[name_span.start as usize..name_span.end as usize].trim();
-    let name = raw_name
-        .rsplit(['.', ':'])
-        .next()
-        .unwrap_or(raw_name)
-        .trim();
-
-    if !name.is_empty()
-        && name
-            .chars()
-            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+fn push_unique_binding(bindings: &mut Vec<ValueBinding>, binding: ValueBinding) {
+    if bindings
+        .iter()
+        .any(|existing| existing.name == binding.name && existing.expression == binding.expression)
     {
-        return Ok(name.to_string());
+        return;
     }
 
-    Err(PalamedesError::UnnamedPlaceholder {
-        syntax: "JSX element",
-    })
+    bindings.push(binding);
+}
+
+fn append_unique_bindings(bindings: &mut Vec<ValueBinding>, incoming: Vec<ValueBinding>) {
+    for binding in incoming {
+        push_unique_binding(bindings, binding);
+    }
 }
 
 pub(super) fn expression_name(expr: &Expression<'_>) -> Option<String> {

@@ -155,12 +155,10 @@ fn transforms_solid_trans_jsx_macro() {
         .code
         .contains("import { Trans } from \"@palamedes/solid\";"));
     assert!(result.code.contains("<Trans id=\""));
+    assert!(result.code.contains("message=\"Hello <0>{name}</0>\""));
     assert!(result
         .code
-        .contains("message=\"Hello <strong>{name}</strong>\""));
-    assert!(result
-        .code
-        .contains("components={{ strong: (children) => <strong>{children}</strong> }}"));
+        .contains("components={{ 0: (children) => <strong>{children}</strong> }}"));
 }
 
 #[test]
@@ -174,10 +172,25 @@ fn deduplicates_same_tag_component_placeholders() {
 
     assert!(result
         .code
-        .contains("message=\"Accept <a>terms</a> and <a_1>privacy</a_1>\""));
+        .contains("message=\"Accept <0>terms</0> and <1>privacy</1>\""));
     assert!(result
         .code
-        .contains("components={{ a: <a href=\"/terms\" />, a_1: <a href=\"/privacy\" /> }}"));
+        .contains("components={{ 0: <a href=\"/terms\" />, 1: <a href=\"/privacy\" /> }}"));
+}
+
+#[test]
+fn deduplicates_same_tag_component_placeholders_with_identical_markup() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("message=\"<0>A</0> and <1>B</1>\""));
+    assert!(result
+        .code
+        .contains("components={{ 0: <strong />, 1: <strong /> }}"));
 }
 
 #[test]

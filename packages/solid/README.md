@@ -29,14 +29,18 @@ import { Trans } from "@palamedes/solid/macro"
 export function Footer() {
   return (
     <footer>
-      <Trans>Powered by Palamedes</Trans>
+      <Trans>
+        Powered by <strong>Palamedes</strong>
+      </Trans>
     </footer>
   )
 }
 ```
 
 When the Palamedes transform runs, macro imports are rewritten to runtime
-imports from `@palamedes/solid`.
+imports from `@palamedes/solid`. Rich JSX children are transformed to numeric
+component slots in the message, for example `<0>Palamedes</0>`, while the Solid
+wrapper is passed separately.
 
 ## Headless Frontend Helpers
 
