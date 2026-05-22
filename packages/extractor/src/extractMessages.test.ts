@@ -37,7 +37,7 @@ describe("extractMessages", () => {
       `
       const messages = extract(code)
       expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Hello <b>World</b>")
+      expect(messages[0].message).toBe("Hello <0>World</0>")
     })
 
     it("deduplicates same-tag component placeholders with different props", () => {
@@ -47,7 +47,7 @@ describe("extractMessages", () => {
       `
       const messages = extract(code)
       expect(messages).toHaveLength(1)
-      expect(messages[0].message).toBe("Accept <a>terms</a> and <a_1>privacy</a_1>")
+      expect(messages[0].message).toBe("Accept <0>terms</0> and <1>privacy</1>")
     })
 
     it("extracts Solid Trans macros with the same semantics", () => {
