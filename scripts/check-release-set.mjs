@@ -16,6 +16,8 @@ function fail(message) {
 const releaseConfig = readJson(".release-please-config.json")
 const releaseManifest = readJson(".release-please-manifest.json")
 const publishWorkflow = readFileSync(path.join(root, ".github/workflows/publish.yml"), "utf8")
+const rootReleasePath = "."
+const rootReleaseConfig = releaseConfig.packages?.[rootReleasePath]
 
 const publicPackages = readdirSync(path.join(root, "packages"))
   .map((directory) => {
@@ -33,7 +35,6 @@ const publicPackages = readdirSync(path.join(root, "packages"))
     }
 
     return {
-      component: releaseConfig.packages?.[packagePath]?.component,
       isNative: nativePackagePattern.test(packageJson.name),
       name: packageJson.name,
       path: packagePath,
@@ -43,9 +44,11 @@ const publicPackages = readdirSync(path.join(root, "packages"))
   .filter(Boolean)
   .sort((a, b) => a.name.localeCompare(b.name))
 
-const releasePackages = releaseConfig.packages ?? {}
-const linkedVersions = releaseConfig.plugins?.find((plugin) => plugin.type === "linked-versions")
-const linkedComponents = new Set(linkedVersions?.components ?? [])
+const extraVersionFiles = new Set(
+  (rootReleaseConfig?.["extra-files"] ?? [])
+    .filter((file) => file?.type === "json" && file?.jsonpath === "$.version")
+    .map((file) => file.path)
+)
 const workflowFilters = new Set(
   Array.from(publishWorkflow.matchAll(/--filter\s+([^\s]+)/g), (match) =>
     match[1].replace(/^"|"$/g, "")
@@ -56,27 +59,33 @@ const nativeMatrixPackages = new Set(
 )
 const expectedVersion = publicPackages[0]?.version
 
+if (!rootReleaseConfig) {
+  fail(`${rootReleasePath} is missing from .release-please-config.json`)
+} else {
+  if (rootReleaseConfig.component !== "palamedes") {
+    fail(`root release component is ${rootReleaseConfig.component}, expected palamedes`)
+  }
+
+  if (rootReleaseConfig["release-type"] !== "rust") {
+    fail(`root release type is ${rootReleaseConfig["release-type"]}, expected rust`)
+  }
+}
+
+if (releaseManifest[rootReleasePath] !== expectedVersion) {
+  fail(
+    `release manifest tracks ${releaseManifest[rootReleasePath]}, but public packages are at ${expectedVersion}`
+  )
+}
+
 for (const packageInfo of publicPackages) {
-  if (!releasePackages[packageInfo.path]) {
-    fail(`${packageInfo.name} is missing from .release-please-config.json`)
-  }
-
-  if (!releaseManifest[packageInfo.path]) {
-    fail(`${packageInfo.name} is missing from .release-please-manifest.json`)
-  }
-
-  if (releaseManifest[packageInfo.path] !== packageInfo.version) {
+  if (packageInfo.version !== expectedVersion) {
     fail(
-      `${packageInfo.name} has version ${packageInfo.version}, but manifest tracks ${releaseManifest[packageInfo.path]}`
+      `${packageInfo.name} has version ${packageInfo.version}, expected ${expectedVersion}`
     )
   }
 
-  if (packageInfo.version !== expectedVersion) {
-    fail(`${packageInfo.name} has version ${packageInfo.version}, expected ${expectedVersion}`)
-  }
-
-  if (!packageInfo.component || !linkedComponents.has(packageInfo.component)) {
-    fail(`${packageInfo.name} is missing from the linked-versions component list`)
+  if (!extraVersionFiles.has(path.join(packageInfo.path, "package.json"))) {
+    fail(`${packageInfo.name} is missing from the root release extra-files list`)
   }
 
   if (packageInfo.isNative) {
@@ -92,4 +101,6 @@ if (process.exitCode) {
   process.exit(process.exitCode)
 }
 
-console.log(`Release set is consistent for ${publicPackages.length} public packages at ${expectedVersion}.`)
+console.log(
+  `Release set is consistent for ${publicPackages.length} public packages at ${expectedVersion}.`
+)

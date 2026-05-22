@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "ferrocat",
  "oxc_allocator",
@@ -819,7 +819,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-node"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "napi",
  "napi-build",

@@ -1,121 +1,155 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-component-in-tag": true,
+  "tag-separator": "-",
   "separate-pull-requests": false,
-  "plugins": [
+  "changelog-sections": [
     {
-      "type": "node-workspace",
-      "merge": false
+      "type": "feat",
+      "section": "Features"
     },
     {
-      "type": "linked-versions",
-      "groupName": "palamedes",
-      "merge": true,
-      "components": [
-        "cli",
-        "config",
-        "core",
-        "core-node",
-        "core-node-darwin-arm64",
-        "core-node-linux-arm64-gnu",
-        "core-node-linux-x64-gnu",
-        "core-node-win32-x64-msvc",
-        "extractor",
-        "next-plugin",
-        "react",
-        "runtime",
-        "solid",
-        "transform",
-        "vite-plugin",
-        "create-palamedes",
-        "palamedes"
-      ]
+      "type": "fix",
+      "section": "Bug Fixes"
+    },
+    {
+      "type": "perf",
+      "section": "Performance Improvements"
+    },
+    {
+      "type": "deps",
+      "section": "Dependencies",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "Miscellaneous Chores",
+      "hidden": true
+    },
+    {
+      "type": "docs",
+      "section": "Documentation",
+      "hidden": true
+    },
+    {
+      "type": "refactor",
+      "section": "Code Refactoring",
+      "hidden": true
+    },
+    {
+      "type": "style",
+      "section": "Styles",
+      "hidden": true
+    },
+    {
+      "type": "test",
+      "section": "Tests",
+      "hidden": true
+    },
+    {
+      "type": "build",
+      "section": "Build System",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "Continuous Integration",
+      "hidden": true
     }
   ],
   "packages": {
-    "packages/cli": {
-      "release-type": "node",
-      "package-name": "@palamedes/cli",
-      "component": "cli"
-    },
-    "packages/config": {
-      "release-type": "node",
-      "package-name": "@palamedes/config",
-      "component": "config"
-    },
-    "packages/core": {
-      "release-type": "node",
-      "package-name": "@palamedes/core",
-      "component": "core"
-    },
-    "packages/core-node": {
-      "release-type": "node",
-      "package-name": "@palamedes/core-node",
-      "component": "core-node"
-    },
-    "packages/core-node-darwin-arm64": {
-      "release-type": "node",
-      "package-name": "@palamedes/core-node-darwin-arm64",
-      "component": "core-node-darwin-arm64"
-    },
-    "packages/core-node-linux-arm64-gnu": {
-      "release-type": "node",
-      "package-name": "@palamedes/core-node-linux-arm64-gnu",
-      "component": "core-node-linux-arm64-gnu"
-    },
-    "packages/core-node-linux-x64-gnu": {
-      "release-type": "node",
-      "package-name": "@palamedes/core-node-linux-x64-gnu",
-      "component": "core-node-linux-x64-gnu"
-    },
-    "packages/core-node-win32-x64-msvc": {
-      "release-type": "node",
-      "package-name": "@palamedes/core-node-win32-x64-msvc",
-      "component": "core-node-win32-x64-msvc"
-    },
-    "packages/extractor": {
-      "release-type": "node",
-      "package-name": "@palamedes/extractor",
-      "component": "extractor"
-    },
-    "packages/next-plugin": {
-      "release-type": "node",
-      "package-name": "@palamedes/next-plugin",
-      "component": "next-plugin"
-    },
-    "packages/react": {
-      "release-type": "node",
-      "package-name": "@palamedes/react",
-      "component": "react"
-    },
-    "packages/runtime": {
-      "release-type": "node",
-      "package-name": "@palamedes/runtime",
-      "component": "runtime"
-    },
-    "packages/solid": {
-      "release-type": "node",
-      "package-name": "@palamedes/solid",
-      "component": "solid"
-    },
-    "packages/transform": {
-      "release-type": "node",
-      "package-name": "@palamedes/transform",
-      "component": "transform"
-    },
-    "packages/vite-plugin": {
-      "release-type": "node",
-      "package-name": "@palamedes/vite-plugin",
-      "component": "vite-plugin"
-    },
-    "packages/create-palamedes": {
-      "release-type": "node",
-      "package-name": "create-palamedes",
-      "component": "create-palamedes"
-    },
-    "packages/palamedes": {
-      "release-type": "node",
+    ".": {
+      "release-type": "rust",
       "package-name": "palamedes",
-      "component": "palamedes"
+      "component": "palamedes",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/config/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/core/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/core-node/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/core-node-darwin-arm64/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/core-node-linux-arm64-gnu/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/core-node-linux-x64-gnu/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/core-node-win32-x64-msvc/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/create-palamedes/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/extractor/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/next-plugin/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/palamedes/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/react/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/runtime/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/solid/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/transform/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/vite-plugin/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }
