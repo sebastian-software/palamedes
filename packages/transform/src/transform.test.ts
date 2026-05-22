@@ -133,6 +133,18 @@ const el = <Trans>Accept <a href="/terms">terms</a> and <a href="/privacy">priva
     )
   })
 
+  it("reuses identical component bindings once", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message="<strong>A</strong> and <strong>B</strong>"')
+    expect(result.code).toContain('components={{ strong: <strong /> }}')
+    expect(result.code).not.toContain('strong: <strong />, strong:')
+  })
+
   it("strips the message field when requested", () => {
     const code = `
 import { t } from "@palamedes/core/macro";

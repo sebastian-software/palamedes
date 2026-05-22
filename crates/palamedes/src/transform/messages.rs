@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use oxc_ast::ast::{
     Argument, Expression, JSXAttributeValue, JSXChild, JSXExpression, JSXOpeningElement,
@@ -319,6 +319,11 @@ pub(super) fn extract_jsx_children_parts(
             }
         }
     }
+
+    let mut seen_components = HashSet::<(String, String)>::new();
+    components.retain(|binding| {
+        seen_components.insert((binding.name.clone(), binding.expression.clone()))
+    });
 
     Ok((parts.join("").trim().to_string(), values, components))
 }

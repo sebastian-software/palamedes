@@ -181,6 +181,22 @@ fn deduplicates_same_tag_component_placeholders() {
 }
 
 #[test]
+fn reuses_identical_component_binding_once() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains("message=\"<strong>A</strong> and <strong>B</strong>\""));
+    assert!(result.code.contains("components={{ strong: <strong /> }}"));
+    assert!(!result.code.contains("strong: <strong />, strong:"));
+}
+
+#[test]
 fn preserves_use_client_directive_before_injected_imports() {
     let result = transform_macros(
         "\"use client\";\nimport { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello</Trans>;\n",
