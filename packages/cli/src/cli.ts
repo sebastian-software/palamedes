@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module"
+
 import { program } from "commander"
 import chalk from "chalk"
 import { audit } from "./commands/audit"
 import { mergeCatalog } from "./commands/catalog"
 import { extract } from "./commands/extract"
 
-const VERSION = "0.0.1"
+const require = createRequire(import.meta.url)
+const VERSION = require("../package.json").version as string
 
 program
   .name("pmds")
