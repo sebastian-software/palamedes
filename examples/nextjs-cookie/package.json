@@ -22,8 +22,8 @@
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/next-plugin": "workspace:^",
-    "@types/node": "^25.9.0",
-    "@types/react": "^19.2.14",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "typescript": "^6.0.3"
   }

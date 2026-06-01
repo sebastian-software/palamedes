@@ -14,9 +14,9 @@
     "@palamedes/example-locale-shared": "workspace:^",
     "@palamedes/react": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "@tanstack/react-router": "^1.170.4",
-    "@tanstack/react-start": "^1.168.6",
-    "@tanstack/router-plugin": "^1.168.6",
+    "@tanstack/react-router": "^1.170.10",
+    "@tanstack/react-start": "^1.168.18",
+    "@tanstack/router-plugin": "^1.168.13",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
@@ -24,11 +24,11 @@
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
-    "@types/node": "^25.9.0",
-    "@types/react": "^19.2.14",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "typescript": "^6.0.3",
-    "vite": "^8.0.13"
+    "vite": "^8.0.15"
   }
 }
