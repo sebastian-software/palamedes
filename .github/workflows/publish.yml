@@ -45,8 +45,47 @@ jobs:
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
           fi
 
-  publish-native:
+  validate-release:
     needs: determine-release
+    if: needs.determine-release.outputs.should_publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PALAMEDES_RUST_PROFILE: release
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check release package set
+        run: pnpm check:release-set
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Check types
+        run: pnpm check-types
+
+  publish-native:
+    needs:
+      - determine-release
+      - validate-release
     if: needs.determine-release.outputs.should_publish == 'true'
     strategy:
       fail-fast: false
@@ -89,6 +128,9 @@ jobs:
 
       - name: Build native package
         run: pnpm --filter "${{ matrix.package_name }}" build
+
+      - name: Smoke-test native package
+        run: pnpm --filter "${{ matrix.package_name }}" exec node --input-type=module -e "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); const native = require('./palamedes-node.node'); if (typeof native.transformMacros !== 'function') process.exit(1)"
 
       - name: Publish native package
         run: pnpm --filter "${{ matrix.package_name }}" publish --access public --no-git-checks
