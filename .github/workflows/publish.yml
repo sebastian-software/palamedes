@@ -49,6 +49,9 @@ jobs:
     needs: determine-release
     if: needs.determine-release.outputs.should_publish == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PALAMEDES_RUST_PROFILE: release
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -127,9 +130,7 @@ jobs:
         run: pnpm --filter "${{ matrix.package_name }}" build
 
       - name: Smoke-test native package
-        env:
-          PACKAGE_NAME: ${{ matrix.package_name }}
-        run: node -e "const binding = require(process.env.PACKAGE_NAME); if (typeof binding.transform !== 'function') process.exit(1)"
+        run: pnpm --filter "${{ matrix.package_name }}" exec node --input-type=module -e "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); const native = require('./palamedes-node.node'); if (typeof native.transformMacros !== 'function') process.exit(1)"
 
       - name: Publish native package
         run: pnpm --filter "${{ matrix.package_name }}" publish --access public --no-git-checks
