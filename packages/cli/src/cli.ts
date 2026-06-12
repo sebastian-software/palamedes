@@ -7,6 +7,7 @@ import chalk from "chalk"
 import { audit } from "./commands/audit"
 import { mergeCatalog } from "./commands/catalog"
 import { extract } from "./commands/extract"
+import { exportXliff, importXliff } from "./commands/xliff"
 
 const require = createRequire(import.meta.url)
 const VERSION = require("../package.json").version as string
@@ -65,6 +66,41 @@ catalog
   .action(async (inputs: string[], options) => {
     try {
       await mergeCatalog(inputs, options)
+    } catch (error) {
+      console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
+      process.exit(1)
+    }
+  })
+
+const xliff = program
+  .command("xliff")
+  .description("Export and import XLIFF files for translation workflows")
+
+xliff
+  .command("export")
+  .description("Export configured PO catalogs to XLIFF 1.2")
+  .requiredOption("--locale <locale>", "Target locale to export")
+  .requiredOption("--output <path>", "Output XLIFF path")
+  .option("-c, --config <path>", "Path to palamedes.config.ts")
+  .action(async (options) => {
+    try {
+      await exportXliff(options)
+    } catch (error) {
+      console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
+      process.exit(1)
+    }
+  })
+
+xliff
+  .command("import")
+  .description("Import an XLIFF 1.2 file back into configured PO catalogs")
+  .argument("<input>", "Input XLIFF path")
+  .option("-c, --config <path>", "Path to palamedes.config.ts")
+  .option("--locale <locale>", "Target locale when target-language is absent")
+  .option("--output <path>", "PO output path for single-file imports")
+  .action(async (input: string, options) => {
+    try {
+      await importXliff(input, options)
     } catch (error) {
       console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
       process.exit(1)
