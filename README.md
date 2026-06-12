@@ -209,9 +209,6 @@ The same foundation also matters for future translation workflows:
 ## Proof And Adoption Docs
 
 - [MDX-ready messaging source for homepage/docs](https://github.com/sebastian-software/palamedes/blob/main/docs/site/index.mdx)
-- [API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md)
-- [Configuration reference](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md)
-- [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md)
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
 - [Example matrix and local/CI verification story](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 - [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)

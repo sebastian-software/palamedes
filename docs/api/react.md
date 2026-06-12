@@ -12,6 +12,9 @@ points, and headless locale-switch helpers.
 - `buildLocaleSwitchItems(options)`
 - `Fragment`
 
+`Fragment` is re-exported from React for generated/runtime component rendering
+paths that need the same import surface as other React helpers.
+
 The client subpath `@palamedes/react/client` exports:
 
 - `useClientLocale(locale, sync)`

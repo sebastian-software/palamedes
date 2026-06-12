@@ -36,6 +36,9 @@ automatically.
 On the client, `getI18n()` reads the instance registered with
 `setClientI18n()`. On the server, it reads the active server getter.
 
+`getI18n()` throws a descriptive error when no active client instance or server
+getter result is available. Initialize the runtime before translated code runs.
+
 ## Server Runtime
 
 For request-local server rendering, prefer `@palamedes/runtime/server`:

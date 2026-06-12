@@ -10,7 +10,7 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `parseCatalog(request)`
 - `updateCatalogFile(request)`
 - `auditCatalogs(request, options?)`
-- `deriveMessageMetadata(input)`
+- `deriveMessageMetadata(message, context?)`
 - `normalizeMessageMetadata(input)`
 - `validateMessageMetadata(input)`
 - `combineCatalogs(request)`
