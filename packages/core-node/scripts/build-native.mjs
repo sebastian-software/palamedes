@@ -16,19 +16,37 @@ const targets = {
     platform: "darwin",
     arch: "arm64",
   },
+  "@palamedes/core-node-darwin-x64": {
+    platform: "darwin",
+    arch: "x64",
+  },
   "@palamedes/core-node-linux-x64-gnu": {
     platform: "linux",
     arch: "x64",
     libc: "glibc",
+  },
+  "@palamedes/core-node-linux-x64-musl": {
+    platform: "linux",
+    arch: "x64",
+    libc: "musl",
   },
   "@palamedes/core-node-linux-arm64-gnu": {
     platform: "linux",
     arch: "arm64",
     libc: "glibc",
   },
+  "@palamedes/core-node-linux-arm64-musl": {
+    platform: "linux",
+    arch: "arm64",
+    libc: "musl",
+  },
   "@palamedes/core-node-win32-x64-msvc": {
     platform: "win32",
     arch: "x64",
+  },
+  "@palamedes/core-node-win32-arm64-msvc": {
+    platform: "win32",
+    arch: "arm64",
   },
 }
 
@@ -44,17 +62,19 @@ function detectLinuxLibc() {
 }
 
 const target = targets[packageJson.name]
+const cargoTarget = process.env.PALAMEDES_CARGO_TARGET || undefined
+const cargoSubcommand = process.env.PALAMEDES_CARGO_SUBCOMMAND || "build"
 
 if (!target) {
   throw new Error(`Unsupported native target package: ${packageJson.name}`)
 }
 
-if (process.platform !== target.platform || process.arch !== target.arch) {
+if (!cargoTarget && (process.platform !== target.platform || process.arch !== target.arch)) {
   console.log(`Skipping native build for ${packageJson.name} on ${process.platform}/${process.arch}`)
   process.exit(0)
 }
 
-if (target.platform === "linux" && target.libc && detectLinuxLibc() !== target.libc) {
+if (!cargoTarget && target.platform === "linux" && target.libc && detectLinuxLibc() !== target.libc) {
   console.log(`Skipping native build for ${packageJson.name} due to libc mismatch`)
   process.exit(0)
 }
@@ -72,7 +92,11 @@ if (!extension) {
   throw new Error(`Unsupported platform for Palamedes native build: ${process.platform}`)
 }
 
-const cargoArgs = ["build", "--package", "palamedes-node"]
+const cargoArgs = [cargoSubcommand, "--package", "palamedes-node"]
+
+if (cargoTarget) {
+  cargoArgs.push("--target", cargoTarget)
+}
 
 if (profile === "release") {
   cargoArgs.push("--release")
@@ -85,7 +109,13 @@ execFileSync("cargo", cargoArgs, {
 
 const binaryName =
   process.platform === "win32" ? "palamedes_node.dll" : `libpalamedes_node.${extension}`
-const sourcePath = path.join(repoRoot, "target", profile, binaryName)
+const sourcePath = path.join(
+  repoRoot,
+  "target",
+  ...(cargoTarget ? [cargoTarget] : []),
+  profile,
+  binaryName
+)
 const targetPath = path.join(packageDir, "palamedes-node.node")
 
 if (!existsSync(sourcePath)) {
