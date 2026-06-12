@@ -38,6 +38,7 @@
     "generate-native-types": "node ./scripts/generate-native-types.mjs",
     "check-native-types": "node ./scripts/generate-native-types.mjs --check",
     "build": "unbuild",
+    "test": "vitest run --globals src/index.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {
@@ -55,6 +56,7 @@
   "devDependencies": {
     "@types/node": "^25.9.0",
     "typescript": "^6.0.3",
-    "unbuild": "^3.6.1"
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.6"
   }
 }
