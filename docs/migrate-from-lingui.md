@@ -158,6 +158,53 @@ import { setServerI18nGetter } from "@palamedes/runtime"
 setServerI18nGetter(() => getRequestScopedI18n())
 ```
 
+For Next.js App Router Server Components on the Node runtime, prefer the
+server-only helper:
+
+```ts
+// src/lib/i18n.server.ts
+import "server-only"
+
+import { cache } from "react"
+import { createServerI18nScope } from "@palamedes/runtime/server"
+import type { PalamedesI18n } from "@palamedes/core"
+
+export const serverI18n = createServerI18nScope<PalamedesI18n>()
+
+const loadActiveServerI18n = cache(async () => {
+  const locale = await resolveLocaleFromCookiesOrHeaders()
+  const i18n = await loadI18n(locale)
+  return { i18n, locale }
+})
+
+export async function createActiveServerI18n() {
+  const active = await loadActiveServerI18n()
+  serverI18n.activate(active.i18n)
+  return active
+}
+```
+
+```tsx
+// app/page.tsx
+import { t } from "@palamedes/core/macro"
+import { createActiveServerI18n } from "@/lib/i18n.server"
+
+function CheckoutTitle() {
+  return <h1>{t`Checkout`}</h1>
+}
+
+export default async function Page() {
+  await createActiveServerI18n()
+  return <CheckoutTitle />
+}
+```
+
+This follows the official RSC model: server-only modules prevent accidental
+client imports, React `cache()` memoizes work within the current request, and
+the runtime scope is activated before downstream Server Components call direct
+macros. Do not register a new global server getter from every Server Component
+render.
+
 For backend servers outside React frameworks, use the same runtime getter with
 request-local storage. The Hono/Express pattern is documented here:
 
