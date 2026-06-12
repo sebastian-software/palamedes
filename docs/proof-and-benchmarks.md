@@ -75,6 +75,24 @@ For a quicker sample run:
 node ./scripts/benchmark-proof.mjs --warmup 1 --runs 3
 ```
 
+For a generated large-catalog run:
+
+```bash
+pnpm benchmark:proof:large
+```
+
+Equivalent direct command:
+
+```bash
+node ./scripts/benchmark-proof.mjs --warmup 1 --runs 3 --large-messages 10000
+```
+
+For a larger stress run:
+
+```bash
+node ./scripts/benchmark-proof.mjs --warmup 1 --runs 3 --large-messages 50000 --large-source-files 50
+```
+
 For the separate Lingui v6 preview comparison harness:
 
 ```bash
@@ -105,6 +123,7 @@ SWC lanes instead of folding them into one number.
 - warmup runs before measurement
 - median reported for each operation
 - operations measured independently, not as a blended total
+- sampled peak RSS reported from Node's `process.memoryUsage().rss`
 
 This is meant to be reproducible and honest, not a "best possible marketing
 number."
@@ -129,6 +148,20 @@ That gives the benchmark:
 - JSX and tagged template paths
 - client-oriented and server-oriented render shapes
 - catalog artifact compilation on plain checked-in source fixtures
+
+Large-catalog runs use a deterministic generator under
+[`benchmarks/large-catalog`](/Users/sebastian/Workspace/business/palamedes/benchmarks/large-catalog)
+instead of checking in a 10k or 50k message catalog. The generator creates
+synthetic TSX source files and matching catalog message metadata so the same
+run can measure:
+
+- macro transform time across the generated source files
+- extraction time across the generated source files
+- catalog update time for the generated message set
+- catalog artifact compile time for the generated PO catalog
+
+Set `--large-messages` to enable that section. The default benchmark remains
+small and quick so it is still useful during routine local checks.
 
 ## Local Baseline
 
@@ -155,8 +188,8 @@ Median results from that run:
 
 This sample is a historical reference point. Current Palamedes builds use
 Ferrocat `0.11.0`; rerun the command above when you need fresh numbers for the
-current release line. The benchmark script also prints the raw sample series so
-the checked median is easy to verify.
+current release line. The benchmark script also prints the raw sample series and
+sampled peak RSS so the checked median and memory shape are easy to verify.
 
 ## What This Page Does Not Claim
 

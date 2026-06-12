@@ -22,6 +22,7 @@
     "verify:examples:smoke": "node ./scripts/verify-examples.mjs",
     "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
+    "benchmark:proof:large": "pnpm build && node ./scripts/benchmark-proof.mjs --large-messages 10000",
     "benchmark:lingui-v6": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark",
     "benchmark:lingui-v6:quick": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark:quick",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
