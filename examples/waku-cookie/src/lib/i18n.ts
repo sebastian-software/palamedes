@@ -1,4 +1,5 @@
 import { createI18n } from "@palamedes/core"
+import type { CatalogMessages } from "@palamedes/core"
 import { setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
 import {
   DEFAULT_LOCALE,
@@ -7,9 +8,6 @@ import {
   LOCALE_LABELS,
   type Locale,
 } from "@palamedes/example-locale-shared"
-import { messages as deMessages } from "../locales/de.po"
-import { messages as enMessages } from "../locales/en.po"
-import { messages as esMessages } from "../locales/es.po"
 
 export {
   DEFAULT_LOCALE,
@@ -23,24 +21,25 @@ export function getLocaleLabel(locale: Locale) {
   return LOCALE_LABELS[locale]
 }
 
-const localeMessages = {
-  en: enMessages,
-  de: deMessages,
-  es: esMessages,
-} as const
+export async function loadMessages(locale: Locale): Promise<CatalogMessages> {
+  const { messages } = await import(`../locales/${locale}.po`)
+  return messages
+}
 
 const clientI18n = createI18n()
 
-export function activateServerI18n(locale: Locale) {
+export async function activateServerI18n(locale: Locale) {
+  const messages = await loadMessages(locale)
   const i18n = createI18n()
-  i18n.load(locale, localeMessages[locale])
+  i18n.load(locale, messages)
   i18n.activate(locale)
   setServerI18nGetter(() => i18n)
   return i18n
 }
 
-export function syncClientI18n(locale: Locale) {
-  clientI18n.load(locale, localeMessages[locale])
+export async function syncClientI18n(locale: Locale) {
+  const messages = await loadMessages(locale)
+  clientI18n.load(locale, messages)
   clientI18n.activate(locale)
 
   if (typeof window === "undefined") {

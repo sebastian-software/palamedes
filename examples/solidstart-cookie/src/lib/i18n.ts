@@ -8,9 +8,6 @@ import {
   LOCALE_LABELS,
   type Locale,
 } from "@palamedes/example-locale-shared"
-import { messages as deMessages } from "../locales/de.po"
-import { messages as enMessages } from "../locales/en.po"
-import { messages as esMessages } from "../locales/es.po"
 
 export {
   DEFAULT_LOCALE,
@@ -20,10 +17,9 @@ export {
   type Locale,
 }
 
-export const localeMessages: Record<Locale, CatalogMessages> = {
-  en: enMessages,
-  de: deMessages,
-  es: esMessages,
+export async function loadMessages(locale: Locale): Promise<CatalogMessages> {
+  const { messages } = await import(`../locales/${locale}.po`)
+  return messages
 }
 
 const clientI18n = createI18n()
@@ -42,12 +38,13 @@ export function getLocaleLabel(locale: Locale): string {
   return LOCALE_LABELS[locale]
 }
 
-export function syncClientI18n(locale: Locale) {
+export async function syncClientI18n(locale: Locale) {
   if (typeof window === "undefined") {
     return
   }
 
-  clientI18n.load(locale, localeMessages[locale])
+  const messages = await loadMessages(locale)
+  clientI18n.load(locale, messages)
   clientI18n.activate(locale)
   setClientI18n(clientI18n)
 }
@@ -64,7 +61,7 @@ function bootstrapClientI18n() {
     ?.slice(`${LOCALE_COOKIE}=`.length)
 
   const preferredLanguage = navigator.language.split("-")[0] ?? DEFAULT_LOCALE
-  syncClientI18n(normalizeLocale(cookieValue ?? preferredLanguage))
+  void syncClientI18n(normalizeLocale(cookieValue ?? preferredLanguage))
 }
 
 bootstrapClientI18n()

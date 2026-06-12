@@ -78,6 +78,18 @@ Shared locale and routing proof logic lives in the internal package:
 
 - [packages/example-locale-shared](/Users/sebastian/Workspace/business/palamedes/packages/example-locale-shared)
 
+## Catalog Loading And Bundle Size
+
+Examples should load only the active locale catalog on client-reachable paths.
+Use dynamic imports such as `await import(\`../locales/${locale}.po\`)` when
+the browser only needs one locale at a time. That gives bundlers a chance to
+split catalogs into per-locale chunks.
+
+Static imports are still useful for tiny demos or server-only modules, but they
+make every imported locale reachable from that module. In copied app code with
+large catalogs, prefer the dynamic import pattern unless all locales are
+intentionally needed at once.
+
 ## Verification
 
 Workspace-level example builds:

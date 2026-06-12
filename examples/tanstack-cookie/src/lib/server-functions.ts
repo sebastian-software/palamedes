@@ -15,7 +15,7 @@ function getResolvedLocale() {
 export const loadHomePageData = createServerFn({ method: "GET" })
   .handler(async () => {
     const resolved = getResolvedLocale()
-    activateServerI18n(resolved.locale)
+    await activateServerI18n(resolved.locale)
 
     return {
       locale: resolved.locale,
@@ -43,7 +43,7 @@ export const setLocaleCookie = createServerFn({ method: "POST" })
 export const getLocalizedServerStatus = createServerFn({ method: "GET" })
   .handler(async () => {
     const resolved = getResolvedLocale()
-    activateServerI18n(resolved.locale)
+    await activateServerI18n(resolved.locale)
 
     return {
       locale: resolved.locale,
