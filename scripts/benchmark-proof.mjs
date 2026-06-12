@@ -3,6 +3,8 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
+import { createLargeCatalogFixture } from "../benchmarks/large-catalog/fixture.mjs"
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, "..")
 const fixtureRoot = path.join(repoRoot, "benchmarks", "proof-fixtures")
@@ -45,6 +47,10 @@ function parseArg(name, fallback) {
   return Number.isFinite(value) ? value : fallback
 }
 
+function formatBytes(bytes) {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`
+}
+
 async function loadFixtures() {
   return Promise.all(
     fixtureFiles.map(async (filename) => ({
@@ -80,8 +86,11 @@ async function collectMessages(fixtures) {
 }
 
 async function benchmark(name, fn, warmup, runs) {
+  let peakRssBytes = process.memoryUsage().rss
+
   for (let i = 0; i < warmup; i += 1) {
     await fn()
+    peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss)
   }
 
   const samples = []
@@ -91,6 +100,7 @@ async function benchmark(name, fn, warmup, runs) {
     await fn()
     const end = process.hrtime.bigint()
     samples.push(Number(end - start) / 1_000_000)
+    peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss)
   }
 
   samples.sort((a, b) => a - b)
@@ -100,22 +110,11 @@ async function benchmark(name, fn, warmup, runs) {
     name,
     medianMs: median,
     samplesMs: samples,
+    peakRssBytes,
   }
 }
 
-async function main() {
-  const warmup = parseArg("warmup", 3)
-  const runs = parseArg("runs", 7)
-  const fixtures = await loadFixtures()
-  const messages = await collectMessages(fixtures)
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "palamedes-bench-"))
-  const benchmarkRoot = path.join(tempDir, "fixture")
-  const benchmarkLocaleDir = path.join(benchmarkRoot, "src", "locales")
-  const compileResourcePath = path.join(benchmarkLocaleDir, "de.po")
-  const updateTargetPath = path.join(tempDir, "de-update.po")
-
-  await mkdir(benchmarkLocaleDir, { recursive: true })
-
+function writeCatalogs({ benchmarkLocaleDir, compileResourcePath, messages }) {
   updateCatalogFile({
     targetPath: path.join(benchmarkLocaleDir, "en.po"),
     locale: "en",
@@ -131,6 +130,132 @@ async function main() {
     clean: true,
     messages,
   })
+}
+
+function printResults(results) {
+  for (const result of results) {
+    console.log(
+      `- ${result.name}: median ${result.medianMs.toFixed(2)} ms; sampled peak RSS ${formatBytes(result.peakRssBytes)} (${result.samplesMs
+        .map((value) => value.toFixed(2))
+        .join(", ")})`
+    )
+  }
+}
+
+async function runLargeCatalogBenchmark({
+  messageCount,
+  sourceFileCount,
+  warmup,
+  runs,
+  tempDir,
+}) {
+  if (messageCount <= 0) {
+    return
+  }
+
+  const largeFixture = createLargeCatalogFixture({ messageCount, sourceFileCount })
+  const benchmarkRoot = path.join(tempDir, "large-fixture")
+  const benchmarkLocaleDir = path.join(benchmarkRoot, "src", "locales")
+  const compileResourcePath = path.join(benchmarkLocaleDir, "de.po")
+  const updateTargetPath = path.join(tempDir, "de-large-update.po")
+  const totalBytes = largeFixture.fixtures.reduce((sum, fixture) => sum + fixture.source.length, 0)
+
+  await mkdir(benchmarkLocaleDir, { recursive: true })
+  writeCatalogs({
+    benchmarkLocaleDir,
+    compileResourcePath,
+    messages: largeFixture.messages,
+  })
+
+  const baselineCatalog = await readFile(compileResourcePath, "utf8")
+  const catalogConfig = {
+    ...catalogShape,
+    rootDir: benchmarkRoot,
+  }
+
+  const transformResult = await benchmark(
+    "large-transform",
+    () => {
+      for (const fixture of largeFixture.fixtures) {
+        transformMacrosNative(fixture.source, fixture.filename)
+      }
+    },
+    warmup,
+    runs
+  )
+
+  const extractResult = await benchmark(
+    "large-extract",
+    () => {
+      for (const fixture of largeFixture.fixtures) {
+        extractMessagesNative(fixture.source, fixture.filename)
+      }
+    },
+    warmup,
+    runs
+  )
+
+  const updateResult = await benchmark(
+    "large-catalog-update",
+    async () => {
+      await writeFile(updateTargetPath, baselineCatalog, "utf8")
+      updateCatalogFile({
+        targetPath: updateTargetPath,
+        locale: "de",
+        sourceLocale: "en",
+        clean: false,
+        messages: largeFixture.messages,
+      })
+    },
+    warmup,
+    runs
+  )
+
+  const artifactResult = await benchmark(
+    "large-catalog-artifact-compile",
+    async () => {
+      compileCatalogArtifact(catalogConfig, compileResourcePath)
+    },
+    warmup,
+    runs
+  )
+
+  console.log("")
+  console.log("## Large Catalog Fixture")
+  console.log("")
+  console.log(
+    `Generated: ${largeFixture.messageCount} messages across ${largeFixture.sourceFileCount} source files, ${totalBytes} source bytes`
+  )
+  console.log("Fixture generator: benchmarks/large-catalog/fixture.mjs")
+  console.log("")
+  printResults([
+    transformResult,
+    extractResult,
+    updateResult,
+    artifactResult,
+  ])
+}
+
+async function main() {
+  const warmup = parseArg("warmup", 3)
+  const runs = parseArg("runs", 7)
+  const largeMessages = parseArg("large-messages", 0)
+  const largeSourceFiles = parseArg("large-source-files", 20)
+  const fixtures = await loadFixtures()
+  const messages = await collectMessages(fixtures)
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "palamedes-bench-"))
+  const benchmarkRoot = path.join(tempDir, "fixture")
+  const benchmarkLocaleDir = path.join(benchmarkRoot, "src", "locales")
+  const compileResourcePath = path.join(benchmarkLocaleDir, "de.po")
+  const updateTargetPath = path.join(tempDir, "de-update.po")
+
+  await mkdir(benchmarkLocaleDir, { recursive: true })
+
+  writeCatalogs({
+    benchmarkLocaleDir,
+    compileResourcePath,
+    messages,
+  })
 
   const baselineCatalog = await readFile(compileResourcePath, "utf8")
   const catalogConfig = {
@@ -140,7 +265,7 @@ async function main() {
 
   try {
     const transformResult = await benchmark(
-        "transform",
+      "transform",
       () => {
         for (const fixture of fixtures) {
           transformMacrosNative(fixture.source, fixture.filename)
@@ -151,7 +276,7 @@ async function main() {
     )
 
     const extractResult = await benchmark(
-        "extract",
+      "extract",
       () => {
         for (const fixture of fixtures) {
           extractMessagesNative(fixture.source, fixture.filename)
@@ -162,7 +287,7 @@ async function main() {
     )
 
     const updateResult = await benchmark(
-        "catalog-update",
+      "catalog-update",
       async () => {
         await writeFile(updateTargetPath, baselineCatalog, "utf8")
         updateCatalogFile({
@@ -178,7 +303,7 @@ async function main() {
     )
 
     const artifactResult = await benchmark(
-        "catalog-artifact-compile",
+      "catalog-artifact-compile",
       async () => {
         compileCatalogArtifact(catalogConfig, compileResourcePath)
       },
@@ -197,22 +322,25 @@ async function main() {
     console.log(`Ferrocat: ${nativeInfo.ferrocatVersion}`)
     console.log(`Fixtures: ${fixtures.length} files, ${totalBytes} source bytes`)
     console.log(`Catalog messages for update: ${messages.length}`)
+    console.log(`Large catalog messages: ${largeMessages > 0 ? largeMessages : "disabled"}`)
     console.log(`Warmup: ${warmup}`)
     console.log(`Runs: ${runs}`)
     console.log("")
 
-    for (const result of [
+    printResults([
       transformResult,
       extractResult,
       updateResult,
       artifactResult,
-    ]) {
-      console.log(
-        `- ${result.name}: median ${result.medianMs.toFixed(2)} ms (${result.samplesMs
-          .map((value) => value.toFixed(2))
-          .join(", ")})`
-      )
-    }
+    ])
+
+    await runLargeCatalogBenchmark({
+      messageCount: largeMessages,
+      sourceFileCount: largeSourceFiles,
+      warmup,
+      runs,
+      tempDir,
+    })
   } finally {
     await rm(tempDir, { recursive: true, force: true })
   }

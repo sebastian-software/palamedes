@@ -8,6 +8,7 @@ import { audit } from "./commands/audit"
 import { mergeCatalog } from "./commands/catalog"
 import { extract } from "./commands/extract"
 import { exportXliff, importXliff } from "./commands/xliff"
+import { report } from "./commands/report"
 
 const require = createRequire(import.meta.url)
 const VERSION = require("../package.json").version as string
@@ -43,6 +44,22 @@ program
   .action(async (options) => {
     try {
       await audit(options)
+    } catch (error) {
+      console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
+      process.exit(1)
+    }
+  })
+
+program
+  .command("report")
+  .description("Report per-locale catalog translation completeness")
+  .option("-c, --config <path>", "Path to palamedes.config.ts")
+  .option("--locale <locale...>", "Only report selected target locale(s); comma-separated values are supported")
+  .option("--json", "Print the machine-readable report as JSON")
+  .option("--fail-if-below <percent>", "Fail when any reported locale is below this translated percentage")
+  .action(async (options) => {
+    try {
+      await report(options)
     } catch (error) {
       console.error(chalk.red("Error:"), error instanceof Error ? error.message : error)
       process.exit(1)

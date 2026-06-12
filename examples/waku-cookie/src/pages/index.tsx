@@ -22,12 +22,12 @@ export default async function CookiePage() {
   })
   const localeLabel = getLocaleLabel(locale)
 
-  activateServerI18n(locale)
+  await activateServerI18n(locale)
 
   async function runProbe(): Promise<ProbeResult> {
     "use server"
 
-    activateServerI18n(locale)
+    await activateServerI18n(locale)
 
     return {
       handledAt: new Date().toISOString(),

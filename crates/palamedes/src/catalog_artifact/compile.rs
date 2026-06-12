@@ -17,14 +17,14 @@ pub(super) fn align_diagnostics_with_runtime_icu_semantics(artifact: &mut Compil
     for diagnostic in diagnostics {
         if diagnostic.code == "compile.invalid_icu_message" {
             if let Some(runtime_message) = artifact.messages.get(&diagnostic.key) {
-                if parse_runtime_icu(runtime_message).is_some() {
-                    if push_runtime_icu_compatibility_diagnostics(
+                if parse_runtime_icu(runtime_message).is_some()
+                    && push_runtime_icu_compatibility_diagnostics(
                         &diagnostic,
                         runtime_message,
                         &mut additional,
-                    ) {
-                        continue;
-                    }
+                    )
+                {
+                    continue;
                 }
             }
         }

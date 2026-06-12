@@ -18,6 +18,7 @@
   ],
   "scripts": {
     "build": "unbuild",
+    "test": "vitest run --globals src/*.test.ts",
     "stub": "unbuild --stub"
   },
   "homepage": "https://github.com/sebastian-software/palamedes",
@@ -62,6 +63,7 @@
   "devDependencies": {
     "next": "^16.2.6",
     "typescript": "^6.0.3",
-    "unbuild": "^3.6.1"
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.6"
   }
 }

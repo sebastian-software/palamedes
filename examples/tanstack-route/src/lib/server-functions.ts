@@ -8,7 +8,7 @@ import {
   normalizeLocale as normalizeSharedLocale,
 } from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
-import { getLocaleLabel, ROUTE_HOSTS, type Locale, normalizeLocale } from "./i18n"
+import { getLocaleLabel, ROUTE_HOSTS, normalizeLocale } from "./i18n"
 
 export const resolveRootRedirect = createServerFn({ method: "GET" })
   .handler(async () => {

@@ -42,6 +42,27 @@ flow and a calmer system underneath.**
 - **Goal**: give contributors and advanced adopters a stable frame for why the product feels different
 - **Key message**: one identity model, one runtime model, native core, thin adapters, delegated semantics
 
+## Round 1 Proof Package
+
+The first public round is now organized around visible proof instead of broad
+positioning claims:
+
+- [Homepage proof copy](./site/index.mdx)
+- [Verification matrix image](./site/assets/palamedes-framework-matrix.png)
+- [Round 1 post drafts](./site/posts/README.md)
+
+Drafts included in this round:
+
+- [A calmer path for JavaScript i18n](./site/posts/a-calmer-path-for-javascript-i18n.md)
+- [Measuring Palamedes honestly](./site/posts/measuring-palamedes-honestly.md)
+- [How we browser-verify i18n across five frameworks](./site/posts/browser-verifying-i18n-across-five-frameworks.md)
+- [The third time I built JavaScript i18n tooling](./site/posts/the-third-time-i-built-javascript-i18n-tooling.md)
+- [Round 1 micro-content](./site/posts/micro-content-round-1.md)
+
+The first three assets can be published without testimonial permissions. The
+origin-story post should stay in draft until the bio links and any optional
+recommendation quotes are approved for public use.
+
 ## Ongoing Micro-Content Stream
 
 Post 1 to 2 short pieces each week. Each post should make exactly one sharp point.
