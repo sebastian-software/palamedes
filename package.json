@@ -28,12 +28,17 @@
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check:release-set": "node ./scripts/check-release-set.mjs",
     "check-types": "pnpm check:native-types && pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint --ignore-path .gitignore --deny-warnings .",
+    "lint:fix": "oxlint --ignore-path .gitignore --fix --deny-warnings .",
+    "format": "prettier --write .",
     "build:native": "cargo build --workspace",
     "check:rust": "cargo check --workspace",
     "test:rust": "cargo test --workspace"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "oxlint": "^1.69.0",
+    "prettier": "^3.8.4",
     "typescript": "^6.0.3",
     "vercel": "^54.1.0",
     "vitest": "^4.1.6"
