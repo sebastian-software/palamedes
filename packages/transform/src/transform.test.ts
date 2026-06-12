@@ -81,7 +81,7 @@ const el = <Trans>Hello {name}</Trans>;
 
     expect(result.code).toContain('import { Trans } from "@palamedes/react"')
     expect(result.code).toContain('<Trans id="')
-    expect(result.code).toContain('message="Hello {name}"')
+    expect(result.code).toContain('message={"Hello {name}"}')
     expect(result.code).toContain('values={{ name }}')
   })
 
@@ -95,7 +95,7 @@ const y = <Trans>Hallo Welt</Trans>;
     expect(result.hasChanged).toBe(true)
     expect(result.code).toContain('import { Trans } from "@palamedes/react"')
     expect(result.code).toContain('const x = "äöü";')
-    expect(result.code).toContain('message="Hallo Welt"')
+    expect(result.code).toContain('message={"Hallo Welt"}')
     expect(result.map).toMatchObject({
       version: 3,
       sources: ["test.tsx"],
@@ -114,7 +114,7 @@ const el = <Trans>Hello <strong>{name}</strong></Trans>;
 
     expect(result.code).toContain('import { Trans } from "@palamedes/solid"')
     expect(result.code).toContain('<Trans id="')
-    expect(result.code).toContain('message="Hello <0>{name}</0>"')
+    expect(result.code).toContain('message={"Hello <0>{name}</0>"}')
     expect(result.code).toContain(
       'components={{ 0: (children) => <strong>{children}</strong> }}'
     )
@@ -127,7 +127,7 @@ const el = <Trans>Accept <a href="/terms">terms</a> and <a href="/privacy">priva
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
-    expect(result.code).toContain('message="Accept <0>terms</0> and <1>privacy</1>"')
+    expect(result.code).toContain('message={"Accept <0>terms</0> and <1>privacy</1>"}')
     expect(result.code).toContain(
       'components={{ 0: <a href="/terms" />, 1: <a href="/privacy" /> }}'
     )
@@ -141,7 +141,7 @@ const el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;
     const result = transformPalamedesMacros(code, "test.tsx")
 
     expect(result.code).toContain(
-      'message="<0>A</0> and <1>B</1>"'
+      'message={"<0>A</0> and <1>B</1>"}'
     )
     expect(result.code).toContain(
       "components={{ 0: <strong />, 1: <strong /> }}"
@@ -159,6 +159,47 @@ const msg = t({ message: "Hello" });
 
     expect(result.code).toContain('getI18n()._("')
     expect(result.code).not.toContain('message: "Hello"')
+  })
+
+
+  it("emits parseable JSX for <Trans> messages containing double quotes", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+export function Demo() {
+  return <Trans>Upload settlement data file with "3Degrees Audit Summary" tab</Trans>;
+}
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain(
+      'message={"Upload settlement data file with \\\"3Degrees Audit Summary\\\" tab"}'
+    )
+    expect(result.code).not.toContain('message="Upload settlement data file with \\\"')
+  })
+
+  it("wraps JSX choice macro replacements when used as children", () => {
+    const code = `
+import { Plural } from "@palamedes/react/macro";
+export function Demo({ totalRows }: { totalRows: number }) {
+  return <p><Plural one="# row" other="# rows" value={totalRows} /></p>;
+}
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('<p>{getI18n()._("')
+    expect(result.code).toContain('message: "{totalRows, plural, one {# row} other {# rows}}"')
+    expect(result.code).toContain(')}</p>')
+  })
+
+  it("keeps JSX choice macro replacements as expressions outside JSX children", () => {
+    const code = `
+import { Plural } from "@palamedes/react/macro";
+const text = <Plural one="# row" other="# rows" value={totalRows} />;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('const text = getI18n()._("')
+    expect(result.code).not.toContain('const text = {getI18n()._')
   })
 
   it("rejects explicit ids in macro authoring", () => {

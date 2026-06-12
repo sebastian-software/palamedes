@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use oxc_ast::ast::{CallExpression, JSXElement, TaggedTemplateExpression};
+use oxc_ast::ast::{CallExpression, JSXChild, JSXElement, TaggedTemplateExpression};
 use oxc_ast_visit::{walk, Visit};
 
 use crate::error::PalamedesError;
@@ -29,6 +29,7 @@ pub(super) struct TransformVisitor<'a> {
     pub needs_runtime_import: bool,
     pub trans_import_modules: HashSet<String>,
     pub error: Option<PalamedesError>,
+    jsx_child_element_depth: usize,
 }
 
 impl<'a> TransformVisitor<'a> {
@@ -46,6 +47,7 @@ impl<'a> TransformVisitor<'a> {
             needs_runtime_import: false,
             trans_import_modules: HashSet::new(),
             error: None,
+            jsx_child_element_depth: 0,
         }
     }
 
@@ -102,6 +104,12 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
+                let text =
+                    if macro_info.imported_name != "Trans" && self.jsx_child_element_depth > 0 {
+                        format!("{{{text}}}")
+                    } else {
+                        text
+                    };
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
                     end: it.span.end as usize,
@@ -126,6 +134,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         }
 
         walk::walk_jsx_element(self, it);
+    }
+
+    fn visit_jsx_child(&mut self, it: &JSXChild<'a>) {
+        if matches!(it, JSXChild::Element(_)) {
+            self.jsx_child_element_depth += 1;
+            walk::walk_jsx_child(self, it);
+            self.jsx_child_element_depth -= 1;
+        } else {
+            walk::walk_jsx_child(self, it);
+        }
     }
 
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
