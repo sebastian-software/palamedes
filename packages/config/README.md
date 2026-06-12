@@ -43,7 +43,7 @@ export default defineConfig({
   string checks. Plugin integrations skip `failOnMissing` failures for that
   locale while keeping strict checks for real locales.
 
-See [Pseudo-localization and fallback locales](../../docs/pseudo-localization.md)
+See [Pseudo-localization and fallback locales](https://github.com/sebastian-software/palamedes/blob/main/docs/pseudo-localization.md)
 for examples and the recommended development workflow.
 
 ## License
