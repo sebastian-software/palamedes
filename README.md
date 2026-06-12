@@ -96,6 +96,9 @@ Evidence:
 ## Start Here
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md)
+- [Configuration reference](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md)
+- [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md)
 - [Backend servers with Hono, Express, and request-local i18n](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
 - [`llms.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms.txt) and [`llms-full.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms-full.txt) for AI coding assistants
 - [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) for Vite projects
