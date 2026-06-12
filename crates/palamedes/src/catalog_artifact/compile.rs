@@ -18,12 +18,13 @@ pub(super) fn align_diagnostics_with_runtime_icu_semantics(artifact: &mut Compil
         if diagnostic.code == "compile.invalid_icu_message" {
             if let Some(runtime_message) = artifact.messages.get(&diagnostic.key) {
                 if parse_runtime_icu(runtime_message).is_some() {
-                    push_runtime_icu_compatibility_diagnostics(
+                    if push_runtime_icu_compatibility_diagnostics(
                         &diagnostic,
                         runtime_message,
                         &mut additional,
-                    );
-                    continue;
+                    ) {
+                        continue;
+                    }
                 }
             }
         }
@@ -72,12 +73,12 @@ fn push_runtime_icu_compatibility_diagnostics(
     diagnostic: &CompiledCatalogDiagnostic,
     runtime_message: &str,
     diagnostics: &mut Vec<CompiledCatalogDiagnostic>,
-) {
+) -> bool {
     let Some(source_icu) = parse_runtime_icu(&diagnostic.msgid) else {
-        return;
+        return false;
     };
     let Some(runtime_icu) = parse_runtime_icu(runtime_message) else {
-        return;
+        return false;
     };
 
     let report = compare_icu_messages(
@@ -96,6 +97,8 @@ fn push_runtime_icu_compatibility_diagnostics(
             locale: diagnostic.locale.clone(),
         });
     }
+
+    true
 }
 
 fn parse_runtime_icu(message: &str) -> Option<ferrocat::IcuMessage> {

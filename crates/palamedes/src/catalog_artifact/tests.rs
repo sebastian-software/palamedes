@@ -255,6 +255,58 @@ msgstr "Konnte {firstName}'s Daten nicht laden"
 }
 
 #[test]
+fn compile_catalog_artifact_keeps_invalid_icu_when_source_msgid_cannot_parse() {
+    let fixture = create_fixture_dir("catalog-artifact-apostrophe-source-invalid");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    fs::write(
+        locale_dir.join("en.po"),
+        r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "{unclosed"
+msgstr ""
+"#,
+    )
+    .expect("write en");
+
+    fs::write(
+        locale_dir.join("de.po"),
+        r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "{unclosed"
+msgstr "John's Daten konnten nicht geladen werden"
+"#,
+    )
+    .expect("write de");
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
+
+    assert!(result.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == "compile.invalid_icu_message"
+            && diagnostic.source_key.message == "{unclosed"
+            && diagnostic.locale == "de"
+    }));
+}
+
+#[test]
 fn compile_catalog_artifact_reports_icu_compatibility_diagnostics() {
     let fixture = create_fixture_dir("catalog-artifact-icu-compatibility");
     let locale_dir = fixture.join("src/locales");
@@ -424,6 +476,63 @@ msgstr "Hallo {firstName}"
         .diagnostics
         .iter()
         .any(|diagnostic| diagnostic.code == "icu.missing_argument"));
+}
+
+#[test]
+fn compile_catalog_artifact_selected_accepts_runtime_literal_apostrophes() {
+    let fixture = create_fixture_dir("catalog-artifact-selected-apostrophes");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    fs::write(
+        locale_dir.join("en.po"),
+        r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Couldn't load applied rules"
+msgstr ""
+"#,
+    )
+    .expect("write en");
+
+    fs::write(
+        locale_dir.join("fr.po"),
+        r#"msgid ""
+msgstr ""
+"Language: fr\n"
+
+msgid "Couldn't load applied rules"
+msgstr "Impossible d'ouvrir les regles"
+"#,
+    )
+    .expect("write fr");
+
+    let request = CatalogArtifactSelectedRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "fr".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("fr.po").to_string_lossy().into_owned(),
+        compiled_ids: vec![compiled_key("Couldn't load applied rules", None)],
+    };
+    let result = compile_catalog_artifact_selected(&request).expect("selected catalog artifact");
+
+    assert_eq!(result.messages.len(), 1);
+    assert_eq!(
+        result
+            .messages
+            .get(&compiled_key("Couldn't load applied rules", None))
+            .map(String::as_str),
+        Some("Impossible d'ouvrir les regles")
+    );
+    assert!(result.diagnostics.is_empty());
 }
 
 fn create_fixture_dir(prefix: &str) -> PathBuf {
