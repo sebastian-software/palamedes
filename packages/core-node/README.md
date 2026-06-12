@@ -38,9 +38,16 @@ pnpm add @palamedes/core-node
 The package loads one of these platform packages behind the scenes:
 
 - `@palamedes/core-node-darwin-arm64`
+- `@palamedes/core-node-darwin-x64`
 - `@palamedes/core-node-linux-x64-gnu`
+- `@palamedes/core-node-linux-x64-musl`
 - `@palamedes/core-node-linux-arm64-gnu`
+- `@palamedes/core-node-linux-arm64-musl`
+- `@palamedes/core-node-win32-arm64-msvc`
 - `@palamedes/core-node-win32-x64-msvc`
+
+Linux packages are split by libc: `gnu` targets glibc distributions and `musl`
+targets Alpine-style environments.
 
 ## Example
 

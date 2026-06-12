@@ -197,13 +197,39 @@ function detectLinuxLibc(): "gnu" | "musl" | null {
   return "musl"
 }
 
+const SUPPORTED_NATIVE_PACKAGES = [
+  "@palamedes/core-node-darwin-arm64",
+  "@palamedes/core-node-darwin-x64",
+  "@palamedes/core-node-linux-arm64-gnu",
+  "@palamedes/core-node-linux-arm64-musl",
+  "@palamedes/core-node-linux-x64-gnu",
+  "@palamedes/core-node-linux-x64-musl",
+  "@palamedes/core-node-win32-arm64-msvc",
+  "@palamedes/core-node-win32-x64-msvc",
+] as const
+
+function getPlatformTriple(): string {
+  const libc = detectLinuxLibc()
+  return libc
+    ? `${process.platform}-${process.arch}-${libc}`
+    : `${process.platform}-${process.arch}`
+}
+
 function getNativePackageName(): string {
   if (process.platform === "darwin" && process.arch === "arm64") {
     return "@palamedes/core-node-darwin-arm64"
   }
 
+  if (process.platform === "darwin" && process.arch === "x64") {
+    return "@palamedes/core-node-darwin-x64"
+  }
+
   if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "gnu") {
     return "@palamedes/core-node-linux-x64-gnu"
+  }
+
+  if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "musl") {
+    return "@palamedes/core-node-linux-x64-musl"
   }
 
   if (
@@ -214,12 +240,24 @@ function getNativePackageName(): string {
     return "@palamedes/core-node-linux-arm64-gnu"
   }
 
+  if (
+    process.platform === "linux" &&
+    process.arch === "arm64" &&
+    detectLinuxLibc() === "musl"
+  ) {
+    return "@palamedes/core-node-linux-arm64-musl"
+  }
+
   if (process.platform === "win32" && process.arch === "x64") {
     return "@palamedes/core-node-win32-x64-msvc"
   }
 
+  if (process.platform === "win32" && process.arch === "arm64") {
+    return "@palamedes/core-node-win32-arm64-msvc"
+  }
+
   throw new Error(
-    `No Palamedes native bindings package is available for ${process.platform}/${process.arch}.`
+    `No Palamedes native bindings package is available for ${getPlatformTriple()}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}. If you need to build from source, run \`cargo build --workspace\` in the Palamedes repository.`
   )
 }
 
@@ -233,7 +271,7 @@ function loadNativeBindings(): NativeBindings {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(
-      `Failed to load Palamedes native bindings from ${nativePackageName} for package ${packageDir}: ${message}`
+      `Failed to load Palamedes native bindings from ${nativePackageName} for ${getPlatformTriple()} in package ${packageDir}: ${message}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}.`
     )
   }
 }

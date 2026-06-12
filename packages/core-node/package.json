@@ -48,8 +48,12 @@
   },
   "optionalDependencies": {
     "@palamedes/core-node-darwin-arm64": "workspace:^",
+    "@palamedes/core-node-darwin-x64": "workspace:^",
     "@palamedes/core-node-linux-arm64-gnu": "workspace:^",
+    "@palamedes/core-node-linux-arm64-musl": "workspace:^",
     "@palamedes/core-node-linux-x64-gnu": "workspace:^",
+    "@palamedes/core-node-linux-x64-musl": "workspace:^",
+    "@palamedes/core-node-win32-arm64-msvc": "workspace:^",
     "@palamedes/core-node-win32-x64-msvc": "workspace:^"
   },
   "devDependencies": {
