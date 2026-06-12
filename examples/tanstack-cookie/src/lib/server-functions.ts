@@ -3,7 +3,7 @@ import { getRequestHeader, setCookie } from "@tanstack/react-start/server"
 import { t } from "@palamedes/core/macro"
 import { resolveCookieLocale } from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
-import { getLocaleLabel, LOCALE_COOKIE, type Locale, normalizeLocale } from "./i18n"
+import { getLocaleLabel, LOCALE_COOKIE, normalizeLocale } from "./i18n"
 
 function getResolvedLocale() {
   return resolveCookieLocale({

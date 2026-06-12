@@ -7,7 +7,7 @@ interface CounterProps {
   locale: Locale
 }
 
-export function Counter({ locale }: CounterProps) {
+export function Counter({ locale: _locale }: CounterProps) {
   const [count, setCount] = useState(0)
 
   return (

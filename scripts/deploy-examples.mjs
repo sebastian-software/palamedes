@@ -141,7 +141,7 @@ function getCommandCwd(example) {
   return example.cwd
 }
 
-function getVercelCwdArgs(example) {
+function getVercelCwdArgs() {
   return []
 }
 

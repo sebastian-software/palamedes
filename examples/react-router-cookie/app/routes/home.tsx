@@ -13,7 +13,7 @@ import {
   syncClientI18n,
 } from "~/lib/i18n"
 
-export function meta({}: Route.MetaArgs) {
+export function meta() {
   return [
     { title: "React Router Cookie Locale Example" },
     { name: "description", content: "Cookie-driven Palamedes locale proof for React Router framework mode." },

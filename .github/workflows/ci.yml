@@ -34,6 +34,9 @@ jobs:
       - name: Check release package set
         run: pnpm check:release-set
 
+      - name: Run JavaScript and TypeScript lint
+        run: pnpm lint
+
       - name: Build packages
         run: pnpm build
 
