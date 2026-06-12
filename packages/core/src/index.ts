@@ -111,6 +111,8 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
       })
     }
 
+    // Keep rendering resilient after telemetry: try the source fallback, then
+    // return the raw source message if that pattern is malformed too.
     if (message.pattern !== message.fallback) {
       try {
         return formatMessagePattern(message.fallback, values, activeLocale)

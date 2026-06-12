@@ -44,6 +44,9 @@ const i18n = createI18n({
 
 Use `pmds audit --fail-on error` in CI for checked-in catalogs, then wire these
 hooks to observe runtime-loaded catalogs or fast-moving translation changes.
+`getMessage(id, descriptor)` uses the same missing-catalog lookup path as `_()`,
+so `onMissing` also fires when callers ask for a raw pattern by id and the
+active catalog does not contain that id.
 
 For authoring imports, use:
 
