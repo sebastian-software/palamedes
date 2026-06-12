@@ -214,6 +214,9 @@ describe("createI18n", () => {
     expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: 12.3 })).toBe(
       `Total: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" }).format(12.3)}`
     )
+    expect(i18n._({ message: "Bare: {amount, number, currency/EUR}" }, { amount: 12.3 })).toBe(
+      `Bare: ${new Intl.NumberFormat("en-US").format(12.3)}`
+    )
     expect(i18n._({ message: "Progress: {ratio, number, percent}" }, { ratio: 0.42 })).toBe(
       `Progress: ${new Intl.NumberFormat("en-US", { style: "percent" }).format(0.42)}`
     )

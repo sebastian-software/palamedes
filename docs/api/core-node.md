@@ -21,6 +21,12 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
 
+`compileCatalogArtifact()` and `compileCatalogArtifactSelected()` include
+runtime formatter diagnostics in their `diagnostics` arrays. Unsupported
+formatter kinds such as `list`, `duration`, `ago`, and `name` are errors.
+Unsupported styles on supported `number`, `date`, and `time` formatters are
+warnings because the runtime falls back to default `Intl` formatting.
+
 ## Stability
 
 This package is useful for integration tests and custom tooling, but it is a

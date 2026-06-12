@@ -4,8 +4,9 @@ use super::{
     CatalogConfig,
 };
 use ferrocat::compiled_key;
+use std::collections::BTreeSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -479,6 +480,222 @@ msgstr "Hallo {firstName}"
 }
 
 #[test]
+fn compile_catalog_artifact_reports_runtime_unsupported_formatter_kinds() {
+    let fixture = create_fixture_dir("catalog-artifact-runtime-unsupported-kinds");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    let source_entries = unsupported_runtime_formatter_kind_messages()
+        .into_iter()
+        .map(|message| (message, ""))
+        .collect::<Vec<_>>();
+    write_test_catalog(&locale_dir, "en", &source_entries);
+    write_test_catalog(&locale_dir, "de", &[]);
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
+    let diagnostics = result
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "icu.unsupported_formatter_kind")
+        .collect::<Vec<_>>();
+
+    assert_eq!(diagnostics.len(), 4);
+    assert!(diagnostics.iter().all(|diagnostic| {
+        diagnostic.severity == CatalogArtifactDiagnosticSeverity::Error && diagnostic.locale == "en"
+    }));
+    assert_eq!(
+        diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.source_key.message.as_str())
+            .collect::<BTreeSet<_>>(),
+        unsupported_runtime_formatter_kind_messages()
+            .into_iter()
+            .collect::<BTreeSet<_>>()
+    );
+    assert_eq!(result.missing.len(), 4);
+    assert!(result
+        .missing
+        .iter()
+        .all(|missing| missing.resolved_locale.as_deref() == Some("en")));
+}
+
+#[test]
+fn compile_catalog_artifact_selected_reports_runtime_unsupported_formatter_kinds() {
+    let fixture = create_fixture_dir("catalog-artifact-selected-runtime-unsupported-kinds");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    let source_entries = unsupported_runtime_formatter_kind_messages()
+        .into_iter()
+        .map(|message| (message, ""))
+        .collect::<Vec<_>>();
+    write_test_catalog(&locale_dir, "en", &source_entries);
+    write_test_catalog(&locale_dir, "de", &[]);
+
+    let request = CatalogArtifactSelectedRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+        compiled_ids: unsupported_runtime_formatter_kind_messages()
+            .into_iter()
+            .map(|message| compiled_key(message, None))
+            .collect(),
+    };
+    let result = compile_catalog_artifact_selected(&request).expect("selected catalog artifact");
+    let diagnostics = result
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "icu.unsupported_formatter_kind")
+        .collect::<Vec<_>>();
+
+    assert_eq!(result.messages.len(), 4);
+    assert_eq!(diagnostics.len(), 4);
+    assert!(diagnostics.iter().all(|diagnostic| {
+        diagnostic.severity == CatalogArtifactDiagnosticSeverity::Error && diagnostic.locale == "en"
+    }));
+    assert_eq!(
+        diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.source_key.message.as_str())
+            .collect::<BTreeSet<_>>(),
+        unsupported_runtime_formatter_kind_messages()
+            .into_iter()
+            .collect::<BTreeSet<_>>()
+    );
+}
+
+#[test]
+fn compile_catalog_artifact_reports_runtime_unsupported_formatter_styles() {
+    let fixture = create_fixture_dir("catalog-artifact-runtime-unsupported-styles");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    write_test_catalog(
+        &locale_dir,
+        "en",
+        &[
+            ("Compact {amount, number, ::compact-short}", ""),
+            ("Bare currency {amount, number, currency/EUR}", ""),
+            ("Pattern {when, date, yyyy-MM-dd}", ""),
+        ],
+    );
+    write_test_catalog(
+        &locale_dir,
+        "de",
+        &[
+            (
+                "Compact {amount, number, ::compact-short}",
+                "Kompakt {amount, number, ::compact-short}",
+            ),
+            (
+                "Bare currency {amount, number, currency/EUR}",
+                "Bare Waehrung {amount, number, currency/EUR}",
+            ),
+            (
+                "Pattern {when, date, yyyy-MM-dd}",
+                "Muster {when, date, yyyy-MM-dd}",
+            ),
+        ],
+    );
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
+    let diagnostics = result
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "icu.unsupported_formatter_style")
+        .collect::<Vec<_>>();
+
+    assert_eq!(diagnostics.len(), 3);
+    assert!(diagnostics.iter().all(|diagnostic| {
+        diagnostic.severity == CatalogArtifactDiagnosticSeverity::Warning
+            && diagnostic.locale == "de"
+    }));
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.source_key.message
+            == "Compact {amount, number, ::compact-short}"));
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.source_key.message
+            == "Bare currency {amount, number, currency/EUR}"));
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.source_key.message == "Pattern {when, date, yyyy-MM-dd}"));
+}
+
+#[test]
+fn compile_catalog_artifact_allows_supported_runtime_formatter_subset() {
+    let fixture = create_fixture_dir("catalog-artifact-runtime-supported-formatters");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    let message = concat!(
+        "Values {plain, number} {percent, number, percent} ",
+        "{integer, number, integer} {percentSkeleton, number, ::percent} ",
+        "{integerSkeleton, number, ::integer} {currency, number, ::currency/EUR} ",
+        "{datePlain, date} {dateShort, date, short} {dateMedium, date, medium} ",
+        "{dateLong, date, long} {dateFull, date, full} {timePlain, time} ",
+        "{timeShort, time, short} {timeMedium, time, medium} {timeLong, time, long} ",
+        "{timeFull, time, full}"
+    );
+
+    write_test_catalog(&locale_dir, "en", &[(message, "")]);
+    write_test_catalog(&locale_dir, "de", &[(message, message)]);
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
+
+    assert!(!result.diagnostics.iter().any(|diagnostic| diagnostic.code
+        == "icu.unsupported_formatter_kind"
+        || diagnostic.code == "icu.unsupported_formatter_style"));
+}
+
+#[test]
 fn compile_catalog_artifact_selected_accepts_runtime_literal_apostrophes() {
     let fixture = create_fixture_dir("catalog-artifact-selected-apostrophes");
     let locale_dir = fixture.join("src/locales");
@@ -543,4 +760,33 @@ fn create_fixture_dir(prefix: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("palamedes-{prefix}-{unique}"));
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
+}
+
+fn unsupported_runtime_formatter_kind_messages() -> [&'static str; 4] {
+    [
+        "Items {items, list}",
+        "Elapsed {elapsed, duration}",
+        "Updated {updated, ago}",
+        "Owner {owner, name}",
+    ]
+}
+
+fn write_test_catalog(locale_dir: &Path, locale: &str, entries: &[(&str, &str)]) {
+    let mut catalog = format!("msgid \"\"\nmsgstr \"\"\n\"Language: {locale}\\n\"\n");
+
+    for (msgid, msgstr) in entries {
+        catalog.push('\n');
+        catalog.push_str("msgid ");
+        catalog.push_str(&po_string(msgid));
+        catalog.push('\n');
+        catalog.push_str("msgstr ");
+        catalog.push_str(&po_string(msgstr));
+        catalog.push('\n');
+    }
+
+    fs::write(locale_dir.join(format!("{locale}.po")), catalog).expect("write catalog");
+}
+
+fn po_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }

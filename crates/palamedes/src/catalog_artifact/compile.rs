@@ -1,15 +1,22 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use ferrocat::{
-    compare_icu_messages, parse_icu, CompiledCatalogArtifact, CompiledCatalogDiagnostic,
-    DiagnosticSeverity, IcuCompatibilityOptions, IcuDiagnosticSeverity,
+    compare_icu_messages, parse_icu, validate_icu_formatter_support, CompiledCatalogArtifact,
+    CompiledCatalogDiagnostic, CompiledCatalogIdIndex, DiagnosticSeverity, IcuArgumentKind,
+    IcuCompatibilityOptions, IcuDiagnosticSeverity, IcuFormatter, IcuFormatterSupport,
 };
 
 use super::types::{
     CatalogArtifactDiagnostic, CatalogArtifactMissingMessage, CatalogArtifactResult,
 };
 
-pub(super) fn align_diagnostics_with_runtime_icu_semantics(artifact: &mut CompiledCatalogArtifact) {
+pub(super) fn align_diagnostics_with_runtime_icu_semantics(
+    artifact: &mut CompiledCatalogArtifact,
+    compiled_id_index: &CompiledCatalogIdIndex,
+    requested_locale: &str,
+) {
+    let runtime_message_locales = runtime_message_locales(artifact, requested_locale);
     let diagnostics = std::mem::take(&mut artifact.diagnostics);
     let mut aligned = Vec::with_capacity(diagnostics.len());
     let mut additional = Vec::new();
@@ -34,6 +41,12 @@ pub(super) fn align_diagnostics_with_runtime_icu_semantics(artifact: &mut Compil
 
     aligned.extend(additional);
     artifact.diagnostics = aligned;
+    push_runtime_icu_formatter_support_diagnostics(
+        artifact,
+        compiled_id_index,
+        &runtime_message_locales,
+        requested_locale,
+    );
 }
 
 pub(super) fn build_artifact_result(
@@ -99,6 +112,111 @@ fn push_runtime_icu_compatibility_diagnostics(
     }
 
     true
+}
+
+fn push_runtime_icu_formatter_support_diagnostics(
+    artifact: &mut CompiledCatalogArtifact,
+    compiled_id_index: &CompiledCatalogIdIndex,
+    runtime_message_locales: &BTreeMap<String, String>,
+    requested_locale: &str,
+) {
+    for (compiled_id, runtime_message) in &artifact.messages {
+        let Some(source_key) = compiled_id_index.get(compiled_id) else {
+            continue;
+        };
+        let Some(runtime_icu) = parse_runtime_icu(runtime_message) else {
+            continue;
+        };
+
+        let report = validate_icu_formatter_support(&runtime_icu, runtime_icu_formatter_support);
+        let locale = runtime_message_locales
+            .get(compiled_id)
+            .map(String::as_str)
+            .unwrap_or(requested_locale);
+
+        for icu_diagnostic in report.diagnostics {
+            artifact.diagnostics.push(CompiledCatalogDiagnostic {
+                severity: runtime_icu_diagnostic_severity(icu_diagnostic.severity),
+                code: icu_diagnostic.code,
+                message: icu_diagnostic.message,
+                key: compiled_id.clone(),
+                msgid: source_key.msgid.clone(),
+                msgctxt: source_key.msgctxt.clone(),
+                locale: locale.to_owned(),
+            });
+        }
+    }
+}
+
+fn runtime_message_locales(
+    artifact: &CompiledCatalogArtifact,
+    requested_locale: &str,
+) -> BTreeMap<String, String> {
+    artifact
+        .missing
+        .iter()
+        .map(|missing| {
+            (
+                missing.key.clone(),
+                missing
+                    .resolved_locale
+                    .clone()
+                    .unwrap_or_else(|| requested_locale.to_owned()),
+            )
+        })
+        .collect()
+}
+
+fn runtime_icu_formatter_support(formatter: &IcuFormatter) -> IcuFormatterSupport {
+    match formatter.kind {
+        IcuArgumentKind::Number => runtime_icu_style_support(is_supported_runtime_number_style(
+            formatter.style.as_deref(),
+        )),
+        IcuArgumentKind::Date | IcuArgumentKind::Time => runtime_icu_style_support(
+            is_supported_runtime_date_time_style(formatter.style.as_deref()),
+        ),
+        _ => IcuFormatterSupport::UnsupportedKind {
+            severity: IcuDiagnosticSeverity::Error,
+        },
+    }
+}
+
+const fn runtime_icu_style_support(supported: bool) -> IcuFormatterSupport {
+    if supported {
+        IcuFormatterSupport::Supported
+    } else {
+        IcuFormatterSupport::UnsupportedStyle {
+            severity: IcuDiagnosticSeverity::Warning,
+        }
+    }
+}
+
+fn is_supported_runtime_number_style(style: Option<&str>) -> bool {
+    let Some(style) = style.map(str::trim).filter(|style| !style.is_empty()) else {
+        return true;
+    };
+
+    if let Some(skeleton) = style.strip_prefix("::") {
+        return matches!(skeleton, "percent" | "integer") || supported_currency_skeleton(skeleton);
+    }
+
+    matches!(style, "percent" | "integer")
+}
+
+fn supported_currency_skeleton(style: &str) -> bool {
+    let Some(currency) = style.strip_prefix("currency/") else {
+        return false;
+    };
+
+    currency.len() == 3 && currency.bytes().all(|byte| byte.is_ascii_alphabetic())
+}
+
+fn is_supported_runtime_date_time_style(style: Option<&str>) -> bool {
+    let Some(style) = style.map(str::trim).filter(|style| !style.is_empty()) else {
+        return true;
+    };
+
+    matches!(style, "short" | "medium" | "long" | "full")
 }
 
 fn parse_runtime_icu(message: &str) -> Option<ferrocat::IcuMessage> {

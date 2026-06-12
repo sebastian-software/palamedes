@@ -189,9 +189,9 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "ferrocat"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93307be6789b486541ef1c39f4bcb87c99d2433c52f19afd63a373f135561427"
+checksum = "70d0c8e7aeb6511c6f3d544540b58ad6c61bf79181f55e2ce7724161f7e0ee7c"
 dependencies = [
  "ferrocat-icu",
  "ferrocat-po",
@@ -199,18 +199,18 @@ dependencies = [
 
 [[package]]
 name = "ferrocat-icu"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "599dfc6c60dd262d1cdec037ceab9700a97641051194ef6c19552e2bf6259633"
+checksum = "dd17fb2690fc26249dd57b1c9c0db61af7aa4dfdd79e4a77b46fa45e55361a6d"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "ferrocat-po"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d6a78c367a6b67d7385e156ec1eabd032ee382bfc8c18a339a63b360251b76e"
+checksum = "558ef350bbffb67fef943accc5c12a9befd0af7804271717fa6e5b396a9232bf"
 dependencies = [
  "ferrocat-icu",
  "icu_locale",
