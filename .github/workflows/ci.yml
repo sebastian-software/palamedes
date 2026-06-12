@@ -11,7 +11,24 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-24.04
+    name: validate (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            node: 24
+            full: true
+          - os: ubuntu-24.04
+            node: 22
+            full: true
+          - os: macos-14
+            node: 24
+            full: false
+          - os: windows-2025
+            node: 24
+            full: false
 
     steps:
       - name: Check out repository
@@ -20,7 +37,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
 
       - name: Enable Corepack
         run: corepack enable
@@ -32,13 +49,20 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check release package set
+        if: matrix.full
         run: pnpm check:release-set
 
       - name: Build packages
         run: pnpm build
 
+      - name: Smoke-test native binding load
+        if: ${{ !matrix.full }}
+        run: node -e "const core = require('@palamedes/core-node'); if (typeof core.transform !== 'function') process.exit(1)"
+
       - name: Run tests
+        if: matrix.full
         run: pnpm test
 
       - name: Check types
+        if: matrix.full
         run: pnpm check-types
