@@ -12,89 +12,136 @@ msgstr ""
 "Report-Msgid-Bugs-To: \n"
 "X-Generator: palamedes\n"
 
-#: src/components/Counter.tsx:40
-msgid "Click me"
-msgstr "Klick mich"
-
-#: src/components/ServerActionProbe.tsx:45
+#: src/components/ServerActionProbe.tsx:58
 msgid "Ask server for localized status"
 msgstr "Server nach lokalisiertem Status fragen"
 
-#: src/components/Counter.tsx:20
+#: src/components/Counter.tsx:36
+msgid "Click me"
+msgstr "Klick mich"
+
+#: src/components/Counter.tsx:13
+msgid "Client interaction"
+msgstr "Client-Interaktion"
+
+#: src/app/page.tsx:20
+msgid "Cookie strategy"
+msgstr "Cookie-Strategie"
+
+#: src/components/Counter.tsx:16
 msgid "Counter Example"
 msgstr "Zaehlerbeispiel"
 
-#: src/components/ServerActionProbe.tsx:31
-msgid ""
-"This button calls a dedicated server action that reads the active locale"
-" from the request cookie and returns localized text from the server."
-msgstr ""
-"Dieser Button ruft eine eigene Server-Action auf, die die aktive"
-" Sprache aus dem Request-Cookie liest und lokalisierten Text vom Server"
-" zurueckgibt."
+#: src/app/page.tsx:19
+msgid "Direct server macro"
+msgstr "Direktes Server-Makro"
 
-#: src/components/ServerActionProbe.tsx:75
-msgid "Run the action to fetch a server-localized result."
-msgstr "Fuehre die Action aus, um ein server-lokalisiertes Ergebnis zu laden."
+#: src/app/page.tsx:37
+msgid "Direct server macro ran inside the request scope."
+msgstr "Direktes Server-Makro lief im Request-Scope."
 
-#: src/app/page.tsx:25
-msgid "Language"
-msgstr "Sprache"
-
-#: src/components/ServerActionProbe.tsx:32
-msgid "Server Action Proof"
-msgstr "Server-Action-Beweis"
-
-#: src/app/page.tsx:31
-msgid "Server Component Proof"
-msgstr "Server-Component-Beweis"
-
-#: src/components/ServerActionProbe.tsx:65
-#: src/app/page.tsx:42
-msgid "Server locale"
-msgstr "Server-Sprache"
-
-#: src/components/ServerActionProbe.tsx:69
-#: src/app/page.tsx:44
+#: src/components/ServerActionProbe.tsx:74
 msgid "Handled at"
 msgstr "Bearbeitet um"
 
-#: src/components/ServerActionProbe.tsx:73
+#: src/app/page.tsx:14
+msgid "Language"
+msgstr "Sprache"
+
+#: src/app/page.tsx:18
+msgid "Locale source"
+msgstr "Sprachquelle"
+
+#: src/components/ServerActionProbe.tsx:80
 msgid "Localized message"
 msgstr "Lokalisierte Nachricht"
 
-#: src/app/page.tsx:47
-msgid "Rendered on server"
-msgstr "Auf dem Server gerendert"
+#: src/components/ServerActionProbe.tsx:36
+msgid "Localized server action result"
+msgstr "Lokalisierte Server-Action-Antwort"
 
-#: src/app/page.tsx:36
-msgid "This section was rendered on the server for locale {localeLabel}."
-msgstr "Dieser Abschnitt wurde auf dem Server fuer die Sprache {localeLabel} gerendert."
+#~ #: src/app/page.tsx:33
+#~ msgid "Powered by <0>@palamedes/next-plugin</0>"
+#~ msgstr "Bereitgestellt von <0>@palamedes/next-plugin</0>"
 
-#: src/app/page.tsx:33
-msgid "Powered by <0>@palamedes/next-plugin</0>"
-msgstr "Bereitgestellt von <0>@palamedes/next-plugin</0>"
-
-#: src/app/page.tsx:33
+#: src/app/page.tsx:25
 msgid "Powered by @palamedes/next-plugin"
 msgstr "Bereitgestellt von @palamedes/next-plugin"
 
-#: src/app/page.tsx:21
-msgid ""
-"This example demonstrates the Palamedes-owned runtime with the OXC-based macro"
-" transformer in a Next.js App Router project. No Babel required!"
-msgstr ""
-"Dieses Beispiel zeigt die Palamedes-eigene Runtime mit dem OXC-basierten"
-" Makro-Transformer in einem Next.js-App-Router-Projekt. Kein Babel noetig!"
+#: src/app/page.tsx:24
+msgid "Rendered on server"
+msgstr "Auf dem Server gerendert"
 
-#: src/app/page.tsx:18
-msgid "Welcome to Palamedes"
-msgstr "Willkommen bei Palamedes"
+#: src/components/ServerActionProbe.tsx:86
+msgid "Run the action to fetch a server-localized result."
+msgstr "Fuehre die Action aus, um ein server-lokalisiertes Ergebnis zu laden."
 
-#: src/lib/actions.ts:29
+#~ #: src/components/ServerActionProbe.tsx:32
+#~ msgid "Server Action Proof"
+#~ msgstr "Server-Action-Beweis"
+
+#: src/app/page.tsx:15
+msgid "Server Component Proof"
+msgstr "Server-Component-Beweis"
+
+#: src/lib/actions.ts:10
 msgid "Server action confirmed locale {locale}."
 msgstr "Die Server-Action hat die Sprache {locale} bestaetigt."
 
-#: src/components/Counter.tsx:23
+#: src/components/ServerActionProbe.tsx:33
+msgid "Server action proof"
+msgstr "Server-Action-Beweis"
+
+#: src/components/ServerActionProbe.tsx:70
+#: src/app/page.tsx:17
+msgid "Server locale"
+msgstr "Server-Sprache"
+
+#: src/components/ServerActionProbe.tsx:39
+msgid ""
+"This button calls a dedicated server action that reads the active locale from "
+"the request cookie and returns localized text from the server."
+msgstr ""
+"Dieser Button ruft eine eigene Server-Action auf, die die aktive Sprache aus "
+"dem Request-Cookie liest und lokalisierten Text vom Server zurueckgibt."
+
+#: src/app/page.tsx:11
+msgid ""
+"This cookie-based Next.js example derives the first locale from "
+"Accept-Language, persists it in a cookie, and keeps server components plus "
+"server actions localized from the request state."
+msgstr ""
+"Dieses Cookie-basierte Next.js-Beispiel leitet die erste Sprache aus "
+"Accept-Language ab, speichert sie in einem Cookie und haelt Server "
+"Components plus Server Actions anhand des Request-Zustands lokalisiert."
+
+#~ #: src/app/page.tsx:21
+#~ msgid ""
+#~ "This example demonstrates the Palamedes-owned runtime with the OXC-based macro"
+#~ " transformer in a Next.js App Router project. No Babel required!"
+#~ msgstr ""
+#~ "Dieses Beispiel zeigt die Palamedes-eigene Runtime mit dem OXC-basierten "
+#~ "Makro-Transformer in einem Next.js-App-Router-Projekt. Kein Babel noetig!"
+
+#: src/app/page.tsx:16
+msgid "This section was rendered on the server for locale {localeLabel}."
+msgstr ""
+"Dieser Abschnitt wurde auf dem Server fuer die Sprache {localeLabel} "
+"gerendert."
+
+#: src/app/page.tsx:10
+msgid "Welcome to Palamedes"
+msgstr "Willkommen bei Palamedes"
+
+#: src/app/page.tsx:21
+msgid ""
+"Without a locale cookie, the server picks the best supported language from "
+"Accept-Language. After switching, the cookie becomes authoritative."
+msgstr ""
+"Ohne Sprach-Cookie waehlt der Server die am besten passende unterstuetzte "
+"Sprache aus Accept-Language. Nach dem Wechsel ist das Cookie massgeblich."
+
+#: src/components/Counter.tsx:19
 msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"
-msgstr "{count, plural, one {Du hast # Mal geklickt} other {Du hast # Mal geklickt}}"
+msgstr ""
+"{count, plural, one {Du hast # Mal geklickt} other {Du hast # Mal geklickt}}"

@@ -16,6 +16,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "node": {
+        "import": "./dist/server.mjs",
+        "require": "./dist/server.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",
@@ -28,7 +35,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts",
+    "test": "vitest run --globals src/index.test.ts src/server.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {

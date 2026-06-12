@@ -48,26 +48,43 @@ setServerI18nGetter(() => {
 })
 ```
 
+For Node server code, prefer the server-only helper subpath. It uses
+`AsyncLocalStorage` internally and registers the runtime getter once when the
+scope is created:
+
+```ts
+import { createI18n } from "@palamedes/core"
+import { createServerI18nScope } from "@palamedes/runtime/server"
+
+const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()
+
+serverI18n.activate(i18n)
+renderTranslatedServerComponents()
+
+await serverI18n.run(i18n, async () => {
+  renderTranslatedRequestHandler()
+})
+```
+
 ## Backend Servers
 
 The same runtime model also works in classic backend applications such as Hono,
 Express, or custom Node servers.
 
 The important requirement is request-local access to the active i18n instance.
-The recommended pattern is `AsyncLocalStorage`:
+The recommended pattern is `@palamedes/runtime/server`:
 
 ```ts
-import { AsyncLocalStorage } from "node:async_hooks"
 import { createI18n } from "@palamedes/core"
-import { setServerI18nGetter } from "@palamedes/runtime"
+import { createServerI18nScope } from "@palamedes/runtime/server"
 
-const i18nStorage = new AsyncLocalStorage<ReturnType<typeof createI18n>>()
-
-setServerI18nGetter(() => i18nStorage.getStore())
+const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()
 ```
 
 Per request, resolve the locale from `Accept-Language`, cookies, session data,
-or the user profile, then run the request inside `i18nStorage.run(i18n, ...)`.
+or the user profile. Use `serverI18n.activate(i18n)` when framework rendering
+continues after the initializer returns, as in React Server Components. Use
+`serverI18n.run(i18n, ...)` for tightly scoped request-handler callbacks.
 
 For a fuller walkthrough, including Hono and Express examples, see:
 
@@ -79,6 +96,10 @@ For a fuller walkthrough, including Hono and Express examples, see:
 - `setClientI18n(i18n)`
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
+- `createServerI18nScope()` from `@palamedes/runtime/server` for Node runtimes
+  - `scope.activate(i18n)` binds an i18n instance to the current async context
+  - `scope.run(i18n, callback)` runs a callback inside a scoped async context
+  - `scope.get()` returns the current scoped i18n instance, if one is active
 
 ## Related Packages
 

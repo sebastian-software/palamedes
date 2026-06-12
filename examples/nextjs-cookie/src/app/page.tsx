@@ -1,4 +1,4 @@
-import { defineMessage } from "@palamedes/core/macro"
+import { defineMessage, t } from "@palamedes/core/macro"
 import type { MessageDescriptor, PalamedesI18n } from "@palamedes/core"
 import { ClientLocaleBoundary } from "@/components/ClientLocaleBoundary"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
@@ -16,6 +16,7 @@ const serverComponentProofMessage = defineMessage({ message: "Server Component P
 const serverSectionMessage = defineMessage({ message: "This section was rendered on the server for locale {localeLabel}." }) as unknown as MessageDescriptor
 const serverLocaleMessage = defineMessage({ message: "Server locale" }) as unknown as MessageDescriptor
 const localeSourceMessage = defineMessage({ message: "Locale source" }) as unknown as MessageDescriptor
+const directServerMacroMessage = defineMessage({ message: "Direct server macro" }) as unknown as MessageDescriptor
 const cookieStrategyMessage = defineMessage({ message: "Cookie strategy" }) as unknown as MessageDescriptor
 const cookieStrategyDescriptionMessage = defineMessage({
   message: "Without a locale cookie, the server picks the best supported language from Accept-Language. After switching, the cookie becomes authoritative.",
@@ -32,8 +33,12 @@ function translate(
   return i18n._(id, values, descriptor)
 }
 
+function DirectServerMacroProbe() {
+  return t({ message: "Direct server macro ran inside the request scope." })
+}
+
 // This is a Server Component!
-// Direct macros compile to getI18n()._() and resolve the active server instance.
+// Direct macros compile to getI18n()._() and resolve through the request-local server scope.
 // When the user changes language, router.refresh() is called,
 // which causes the server to re-render with the new locale from the cookie.
 
@@ -74,6 +79,10 @@ export default async function Home() {
           <dd data-testid="server-locale-value" style={{ margin: 0 }}>{localeLabel}</dd>
           <dt>{translate(i18n, localeSourceMessage)}</dt>
           <dd style={{ margin: 0 }}>{source}</dd>
+          <dt>{translate(i18n, directServerMacroMessage)}</dt>
+          <dd data-testid="direct-server-macro-value" style={{ margin: 0 }}>
+            <DirectServerMacroProbe />
+          </dd>
           <dt>{translate(i18n, renderedOnServerMessage)}</dt>
           <dd style={{ margin: 0 }}>
             <code>{renderedAt}</code>
