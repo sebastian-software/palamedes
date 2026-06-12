@@ -38,6 +38,7 @@ export type MessageNode =
 const parseCache = new Map<string, MessageNode[]>()
 const numberFormatCache = new Map<string, Intl.NumberFormat>()
 const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>()
+const FORMATTER_CACHE_LIMIT = 64
 
 interface ParserState {
   input: string
@@ -335,7 +336,11 @@ function formatArgument(
   locale?: string
 ): string {
   if (node.format === "number") {
-    const numericValue = normalizeNumericValue(value)
+    const numericValue = normalizeFormattedNumberValue(value)
+    if (numericValue === undefined) {
+      return stringifyValue(value)
+    }
+
     return getNumberFormatter(locale, node.style).format(numericValue)
   }
 
@@ -355,8 +360,7 @@ function getNumberFormatter(locale: string | undefined, style: string | undefine
   }
 
   const formatter = new Intl.NumberFormat(locale, parseNumberFormatOptions(style))
-  numberFormatCache.set(cacheKey, formatter)
-  return formatter
+  return rememberFormatter(numberFormatCache, cacheKey, formatter)
 }
 
 function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatOptions {
@@ -406,7 +410,7 @@ function getDateTimeFormatter(
   format: "date" | "time",
   style: string | undefined
 ): Intl.DateTimeFormat {
-  const normalizedStyle = normalizeDateTimeStyle(style)
+  const normalizedStyle = normalizeDateTimeStyle(style, format)
   const cacheKey = `${locale ?? ""}\0${format}\0${normalizedStyle ?? ""}`
   const cached = dateTimeFormatCache.get(cacheKey)
   if (cached) {
@@ -418,16 +422,18 @@ function getDateTimeFormatter(
       ? { dateStyle: normalizedStyle }
       : { timeStyle: normalizedStyle }
   const formatter = new Intl.DateTimeFormat(locale, options)
-  dateTimeFormatCache.set(cacheKey, formatter)
-  return formatter
+  return rememberFormatter(dateTimeFormatCache, cacheKey, formatter)
 }
 
-function normalizeDateTimeStyle(style: string | undefined): "full" | "long" | "medium" | "short" | undefined {
+function normalizeDateTimeStyle(
+  style: string | undefined,
+  format: "date" | "time"
+): "full" | "long" | "medium" | "short" | undefined {
   if (style === "full" || style === "long" || style === "medium" || style === "short") {
     return style
   }
 
-  return undefined
+  return format === "time" ? "short" : undefined
 }
 
 function selectChoice(node: MessageChoiceNode, value: unknown, locale?: string): MessageNode[] {
@@ -458,6 +464,35 @@ function normalizeNumericValue(value: unknown): number {
 
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function normalizeFormattedNumberValue(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  return undefined
+}
+
+function rememberFormatter<TFormatter>(
+  cache: Map<string, TFormatter>,
+  key: string,
+  formatter: TFormatter
+): TFormatter {
+  if (!cache.has(key) && cache.size >= FORMATTER_CACHE_LIMIT) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey)
+    }
+  }
+
+  cache.set(key, formatter)
+  return formatter
 }
 
 function replacePound(value: string, numericValue: number, locale?: string): string {

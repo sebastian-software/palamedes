@@ -106,6 +106,17 @@ describe("createI18n", () => {
     )
   })
 
+  it("stringifies invalid ICU number arguments instead of formatting them as zero", () => {
+    const i18n = createI18n()
+    i18n.activate("en-US")
+
+    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, {})).toBe("Total: ")
+    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: Number.NaN })).toBe("Total: NaN")
+    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: Number.POSITIVE_INFINITY })).toBe(
+      "Total: Infinity"
+    )
+  })
+
   it("formats ICU date and time arguments with locale-aware styles", () => {
     const i18n = createI18n()
     i18n.activate("en-US")
@@ -115,6 +126,9 @@ describe("createI18n", () => {
       `Due ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(when)}`
     )
     expect(i18n._({ message: "Starts {when, time, short}" }, { when })).toBe(
+      `Starts ${new Intl.DateTimeFormat("en-US", { timeStyle: "short" }).format(when)}`
+    )
+    expect(i18n._({ message: "Starts {when, time}" }, { when })).toBe(
       `Starts ${new Intl.DateTimeFormat("en-US", { timeStyle: "short" }).format(when)}`
     )
   })
