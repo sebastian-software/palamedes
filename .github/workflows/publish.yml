@@ -104,6 +104,10 @@ jobs:
         if: matrix.cargo_subcommand == 'zigbuild'
         run: cargo install cargo-zigbuild --locked
 
+      - name: Install Rust target for musl builds
+        if: matrix.cargo_subcommand == 'zigbuild'
+        run: rustup target add "${{ matrix.cargo_target }}"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
