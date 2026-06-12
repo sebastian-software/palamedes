@@ -68,6 +68,97 @@ describe("createI18n", () => {
     ).toBe("2 messages for Ada")
   })
 
+  it("reports missing catalog messages when an active locale is missing an id", () => {
+    const missing: Array<{ id: string; locale: string }> = []
+    const i18n = createI18n({
+      onMissing(info) {
+        missing.push({ id: info.id, locale: info.locale })
+      },
+    })
+
+    i18n.activate("de")
+
+    expect(i18n._("missing-key", {}, { message: "Fallback" })).toBe("Fallback")
+    expect(missing).toEqual([{ id: "missing-key", locale: "de" }])
+  })
+
+  it("does not report missing messages for loaded empty-string translations", () => {
+    const missing: string[] = []
+    const i18n = createI18n({
+      onMissing(info) {
+        missing.push(info.id)
+      },
+    })
+
+    i18n.load("de", {
+      intentionallyEmpty: "",
+    })
+    i18n.activate("de")
+
+    expect(i18n._("intentionallyEmpty", {}, { message: "Fallback" })).toBe("")
+    expect(missing).toEqual([])
+  })
+
+  it("reports malformed catalog patterns and falls back to the formatted source message", () => {
+    const errors: Array<{ id?: string; locale?: string; pattern: string; fallback: string }> = []
+    const i18n = createI18n({
+      onError(info) {
+        errors.push({
+          id: info.id,
+          locale: info.locale,
+          pattern: info.pattern,
+          fallback: info.fallback,
+        })
+      },
+    })
+
+    i18n.load("de", {
+      "broken.message": "{count, plural one {# Datei} other {# Dateien}}",
+    })
+    i18n.activate("de")
+
+    expect(
+      i18n._("broken.message", { count: 2 }, { message: "{count, plural, one {# file} other {# files}}" })
+    ).toBe("2 files")
+    expect(errors).toEqual([
+      {
+        id: "broken.message",
+        locale: "de",
+        pattern: "{count, plural one {# Datei} other {# Dateien}}",
+        fallback: "{count, plural, one {# file} other {# files}}",
+      },
+    ])
+  })
+
+  it("returns the raw source message when the source pattern is malformed", () => {
+    const errors: string[] = []
+    const i18n = createI18n({
+      onError(info) {
+        errors.push(info.pattern)
+      },
+    })
+
+    expect(i18n._({ message: "{count, plural one {# file} other {# files}}" }, { count: 2 })).toBe(
+      "{count, plural one {# file} other {# files}}"
+    )
+    expect(errors).toEqual(["{count, plural one {# file} other {# files}}"])
+  })
+
+  it("keeps rendering resilient when hooks throw", () => {
+    const i18n = createI18n({
+      onMissing() {
+        throw new Error("missing telemetry failed")
+      },
+      onError() {
+        throw new Error("error telemetry failed")
+      },
+    })
+
+    i18n.activate("de")
+
+    expect(i18n._("broken", {}, { message: "{name" })).toBe("{name")
+  })
+
   it("keeps descriptors without ids message-only", () => {
     const i18n = createI18n()
 

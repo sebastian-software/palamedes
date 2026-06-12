@@ -9,6 +9,26 @@ export interface MessageDescriptor {
 
 export type CatalogMessages = Record<string, string>
 
+export interface MissingMessageInfo {
+  id: string
+  locale: string
+  descriptor?: MessageDescriptor
+}
+
+export interface MessageFormatErrorInfo {
+  id?: string
+  locale?: string
+  error: Error
+  pattern: string
+  fallback: string
+  descriptor?: MessageDescriptor
+}
+
+export interface CreateI18nOptions {
+  onMissing?: (info: MissingMessageInfo) => void
+  onError?: (info: MessageFormatErrorInfo) => void
+}
+
 export interface PalamedesI18n {
   locale?: string
   _: (
@@ -21,9 +41,88 @@ export interface PalamedesI18n {
   getMessage: (id: string, descriptor?: MessageDescriptor) => string
 }
 
-export function createI18n(): PalamedesI18n {
+interface ResolvedMessage {
+  pattern: string
+  fallback: string
+}
+
+export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
   const catalogs = new Map<string, CatalogMessages>()
   let activeLocale: string | undefined
+
+  function notifyMissing(info: MissingMessageInfo): void {
+    try {
+      options.onMissing?.(info)
+    } catch {
+      // Telemetry hooks should not make message rendering fail.
+    }
+  }
+
+  function notifyError(info: MessageFormatErrorInfo): void {
+    try {
+      options.onError?.(info)
+    } catch {
+      // Telemetry hooks should not make message rendering fail.
+    }
+  }
+
+  function resolveMessage(id: string, descriptor?: MessageDescriptor): ResolvedMessage {
+    const catalog = activeLocale ? catalogs.get(activeLocale) : undefined
+    const catalogMessage = catalog?.[id]
+    const fallback = descriptor?.message ?? id
+
+    if (catalogMessage !== undefined) {
+      return {
+        pattern: catalogMessage,
+        fallback,
+      }
+    }
+
+    if (activeLocale) {
+      notifyMissing({
+        id,
+        locale: activeLocale,
+        descriptor,
+      })
+    }
+
+    return {
+      pattern: fallback,
+      fallback,
+    }
+  }
+
+  function renderMessage(
+    message: ResolvedMessage,
+    values: Record<string, unknown>,
+    id?: string,
+    descriptor?: MessageDescriptor
+  ): string {
+    try {
+      return formatMessagePattern(message.pattern, values, activeLocale)
+    } catch (error) {
+      notifyError({
+        id,
+        locale: activeLocale,
+        error: normalizeError(error),
+        pattern: message.pattern,
+        fallback: message.fallback,
+        descriptor,
+      })
+    }
+
+    // Keep rendering resilient after telemetry: try the source fallback, then
+    // return the raw source message if that pattern is malformed too.
+    if (message.pattern !== message.fallback) {
+      try {
+        return formatMessagePattern(message.fallback, values, activeLocale)
+      } catch {
+        return message.fallback
+      }
+    }
+
+    return message.fallback
+  }
 
   return {
     get locale() {
@@ -40,22 +139,31 @@ export function createI18n(): PalamedesI18n {
     },
 
     getMessage(id, descriptor) {
-      const catalog = activeLocale ? catalogs.get(activeLocale) : undefined
-      return catalog?.[id] ?? descriptor?.message ?? id
+      return resolveMessage(id, descriptor).pattern
     },
 
     _(idOrDescriptor, values = {}, descriptor) {
       if (typeof idOrDescriptor === "string") {
-        return formatMessagePattern(this.getMessage(idOrDescriptor, descriptor), values, activeLocale)
+        return renderMessage(resolveMessage(idOrDescriptor, descriptor), values, idOrDescriptor, descriptor)
       }
 
       if (idOrDescriptor.id !== undefined) {
-        return formatMessagePattern(this.getMessage(idOrDescriptor.id, idOrDescriptor), values, activeLocale)
+        return renderMessage(
+          resolveMessage(idOrDescriptor.id, idOrDescriptor),
+          values,
+          idOrDescriptor.id,
+          idOrDescriptor
+        )
       }
 
-      return formatMessagePattern(idOrDescriptor.message ?? "", values, activeLocale)
+      const pattern = idOrDescriptor.message ?? ""
+      return renderMessage({ pattern, fallback: pattern }, values, undefined, idOrDescriptor)
     },
   }
+}
+
+function normalizeError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
 }
 
 export { formatMessagePattern, parseMessagePattern }
