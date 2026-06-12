@@ -1,5 +1,13 @@
 import { transformPalamedesMacros } from "./transform"
 
+interface SourceMapLike {
+  file?: string
+  mappings?: string
+  sources?: string[]
+  sourcesContent?: Array<string | null>
+  version?: number
+}
+
 describe("transformPalamedesMacros", () => {
   it("returns unchanged code without Palamedes macro imports", () => {
     const code = `const x = 1;`
@@ -24,13 +32,14 @@ const msg = t\`Hello \${name}\`;
     expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
     expect(result.code).not.toContain("@palamedes/core/macro")
     expect(result.compiledIds).toHaveLength(1)
-    expect(result.map).toMatchObject({
+    const map = normalizeSourceMap(result.map)
+    expect(map).toMatchObject({
       version: 3,
       sources: ["test.ts"],
       sourcesContent: [code],
       file: "test.ts",
     })
-    expect(result.map?.mappings).not.toBe("")
+    expect(map.mappings).not.toBe("")
   })
 
   it("preserves member expression values in tagged templates", () => {
@@ -96,13 +105,14 @@ const y = <Trans>Hallo Welt</Trans>;
     expect(result.code).toContain('import { Trans } from "@palamedes/react"')
     expect(result.code).toContain('const x = "äöü";')
     expect(result.code).toContain('message={"Hallo Welt"}')
-    expect(result.map).toMatchObject({
+    const map = normalizeSourceMap(result.map)
+    expect(map).toMatchObject({
       version: 3,
       sources: ["test.tsx"],
       sourcesContent: [code],
       file: "test.tsx",
     })
-    expect(result.map?.mappings).not.toBe("")
+    expect(map.mappings).not.toBe("")
   })
 
   it("transforms Solid <Trans> macros to @palamedes/solid imports", () => {
@@ -259,3 +269,15 @@ const msg = t\`Hello\`;
     expect(result.code).toBe(code)
   })
 })
+
+function normalizeSourceMap(map: unknown): SourceMapLike {
+  if (typeof map === "string") {
+    return JSON.parse(map) as SourceMapLike
+  }
+
+  if (map === null || map === undefined) {
+    throw new Error("Expected transform to return a source map")
+  }
+
+  return map as SourceMapLike
+}

@@ -4,6 +4,8 @@ import Module from "node:module"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const require = createRequire(import.meta.url)
+// The package ships this loader as a hand-authored CJS entrypoint, so the test
+// intentionally exercises the published loader path directly.
 const loaderPath = "../palamedes-po-loader.cjs"
 const moduleLoader = Module as unknown as {
   _load: (request: string, parent: unknown, isMain: boolean) => unknown
@@ -91,6 +93,28 @@ describe("palamedes-po-loader.cjs", () => {
     await runLoader()
 
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Catalog diagnostics for locale de"))
+  })
+
+  it("fails compile diagnostics when configured", async () => {
+    compileCatalogArtifact.mockReturnValue({
+      messages: {},
+      missing: [],
+      diagnostics: [
+        {
+          severity: "error",
+          code: "icu.missing_argument",
+          message: "Missing argument",
+          sourceKey: { message: "Hello {name}" },
+          locale: "de",
+        },
+      ],
+      watchFiles: [],
+    })
+
+    await expect(runLoader({ failOnCompileError: true })).rejects.toThrow(
+      /Compilation error for 1 translation/
+    )
+    expect(console.warn).not.toHaveBeenCalled()
   })
 })
 

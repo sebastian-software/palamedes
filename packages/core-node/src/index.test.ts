@@ -6,6 +6,13 @@ import {
   transformMacrosNative,
 } from "./index"
 
+interface SourceMapLike {
+  mappings?: string
+  sources?: string[]
+  sourcesContent?: Array<string | null>
+  version?: number
+}
+
 describe("@palamedes/core-node", () => {
   it("loads native bindings and exposes version information", () => {
     const info = getNativeInfo()
@@ -44,10 +51,24 @@ const msg = t\`Hello \${name}\`;
     expect(result.hasChanged).toBe(true)
     expect(result.code).toContain('getI18n()._("')
     expect(result.compiledIds).toHaveLength(1)
-    expect(result.map).toMatchObject({
+    const map = normalizeSourceMap(result.map)
+    expect(map).toMatchObject({
       version: 3,
       sources: ["sample.ts"],
       sourcesContent: [source],
     })
+    expect(map.mappings).not.toBe("")
   })
 })
+
+function normalizeSourceMap(map: unknown): SourceMapLike {
+  if (typeof map === "string") {
+    return JSON.parse(map) as SourceMapLike
+  }
+
+  if (map === null || map === undefined) {
+    throw new Error("Expected native transform to return a source map")
+  }
+
+  return map as SourceMapLike
+}
