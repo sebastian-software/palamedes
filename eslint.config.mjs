@@ -1,4 +1,8 @@
-import { disableRule, getEslintConfig } from "eslint-config-setup"
+import path from "node:path"
+import { createRequire } from "node:module"
+import { pathToFileURL } from "node:url"
+
+import { disableRule, getEslintConfig, optionsToFilename } from "eslint-config-setup"
 
 const generatedAndBuildIgnores = {
   ignores: [
@@ -106,12 +110,30 @@ const legacyBaselineRules = {
   "vitest/require-top-level-describe": "off",
 }
 
-const config = await getEslintConfig({
-  ai: true,
-  node: true,
-  oxlint: true,
+const eslintConfigOptions = {
   react: true,
-})
+  node: true,
+  ai: true,
+  oxlint: true,
+}
+
+async function getPortableEslintConfig(options) {
+  try {
+    return await getEslintConfig(options)
+  } catch (error) {
+    const require = createRequire(import.meta.url)
+    const packageEntry = require.resolve("eslint-config-setup")
+    const configPath = path.join(path.dirname(packageEntry), "configs", optionsToFilename(options))
+
+    try {
+      return (await import(pathToFileURL(configPath).href)).default
+    } catch {
+      throw error
+    }
+  }
+}
+
+const config = await getPortableEslintConfig(eslintConfigOptions)
 
 for (const ruleName of Object.keys(legacyBaselineRules)) {
   disableRule(config, ruleName)
