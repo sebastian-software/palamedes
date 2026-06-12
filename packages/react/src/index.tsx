@@ -3,7 +3,7 @@ import { cloneElement, Fragment, isValidElement } from "react"
 import type { ReactElement, ReactNode } from "react"
 
 import { getI18n } from "@palamedes/runtime"
-import { parseMessagePattern } from "@palamedes/core"
+import { formatMessagePattern, parseMessagePattern } from "@palamedes/core"
 import type { MessageChoiceNode, MessageDescriptor, MessageNode, PalamedesI18n } from "@palamedes/core"
 
 export interface TransProps extends MessageDescriptor {
@@ -120,6 +120,8 @@ function renderNode(
       return [pluralValue === undefined ? node.value : node.value.replaceAll("#", formatNumber(pluralValue, locale))]
     case "variable":
       return [renderVariable(values[node.name])]
+    case "formatted":
+      return [formatMessagePattern(buildFormattedMessage(node), values, locale)]
     case "tag": {
       const children = renderNodes(node.children, values, components, locale, pluralValue)
       const component = components[node.name]
@@ -136,6 +138,12 @@ function renderNode(
       return renderNodes(choice, values, components, locale, nextPluralValue)
     }
   }
+
+  return []
+}
+
+function buildFormattedMessage(node: Extract<MessageNode, { type: "formatted" }>): string {
+  return `{${node.variable}, ${node.format}${node.style ? `, ${node.style}` : ""}}`
 }
 
 function selectChoice(node: MessageChoiceNode, value: unknown, locale?: string): MessageNode[] {

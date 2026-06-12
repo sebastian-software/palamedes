@@ -167,4 +167,10 @@ function normalizeError(error: unknown): Error {
 }
 
 export { formatMessagePattern, parseMessagePattern }
-export type { MessageNode, MessageChoiceNode, MessageTagNode, MessageVariableNode } from "./messageFormat"
+export type {
+  MessageNode,
+  MessageChoiceNode,
+  MessageFormattedArgumentNode,
+  MessageTagNode,
+  MessageVariableNode,
+} from "./messageFormat"

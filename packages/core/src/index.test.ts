@@ -181,4 +181,46 @@ describe("createI18n", () => {
       i18n._("ordinal", { count: 3 }, { message: "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}" })
     ).toBe("3rd")
   })
+
+  it("formats ICU number arguments with locale-aware styles", () => {
+    const i18n = createI18n()
+    i18n.activate("en-US")
+
+    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: 12.3 })).toBe(
+      `Total: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" }).format(12.3)}`
+    )
+    expect(i18n._({ message: "Progress: {ratio, number, percent}" }, { ratio: 0.42 })).toBe(
+      `Progress: ${new Intl.NumberFormat("en-US", { style: "percent" }).format(0.42)}`
+    )
+    expect(i18n._({ message: "Rounded: {count, number, integer}" }, { count: 12.8 })).toBe(
+      `Rounded: ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(12.8)}`
+    )
+  })
+
+  it("stringifies invalid ICU number arguments instead of formatting them as zero", () => {
+    const i18n = createI18n()
+    i18n.activate("en-US")
+
+    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, {})).toBe("Total: ")
+    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: Number.NaN })).toBe("Total: NaN")
+    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: Number.POSITIVE_INFINITY })).toBe(
+      "Total: Infinity"
+    )
+  })
+
+  it("formats ICU date and time arguments with locale-aware styles", () => {
+    const i18n = createI18n()
+    i18n.activate("en-US")
+    const when = new Date(Date.UTC(2026, 5, 12, 13, 45, 0))
+
+    expect(i18n._({ message: "Due {when, date, medium}" }, { when })).toBe(
+      `Due ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(when)}`
+    )
+    expect(i18n._({ message: "Starts {when, time, short}" }, { when })).toBe(
+      `Starts ${new Intl.DateTimeFormat("en-US", { timeStyle: "short" }).format(when)}`
+    )
+    expect(i18n._({ message: "Starts {when, time}" }, { when })).toBe(
+      `Starts ${new Intl.DateTimeFormat("en-US", { timeStyle: "short" }).format(when)}`
+    )
+  })
 })
