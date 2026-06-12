@@ -1,6 +1,5 @@
 import path from "node:path"
-import { createRequire } from "node:module"
-import { pathToFileURL } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 import { disableRule, getEslintConfig, optionsToFilename } from "eslint-config-setup"
 
@@ -121,8 +120,7 @@ async function getPortableEslintConfig(options) {
   try {
     return await getEslintConfig(options)
   } catch (error) {
-    const require = createRequire(import.meta.url)
-    const packageEntry = require.resolve("eslint-config-setup")
+    const packageEntry = fileURLToPath(import.meta.resolve("eslint-config-setup"))
     const configPath = path.join(path.dirname(packageEntry), "configs", optionsToFilename(options))
 
     try {
