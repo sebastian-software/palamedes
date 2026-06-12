@@ -1095,12 +1095,21 @@ fn catalog_key(message: &str, context: Option<&str>) -> String {
 
 impl From<AggregatedCatalogEntry> for CatalogUpdateMessage {
     fn from(value: AggregatedCatalogEntry) -> Self {
+        let AggregatedCatalogEntry {
+            message,
+            context,
+            placeholders,
+            extracted_comments,
+            mut origins,
+        } = value;
+        origins.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
+
         Self {
-            message: value.message,
-            context: value.context,
-            placeholders: value.placeholders,
-            extracted_comments: value.extracted_comments,
-            origins: value.origins,
+            message,
+            context,
+            placeholders,
+            extracted_comments,
+            origins,
         }
     }
 }
@@ -1284,6 +1293,59 @@ mod tests {
                 .get("name")
                 .expect("placeholder expression"),
             &vec!["user.name".to_string()]
+        );
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_sorts_aggregated_origins_by_file_then_line() {
+        let root = temp_root("batch-origin-order");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("src dir");
+        let first = src.join("A.tsx");
+        let second = src.join("Z.tsx");
+        fs::write(
+            &first,
+            concat!(
+                "import { t } from \"@palamedes/core/macro\"\n",
+                "export const early = t`Shared origin`\n",
+                "\n",
+                "export const later = t`Shared origin`\n",
+            ),
+        )
+        .expect("first source");
+        fs::write(
+            &second,
+            concat!(
+                "import { t } from \"@palamedes/core/macro\"\n",
+                "export const duplicate = t`Shared origin`\n",
+            ),
+        )
+        .expect("second source");
+
+        let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![
+                second.to_string_lossy().into_owned(),
+                first.to_string_lossy().into_owned(),
+            ],
+        })
+        .expect("batch extraction");
+
+        let shared = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Shared origin")
+            .expect("shared message");
+        let origins = shared
+            .origins
+            .iter()
+            .map(|origin| (origin.file.as_str(), origin.line))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            origins,
+            vec![("src/A.tsx", 2), ("src/A.tsx", 4), ("src/Z.tsx", 2)]
         );
 
         fs::remove_dir_all(root).expect("cleanup");

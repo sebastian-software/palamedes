@@ -116,11 +116,11 @@ async function extractFromCatalog(
   ) || ["**/node_modules/**"]
 
   const globStartedAt = Date.now()
-  const files = await glob(includePatterns, {
+  const files = (await glob(includePatterns, {
     ignore: excludePatterns,
     absolute: true,
     nodir: true,
-  })
+  })).sort(compareFilePaths)
   const globMs = Date.now() - globStartedAt
 
   if (options.verbose) {
@@ -225,4 +225,14 @@ async function runWatchMode(
 
 function shouldEmitTimingJson(): boolean {
   return process.env.PALAMEDES_TIMING_JSON === "1"
+}
+
+function compareFilePaths(a: string, b: string): number {
+  if (a < b) {
+    return -1
+  }
+  if (a > b) {
+    return 1
+  }
+  return 0
 }
