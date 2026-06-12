@@ -2,13 +2,56 @@
 
 **Modern i18n tooling that keeps the translation model steady as your app changes.**
 
-Palamedes is for teams that like writing messages close to the code, want
-source-string-first catalogs, and do not want their i18n setup to splinter
+Palamedes is for JavaScript teams that like writing messages close to the code,
+want source-string-first catalogs, and do not want their i18n setup to splinter
 every time the framework changes.
 
 It gives you one runtime model, one message identity model, and one catalog
 workflow across verified integrations for Next.js, TanStack Start, SolidStart,
 Waku, React Router, Vite, and backend servers.
+
+We are not asking you to trust a slogan. The repo shows the work.
+
+![Palamedes verification matrix](./assets/palamedes-framework-matrix.png)
+
+## Proof First
+
+The strongest public claim is simple: Palamedes keeps the same i18n model
+working across different app shapes.
+
+The repo backs that claim with visible evidence:
+
+- five framework families: Next.js, TanStack Start, SolidStart, Waku, and React Router
+- two locale strategies per framework: cookie and route segment
+- versioned browser screenshots generated from the same Playwright verifier used in CI
+- reproducible benchmark commands for transform, extract, catalog update, and artifact compile
+- 14 ADRs that explain the product decisions, including what Palamedes deliberately does not own
+
+Start with the [example matrix](../../examples/README.md), the
+[versioned screenshots](../example-screenshots/README.md), and the
+[proof and benchmark page](../proof-and-benchmarks.md). If you want the
+decision trail, read the [ADRs](../../adr/001-project-scope-and-positioning.md).
+
+## Who Builds This
+
+Palamedes is maintained by Sebastian Software GmbH. Sebastian Werner's public
+profile lists recent frontend internationalization work for Regrello, including
+a Lingui-based application internationalization project from October 2024 to
+September 2025. Salesforce later announced the Regrello acquisition and noted
+that it completed on October 1, 2025.
+
+The useful signal is continuity: Palamedes comes from repeated work on
+JavaScript i18n systems, from older gettext-style macro
+models to recent enterprise Lingui migrations. The same lessons show up here
+as source-string-first catalogs, `message + context` identity, and ADRs that
+make tradeoffs readable before a team depends on the tool.
+
+Evidence:
+
+- [Sebastian Werner profile at Sebastian Software](https://sebastian-software.de/werner)
+- [Sebastian Consulting profile](https://sebastian-consulting.de/de/werner)
+- [qooxdoo](https://qooxdoo.org/)
+- [Salesforce announcement for Regrello](https://www.salesforce.com/news/stories/salesforce-signs-definitive-agreement-to-acquire-regrello/)
 
 ## Why It Feels Different
 
@@ -60,6 +103,7 @@ Useful evidence links:
 - [Example screenshots](../example-screenshots/README.md)
 - [Proof and benchmarks](../proof-and-benchmarks.md)
 - [Framework notes](../framework-example-notes.md)
+- [Round 1 posts](./posts/README.md)
 
 ## Competitive Frame
 
