@@ -22,7 +22,9 @@
       "node": {
         "import": "./dist/server.mjs",
         "require": "./dist/server.cjs"
-      }
+      },
+      "browser": "./dist/server-unavailable.mjs",
+      "default": "./dist/server-unavailable.mjs"
     }
   },
   "main": "./dist/index.cjs",
@@ -35,7 +37,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts src/server.test.ts",
+    "test": "vitest run --globals src/index.test.ts src/server.test.ts src/server-unavailable.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {

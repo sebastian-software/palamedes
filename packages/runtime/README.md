@@ -66,6 +66,10 @@ await serverI18n.run(i18n, async () => {
 })
 ```
 
+All scopes created by this helper share the same runtime getter, so independently
+created scopes do not disconnect transformed `getI18n()` calls from the scope
+that was activated for the current async context.
+
 ## Backend Servers
 
 The same runtime model also works in classic backend applications such as Hono,
@@ -100,6 +104,10 @@ For a fuller walkthrough, including Hono and Express examples, see:
   - `scope.activate(i18n)` binds an i18n instance to the current async context
   - `scope.run(i18n, callback)` runs a callback inside a scoped async context
   - `scope.get()` returns the current scoped i18n instance, if one is active
+
+The `@palamedes/runtime/server` implementation imports Node `async_hooks`. In
+non-Node bundles, the subpath resolves to a small fallback module that throws an
+actionable Node-only error when called.
 
 ## Related Packages
 
