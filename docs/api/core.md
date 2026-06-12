@@ -94,6 +94,9 @@ implemented by the Palamedes runtime:
 - `{value, date, short|medium|long|full}`
 - `{value, time, short|medium|long|full}`
 
+Currency formatting must use the `::currency/ISO` skeleton form; bare
+`currency/ISO` is outside the supported runtime subset.
+
 Catalog artifact compilation reports `list`, `duration`, `ago`, `name`, and
 other unsupported formatter kinds as errors. Unsupported styles on `number`,
 `date`, and `time` are warnings because the runtime currently falls back to the

@@ -383,13 +383,19 @@ function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatO
     return { maximumFractionDigits: 0 }
   }
 
-  if (skeleton.startsWith("currency/")) {
-    const currency = skeleton.slice("currency/".length).trim().toUpperCase()
-    if (/^[A-Z]{3}$/.test(currency)) {
-      return {
-        style: "currency",
-        currency,
-      }
+  if (!normalized.startsWith("::")) {
+    return {}
+  }
+
+  if (!skeleton.startsWith("currency/")) {
+    return {}
+  }
+
+  const currency = skeleton.slice("currency/".length).trim().toUpperCase()
+  if (/^[A-Z]{3}$/.test(currency)) {
+    return {
+      style: "currency",
+      currency,
     }
   }
 

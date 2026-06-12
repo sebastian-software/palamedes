@@ -77,6 +77,9 @@ Supported runtime styles:
 - `{value, date, short|medium|long|full}`
 - `{value, time, short|medium|long|full}`
 
+Currency formatting must use the `::currency/ISO_CODE` skeleton form; bare
+`currency/ISO_CODE` is outside the supported runtime subset.
+
 Catalog artifact compilation reports unsupported formatter kinds such as `list`,
 `duration`, `ago`, and `name` as errors because the runtime does not render
 those kinds. Unsupported styles on `number`, `date`, and `time` are warnings:

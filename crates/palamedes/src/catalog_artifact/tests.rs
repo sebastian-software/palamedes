@@ -596,6 +596,7 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_styles() {
         "en",
         &[
             ("Compact {amount, number, ::compact-short}", ""),
+            ("Bare currency {amount, number, currency/EUR}", ""),
             ("Pattern {when, date, yyyy-MM-dd}", ""),
         ],
     );
@@ -606,6 +607,10 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_styles() {
             (
                 "Compact {amount, number, ::compact-short}",
                 "Kompakt {amount, number, ::compact-short}",
+            ),
+            (
+                "Bare currency {amount, number, currency/EUR}",
+                "Bare Waehrung {amount, number, currency/EUR}",
             ),
             (
                 "Pattern {when, date, yyyy-MM-dd}",
@@ -634,7 +639,7 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_styles() {
         .filter(|diagnostic| diagnostic.code == "icu.unsupported_formatter_style")
         .collect::<Vec<_>>();
 
-    assert_eq!(diagnostics.len(), 2);
+    assert_eq!(diagnostics.len(), 3);
     assert!(diagnostics.iter().all(|diagnostic| {
         diagnostic.severity == CatalogArtifactDiagnosticSeverity::Warning
             && diagnostic.locale == "de"
@@ -643,6 +648,10 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_styles() {
         .iter()
         .any(|diagnostic| diagnostic.source_key.message
             == "Compact {amount, number, ::compact-short}"));
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.source_key.message
+            == "Bare currency {amount, number, currency/EUR}"));
     assert!(diagnostics
         .iter()
         .any(|diagnostic| diagnostic.source_key.message == "Pattern {when, date, yyyy-MM-dd}"));

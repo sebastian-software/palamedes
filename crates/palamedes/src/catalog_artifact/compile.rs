@@ -195,9 +195,12 @@ fn is_supported_runtime_number_style(style: Option<&str>) -> bool {
     let Some(style) = style.map(str::trim).filter(|style| !style.is_empty()) else {
         return true;
     };
-    let style = style.strip_prefix("::").unwrap_or(style);
 
-    matches!(style, "percent" | "integer") || supported_currency_skeleton(style)
+    if let Some(skeleton) = style.strip_prefix("::") {
+        return matches!(skeleton, "percent" | "integer") || supported_currency_skeleton(skeleton);
+    }
+
+    matches!(style, "percent" | "integer")
 }
 
 fn supported_currency_skeleton(style: &str) -> bool {

@@ -30,6 +30,9 @@ The supported runtime subset is:
 - `date` and `time` with no style
 - `date` and `time` with `short`, `medium`, `long`, or `full`
 
+Currency formatting intentionally requires the `::currency/ISO` skeleton form;
+bare `currency/ISO` is treated as outside the runtime formatter subset.
+
 Palamedes treats unsupported formatter kinds such as `list`, `duration`, `ago`,
 and `name` as errors because the runtime parser does not render those formatter
 kinds. Unsupported styles on supported formatter kinds are warnings because the
