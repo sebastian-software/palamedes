@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.7.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.6.0...palamedes-v0.7.0) (2026-06-12)
+
+
+### Features
+
+* **cli:** add catalog completeness report ([#179](https://github.com/sebastian-software/palamedes/issues/179)) ([37a0934](https://github.com/sebastian-software/palamedes/commit/37a093453b729057e472aa3594d3f6bd0c500b36))
+* **cli:** add xliff bridge ([#182](https://github.com/sebastian-software/palamedes/issues/182)) ([0338cab](https://github.com/sebastian-software/palamedes/commit/0338cabf37f2bba1eed90be3053bfecc5db549e6))
+* **core-node:** add native target packages ([#174](https://github.com/sebastian-software/palamedes/issues/174)) ([63594e0](https://github.com/sebastian-software/palamedes/commit/63594e068a29a5371ab71bfe1e5fac31267d3058))
+* **core:** add runtime fallback hooks ([#175](https://github.com/sebastian-software/palamedes/issues/175)) ([fd68a24](https://github.com/sebastian-software/palamedes/commit/fd68a244ebc63e7d531413fd9b53f60acd1f7b8b))
+* **core:** format ICU number and date arguments ([#176](https://github.com/sebastian-software/palamedes/issues/176)) ([5a13d1d](https://github.com/sebastian-software/palamedes/commit/5a13d1d8cb3a71deb1a791585318ca27cf3d2cfd))
+
+
+### Bug Fixes
+
+* **cli:** report package version ([ee1ad58](https://github.com/sebastian-software/palamedes/commit/ee1ad583690493777a132f5e614ebb507e436e70))
+* **cli:** report package version ([a5c9405](https://github.com/sebastian-software/palamedes/commit/a5c940570b2ab9bcd465d282de56be5f26964b14))
+* **core:** resolve descriptor ids through active catalog ([#141](https://github.com/sebastian-software/palamedes/issues/141)) ([4447b07](https://github.com/sebastian-software/palamedes/commit/4447b07b7ed80c46fa3dcc21b47c66cb174b312f))
+* **next-plugin:** suppress false apostrophe ICU diagnostics ([#139](https://github.com/sebastian-software/palamedes/issues/139)) ([39f7f8b](https://github.com/sebastian-software/palamedes/commit/39f7f8b2908844733f5afb5d3e054e6a81a602e8))
+* **runtime:** add request-local server i18n scope ([#142](https://github.com/sebastian-software/palamedes/issues/142)) ([2088f81](https://github.com/sebastian-software/palamedes/commit/2088f81261ab2e24c8cc2d95b0eb5985140ab6ec))
+* **transform:** emit valid JSX for macro replacements ([16dfcc4](https://github.com/sebastian-software/palamedes/commit/16dfcc4218a3061029e4d84063aca3b498c4afd0))
+* **transform:** validate descriptor macro values ([#180](https://github.com/sebastian-software/palamedes/issues/180)) ([3b37189](https://github.com/sebastian-software/palamedes/commit/3b371890ef721004e5f8ef50a293d5cf99955cd4))
+
 ## [0.6.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.5.0...palamedes-v0.6.0) (2026-05-22)
 
 
