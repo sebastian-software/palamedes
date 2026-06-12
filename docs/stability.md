@@ -17,6 +17,15 @@ major/minor/patch sense.
 
 ## Stability Tiers
 
+- **Stable**: app-facing surface that should only change with migration notes
+  and release notes during 0.x.
+- **Preview**: usable, but still allowed to change as real adoption clarifies
+  the API shape.
+- **Internal**: implementation detail. Apps should not import or depend on it
+  directly.
+- **Reserved**: package name or surface intentionally held for future work, with
+  no supported adoption path yet.
+
 | Surface | Tier | Notes |
 | --- | --- | --- |
 | `@palamedes/core` runtime API | Stable | `createI18n`, message descriptors, locale activation, and source-message fallback behavior are app-facing. |
