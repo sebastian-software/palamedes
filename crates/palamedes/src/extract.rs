@@ -764,16 +764,15 @@ fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
 
 fn extract_jsx_children_as_message(
     children: &[JSXChild<'_>],
-    source: &str,
+    _source: &str,
 ) -> PalamedesResult<String> {
     let mut next_component_index = 0usize;
 
-    extract_jsx_children_as_message_with_state(children, source, &mut next_component_index)
+    extract_jsx_children_as_message_with_state(children, &mut next_component_index)
 }
 
 fn extract_jsx_children_as_message_with_state(
     children: &[JSXChild<'_>],
-    source: &str,
     next_component_index: &mut usize,
 ) -> PalamedesResult<String> {
     let mut parts = Vec::new();
@@ -802,7 +801,6 @@ fn extract_jsx_children_as_message_with_state(
                 *next_component_index += 1;
                 let inner = extract_jsx_children_as_message_with_state(
                     &element.children,
-                    source,
                     next_component_index,
                 )?;
                 parts.push(format!("<{name}>{inner}</{name}>"));
@@ -810,7 +808,6 @@ fn extract_jsx_children_as_message_with_state(
             JSXChild::Fragment(fragment) => {
                 let inner = extract_jsx_children_as_message_with_state(
                     &fragment.children,
-                    source,
                     next_component_index,
                 )?;
                 if !inner.is_empty() {

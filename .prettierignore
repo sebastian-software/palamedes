@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+dist/
+target/
+.next/
+.tanstack/
+.vinxi/
+.nitro/
+.output/
+.vercel/
+coverage/
+docs/example-screenshots/
+benchmarks/*/results/
+pnpm-lock.yaml
+Cargo.lock
+*.tsbuildinfo
+*.node

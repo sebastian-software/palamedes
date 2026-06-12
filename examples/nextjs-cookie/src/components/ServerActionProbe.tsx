@@ -16,7 +16,7 @@ interface ServerActionProbeProps {
   locale: Locale
 }
 
-export function ServerActionProbe({ locale }: ServerActionProbeProps) {
+export function ServerActionProbe({ locale: _locale }: ServerActionProbeProps) {
   const [result, setResult] = useState<ServerActionProof | null>(null)
   const [isPending, startTransition] = useTransition()
 

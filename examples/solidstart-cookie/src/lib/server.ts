@@ -14,7 +14,7 @@ export const loadHomePageData = query(async () => {
     cookieHeader: event?.request.headers.get("cookie"),
   })
 
-  activateServerI18n(resolved.locale)
+  await activateServerI18n(resolved.locale)
 
   return {
     locale: resolved.locale,
@@ -33,7 +33,7 @@ export const getLocalizedServerStatus = query(async () => {
     cookieHeader: event?.request.headers.get("cookie"),
   })
 
-  activateServerI18n(resolved.locale)
+  await activateServerI18n(resolved.locale)
 
   return {
     locale: resolved.locale,

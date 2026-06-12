@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose a Palamedes capability or workflow improvement
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What adoption, workflow, or runtime problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful shape of the feature.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - CLI
+        - Core runtime
+        - Config
+        - React or Solid integration
+        - Vite plugin
+        - Next plugin
+        - Native core
+        - Documentation
+        - Examples
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workaround or existing tool are you using today?
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility notes
+      description: Mention migration, SemVer, platform, or catalog-format implications if known.

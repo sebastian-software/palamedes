@@ -3,49 +3,7 @@
 const path = require("node:path");
 const { loadPalamedesConfig } = require("@palamedes/config");
 const { compileCatalogArtifact } = require("@palamedes/core-node");
-
-function createMissingErrorMessage(locale, missingMessages) {
-  const lines = missingMessages.map((missing) =>
-    missing.sourceKey.context
-      ? `${missing.sourceKey.message} [context: ${missing.sourceKey.context}]`
-      : missing.sourceKey.message
-  );
-  return `Failed to compile catalog for locale ${locale}!\n\nMissing ${missingMessages.length} translation(s):\n${lines.join("\n")}`;
-}
-
-function createDiagnosticMessage(locale, diagnostics) {
-  const lines = diagnostics.map((diagnostic) => {
-    const source = diagnostic.sourceKey.context
-      ? `${diagnostic.sourceKey.message} [context: ${diagnostic.sourceKey.context}]`
-      : diagnostic.sourceKey.message;
-    return `[${diagnostic.severity}] ${diagnostic.code} (${diagnostic.locale})\n${diagnostic.message}\nSource: ${source}`;
-  });
-  return `Catalog diagnostics for locale ${locale}:\n\n${lines.join("\n\n")}`;
-}
-
-function createCompileErrorMessage(locale, diagnostics) {
-  const lines = diagnostics.map((diagnostic) => {
-    const source = diagnostic.sourceKey.context
-      ? `${diagnostic.sourceKey.message} [context: ${diagnostic.sourceKey.context}]`
-      : diagnostic.sourceKey.message;
-    return `${diagnostic.message}\nCode: ${diagnostic.code}\nLocale: ${diagnostic.locale}\nSource: ${source}`;
-  });
-  return `Failed to compile catalog for locale ${locale}!\n\nCompilation error for ${diagnostics.length} translation(s):\n${lines.join("\n\n")}`;
-}
-
-function warnDiagnostics(locale, diagnostics) {
-  if (diagnostics.length === 0) {
-    return;
-  }
-
-  console.warn(
-    `${createDiagnosticMessage(locale, diagnostics)}\n\nYou can fail the build on error diagnostics by setting \`failOnCompileError=true\` in the Palamedes Next plugin configuration.`
-  );
-}
-
-function renderCatalogModule(messages) {
-  return `export const messages=${JSON.stringify(messages)};export default { messages };`;
-}
+const { createCatalogLoaderResult } = require("@palamedes/transform/catalog-loader");
 
 module.exports = function palamedesPoLoader() {
   const callback = this.async();
@@ -73,24 +31,18 @@ module.exports = function palamedesPoLoader() {
       }
     });
 
-    if (locale !== cfg.pseudoLocale && result.missing.length > 0 && failOnMissing) {
-      throw new Error(createMissingErrorMessage(locale, result.missing));
-    }
+    const loaderResult = createCatalogLoaderResult(result, {
+      locale,
+      pseudoLocale: cfg.pseudoLocale,
+      failOnMissing,
+      failOnCompileError,
+      diagnosticsWarningHint:
+        "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Next plugin configuration.",
+    });
 
-    if (result.diagnostics.length > 0) {
-      const errorDiagnostics = result.diagnostics.filter(
-        (diagnostic) => diagnostic.severity === "error"
-      );
+    loaderResult.warnings.forEach((warning) => console.warn(warning));
 
-      if (failOnCompileError && errorDiagnostics.length > 0) {
-        const message = createCompileErrorMessage(locale, errorDiagnostics);
-        throw new Error(message);
-      }
-
-      warnDiagnostics(locale, result.diagnostics);
-    }
-
-    callback(null, renderCatalogModule(result.messages), null);
+    callback(null, loaderResult.code, null);
   })().catch((error) => {
     callback(error);
   });

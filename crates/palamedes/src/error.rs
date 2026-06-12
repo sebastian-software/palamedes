@@ -163,4 +163,14 @@ pub enum PalamedesError {
         /// Human-readable source shape that failed placeholder naming.
         syntax: &'static str,
     },
+    /// A macro values object literal does not match the placeholders used by the source message.
+    #[error(
+        "Macro values do not match message placeholders. Missing value(s): {missing}; extra value(s): {extra}."
+    )]
+    MacroValuesMismatch {
+        /// Placeholder names referenced by the message but not provided by values.
+        missing: String,
+        /// Value names provided by values but not referenced by the message.
+        extra: String,
+    },
 }

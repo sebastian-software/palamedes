@@ -105,7 +105,7 @@ async function ensureVercelLink(example, env, token) {
     return
   }
 
-  const vercelCwdArgs = getVercelCwdArgs(example)
+  const vercelCwdArgs = getVercelCwdArgs()
   const args = [
     "exec",
     "vercel",
@@ -141,7 +141,7 @@ function getCommandCwd(example) {
   return example.cwd
 }
 
-function getVercelCwdArgs(example) {
+function getVercelCwdArgs() {
   return []
 }
 
@@ -194,7 +194,7 @@ async function deployExample(example, options) {
 
   await ensureVercelLink(example, env, token)
 
-  const baseArgs = ["exec", "vercel", ...getVercelCwdArgs(example)]
+  const baseArgs = ["exec", "vercel", ...getVercelCwdArgs()]
   const environmentArgs = ["--yes", `--environment=${options.environment}`, `--token=${token}`]
   const buildArgs = ["build", `--token=${token}`]
   const deployArgs = ["deploy", "--prebuilt", "--yes", `--token=${token}`]

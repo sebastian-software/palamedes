@@ -3,7 +3,7 @@ import { getRequestHeader, setCookie } from "@tanstack/react-start/server"
 import { t } from "@palamedes/core/macro"
 import { resolveCookieLocale } from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
-import { getLocaleLabel, LOCALE_COOKIE, type Locale, normalizeLocale } from "./i18n"
+import { getLocaleLabel, LOCALE_COOKIE, normalizeLocale } from "./i18n"
 
 function getResolvedLocale() {
   return resolveCookieLocale({
@@ -15,7 +15,7 @@ function getResolvedLocale() {
 export const loadHomePageData = createServerFn({ method: "GET" })
   .handler(async () => {
     const resolved = getResolvedLocale()
-    activateServerI18n(resolved.locale)
+    await activateServerI18n(resolved.locale)
 
     return {
       locale: resolved.locale,
@@ -43,7 +43,7 @@ export const setLocaleCookie = createServerFn({ method: "POST" })
 export const getLocalizedServerStatus = createServerFn({ method: "GET" })
   .handler(async () => {
     const resolved = getResolvedLocale()
-    activateServerI18n(resolved.locale)
+    await activateServerI18n(resolved.locale)
 
     return {
       locale: resolved.locale,

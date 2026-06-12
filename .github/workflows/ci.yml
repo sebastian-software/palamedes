@@ -11,7 +11,24 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-24.04
+    name: validate (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            node: 24
+            full: true
+          - os: ubuntu-24.04
+            node: 22
+            full: true
+          - os: macos-14
+            node: 24
+            full: false
+          - os: windows-2025
+            node: 24
+            full: false
 
     steps:
       - name: Check out repository
@@ -20,7 +37,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
 
       - name: Enable Corepack
         run: corepack enable
@@ -32,13 +49,54 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check release package set
+        if: ${{ matrix.full }}
         run: pnpm check:release-set
+
+      - name: Run JavaScript and TypeScript lint
+        run: pnpm lint
 
       - name: Build packages
         run: pnpm build
 
+      - name: Smoke-test native binding load
+        if: ${{ !matrix.full }}
+        run: pnpm --filter @palamedes/core-node exec node -e "const core = require('./dist/index.cjs'); if (typeof core.transformMacrosNative !== 'function') process.exit(1)"
+
       - name: Run tests
+        if: ${{ matrix.full }}
         run: pnpm test
 
       - name: Check types
+        if: ${{ matrix.full }}
         run: pnpm check-types
+
+  validate-rust:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain:
+          - stable
+          - "1.93"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: clippy, rustfmt
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Run Rust lints
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test --workspace --locked

@@ -1,13 +1,18 @@
 use ferrocat::compiled_key;
-use oxc_ast::ast::{CallExpression, JSXElement, ObjectExpression, TemplateLiteral};
+use std::collections::BTreeSet;
+
+use oxc_ast::ast::{
+    Argument, CallExpression, JSXElement, ObjectExpression, ObjectPropertyKind, TemplateLiteral,
+};
+use oxc_span::GetSpan;
 
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::messages::{
-    build_icu_message, escape_string, expression_binding, extract_choice_options,
-    extract_choice_options_from_jsx, extract_jsx_children_parts, extract_jsx_value_binding,
-    extract_object_properties, first_argument_object, jsx_attributes, template_to_message,
-    ValueBinding,
+    build_icu_message, escape_string, expression_binding, expression_source,
+    extract_choice_options, extract_choice_options_from_jsx, extract_jsx_children_parts,
+    extract_jsx_value_binding, extract_object_properties, first_argument_object, jsx_attributes,
+    template_to_message, ValueBinding,
 };
 use super::NativeTransformOptions;
 
@@ -37,6 +42,7 @@ pub(super) fn transform_tagged_template(
 
 pub(super) fn transform_descriptor_call(
     call: &CallExpression<'_>,
+    source: &str,
     macro_name: &str,
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
@@ -44,11 +50,13 @@ pub(super) fn transform_descriptor_call(
         return Ok(None);
     };
 
-    transform_descriptor_object(object, macro_name, options)
+    transform_descriptor_object(call, object, source, macro_name, options)
 }
 
 fn transform_descriptor_object(
+    call: &CallExpression<'_>,
     object: &ObjectExpression<'_>,
+    source: &str,
     macro_name: &str,
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
@@ -83,17 +91,146 @@ fn transform_descriptor_object(
     if macro_name == "defineMessage" {
         Ok(Some((descriptor, lookup_key)))
     } else {
+        let values_text = descriptor_values_argument(call, source, &message)?;
         Ok(Some((
-            build_runtime_call(
+            build_runtime_call_with_values_text(
                 &lookup_key,
                 Some(&message),
-                None,
+                values_text.as_deref(),
                 context.as_deref(),
                 comment.as_deref(),
                 options,
             ),
             lookup_key,
         )))
+    }
+}
+
+enum DescriptorValues {
+    Bindings(Vec<ValueBinding>),
+    Raw(String),
+}
+
+fn descriptor_values_argument(
+    call: &CallExpression<'_>,
+    source: &str,
+    message: &str,
+) -> PalamedesResult<Option<String>> {
+    let Some(argument) = call.arguments.get(1) else {
+        return Ok(None);
+    };
+
+    match extract_descriptor_values(argument, source) {
+        DescriptorValues::Bindings(bindings) => {
+            validate_message_values(message, &bindings)?;
+            Ok(Some(render_values_object(&bindings)))
+        }
+        DescriptorValues::Raw(source) => Ok(Some(source)),
+    }
+}
+
+fn extract_descriptor_values(argument: &Argument<'_>, source: &str) -> DescriptorValues {
+    let Argument::ObjectExpression(object) = argument else {
+        return DescriptorValues::Raw(argument_source(argument, source));
+    };
+
+    let mut bindings = Vec::new();
+
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return DescriptorValues::Raw(argument_source(argument, source));
+        };
+        let Some(key) = property.key.static_name() else {
+            return DescriptorValues::Raw(argument_source(argument, source));
+        };
+
+        bindings.push(ValueBinding {
+            name: key.into_owned(),
+            expression: expression_source(&property.value, source),
+        });
+    }
+
+    DescriptorValues::Bindings(bindings)
+}
+
+fn argument_source(argument: &Argument<'_>, source: &str) -> String {
+    let span = argument.span();
+    source[span.start as usize..span.end as usize].to_string()
+}
+
+fn validate_message_values(message: &str, values: &[ValueBinding]) -> PalamedesResult<()> {
+    let placeholders = collect_message_placeholders(message);
+    let value_names = values
+        .iter()
+        .map(|binding| binding.name.clone())
+        .collect::<BTreeSet<_>>();
+    let missing = placeholders
+        .difference(&value_names)
+        .cloned()
+        .collect::<Vec<_>>();
+    let extra = value_names
+        .difference(&placeholders)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if missing.is_empty() && extra.is_empty() {
+        return Ok(());
+    }
+
+    Err(PalamedesError::MacroValuesMismatch {
+        missing: format_names(&missing),
+        extra: format_names(&extra),
+    })
+}
+
+fn collect_message_placeholders(message: &str) -> BTreeSet<String> {
+    if let Ok(metadata) = ferrocat::derive_message_metadata_from_icu(message, None) {
+        return metadata
+            .args
+            .into_keys()
+            .filter(|name| is_placeholder_name(name.as_str()))
+            .collect();
+    }
+
+    collect_message_placeholders_from_braces(message)
+}
+
+fn collect_message_placeholders_from_braces(message: &str) -> BTreeSet<String> {
+    let mut placeholders = BTreeSet::new();
+    let mut index = 0usize;
+
+    while let Some(relative_start) = message[index..].find('{') {
+        let start = index + relative_start + 1;
+        let Some(relative_end) = message[start..].find([',', '}']) else {
+            break;
+        };
+        let end = start + relative_end;
+        let name = message[start..end].trim();
+        if is_placeholder_name(name) {
+            placeholders.insert(name.to_string());
+        }
+        index = end + 1;
+    }
+
+    placeholders
+}
+
+fn is_placeholder_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first == '_' || first == '$' || first.is_ascii_alphabetic()) {
+        return false;
+    }
+    chars.all(|ch| ch == '_' || ch == '$' || ch.is_ascii_alphanumeric())
+}
+
+fn format_names(names: &[String]) -> String {
+    if names.is_empty() {
+        "none".to_string()
+    } else {
+        names.join(", ")
     }
 }
 
@@ -289,11 +426,30 @@ fn build_runtime_call(
     comment: Option<&str>,
     options: &NativeTransformOptions,
 ) -> String {
-    let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
-    let descriptor = build_runtime_descriptor(message, context, comment, options);
     let values_text = values
         .filter(|values| !values.is_empty())
         .map(|values| format!("{{ {} }}", render_value_bindings(values)));
+
+    build_runtime_call_with_values_text(
+        lookup_key,
+        message,
+        values_text.as_deref(),
+        context,
+        comment,
+        options,
+    )
+}
+
+fn build_runtime_call_with_values_text(
+    lookup_key: &str,
+    message: Option<&str>,
+    values_text: Option<&str>,
+    context: Option<&str>,
+    comment: Option<&str>,
+    options: &NativeTransformOptions,
+) -> String {
+    let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
+    let descriptor = build_runtime_descriptor(message, context, comment, options);
 
     match (values_text, descriptor) {
         (None, None) => format!(
@@ -329,6 +485,14 @@ fn render_value_bindings(values: &[ValueBinding]) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn render_values_object(values: &[ValueBinding]) -> String {
+    if values.is_empty() {
+        "{}".to_string()
+    } else {
+        format!("{{ {} }}", render_value_bindings(values))
+    }
 }
 
 fn build_runtime_descriptor(

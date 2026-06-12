@@ -23,6 +23,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./catalog-loader": {
+      "types": "./dist/catalogLoader.d.ts",
+      "import": "./dist/catalogLoader.mjs",
+      "require": "./dist/catalogLoader.cjs"
     }
   },
   "main": "./dist/index.cjs",
@@ -36,7 +41,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/transform.test.ts",
+    "test": "vitest run --globals src/*.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {

@@ -38,6 +38,7 @@
     "generate-native-types": "node ./scripts/generate-native-types.mjs",
     "check-native-types": "node ./scripts/generate-native-types.mjs --check",
     "build": "unbuild",
+    "test": "vitest run --globals src/index.test.ts",
     "stub": "unbuild --stub"
   },
   "engines": {
@@ -48,13 +49,18 @@
   },
   "optionalDependencies": {
     "@palamedes/core-node-darwin-arm64": "workspace:^",
+    "@palamedes/core-node-darwin-x64": "workspace:^",
     "@palamedes/core-node-linux-arm64-gnu": "workspace:^",
+    "@palamedes/core-node-linux-arm64-musl": "workspace:^",
     "@palamedes/core-node-linux-x64-gnu": "workspace:^",
+    "@palamedes/core-node-linux-x64-musl": "workspace:^",
+    "@palamedes/core-node-win32-arm64-msvc": "workspace:^",
     "@palamedes/core-node-win32-x64-msvc": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^25.9.0",
     "typescript": "^6.0.3",
-    "unbuild": "^3.6.1"
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.6"
   }
 }

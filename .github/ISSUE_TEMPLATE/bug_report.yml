@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a reproducible Palamedes problem
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for maintainers to reproduce it.
+  - type: input
+    id: package
+    attributes:
+      label: Package
+      description: Which Palamedes package is affected?
+      placeholder: "@palamedes/vite-plugin"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "0.6.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: framework
+    attributes:
+      label: Framework or runtime
+      options:
+        - Vite
+        - Next.js
+        - React Router
+        - TanStack Start
+        - SolidStart
+        - Waku
+        - Node.js
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Link a repository or paste the smallest code/config sample that reproduces the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include exact error output when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Node.js, pnpm, OS, CPU architecture, libc if Linux, and Rust version if native builds are involved.
+      render: text
+  - type: textarea
+    id: checks
+    attributes:
+      label: Checks tried
+      description: Commands you already ran, such as `pnpm build`, `pnpm test`, or `pmds audit`.
