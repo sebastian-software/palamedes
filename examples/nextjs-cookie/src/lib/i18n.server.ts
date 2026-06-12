@@ -27,27 +27,29 @@ export async function getLocale(): Promise<{ locale: Locale; source: LocaleSourc
 /**
  * Initialize a request-local i18n instance for server-side rendering.
  */
-const resolveActiveServerI18n = cache(async (locale?: Locale): Promise<{
-  i18n: PalamedesI18n
-  locale: Locale
-  source: LocaleSource
-}> => {
-  const resolved = locale
-    ? { locale, source: "cookie" as const }
-    : await getLocale()
-  const resolvedLocale = resolved.locale
-  const messages = await loadMessages(resolvedLocale)
-  const i18n = createExampleI18n()
+const resolveActiveServerI18n = cache(
+  async (
+    locale?: Locale
+  ): Promise<{
+    i18n: PalamedesI18n
+    locale: Locale
+    source: LocaleSource
+  }> => {
+    const resolved = locale ? { locale, source: "cookie" as const } : await getLocale()
+    const resolvedLocale = resolved.locale
+    const messages = await loadMessages(resolvedLocale)
+    const i18n = createExampleI18n()
 
-  i18n.load(resolvedLocale, messages)
-  i18n.activate(resolvedLocale)
+    i18n.load(resolvedLocale, messages)
+    i18n.activate(resolvedLocale)
 
-  return {
-    i18n,
-    locale: resolvedLocale,
-    source: resolved.source,
+    return {
+      i18n,
+      locale: resolvedLocale,
+      source: resolved.source,
+    }
   }
-})
+)
 
 export async function createActiveServerI18n(locale?: Locale): Promise<{
   i18n: PalamedesI18n
@@ -59,10 +61,7 @@ export async function createActiveServerI18n(locale?: Locale): Promise<{
   return active
 }
 
-export function runWithServerI18n<Result>(
-  i18n: PalamedesI18n,
-  callback: () => Result
-): Result {
+export function runWithServerI18n<Result>(i18n: PalamedesI18n, callback: () => Result): Result {
   return serverI18nScope.run(i18n, callback)
 }
 

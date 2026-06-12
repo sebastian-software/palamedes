@@ -78,7 +78,7 @@ const extraVersionFiles = new Set(
 )
 const workflowFilters = new Set(
   Array.from(publishWorkflow.matchAll(/--filter\s+([^\s]+)/g), (match) =>
-    match[1].replace(/^"|"$/g, "")
+    match[1].replaceAll(/^"|"$/g, "")
   )
 )
 const nativeMatrixPackages = new Set(
@@ -102,7 +102,7 @@ function cargoManifestVersion(file) {
 }
 
 function cargoLockVersion(packageName) {
-  const escapedName = packageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const escapedName = packageName.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")
   return readText("Cargo.lock").match(
     new RegExp(`\\[\\[package\\]\\]\\nname = "${escapedName}"\\nversion = "([^"]+)"`)
   )?.[1]
@@ -153,9 +153,7 @@ for (const [name, version] of [
 
 for (const packageInfo of publicPackages) {
   if (packageInfo.version !== expectedVersion) {
-    fail(
-      `${packageInfo.name} has version ${packageInfo.version}, expected ${expectedVersion}`
-    )
+    fail(`${packageInfo.name} has version ${packageInfo.version}, expected ${expectedVersion}`)
   }
 
   if (!extraVersionFiles.has(path.join(packageInfo.path, "package.json"))) {

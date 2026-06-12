@@ -13,10 +13,7 @@ import { report } from "./commands/report"
 const require = createRequire(import.meta.url)
 const VERSION = require("../package.json").version as string
 
-program
-  .name("pmds")
-  .description("Palamedes CLI for fast message extraction")
-  .version(VERSION)
+program.name("pmds").description("Palamedes CLI for fast message extraction").version(VERSION)
 
 program
   .command("extract")
@@ -54,9 +51,15 @@ program
   .command("report")
   .description("Report per-locale catalog translation completeness")
   .option("-c, --config <path>", "Path to palamedes.config.ts")
-  .option("--locale <locale...>", "Only report selected target locale(s); comma-separated values are supported")
+  .option(
+    "--locale <locale...>",
+    "Only report selected target locale(s); comma-separated values are supported"
+  )
   .option("--json", "Print the machine-readable report as JSON")
-  .option("--fail-if-below <percent>", "Fail when any reported locale is below this translated percentage")
+  .option(
+    "--fail-if-below <percent>",
+    "Fail when any reported locale is below this translated percentage"
+  )
   .action(async (options) => {
     try {
       await report(options)
@@ -66,9 +69,7 @@ program
     }
   })
 
-const catalog = program
-  .command("catalog")
-  .description("Work with Palamedes catalog files")
+const catalog = program.command("catalog").description("Work with Palamedes catalog files")
 
 catalog
   .command("merge")

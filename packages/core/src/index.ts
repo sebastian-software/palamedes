@@ -1,6 +1,6 @@
 import { formatMessagePattern, parseMessagePattern } from "./messageFormat"
 
-export interface MessageDescriptor {
+export type MessageDescriptor = {
   id?: string
   message?: string
   context?: string
@@ -9,13 +9,13 @@ export interface MessageDescriptor {
 
 export type CatalogMessages = Record<string, string>
 
-export interface MissingMessageInfo {
+export type MissingMessageInfo = {
   id: string
   locale: string
   descriptor?: MessageDescriptor
 }
 
-export interface MessageFormatErrorInfo {
+export type MessageFormatErrorInfo = {
   id?: string
   locale?: string
   error: Error
@@ -24,12 +24,12 @@ export interface MessageFormatErrorInfo {
   descriptor?: MessageDescriptor
 }
 
-export interface CreateI18nOptions {
+export type CreateI18nOptions = {
   onMissing?: (info: MissingMessageInfo) => void
   onError?: (info: MessageFormatErrorInfo) => void
 }
 
-export interface PalamedesI18n {
+export type PalamedesI18n = {
   locale?: string
   _: (
     idOrDescriptor: string | MessageDescriptor,
@@ -41,7 +41,7 @@ export interface PalamedesI18n {
   getMessage: (id: string, descriptor?: MessageDescriptor) => string
 }
 
-interface ResolvedMessage {
+type ResolvedMessage = {
   pattern: string
   fallback: string
 }
@@ -144,7 +144,12 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
 
     _(idOrDescriptor, values = {}, descriptor) {
       if (typeof idOrDescriptor === "string") {
-        return renderMessage(resolveMessage(idOrDescriptor, descriptor), values, idOrDescriptor, descriptor)
+        return renderMessage(
+          resolveMessage(idOrDescriptor, descriptor),
+          values,
+          idOrDescriptor,
+          descriptor
+        )
       }
 
       if (idOrDescriptor.id !== undefined) {

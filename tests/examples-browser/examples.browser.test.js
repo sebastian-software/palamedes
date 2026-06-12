@@ -16,7 +16,7 @@ function resolveChromiumExecutable() {
     return macChrome
   }
 
-  return undefined
+  return
 }
 
 function activeExample() {
@@ -61,12 +61,16 @@ async function currentServerLocale(page) {
 }
 
 async function waitForClientReady(page) {
-  await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 }).catch(() => {})
+  await page
+    .getByTestId("client-ready")
+    .waitFor({ state: "attached", timeout: 10_000 })
+    .catch(() => {})
 }
 
 async function stabilizePage(page) {
-  await page.addStyleTag({
-    content: `
+  await page
+    .addStyleTag({
+      content: `
       *,
       *::before,
       *::after {
@@ -75,7 +79,8 @@ async function stabilizePage(page) {
         caret-color: transparent !important;
       }
     `,
-  }).catch(() => {})
+    })
+    .catch(() => {})
 }
 
 async function captureScreenshot(page, example, state) {
@@ -96,17 +101,20 @@ test("matrix example browser contract", async () => {
   expect(example.id).not.toBe("")
 
   const page = await launchPage()
-  const initialUrl = example.strategy === "route" ? routeUrl(example.baseUrl) : `${example.baseUrl}/`
+  const initialUrl =
+    example.strategy === "route" ? routeUrl(example.baseUrl) : `${example.baseUrl}/`
   await page.goto(initialUrl, { waitUntil: "domcontentloaded" })
 
   await expect.poll(() => currentServerLocale(page)).toContain("English")
   await captureScreenshot(page, example, "initial")
 
   if (example.strategy === "cookie") {
-    await page.getByTestId("locale-switch-de").click({ force: true, noWaitAfter: true, timeout: 15_000 })
+    await page
+      .getByTestId("locale-switch-de")
+      .click({ force: true, noWaitAfter: true, timeout: 15_000 })
 
     try {
-      await expect.poll(() => currentServerLocale(page), { timeout: 2_500 }).toContain("Deutsch")
+      await expect.poll(() => currentServerLocale(page), { timeout: 2500 }).toContain("Deutsch")
     } catch {
       await page.reload({ waitUntil: "domcontentloaded" })
       await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
@@ -120,13 +128,17 @@ test("matrix example browser contract", async () => {
       document.querySelector('[data-testid="server-proof-trigger"]')?.click()
     })
     await expect
-      .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
+      .poll(
+        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+      )
       .toContain("de")
     await captureScreenshot(page, example, "interactive")
     return
   }
 
-  await page.getByTestId("locale-switch-de").click({ force: true, noWaitAfter: true, timeout: 15_000 })
+  await page
+    .getByTestId("locale-switch-de")
+    .click({ force: true, noWaitAfter: true, timeout: 15_000 })
   await page.waitForURL(/\/de$/)
   expect(page.url()).toContain("/de")
 
@@ -147,7 +159,9 @@ test("matrix example browser contract", async () => {
   await expect
     .poll(async () => (await page.locator("body").textContent())?.trim() ?? "")
     .toContain("Locale suggestion")
-  await page.getByTestId("locale-suggestion-cta").click({ force: true, noWaitAfter: true, timeout: 15_000 })
+  await page
+    .getByTestId("locale-suggestion-cta")
+    .click({ force: true, noWaitAfter: true, timeout: 15_000 })
   await page.waitForURL(/\/de$/)
   expect(page.url()).toContain("/de")
   expect(page.url()).toContain("de.lvh.me")

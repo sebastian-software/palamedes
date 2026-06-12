@@ -52,6 +52,9 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm check:release-set
 
+      - name: Check JavaScript and TypeScript formatting
+        run: pnpm format:check
+
       - name: Run JavaScript and TypeScript lint
         run: pnpm lint
 

@@ -52,12 +52,7 @@ targets Alpine-style environments.
 ## Example
 
 ```ts
-import {
-  getNativeInfo,
-  mergeCatalogFiles,
-  parsePo,
-  updateCatalogFile,
-} from "@palamedes/core-node"
+import { getNativeInfo, mergeCatalogFiles, parsePo, updateCatalogFile } from "@palamedes/core-node"
 
 const info = getNativeInfo()
 const po = parsePo(`

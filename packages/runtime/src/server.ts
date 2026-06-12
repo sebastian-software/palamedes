@@ -4,19 +4,18 @@ import { type I18nInstance, setServerI18nGetter } from "./index"
 
 const SERVER_SCOPE_STATE_KEY = Symbol.for("palamedes.runtime.serverI18nScopeState")
 
-interface ServerScopeState {
+type ServerScopeState = {
   active: AsyncLocalStorage<I18nInstance>
 }
 
-export interface ServerI18nScope<T extends I18nInstance = I18nInstance> {
+export type ServerI18nScope<T extends I18nInstance = I18nInstance> = {
   run<Result>(i18n: T, callback: () => Result): Result
   activate(i18n: T): T
   get(): T | undefined
 }
 
 function getServerScopeState(): ServerScopeState {
-  const globalState = globalThis as typeof globalThis &
-    Record<symbol, ServerScopeState | undefined>
+  const globalState = globalThis as typeof globalThis & Record<symbol, ServerScopeState | undefined>
   const existing = globalState[SERVER_SCOPE_STATE_KEY]
   if (existing) {
     return existing
@@ -29,9 +28,7 @@ function getServerScopeState(): ServerScopeState {
   return state
 }
 
-export function createServerI18nScope<
-  T extends I18nInstance = I18nInstance,
->(): ServerI18nScope<T> {
+export function createServerI18nScope<T extends I18nInstance = I18nInstance>(): ServerI18nScope<T> {
   const sharedState = getServerScopeState()
   const storage = new AsyncLocalStorage<T>()
 

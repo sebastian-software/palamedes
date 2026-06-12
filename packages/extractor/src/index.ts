@@ -8,23 +8,16 @@
  * requiring Babel transformation first.
  */
 
-import {
-  extractMessagesNative,
-  type NativeExtractedMessage,
-} from "@palamedes/core-node"
+import { extractMessagesNative, type NativeExtractedMessage } from "@palamedes/core-node"
 
-const SUPPORTED_EXTENSIONS =
-  /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx)$/i
+const SUPPORTED_EXTENSIONS = /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx)$/i
 
 export type ExtractedMessageInfo = NativeExtractedMessage
 
 /**
  * Extract source-first messages from a JavaScript or TypeScript module.
  */
-export function extractMessages(
-  source: string,
-  filename: string
-): ExtractedMessageInfo[] {
+export function extractMessages(source: string, filename: string): ExtractedMessageInfo[] {
   return extractMessagesNative(source, filename)
 }
 
@@ -46,7 +39,7 @@ export function extractMessages(
  * }
  * ```
  */
-export interface PalamedesExtractor {
+export type PalamedesExtractor = {
   match(filename: string): boolean
   extract(
     filename: string,

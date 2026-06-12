@@ -25,7 +25,10 @@ const AREAS = [
 
 export function createLargeCatalogFixture(options = {}) {
   const messageCount = normalizePositiveInteger(options.messageCount, DEFAULT_MESSAGE_COUNT)
-  const sourceFileCount = normalizePositiveInteger(options.sourceFileCount, DEFAULT_SOURCE_FILE_COUNT)
+  const sourceFileCount = normalizePositiveInteger(
+    options.sourceFileCount,
+    DEFAULT_SOURCE_FILE_COUNT
+  )
   const messages = []
   const sourceFiles = Array.from({ length: sourceFileCount }, (_, index) => ({
     filename: `benchmarks/large-catalog/generated/part-${String(index + 1).padStart(3, "0")}.tsx`,
@@ -54,7 +57,9 @@ export function createLargeCatalogFixture(options = {}) {
       ],
     })
 
-    const descriptor = context ? `{ message: ${JSON.stringify(message)}, context: ${JSON.stringify(context)} }` : `{ message: ${JSON.stringify(message)} }`
+    const descriptor = context
+      ? `{ message: ${JSON.stringify(message)}, context: ${JSON.stringify(context)} }`
+      : `{ message: ${JSON.stringify(message)} }`
     sourceFile.lines.push(`    t(${descriptor}, { count, name, status }),`)
   }
 
@@ -80,16 +85,21 @@ function createMessage(index) {
   const id = String(index + 1).padStart(5, "0")
 
   switch (index % 5) {
-    case 0:
+    case 0: {
       return `Benchmark ${area} ${id}: ${subject} assigned to {name}`
-    case 1:
+    }
+    case 1: {
       return `Benchmark ${area} ${id}: {count, plural, one {# ${subject}} other {# ${subject}s}} ready`
-    case 2:
+    }
+    case 2: {
       return `Benchmark ${area} ${id}: status is {status, select, open {open} closed {closed} other {unknown}}`
-    case 3:
+    }
+    case 3: {
       return `Benchmark ${area} ${id}: {count, plural, =0 {no ${subject}s} one {one ${subject}} other {# ${subject}s}} for {name}`
-    default:
+    }
+    default: {
       return `Benchmark ${area} ${id}: review ${subject} with <strong>{name}</strong>`
+    }
   }
 }
 

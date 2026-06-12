@@ -60,6 +60,7 @@
     "solid-js": "^1.9.12"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
     "solid-js": "^1.9.13",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",

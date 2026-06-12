@@ -6,10 +6,7 @@ import { fileURLToPath } from "node:url"
 import { transformAsync } from "@babel/core"
 import linguiMacro from "@lingui/babel-plugin-lingui-macro"
 import { createCompiledCatalog } from "@lingui/cli/api"
-import {
-  extractFromFileWithBabel,
-  getBabelParserOptions,
-} from "@lingui/cli/api/extractors/babel"
+import { extractFromFileWithBabel, getBabelParserOptions } from "@lingui/cli/api/extractors/babel"
 import { makeConfig } from "@lingui/conf"
 import { formatter as createPoFormatter } from "@lingui/format-po"
 import { transform as transformSwc } from "@swc/core"
@@ -27,7 +24,7 @@ import {
   PROFILE_DEFINITIONS,
 } from "./corpus.mjs"
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const __dirname = import.meta.dirname
 const benchmarkRoot = path.resolve(__dirname, "..")
 const repoRoot = path.resolve(benchmarkRoot, "..", "..")
 const resultsDir = path.join(benchmarkRoot, "results")
@@ -60,7 +57,15 @@ const EXAMPLE_FIXTURE_FILES = [
 const EXAMPLE_COMPILE_TARGETS = [
   {
     name: "ferrocat-first-test",
-    rootDir: path.join(repoRoot, "packages", "cli", "src", "commands", "fixtures", "ferrocat-first-test"),
+    rootDir: path.join(
+      repoRoot,
+      "packages",
+      "cli",
+      "src",
+      "commands",
+      "fixtures",
+      "ferrocat-first-test"
+    ),
     resourcePath: path.join(
       repoRoot,
       "packages",
@@ -102,7 +107,11 @@ async function main() {
         seed: args.seed,
       })
       const linguiConfig = buildLinguiConfig(corpus.rootDir)
-      const compileConfig = buildPalamedesCompileConfig(corpus.rootDir, corpus.locales, corpus.sourceLocale)
+      const compileConfig = buildPalamedesCompileConfig(
+        corpus.rootDir,
+        corpus.locales,
+        corpus.sourceLocale
+      )
 
       const validation = await validateSyntheticProfile(corpus, linguiConfig, compileConfig)
 
@@ -253,8 +262,18 @@ async function main() {
       ]
 
       const trackComparisons = [
-        createComparison(profileName, "macro-transform-babel", transformPalamedes, transformLinguiBabel),
-        createComparison(profileName, "macro-transform-swc", transformPalamedes, transformLinguiSwc),
+        createComparison(
+          profileName,
+          "macro-transform-babel",
+          transformPalamedes,
+          transformLinguiBabel
+        ),
+        createComparison(
+          profileName,
+          "macro-transform-swc",
+          transformPalamedes,
+          transformLinguiSwc
+        ),
         createComparison(profileName, "extract", extractPalamedes, extractLingui),
         createComparison(profileName, "compile-from-catalog", compilePalamedes, compileLingui),
       ]
@@ -336,7 +355,10 @@ function readProfiles(argv) {
     return Object.keys(PROFILE_DEFINITIONS)
   }
 
-  return value.split(",").map((profile) => profile.trim()).filter(Boolean)
+  return value
+    .split(",")
+    .map((profile) => profile.trim())
+    .filter(Boolean)
 }
 
 function readNumberArg(argv, name, fallback) {
@@ -350,31 +372,24 @@ function readNumberArg(argv, name, fallback) {
 }
 
 async function readVersions(nativeInfo) {
-  const [
-    babelCore,
-    swcCore,
-    linguiCli,
-    linguiMacro,
-    linguiSwc,
-    linguiFormatPo,
-    benchmarkPackage,
-  ] = await Promise.all([
-    readJson(path.join(benchmarkRoot, "node_modules", "@babel", "core", "package.json")),
-    readJson(path.join(benchmarkRoot, "node_modules", "@swc", "core", "package.json")),
-    readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "cli", "package.json")),
-    readJson(
-      path.join(
-        benchmarkRoot,
-        "node_modules",
-        "@lingui",
-        "babel-plugin-lingui-macro",
-        "package.json"
-      )
-    ),
-    readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "swc-plugin", "package.json")),
-    readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "format-po", "package.json")),
-    readJson(path.join(benchmarkRoot, "package.json")),
-  ])
+  const [babelCore, swcCore, linguiCli, linguiMacro, linguiSwc, linguiFormatPo, benchmarkPackage] =
+    await Promise.all([
+      readJson(path.join(benchmarkRoot, "node_modules", "@babel", "core", "package.json")),
+      readJson(path.join(benchmarkRoot, "node_modules", "@swc", "core", "package.json")),
+      readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "cli", "package.json")),
+      readJson(
+        path.join(
+          benchmarkRoot,
+          "node_modules",
+          "@lingui",
+          "babel-plugin-lingui-macro",
+          "package.json"
+        )
+      ),
+      readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "swc-plugin", "package.json")),
+      readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "format-po", "package.json")),
+      readJson(path.join(benchmarkRoot, "package.json")),
+    ])
 
   return {
     benchmarkPackage: benchmarkPackage.name,
@@ -539,7 +554,9 @@ async function validateSyntheticProfile(corpus, linguiConfig, compileConfig) {
   const transformLinguiSwc = await runLinguiTransformSwc(corpus)
 
   if (transformPalamedes.fileCount !== corpus.fileCount) {
-    throw new Error(`Palamedes transform validated ${transformPalamedes.fileCount} files, expected ${corpus.fileCount}`)
+    throw new Error(
+      `Palamedes transform validated ${transformPalamedes.fileCount} files, expected ${corpus.fileCount}`
+    )
   }
   if (transformLinguiBabel.fileCount !== corpus.fileCount) {
     throw new Error(
@@ -771,11 +788,15 @@ async function compileLinguiPoFile(filename, locale) {
 }
 
 function normalizePalamedesMessages(messages) {
-  return [...new Set(messages.map((message) => createMessageKey(message.message, message.context)))].sort()
+  return [
+    ...new Set(messages.map((message) => createMessageKey(message.message, message.context))),
+  ].sort()
 }
 
 function normalizeLinguiMessages(messages) {
-  return [...new Set(messages.map((message) => createMessageKey(message.message, message.context)))].sort()
+  return [
+    ...new Set(messages.map((message) => createMessageKey(message.message, message.context))),
+  ].sort()
 }
 
 function assertKeySetsMatch(label, expected, actual) {
@@ -835,9 +856,10 @@ function createComparison(profile, track, palamedes, lingui) {
     profile,
     track,
     fasterTool,
-    speedupFactor: fasterTool === "palamedes"
-      ? linguiMedianMs / palamedesMedianMs
-      : palamedesMedianMs / linguiMedianMs,
+    speedupFactor:
+      fasterTool === "palamedes"
+        ? linguiMedianMs / palamedesMedianMs
+        : palamedesMedianMs / linguiMedianMs,
     palamedesMedianMs,
     linguiMedianMs,
   }
@@ -905,7 +927,7 @@ function summarizeCorpus(corpus) {
 async function writeOutputs(report) {
   await mkdir(resultsDir, { recursive: true })
 
-  const stamp = report.generatedAt.replace(/[:.]/g, "-")
+  const stamp = report.generatedAt.replaceAll(/[:.]/g, "-")
   const jsonFilename = path.join(resultsDir, `${stamp}.json`)
   const markdownFilename = path.join(resultsDir, `${stamp}.md`)
   const latestJson = path.join(resultsDir, "latest.json")
@@ -995,7 +1017,7 @@ function renderMarkdown(report) {
     )
     lines.push("")
 
-    if (!profile.comparisons.length) {
+    if (profile.comparisons.length === 0) {
       lines.push("Validation-only run. No timings captured.")
       continue
     }
@@ -1014,11 +1036,17 @@ function renderMarkdown(report) {
   lines.push("## Notes")
   lines.push("")
   lines.push(`- ${PALAMEDES_SHARED_MACRO_BASELINE_NOTE}`)
-  lines.push("- Results are machine-local and should not be treated as universal cross-machine claims.")
-  lines.push("- Build-system integration, watch mode, and catalog update are intentionally excluded from this head-to-head comparison.")
+  lines.push(
+    "- Results are machine-local and should not be treated as universal cross-machine claims."
+  )
+  lines.push(
+    "- Build-system integration, watch mode, and catalog update are intentionally excluded from this head-to-head comparison."
+  )
   lines.push("- Raw samples are stored in the accompanying JSON output.")
   if (report.validateOnly) {
-    lines.push("- Validate-only runs write timestamped outputs but do not replace the latest full benchmark result.")
+    lines.push(
+      "- Validate-only runs write timestamped outputs but do not replace the latest full benchmark result."
+    )
   }
 
   return lines.join("\n")
@@ -1030,7 +1058,7 @@ function printConsoleSummary(report, outputPaths) {
   console.log(`Results: ${outputPaths.primaryJson}`)
 
   for (const profile of report.profiles) {
-    if (!profile.comparisons.length) {
+    if (profile.comparisons.length === 0) {
       console.log(`- ${profile.profile}: validation only`)
       continue
     }

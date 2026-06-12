@@ -33,15 +33,15 @@ Stay on Lingui if you want:
 
 ## Outcome-First Comparison
 
-| Topic | Lingui | Palamedes |
-| --- | --- | --- |
-| Authoring feel | Familiar macro-based i18n | Intentionally familiar macro-based i18n |
-| Dev/build work | Historically more JS/Babel-shaped | Rust core + OXC + small adapters |
-| Message identity | Broader historical surface | Strictly `message + context` |
-| Runtime model | More than one historical access path | One public model: `getI18n()` |
-| Catalog semantics | Mixed legacy and ecosystem pressure | Source-first with `ferrocat` underneath |
-| Future translation layering | Usually solved outside the core | Local catalog and QA foundation |
-| Long-term shape | Broad compatibility pressure | Opinionated, narrower, easier to trust |
+| Topic                       | Lingui                               | Palamedes                               |
+| --------------------------- | ------------------------------------ | --------------------------------------- |
+| Authoring feel              | Familiar macro-based i18n            | Intentionally familiar macro-based i18n |
+| Dev/build work              | Historically more JS/Babel-shaped    | Rust core + OXC + small adapters        |
+| Message identity            | Broader historical surface           | Strictly `message + context`            |
+| Runtime model               | More than one historical access path | One public model: `getI18n()`           |
+| Catalog semantics           | Mixed legacy and ecosystem pressure  | Source-first with `ferrocat` underneath |
+| Future translation layering | Usually solved outside the core      | Local catalog and QA foundation         |
+| Long-term shape             | Broad compatibility pressure         | Opinionated, narrower, easier to trust  |
 
 ## Why The End State Gets Cleaner
 

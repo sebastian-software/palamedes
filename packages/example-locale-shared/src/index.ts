@@ -5,12 +5,12 @@ export const LOCALE_COOKIE = "locale"
 export type Locale = (typeof LOCALES)[number]
 export type LocaleSource = "accept-language" | "cookie" | "default" | "host" | "route"
 
-export interface HostLocaleConfig {
+export type HostLocaleConfig = {
   locales: Partial<Record<Locale, string>>
   defaultHost?: string | null
 }
 
-export interface LocaleBanner {
+export type LocaleBanner = {
   currentLocale: Locale
   description: string
   reason: "accept-language" | "host"
@@ -227,9 +227,7 @@ export function buildCanonicalUrl(options: {
   }
 
   const hostWithPort =
-    requestPort && !canonicalHost.includes(":")
-      ? `${canonicalHost}:${requestPort}`
-      : canonicalHost
+    requestPort && !canonicalHost.includes(":") ? `${canonicalHost}:${requestPort}` : canonicalHost
 
   return `http://${hostWithPort}${canonicalPath}${options.search ?? ""}`
 }

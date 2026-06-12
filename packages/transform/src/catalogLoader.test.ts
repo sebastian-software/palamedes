@@ -30,7 +30,9 @@ describe("catalog loader helpers", () => {
         { sourceKey: { message: "Hello" } },
         { sourceKey: { message: "Open", context: "verb" } },
       ])
-    ).toBe("Failed to compile catalog for locale de!\n\nMissing 2 translation(s):\nHello\nOpen [context: verb]")
+    ).toBe(
+      "Failed to compile catalog for locale de!\n\nMissing 2 translation(s):\nHello\nOpen [context: verb]"
+    )
   })
 
   it("formats diagnostics and compile errors with the same source key rendering", () => {
@@ -109,7 +111,7 @@ describe("catalog loader helpers", () => {
         locale: "de",
         diagnosticsWarningHint: "warning hint",
       }).warnings
-    ).toEqual([
+    ).toStrictEqual([
       "Catalog diagnostics for locale de:\n\n[error] icu (de)\nBroken ICU\nSource: Inbox\n\nwarning hint",
     ])
   })
@@ -134,6 +136,8 @@ describe("catalog loader helpers", () => {
         failOnCompileError: true,
         diagnosticsWarningHint: "set failOnCompileError",
       }).warnings
-    ).toEqual(["Catalog diagnostics for locale de:\n\n[warning] icu (de)\nSuspicious ICU\nSource: Inbox"])
+    ).toStrictEqual([
+      "Catalog diagnostics for locale de:\n\n[warning] icu (de)\nSuspicious ICU\nSource: Inbox",
+    ])
   })
 })

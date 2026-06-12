@@ -24,16 +24,17 @@ function Home() {
         <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
         <p>
           <Trans>
-            This example proves a cookie-based locale flow in TanStack Start:
-            first-request Accept-Language detection, cookie persistence, SSR,
-            .po imports, and localized server functions.
+            This example proves a cookie-based locale flow in TanStack Start: first-request
+            Accept-Language detection, cookie persistence, SSR, .po imports, and localized server
+            functions.
           </Trans>
         </p>
         <div className="button-row">
           <LocaleSwitcher locale={locale} />
         </div>
         <p className="footer-note">
-          <Trans>Current locale:</Trans> <strong data-testid="server-locale-value">{localeLabel}</strong>
+          <Trans>Current locale:</Trans>{" "}
+          <strong data-testid="server-locale-value">{localeLabel}</strong>
         </p>
       </section>
 

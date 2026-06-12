@@ -13,8 +13,8 @@ vi.mock("@palamedes/core-node", () => ({
 const tempDirs: string[] = []
 
 beforeEach(() => {
-  vi.spyOn(console, "log").mockImplementation(() => undefined)
-  vi.spyOn(console, "error").mockImplementation(() => undefined)
+  vi.spyOn(console, "log").mockImplementation(() => {})
+  vi.spyOn(console, "error").mockImplementation(() => {})
 })
 
 afterEach(async () => {
@@ -45,7 +45,7 @@ describe("report", () => {
       fuzzy: 1,
     })
     expect(result.locales[0]?.percent).toBeCloseTo(100 / 3)
-    expect(result.locales[1]).toEqual({
+    expect(result.locales[1]).toStrictEqual({
       locale: "fr",
       total: 3,
       translated: 0,
@@ -186,7 +186,7 @@ function parseTestPo(source: string) {
 function parseEntry(entry: string) {
   const msgid = entry.match(/^msgid "((?:[^"\\]|\\.)*)"/m)?.[1]
   if (msgid === undefined) {
-    return undefined
+    return
   }
 
   const msgctxt = entry.match(/^msgctxt "((?:[^"\\]|\\.)*)"/m)?.[1]

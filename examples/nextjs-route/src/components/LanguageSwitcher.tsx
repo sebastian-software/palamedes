@@ -10,7 +10,7 @@ const buttonStyle = {
   textDecoration: "none",
 }
 
-interface LanguageSwitcherProps {
+type LanguageSwitcherProps = {
   locale: Locale
   locales: readonly Locale[]
 }

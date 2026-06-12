@@ -3,14 +3,14 @@ import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "../lib/i18n"
 import { getLocalizedServerStatus } from "../lib/server-functions"
 
-interface ServerFunctionResult {
+type ServerFunctionResult = {
   locale: Locale
   localeLabel: string
   handledAt: string
   message: string
 }
 
-interface ServerFunctionProbeProps {
+type ServerFunctionProbeProps = {
   locale: Locale
 }
 
@@ -42,8 +42,8 @@ export function ServerFunctionProbe({ locale }: ServerFunctionProbeProps) {
       </h2>
       <p className="muted">
         <Trans>
-          The text below is returned from a TanStack Start server function after the
-          server resolves the active locale from the request cookie.
+          The text below is returned from a TanStack Start server function after the server resolves
+          the active locale from the request cookie.
         </Trans>
       </p>
       <div className="button-row">

@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 import { createLargeCatalogFixture } from "../benchmarks/large-catalog/fixture.mjs"
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const __dirname = import.meta.dirname
 const repoRoot = path.resolve(__dirname, "..")
 const fixtureRoot = path.join(repoRoot, "benchmarks", "proof-fixtures")
 
@@ -142,13 +142,7 @@ function printResults(results) {
   }
 }
 
-async function runLargeCatalogBenchmark({
-  messageCount,
-  sourceFileCount,
-  warmup,
-  runs,
-  tempDir,
-}) {
+async function runLargeCatalogBenchmark({ messageCount, sourceFileCount, warmup, runs, tempDir }) {
   if (messageCount <= 0) {
     return
   }
@@ -228,12 +222,7 @@ async function runLargeCatalogBenchmark({
   )
   console.log("Fixture generator: benchmarks/large-catalog/fixture.mjs")
   console.log("")
-  printResults([
-    transformResult,
-    extractResult,
-    updateResult,
-    artifactResult,
-  ])
+  printResults([transformResult, extractResult, updateResult, artifactResult])
 }
 
 async function main() {
@@ -327,12 +316,7 @@ async function main() {
     console.log(`Runs: ${runs}`)
     console.log("")
 
-    printResults([
-      transformResult,
-      extractResult,
-      updateResult,
-      artifactResult,
-    ])
+    printResults([transformResult, extractResult, updateResult, artifactResult])
 
     await runLargeCatalogBenchmark({
       messageCount: largeMessages,

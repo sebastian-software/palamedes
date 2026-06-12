@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  getNativeInfo,
-  parsePo,
-  transformMacrosNative,
-} from "./index"
+import { getNativeInfo, parsePo, transformMacrosNative } from "./index"
 
-interface SourceMapLike {
+type SourceMapLike = {
   mappings?: string
   sources?: string[]
   sourcesContent?: Array<string | null>

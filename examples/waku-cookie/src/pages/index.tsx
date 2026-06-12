@@ -46,9 +46,9 @@ export default async function CookiePage() {
         <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
         <p>
           <Trans>
-            This cookie-based Waku example derives the first locale from
-            Accept-Language, persists it with a cookie write endpoint, and keeps
-            server components plus server actions localized.
+            This cookie-based Waku example derives the first locale from Accept-Language, persists
+            it with a cookie write endpoint, and keeps server components plus server actions
+            localized.
           </Trans>
         </p>
         <LocaleSwitcher locale={locale} />

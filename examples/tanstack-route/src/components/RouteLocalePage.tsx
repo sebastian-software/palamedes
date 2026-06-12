@@ -27,9 +27,8 @@ export function RouteLocalePage({
         <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
         <p>
           <Trans>
-            This example proves a route-based locale flow in TanStack Start with
-            SSR, locale segments, host-mapping suggestions, .po imports, and
-            localized server functions.
+            This example proves a route-based locale flow in TanStack Start with SSR, locale
+            segments, host-mapping suggestions, .po imports, and localized server functions.
           </Trans>
         </p>
         {banner ? (
@@ -47,7 +46,8 @@ export function RouteLocalePage({
           <LocaleSwitcher locale={locale} />
         </div>
         <p className="footer-note">
-          <Trans>Current locale:</Trans> <strong data-testid="server-locale-value">{localeLabel}</strong>
+          <Trans>Current locale:</Trans>{" "}
+          <strong data-testid="server-locale-value">{localeLabel}</strong>
         </p>
       </section>
 

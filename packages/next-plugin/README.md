@@ -116,15 +116,18 @@ References: [Next.js Server and Client Components](https://nextjs.org/docs/app/g
 ```js
 const { withPalamedes } = require("@palamedes/next-plugin")
 
-module.exports = withPalamedes({}, {
-  include: /\.(tsx?|jsx?)$/,
-  exclude: /node_modules/,
-  enablePoLoader: true,
-  configPath: "./palamedes.config.ts",
-  failOnMissing: false,
-  failOnCompileError: false,
-  runtimeModule: "@palamedes/runtime",
-})
+module.exports = withPalamedes(
+  {},
+  {
+    include: /\.(tsx?|jsx?)$/,
+    exclude: /node_modules/,
+    enablePoLoader: true,
+    configPath: "./palamedes.config.ts",
+    failOnMissing: false,
+    failOnCompileError: false,
+    runtimeModule: "@palamedes/runtime",
+  }
+)
 ```
 
 ## What This Package Handles

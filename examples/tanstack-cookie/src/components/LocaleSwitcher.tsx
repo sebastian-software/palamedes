@@ -4,7 +4,7 @@ import type { Locale } from "../lib/i18n"
 import { LOCALES, LOCALE_LABELS } from "../lib/i18n"
 import { setLocaleCookie } from "../lib/server-functions"
 
-interface LocaleSwitcherProps {
+type LocaleSwitcherProps = {
   locale: Locale
 }
 

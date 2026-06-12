@@ -78,7 +78,9 @@ async function runCommand(command, args, options) {
       if (code === 0) {
         resolve({ stderr, stdout })
       } else {
-        reject(new Error(`${command} ${args.join(" ")} failed in ${options.cwd} with exit code ${code}`))
+        reject(
+          new Error(`${command} ${args.join(" ")} failed in ${options.cwd} with exit code ${code}`)
+        )
       }
     })
 
@@ -241,7 +243,7 @@ async function main() {
 
     await writeSummaryLine(
       options.summaryFile,
-      `- \`${deployment.id}\` -> [${deployment.url}](${deployment.url}) via \`${deployment.vercelProject}\``,
+      `- \`${deployment.id}\` -> [${deployment.url}](${deployment.url}) via \`${deployment.vercelProject}\``
     )
   }
 

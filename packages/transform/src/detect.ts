@@ -5,7 +5,7 @@
 import { PALAMEDES_MACRO_PACKAGES } from "./types"
 import { walk } from "./ast"
 
-interface ImportInfo {
+type ImportInfo = {
   localName: string
   importedName: string
   source: string
@@ -72,7 +72,6 @@ export function findMacroImports(program: unknown): Map<string, ImportInfo> {
 
   return imports
 }
-
 
 /**
  * Find the import declaration node for a given source

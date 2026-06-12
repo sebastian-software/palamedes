@@ -61,7 +61,10 @@ cover the stable frontend primitives that repeat across apps:
 import { buildLocaleSwitchItems } from "@palamedes/solid"
 import { createClientLocaleEffect } from "@palamedes/solid/client"
 
-function LocaleToolbar(props: { locale: "en" | "de"; sync: (locale: "en" | "de") => void | Promise<void> }) {
+function LocaleToolbar(props: {
+  locale: "en" | "de"
+  sync: (locale: "en" | "de") => void | Promise<void>
+}) {
   createClientLocaleEffect(() => props.locale, props.sync)
 
   const items = () =>

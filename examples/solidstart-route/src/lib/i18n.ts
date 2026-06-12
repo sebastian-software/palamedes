@@ -13,13 +13,7 @@ import { messages as deMessages } from "../locales/de.po"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as esMessages } from "../locales/es.po"
 
-export {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_COOKIE,
-  LOCALE_LABELS,
-  type Locale,
-}
+export { DEFAULT_LOCALE, LOCALES, LOCALE_COOKIE, LOCALE_LABELS, type Locale }
 
 export const ROUTE_HOSTS: HostLocaleConfig = {
   locales: {

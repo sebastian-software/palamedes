@@ -3,14 +3,14 @@ import { Trans } from "@palamedes/solid/macro"
 import { normalizeLocale, syncClientI18n, type Locale } from "../lib/i18n"
 import { getLocalizedServerStatus } from "../lib/server"
 
-interface ServerQueryResult {
+type ServerQueryResult = {
   locale: Locale
   localeLabel: string
   handledAt: string
   message: string
 }
 
-interface ServerQueryProbeProps {
+type ServerQueryProbeProps = {
   locale: Locale
 }
 

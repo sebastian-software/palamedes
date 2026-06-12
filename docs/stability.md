@@ -26,21 +26,21 @@ major/minor/patch sense.
 - **Reserved**: package name or surface intentionally held for future work, with
   no supported adoption path yet.
 
-| Surface | Tier | Notes |
-| --- | --- | --- |
-| `@palamedes/core` runtime API | Stable | `createI18n`, message descriptors, locale activation, and source-message fallback behavior are app-facing. |
-| `@palamedes/runtime` | Stable | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target. |
-| `@palamedes/react` and `@palamedes/solid` | Stable | Runtime components and macro entry points are public app APIs. |
-| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable | Plugin options and `.po` loading behavior are public integration APIs. |
-| `@palamedes/config` | Stable | Config file names, `defineConfig`, and the config schema are public. |
-| `@palamedes/cli` | Stable | Documented commands and flags are public. New commands may appear in minors. |
-| Source-string-first `.po` catalogs | Stable | Message identity is `message + context`. Catalog files remain user-owned. |
-| Macro syntax | Stable | Supported macros remain the authoring model. Unsupported explicit IDs are not a compatibility target. |
-| `@palamedes/core-node` | Preview | It is usable directly, but primarily exists as the JS boundary to the Rust core. Generated type details may change before 1.0. |
-| Platform native packages | Internal | `@palamedes/core-node-*` packages are optional dependency carriers for native binaries. Apps should not import them directly. |
-| `palamedes` and `create-palamedes` | Reserved | Placeholder top-level packages exist, but there is no supported first-run entry yet. |
-| Compiled catalog artifact internals | Preview | Public loaders can consume them; the internal representation may evolve before 1.0. |
-| `crates/*` Rust APIs | Preview | The Rust crates support the Node toolchain today. They are not yet a separately promised public Rust SDK. |
+| Surface                                               | Tier     | Notes                                                                                                                          |
+| ----------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `@palamedes/core` runtime API                         | Stable   | `createI18n`, message descriptors, locale activation, and source-message fallback behavior are app-facing.                     |
+| `@palamedes/runtime`                                  | Stable   | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target.                                   |
+| `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs.                                                                 |
+| `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                         |
+| `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                           |
+| `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                   |
+| Source-string-first `.po` catalogs                    | Stable   | Message identity is `message + context`. Catalog files remain user-owned.                                                      |
+| Macro syntax                                          | Stable   | Supported macros remain the authoring model. Unsupported explicit IDs are not a compatibility target.                          |
+| `@palamedes/core-node`                                | Preview  | It is usable directly, but primarily exists as the JS boundary to the Rust core. Generated type details may change before 1.0. |
+| Platform native packages                              | Internal | `@palamedes/core-node-*` packages are optional dependency carriers for native binaries. Apps should not import them directly.  |
+| `palamedes` and `create-palamedes`                    | Reserved | Placeholder top-level packages exist, but there is no supported first-run entry yet.                                           |
+| Compiled catalog artifact internals                   | Preview  | Public loaders can consume them; the internal representation may evolve before 1.0.                                            |
+| `crates/*` Rust APIs                                  | Preview  | The Rust crates support the Node toolchain today. They are not yet a separately promised public Rust SDK.                      |
 
 ## Stable Surfaces
 

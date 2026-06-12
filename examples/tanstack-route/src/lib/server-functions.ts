@@ -10,13 +10,12 @@ import {
 import { activateServerI18n } from "./i18n.server"
 import { getLocaleLabel, ROUTE_HOSTS, normalizeLocale } from "./i18n"
 
-export const resolveRootRedirect = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const locale = getPreferredLocale(getRequestHeader("accept-language"))
-    throw redirect({
-      to: locale === "de" ? "/de" : locale === "es" ? "/es" : "/en",
-    })
+export const resolveRootRedirect = createServerFn({ method: "GET" }).handler(async () => {
+  const locale = getPreferredLocale(getRequestHeader("accept-language"))
+  throw redirect({
+    to: locale === "de" ? "/de" : locale === "es" ? "/es" : "/en",
   })
+})
 
 export const loadHomePageData = createServerFn({ method: "GET" })
   .inputValidator((data: { locale?: string } | undefined) => ({

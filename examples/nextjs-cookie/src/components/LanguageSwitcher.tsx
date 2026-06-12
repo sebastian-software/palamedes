@@ -10,7 +10,7 @@ const buttonStyle = {
   cursor: "pointer",
 }
 
-interface LanguageSwitcherProps {
+type LanguageSwitcherProps = {
   locale: Locale
   locales: readonly Locale[]
 }

@@ -11,6 +11,7 @@ target/
 coverage/
 docs/example-screenshots/
 benchmarks/*/results/
+packages/core-node/src/generated/
 pnpm-lock.yaml
 Cargo.lock
 *.tsbuildinfo

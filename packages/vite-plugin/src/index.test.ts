@@ -36,7 +36,7 @@ beforeEach(() => {
     diagnostics: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
-  vi.spyOn(console, "warn").mockImplementation(() => undefined)
+  vi.spyOn(console, "warn").mockImplementation(() => {})
 })
 
 describe("palamedes vite plugin", () => {
@@ -44,7 +44,7 @@ describe("palamedes vite plugin", () => {
     const addWatchFile = vi.fn()
     const result = await runPoTransform({ addWatchFile })
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       code: 'export const messages={"greeting":"Hallo"};export default { messages };',
       map: null,
     })
@@ -86,7 +86,9 @@ describe("palamedes vite plugin", () => {
 
     await runPoTransform()
 
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Catalog diagnostics for locale de"))
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Catalog diagnostics for locale de")
+    )
   })
 })
 
@@ -99,7 +101,7 @@ async function runPoTransform(
   const transform = poLoader?.transform
 
   if (typeof transform !== "function") {
-    throw new Error("Expected palamedes:po-loader transform hook")
+    throw new TypeError("Expected palamedes:po-loader transform hook")
   }
 
   return transform.call(

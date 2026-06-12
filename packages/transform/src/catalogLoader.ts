@@ -1,13 +1,13 @@
-export interface CatalogSourceKey {
+export type CatalogSourceKey = {
   message: string
   context?: string
 }
 
-export interface MissingCatalogMessage {
+export type MissingCatalogMessage = {
   sourceKey: CatalogSourceKey
 }
 
-export interface CatalogDiagnostic {
+export type CatalogDiagnostic = {
   severity: "info" | "warning" | "error"
   code: string
   message: string
@@ -15,13 +15,13 @@ export interface CatalogDiagnostic {
   locale: string
 }
 
-export interface CatalogCompileArtifactResult {
+export type CatalogCompileArtifactResult = {
   messages: Record<string, string>
   missing: MissingCatalogMessage[]
   diagnostics: CatalogDiagnostic[]
 }
 
-export interface CatalogLoaderOptions {
+export type CatalogLoaderOptions = {
   locale: string
   pseudoLocale?: string
   failOnMissing?: boolean
@@ -31,7 +31,7 @@ export interface CatalogLoaderOptions {
   diagnosticsWarningHint?: string
 }
 
-export interface CatalogLoaderResult {
+export type CatalogLoaderResult = {
   code: string
   warnings: string[]
 }
@@ -98,7 +98,10 @@ export function createDiagnosticMessage(locale: string, diagnostics: CatalogDiag
   return `Catalog diagnostics for locale ${locale}:\n\n${lines.join("\n\n")}`
 }
 
-export function createCompileErrorMessage(locale: string, diagnostics: CatalogDiagnostic[]): string {
+export function createCompileErrorMessage(
+  locale: string,
+  diagnostics: CatalogDiagnostic[]
+): string {
   const lines = diagnostics.map((diagnostic) => {
     const source = renderSourceKey(diagnostic.sourceKey)
     return `${diagnostic.message}\nCode: ${diagnostic.code}\nLocale: ${diagnostic.locale}\nSource: ${source}`

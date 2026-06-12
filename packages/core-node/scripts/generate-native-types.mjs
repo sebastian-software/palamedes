@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const scriptDir = import.meta.dirname
 const packageDir = path.resolve(scriptDir, "..")
 const repoRoot = path.resolve(packageDir, "../..")
 const outputPath = path.join(packageDir, "src/generated/palamedes-node-types.ts")

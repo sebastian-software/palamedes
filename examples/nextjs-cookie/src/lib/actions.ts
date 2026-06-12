@@ -4,7 +4,7 @@ import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { defineMessage } from "@palamedes/core/macro"
 import type { MessageDescriptor } from "@palamedes/core"
-import { getLocaleLabel, Locale, LOCALES, LOCALE_COOKIE } from "./i18n"
+import { getLocaleLabel, type Locale, LOCALES, LOCALE_COOKIE } from "./i18n"
 import { createActiveServerI18n } from "./i18n.server"
 
 const serverActionMessage = defineMessage({
@@ -33,6 +33,10 @@ export async function getServerActionProof() {
     locale,
     localeLabel: getLocaleLabel(locale),
     handledAt: new Date().toISOString(),
-    message: i18n._(serverActionMessage.id ?? serverActionMessage.message ?? "", { locale }, serverActionMessage),
+    message: i18n._(
+      serverActionMessage.id ?? serverActionMessage.message ?? "",
+      { locale },
+      serverActionMessage
+    ),
   }
 }

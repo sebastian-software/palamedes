@@ -1,4 +1,4 @@
-export interface I18nInstance {
+export type I18nInstance = {
   _: (...args: any[]) => unknown
   locale?: string
 }
@@ -24,9 +24,7 @@ export function setClientI18n<T extends I18nInstance>(i18n: T): T {
   return i18n
 }
 
-export function setServerI18nGetter<T extends I18nInstance>(
-  getter: ServerI18nGetter<T>
-): void {
+export function setServerI18nGetter<T extends I18nInstance>(getter: ServerI18nGetter<T>): void {
   serverI18nGetter = getter as ServerI18nGetter
 }
 

@@ -54,7 +54,7 @@ async function ensurePortFree(port) {
   }
 
   const startedAt = Date.now()
-  while (Date.now() - startedAt < 2_000) {
+  while (Date.now() - startedAt < 2000) {
     if (getListeningPids(port).length === 0) {
       return
     }
@@ -88,7 +88,7 @@ async function stopCommand(child) {
   } catch {}
 
   const exitPromise = waitForExit(child)
-  const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2_000))
+  const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000))
   await Promise.race([exitPromise, timeoutPromise])
 
   if (child.exitCode !== null || child.signalCode !== null) {
@@ -126,22 +126,22 @@ function runVitest(example, options) {
           PALAMEDES_VERIFY_BASE_URL: `http://127.0.0.1:${example.port}`,
           PALAMEDES_VERIFY_FRAMEWORK: example.framework,
           PALAMEDES_VERIFY_HOST_MISMATCH_URL:
-            example.strategy === "route"
-              ? `http://de.lvh.me:${example.port}/en`
-              : "",
+            example.strategy === "route" ? `http://de.lvh.me:${example.port}/en` : "",
           PALAMEDES_VERIFY_STRATEGY: example.strategy,
           PALAMEDES_CAPTURE_SCREENSHOTS: options.captureScreenshots ? "1" : "0",
           PALAMEDES_SCREENSHOT_DIR: options.screenshotDir,
         },
         stdio: "inherit",
-      },
+      }
     )
 
     child.on("exit", (code) => {
       if (code === 0) {
         resolve()
       } else {
-        reject(new Error(`Vitest browser verification failed for ${example.id} with exit code ${code}`))
+        reject(
+          new Error(`Vitest browser verification failed for ${example.id} with exit code ${code}`)
+        )
       }
     })
   })
@@ -165,7 +165,7 @@ function requestText(port, requestPath) {
             statusCode: response.statusCode ?? 0,
           })
         })
-      },
+      }
     )
 
     request.on("error", reject)

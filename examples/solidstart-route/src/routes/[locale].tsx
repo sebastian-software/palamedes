@@ -10,7 +10,7 @@ import { ServerQueryProbe } from "../components/ServerQueryProbe"
 import { syncClientI18n } from "../lib/i18n"
 import { loadRoutePageData } from "../lib/server"
 
-interface RoutePageData {
+type RoutePageData = {
   banner: {
     description: string
     recommendedUrl: string
@@ -32,18 +32,21 @@ function RoutePageContent(props: { data: RoutePageData }) {
         <h1>{t`Palamedes in SolidStart with one runtime model.`}</h1>
         <p>
           <Trans>
-            This example proves a route-based locale flow in SolidStart with
-            SSR, locale segments, host-mapping suggestions, .po imports, and
-            localized server queries.
+            This example proves a route-based locale flow in SolidStart with SSR, locale segments,
+            host-mapping suggestions, .po imports, and localized server queries.
           </Trans>
         </p>
         {props.data.banner ? (
-          <div class="panel" style={{ "background": "#fff7ed", "border-color": "#d97706" }}>
+          <div class="panel" style={{ background: "#fff7ed", "border-color": "#d97706" }}>
             <p class="kicker">
               <Trans>Locale suggestion</Trans>
             </p>
             <p class="muted">{props.data.banner.description}</p>
-            <a class="button" data-testid="locale-suggestion-cta" href={props.data.banner.recommendedUrl}>
+            <a
+              class="button"
+              data-testid="locale-suggestion-cta"
+              href={props.data.banner.recommendedUrl}
+            >
               <Trans>Switch to the recommended locale</Trans>
             </a>
           </div>

@@ -3,7 +3,7 @@ import type { NativeTransformOptions } from "@palamedes/core-node"
 /**
  * Source map interface (compatible with standard source map format)
  */
-export interface SourceMap {
+export type SourceMap = {
   version: number
   sources: string[]
   sourcesContent?: (string | null)[]
@@ -20,7 +20,7 @@ export type TransformOptions = NativeTransformOptions
 /**
  * Result of a transform operation
  */
-export interface TransformResult {
+export type TransformResult = {
   /**
    * The transformed source code
    */
@@ -54,14 +54,7 @@ export const PALAMEDES_MACRO_PACKAGES = [
 /**
  * JS macro function names
  */
-export const JS_MACROS = [
-  "t",
-  "msg",
-  "defineMessage",
-  "plural",
-  "select",
-  "selectOrdinal",
-] as const
+export const JS_MACROS = ["t", "msg", "defineMessage", "plural", "select", "selectOrdinal"] as const
 
 /**
  * JSX macro component names

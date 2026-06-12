@@ -1,28 +1,28 @@
-export interface MessageTextNode {
+export type MessageTextNode = {
   type: "text"
   value: string
 }
 
-export interface MessageVariableNode {
+export type MessageVariableNode = {
   type: "variable"
   name: string
 }
 
-export interface MessageFormattedArgumentNode {
+export type MessageFormattedArgumentNode = {
   type: "formatted"
   variable: string
   format: "number" | "date" | "time"
   style?: string
 }
 
-export interface MessageChoiceNode {
+export type MessageChoiceNode = {
   type: "choice"
   variable: string
   kind: "plural" | "select" | "selectordinal"
   options: Record<string, MessageNode[]>
 }
 
-export interface MessageTagNode {
+export type MessageTagNode = {
   type: "tag"
   name: string
   children: MessageNode[]
@@ -40,7 +40,7 @@ const numberFormatCache = new Map<string, Intl.NumberFormat>()
 const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>()
 const FORMATTER_CACHE_LIMIT = 64
 
-interface ParserState {
+type ParserState = {
   input: string
   index: number
 }
@@ -281,7 +281,7 @@ function mergeTextNodes(nodes: MessageNode[]): MessageNode[] {
   const merged: MessageNode[] = []
 
   for (const node of nodes) {
-    const last = merged[merged.length - 1]
+    const last = merged.at(-1)
     if (last?.type === "text" && node.type === "text") {
       last.value += node.value
       continue
@@ -301,9 +301,7 @@ function renderNodesToString(
   locale?: string,
   pluralValue?: number
 ): string {
-  return nodes
-    .map((node) => renderNodeToString(node, values, locale, pluralValue))
-    .join("")
+  return nodes.map((node) => renderNodeToString(node, values, locale, pluralValue)).join("")
 }
 
 function renderNodeToString(
@@ -313,18 +311,21 @@ function renderNodeToString(
   pluralValue?: number
 ): string {
   switch (node.type) {
-    case "text":
+    case "text": {
       return pluralValue === undefined ? node.value : replacePound(node.value, pluralValue, locale)
-    case "variable":
+    }
+    case "variable": {
       return stringifyValue(values[node.name])
-    case "formatted":
+    }
+    case "formatted": {
       return formatArgument(node, values[node.variable], locale)
-    case "tag":
+    }
+    case "tag": {
       return renderNodesToString(node.children, values, locale, pluralValue)
+    }
     case "choice": {
       const value = values[node.variable]
-      const nextPluralValue =
-        node.kind === "select" ? pluralValue : normalizeNumericValue(value)
+      const nextPluralValue = node.kind === "select" ? pluralValue : normalizeNumericValue(value)
       return renderNodesToString(selectChoice(node, value, locale), values, locale, nextPluralValue)
     }
   }
@@ -352,7 +353,10 @@ function formatArgument(
   return getDateTimeFormatter(locale, node.format, node.style).format(dateValue)
 }
 
-function getNumberFormatter(locale: string | undefined, style: string | undefined): Intl.NumberFormat {
+function getNumberFormatter(
+  locale: string | undefined,
+  style: string | undefined
+): Intl.NumberFormat {
   const cacheKey = `${locale ?? ""}\0${style ?? ""}`
   const cached = numberFormatCache.get(cacheKey)
   if (cached) {
@@ -418,9 +422,7 @@ function getDateTimeFormatter(
   }
 
   const options: Intl.DateTimeFormatOptions =
-    format === "date"
-      ? { dateStyle: normalizedStyle }
-      : { timeStyle: normalizedStyle }
+    format === "date" ? { dateStyle: normalizedStyle } : { timeStyle: normalizedStyle }
   const formatter = new Intl.DateTimeFormat(locale, options)
   return rememberFormatter(dateTimeFormatCache, cacheKey, formatter)
 }
@@ -452,7 +454,9 @@ function selectChoice(node: MessageChoiceNode, value: unknown, locale?: string):
     localeMatcher: "best fit",
     type: node.kind === "selectordinal" ? "ordinal" : "cardinal",
   })
-  const resolvedRules = locale ? new Intl.PluralRules(locale, { type: node.kind === "selectordinal" ? "ordinal" : "cardinal" }) : pluralRules
+  const resolvedRules = locale
+    ? new Intl.PluralRules(locale, { type: node.kind === "selectordinal" ? "ordinal" : "cardinal" })
+    : pluralRules
   const category = resolvedRules.select(numericValue)
   return node.options[category] ?? node.options.other ?? []
 }

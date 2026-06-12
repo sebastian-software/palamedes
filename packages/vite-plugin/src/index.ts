@@ -8,10 +8,7 @@
 import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter } from "vite"
-import {
-  loadPalamedesConfig,
-  type LoadedPalamedesConfig,
-} from "@palamedes/config"
+import { loadPalamedesConfig, type LoadedPalamedesConfig } from "@palamedes/config"
 import { compileCatalogArtifact } from "@palamedes/core-node"
 import { createCatalogLoaderResult } from "@palamedes/transform/catalog-loader"
 import { transformPalamedesMacros } from "@palamedes/transform"
@@ -24,7 +21,7 @@ function stripQuery(id: string): string {
   return id.split("?")[0] ?? id
 }
 
-export interface PalamedesPluginOptions {
+export type PalamedesPluginOptions = {
   /**
    * Pattern to include files for transformation.
    * @default /\.(tsx?|jsx?|mjs|cjs)$/
@@ -181,9 +178,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
       // Quick check: skip if no macro imports
       const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES)
-      const hasAnyMacroImport = Array.from(ids).some((macroId) =>
-        code.includes(macroId)
-      )
+      const hasAnyMacroImport = [...ids].some((macroId) => code.includes(macroId))
       if (!hasAnyMacroImport) {
         return null
       }

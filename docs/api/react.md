@@ -34,12 +34,7 @@ Runtime components read the active i18n instance through
 
 ```tsx
 import { Trans } from "@palamedes/react"
-
-<Trans
-  id="footer"
-  message="Powered by <0>Palamedes</0>"
-  components={{ 0: <strong /> }}
-/>
+;<Trans id="footer" message="Powered by <0>Palamedes</0>" components={{ 0: <strong /> }} />
 ```
 
 For authoring source strings, prefer macro imports from

@@ -14,14 +14,7 @@ import { messages as deMessages } from "../locales/de.po"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as esMessages } from "../locales/es.po"
 
-export {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_LABELS,
-  isLocale,
-  normalizeLocale,
-  type Locale,
-}
+export { DEFAULT_LOCALE, LOCALES, LOCALE_LABELS, isLocale, normalizeLocale, type Locale }
 
 export const HOSTS: HostLocaleConfig = {
   locales: {
@@ -64,10 +57,7 @@ export function syncClientI18n(locale: Locale) {
   return clientI18n
 }
 
-export function createBanner(
-  headers: Record<string, string | undefined>,
-  locale: Locale
-) {
+export function createBanner(headers: Record<string, string | undefined>, locale: Locale) {
   return createRouteLocaleBanner({
     acceptLanguageHeader: headers["accept-language"],
     currentLocale: locale,

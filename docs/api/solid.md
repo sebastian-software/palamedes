@@ -29,8 +29,7 @@ Runtime components read the active i18n instance through
 
 ```tsx
 import { Trans } from "@palamedes/solid"
-
-<Trans id="title" message="Welcome to Palamedes" />
+;<Trans id="title" message="Welcome to Palamedes" />
 ```
 
 For source authoring, prefer macro imports from `@palamedes/solid/macro`.

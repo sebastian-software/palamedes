@@ -3,7 +3,7 @@ import type { Accessor } from "solid-js"
 
 export function createClientLocaleEffect<TLocale>(
   localeAccessor: Accessor<TLocale>,
-  sync: (locale: TLocale) => unknown,
+  sync: (locale: TLocale) => unknown
 ): void {
   let lastLocale = localeAccessor()
   void sync(lastLocale)

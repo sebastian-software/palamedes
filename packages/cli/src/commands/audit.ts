@@ -1,15 +1,12 @@
 import chalk from "chalk"
-import {
-  loadPalamedesConfig,
-  type LoadedPalamedesConfig,
-} from "@palamedes/config"
+import { loadPalamedesConfig, type LoadedPalamedesConfig } from "@palamedes/config"
 import {
   auditCatalogs,
   type CatalogAuditDiagnostic,
   type CatalogAuditResult,
 } from "@palamedes/core-node"
 
-interface AuditOptions {
+type AuditOptions = {
   config?: string
   locale?: string[]
   json?: boolean
@@ -81,12 +78,15 @@ function groupByCatalog(diagnostics: CatalogAuditDiagnostic[]) {
 
 function formatSeverity(severity: CatalogAuditDiagnostic["severity"]): string {
   switch (severity) {
-    case "error":
+    case "error": {
       return chalk.red("[error]")
-    case "warning":
+    }
+    case "warning": {
       return chalk.yellow("[warning]")
-    case "info":
+    }
+    case "info": {
       return chalk.blue("[info]")
+    }
   }
 }
 
@@ -95,9 +95,7 @@ function formatSource(diagnostic: CatalogAuditDiagnostic): string {
     return ""
   }
 
-  const context = diagnostic.sourceKey.context
-    ? ` [context: ${diagnostic.sourceKey.context}]`
-    : ""
+  const context = diagnostic.sourceKey.context ? ` [context: ${diagnostic.sourceKey.context}]` : ""
   return chalk.gray(`\n    Source: ${diagnostic.sourceKey.message}${context}`)
 }
 
@@ -117,10 +115,7 @@ function normalizeFailOn(value: AuditOptions["failOn"]): "error" | "warning" {
   throw new Error("Invalid --fail-on value. Expected `error` or `warning`.")
 }
 
-function createFailureMessage(
-  result: CatalogAuditResult,
-  failOn: "error" | "warning"
-): string {
+function createFailureMessage(result: CatalogAuditResult, failOn: "error" | "warning"): string {
   if (failOn === "warning") {
     return `Catalog audit failed with ${result.summary.errors} error(s) and ${result.summary.warnings} warning(s).`
   }

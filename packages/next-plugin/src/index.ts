@@ -12,7 +12,7 @@ import type { NextConfig } from "next"
 
 const require = createRequire(import.meta.url)
 
-export interface WithPalamedesOptions {
+export type WithPalamedesOptions = {
   /**
    * Pattern to include files for transformation.
    * @default /\.(tsx?|jsx?)$/
@@ -74,18 +74,18 @@ function resolveWorkspaceRoot(explicitRoot?: string) {
     const packageJsonPath = path.join(currentDir, "package.json")
 
     if (
-      hasWorkspaces(packageJsonPath)
-      || existsSync(path.join(currentDir, "pnpm-workspace.yaml"))
-      || existsSync(path.join(currentDir, "pnpm-workspace.yml"))
-      || existsSync(path.join(currentDir, "turbo.json"))
-      || existsSync(path.join(currentDir, ".git"))
+      hasWorkspaces(packageJsonPath) ||
+      existsSync(path.join(currentDir, "pnpm-workspace.yaml")) ||
+      existsSync(path.join(currentDir, "pnpm-workspace.yml")) ||
+      existsSync(path.join(currentDir, "turbo.json")) ||
+      existsSync(path.join(currentDir, ".git"))
     ) {
       return currentDir === initialDir ? undefined : currentDir
     }
 
     const parentDir = path.dirname(currentDir)
     if (parentDir === currentDir) {
-      return undefined
+      return
     }
     currentDir = parentDir
   }
@@ -106,9 +106,9 @@ function hasWorkspaces(packageJsonPath: string) {
     }
 
     if (
-      packageJson.workspaces
-      && typeof packageJson.workspaces === "object"
-      && Array.isArray((packageJson.workspaces as { packages?: unknown }).packages)
+      packageJson.workspaces &&
+      typeof packageJson.workspaces === "object" &&
+      Array.isArray((packageJson.workspaces as { packages?: unknown }).packages)
     ) {
       return (packageJson.workspaces as { packages: unknown[] }).packages.length > 0
     }
@@ -150,16 +150,12 @@ export function withPalamedes(
   const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)
   const configuredTurbopackRoot = baseConfig.turbopack?.root ?? workspaceRoot
   const outputFileTracingRoot =
-    baseConfig.outputFileTracingRoot
-    ?? (typeof configuredTurbopackRoot === "string" ? configuredTurbopackRoot : undefined)
+    baseConfig.outputFileTracingRoot ??
+    (typeof configuredTurbopackRoot === "string" ? configuredTurbopackRoot : undefined)
 
   // Resolve loader paths
-  const oxcLoaderPath = require.resolve(
-    "@palamedes/next-plugin/palamedes-loader"
-  )
-  const poLoaderPath = require.resolve(
-    "@palamedes/next-plugin/palamedes-po-loader"
-  )
+  const oxcLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-loader")
+  const poLoaderPath = require.resolve("@palamedes/next-plugin/palamedes-po-loader")
   const poLoaderOptions = {
     failOnMissing,
     failOnCompileError,

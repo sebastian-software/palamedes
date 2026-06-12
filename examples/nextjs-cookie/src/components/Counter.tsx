@@ -9,7 +9,14 @@ export function Counter() {
 
   return (
     <section style={{ marginTop: "2rem" }}>
-      <p style={{ color: "#666", textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "0.75rem" }}>
+      <p
+        style={{
+          color: "#666",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          fontSize: "0.75rem",
+        }}
+      >
         <Trans>Client interaction</Trans>
       </p>
       <h2>

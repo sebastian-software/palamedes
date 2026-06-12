@@ -2,7 +2,7 @@ import { buildLocaleSwitchItems } from "@palamedes/react"
 import type { Locale } from "../lib/i18n"
 import { LOCALES, LOCALE_LABELS } from "../lib/i18n"
 
-interface LocaleSwitcherProps {
+type LocaleSwitcherProps = {
   locale: Locale
 }
 
