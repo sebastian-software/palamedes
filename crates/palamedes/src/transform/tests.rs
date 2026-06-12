@@ -294,6 +294,32 @@ fn keeps_choice_jsx_macro_as_expression_outside_jsx_children() {
 }
 
 #[test]
+fn keeps_choice_jsx_macro_as_expression_in_jsx_attribute_container() {
+    let result = transform_macros(
+        "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Summary label={<Plural value={count} one=\"# item\" other=\"# items\" />} />;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("label={getI18n()._(\""));
+    assert!(!result.code.contains("label={{getI18n()._(\""));
+}
+
+#[test]
+fn keeps_choice_jsx_macro_as_expression_in_jsx_child_expression_container() {
+    let result = transform_macros(
+        "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Summary>{show && <Plural value={count} one=\"# item\" other=\"# items\" />}</Summary>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("{show && getI18n()._(\""));
+    assert!(!result.code.contains("{show && {getI18n()._(\""));
+}
+
+#[test]
 fn rejects_explicit_ids() {
     let error = transform_macros(
         "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ id: \"greeting\", message: \"Hello\" });\n",
