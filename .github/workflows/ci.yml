@@ -49,7 +49,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check release package set
-        if: matrix.full
+        if: ${{ matrix.full }}
         run: pnpm check:release-set
 
       - name: Build packages
@@ -57,12 +57,12 @@ jobs:
 
       - name: Smoke-test native binding load
         if: ${{ !matrix.full }}
-        run: node -e "const core = require('@palamedes/core-node'); if (typeof core.transform !== 'function') process.exit(1)"
+        run: pnpm --filter @palamedes/core-node exec node -e "const core = require('./dist/index.cjs'); if (typeof core.transformMacrosNative !== 'function') process.exit(1)"
 
       - name: Run tests
-        if: matrix.full
+        if: ${{ matrix.full }}
         run: pnpm test
 
       - name: Check types
-        if: matrix.full
+        if: ${{ matrix.full }}
         run: pnpm check-types
