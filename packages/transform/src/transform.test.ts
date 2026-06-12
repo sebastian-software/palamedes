@@ -58,6 +58,35 @@ const msg = t({ message: "Hello", context: "informal", comment: "A greeting" });
     expect(result.code).not.toContain('id: "greeting"')
   })
 
+  it("forwards descriptor macro values object literals", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+const msg = t({ message: "Hello {name}" }, { name });
+`
+    const result = transformPalamedesMacros(code, "test.ts")
+
+    expect(result.code).toContain('message: "Hello {name}"')
+    expect(result.code).toContain("{ name }")
+  })
+
+  it("rejects descriptor macro values missing message placeholders", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+const msg = t({ message: "Hello {name}" }, { naem: user.name });
+`
+
+    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/Missing value\(s\): name/)
+  })
+
+  it("rejects descriptor macro values not used by the message", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+const msg = t({ message: "Hello" }, { name });
+`
+
+    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/extra value\(s\): name/)
+  })
+
   it("transforms defineMessage to a descriptor with an internal lookup key", () => {
     const code = `
 import { defineMessage } from "@palamedes/core/macro";

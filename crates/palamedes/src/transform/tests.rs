@@ -332,6 +332,43 @@ fn rejects_explicit_ids() {
 }
 
 #[test]
+fn descriptor_call_forwards_values_object() {
+    let result = transform_macros(
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello {name}\" }, { name });\n",
+        "test.ts",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("message: \"Hello {name}\""));
+    assert!(result.code.contains(", { name },"));
+}
+
+#[test]
+fn descriptor_call_rejects_missing_values() {
+    let error = transform_macros(
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello {name}\" }, { naem: user.name });\n",
+        "test.ts",
+        None,
+    )
+    .expect_err("placeholder mismatch should fail");
+
+    assert!(error.to_string().contains("Missing value(s): name"));
+}
+
+#[test]
+fn descriptor_call_rejects_extra_values() {
+    let error = transform_macros(
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello\" }, { name });\n",
+        "test.ts",
+        None,
+    )
+    .expect_err("extra values should fail");
+
+    assert!(error.to_string().contains("extra value(s): name"));
+}
+
+#[test]
 fn rejects_unnamed_template_placeholders() {
     let error = transform_macros(
         "import { t } from \"@palamedes/core/macro\";\nconst msg = t`Hello ${firstName + lastName}`;\n",
