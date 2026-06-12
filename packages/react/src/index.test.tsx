@@ -42,6 +42,18 @@ describe("@palamedes/react", () => {
     expect(html).toBe("2 items")
   })
 
+  it("renders formatted ICU arguments through Trans", () => {
+    const i18n = createI18n()
+    i18n.activate("en-US")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <Trans id="total" message="Total: {amount, number, ::currency/EUR}" values={{ amount: 12.3 }} />
+    )
+
+    expect(html).toBe(`Total: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" }).format(12.3)}`)
+  })
+
   it("builds locale switch items headlessly", () => {
     expect(
       buildLocaleSwitchItems({
