@@ -18,7 +18,7 @@ function resolveInitialLocale() {
 }
 
 function ClientEntry() {
-  syncClientI18n(resolveInitialLocale())
+  void syncClientI18n(resolveInitialLocale())
   return <StartClient />
 }
 
