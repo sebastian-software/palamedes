@@ -114,7 +114,7 @@ async function benchmark(name, fn, warmup, runs) {
   }
 }
 
-async function writeCatalogs({ benchmarkLocaleDir, compileResourcePath, messages }) {
+function writeCatalogs({ benchmarkLocaleDir, compileResourcePath, messages }) {
   updateCatalogFile({
     targetPath: path.join(benchmarkLocaleDir, "en.po"),
     locale: "en",
@@ -161,7 +161,7 @@ async function runLargeCatalogBenchmark({
   const totalBytes = largeFixture.fixtures.reduce((sum, fixture) => sum + fixture.source.length, 0)
 
   await mkdir(benchmarkLocaleDir, { recursive: true })
-  await writeCatalogs({
+  writeCatalogs({
     benchmarkLocaleDir,
     compileResourcePath,
     messages: largeFixture.messages,
@@ -251,7 +251,7 @@ async function main() {
 
   await mkdir(benchmarkLocaleDir, { recursive: true })
 
-  await writeCatalogs({
+  writeCatalogs({
     benchmarkLocaleDir,
     compileResourcePath,
     messages,

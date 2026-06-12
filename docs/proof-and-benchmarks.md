@@ -52,7 +52,7 @@ The benchmark flow here focuses on the operations Palamedes claims to improve:
 - catalog artifact compile
 
 It uses a checked-in fixture corpus under
-[`benchmarks/proof-fixtures`](/Users/sebastian/Workspace/business/palamedes/benchmarks/proof-fixtures),
+[`benchmarks/proof-fixtures`](../benchmarks/proof-fixtures),
 not runnable demo applications.
 
 ## Exact Commands
@@ -150,7 +150,7 @@ That gives the benchmark:
 - catalog artifact compilation on plain checked-in source fixtures
 
 Large-catalog runs use a deterministic generator under
-[`benchmarks/large-catalog`](/Users/sebastian/Workspace/business/palamedes/benchmarks/large-catalog)
+[`benchmarks/large-catalog`](../benchmarks/large-catalog)
 instead of checking in a 10k or 50k message catalog. The generator creates
 synthetic TSX source files and matching catalog message metadata so the same
 run can measure:
