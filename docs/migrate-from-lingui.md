@@ -36,13 +36,13 @@ Wait if you need:
 
 ## Breaking Changes At A Glance
 
-| Topic | Lingui-leaning code | Palamedes target |
-| --- | --- | --- |
-| Runtime access | Multiple historical access paths | `getI18n()` |
-| Message identity | Public API may mix source strings and explicit `id` | `message + context` only |
-| Extraction | Lingui CLI / Babel-oriented flows | `pmds extract` |
-| Catalog semantics | Historically mixed stack responsibilities | Source-first + `ferrocat` |
-| Host integration | Lingui adapters | `@palamedes/vite-plugin` / `@palamedes/next-plugin` |
+| Topic             | Lingui-leaning code                                 | Palamedes target                                    |
+| ----------------- | --------------------------------------------------- | --------------------------------------------------- |
+| Runtime access    | Multiple historical access paths                    | `getI18n()`                                         |
+| Message identity  | Public API may mix source strings and explicit `id` | `message + context` only                            |
+| Extraction        | Lingui CLI / Babel-oriented flows                   | `pmds extract`                                      |
+| Catalog semantics | Historically mixed stack responsibilities           | Source-first + `ferrocat`                           |
+| Host integration  | Lingui adapters                                     | `@palamedes/vite-plugin` / `@palamedes/next-plugin` |
 
 ## What Usually Stays The Same
 
@@ -238,33 +238,41 @@ ICU diagnostics with the current native core and `ferrocat`.
 ### "No active client i18n instance"
 
 Cause:
+
 - transformed code is running before `setClientI18n(...)`
 
 Fix:
+
 - register the active client instance during app startup before translated UI renders
 
 ### "No active server i18n instance"
 
 Cause:
+
 - server-side translated code runs before `setServerI18nGetter(...)`
 
 Fix:
+
 - expose the request-local i18n instance through `@palamedes/runtime`
 
 ### Extraction works, but translations do not render
 
 Cause:
+
 - catalogs exist, but the active locale has not loaded messages into the runtime instance
 
 Fix:
+
 - explicitly load and activate locale messages before rendering
 
 ### Explicit `id` usage now fails
 
 Cause:
+
 - Palamedes no longer supports author-facing explicit IDs as a normal path
 
 Fix:
+
 - move to source-string-first descriptors and use `context` when disambiguation is needed
 
 ## What Gets Better After The Move

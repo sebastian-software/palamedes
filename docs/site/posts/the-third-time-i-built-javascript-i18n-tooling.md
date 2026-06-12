@@ -19,8 +19,7 @@ profile lists a Regrello project from October 2024 to September 2025 focused
 on frontend internationalization with Lingui: replacing thousands of hardcoded
 strings with translation macros, building language dictionaries, and putting
 message extraction and compilation into the workflow. Salesforce later
-announced the Regrello acquisition and noted that it completed on October 1,
-2025.
+announced the Regrello acquisition and noted that it completed on October 1, 2025.
 
 That kind of migration work makes the pain concrete.
 

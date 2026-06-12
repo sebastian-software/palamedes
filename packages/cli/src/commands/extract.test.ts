@@ -9,16 +9,13 @@ import { parsePo } from "@palamedes/core-node"
 
 import { extract } from "./extract"
 
-const FIXTURE_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "fixtures/ferrocat-first-test"
-)
+const FIXTURE_DIR = path.resolve(import.meta.dirname, "fixtures/ferrocat-first-test")
 
 const tempDirs: string[] = []
 
 beforeEach(() => {
-  vi.spyOn(console, "log").mockImplementation(() => undefined)
-  vi.spyOn(console, "warn").mockImplementation(() => undefined)
+  vi.spyOn(console, "log").mockImplementation(() => {})
+  vi.spyOn(console, "warn").mockImplementation(() => {})
 })
 
 afterEach(async () => {
@@ -41,20 +38,20 @@ describe("extract", () => {
     })
 
     const deCatalog = normalizePo(await readCatalog(fixtureDir, "de"))
-    expect(findItem(deCatalog.items, "Simple hello")?.msgstr).toEqual(["Einfach hallo"])
+    expect(findItem(deCatalog.items, "Simple hello")?.msgstr).toStrictEqual(["Einfach hallo"])
     expect(findItem(deCatalog.items, "Hello descriptor")).toBeDefined()
     expect(findItem(deCatalog.items, "Computed {last}")).toBeDefined()
     expect(findItem(deCatalog.items, "Context hello", "email.subject")).toBeDefined()
-    expect(
-      findItem(deCatalog.items, "{count, plural, one {# item} other {# items}}")
-    ).toBeDefined()
-    expect(findItem(deCatalog.items, "Repeated origin")?.references).toEqual([
+    expect(findItem(deCatalog.items, "{count, plural, one {# item} other {# items}}")).toBeDefined()
+    expect(findItem(deCatalog.items, "Repeated origin")?.references).toStrictEqual([
       "src/App.tsx:15",
       "src/More.tsx:3",
     ])
 
     const enCatalog = normalizePo(await readCatalog(fixtureDir, "en"))
-    expect(findItem(enCatalog.items, "Hello descriptor")?.msgstr).toEqual(["Hello descriptor"])
+    expect(findItem(enCatalog.items, "Hello descriptor")?.msgstr).toStrictEqual([
+      "Hello descriptor",
+    ])
   })
 
   it("marks obsolete entries by default and removes them when clean is enabled", async () => {
@@ -101,23 +98,23 @@ describe("extract", () => {
       config: path.join(fixtureDir, "palamedes.config.ts"),
     })
 
-    const timingCall = vi.mocked(console.log).mock.calls.find(
-      ([first]) => typeof first === "string" && first.startsWith("__PALAMEDES_TIMINGS__")
-    )
+    const timingCall = vi
+      .mocked(console.log)
+      .mock.calls.find(
+        ([first]) => typeof first === "string" && first.startsWith("__PALAMEDES_TIMINGS__")
+      )
     expect(timingCall).toBeDefined()
 
-    const timing = JSON.parse(
-      String(timingCall?.[0]).slice("__PALAMEDES_TIMINGS__".length)
-    )
+    const timing = JSON.parse(String(timingCall?.[0]).slice("__PALAMEDES_TIMINGS__".length))
     expect(timing).toMatchObject({
       engine: "ferrocat",
       totalMessages: 7,
       totalFiles: 2,
     })
-    expect(timing.globMs).toEqual(expect.any(Number))
-    expect(timing.extractMs).toEqual(expect.any(Number))
-    expect(timing.writeMs).toEqual(expect.any(Number))
-    expect(timing.totalMs).toEqual(expect.any(Number))
+    expect(timing.globMs).toStrictEqual(expect.any(Number))
+    expect(timing.extractMs).toStrictEqual(expect.any(Number))
+    expect(timing.writeMs).toStrictEqual(expect.any(Number))
+    expect(timing.totalMs).toStrictEqual(expect.any(Number))
   })
 })
 
@@ -147,10 +144,8 @@ function normalizePo(content: string) {
   return { items }
 }
 
-function findItem(
-  items: ReturnType<typeof normalizePo>["items"],
-  msgid: string,
-  msgctxt?: string
-) {
-  return items.find((item) => item.msgid === msgid && (msgctxt === undefined || item.msgctxt === msgctxt))
+function findItem(items: ReturnType<typeof normalizePo>["items"], msgid: string, msgctxt?: string) {
+  return items.find(
+    (item) => item.msgid === msgid && (msgctxt === undefined || item.msgctxt === msgctxt)
+  )
 }

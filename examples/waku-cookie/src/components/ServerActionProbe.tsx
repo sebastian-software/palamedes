@@ -1,4 +1,4 @@
-'use client';
+"use client"
 
 import { useEffect, useState, useTransition } from "react"
 import { useClientLocale } from "@palamedes/react/client"
@@ -36,7 +36,11 @@ export const ServerActionProbe = ({
 
   return (
     <section className="panel">
-      {isHydrated ? <span aria-hidden="true" data-testid="client-ready" style={{ display: "none" }}>ready</span> : null}
+      {isHydrated ? (
+        <span aria-hidden="true" data-testid="client-ready" style={{ display: "none" }}>
+          ready
+        </span>
+      ) : null}
       <p className="kicker">
         <Trans>Server action proof</Trans>
       </p>
@@ -45,11 +49,17 @@ export const ServerActionProbe = ({
       </h2>
       <p className="muted">
         <Trans>
-          This button calls a Waku server action that returns localized text for
-          the locale active on the current request.
+          This button calls a Waku server action that returns localized text for the locale active
+          on the current request.
         </Trans>
       </p>
-      <button className="button" data-testid="server-proof-trigger" disabled={isPending} onClick={handleProbe} type="button">
+      <button
+        className="button"
+        data-testid="server-proof-trigger"
+        disabled={isPending}
+        onClick={handleProbe}
+        type="button"
+      >
         <Trans>Ask server for localized status</Trans>
       </button>
       {result ? (

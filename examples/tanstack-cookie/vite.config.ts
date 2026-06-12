@@ -4,9 +4,5 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [
-    tanstackStart(),
-    palamedes(),
-    react(),
-  ],
+  plugins: [tanstackStart(), palamedes(), react()],
 })

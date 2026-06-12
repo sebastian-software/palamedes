@@ -19,9 +19,13 @@ describe("createI18n", () => {
     const i18n = createI18n()
     i18n.activate("en")
 
-    expect(i18n._("missing-key", { count: 2 }, { message: "{count, plural, one {# file} other {# files}}" })).toBe(
-      "2 files"
-    )
+    expect(
+      i18n._(
+        "missing-key",
+        { count: 2 },
+        { message: "{count, plural, one {# file} other {# files}}" }
+      )
+    ).toBe("2 files")
   })
 
   it("resolves descriptor ids through the active catalog", () => {
@@ -34,7 +38,10 @@ describe("createI18n", () => {
 
     expect(
       i18n._(
-        { id: "inbox.summary", message: "{count, plural, one {# message} other {# messages}} for {name}" },
+        {
+          id: "inbox.summary",
+          message: "{count, plural, one {# message} other {# messages}} for {name}",
+        },
         { count: 2, name: "Ada" }
       )
     ).toBe("2 Nachrichten fuer Ada")
@@ -46,7 +53,10 @@ describe("createI18n", () => {
 
     expect(
       i18n._(
-        { id: "inbox.summary", message: "{count, plural, one {# message} other {# messages}} for {name}" },
+        {
+          id: "inbox.summary",
+          message: "{count, plural, one {# message} other {# messages}} for {name}",
+        },
         { count: 1, name: "Ada" }
       )
     ).toBe("1 message for Ada")
@@ -62,7 +72,10 @@ describe("createI18n", () => {
 
     expect(
       i18n._(
-        { id: "inbox.summary", message: "{count, plural, one {# message} other {# messages}} for {name}" },
+        {
+          id: "inbox.summary",
+          message: "{count, plural, one {# message} other {# messages}} for {name}",
+        },
         { count: 2, name: "Ada" }
       )
     ).toBe("2 messages for Ada")
@@ -79,7 +92,7 @@ describe("createI18n", () => {
     i18n.activate("de")
 
     expect(i18n._("missing-key", {}, { message: "Fallback" })).toBe("Fallback")
-    expect(missing).toEqual([{ id: "missing-key", locale: "de" }])
+    expect(missing).toStrictEqual([{ id: "missing-key", locale: "de" }])
   })
 
   it("does not report missing messages for loaded empty-string translations", () => {
@@ -96,7 +109,7 @@ describe("createI18n", () => {
     i18n.activate("de")
 
     expect(i18n._("intentionallyEmpty", {}, { message: "Fallback" })).toBe("")
-    expect(missing).toEqual([])
+    expect(missing).toStrictEqual([])
   })
 
   it("reports malformed catalog patterns and falls back to the formatted source message", () => {
@@ -118,9 +131,13 @@ describe("createI18n", () => {
     i18n.activate("de")
 
     expect(
-      i18n._("broken.message", { count: 2 }, { message: "{count, plural, one {# file} other {# files}}" })
+      i18n._(
+        "broken.message",
+        { count: 2 },
+        { message: "{count, plural, one {# file} other {# files}}" }
+      )
     ).toBe("2 files")
-    expect(errors).toEqual([
+    expect(errors).toStrictEqual([
       {
         id: "broken.message",
         locale: "de",
@@ -141,7 +158,7 @@ describe("createI18n", () => {
     expect(i18n._({ message: "{count, plural one {# file} other {# files}}" }, { count: 2 })).toBe(
       "{count, plural one {# file} other {# files}}"
     )
-    expect(errors).toEqual(["{count, plural one {# file} other {# files}}"])
+    expect(errors).toStrictEqual(["{count, plural one {# file} other {# files}}"])
   })
 
   it("keeps rendering resilient when hooks throw", () => {
@@ -175,10 +192,18 @@ describe("createI18n", () => {
     i18n.activate("en")
 
     expect(
-      i18n._("gendered", { gender: "female" }, { message: "{gender, select, male {He} female {She} other {They}}" })
+      i18n._(
+        "gendered",
+        { gender: "female" },
+        { message: "{gender, select, male {He} female {She} other {They}}" }
+      )
     ).toBe("She")
     expect(
-      i18n._("ordinal", { count: 3 }, { message: "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}" })
+      i18n._(
+        "ordinal",
+        { count: 3 },
+        { message: "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}" }
+      )
     ).toBe("3rd")
   })
 
@@ -202,10 +227,15 @@ describe("createI18n", () => {
     i18n.activate("en-US")
 
     expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, {})).toBe("Total: ")
-    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: Number.NaN })).toBe("Total: NaN")
-    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: Number.POSITIVE_INFINITY })).toBe(
-      "Total: Infinity"
-    )
+    expect(
+      i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: Number.NaN })
+    ).toBe("Total: NaN")
+    expect(
+      i18n._(
+        { message: "Total: {amount, number, ::currency/EUR}" },
+        { amount: Number.POSITIVE_INFINITY }
+      )
+    ).toBe("Total: Infinity")
   })
 
   it("formats ICU date and time arguments with locale-aware styles", () => {

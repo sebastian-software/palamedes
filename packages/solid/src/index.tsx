@@ -1,18 +1,23 @@
 import type { JSX } from "solid-js"
 
 import { formatMessagePattern, parseMessagePattern } from "@palamedes/core"
-import type { MessageChoiceNode, MessageDescriptor, MessageNode, PalamedesI18n } from "@palamedes/core"
+import type {
+  MessageChoiceNode,
+  MessageDescriptor,
+  MessageNode,
+  PalamedesI18n,
+} from "@palamedes/core"
 import { getI18n } from "@palamedes/runtime"
 
 type WrapperComponent = (children: JSX.Element) => JSX.Element
 
-export interface TransProps extends MessageDescriptor {
+export type TransProps = {
   id: string
   values?: Record<string, unknown>
   components?: Record<string, WrapperComponent | JSX.Element>
-}
+} & MessageDescriptor
 
-interface ChoiceComponentProps {
+type ChoiceComponentProps = {
   value: string | number
   zero?: string
   one?: string
@@ -22,31 +27,38 @@ interface ChoiceComponentProps {
   other: string
 }
 
-export interface PluralProps extends ChoiceComponentProps {}
+export type PluralProps = {} & ChoiceComponentProps
 
-export interface SelectOrdinalProps extends ChoiceComponentProps {}
+export type SelectOrdinalProps = {} & ChoiceComponentProps
 
-export interface SelectProps {
+export type SelectProps = {
   value: string | number
   other: string
   [key: string]: string | number | undefined
 }
 
-export interface LocaleSwitchItem<TLocale extends string = string> {
+export type LocaleSwitchItem<TLocale extends string = string> = {
   active: boolean
   label: string
   locale: TLocale
   testId: string
 }
 
-export interface BuildLocaleSwitchItemsOptions<TLocale extends string> {
+export type BuildLocaleSwitchItemsOptions<TLocale extends string> = {
   currentLocale: TLocale
   labels?: Partial<Record<TLocale, string>>
   locales: readonly TLocale[]
   testIdPrefix?: string
 }
 
-export function Trans({ id, message, values, components, context, comment }: TransProps): JSX.Element {
+export function Trans({
+  id,
+  message,
+  values,
+  components,
+  context,
+  comment,
+}: TransProps): JSX.Element {
   const i18n = getI18n<PalamedesI18n>()
   const pattern = i18n.getMessage(id, {
     id,
@@ -55,22 +67,36 @@ export function Trans({ id, message, values, components, context, comment }: Tra
     comment,
   })
 
-  return renderNodes(parseMessagePattern(pattern), values ?? {}, components ?? {}, i18n.locale) as unknown as JSX.Element
+  return renderNodes(
+    parseMessagePattern(pattern),
+    values ?? {},
+    components ?? {},
+    i18n.locale
+  ) as unknown as JSX.Element
 }
 
 export function Plural({ value, ...choices }: PluralProps): JSX.Element {
   const i18n = getI18n<PalamedesI18n>()
-  return i18n._({ message: buildChoiceMessage("value", "plural", choices) }, { value }) as JSX.Element
+  return i18n._(
+    { message: buildChoiceMessage("value", "plural", choices) },
+    { value }
+  ) as JSX.Element
 }
 
 export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): JSX.Element {
   const i18n = getI18n<PalamedesI18n>()
-  return i18n._({ message: buildChoiceMessage("value", "selectordinal", choices) }, { value }) as JSX.Element
+  return i18n._(
+    { message: buildChoiceMessage("value", "selectordinal", choices) },
+    { value }
+  ) as JSX.Element
 }
 
 export function Select({ value, ...choices }: SelectProps): JSX.Element {
   const i18n = getI18n<PalamedesI18n>()
-  return i18n._({ message: buildChoiceMessage("value", "select", choices) }, { value }) as JSX.Element
+  return i18n._(
+    { message: buildChoiceMessage("value", "select", choices) },
+    { value }
+  ) as JSX.Element
 }
 
 export function buildLocaleSwitchItems<TLocale extends string>({
@@ -78,7 +104,7 @@ export function buildLocaleSwitchItems<TLocale extends string>({
   labels,
   locales,
   testIdPrefix = "locale-switch",
-}: BuildLocaleSwitchItemsOptions<TLocale>): LocaleSwitchItem<TLocale>[] {
+}: BuildLocaleSwitchItemsOptions<TLocale>): Array<LocaleSwitchItem<TLocale>> {
   return locales.map((locale) => ({
     active: locale === currentLocale,
     label: labels?.[locale] ?? locale,
@@ -90,7 +116,7 @@ export function buildLocaleSwitchItems<TLocale extends string>({
 function buildChoiceMessage(
   variable: string,
   kind: "plural" | "select" | "selectordinal",
-  choices: Record<string, string | number | undefined>,
+  choices: Record<string, string | number | undefined>
 ): string {
   const parts = Object.entries(choices)
     .filter((entry): entry is [string, string] => typeof entry[1] === "string")
@@ -103,9 +129,11 @@ function renderNodes(
   values: Record<string, unknown>,
   components: Record<string, WrapperComponent | JSX.Element>,
   locale?: string,
-  pluralValue?: number,
+  pluralValue?: number
 ): JSX.Element[] {
-  return nodes.flatMap((node, index) => renderNode(node, values, components, index, locale, pluralValue))
+  return nodes.flatMap((node, index) =>
+    renderNode(node, values, components, index, locale, pluralValue)
+  )
 }
 
 function renderNode(
@@ -114,15 +142,22 @@ function renderNode(
   components: Record<string, WrapperComponent | JSX.Element>,
   key: number,
   locale?: string,
-  pluralValue?: number,
+  pluralValue?: number
 ): JSX.Element[] {
   switch (node.type) {
-    case "text":
-      return [pluralValue === undefined ? node.value : node.value.replaceAll("#", formatNumber(pluralValue, locale))]
-    case "variable":
+    case "text": {
+      return [
+        pluralValue === undefined
+          ? node.value
+          : node.value.replaceAll("#", formatNumber(pluralValue, locale)),
+      ]
+    }
+    case "variable": {
       return [renderVariable(values[node.name])]
-    case "formatted":
+    }
+    case "formatted": {
       return [formatMessagePattern(buildFormattedMessage(node), values, locale)]
+    }
     case "tag": {
       const children = renderNodes(node.children, values, components, locale, pluralValue)
       const component = components[node.name]
@@ -139,8 +174,7 @@ function renderNode(
     }
     case "choice": {
       const value = values[node.variable]
-      const nextPluralValue =
-        node.kind === "select" ? pluralValue : normalizeNumericValue(value)
+      const nextPluralValue = node.kind === "select" ? pluralValue : normalizeNumericValue(value)
       const choice = selectChoice(node, value, locale)
       return renderNodes(choice, values, components, locale, nextPluralValue)
     }

@@ -5,14 +5,14 @@ import { Trans } from "@palamedes/react/macro"
 import { getServerActionProof } from "@/lib/actions"
 import type { Locale } from "@/lib/i18n"
 
-interface ServerActionProof {
+type ServerActionProof = {
   locale: Locale
   localeLabel: string
   handledAt: string
   message: string
 }
 
-interface ServerActionProbeProps {
+type ServerActionProbeProps = {
   locale: Locale
 }
 
@@ -29,7 +29,14 @@ export function ServerActionProbe({ locale: _locale }: ServerActionProbeProps) {
 
   return (
     <section style={{ marginTop: "2rem" }}>
-      <p style={{ color: "#666", textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "0.75rem" }}>
+      <p
+        style={{
+          color: "#666",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          fontSize: "0.75rem",
+        }}
+      >
         <Trans>Server action proof</Trans>
       </p>
       <h2>
@@ -37,8 +44,8 @@ export function ServerActionProbe({ locale: _locale }: ServerActionProbeProps) {
       </h2>
       <p style={{ color: "#666" }}>
         <Trans>
-          This button calls a dedicated server action that reads the active locale
-          from the request cookie and returns localized text from the server.
+          This button calls a dedicated server action that reads the active locale from the request
+          cookie and returns localized text from the server.
         </Trans>
       </p>
       <button
@@ -79,7 +86,9 @@ export function ServerActionProbe({ locale: _locale }: ServerActionProbeProps) {
           <dt>
             <Trans>Localized message</Trans>
           </dt>
-          <dd data-testid="server-proof-message" style={{ margin: 0 }}>{result.message}</dd>
+          <dd data-testid="server-proof-message" style={{ margin: 0 }}>
+            {result.message}
+          </dd>
         </dl>
       ) : (
         <p style={{ color: "#666", marginTop: "1rem" }}>

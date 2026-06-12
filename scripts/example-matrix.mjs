@@ -1,7 +1,7 @@
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+export const ROOT = path.resolve(import.meta.dirname, "..")
 
 export const EXAMPLE_MATRIX = [
   {
@@ -156,7 +156,10 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { "accept-language": "de" },
         path: "/",
-        substrings: ["accept-language", "This panel was rendered on the server for locale Deutsch."],
+        substrings: [
+          "accept-language",
+          "This panel was rendered on the server for locale Deutsch.",
+        ],
       },
     ],
   },
@@ -226,10 +229,7 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { "accept-language": "de" },
         path: "/en",
-        substrings: [
-          "Locale suggestion",
-          "Switch to the recommended locale",
-        ],
+        substrings: ["Locale suggestion", "Switch to the recommended locale"],
       },
       {
         headers: { host: "de.lvh.me:4051" },

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-export const DEFAULT_SEED = 20260318
+export const DEFAULT_SEED = 20_260_318
 
 export const PROFILE_DEFINITIONS = {
   small: {
@@ -17,38 +17,11 @@ export const PROFILE_DEFINITIONS = {
 
 const FIXTURE_MESSAGES_PER_FILE = 10
 
-const AREAS = [
-  "queue",
-  "board",
-  "campaign",
-  "ledger",
-  "insight",
-  "portal",
-  "workspace",
-  "release",
-]
+const AREAS = ["queue", "board", "campaign", "ledger", "insight", "portal", "workspace", "release"]
 
-const ACTIONS = [
-  "review",
-  "approve",
-  "sync",
-  "publish",
-  "triage",
-  "archive",
-  "ship",
-  "stage",
-]
+const ACTIONS = ["review", "approve", "sync", "publish", "triage", "archive", "ship", "stage"]
 
-const SURFACES = [
-  "toolbar",
-  "modal",
-  "sidebar",
-  "header",
-  "panel",
-  "summary",
-  "overview",
-  "detail",
-]
+const SURFACES = ["toolbar", "modal", "sidebar", "header", "panel", "summary", "overview", "detail"]
 
 const STATUSES = ["draft", "published", "scheduled", "queued"]
 const DEFAULT_LOCALES = ["en", "de"]
@@ -391,10 +364,7 @@ function toManifestEntry(entry) {
 }
 
 function quotePo(value) {
-  return `"${value
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")}"`
+  return `"${value.replaceAll(/\\/g, "\\\\").replaceAll(/"/g, '\\"').replaceAll(/\n/g, "\\n")}"`
 }
 
 function pick(values, seed, fileIndex, salt) {

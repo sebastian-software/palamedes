@@ -7,7 +7,7 @@ import { useClientLocale } from "@palamedes/react/client"
 import type { Locale } from "@/lib/i18n"
 import { syncClientI18n } from "@/lib/i18n.client"
 
-interface ClientLocaleBoundaryProps {
+type ClientLocaleBoundaryProps = {
   children: ReactNode
   locale: Locale
 }

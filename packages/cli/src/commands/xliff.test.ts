@@ -9,15 +9,12 @@ import { parsePo } from "@palamedes/core-node"
 
 import { exportXliff, importXliff } from "./xliff"
 
-const FIXTURE_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "fixtures/ferrocat-first-test"
-)
+const FIXTURE_DIR = path.resolve(import.meta.dirname, "fixtures/ferrocat-first-test")
 
 const tempDirs: string[] = []
 
 beforeEach(() => {
-  vi.spyOn(console, "log").mockImplementation(() => undefined)
+  vi.spyOn(console, "log").mockImplementation(() => {})
 })
 
 afterEach(async () => {
@@ -58,11 +55,9 @@ msgstr "Betreff hallo"
     expect(xliff).toContain('source-language="en"')
     expect(xliff).toContain('target-language="de"')
     expect(xliff).toContain("<source>Simple hello</source>")
-    expect(xliff).toContain("<target state=\"translated\">Einfach hallo</target>")
+    expect(xliff).toContain('<target state="translated">Einfach hallo</target>')
     expect(xliff).toContain('resname="email.subject"')
-    expect(xliff).toContain(
-      '<note from="palamedes-context">email.subject</note>'
-    )
+    expect(xliff).toContain('<note from="palamedes-context">email.subject</note>')
   })
 
   it("imports translated XLIFF targets back into PO catalogs", async () => {
@@ -81,7 +76,7 @@ msgstr "Betreff hallo"
 
     expect(result.updated).toBe(1)
     const item = findItem(await readCatalog(fixtureDir, "de"), "Simple hello")
-    expect(item?.msgstr).toEqual(["Hallo Agentur"])
+    expect(item?.msgstr).toStrictEqual(["Hallo Agentur"])
     expect(item?.flags.fuzzy).toBe(true)
   })
 
@@ -110,7 +105,7 @@ msgstr "Betreff hallo"
 
     expect(result.updated).toBe(1)
     const item = findItem(await readCatalog(fixtureDir, "de"), "Simple hello")
-    expect(item?.msgstr).toEqual([""])
+    expect(item?.msgstr).toStrictEqual([""])
   })
 
   it("rejects XLIFF original paths outside the configured root", async () => {
@@ -136,9 +131,7 @@ msgstr "Betreff hallo"
 `
     )
 
-    await expect(importXliff(output, { config })).rejects.toThrow(
-      "escapes the configured rootDir"
-    )
+    await expect(importXliff(output, { config })).rejects.toThrow("escapes the configured rootDir")
     await expect(readFile(poPath, "utf8")).resolves.toBe(before)
   })
 
@@ -211,9 +204,7 @@ msgstr[1] "Dateien"
 `
     )
 
-    await expect(importXliff(output, { config })).rejects.toThrow(
-      "Conflicting XLIFF targets"
-    )
+    await expect(importXliff(output, { config })).rejects.toThrow("Conflicting XLIFF targets")
     await expect(readFile(poPath, "utf8")).resolves.toBe(before)
   })
 })
@@ -232,13 +223,8 @@ async function readCatalog(fixtureDir: string, locale: string) {
   return parsed.items
 }
 
-function findItem(
-  items: Awaited<ReturnType<typeof readCatalog>>,
-  msgid: string,
-  msgctxt?: string
-) {
+function findItem(items: Awaited<ReturnType<typeof readCatalog>>, msgid: string, msgctxt?: string) {
   return items.find(
-    (item) =>
-      item.msgid === msgid && (msgctxt === undefined || item.msgctxt === msgctxt)
+    (item) => item.msgid === msgid && (msgctxt === undefined || item.msgctxt === msgctxt)
   )
 }

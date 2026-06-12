@@ -7,16 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { audit } from "./audit"
 
-const FIXTURE_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "fixtures/ferrocat-first-test"
-)
+const FIXTURE_DIR = path.resolve(import.meta.dirname, "fixtures/ferrocat-first-test")
 
 const tempDirs: string[] = []
 
 beforeEach(() => {
-  vi.spyOn(console, "log").mockImplementation(() => undefined)
-  vi.spyOn(console, "error").mockImplementation(() => undefined)
+  vi.spyOn(console, "log").mockImplementation(() => {})
+  vi.spyOn(console, "error").mockImplementation(() => {})
 })
 
 afterEach(async () => {
@@ -39,7 +36,7 @@ describe("audit", () => {
       json: true,
     }).catch((error: unknown) => {
       expect(error).toBeInstanceOf(Error)
-      return undefined
+      return
     })
 
     expect(result).toBeUndefined()

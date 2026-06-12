@@ -16,7 +16,10 @@ import {
 export function meta(_args: Route.MetaArgs) {
   return [
     { title: "React Router Cookie Locale Example" },
-    { name: "description", content: "Cookie-driven Palamedes locale proof for React Router framework mode." },
+    {
+      name: "description",
+      content: "Cookie-driven Palamedes locale proof for React Router framework mode.",
+    },
   ]
 }
 
@@ -26,7 +29,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     locale: resolved.locale,
-    localeLabel: resolved.locale === "de" ? "Deutsch" : resolved.locale === "es" ? "Espanol" : "English",
+    localeLabel:
+      resolved.locale === "de" ? "Deutsch" : resolved.locale === "es" ? "Espanol" : "English",
     renderedAt: new Date().toISOString(),
     source: resolved.source,
   }
@@ -52,7 +56,8 @@ export async function action({ request }: Route.ActionArgs) {
     proof: {
       handledAt: new Date().toISOString(),
       locale: resolved.locale,
-      localeLabel: resolved.locale === "de" ? "Deutsch" : resolved.locale === "es" ? "Espanol" : "English",
+      localeLabel:
+        resolved.locale === "de" ? "Deutsch" : resolved.locale === "es" ? "Espanol" : "English",
       message: t`Server action confirmed locale ${resolved.locale}.`,
     },
   }
@@ -80,9 +85,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
         <p>
           <Trans>
-            This cookie-based React Router example derives the first locale from
-            Accept-Language, persists it in a cookie, and keeps SSR plus route
-            actions localized.
+            This cookie-based React Router example derives the first locale from Accept-Language,
+            persists it in a cookie, and keeps SSR plus route actions localized.
           </Trans>
         </p>
         <div className="button-row">

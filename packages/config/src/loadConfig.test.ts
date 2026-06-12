@@ -74,7 +74,7 @@ describe("loadPalamedesConfig", () => {
 
     expect(config.configPath).toBe(configPath)
     expect(config.pseudoLocale).toBe("pseudo")
-    expect(config.catalogs[0]?.exclude).toEqual(["src/ignore"])
+    expect(config.catalogs[0]?.exclude).toStrictEqual(["src/ignore"])
   })
 
   it("fails validation for invalid config shapes", async () => {

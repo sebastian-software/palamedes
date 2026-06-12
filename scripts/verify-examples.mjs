@@ -67,7 +67,7 @@ async function ensurePortFree(port) {
   }
 
   const startedAt = Date.now()
-  while (Date.now() - startedAt < 2_000) {
+  while (Date.now() - startedAt < 2000) {
     if (getListeningPids(port).length === 0) {
       return
     }
@@ -101,7 +101,7 @@ async function stopCommand(child) {
   } catch {}
 
   const exitPromise = waitForExit(child)
-  const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2_000))
+  const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000))
   await Promise.race([exitPromise, timeoutPromise])
 
   if (child.exitCode !== null || child.signalCode !== null) {
@@ -139,7 +139,7 @@ function requestText(port, requestPath, headers = {}) {
             statusCode: response.statusCode ?? 0,
           })
         })
-      },
+      }
     )
 
     request.on("error", reject)
@@ -184,7 +184,9 @@ async function verifyExample(example) {
       const response = await requestText(example.port, check.path, check.headers)
       for (const substring of check.substrings) {
         if (!response.body.includes(substring)) {
-          throw new Error(`Missing substring "${substring}" in ${example.id} response for ${check.path}`)
+          throw new Error(
+            `Missing substring "${substring}" in ${example.id} response for ${check.path}`
+          )
         }
       }
     }

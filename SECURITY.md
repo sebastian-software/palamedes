@@ -9,10 +9,10 @@ before public disclosure.
 Palamedes currently ships pre-1.0 packages in lockstep. Security fixes target
 the latest released version.
 
-| Version | Supported |
-| --- | --- |
-| Latest 0.x | Yes |
-| Older 0.x | Best effort |
+| Version    | Supported   |
+| ---------- | ----------- |
+| Latest 0.x | Yes         |
+| Older 0.x  | Best effort |
 
 ## Reporting A Vulnerability
 

@@ -30,7 +30,7 @@ beforeEach(() => {
     diagnostics: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
-  vi.spyOn(console, "warn").mockImplementation(() => undefined)
+  vi.spyOn(console, "warn").mockImplementation(() => {})
 
   moduleLoader._load = (request, parent, isMain) => {
     if (request === "@palamedes/config") {
@@ -53,8 +53,10 @@ describe("palamedes-po-loader.cjs", () => {
   it("compiles a PO file into a catalog module and tracks dependencies", async () => {
     const result = await runLoader()
 
-    expect(result.code).toBe('export const messages={"greeting":"Hallo"};export default { messages };')
-    expect(result.dependencies).toEqual(["/repo/src/locales/en.po"])
+    expect(result.code).toBe(
+      'export const messages={"greeting":"Hallo"};export default { messages };'
+    )
+    expect(result.dependencies).toStrictEqual(["/repo/src/locales/en.po"])
     expect(compileCatalogArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
       "/repo/src/locales/de.po"
@@ -69,9 +71,7 @@ describe("palamedes-po-loader.cjs", () => {
       watchFiles: [],
     })
 
-    await expect(runLoader({ failOnMissing: true })).rejects.toThrow(
-      /Missing 1 translation/
-    )
+    await expect(runLoader({ failOnMissing: true })).rejects.toThrow(/Missing 1 translation/)
   })
 
   it("warns diagnostics when compile errors are not fatal", async () => {
@@ -92,7 +92,9 @@ describe("palamedes-po-loader.cjs", () => {
 
     await runLoader()
 
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Catalog diagnostics for locale de"))
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Catalog diagnostics for locale de")
+    )
   })
 
   it("fails compile diagnostics when configured", async () => {

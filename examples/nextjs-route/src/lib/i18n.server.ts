@@ -9,13 +9,7 @@ import {
   type LocaleBanner,
   type LocaleSource,
 } from "@palamedes/example-locale-shared"
-import {
-  createExampleI18n,
-  DEFAULT_LOCALE,
-  type Locale,
-  ROUTE_HOSTS,
-  loadMessages,
-} from "./i18n"
+import { createExampleI18n, DEFAULT_LOCALE, type Locale, ROUTE_HOSTS, loadMessages } from "./i18n"
 
 export async function getRouteLocale(paramsLocale?: string): Promise<{
   banner: LocaleBanner | null
@@ -23,7 +17,8 @@ export async function getRouteLocale(paramsLocale?: string): Promise<{
   source: LocaleSource
 }> {
   const headerStore = await headers()
-  const pathname = paramsLocale && paramsLocale !== DEFAULT_LOCALE ? `/${paramsLocale}` : `/${paramsLocale ?? ""}`
+  const pathname =
+    paramsLocale && paramsLocale !== DEFAULT_LOCALE ? `/${paramsLocale}` : `/${paramsLocale ?? ""}`
   const resolved = resolveRouteLocale({
     acceptLanguageHeader: headerStore.get("accept-language"),
     routeLocale: paramsLocale,

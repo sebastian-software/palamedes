@@ -10,26 +10,26 @@ import {
 } from "@palamedes/config"
 import { parsePo, type ParsedPoItem } from "@palamedes/core-node"
 
-export interface XliffExportOptions {
+export type XliffExportOptions = {
   config?: string
   locale: string
   output: string
 }
 
-export interface XliffImportOptions {
+export type XliffImportOptions = {
   config?: string
   locale?: string
   output?: string
 }
 
-export interface XliffExportResult {
+export type XliffExportResult = {
   outputPath: string
   locale: string
   files: number
   units: number
 }
 
-export interface XliffImportResult {
+export type XliffImportResult = {
   locale: string
   files: number
   units: number
@@ -38,19 +38,19 @@ export interface XliffImportResult {
   skipped: number
 }
 
-interface CatalogExportFile {
+type CatalogExportFile = {
   original: string
   units: XliffUnit[]
 }
 
-interface ParsedXliffFile {
+type ParsedXliffFile = {
   original?: string
   sourceLanguage?: string
   targetLanguage?: string
   units: XliffUnit[]
 }
 
-interface XliffUnit {
+type XliffUnit = {
   id?: string
   source: string
   target?: string
@@ -58,16 +58,14 @@ interface XliffUnit {
   state?: string
 }
 
-interface PoMergeResult {
+type PoMergeResult = {
   content: string
   updated: number
   unchanged: number
   skipped: number
 }
 
-export async function exportXliff(
-  options: XliffExportOptions
-): Promise<XliffExportResult> {
+export async function exportXliff(options: XliffExportOptions): Promise<XliffExportResult> {
   if (!options.locale) {
     throw new Error("Missing required --locale value.")
   }
@@ -159,10 +157,7 @@ export async function importXliff(
     await writeFile(file.targetPath, file.result.content, "utf8")
   }
 
-  console.log(
-    chalk.green("OK"),
-    `Imported ${updated} changed XLIFF unit(s) for ${locale}`
-  )
+  console.log(chalk.green("OK"), `Imported ${updated} changed XLIFF unit(s) for ${locale}`)
 
   return {
     locale,
@@ -174,10 +169,7 @@ export async function importXliff(
   }
 }
 
-function assertConfiguredLocale(
-  config: LoadedPalamedesConfig,
-  locale: string
-): void {
+function assertConfiguredLocale(config: LoadedPalamedesConfig, locale: string): void {
   if (!config.locales.includes(locale)) {
     throw new Error(
       `Locale ${locale} is not configured. Expected one of: ${config.locales.join(", ")}.`
@@ -185,10 +177,7 @@ function assertConfiguredLocale(
   }
 }
 
-function resolveLocaleCatalogPaths(
-  config: LoadedPalamedesConfig,
-  locale: string
-): string[] {
+function resolveLocaleCatalogPaths(config: LoadedPalamedesConfig, locale: string): string[] {
   return (config.catalogs ?? []).map(
     (catalog) => `${resolveCatalogPath(config, catalog.path, locale)}.po`
   )
@@ -221,10 +210,7 @@ function unitId(source: string, context: string | undefined): string {
     .slice(0, 16)
 }
 
-function relativeCatalogPath(
-  config: LoadedPalamedesConfig,
-  catalogPath: string
-): string {
+function relativeCatalogPath(config: LoadedPalamedesConfig, catalogPath: string): string {
   return path.relative(config.rootDir, catalogPath).split(path.sep).join("/")
 }
 
@@ -245,9 +231,7 @@ function formatXliffDocument(
     )
 
     for (const unit of file.units) {
-      const resname = unit.context
-        ? ` resname="${escapeXmlAttribute(unit.context)}"`
-        : ""
+      const resname = unit.context ? ` resname="${escapeXmlAttribute(unit.context)}"` : ""
       lines.push(
         `      <trans-unit id="${escapeXmlAttribute(unit.id ?? unitId(unit.source, unit.context))}"${resname}>`,
         `        <source>${escapeXmlText(unit.source)}</source>`,
@@ -255,9 +239,7 @@ function formatXliffDocument(
       )
 
       if (unit.context) {
-        lines.push(
-          `        <note from="palamedes-context">${escapeXmlText(unit.context)}</note>`
-        )
+        lines.push(`        <note from="palamedes-context">${escapeXmlText(unit.context)}</note>`)
       }
 
       lines.push("      </trans-unit>")
@@ -295,12 +277,8 @@ function parseXliffDocument(content: string): ParsedXliffFile[] {
           id: unitAttrs.id,
           source,
           target: target ? decodeXmlBody(target.body) : undefined,
-          context: contextNote
-            ? decodeXmlBody(contextNote.body)
-            : unitAttrs.resname,
-          state: target
-            ? parseAttributes(target.attributes).state
-            : undefined,
+          context: contextNote ? decodeXmlBody(contextNote.body) : unitAttrs.resname,
+          state: target ? parseAttributes(target.attributes).state : undefined,
         }
       }),
     }
@@ -313,27 +291,20 @@ function parseXliffDocument(content: string): ParsedXliffFile[] {
   return files
 }
 
-function resolveImportLocale(
-  files: ParsedXliffFile[],
-  localeOverride: string | undefined
-): string {
+function resolveImportLocale(files: ParsedXliffFile[], localeOverride: string | undefined): string {
   if (localeOverride) {
     return localeOverride
   }
 
   const locales = new Set(
-    files
-      .map((file) => file.targetLanguage)
-      .filter((locale): locale is string => Boolean(locale))
+    files.map((file) => file.targetLanguage).filter((locale): locale is string => Boolean(locale))
   )
 
   if (locales.size === 1) {
     return [...locales][0]
   }
 
-  throw new Error(
-    "Could not infer import locale from XLIFF target-language. Pass --locale."
-  )
+  throw new Error("Could not infer import locale from XLIFF target-language. Pass --locale.")
 }
 
 function resolveImportTargetPath(
@@ -408,10 +379,7 @@ function mergeXliffUnitsIntoPo(content: string, units: XliffUnit[]): PoMergeResu
     }
 
     updated += 1
-    return setFuzzyFlag(
-      replaceMsgstr(block, update.target),
-      nextNeedsReview
-    )
+    return setFuzzyFlag(replaceMsgstr(block, update.target), nextNeedsReview)
   })
 
   skipped = [...updates.values()].filter((unit) => unit.target !== undefined).length
@@ -436,9 +404,7 @@ function normalizeImportUnits(units: XliffUnit[]): Map<string, XliffUnit> {
       unit.target !== undefined &&
       existing.target !== unit.target
     ) {
-      throw new Error(
-        `Conflicting XLIFF targets for message ${JSON.stringify(unit.source)}.`
-      )
+      throw new Error(`Conflicting XLIFF targets for message ${JSON.stringify(unit.source)}.`)
     }
 
     updates.set(key, {
@@ -447,7 +413,7 @@ function normalizeImportUnits(units: XliffUnit[]): Map<string, XliffUnit> {
       state:
         isNeedsReviewState(existing?.state) || isNeedsReviewState(unit.state)
           ? "needs-review-translation"
-          : unit.state ?? existing?.state,
+          : (unit.state ?? existing?.state),
     })
   }
 
@@ -528,10 +494,10 @@ function formatPoString(keyword: string, value: string): string {
 
 function escapePoString(value: string): string {
   return value
-    .replace(/\\/g, "\\\\")
-    .replace(/\t/g, "\\t")
-    .replace(/\r/g, "\\r")
-    .replace(/"/g, '\\"')
+    .replaceAll(/\\/g, "\\\\")
+    .replaceAll(/\t/g, "\\t")
+    .replaceAll(/\r/g, "\\r")
+    .replaceAll(/"/g, '\\"')
 }
 
 function isNeedsReviewState(state: string | undefined): boolean {
@@ -591,34 +557,29 @@ function parseAttributes(source: string): Record<string, string> {
 
 function decodeXmlBody(value: string): string {
   return decodeXmlEntities(
-    value
-      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-      .replace(/<[^>]+>/g, "")
+    value.replaceAll(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replaceAll(/<[^>]+>/g, "")
   )
 }
 
 function decodeXmlEntities(value: string): string {
   return value
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) =>
+    .replaceAll(/&#x([0-9a-f]+);/gi, (_match, code: string) =>
       String.fromCodePoint(Number.parseInt(code, 16))
     )
-    .replace(/&#(\d+);/g, (_match, code: string) =>
+    .replaceAll(/&#(\d+);/g, (_match, code: string) =>
       String.fromCodePoint(Number.parseInt(code, 10))
     )
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
+    .replaceAll(/&quot;/g, '"')
+    .replaceAll(/&apos;/g, "'")
+    .replaceAll(/&lt;/g, "<")
+    .replaceAll(/&gt;/g, ">")
+    .replaceAll(/&amp;/g, "&")
 }
 
 function escapeXmlText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
+  return value.replaceAll(/&/g, "&amp;").replaceAll(/</g, "&lt;").replaceAll(/>/g, "&gt;")
 }
 
 function escapeXmlAttribute(value: string): string {
-  return escapeXmlText(value).replace(/"/g, "&quot;")
+  return escapeXmlText(value).replaceAll(/"/g, "&quot;")
 }

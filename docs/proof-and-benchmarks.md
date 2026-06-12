@@ -19,16 +19,16 @@ evidence easy to inspect.
 
 ## Current Maturity
 
-| Topic | Current state |
-| --- | --- |
+| Topic                 | Current state                                                                     |
+| --------------------- | --------------------------------------------------------------------------------- |
 | Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring |
-| Supported frameworks | Verified examples for Next.js, TanStack Start, SolidStart, Waku, and React Router |
-| Runtime model | `@palamedes/runtime` with `getI18n()` |
-| Catalog model | Source-string-first, `.po`, `message + context` identity |
-| Native core | Rust + `napi-rs` |
-| Catalog semantics | Delegated to `ferrocat`, including audit and ICU diagnostics |
-| Node requirement | `>=22` |
-| Not yet productized | Top-level `palamedes` install, `create-palamedes` scaffold |
+| Supported frameworks  | Verified examples for Next.js, TanStack Start, SolidStart, Waku, and React Router |
+| Runtime model         | `@palamedes/runtime` with `getI18n()`                                             |
+| Catalog model         | Source-string-first, `.po`, `message + context` identity                          |
+| Native core           | Rust + `napi-rs`                                                                  |
+| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                      |
+| Node requirement      | `>=22`                                                                            |
+| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                        |
 
 ## What Counts As Proof In This Repo
 

@@ -3,7 +3,7 @@ import { plural } from "@palamedes/core/macro"
 import { Trans } from "@palamedes/solid/macro"
 import { syncClientI18n, type Locale } from "../lib/i18n"
 
-interface CounterProps {
+type CounterProps = {
   locale: Locale
 }
 

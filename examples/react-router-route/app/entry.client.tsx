@@ -18,7 +18,7 @@ async function bootstrap() {
       document,
       <StrictMode>
         <HydratedRouter />
-      </StrictMode>,
+      </StrictMode>
     )
   })
 }

@@ -1,6 +1,6 @@
 import { transformPalamedesMacros } from "./transform"
 
-interface SourceMapLike {
+type SourceMapLike = {
   file?: string
   mappings?: string
   sources?: string[]
@@ -27,7 +27,7 @@ const msg = t\`Hello \${name}\`;
 
     expect(result.hasChanged).toBe(true)
     expect(result.code).toContain('getI18n()._("')
-    expect(result.code).toContain('{ name }')
+    expect(result.code).toContain("{ name }")
     expect(result.code).toContain('message: "Hello {name}"')
     expect(result.code).toContain('import { getI18n } from "@palamedes/runtime"')
     expect(result.code).not.toContain("@palamedes/core/macro")
@@ -106,7 +106,7 @@ const msg = defineMessage({ message: "Hello" });
     expect(result.hasChanged).toBe(true)
     expect(result.code).toContain('id: "')
     expect(result.code).toContain('message: "Hello"')
-    expect(result.code).not.toContain('getI18n()._')
+    expect(result.code).not.toContain("getI18n()._")
     expect(result.compiledIds).toHaveLength(1)
   })
 
@@ -120,7 +120,7 @@ const el = <Trans>Hello {name}</Trans>;
     expect(result.code).toContain('import { Trans } from "@palamedes/react"')
     expect(result.code).toContain('<Trans id="')
     expect(result.code).toContain('message={"Hello {name}"}')
-    expect(result.code).toContain('values={{ name }}')
+    expect(result.code).toContain("values={{ name }}")
   })
 
   it("applies native UTF-8 byte edit offsets to JavaScript strings", () => {
@@ -154,9 +154,7 @@ const el = <Trans>Hello <strong>{name}</strong></Trans>;
     expect(result.code).toContain('import { Trans } from "@palamedes/solid"')
     expect(result.code).toContain('<Trans id="')
     expect(result.code).toContain('message={"Hello <0>{name}</0>"}')
-    expect(result.code).toContain(
-      'components={{ 0: (children) => <strong>{children}</strong> }}'
-    )
+    expect(result.code).toContain("components={{ 0: (children) => <strong>{children}</strong> }}")
   })
 
   it("deduplicates same-tag component placeholders", () => {
@@ -179,12 +177,8 @@ const el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
-    expect(result.code).toContain(
-      'message={"<0>A</0> and <1>B</1>"}'
-    )
-    expect(result.code).toContain(
-      "components={{ 0: <strong />, 1: <strong /> }}"
-    )
+    expect(result.code).toContain('message={"<0>A</0> and <1>B</1>"}')
+    expect(result.code).toContain("components={{ 0: <strong />, 1: <strong /> }}")
   })
 
   it("strips the message field when requested", () => {
@@ -199,7 +193,6 @@ const msg = t({ message: "Hello" });
     expect(result.code).toContain('getI18n()._("')
     expect(result.code).not.toContain('message: "Hello"')
   })
-
 
   it("emits parseable JSX for <Trans> messages containing double quotes", () => {
     const code = `
@@ -227,7 +220,7 @@ export function Demo({ totalRows }: { totalRows: number }) {
 
     expect(result.code).toContain('<p>{getI18n()._("')
     expect(result.code).toContain('message: "{totalRows, plural, one {# row} other {# rows}}"')
-    expect(result.code).toContain(')}</p>')
+    expect(result.code).toContain(")}</p>")
   })
 
   it("keeps JSX choice macro replacements as expressions outside JSX children", () => {
@@ -238,7 +231,7 @@ const text = <Plural one="# row" other="# rows" value={totalRows} />;
     const result = transformPalamedesMacros(code, "test.tsx")
 
     expect(result.code).toContain('const text = getI18n()._("')
-    expect(result.code).not.toContain('const text = {getI18n()._')
+    expect(result.code).not.toContain("const text = {getI18n()._")
   })
 
   it("rejects explicit ids in macro authoring", () => {

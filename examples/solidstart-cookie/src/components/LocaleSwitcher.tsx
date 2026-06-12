@@ -2,7 +2,7 @@ import { createSignal, For } from "solid-js"
 import { buildLocaleSwitchItems } from "@palamedes/solid"
 import { LOCALES, LOCALE_COOKIE, LOCALE_LABELS, type Locale } from "../lib/i18n"
 
-interface LocaleSwitcherProps {
+type LocaleSwitcherProps = {
   locale: Locale
 }
 

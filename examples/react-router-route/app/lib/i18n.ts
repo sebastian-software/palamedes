@@ -11,12 +11,7 @@ import {
   type Locale,
 } from "@palamedes/example-locale-shared"
 
-export {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_LABELS,
-  type Locale,
-}
+export { DEFAULT_LOCALE, LOCALES, LOCALE_LABELS, type Locale }
 
 export const ROUTE_HOSTS: HostLocaleConfig = {
   locales: {

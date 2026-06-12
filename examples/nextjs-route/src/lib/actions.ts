@@ -20,6 +20,10 @@ export async function getServerActionProof(locale: Locale) {
     locale,
     localeLabel: getLocaleLabel(locale),
     handledAt: new Date().toISOString(),
-    message: i18n._(serverActionMessage.id ?? serverActionMessage.message ?? "", { locale }, serverActionMessage),
+    message: i18n._(
+      serverActionMessage.id ?? serverActionMessage.message ?? "",
+      { locale },
+      serverActionMessage
+    ),
   }
 }

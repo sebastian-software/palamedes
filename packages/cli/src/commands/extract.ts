@@ -1,5 +1,5 @@
-import { mkdir } from "fs/promises"
-import path from "path"
+import { mkdir } from "node:fs/promises"
+import path from "node:path"
 import chalk from "chalk"
 import { glob } from "glob"
 import { watch } from "chokidar"
@@ -16,7 +16,7 @@ import {
   type CatalogUpdateMessage,
 } from "@palamedes/core-node"
 
-interface ExtractOptions {
+type ExtractOptions = {
   config?: string
   watch?: boolean
   clean?: boolean
@@ -25,7 +25,7 @@ interface ExtractOptions {
 
 const TIMING_MARKER = "__PALAMEDES_TIMINGS__"
 
-interface CatalogExtractionResult {
+type CatalogExtractionResult = {
   messages: CatalogUpdateMessage[]
   fileCount: number
   globMs: number
@@ -116,11 +116,13 @@ async function extractFromCatalog(
   ) || ["**/node_modules/**"]
 
   const globStartedAt = Date.now()
-  const files = (await glob(includePatterns, {
-    ignore: excludePatterns,
-    absolute: true,
-    nodir: true,
-  })).sort(compareFilePaths)
+  const files = (
+    await glob(includePatterns, {
+      ignore: excludePatterns,
+      absolute: true,
+      nodir: true,
+    })
+  ).sort(compareFilePaths)
   const globMs = Date.now() - globStartedAt
 
   if (options.verbose) {
@@ -177,20 +179,14 @@ async function writeCatalog(
   if (options.verbose) {
     console.log(chalk.gray(`  → ${poPath}`))
     for (const diagnostic of result.diagnostics) {
-      console.warn(
-        chalk.yellow("Warning:"),
-        `${diagnostic.code}: ${diagnostic.message}`
-      )
+      console.warn(chalk.yellow("Warning:"), `${diagnostic.code}: ${diagnostic.message}`)
     }
   }
 
   return Date.now() - startedAt
 }
 
-async function runWatchMode(
-  config: LoadedPalamedesConfig,
-  options: ExtractOptions
-): Promise<void> {
+async function runWatchMode(config: LoadedPalamedesConfig, options: ExtractOptions): Promise<void> {
   console.log(chalk.cyan("Watching for changes..."))
 
   // Initial extraction

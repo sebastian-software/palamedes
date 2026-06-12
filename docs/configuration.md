@@ -29,13 +29,13 @@ export default defineConfig({
 
 ## Fields
 
-| Field | Required | Type | Notes |
-| --- | --- | --- | --- |
-| `locales` | Yes | `string[]` | All locale codes known to the project. Must include `sourceLocale`. |
-| `sourceLocale` | Yes | `string` | Locale used by source messages. |
-| `catalogs` | Yes | `PalamedesCatalogConfig[]` | Catalog locations and source scan patterns. |
-| `fallbackLocales` | No | `string[] \| Record<string, string[]>` | Shared or per-locale fallback chain. |
-| `pseudoLocale` | No | `string` | Locale code used for pseudo-localized UI testing. |
+| Field             | Required | Type                                   | Notes                                                               |
+| ----------------- | -------- | -------------------------------------- | ------------------------------------------------------------------- |
+| `locales`         | Yes      | `string[]`                             | All locale codes known to the project. Must include `sourceLocale`. |
+| `sourceLocale`    | Yes      | `string`                               | Locale used by source messages.                                     |
+| `catalogs`        | Yes      | `PalamedesCatalogConfig[]`             | Catalog locations and source scan patterns.                         |
+| `fallbackLocales` | No       | `string[] \| Record<string, string[]>` | Shared or per-locale fallback chain.                                |
+| `pseudoLocale`    | No       | `string`                               | Locale code used for pseudo-localized UI testing.                   |
 
 ## Catalogs
 

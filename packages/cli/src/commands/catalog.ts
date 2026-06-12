@@ -5,7 +5,7 @@ import {
   type CatalogMergeResult,
 } from "@palamedes/core-node"
 
-export interface CatalogMergeOptions {
+export type CatalogMergeOptions = {
   config?: string
   output: string
   format?: string
@@ -71,8 +71,5 @@ async function resolveSourceLocale(options: CatalogMergeOptions): Promise<string
 }
 
 function isMissingConfigError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.startsWith("Could not find a Palamedes config.")
-  )
+  return error instanceof Error && error.message.startsWith("Could not find a Palamedes config.")
 }

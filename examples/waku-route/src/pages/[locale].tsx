@@ -50,9 +50,8 @@ export default async function RoutePage({ locale }: PageProps<"/[locale]">) {
         <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
         <p>
           <Trans>
-            This route-based Waku example keeps locale in the URL, shows host or
-            Accept-Language mismatch hints, and localizes server components plus
-            server actions.
+            This route-based Waku example keeps locale in the URL, shows host or Accept-Language
+            mismatch hints, and localizes server components plus server actions.
           </Trans>
         </p>
         {banner ? (
@@ -68,7 +67,8 @@ export default async function RoutePage({ locale }: PageProps<"/[locale]">) {
         ) : null}
         <LocaleSwitcher locale={currentLocale} />
         <p className="muted" style={{ marginTop: "1rem" }}>
-          <Trans>Current locale:</Trans> <strong data-testid="server-locale-value">{localeLabel}</strong>
+          <Trans>Current locale:</Trans>{" "}
+          <strong data-testid="server-locale-value">{localeLabel}</strong>
         </p>
       </section>
 

@@ -32,9 +32,7 @@ vi.mock("@palamedes/core-node", async () => {
   }
 
   function mergePo(first: string, second: string): string {
-    const known = new Set(
-      [...first.matchAll(/msgid "([^"]*)"/g)].map((match) => match[1])
-    )
+    const known = new Set([...first.matchAll(/msgid "([^"]*)"/g)].map((match) => match[1]))
     const additions = splitEntries(second).filter((entry) => {
       const id = entry.match(/msgid "([^"]*)"/)?.[1]
       return id && id !== "" && !known.has(id)
@@ -43,9 +41,7 @@ vi.mock("@palamedes/core-node", async () => {
   }
 
   function mergeNdjson(first: string, second: string): string {
-    const known = new Set(
-      [...first.matchAll(/"id":"([^"]*)"/g)].map((match) => match[1])
-    )
+    const known = new Set([...first.matchAll(/"id":"([^"]*)"/g)].map((match) => match[1]))
     const additions = second
       .split("\n")
       .filter((line) => line.startsWith("{"))
@@ -70,11 +66,11 @@ vi.mock("@palamedes/core-node", async () => {
   }
 
   return {
-    mergeCatalogFiles: (request: {
+    mergeCatalogFiles(request: {
       inputPaths: string[]
       outputPath: string
       format?: "po" | "json"
-    }) => {
+    }) {
       const format = request.format ?? inferFormat(request.inputPaths, request.outputPath)
       const [firstPath, secondPath] = request.inputPaths
       const first = readFileSync(firstPath, "utf8")
@@ -214,17 +210,13 @@ locale: de
     await writeFile(theirs, '{"id":"Hello","str":"Hallo"}\n')
     await writeFile(output, "unchanged")
 
-    await expect(mergeCatalog([ours, theirs], { output })).rejects.toThrow(
-      "same format"
-    )
+    await expect(mergeCatalog([ours, theirs], { output })).rejects.toThrow("same format")
     await expect(readFile(output, "utf8")).resolves.toBe("unchanged")
   })
 })
 
 async function tempDir(name: string): Promise<string> {
-  const dir = await mkdtemp(
-    path.join(os.tmpdir(), `palamedes-cli-merge-${name}-`)
-  )
+  const dir = await mkdtemp(path.join(os.tmpdir(), `palamedes-cli-merge-${name}-`))
   tempDirs.push(dir)
   return dir
 }

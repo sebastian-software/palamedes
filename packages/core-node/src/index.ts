@@ -69,37 +69,28 @@ export type MachineTranslationMetadata = GeneratedMachineTranslationMetadata
 export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions
 export type CatalogAuditSummary = GeneratedCatalogAuditSummary
 export type CatalogDiagnosticSeverity = "info" | "warning" | "error"
-export type CatalogDiagnostic =
-  Omit<GeneratedCatalogDiagnostic, "severity"> & {
+export type CatalogDiagnostic = Omit<GeneratedCatalogDiagnostic, "severity"> & {
   severity: CatalogDiagnosticSeverity
-  }
-export type CatalogUpdateResult =
-  Omit<GeneratedCatalogUpdateResult, "diagnostics"> & {
+}
+export type CatalogUpdateResult = Omit<GeneratedCatalogUpdateResult, "diagnostics"> & {
   diagnostics: CatalogDiagnostic[]
-  }
-export type CatalogParseResult =
-  Omit<GeneratedCatalogParseResult, "diagnostics"> & {
+}
+export type CatalogParseResult = Omit<GeneratedCatalogParseResult, "diagnostics"> & {
   diagnostics: CatalogDiagnostic[]
-  }
-export type CatalogAuditDiagnostic =
-  Omit<GeneratedCatalogAuditDiagnostic, "severity"> & {
+}
+export type CatalogAuditDiagnostic = Omit<GeneratedCatalogAuditDiagnostic, "severity"> & {
   severity: CatalogDiagnosticSeverity
-  }
-export type CatalogAuditResult =
-  Omit<GeneratedCatalogAuditResult, "diagnostics"> & {
+}
+export type CatalogAuditResult = Omit<GeneratedCatalogAuditResult, "diagnostics"> & {
   diagnostics: CatalogAuditDiagnostic[]
-  }
-export interface CatalogCombineInput {
+}
+export type CatalogCombineInput = {
   content: string
   label?: string
 }
 export type CatalogCombineConflictStrategy = "useFirst" | "useLast" | "error"
-export type CatalogCombineSelection =
-  | "all"
-  | "unique"
-  | { moreThan: number }
-  | { lessThan: number }
-export interface CatalogCombineRequest {
+export type CatalogCombineSelection = "all" | "unique" | { moreThan: number } | { lessThan: number }
+export type CatalogCombineRequest = {
   inputs: CatalogCombineInput[]
   sourceLocale: string
   locale?: string
@@ -107,13 +98,12 @@ export interface CatalogCombineRequest {
   selection?: CatalogCombineSelection
   includeObsolete?: boolean
 }
-export type CatalogCombineResult =
-  Omit<GeneratedCatalogCombineResult, "diagnostics"> & {
+export type CatalogCombineResult = Omit<GeneratedCatalogCombineResult, "diagnostics"> & {
   diagnostics: CatalogDiagnostic[]
-  }
+}
 export type CatalogMergeFormat = "po" | "json"
 export type CatalogMergeStrategy = "useFirst"
-export interface CatalogMergeRequest {
+export type CatalogMergeRequest = {
   inputPaths: string[]
   outputPath: string
   format?: CatalogMergeFormat
@@ -121,12 +111,11 @@ export interface CatalogMergeRequest {
   locale?: string
   strategy?: CatalogMergeStrategy
 }
-export type CatalogMergeResult =
-  Omit<GeneratedCatalogMergeResult, "format" | "diagnostics"> & {
+export type CatalogMergeResult = Omit<GeneratedCatalogMergeResult, "format" | "diagnostics"> & {
   format: CatalogMergeFormat
   diagnostics: CatalogDiagnostic[]
-  }
-export interface CatalogAuditOptions {
+}
+export type CatalogAuditOptions = {
   locales?: string[]
   checks?: CatalogAuditCheckOptions
   metadata?: MessageMetadataInput[]
@@ -140,19 +129,19 @@ export type MessageFormatStyleKind = GeneratedMessageFormatStyleKind
 export type MessageSelectorKind = GeneratedMessageSelectorKind
 export type MessageSelectorMetadata = GeneratedMessageSelectorMetadata
 export type MessageMetadata = GeneratedMessageMetadata
-export type MessageMetadataDiagnostic =
-  Omit<GeneratedMessageMetadataDiagnostic, "severity"> & {
+export type MessageMetadataDiagnostic = Omit<GeneratedMessageMetadataDiagnostic, "severity"> & {
   severity: CatalogDiagnosticSeverity
-  }
-export type MessageMetadataValidationReport =
-  Omit<GeneratedMessageMetadataValidationReport, "diagnostics"> & {
+}
+export type MessageMetadataValidationReport = Omit<
+  GeneratedMessageMetadataValidationReport,
+  "diagnostics"
+> & {
   diagnostics: MessageMetadataDiagnostic[]
-  }
+}
 
-export type NativeExtractedMessage =
-  Omit<GeneratedNativeExtractedMessage, "origin"> & {
+export type NativeExtractedMessage = Omit<GeneratedNativeExtractedMessage, "origin"> & {
   origin: [filename: string, line: number, column?: number]
-  }
+}
 
 export type NativeTransformOptions = GeneratedNativeTransformOptions
 export type NativeTransformEdit = GeneratedNativeTransformEdit
@@ -161,17 +150,16 @@ export type NativeTransformResult = GeneratedNativeTransformResult
 export type CatalogArtifactSourceKey = GeneratedCatalogArtifactSourceKey
 export type CatalogArtifactMissingMessage = GeneratedCatalogArtifactMissingMessage
 export type CatalogArtifactDiagnosticSeverity = "info" | "warning" | "error"
-export type CatalogArtifactDiagnostic =
-  Omit<GeneratedCatalogArtifactDiagnostic, "severity"> & {
+export type CatalogArtifactDiagnostic = Omit<GeneratedCatalogArtifactDiagnostic, "severity"> & {
   severity: CatalogArtifactDiagnosticSeverity
-  }
-export type CatalogArtifactFallbackLocales =
-  NonNullable<GeneratedCatalogArtifactConfig["fallbackLocales"]>
+}
+export type CatalogArtifactFallbackLocales = NonNullable<
+  GeneratedCatalogArtifactConfig["fallbackLocales"]
+>
 export type CatalogArtifactConfig = GeneratedCatalogArtifactConfig
-export type CatalogArtifactResult =
-  Omit<GeneratedCatalogArtifactResult, "diagnostics"> & {
+export type CatalogArtifactResult = Omit<GeneratedCatalogArtifactResult, "diagnostics"> & {
   diagnostics: CatalogArtifactDiagnostic[]
-  }
+}
 
 type NativeBindings = GeneratedNativeBindings
 type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest
@@ -232,19 +220,11 @@ function getNativePackageName(): string {
     return "@palamedes/core-node-linux-x64-musl"
   }
 
-  if (
-    process.platform === "linux" &&
-    process.arch === "arm64" &&
-    detectLinuxLibc() === "gnu"
-  ) {
+  if (process.platform === "linux" && process.arch === "arm64" && detectLinuxLibc() === "gnu") {
     return "@palamedes/core-node-linux-arm64-gnu"
   }
 
-  if (
-    process.platform === "linux" &&
-    process.arch === "arm64" &&
-    detectLinuxLibc() === "musl"
-  ) {
+  if (process.platform === "linux" && process.arch === "arm64" && detectLinuxLibc() === "musl") {
     return "@palamedes/core-node-linux-arm64-musl"
   }
 
@@ -271,7 +251,8 @@ function loadNativeBindings(): NativeBindings {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(
-      `Failed to load Palamedes native bindings from ${nativePackageName} for ${getPlatformTriple()} in package ${packageDir}: ${message}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}.`
+      `Failed to load Palamedes native bindings from ${nativePackageName} for ${getPlatformTriple()} in package ${packageDir}: ${message}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}.`,
+      { cause: error }
     )
   }
 }
@@ -279,15 +260,20 @@ function loadNativeBindings(): NativeBindings {
 const native = loadNativeBindings()
 
 function mapNativeDiagnosticSeverity(
-  severity: GeneratedCatalogArtifactDiagnostic["severity"] | GeneratedCatalogAuditDiagnostic["severity"]
+  severity:
+    | GeneratedCatalogArtifactDiagnostic["severity"]
+    | GeneratedCatalogAuditDiagnostic["severity"]
 ): CatalogDiagnosticSeverity {
   switch (severity) {
-    case "Info":
+    case "Info": {
       return "info"
-    case "Warning":
+    }
+    case "Warning": {
       return "warning"
-    case "Error":
+    }
+    case "Error": {
       return "error"
+    }
   }
 }
 
@@ -336,16 +322,11 @@ export function auditCatalogs(
   }
 }
 
-export function deriveMessageMetadata(
-  message: string,
-  context?: string
-): MessageMetadata {
+export function deriveMessageMetadata(message: string, context?: string): MessageMetadata {
   return native.deriveMessageMetadata(message, context)
 }
 
-export function normalizeMessageMetadata(
-  input: MessageMetadataInput
-): MessageMetadata {
+export function normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata {
   return native.normalizeMessageMetadata(input)
 }
 
@@ -395,12 +376,15 @@ function toNativeConflictStrategy(
   strategy: CatalogCombineConflictStrategy
 ): NonNullable<NativeCatalogCombineRequest["conflictStrategy"]> {
   switch (strategy) {
-    case "useFirst":
+    case "useFirst": {
       return "UseFirst"
-    case "useLast":
+    }
+    case "useLast": {
       return "UseLast"
-    case "error":
+    }
+    case "error": {
       return "Error"
+    }
   }
 }
 
@@ -419,21 +403,23 @@ function toNativeMergeFormat(
   format: CatalogMergeFormat
 ): NonNullable<NativeCatalogMergeRequest["format"]> {
   switch (format) {
-    case "po":
+    case "po": {
       return "Po"
-    case "json":
+    }
+    case "json": {
       return "Json"
+    }
   }
 }
 
-function fromNativeMergeFormat(
-  format: GeneratedCatalogMergeResult["format"]
-): CatalogMergeFormat {
+function fromNativeMergeFormat(format: GeneratedCatalogMergeResult["format"]): CatalogMergeFormat {
   switch (format) {
-    case "Po":
+    case "Po": {
       return "po"
-    case "Json":
+    }
+    case "Json": {
       return "json"
+    }
   }
 }
 
@@ -441,8 +427,9 @@ function toNativeMergeStrategy(
   strategy: CatalogMergeStrategy
 ): NonNullable<NativeCatalogMergeRequest["strategy"]> {
   switch (strategy) {
-    case "useFirst":
+    case "useFirst": {
       return "UseFirst"
+    }
   }
 }
 
@@ -505,10 +492,7 @@ export function compileCatalogArtifactSelected(
   }
 }
 
-export function extractMessagesNative(
-  source: string,
-  filename: string
-): NativeExtractedMessage[] {
+export function extractMessagesNative(source: string, filename: string): NativeExtractedMessage[] {
   return native.extractMessages(source, filename).map((message) => ({
     ...message,
     origin: [message.origin.filename, message.origin.line, message.origin.column],

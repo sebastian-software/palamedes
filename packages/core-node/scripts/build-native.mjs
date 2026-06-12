@@ -3,13 +3,11 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { execFileSync } from "node:child_process"
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const scriptDir = import.meta.dirname
 const packageDir = process.cwd()
 const repoRoot = path.resolve(scriptDir, "../../..")
 
-const packageJson = JSON.parse(
-  readFileSync(path.join(packageDir, "package.json"), "utf8")
-)
+const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"))
 
 const targets = {
   "@palamedes/core-node-darwin-arm64": {
@@ -70,11 +68,18 @@ if (!target) {
 }
 
 if (!cargoTarget && (process.platform !== target.platform || process.arch !== target.arch)) {
-  console.log(`Skipping native build for ${packageJson.name} on ${process.platform}/${process.arch}`)
+  console.log(
+    `Skipping native build for ${packageJson.name} on ${process.platform}/${process.arch}`
+  )
   process.exit(0)
 }
 
-if (!cargoTarget && target.platform === "linux" && target.libc && detectLinuxLibc() !== target.libc) {
+if (
+  !cargoTarget &&
+  target.platform === "linux" &&
+  target.libc &&
+  detectLinuxLibc() !== target.libc
+) {
   console.log(`Skipping native build for ${packageJson.name} due to libc mismatch`)
   process.exit(0)
 }

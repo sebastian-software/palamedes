@@ -5,20 +5,16 @@ import {
   resolveCatalogPath,
   type LoadedPalamedesConfig,
 } from "@palamedes/config"
-import {
-  parsePo,
-  type ParsedPoFile,
-  type ParsedPoItem,
-} from "@palamedes/core-node"
+import { parsePo, type ParsedPoFile, type ParsedPoItem } from "@palamedes/core-node"
 
-export interface ReportOptions {
+export type ReportOptions = {
   config?: string
   locale?: string[]
   json?: boolean
   failIfBelow?: string
 }
 
-export interface LocaleCompletenessReport {
+export type LocaleCompletenessReport = {
   locale: string
   total: number
   translated: number
@@ -27,16 +23,16 @@ export interface LocaleCompletenessReport {
   percent: number
 }
 
-export interface CompletenessReport {
+export type CompletenessReport = {
   locales: LocaleCompletenessReport[]
 }
 
-interface MessageKey {
+type MessageKey = {
   message: string
   context?: string
 }
 
-interface MutableLocaleStats {
+type MutableLocaleStats = {
   locale: string
   total: number
   translated: number
@@ -88,9 +84,7 @@ async function buildReport(
   for (const catalog of config.catalogs) {
     const sourcePath = `${resolveCatalogPath(config, catalog.path, config.sourceLocale)}.po`
     const sourceCatalog = await readCatalog(sourcePath)
-    const sourceMessages = sourceCatalog.items
-      .filter(isReportableMessage)
-      .map(toMessageKey)
+    const sourceMessages = sourceCatalog.items.filter(isReportableMessage).map(toMessageKey)
 
     for (const locale of locales) {
       const localeStats = stats.get(locale)
@@ -109,10 +103,10 @@ async function buildReport(
       const targetCatalog = await readCatalogIfExists(targetPath)
       const targetMessages = targetCatalog
         ? new Map(
-          targetCatalog.items
-            .filter(isReportableMessage)
-            .map((item) => [serializeMessageKey(toMessageKey(item)), item])
-        )
+            targetCatalog.items
+              .filter(isReportableMessage)
+              .map((item) => [serializeMessageKey(toMessageKey(item)), item])
+          )
         : new Map<string, ParsedPoItem>()
 
       for (const sourceMessage of sourceMessages) {
@@ -161,9 +155,7 @@ async function readCatalogIfExists(catalogPath: string): Promise<ParsedPoFile | 
 
 function isFileMissing(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    "code" in error &&
-    (error as NodeJS.ErrnoException).code === "ENOENT"
+    error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT"
   )
 }
 
@@ -186,7 +178,10 @@ function isTranslated(item: ParsedPoItem): boolean {
   return item.msgstr.length > 0 && item.msgstr.every((value) => value.trim().length > 0)
 }
 
-function resolveLocales(config: LoadedPalamedesConfig, selectedLocales: string[] | undefined): string[] {
+function resolveLocales(
+  config: LoadedPalamedesConfig,
+  selectedLocales: string[] | undefined
+): string[] {
   if (selectedLocales && selectedLocales.length > 0) {
     return normalizeLocaleList(selectedLocales)
   }
@@ -226,14 +221,15 @@ function printReport(result: CompletenessReport): void {
     return
   }
 
-  const localeColumnWidth = Math.max(
-    "Locale".length,
-    ...result.locales.map((locale) => locale.locale.length)
-  ) + 2
+  const localeColumnWidth =
+    Math.max("Locale".length, ...result.locales.map((locale) => locale.locale.length)) + 2
 
   console.log(`${"Locale".padEnd(localeColumnWidth)}Translated  Missing  Fuzzy  Complete`)
   for (const locale of result.locales) {
-    const complete = locale.percent === 100 ? chalk.green(formatPercent(locale.percent)) : formatPercent(locale.percent)
+    const complete =
+      locale.percent === 100
+        ? chalk.green(formatPercent(locale.percent))
+        : formatPercent(locale.percent)
     console.log(
       `${locale.locale.padEnd(localeColumnWidth)}${`${locale.translated}/${locale.total}`.padEnd(11)} ${String(locale.missing).padEnd(8)} ${String(locale.fuzzy).padEnd(6)} ${complete}`
     )

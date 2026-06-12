@@ -24,7 +24,10 @@ function getLocaleLabel(locale: Locale) {
 export function meta({ params }: Route.MetaArgs) {
   return [
     { title: `React Router Route Locale Example (${params.locale ?? "en"})` },
-    { name: "description", content: "Route-driven Palamedes locale proof for React Router framework mode." },
+    {
+      name: "description",
+      content: "Route-driven Palamedes locale proof for React Router framework mode.",
+    },
   ]
 }
 
@@ -76,9 +79,8 @@ export default function LocaleHome({ loaderData }: Route.ComponentProps) {
         <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
         <p>
           <Trans>
-            This route-based React Router example keeps locale in the URL,
-            surfaces host or Accept-Language mismatches, and localizes SSR plus
-            route actions.
+            This route-based React Router example keeps locale in the URL, surfaces host or
+            Accept-Language mismatches, and localizes SSR plus route actions.
           </Trans>
         </p>
         {loaderData.banner ? (
@@ -87,7 +89,11 @@ export default function LocaleHome({ loaderData }: Route.ComponentProps) {
               <Trans>Locale suggestion</Trans>
             </p>
             <p className="muted">{loaderData.banner.description}</p>
-            <a className="button" data-testid="locale-suggestion-cta" href={loaderData.banner.recommendedUrl}>
+            <a
+              className="button"
+              data-testid="locale-suggestion-cta"
+              href={loaderData.banner.recommendedUrl}
+            >
               <Trans>Switch to the recommended locale</Trans>
             </a>
           </section>

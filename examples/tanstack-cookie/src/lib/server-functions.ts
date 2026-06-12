@@ -12,18 +12,17 @@ function getResolvedLocale() {
   })
 }
 
-export const loadHomePageData = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const resolved = getResolvedLocale()
-    await activateServerI18n(resolved.locale)
+export const loadHomePageData = createServerFn({ method: "GET" }).handler(async () => {
+  const resolved = getResolvedLocale()
+  await activateServerI18n(resolved.locale)
 
-    return {
-      locale: resolved.locale,
-      localeLabel: getLocaleLabel(resolved.locale),
-      renderedAt: new Date().toISOString(),
-      source: resolved.source,
-    }
-  })
+  return {
+    locale: resolved.locale,
+    localeLabel: getLocaleLabel(resolved.locale),
+    renderedAt: new Date().toISOString(),
+    source: resolved.source,
+  }
+})
 
 export const setLocaleCookie = createServerFn({ method: "POST" })
   .inputValidator((data: { locale?: string } | undefined) => ({
@@ -40,15 +39,14 @@ export const setLocaleCookie = createServerFn({ method: "POST" })
     }
   })
 
-export const getLocalizedServerStatus = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const resolved = getResolvedLocale()
-    await activateServerI18n(resolved.locale)
+export const getLocalizedServerStatus = createServerFn({ method: "GET" }).handler(async () => {
+  const resolved = getResolvedLocale()
+  await activateServerI18n(resolved.locale)
 
-    return {
-      locale: resolved.locale,
-      localeLabel: getLocaleLabel(resolved.locale),
-      handledAt: new Date().toISOString(),
-      message: t`Server function confirmed locale ${resolved.locale}.`,
-    }
-  })
+  return {
+    locale: resolved.locale,
+    localeLabel: getLocaleLabel(resolved.locale),
+    handledAt: new Date().toISOString(),
+    message: t`Server function confirmed locale ${resolved.locale}.`,
+  }
+})

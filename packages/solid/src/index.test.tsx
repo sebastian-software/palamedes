@@ -22,12 +22,7 @@ describe("@palamedes/solid", () => {
     i18n.activate("de")
     setServerI18nGetter(() => i18n)
 
-    const html = renderToString(() => (
-      <Trans
-        id="footer"
-        message="Powered by Palamedes"
-      />
-    ))
+    const html = renderToString(() => <Trans id="footer" message="Powered by Palamedes" />)
 
     expect(html).toBe("Bereitgestellt von Palamedes")
   })
@@ -51,7 +46,7 @@ describe("@palamedes/solid", () => {
         },
         locales: ["en", "de"] as const,
       })
-    ).toEqual([
+    ).toStrictEqual([
       { active: false, label: "English", locale: "en", testId: "locale-switch-en" },
       { active: true, label: "Deutsch", locale: "de", testId: "locale-switch-de" },
     ])
@@ -78,6 +73,6 @@ describe("@palamedes/solid", () => {
       })
     })
 
-    expect(calls).toEqual(["en", "de"])
+    expect(calls).toStrictEqual(["en", "de"])
   })
 })

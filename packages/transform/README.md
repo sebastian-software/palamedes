@@ -59,7 +59,7 @@ console.log(result.code)
 
 ## Supported Macro Shapes
 
-- tagged templates such as `t\`...\`` and `msg\`...\``
+- tagged templates such as `t\`...\``and`msg\`...\``
 - descriptor calls such as `t({ message: "..." })`
 - `defineMessage(...)`
 - `plural(...)`, `select(...)`, `selectOrdinal(...)`

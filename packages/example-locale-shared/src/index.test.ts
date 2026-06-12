@@ -24,7 +24,7 @@ describe("example locale shared", () => {
   })
 
   it("derives stable locale labels from Intl.DisplayNames", () => {
-    expect(LOCALE_LABELS).toEqual({
+    expect(LOCALE_LABELS).toStrictEqual({
       en: "English",
       de: "Deutsch",
       es: "español",
@@ -33,10 +33,12 @@ describe("example locale shared", () => {
   })
 
   it("resolves cookie locale before accept-language", () => {
-    expect(resolveCookieLocale({
-      acceptLanguageHeader: "de",
-      cookieHeader: "locale=es",
-    })).toEqual({
+    expect(
+      resolveCookieLocale({
+        acceptLanguageHeader: "de",
+        cookieHeader: "locale=es",
+      })
+    ).toStrictEqual({
       locale: "es",
       source: "cookie",
     })
@@ -58,32 +60,38 @@ describe("example locale shared", () => {
     }
 
     expect(resolveHostLocale("de.lvh.me:4100", hostConfig)).toBe("de")
-    expect(buildCanonicalUrl({
-      hostConfig,
-      locale: "es",
-      pathname: "/de/docs",
-      requestHost: "de.lvh.me:4100",
-      search: "?probe=1",
-    })).toBe("http://es.lvh.me:4100/es/docs?probe=1")
+    expect(
+      buildCanonicalUrl({
+        hostConfig,
+        locale: "es",
+        pathname: "/de/docs",
+        requestHost: "de.lvh.me:4100",
+        search: "?probe=1",
+      })
+    ).toBe("http://es.lvh.me:4100/es/docs?probe=1")
   })
 
   it("creates accept-language and host mismatch banners", () => {
-    expect(createRouteLocaleBanner({
-      acceptLanguageHeader: "de",
-      currentLocale: "en",
-      pathname: "/en",
-    })?.recommendedLocale).toBe("de")
+    expect(
+      createRouteLocaleBanner({
+        acceptLanguageHeader: "de",
+        currentLocale: "en",
+        pathname: "/en",
+      })?.recommendedLocale
+    ).toBe("de")
 
-    expect(createRouteLocaleBanner({
-      currentLocale: "en",
-      hostConfig: {
-        locales: {
-          de: "de.lvh.me:4100",
-          en: "en.lvh.me:4100",
+    expect(
+      createRouteLocaleBanner({
+        currentLocale: "en",
+        hostConfig: {
+          locales: {
+            de: "de.lvh.me:4100",
+            en: "en.lvh.me:4100",
+          },
         },
-      },
-      pathname: "/en",
-      requestHost: "de.lvh.me:4100",
-    })?.reason).toBe("host")
+        pathname: "/en",
+        requestHost: "de.lvh.me:4100",
+      })?.reason
+    ).toBe("host")
   })
 })

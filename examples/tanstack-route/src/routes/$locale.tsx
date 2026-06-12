@@ -4,7 +4,7 @@ import { loadHomePageData } from "../lib/server-functions"
 import { normalizeLocale } from "../lib/i18n"
 
 export const Route = createFileRoute("/$locale")({
-  loader: async ({ params }) => {
+  async loader({ params }) {
     const locale = normalizeLocale(params.locale)
     if (locale !== params.locale) {
       throw redirect({ to: "/$locale", params: { locale } })

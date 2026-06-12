@@ -23,11 +23,7 @@ describe("@palamedes/react", () => {
     setClientI18n(i18n)
 
     const html = renderToStaticMarkup(
-      <Trans
-        id="footer"
-        message="Powered by <0>Palamedes</0>"
-        components={{ 0: <strong /> }}
-      />
+      <Trans id="footer" message="Powered by <0>Palamedes</0>" components={{ 0: <strong /> }} />
     )
 
     expect(html).toBe("Bereitgestellt von <strong>Palamedes</strong>")
@@ -48,10 +44,16 @@ describe("@palamedes/react", () => {
     setClientI18n(i18n)
 
     const html = renderToStaticMarkup(
-      <Trans id="total" message="Total: {amount, number, ::currency/EUR}" values={{ amount: 12.3 }} />
+      <Trans
+        id="total"
+        message="Total: {amount, number, ::currency/EUR}"
+        values={{ amount: 12.3 }}
+      />
     )
 
-    expect(html).toBe(`Total: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" }).format(12.3)}`)
+    expect(html).toBe(
+      `Total: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" }).format(12.3)}`
+    )
   })
 
   it("builds locale switch items headlessly", () => {
@@ -64,7 +66,7 @@ describe("@palamedes/react", () => {
         },
         locales: ["en", "de"] as const,
       })
-    ).toEqual([
+    ).toStrictEqual([
       { active: false, label: "English", locale: "en", testId: "locale-switch-en" },
       { active: true, label: "Deutsch", locale: "de", testId: "locale-switch-de" },
     ])

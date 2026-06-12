@@ -12,13 +12,13 @@ export const CONFIG_FILENAMES = [
 
 export type PalamedesFallbackLocales = string[] | Record<string, string[]>
 
-export interface PalamedesCatalogConfig {
+export type PalamedesCatalogConfig = {
   path: string
   include: string[]
   exclude?: string[]
 }
 
-export interface PalamedesConfig {
+export type PalamedesConfig = {
   locales: string[]
   sourceLocale: string
   fallbackLocales?: PalamedesFallbackLocales
@@ -26,12 +26,12 @@ export interface PalamedesConfig {
   catalogs: PalamedesCatalogConfig[]
 }
 
-export interface LoadedPalamedesConfig extends PalamedesConfig {
+export type LoadedPalamedesConfig = {
   configPath: string
   rootDir: string
-}
+} & PalamedesConfig
 
-export interface LoadPalamedesConfigOptions {
+export type LoadPalamedesConfigOptions = {
   cwd?: string
   configPath?: string
   skipValidation?: boolean
@@ -163,7 +163,10 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
 
   const record = config as Record<string, unknown>
 
-  if (!Array.isArray(record.locales) || record.locales.some((locale) => typeof locale !== "string")) {
+  if (
+    !Array.isArray(record.locales) ||
+    record.locales.some((locale) => typeof locale !== "string")
+  ) {
     throw new Error(
       `Invalid Palamedes config in ${configPath}: "locales" must be an array of strings.`
     )
@@ -182,13 +185,11 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
   }
 
   if (!Array.isArray(record.catalogs)) {
-    throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs" must be an array.`
-    )
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "catalogs" must be an array.`)
   }
 
-  if (typeof record.pseudoLocale !== "undefined" && typeof record.pseudoLocale !== "string") {
-    throw new Error(
+  if (record.pseudoLocale !== undefined && typeof record.pseudoLocale !== "string") {
+    throw new TypeError(
       `Invalid Palamedes config in ${configPath}: "pseudoLocale" must be a string when provided.`
     )
   }
@@ -201,7 +202,7 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
 }
 
 function validateFallbackLocales(value: unknown, configPath: string): void {
-  if (typeof value === "undefined") {
+  if (value === undefined) {
     return
   }
 
@@ -252,7 +253,7 @@ function validateCatalog(catalog: unknown, configPath: string, index: number): v
   }
 
   if (
-    typeof record.exclude !== "undefined" &&
+    record.exclude !== undefined &&
     (!Array.isArray(record.exclude) || record.exclude.some((value) => typeof value !== "string"))
   ) {
     throw new Error(

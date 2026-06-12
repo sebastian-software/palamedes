@@ -10,13 +10,7 @@ import {
   type Locale,
 } from "@palamedes/example-locale-shared"
 
-export {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_COOKIE,
-  LOCALE_LABELS,
-  type Locale,
-}
+export { DEFAULT_LOCALE, LOCALES, LOCALE_COOKIE, LOCALE_LABELS, type Locale }
 
 export async function loadMessages(locale: Locale): Promise<CatalogMessages> {
   const { messages } = await import(`../locales/${locale}.po`)

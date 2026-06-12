@@ -8,6 +8,6 @@ if (container) {
   createRoot(container).render(
     <StrictMode>
       <ClientApp name="Palamedes" />
-    </StrictMode>,
+    </StrictMode>
   )
 }

@@ -6,11 +6,7 @@ export const metadata: Metadata = {
   description: "Example using the OXC-based Palamedes transformer",
 }
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Server-side: initialize i18n from cookie
   const locale = await initI18nServer()
 

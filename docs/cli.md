@@ -17,12 +17,12 @@ pmds extract --verbose
 
 Options:
 
-| Option | Description |
-| --- | --- |
-| `-c, --config <path>` | Use a specific config file. |
-| `-w, --watch` | Re-run extraction on file changes. |
-| `--clean` | Remove obsolete catalog entries instead of marking them obsolete. |
-| `-v, --verbose` | Print verbose extraction details. |
+| Option                | Description                                                       |
+| --------------------- | ----------------------------------------------------------------- |
+| `-c, --config <path>` | Use a specific config file.                                       |
+| `-w, --watch`         | Re-run extraction on file changes.                                |
+| `--clean`             | Remove obsolete catalog entries instead of marking them obsolete. |
+| `-v, --verbose`       | Print verbose extraction details.                                 |
 
 ## `pmds audit`
 
@@ -37,12 +37,12 @@ pmds audit --fail-on warning
 
 Options:
 
-| Option | Description |
-| --- | --- |
-| `-c, --config <path>` | Use a specific config file. |
-| `--locale <locale...>` | Audit only selected target locales. |
-| `--json` | Print the machine-readable audit result. |
-| `--fail-on <level>` | Fail on `error` or `warning`. Default: `error`. |
+| Option                 | Description                                     |
+| ---------------------- | ----------------------------------------------- |
+| `-c, --config <path>`  | Use a specific config file.                     |
+| `--locale <locale...>` | Audit only selected target locales.             |
+| `--json`               | Print the machine-readable audit result.        |
+| `--fail-on <level>`    | Fail on `error` or `warning`. Default: `error`. |
 
 ## `pmds catalog merge`
 
@@ -56,14 +56,14 @@ pmds catalog merge %A %B --output %A --format po --strategy use-first
 
 Options:
 
-| Option | Description |
-| --- | --- |
-| `--output <path>` | Required output path. |
-| `-c, --config <path>` | Use a specific config file when inferring `sourceLocale`. |
-| `--format <format>` | `po` or `json`. Inferred from paths when omitted. |
-| `--strategy <strategy>` | Currently `use-first`. |
+| Option                     | Description                                                      |
+| -------------------------- | ---------------------------------------------------------------- |
+| `--output <path>`          | Required output path.                                            |
+| `-c, --config <path>`      | Use a specific config file when inferring `sourceLocale`.        |
+| `--format <format>`        | `po` or `json`. Inferred from paths when omitted.                |
+| `--strategy <strategy>`    | Currently `use-first`.                                           |
 | `--source-locale <locale>` | Source locale for catalog semantics. Defaults to config or `en`. |
-| `--locale <locale>` | Locale of the merged catalog. |
+| `--locale <locale>`        | Locale of the merged catalog.                                    |
 
 ## `pmds version`
 

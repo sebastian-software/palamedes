@@ -1,8 +1,4 @@
-import {
-  extractMessages,
-  extractor,
-  type ExtractedMessageInfo,
-} from "./index"
+import { extractMessages, extractor, type ExtractedMessageInfo } from "./index"
 
 function extract(code: string) {
   return extractMessages(code, "test.tsx")
@@ -128,7 +124,7 @@ describe("extractMessages", () => {
 
       expect(messages).toHaveLength(1)
       expect(messages[0].message).toBe("Hello {name}, {locale}")
-      expect(messages[0].placeholders).toEqual({
+      expect(messages[0].placeholders).toStrictEqual({
         name: "name",
         locale: "resolved.locale",
       })
@@ -149,7 +145,7 @@ describe("extractMessages", () => {
 
       expect(messages).toHaveLength(1)
       expect(messages[0].message).toBe("Hello {name}")
-      expect(messages[0].placeholders).toEqual({
+      expect(messages[0].placeholders).toStrictEqual({
         name: "name",
       })
       expect(messages[0].origin[0]).toBe("test.ts")
@@ -161,9 +157,9 @@ describe("extractMessages", () => {
         const message = t({ id: "greeting", message: "Hello" })
       `
 
-      await expect(
-        extractor.extract("test.ts", code, () => undefined)
-      ).rejects.toThrow(/Explicit message ids/)
+      await expect(extractor.extract("test.ts", code, () => {})).rejects.toThrow(
+        /Explicit message ids/
+      )
     })
   })
 

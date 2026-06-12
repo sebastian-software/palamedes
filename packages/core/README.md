@@ -62,8 +62,7 @@ inside translated sentences:
 ```ts
 i18n._(
   {
-    message:
-      "Paid {amount, number, ::currency/EUR} on {when, date, medium} at {when, time, short}",
+    message: "Paid {amount, number, ::currency/EUR} on {when, date, medium} at {when, time, short}",
   },
   {
     amount: 12.3,

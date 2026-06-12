@@ -10,7 +10,7 @@ import { ServerQueryProbe } from "../components/ServerQueryProbe"
 import { syncClientI18n } from "../lib/i18n"
 import { loadHomePageData } from "../lib/server"
 
-interface HomePageData {
+type HomePageData = {
   locale: "en" | "de" | "es"
   localeLabel: string
   renderedAt: string
@@ -29,9 +29,9 @@ function HomePageContent(props: { data: HomePageData }) {
         <h1>{t`Palamedes in SolidStart with one runtime model.`}</h1>
         <p>
           <Trans>
-            This example proves a cookie-based locale flow in SolidStart with
-            SSR, first-request Accept-Language detection, cookie persistence,
-            .po imports, and localized server queries.
+            This example proves a cookie-based locale flow in SolidStart with SSR, first-request
+            Accept-Language detection, cookie persistence, .po imports, and localized server
+            queries.
           </Trans>
         </p>
         <div class="button-row">
