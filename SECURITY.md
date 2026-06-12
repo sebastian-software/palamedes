@@ -1,6 +1,6 @@
 # Security Policy
 
-Palamedes is build-time and runtime infrastructure for JavaScript applications.
+Palamedes is a build-time and runtime infrastructure for JavaScript applications.
 Please report security issues privately so maintainers can assess and fix them
 before public disclosure.
 
