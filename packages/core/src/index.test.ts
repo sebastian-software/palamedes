@@ -24,6 +24,45 @@ describe("createI18n", () => {
     )
   })
 
+  it("resolves descriptor ids through the active catalog", () => {
+    const i18n = createI18n()
+
+    i18n.load("de", {
+      "inbox.summary": "{count, plural, one {# Nachricht} other {# Nachrichten}} fuer {name}",
+    })
+    i18n.activate("de")
+
+    expect(
+      i18n._(
+        { id: "inbox.summary", message: "{count, plural, one {# message} other {# messages}} for {name}" },
+        { count: 2, name: "Ada" }
+      )
+    ).toBe("2 Nachrichten fuer Ada")
+  })
+
+  it("falls back to the descriptor message when its active catalog is missing", () => {
+    const i18n = createI18n()
+    i18n.activate("de")
+
+    expect(
+      i18n._(
+        { id: "inbox.summary", message: "{count, plural, one {# message} other {# messages}} for {name}" },
+        { count: 1, name: "Ada" }
+      )
+    ).toBe("1 message for Ada")
+  })
+
+  it("keeps descriptors without ids message-only", () => {
+    const i18n = createI18n()
+
+    i18n.load("de", {
+      "{name}": "Ada aus dem Katalog",
+    })
+    i18n.activate("de")
+
+    expect(i18n._({ message: "{name}" }, { name: "Inline" })).toBe("Inline")
+  })
+
   it("formats select and selectordinal messages", () => {
     const i18n = createI18n()
     i18n.activate("en")

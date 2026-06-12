@@ -49,6 +49,10 @@ export function createI18n(): PalamedesI18n {
         return formatMessagePattern(this.getMessage(idOrDescriptor, descriptor), values, activeLocale)
       }
 
+      if (idOrDescriptor.id !== undefined) {
+        return formatMessagePattern(this.getMessage(idOrDescriptor.id, idOrDescriptor), values, activeLocale)
+      }
+
       return formatMessagePattern(idOrDescriptor.message ?? "", values, activeLocale)
     },
   }
