@@ -5,16 +5,27 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-Palamedes is i18n tooling for JavaScript and TypeScript teams that want the
-authoring experience to feel good and the system underneath to stay simple.
+Palamedes is i18n tooling for JavaScript and TypeScript teams that want one
+translation model to survive framework changes.
 
 You write messages close to the code, keep source-string-first `.po` catalogs,
 and use the same runtime model across Next.js, TanStack Start, SolidStart,
 Waku, React Router, Vite, and backend servers.
 
-The promise is practical: translations should not become a nest of
-framework-specific glue. Palamedes keeps the important pieces steady as an app
-changes shape.
+We are not asking you to trust a slogan. The repo shows the work.
+
+![Palamedes verification matrix](docs/site/assets/palamedes-framework-matrix.png)
+
+The current proof:
+
+- Five framework families, each with cookie and route locale strategies, are
+  browser-verified through the same Playwright-based flow used in CI.
+- The screenshots above are generated from versioned repo artifacts, not a
+  marketing mockup.
+- Fourteen ADRs explain the runtime model, message identity, native boundary,
+  adapter architecture, and the work deliberately kept out of scope.
+- Benchmark commands and fixtures are checked in so the numbers can be rerun
+  locally.
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,
@@ -60,6 +71,26 @@ easier to review, and easier to carry from one framework to the next.
 - Structured catalog audit and metadata validation APIs backed by `ferrocat`
 - ADRs and architecture docs that explain the decisions behind the product
 - Public headless frontend primitives in `@palamedes/react` and `@palamedes/solid` that the matrix uses directly
+
+## Who Builds This
+
+Palamedes is maintained by Sebastian Software GmbH. Sebastian Werner's public
+profile lists recent frontend internationalization work for Regrello, including
+a full Lingui-based application internationalization effort from October 2024
+to September 2025. Salesforce later announced the Regrello acquisition and
+noted that it completed on October 1, 2025.
+
+That matters because Palamedes is not coming from a generic "i18n is hard"
+take. It comes from repeated work on source-string-first JavaScript i18n:
+older gettext-style macro systems, recent enterprise Lingui migrations, and the
+same hard questions this repo documents in ADRs.
+
+Evidence:
+
+- [Sebastian Werner profile at Sebastian Software](https://sebastian-software.de/werner)
+- [Sebastian Consulting profile](https://sebastian-consulting.de/de/werner)
+- [qooxdoo](https://qooxdoo.org/)
+- [Salesforce announcement for Regrello](https://www.salesforce.com/news/stories/salesforce-signs-definitive-agreement-to-acquire-regrello/)
 
 ## Start Here
 
