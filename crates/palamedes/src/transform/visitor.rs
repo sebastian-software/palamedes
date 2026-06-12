@@ -203,7 +203,12 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
         match macro_info.imported_name.as_str() {
             "t" | "msg" | "defineMessage" => {
-                match transform_descriptor_call(it, &macro_info.imported_name, self.options) {
+                match transform_descriptor_call(
+                    it,
+                    self.source,
+                    &macro_info.imported_name,
+                    self.options,
+                ) {
                     Ok(Some((text, compiled_id))) => {
                         self.replacements.push(Replacement {
                             start: it.span.start as usize,
