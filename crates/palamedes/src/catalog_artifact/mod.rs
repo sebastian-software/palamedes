@@ -52,6 +52,8 @@ pub fn compile_catalog_artifact(
     );
     let mut options =
         CompileCatalogArtifactOptions::new(&prepared.locale, &request.config.source_locale);
+    let compiled_id_index = CompiledCatalogIdIndex::new(&catalogs, CompiledKeyStrategy::FerrocatV1)
+        .map_err(PalamedesError::BuildCompiledIdIndex)?;
     options.fallback_chain = &ferrocat_fallback_chain;
     options.key_strategy = CompiledKeyStrategy::FerrocatV1;
     options.source_fallback = true;
@@ -59,7 +61,11 @@ pub fn compile_catalog_artifact(
 
     let mut artifact = ferrocat_compile_catalog_artifact(&catalogs, &options)
         .map_err(PalamedesError::CompileCatalogArtifact)?;
-    align_diagnostics_with_runtime_icu_semantics(&mut artifact);
+    align_diagnostics_with_runtime_icu_semantics(
+        &mut artifact,
+        &compiled_id_index,
+        &prepared.locale,
+    );
 
     Ok(build_artifact_result(
         artifact,
@@ -102,7 +108,11 @@ pub fn compile_catalog_artifact_selected(
     let mut artifact =
         ferrocat_compile_catalog_artifact_selected(&catalogs, &compiled_id_index, &options)
             .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
-    align_diagnostics_with_runtime_icu_semantics(&mut artifact);
+    align_diagnostics_with_runtime_icu_semantics(
+        &mut artifact,
+        &compiled_id_index,
+        &prepared.locale,
+    );
 
     Ok(build_artifact_result(
         artifact,

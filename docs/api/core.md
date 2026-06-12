@@ -80,3 +80,21 @@ Supported macro names:
 - `plural`
 - `select`
 - `selectOrdinal`
+
+## Runtime Formatting
+
+`formatMessagePattern()` and `createI18n()._()` support the formatter subset
+implemented by the Palamedes runtime:
+
+- `{value, number}`
+- `{value, number, percent}` and `{value, number, integer}`
+- `{value, number, ::percent}`, `{value, number, ::integer}`, and
+  `{value, number, ::currency/ISO}`
+- `{value, date}` and `{value, time}`
+- `{value, date, short|medium|long|full}`
+- `{value, time, short|medium|long|full}`
+
+Catalog artifact compilation reports `list`, `duration`, `ago`, `name`, and
+other unsupported formatter kinds as errors. Unsupported styles on `number`,
+`date`, and `time` are warnings because the runtime currently falls back to the
+default `Intl` formatter for that argument type.
