@@ -13,6 +13,7 @@ import {
   type LoadedPalamedesConfig,
 } from "@palamedes/config"
 import { compileCatalogArtifact } from "@palamedes/core-node"
+import { createCatalogLoaderResult } from "@palamedes/transform/catalog-loader"
 import { transformPalamedesMacros } from "@palamedes/transform"
 import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
 
@@ -75,75 +76,6 @@ export interface PalamedesPluginOptions {
    * @default "@palamedes/runtime"
    */
   runtimeModule?: string
-}
-
-function createMissingErrorMessage(
-  locale: string,
-  missingMessages: Array<{ sourceKey: { message: string; context?: string } }>
-): string {
-  const lines = missingMessages.map((missing) =>
-    missing.sourceKey.context
-      ? `${missing.sourceKey.message} [context: ${missing.sourceKey.context}]`
-      : missing.sourceKey.message
-  )
-  return `Failed to compile catalog for locale ${locale}!\n\nMissing ${missingMessages.length} translation(s):\n${lines.join("\n")}`
-}
-
-function createDiagnosticMessage(
-  locale: string,
-  diagnostics: Array<{
-    severity: "info" | "warning" | "error"
-    code: string
-    message: string
-    sourceKey: { message: string; context?: string }
-    locale: string
-  }>
-): string {
-  const lines = diagnostics.map((diagnostic) => {
-    const source = diagnostic.sourceKey.context
-      ? `${diagnostic.sourceKey.message} [context: ${diagnostic.sourceKey.context}]`
-      : diagnostic.sourceKey.message
-    return `[${diagnostic.severity}] ${diagnostic.code} (${diagnostic.locale})\n${diagnostic.message}\nSource: ${source}`
-  })
-  return `Catalog diagnostics for locale ${locale}:\n\n${lines.join("\n\n")}`
-}
-
-function createCompileErrorMessage(
-  locale: string,
-  diagnostics: Array<{
-    code: string
-    message: string
-    sourceKey: { message: string; context?: string }
-    locale: string
-  }>
-): string {
-  const lines = diagnostics.map((diagnostic) => {
-    const source = diagnostic.sourceKey.context
-      ? `${diagnostic.sourceKey.message} [context: ${diagnostic.sourceKey.context}]`
-      : diagnostic.sourceKey.message
-    return `${diagnostic.message}\nCode: ${diagnostic.code}\nLocale: ${diagnostic.locale}\nSource: ${source}`
-  })
-  return `Failed to compile catalog for locale ${locale}!\n\nCompilation error for ${diagnostics.length} translation(s):\n${lines.join("\n\n")}`
-}
-
-function warnDiagnostics(locale: string, diagnostics: Array<{
-  severity: "info" | "warning" | "error"
-  code: string
-  message: string
-  sourceKey: { message: string; context?: string }
-  locale: string
-}>): void {
-  if (diagnostics.length === 0) {
-    return
-  }
-
-  console.warn(
-    `${createDiagnosticMessage(locale, diagnostics)}\n\nYou can fail the build on error diagnostics by setting \`failOnCompileError=true\` in the Palamedes Vite plugin configuration.`
-  )
-}
-
-function renderCatalogModule(messages: Record<string, string>): string {
-  return `export const messages=${JSON.stringify(messages)};export default { messages };`
 }
 
 /**
@@ -303,40 +235,23 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         result.watchFiles.forEach((file: string) => this.addWatchFile(file))
         const locale = path.basename(cleanId, ".po")
 
-        // Check for missing translations
-        if (
-          failOnMissing &&
-          locale !== cfg.pseudoLocale &&
-          result.missing.length > 0
-        ) {
-          const message = createMissingErrorMessage(
-            locale,
-            result.missing
-          )
-          throw new Error(
-            `${message}\nYou see this error because \`failOnMissing=true\` in Vite Plugin configuration.`
-          )
-        }
+        const loaderResult = createCatalogLoaderResult(result, {
+          locale,
+          pseudoLocale: cfg.pseudoLocale,
+          failOnMissing,
+          failOnCompileError,
+          missingFailureHint:
+            "You see this error because `failOnMissing=true` in Vite plugin configuration.",
+          compileFailureHint:
+            "These errors fail the build because `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
+          diagnosticsWarningHint:
+            "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
+        })
 
-        // Handle compilation errors
-        if (result.diagnostics.length) {
-          const errorDiagnostics = result.diagnostics.filter(
-            (diagnostic) => diagnostic.severity === "error"
-          )
-
-          if (failOnCompileError && errorDiagnostics.length > 0) {
-            const message = createCompileErrorMessage(locale, errorDiagnostics)
-            throw new Error(
-              message +
-                `These errors fail build because \`failOnCompileError=true\` in the Palamedes Vite plugin configuration.`
-            )
-          }
-
-          warnDiagnostics(locale, result.diagnostics)
-        }
+        loaderResult.warnings.forEach((warning) => console.warn(warning))
 
         return {
-          code: renderCatalogModule(result.messages),
+          code: loaderResult.code,
           map: null,
         }
       },
