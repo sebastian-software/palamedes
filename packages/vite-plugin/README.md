@@ -111,6 +111,7 @@ palamedes({
 ## Related Docs
 
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
+- [Troubleshooting common setup failures](https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md)
 - [Migration from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 
