@@ -45,6 +45,7 @@ interface MutableLocaleStats {
 }
 
 export async function report(options: ReportOptions): Promise<CompletenessReport> {
+  const threshold = normalizeThreshold(options.failIfBelow)
   const config = await loadPalamedesConfig({ configPath: options.config })
   const locales = resolveLocales(config, options.locale)
   const result = await buildReport(config, locales)
@@ -55,7 +56,6 @@ export async function report(options: ReportOptions): Promise<CompletenessReport
     printReport(result)
   }
 
-  const threshold = normalizeThreshold(options.failIfBelow)
   if (threshold !== undefined) {
     const failing = result.locales.filter((locale) => locale.percent < threshold)
     if (failing.length > 0) {
@@ -226,11 +226,16 @@ function printReport(result: CompletenessReport): void {
     return
   }
 
-  console.log("Locale  Translated  Missing  Fuzzy  Complete")
+  const localeColumnWidth = Math.max(
+    "Locale".length,
+    ...result.locales.map((locale) => locale.locale.length)
+  ) + 2
+
+  console.log(`${"Locale".padEnd(localeColumnWidth)}Translated  Missing  Fuzzy  Complete`)
   for (const locale of result.locales) {
     const complete = locale.percent === 100 ? chalk.green(formatPercent(locale.percent)) : formatPercent(locale.percent)
     console.log(
-      `${locale.locale.padEnd(7)} ${`${locale.translated}/${locale.total}`.padEnd(11)} ${String(locale.missing).padEnd(8)} ${String(locale.fuzzy).padEnd(6)} ${complete}`
+      `${locale.locale.padEnd(localeColumnWidth)}${`${locale.translated}/${locale.total}`.padEnd(11)} ${String(locale.missing).padEnd(8)} ${String(locale.fuzzy).padEnd(6)} ${complete}`
     )
   }
 }

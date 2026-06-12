@@ -74,6 +74,19 @@ describe("report", () => {
     expect(output.some((line) => line.startsWith("pseudo"))).toBe(false)
   })
 
+  it("widens the locale column for long locale codes", async () => {
+    const fixtureDir = await createReportFixture()
+
+    await report({
+      config: path.join(fixtureDir, "palamedes.config.ts"),
+      locale: ["zh-Hans-CN"],
+    })
+
+    const output = vi.mocked(console.log).mock.calls.map((call) => String(call[0]))
+    expect(output[0]).toBe("Locale      Translated  Missing  Fuzzy  Complete")
+    expect(output[1]).toMatch(/^zh-Hans-CN\s+0\/3\s+3\s+0\s+0%$/)
+  })
+
   it("fails when a reported locale is below the threshold", async () => {
     const fixtureDir = await createReportFixture()
 
@@ -84,6 +97,17 @@ describe("report", () => {
         failIfBelow: "90",
       })
     ).rejects.toThrow("Catalog completeness below 90%")
+  })
+
+  it("validates threshold values before loading config or printing output", async () => {
+    await expect(
+      report({
+        config: path.join("missing", "palamedes.config.ts"),
+        failIfBelow: "invalid",
+      })
+    ).rejects.toThrow("Invalid --fail-if-below value")
+
+    expect(console.log).not.toHaveBeenCalled()
   })
 })
 
