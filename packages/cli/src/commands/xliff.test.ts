@@ -85,6 +85,105 @@ msgstr "Betreff hallo"
     expect(item?.flags.fuzzy).toBe(true)
   })
 
+  it("imports self-closing XLIFF targets as empty translations", async () => {
+    const fixtureDir = await copyFixture()
+    const output = path.join(fixtureDir, "empty-target.xlf")
+    const config = path.join(fixtureDir, "palamedes.config.ts")
+
+    await writeFile(
+      output,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2">
+  <file original="src/locales/de.po" source-language="en" target-language="de">
+    <body>
+      <trans-unit id="empty">
+        <source>Simple hello</source>
+        <target state="needs-translation"/>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>
+`
+    )
+
+    const result = await importXliff(output, { config })
+
+    expect(result.updated).toBe(1)
+    const item = findItem(await readCatalog(fixtureDir, "de"), "Simple hello")
+    expect(item?.msgstr).toEqual([""])
+  })
+
+  it("rejects XLIFF original paths outside the configured root", async () => {
+    const fixtureDir = await copyFixture()
+    const output = path.join(fixtureDir, "traversal.xlf")
+    const config = path.join(fixtureDir, "palamedes.config.ts")
+    const poPath = path.join(fixtureDir, "src", "locales", "de.po")
+    const before = await readFile(poPath, "utf8")
+
+    await writeFile(
+      output,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2">
+  <file original="../outside.po" source-language="en" target-language="de">
+    <body>
+      <trans-unit id="escape">
+        <source>Simple hello</source>
+        <target>Escaped</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>
+`
+    )
+
+    await expect(importXliff(output, { config })).rejects.toThrow(
+      "escapes the configured rootDir"
+    )
+    await expect(readFile(poPath, "utf8")).resolves.toBe(before)
+  })
+
+  it("preserves plural msgstr indexes when importing XLIFF targets", async () => {
+    const fixtureDir = await copyFixture()
+    const output = path.join(fixtureDir, "plural.xlf")
+    const config = path.join(fixtureDir, "palamedes.config.ts")
+    const poPath = path.join(fixtureDir, "src", "locales", "de.po")
+    const existingCatalog = await readFile(poPath, "utf8")
+
+    await writeFile(
+      poPath,
+      `${existingCatalog.trimEnd()}
+
+msgid "File"
+msgid_plural "Files"
+msgstr[0] "Datei"
+msgstr[1] "Dateien"
+`
+    )
+    await writeFile(
+      output,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2">
+  <file original="src/locales/de.po" source-language="en" target-language="de">
+    <body>
+      <trans-unit id="plural">
+        <source>File</source>
+        <target>Akte</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>
+`
+    )
+
+    const result = await importXliff(output, { config })
+    const updatedCatalog = await readFile(poPath, "utf8")
+
+    expect(result.updated).toBe(1)
+    expect(updatedCatalog).toContain('msgstr[0] "Akte"')
+    expect(updatedCatalog).toContain('msgstr[1] "Dateien"')
+    expect(updatedCatalog).not.toContain('msgid_plural "Files"\nmsgstr "Akte"')
+  })
+
   it("fails conflicting duplicate XLIFF targets before writing PO output", async () => {
     const fixtureDir = await copyFixture()
     const output = path.join(fixtureDir, "conflict.xlf")

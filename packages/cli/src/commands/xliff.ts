@@ -351,9 +351,11 @@ function resolveImportTargetPath(
   }
 
   if (file.original) {
-    return path.isAbsolute(file.original)
-      ? file.original
+    const targetPath = path.isAbsolute(file.original)
+      ? path.resolve(file.original)
       : path.resolve(config.rootDir, file.original)
+    assertPathInsideRoot(config.rootDir, targetPath)
+    return targetPath
   }
 
   const catalogPaths = resolveLocaleCatalogPaths(config, locale)
@@ -364,6 +366,16 @@ function resolveImportTargetPath(
   throw new Error(
     "XLIFF file is missing original catalog path. Pass --output or export from Palamedes first."
   )
+}
+
+function assertPathInsideRoot(rootDir: string, targetPath: string): void {
+  const root = path.resolve(rootDir)
+  const relative = path.relative(root, targetPath)
+  if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
+    return
+  }
+
+  throw new Error("XLIFF original catalog path escapes the configured rootDir.")
 }
 
 function mergeXliffUnitsIntoPo(content: string, units: XliffUnit[]): PoMergeResult {
@@ -452,10 +464,15 @@ function parsePoBlock(block: string): ParsedPoItem | undefined {
 
 function replaceMsgstr(block: string, target: string): string {
   const pattern = /^msgstr(?:\[\d+\])? "(?:[^"\\]|\\.)*"(?:\n"(?:[^"\\]|\\.)*")*/m
-  if (!pattern.test(block)) {
+  const match = block.match(pattern)
+  if (!match) {
     throw new Error("Could not update PO entry: missing msgstr.")
   }
-  return block.replace(pattern, formatPoString("msgstr", target))
+  return block.replace(pattern, formatPoString(msgstrKeyword(match[0]), target))
+}
+
+function msgstrKeyword(value: string): string {
+  return value.match(/^msgstr\[\d+\]/)?.[0] ?? "msgstr"
 }
 
 function setFuzzyFlag(block: string, enabled: boolean): string {
@@ -543,7 +560,19 @@ function firstElement(
   content: string,
   name: string
 ): { attributes: string; body: string } | undefined {
-  return collectElements(content, name)[0]
+  const element = collectElements(content, name)[0]
+  if (element) {
+    return element
+  }
+
+  const pattern = new RegExp(`<(?:[\\w.-]+:)?${name}\\b([^>]*)\\/\\s*>`)
+  const match = content.match(pattern)
+  return match
+    ? {
+        attributes: match[1] ?? "",
+        body: "",
+      }
+    : undefined
 }
 
 function firstElementText(content: string, name: string): string | undefined {
