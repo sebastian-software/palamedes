@@ -46,6 +46,9 @@ pnpm exec pmds extract --verbose
 pnpm exec pmds audit
 pnpm exec pmds audit --json
 pnpm exec pmds audit --fail-on warning
+pnpm exec pmds report
+pnpm exec pmds report --locale de,fr --fail-if-below 95
+pnpm exec pmds report --json
 pnpm exec pmds catalog merge --output src/locales/de.po src/locales/de.po other.po
 ```
 
@@ -56,6 +59,21 @@ catalog engine that powers Palamedes builds.
 For local performance checks, set `PALAMEDES_TIMING_JSON=1` on `pmds extract`.
 The command prints a machine-readable timing line with total, glob, extract,
 and catalog-write timings.
+
+### Completeness Report
+
+`pmds report` prints a per-locale translation-management view:
+
+```text
+Locale  Translated  Missing  Fuzzy  Complete
+de      480/520     37       3      92.3%
+fr      510/520     10       0      98.1%
+```
+
+By default, it reports configured target locales and skips the source locale
+and pseudo-locale. Use `--locale de,fr` to select locales, `--json` for bots
+and dashboards, and `--fail-if-below 95` to make CI fail when any reported
+locale is below the threshold.
 
 ### Catalog Merge
 
