@@ -8,6 +8,10 @@ function readJson(file) {
   return JSON.parse(readFileSync(path.join(root, file), "utf8"))
 }
 
+function readText(file) {
+  return readFileSync(path.join(root, file), "utf8")
+}
+
 function fail(message) {
   console.error(message)
   process.exitCode = 1
@@ -15,9 +19,32 @@ function fail(message) {
 
 const releaseConfig = readJson(".release-please-config.json")
 const releaseManifest = readJson(".release-please-manifest.json")
-const publishWorkflow = readFileSync(path.join(root, ".github/workflows/publish.yml"), "utf8")
+const publishWorkflow = readText(".github/workflows/publish.yml")
 const rootReleasePath = "."
 const rootReleaseConfig = releaseConfig.packages?.[rootReleasePath]
+const rootReleaseExtraFiles = rootReleaseConfig?.["extra-files"] ?? []
+const requiredTomlExtraFiles = [
+  {
+    type: "toml",
+    path: "crates/palamedes/Cargo.toml",
+    jsonpath: "$.package.version",
+  },
+  {
+    type: "toml",
+    path: "crates/palamedes-node/Cargo.toml",
+    jsonpath: "$.package.version",
+  },
+  {
+    type: "toml",
+    path: "Cargo.lock",
+    jsonpath: '$.package[?(@.name.value=="palamedes")].version',
+  },
+  {
+    type: "toml",
+    path: "Cargo.lock",
+    jsonpath: '$.package[?(@.name.value=="palamedes-node")].version',
+  },
+]
 
 const publicPackages = readdirSync(path.join(root, "packages"))
   .map((directory) => {
@@ -45,7 +72,7 @@ const publicPackages = readdirSync(path.join(root, "packages"))
   .sort((a, b) => a.name.localeCompare(b.name))
 
 const extraVersionFiles = new Set(
-  (rootReleaseConfig?.["extra-files"] ?? [])
+  rootReleaseExtraFiles
     .filter((file) => file?.type === "json" && file?.jsonpath === "$.version")
     .map((file) => file.path)
 )
@@ -58,6 +85,28 @@ const nativeMatrixPackages = new Set(
   Array.from(publishWorkflow.matchAll(/package_name:\s+"([^"]+)"/g), (match) => match[1])
 )
 const expectedVersion = publicPackages[0]?.version
+const versionFile = rootReleaseConfig?.["version-file"]
+const versionFileVersion = versionFile ? readText(versionFile).trim() : undefined
+
+function hasExtraFile(expectedFile) {
+  return rootReleaseExtraFiles.some(
+    (file) =>
+      file?.type === expectedFile.type &&
+      file?.path === expectedFile.path &&
+      file?.jsonpath === expectedFile.jsonpath
+  )
+}
+
+function cargoManifestVersion(file) {
+  return readText(file).match(/^version = "([^"]+)"/m)?.[1]
+}
+
+function cargoLockVersion(packageName) {
+  const escapedName = packageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return readText("Cargo.lock").match(
+    new RegExp(`\\[\\[package\\]\\]\\nname = "${escapedName}"\\nversion = "([^"]+)"`)
+  )?.[1]
+}
 
 if (!rootReleaseConfig) {
   fail(`${rootReleasePath} is missing from .release-please-config.json`)
@@ -66,15 +115,40 @@ if (!rootReleaseConfig) {
     fail(`root release component is ${rootReleaseConfig.component}, expected palamedes`)
   }
 
-  if (rootReleaseConfig["release-type"] !== "rust") {
-    fail(`root release type is ${rootReleaseConfig["release-type"]}, expected rust`)
+  if (rootReleaseConfig["release-type"] !== "simple") {
+    fail(`root release type is ${rootReleaseConfig["release-type"]}, expected simple`)
   }
+
+  if (versionFile !== ".release-please-version") {
+    fail(`root release version file is ${versionFile}, expected .release-please-version`)
+  }
+}
+
+if (versionFileVersion !== expectedVersion) {
+  fail(`${versionFile} tracks ${versionFileVersion}, but public packages are at ${expectedVersion}`)
 }
 
 if (releaseManifest[rootReleasePath] !== expectedVersion) {
   fail(
     `release manifest tracks ${releaseManifest[rootReleasePath]}, but public packages are at ${expectedVersion}`
   )
+}
+
+for (const requiredFile of requiredTomlExtraFiles) {
+  if (!hasExtraFile(requiredFile)) {
+    fail(`${requiredFile.path} ${requiredFile.jsonpath} is missing from root release extra-files`)
+  }
+}
+
+for (const [name, version] of [
+  ["palamedes", cargoManifestVersion("crates/palamedes/Cargo.toml")],
+  ["palamedes-node", cargoManifestVersion("crates/palamedes-node/Cargo.toml")],
+  ["Cargo.lock palamedes", cargoLockVersion("palamedes")],
+  ["Cargo.lock palamedes-node", cargoLockVersion("palamedes-node")],
+]) {
+  if (version !== expectedVersion) {
+    fail(`${name} has version ${version}, expected ${expectedVersion}`)
+  }
 }
 
 for (const packageInfo of publicPackages) {
