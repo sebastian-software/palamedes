@@ -243,7 +243,7 @@ function getNativePackageName(): string {
 
 function loadNativeBindings(): NativeBindings {
   const require = createRequire(import.meta.url)
-  const packageDir = path.resolve(import.meta.dirname, "..")
+  const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
   const nativePackageName = getNativePackageName()
 
   try {
