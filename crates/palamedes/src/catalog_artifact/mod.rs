@@ -17,7 +17,7 @@ use ferrocat::{
 
 use crate::error::{PalamedesError, PalamedesResult};
 
-use self::compile::build_artifact_result;
+use self::compile::{align_diagnostics_with_runtime_icu_semantics, build_artifact_result};
 use self::load::LocaleCatalogs;
 use self::resolve::{ferrocat_fallback_chain, prepare_compilation};
 pub use self::types::{
@@ -57,8 +57,9 @@ pub fn compile_catalog_artifact(
     options.source_fallback = true;
     options.icu_compatibility = true;
 
-    let artifact = ferrocat_compile_catalog_artifact(&catalogs, &options)
+    let mut artifact = ferrocat_compile_catalog_artifact(&catalogs, &options)
         .map_err(PalamedesError::CompileCatalogArtifact)?;
+    align_diagnostics_with_runtime_icu_semantics(&mut artifact);
 
     Ok(build_artifact_result(
         artifact,
@@ -98,9 +99,10 @@ pub fn compile_catalog_artifact_selected(
     options.source_fallback = true;
     options.icu_compatibility = true;
 
-    let artifact =
+    let mut artifact =
         ferrocat_compile_catalog_artifact_selected(&catalogs, &compiled_id_index, &options)
             .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
+    align_diagnostics_with_runtime_icu_semantics(&mut artifact);
 
     Ok(build_artifact_result(
         artifact,
