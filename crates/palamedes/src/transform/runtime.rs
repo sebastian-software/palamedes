@@ -123,8 +123,7 @@ fn descriptor_values_argument(
     match extract_descriptor_values(argument, source) {
         DescriptorValues::Bindings(bindings) => {
             validate_message_values(message, &bindings)?;
-            Ok((!bindings.is_empty())
-                .then(|| format!("{{ {} }}", render_value_bindings(&bindings))))
+            Ok(Some(render_values_object(&bindings)))
         }
         DescriptorValues::Raw(source) => Ok(Some(source)),
     }
@@ -163,15 +162,15 @@ fn validate_message_values(message: &str, values: &[ValueBinding]) -> PalamedesR
     let placeholders = collect_message_placeholders(message);
     let value_names = values
         .iter()
-        .map(|binding| binding.name.as_str())
+        .map(|binding| binding.name.clone())
         .collect::<BTreeSet<_>>();
     let missing = placeholders
         .difference(&value_names)
-        .copied()
+        .cloned()
         .collect::<Vec<_>>();
     let extra = value_names
         .difference(&placeholders)
-        .copied()
+        .cloned()
         .collect::<Vec<_>>();
 
     if missing.is_empty() && extra.is_empty() {
@@ -184,7 +183,19 @@ fn validate_message_values(message: &str, values: &[ValueBinding]) -> PalamedesR
     })
 }
 
-fn collect_message_placeholders(message: &str) -> BTreeSet<&str> {
+fn collect_message_placeholders(message: &str) -> BTreeSet<String> {
+    if let Ok(metadata) = ferrocat::derive_message_metadata_from_icu(message, None) {
+        return metadata
+            .args
+            .into_keys()
+            .filter(|name| is_placeholder_name(name.as_str()))
+            .collect();
+    }
+
+    collect_message_placeholders_from_braces(message)
+}
+
+fn collect_message_placeholders_from_braces(message: &str) -> BTreeSet<String> {
     let mut placeholders = BTreeSet::new();
     let mut index = 0usize;
 
@@ -196,7 +207,7 @@ fn collect_message_placeholders(message: &str) -> BTreeSet<&str> {
         let end = start + relative_end;
         let name = message[start..end].trim();
         if is_placeholder_name(name) {
-            placeholders.insert(name);
+            placeholders.insert(name.to_string());
         }
         index = end + 1;
     }
@@ -215,7 +226,7 @@ fn is_placeholder_name(name: &str) -> bool {
     chars.all(|ch| ch == '_' || ch == '$' || ch.is_ascii_alphanumeric())
 }
 
-fn format_names(names: &[&str]) -> String {
+fn format_names(names: &[String]) -> String {
     if names.is_empty() {
         "none".to_string()
     } else {
@@ -474,6 +485,14 @@ fn render_value_bindings(values: &[ValueBinding]) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn render_values_object(values: &[ValueBinding]) -> String {
+    if values.is_empty() {
+        "{}".to_string()
+    } else {
+        format!("{{ {} }}", render_value_bindings(values))
+    }
 }
 
 fn build_runtime_descriptor(

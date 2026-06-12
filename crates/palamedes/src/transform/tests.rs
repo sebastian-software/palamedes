@@ -345,6 +345,30 @@ fn descriptor_call_forwards_values_object() {
 }
 
 #[test]
+fn descriptor_call_validates_placeholders_inside_choice_bodies() {
+    let result = transform_macros(
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"{count, plural, one {{name} item} other {{name} items}}\" }, { count, name });\n",
+        "test.ts",
+        None,
+    )
+    .expect("choice body placeholders should validate");
+
+    assert!(result.code.contains(", { count, name },"));
+}
+
+#[test]
+fn descriptor_call_preserves_empty_values_object() {
+    let result = transform_macros(
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello\" }, {});\n",
+        "test.ts",
+        None,
+    )
+    .expect("empty values object should succeed");
+
+    assert!(result.code.contains(", {},"));
+}
+
+#[test]
 fn descriptor_call_rejects_missing_values() {
     let error = transform_macros(
         "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello {name}\" }, { naem: user.name });\n",
@@ -352,6 +376,18 @@ fn descriptor_call_rejects_missing_values() {
         None,
     )
     .expect_err("placeholder mismatch should fail");
+
+    assert!(error.to_string().contains("Missing value(s): name"));
+}
+
+#[test]
+fn descriptor_call_rejects_missing_values_from_empty_object() {
+    let error = transform_macros(
+        "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ message: \"Hello {name}\" }, {});\n",
+        "test.ts",
+        None,
+    )
+    .expect_err("empty values object should still validate placeholders");
 
     assert!(error.to_string().contains("Missing value(s): name"));
 }
