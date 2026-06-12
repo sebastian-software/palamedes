@@ -64,6 +64,9 @@ easier to review, and easier to carry from one framework to the next.
 ## Start Here
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md)
+- [Configuration reference](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md)
+- [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md)
 - [Backend servers with Hono, Express, and request-local i18n](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
 - [`llms.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms.txt) and [`llms-full.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms-full.txt) for AI coding assistants
 - [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) for Vite projects
@@ -206,6 +209,9 @@ The same foundation also matters for future translation workflows:
 ## Proof And Adoption Docs
 
 - [MDX-ready messaging source for homepage/docs](https://github.com/sebastian-software/palamedes/blob/main/docs/site/index.mdx)
+- [API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md)
+- [Configuration reference](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md)
+- [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md)
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
 - [Example matrix and local/CI verification story](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 - [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
