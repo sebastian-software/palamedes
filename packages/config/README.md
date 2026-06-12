@@ -35,6 +35,17 @@ export default defineConfig({
 - `CONFIG_FILENAMES`
 - `expandFallbackLocales(locales, fallbackLocales?)`
 
+## Configuration Notes
+
+- `fallbackLocales` defines the fallback chain for missing translations. It can
+  be one shared array or a per-locale map.
+- `pseudoLocale` marks a generated pseudo-locale used for layout and hardcoded
+  string checks. Plugin integrations skip `failOnMissing` failures for that
+  locale while keeping strict checks for real locales.
+
+See [Pseudo-localization and fallback locales](../../docs/pseudo-localization.md)
+for examples and the recommended development workflow.
+
 ## License
 
 [![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
