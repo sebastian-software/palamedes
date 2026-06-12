@@ -68,7 +68,12 @@ export function createCatalogLoaderResult(
       )
     }
 
-    warnings.push(appendHint(createDiagnosticMessage(locale, result.diagnostics), diagnosticsWarningHint))
+    warnings.push(
+      appendHint(
+        createDiagnosticMessage(locale, result.diagnostics),
+        failOnCompileError ? undefined : diagnosticsWarningHint
+      )
+    )
   }
 
   return {

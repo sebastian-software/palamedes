@@ -68,6 +68,13 @@ describe("catalog loader helpers", () => {
 
     expect(
       createCatalogLoaderResult(result, {
+        locale: "de",
+        failOnMissing: false,
+      }).code
+    ).toBe(renderCatalogModule(baseResult.messages))
+
+    expect(
+      createCatalogLoaderResult(result, {
         locale: "pseudo",
         pseudoLocale: "pseudo",
         failOnMissing: true,
@@ -105,5 +112,28 @@ describe("catalog loader helpers", () => {
     ).toEqual([
       "Catalog diagnostics for locale de:\n\n[error] icu (de)\nBroken ICU\nSource: Inbox\n\nwarning hint",
     ])
+  })
+
+  it("omits compile failure guidance when warning diagnostics do not fail the build", () => {
+    const result: CatalogCompileArtifactResult = {
+      ...baseResult,
+      diagnostics: [
+        {
+          severity: "warning",
+          code: "icu",
+          message: "Suspicious ICU",
+          sourceKey: { message: "Inbox" },
+          locale: "de",
+        },
+      ],
+    }
+
+    expect(
+      createCatalogLoaderResult(result, {
+        locale: "de",
+        failOnCompileError: true,
+        diagnosticsWarningHint: "set failOnCompileError",
+      }).warnings
+    ).toEqual(["Catalog diagnostics for locale de:\n\n[warning] icu (de)\nSuspicious ICU\nSource: Inbox"])
   })
 })
