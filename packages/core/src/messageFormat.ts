@@ -8,6 +8,13 @@ export interface MessageVariableNode {
   name: string
 }
 
+export interface MessageFormattedArgumentNode {
+  type: "formatted"
+  variable: string
+  format: "number" | "date" | "time"
+  style?: string
+}
+
 export interface MessageChoiceNode {
   type: "choice"
   variable: string
@@ -24,10 +31,13 @@ export interface MessageTagNode {
 export type MessageNode =
   | MessageTextNode
   | MessageVariableNode
+  | MessageFormattedArgumentNode
   | MessageChoiceNode
   | MessageTagNode
 
 const parseCache = new Map<string, MessageNode[]>()
+const numberFormatCache = new Map<string, Intl.NumberFormat>()
+const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>()
 
 interface ParserState {
   input: string
@@ -125,7 +135,20 @@ function parseBraceExpression(state: ParserState): MessageNode {
 
   expectChar(state, ",")
   skipWhitespace(state)
-  const kind = readUntil(state, [",", "}"]).trim() as MessageChoiceNode["kind"]
+  const kind = readUntil(state, [",", "}"]).trim()
+
+  if (isFormattedArgumentKind(kind)) {
+    const style = readOptionalStyle(state)
+    expectChar(state, "}")
+
+    return {
+      type: "formatted",
+      variable: name,
+      format: kind,
+      style,
+    }
+  }
+
   expectChar(state, ",")
 
   const options: Record<string, MessageNode[]> = {}
@@ -144,9 +167,23 @@ function parseBraceExpression(state: ParserState): MessageNode {
   return {
     type: "choice",
     variable: name,
-    kind,
+    kind: kind as MessageChoiceNode["kind"],
     options,
   }
+}
+
+function isFormattedArgumentKind(kind: string): kind is MessageFormattedArgumentNode["format"] {
+  return kind === "number" || kind === "date" || kind === "time"
+}
+
+function readOptionalStyle(state: ParserState): string | undefined {
+  if (state.input[state.index] !== ",") {
+    return undefined
+  }
+
+  state.index += 1
+  const style = readUntil(state, ["}"]).trim()
+  return style.length > 0 ? style : undefined
 }
 
 function parseNodesUntilBrace(state: ParserState): MessageNode[] {
@@ -279,6 +316,8 @@ function renderNodeToString(
       return pluralValue === undefined ? node.value : replacePound(node.value, pluralValue, locale)
     case "variable":
       return stringifyValue(values[node.name])
+    case "formatted":
+      return formatArgument(node, values[node.variable], locale)
     case "tag":
       return renderNodesToString(node.children, values, locale, pluralValue)
     case "choice": {
@@ -288,6 +327,107 @@ function renderNodeToString(
       return renderNodesToString(selectChoice(node, value, locale), values, locale, nextPluralValue)
     }
   }
+}
+
+function formatArgument(
+  node: MessageFormattedArgumentNode,
+  value: unknown,
+  locale?: string
+): string {
+  if (node.format === "number") {
+    const numericValue = normalizeNumericValue(value)
+    return getNumberFormatter(locale, node.style).format(numericValue)
+  }
+
+  const dateValue = normalizeDateValue(value)
+  if (!dateValue) {
+    return stringifyValue(value)
+  }
+
+  return getDateTimeFormatter(locale, node.format, node.style).format(dateValue)
+}
+
+function getNumberFormatter(locale: string | undefined, style: string | undefined): Intl.NumberFormat {
+  const cacheKey = `${locale ?? ""}\0${style ?? ""}`
+  const cached = numberFormatCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
+  const formatter = new Intl.NumberFormat(locale, parseNumberFormatOptions(style))
+  numberFormatCache.set(cacheKey, formatter)
+  return formatter
+}
+
+function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatOptions {
+  const normalized = style?.trim()
+  if (!normalized) {
+    return {}
+  }
+
+  const skeleton = normalized.startsWith("::") ? normalized.slice(2) : normalized
+
+  if (skeleton === "percent") {
+    return { style: "percent" }
+  }
+
+  if (skeleton === "integer") {
+    return { maximumFractionDigits: 0 }
+  }
+
+  if (skeleton.startsWith("currency/")) {
+    const currency = skeleton.slice("currency/".length).trim().toUpperCase()
+    if (/^[A-Z]{3}$/.test(currency)) {
+      return {
+        style: "currency",
+        currency,
+      }
+    }
+  }
+
+  return {}
+}
+
+function normalizeDateValue(value: unknown): Date | undefined {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? undefined : date
+  }
+
+  return undefined
+}
+
+function getDateTimeFormatter(
+  locale: string | undefined,
+  format: "date" | "time",
+  style: string | undefined
+): Intl.DateTimeFormat {
+  const normalizedStyle = normalizeDateTimeStyle(style)
+  const cacheKey = `${locale ?? ""}\0${format}\0${normalizedStyle ?? ""}`
+  const cached = dateTimeFormatCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
+  const options: Intl.DateTimeFormatOptions =
+    format === "date"
+      ? { dateStyle: normalizedStyle }
+      : { timeStyle: normalizedStyle }
+  const formatter = new Intl.DateTimeFormat(locale, options)
+  dateTimeFormatCache.set(cacheKey, formatter)
+  return formatter
+}
+
+function normalizeDateTimeStyle(style: string | undefined): "full" | "long" | "medium" | "short" | undefined {
+  if (style === "full" || style === "long" || style === "medium" || style === "short") {
+    return style
+  }
+
+  return undefined
 }
 
 function selectChoice(node: MessageChoiceNode, value: unknown, locale?: string): MessageNode[] {

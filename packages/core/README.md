@@ -28,3 +28,31 @@ For authoring imports, use:
 ```ts
 import { t } from "@palamedes/core/macro"
 ```
+
+## Runtime Formatting
+
+Palamedes supports the common ICU argument types that product UIs usually need
+inside translated sentences:
+
+```ts
+i18n._(
+  {
+    message:
+      "Paid {amount, number, ::currency/EUR} on {when, date, medium} at {when, time, short}",
+  },
+  {
+    amount: 12.3,
+    when: new Date(),
+  }
+)
+```
+
+Supported runtime styles:
+
+- `{value, number}` plus `percent`, `integer`, and `::currency/ISO_CODE`
+- `{value, date, short|medium|long|full}`
+- `{value, time, short|medium|long|full}`
+
+Full ICU skeleton validation belongs in the transform/catalog diagnostics layer;
+unsupported runtime styles fall back to the default `Intl` formatter for the
+argument type.
