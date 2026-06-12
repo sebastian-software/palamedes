@@ -77,6 +77,22 @@ describe("extract", () => {
     expect(findItem(deCatalog.items, "Old only")).toBeUndefined()
   })
 
+  it("keeps repeated extract --clean output byte stable", async () => {
+    const fixtureDir = await copyFixture()
+    const options = {
+      config: path.join(fixtureDir, "palamedes.config.ts"),
+      clean: true,
+    }
+
+    await extract(options)
+    const firstEnCatalog = await readCatalog(fixtureDir, "en")
+    const firstDeCatalog = await readCatalog(fixtureDir, "de")
+
+    await extract(options)
+    expect(await readCatalog(fixtureDir, "en")).toBe(firstEnCatalog)
+    expect(await readCatalog(fixtureDir, "de")).toBe(firstDeCatalog)
+  })
+
   it("emits timing JSON with glob and extract buckets", async () => {
     const fixtureDir = await copyFixture()
     process.env.PALAMEDES_TIMING_JSON = "1"
