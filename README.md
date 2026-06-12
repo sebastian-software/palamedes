@@ -100,6 +100,7 @@ Evidence:
 - [Configuration reference](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md)
 - [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md)
 - [Backend servers with Hono, Express, and request-local i18n](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
+- [Troubleshooting common setup failures](https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md)
 - [`llms.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms.txt) and [`llms-full.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms-full.txt) for AI coding assistants
 - [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) for Vite projects
 - [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) for Next.js projects
@@ -244,6 +245,7 @@ The same foundation also matters for future translation workflows:
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
 - [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
 - [Example matrix and local/CI verification story](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
+- [Troubleshooting common setup failures](https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md)
 - [Pseudo-localization and fallback locale config](https://github.com/sebastian-software/palamedes/blob/main/docs/pseudo-localization.md)
 - [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
 - [Optional demo deployment note](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
