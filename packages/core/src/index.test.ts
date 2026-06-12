@@ -52,6 +52,22 @@ describe("createI18n", () => {
     ).toBe("1 message for Ada")
   })
 
+  it("falls back to the descriptor message when its active catalog lacks the id", () => {
+    const i18n = createI18n()
+
+    i18n.load("de", {
+      "other.message": "Andere Nachricht",
+    })
+    i18n.activate("de")
+
+    expect(
+      i18n._(
+        { id: "inbox.summary", message: "{count, plural, one {# message} other {# messages}} for {name}" },
+        { count: 2, name: "Ada" }
+      )
+    ).toBe("2 messages for Ada")
+  })
+
   it("keeps descriptors without ids message-only", () => {
     const i18n = createI18n()
 
