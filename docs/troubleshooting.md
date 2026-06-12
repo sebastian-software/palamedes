@@ -80,6 +80,14 @@ Fix:
 - Keep `@palamedes/runtime/server` out of Client Components and Edge runtime
   code because it uses Node server APIs.
 
+Direct server runtimes can register the getter explicitly:
+
+```ts
+import { setServerI18nGetter } from "@palamedes/runtime"
+
+setServerI18nGetter(() => getRequestScopedI18n())
+```
+
 ## `.po` Import Fails
 
 Symptom:
@@ -176,6 +184,11 @@ Fix:
 
 ## Translation Exists But Does Not Render
 
+Symptom:
+
+Translated UI renders the original source message or an empty string even
+though the target catalog contains a translation.
+
 Cause:
 
 The source was extracted, but the active runtime instance did not load and
@@ -190,6 +203,11 @@ Fix:
   `message + context`, so a context mismatch is a different catalog entry.
 
 ## Extraction Finds Nothing
+
+Symptom:
+
+`pnpm exec pmds extract` completes with no messages written, or the catalog file
+remains empty after extraction.
 
 Cause:
 
