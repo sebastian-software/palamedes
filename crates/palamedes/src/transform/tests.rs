@@ -53,7 +53,7 @@ fn transforms_after_non_ascii_source_text() {
 
     assert!(result.has_changed);
     assert!(result.code.contains("const x = \"äöü\";"));
-    assert!(result.code.contains("message=\"Hallo Welt\""));
+    assert!(result.code.contains("message={\"Hallo Welt\"}"));
 
     let map = result
         .map
@@ -137,7 +137,7 @@ fn transforms_trans_jsx_macro() {
         .code
         .contains("import { Trans } from \"@palamedes/react\";"));
     assert!(result.code.contains("<Trans id=\""));
-    assert!(result.code.contains("message=\"Hello {name}\""));
+    assert!(result.code.contains("message={\"Hello {name}\"}"));
     assert!(result.code.contains("values={{ name }}"));
     assert!(!result.code.contains("@palamedes/runtime"));
 }
@@ -155,7 +155,7 @@ fn transforms_solid_trans_jsx_macro() {
         .code
         .contains("import { Trans } from \"@palamedes/solid\";"));
     assert!(result.code.contains("<Trans id=\""));
-    assert!(result.code.contains("message=\"Hello <0>{name}</0>\""));
+    assert!(result.code.contains("message={\"Hello <0>{name}</0>\"}"));
     assert!(result
         .code
         .contains("components={{ 0: (children) => <strong>{children}</strong> }}"));
@@ -172,7 +172,7 @@ fn deduplicates_same_tag_component_placeholders() {
 
     assert!(result
         .code
-        .contains("message=\"Accept <0>terms</0> and <1>privacy</1>\""));
+        .contains("message={\"Accept <0>terms</0> and <1>privacy</1>\"}"));
     assert!(result
         .code
         .contains("components={{ 0: <a href=\"/terms\" />, 1: <a href=\"/privacy\" /> }}"));
@@ -187,7 +187,7 @@ fn deduplicates_same_tag_component_placeholders_with_identical_markup() {
     )
     .expect("transform should succeed");
 
-    assert!(result.code.contains("message=\"<0>A</0> and <1>B</1>\""));
+    assert!(result.code.contains("message={\"<0>A</0> and <1>B</1>\"}"));
     assert!(result
         .code
         .contains("components={{ 0: <strong />, 1: <strong /> }}"));
@@ -245,6 +245,52 @@ fn strips_message_field_when_requested() {
 
     assert!(!result.code.contains("message:"));
     assert!(result.code.contains("comment: \"Greeting\""));
+}
+
+#[test]
+fn trans_jsx_macro_escapes_double_quotes_in_message_attribute() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Upload settlement data file with \"3Degrees Audit Summary\" tab</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains(
+        "message={\"Upload settlement data file with \\\"3Degrees Audit Summary\\\" tab\"}"
+    ));
+    assert!(!result
+        .code
+        .contains("message=\"Upload settlement data file with \\\""));
+}
+
+#[test]
+fn wraps_choice_jsx_macro_when_used_as_jsx_child() {
+    let result = transform_macros(
+        "import { Plural } from \"@palamedes/react/macro\";\nfunction Demo({ totalRows }) { return <p><Plural value={totalRows} one=\"# row\" other=\"# rows\" /></p>; }\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("<p>{getI18n()._(\""));
+    assert!(result
+        .code
+        .contains("message: \"{totalRows, plural, one {# row} other {# rows}}\""));
+    assert!(result.code.contains(")}</p>"));
+}
+
+#[test]
+fn keeps_choice_jsx_macro_as_expression_outside_jsx_children() {
+    let result = transform_macros(
+        "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("const el = getI18n()._(\""));
+    assert!(!result.code.contains("const el = {getI18n()._(\""));
 }
 
 #[test]

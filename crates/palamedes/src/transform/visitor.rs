@@ -29,6 +29,7 @@ pub(super) struct TransformVisitor<'a> {
     pub needs_runtime_import: bool,
     pub trans_import_modules: HashSet<String>,
     pub error: Option<PalamedesError>,
+    jsx_element_depth: usize,
 }
 
 impl<'a> TransformVisitor<'a> {
@@ -46,6 +47,7 @@ impl<'a> TransformVisitor<'a> {
             needs_runtime_import: false,
             trans_import_modules: HashSet::new(),
             error: None,
+            jsx_element_depth: 0,
         }
     }
 
@@ -73,12 +75,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         }
 
         let Some(tag_name) = it.opening_element.name.get_identifier_name() else {
+            self.jsx_element_depth += 1;
             walk::walk_jsx_element(self, it);
+            self.jsx_element_depth -= 1;
             return;
         };
 
         let Some(macro_info) = self.macro_imports.get(tag_name.as_str()) else {
+            self.jsx_element_depth += 1;
             walk::walk_jsx_element(self, it);
+            self.jsx_element_depth -= 1;
             return;
         };
 
@@ -102,6 +108,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
+                let text = if macro_info.imported_name != "Trans" && self.jsx_element_depth > 0 {
+                    format!("{{{text}}}")
+                } else {
+                    text
+                };
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
                     end: it.span.end as usize,
@@ -125,7 +136,9 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             }
         }
 
+        self.jsx_element_depth += 1;
         walk::walk_jsx_element(self, it);
+        self.jsx_element_depth -= 1;
     }
 
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {

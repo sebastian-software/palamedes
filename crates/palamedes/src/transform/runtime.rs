@@ -177,7 +177,7 @@ pub(super) fn transform_trans_element(
 
     let mut attrs = vec![
         format!("id=\"{}\"", escape_string(&lookup_key)),
-        format!("message=\"{}\"", escape_string(&message)),
+        format!("message={{\"{}\"}}", escape_string(&message)),
     ];
 
     if !components.is_empty() {
