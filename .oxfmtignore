@@ -12,6 +12,7 @@ coverage/
 docs/example-screenshots/
 benchmarks/*/results/
 packages/core-node/src/generated/
+CHANGELOG.md
 pnpm-lock.yaml
 Cargo.lock
 *.tsbuildinfo
