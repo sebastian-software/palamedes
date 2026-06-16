@@ -48,30 +48,6 @@ is to give that product layer a calm, reliable local base.
 - short hash support for stored translation values
 - stale-metadata detection
 
-### XLIFF bridge
-
-Palamedes includes an offline XLIFF 1.2 bridge for teams that hand local
-catalogs to agencies or translation-management systems.
-
-```bash
-pmds xliff export --locale de --output de.xlf
-pmds xliff import de.xlf
-```
-
-The bridge stays inside the local boundary:
-
-- export reads configured `.po` catalogs and writes one XLIFF `file` per catalog
-- each PO entry is represented by source message plus optional `msgctxt`
-- `msgctxt` is preserved as `resname` and as a Palamedes note
-- empty translations become `needs-translation`
-- `#, fuzzy` entries become `needs-review-translation`
-- import merges by `source + context` identity and reports conflicting duplicate
-  targets before writing back to `.po`
-
-Direct TMS API sync remains outside this layer. Hosted credentials, vendor
-state, account limits, and review workflows belong in the managed product
-surface above Palamedes.
-
 ### Report model
 
 - flagged and unresolved item shapes
