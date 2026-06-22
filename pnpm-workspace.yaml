@@ -4,8 +4,13 @@ packages:
   - "benchmarks/*"
 
 overrides:
+  "eslint-config-setup>eslint-plugin-oxlint": "1.70.0"
   "waku>vite": "^8.0.1"
   "waku>@vitejs/plugin-react": "^6.0.1"
+
+peerDependencyRules:
+  allowedVersions:
+    "eslint-plugin-jsx-a11y>eslint": "^10.0.0"
 
 onlyBuiltDependencies:
   - "@swc/core"
