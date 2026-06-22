@@ -1,5 +1,5 @@
 import { getPreferredLocale } from "@palamedes/example-locale-shared"
-import { unstable_getHeaders } from "waku/server"
+import { unstable_getHeaders } from "waku/router/server"
 import { unstable_redirect } from "waku/router/server"
 
 export default function IndexPage() {
