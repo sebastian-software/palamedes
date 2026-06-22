@@ -26,6 +26,7 @@ mod diagnostic;
 mod error;
 mod extract;
 mod message_metadata;
+mod runtime_icu;
 mod transform;
 
 use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
