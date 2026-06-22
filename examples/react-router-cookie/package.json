@@ -26,7 +26,7 @@
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
     "@react-router/dev": "8.0.1",
-    "@types/node": "^25.9.0",
+    "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "react-server-dom-webpack": "^19.2.7",
