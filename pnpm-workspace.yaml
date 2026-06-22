@@ -44,6 +44,6 @@ minimumReleaseAgeExclude:
   - "@oxc-parser/binding-win32-ia32-msvc@0.132.0"
   - "@oxc-parser/binding-win32-x64-msvc@0.132.0"
   - "@oxc-project/types@0.132.0"
-  - "@types/node@25.9.0"
+  - "@types/node@26.0.0"
   - oxc-parser@0.132.0
   - eslint@10.5.0
