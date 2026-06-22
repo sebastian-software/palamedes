@@ -208,7 +208,7 @@ pub fn transform_macros(
 
     let mut magic_string = MagicString::new(source);
     for replacement in &replacements {
-        apply_replacement(&mut magic_string, replacement);
+        apply_replacement(&mut magic_string, replacement)?;
     }
 
     let code = magic_string.to_string();
@@ -241,12 +241,26 @@ pub fn transform_macros(
     })
 }
 
-fn apply_replacement(magic_string: &mut MagicString<'_>, replacement: &Replacement) {
+fn apply_replacement(
+    magic_string: &mut MagicString<'_>,
+    replacement: &Replacement,
+) -> PalamedesResult<()> {
+    let start = string_wizard_offset(replacement.start)?;
+    let end = string_wizard_offset(replacement.end)?;
+
     if replacement.start == replacement.end {
-        magic_string.append_left(replacement.start, replacement.text.clone());
+        magic_string.append_left(start, replacement.text.clone());
     } else {
-        magic_string.update(replacement.start, replacement.end, replacement.text.clone());
+        magic_string
+            .update(start, end, replacement.text.clone())
+            .map_err(|reason| PalamedesError::TransformEditFailed { reason })?;
     }
+
+    Ok(())
+}
+
+fn string_wizard_offset(offset: usize) -> PalamedesResult<u32> {
+    u32::try_from(offset).map_err(|_| PalamedesError::TransformOffsetTooLarge { offset })
 }
 
 fn import_insertion_offset(program: &oxc_ast::ast::Program<'_>) -> usize {
