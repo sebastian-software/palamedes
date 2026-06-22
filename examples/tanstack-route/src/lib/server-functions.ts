@@ -13,12 +13,13 @@ import { getLocaleLabel, ROUTE_HOSTS, normalizeLocale } from "./i18n"
 export const resolveRootRedirect = createServerFn({ method: "GET" }).handler(async () => {
   const locale = getPreferredLocale(getRequestHeader("accept-language"))
   throw redirect({
-    to: locale === "de" ? "/de" : locale === "es" ? "/es" : "/en",
+    to: "/$locale",
+    params: { locale },
   })
 })
 
 export const loadHomePageData = createServerFn({ method: "GET" })
-  .inputValidator((data: { locale?: string } | undefined) => ({
+  .validator((data: { locale?: string } | undefined) => ({
     locale: normalizeLocale(data?.locale),
   }))
   .handler(async ({ data }) => {
@@ -40,7 +41,7 @@ export const loadHomePageData = createServerFn({ method: "GET" })
   })
 
 export const getLocalizedServerStatus = createServerFn({ method: "GET" })
-  .inputValidator((data: { locale?: string } | undefined) => ({
+  .validator((data: { locale?: string } | undefined) => ({
     locale: normalizeLocale(data?.locale),
   }))
   .handler(async ({ data }) => {

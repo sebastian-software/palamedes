@@ -25,7 +25,7 @@ export const loadHomePageData = createServerFn({ method: "GET" }).handler(async 
 })
 
 export const setLocaleCookie = createServerFn({ method: "POST" })
-  .inputValidator((data: { locale?: string } | undefined) => ({
+  .validator((data: { locale?: string } | undefined) => ({
     locale: normalizeLocale(data?.locale),
   }))
   .handler(async ({ data }) => {
