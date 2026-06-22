@@ -100,10 +100,10 @@ pub fn compile_catalog_artifact_selected(
         &request.config.source_locale,
         &request.compiled_ids,
     );
-    options.fallback_chain = &ferrocat_fallback_chain;
-    options.key_strategy = CompiledKeyStrategy::FerrocatV1;
-    options.source_fallback = true;
-    options.icu_compatibility = true;
+    options.options.fallback_chain = &ferrocat_fallback_chain;
+    options.options.key_strategy = CompiledKeyStrategy::FerrocatV1;
+    options.options.source_fallback = true;
+    options.options.icu_compatibility = true;
 
     let mut artifact =
         ferrocat_compile_catalog_artifact_selected(&catalogs, &compiled_id_index, &options)

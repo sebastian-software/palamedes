@@ -3,8 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ferrocat::{
-    audit_catalogs as ferrocat_audit_catalogs, parse_catalog, CatalogAuditOptions,
-    NormalizedParsedCatalog, ParseCatalogOptions, PluralEncoding,
+    audit_catalogs as ferrocat_audit_catalogs, parse_catalog, CatalogAuditOptions, CatalogMode,
+    NormalizedParsedCatalog, ParseCatalogOptions,
 };
 use serde::{Deserialize, Serialize};
 
@@ -249,15 +249,11 @@ fn load_audit_catalogs(
             path: path.clone(),
             source,
         })?;
-        let parsed = parse_catalog(ParseCatalogOptions {
-            content: &content,
-            locale: Some(locale.as_str()),
-            source_locale: &config.source_locale,
-            plural_encoding: PluralEncoding::Icu,
-            strict: false,
-            ..ParseCatalogOptions::default()
-        })
-        .map_err(|source| PalamedesError::ParseCatalog {
+        let mut options = ParseCatalogOptions::new(&content, &config.source_locale);
+        options.locale = Some(locale.as_str());
+        options.mode = CatalogMode::IcuPo;
+
+        let parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
             path: path.clone(),
             source,
         })?;
