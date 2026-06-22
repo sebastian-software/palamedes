@@ -29,16 +29,7 @@ const benchmarkRoot = path.resolve(__dirname, "..")
 const repoRoot = path.resolve(benchmarkRoot, "..", "..")
 const resultsDir = path.join(benchmarkRoot, "results")
 const poFormatter = createPoFormatter({ origins: false, lineNumbers: false })
-const linguiSwcPluginPath = path.join(
-  benchmarkRoot,
-  "node_modules",
-  "@lingui",
-  "swc-plugin",
-  "target",
-  "wasm32-wasip1",
-  "release",
-  "lingui_macro_plugin.wasm"
-)
+const linguiSwcPluginPath = fileURLToPath(import.meta.resolve("@lingui/swc-plugin"))
 const TRACK_LABELS = {
   "macro-transform-babel": "Macro Transform (Babel)",
   "macro-transform-swc": "Macro Transform (SWC)",
@@ -106,6 +97,7 @@ async function main() {
         rootDir: tempRoot,
         seed: args.seed,
       })
+      const palamedesFiles = toPalamedesMirrorFiles(corpus.files)
       const linguiConfig = buildLinguiConfig(corpus.rootDir)
       const compileConfig = buildPalamedesCompileConfig(
         corpus.rootDir,
@@ -113,7 +105,12 @@ async function main() {
         corpus.sourceLocale
       )
 
-      const validation = await validateSyntheticProfile(corpus, linguiConfig, compileConfig)
+      const validation = await validateSyntheticProfile(
+        corpus,
+        palamedesFiles,
+        linguiConfig,
+        compileConfig
+      )
 
       if (args.validateOnly) {
         profileReports.push({
@@ -127,7 +124,7 @@ async function main() {
       }
 
       const transformPalamedes = await benchmarkTrack(
-        () => runPalamedesTransform(corpus),
+        () => runPalamedesTransform(palamedesFiles),
         args.warmup,
         args.runs
       )
@@ -143,7 +140,7 @@ async function main() {
       )
 
       const extractPalamedes = await benchmarkTrack(
-        () => runPalamedesExtract(corpus),
+        () => runPalamedesExtract(palamedesFiles),
         args.warmup,
         args.runs
       )
@@ -496,11 +493,12 @@ async function runSmokeChecks() {
       source: await readFile(filename, "utf8"),
     }))
   )
+  const linguiFiles = toLinguiMirrorFiles(files)
   const palamedesTransform = await runPalamedesTransform(files)
-  const linguiTransformBabel = await runLinguiTransformBabel(files, config)
-  const linguiTransformSwc = await runLinguiTransformSwc(files)
+  const linguiTransformBabel = await runLinguiTransformBabel(linguiFiles, config)
+  const linguiTransformSwc = await runLinguiTransformSwc(linguiFiles)
   const palamedesExtract = await runPalamedesExtract(files)
-  const linguiExtract = await runLinguiExtract(files, config)
+  const linguiExtract = await runLinguiExtract(linguiFiles, config)
   const palamedesKeys = normalizePalamedesMessages(palamedesExtract.messages)
   const linguiKeys = normalizeLinguiMessages(linguiExtract.messages)
 
@@ -548,8 +546,26 @@ async function runSmokeChecks() {
   }
 }
 
-async function validateSyntheticProfile(corpus, linguiConfig, compileConfig) {
-  const transformPalamedes = await runPalamedesTransform(corpus)
+function toLinguiMirrorFiles(files) {
+  return files.map((file) => ({
+    ...file,
+    source: file.source
+      .replaceAll("@palamedes/core/macro", "@lingui/core/macro")
+      .replaceAll("@palamedes/react/macro", "@lingui/react/macro"),
+  }))
+}
+
+function toPalamedesMirrorFiles(files) {
+  return files.map((file) => ({
+    ...file,
+    source: file.source
+      .replaceAll("@lingui/core/macro", "@palamedes/core/macro")
+      .replaceAll("@lingui/react/macro", "@palamedes/react/macro"),
+  }))
+}
+
+async function validateSyntheticProfile(corpus, palamedesFiles, linguiConfig, compileConfig) {
+  const transformPalamedes = await runPalamedesTransform(palamedesFiles)
   const transformLinguiBabel = await runLinguiTransformBabel(corpus, linguiConfig)
   const transformLinguiSwc = await runLinguiTransformSwc(corpus)
 
@@ -572,7 +588,7 @@ async function validateSyntheticProfile(corpus, linguiConfig, compileConfig) {
   const expectedKeys = corpus.manifest
     .map((entry) => createMessageKey(entry.message, entry.context))
     .sort()
-  const palamedesExtract = await runPalamedesExtract(corpus)
+  const palamedesExtract = await runPalamedesExtract(palamedesFiles)
   const linguiExtract = await runLinguiExtract(corpus, linguiConfig)
   const palamedesKeys = normalizePalamedesMessages(palamedesExtract.messages)
   const linguiKeys = normalizeLinguiMessages(linguiExtract.messages)
