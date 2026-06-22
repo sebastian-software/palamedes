@@ -3,7 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ferrocat::{
-    audit_catalogs as ferrocat_audit_catalogs, parse_catalog, CatalogAuditOptions, CatalogMode,
+    audit_catalogs as ferrocat_audit_catalogs, parse_catalog, CatalogAuditOptions,
+    CatalogAuditReport, CatalogMessage, CatalogMode, DiagnosticSeverity, EffectiveTranslationRef,
     NormalizedParsedCatalog, ParseCatalogOptions,
 };
 use serde::{Deserialize, Serialize};
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::message_metadata::MessageMetadataInput;
+use crate::runtime_icu::parse_runtime_icu;
 
 use super::catalog_artifact::{CatalogArtifactConfig, CatalogConfig};
 
@@ -145,7 +147,13 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
         options.metadata = &metadata;
         options.checks = request.checks.to_ferrocat_checks();
 
-        let report = ferrocat_audit_catalogs(&catalogs, &options).map_err(PalamedesError::from)?;
+        let mut report =
+            ferrocat_audit_catalogs(&catalogs, &options).map_err(PalamedesError::from)?;
+        align_report_with_runtime_icu_semantics(
+            &mut report,
+            &catalogs,
+            &request.config.source_locale,
+        );
         add_summary(&mut result.summary, &report.summary);
 
         let paths_by_locale = paths_by_locale(&request.config, catalog);
@@ -298,6 +306,101 @@ fn diagnostic_locale_from_name(code: &str, name: Option<&str>) -> Option<String>
     }
 }
 
+fn align_report_with_runtime_icu_semantics(
+    report: &mut CatalogAuditReport,
+    catalogs: &[&NormalizedParsedCatalog],
+    source_locale: &str,
+) {
+    let diagnostics = std::mem::take(&mut report.diagnostics);
+    report.diagnostics = diagnostics
+        .into_iter()
+        .filter(|diagnostic| {
+            diagnostic.code != "icu.invalid_syntax"
+                || !diagnostic_matches_runtime_valid_icu(diagnostic, catalogs, source_locale)
+        })
+        .collect();
+    refresh_report_summary(report);
+}
+
+fn diagnostic_matches_runtime_valid_icu(
+    diagnostic: &ferrocat::CatalogAuditDiagnostic,
+    catalogs: &[&NormalizedParsedCatalog],
+    source_locale: &str,
+) -> bool {
+    let Some(source_key) = &diagnostic.source_key else {
+        return false;
+    };
+    let Some(locale) = source_key.locale.as_deref() else {
+        return false;
+    };
+    let Some(catalog) = catalogs
+        .iter()
+        .copied()
+        .find(|catalog| catalog.parsed_catalog().locale.as_deref() == Some(locale))
+    else {
+        return false;
+    };
+    let Some(message) = catalog.get_by_parts(&source_key.msgid, source_key.msgctxt.as_deref())
+    else {
+        return false;
+    };
+
+    runtime_validates_all_strict_invalid_message_strings(message, locale == source_locale)
+}
+
+fn runtime_validates_all_strict_invalid_message_strings(
+    message: &CatalogMessage,
+    include_msgid: bool,
+) -> bool {
+    let mut invalid_values = Vec::new();
+    if include_msgid {
+        push_unique_message_value(&mut invalid_values, message.msgid.as_str());
+    }
+    match message.effective_translation() {
+        EffectiveTranslationRef::Singular(value) => {
+            push_unique_message_value(&mut invalid_values, value);
+        }
+        EffectiveTranslationRef::Plural(translations) => {
+            for value in translations.values().map(String::as_str) {
+                push_unique_message_value(&mut invalid_values, value);
+            }
+        }
+    }
+
+    let mut has_strict_invalid_value = false;
+    let all_strict_invalid_values_are_runtime_valid = invalid_values
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .filter(|value| {
+            let invalid = ferrocat::parse_icu(value).is_err();
+            has_strict_invalid_value |= invalid;
+            invalid
+        })
+        .all(|value| parse_runtime_icu(value).is_some());
+
+    has_strict_invalid_value && all_strict_invalid_values_are_runtime_valid
+}
+
+fn push_unique_message_value<'a>(values: &mut Vec<&'a str>, value: &'a str) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
+}
+
+fn refresh_report_summary(report: &mut CatalogAuditReport) {
+    report.summary.diagnostics = report.diagnostics.len();
+    report.summary.errors = 0;
+    report.summary.warnings = 0;
+    report.summary.infos = 0;
+    for diagnostic in &report.diagnostics {
+        match diagnostic.severity {
+            DiagnosticSeverity::Error => report.summary.errors += 1,
+            DiagnosticSeverity::Warning => report.summary.warnings += 1,
+            DiagnosticSeverity::Info => report.summary.infos += 1,
+        }
+    }
+}
+
 fn add_summary(target: &mut CatalogAuditSummary, summary: &ferrocat::CatalogAuditSummary) {
     target.source_messages += summary.source_messages;
     target.target_locales += summary.target_locales;
@@ -362,6 +465,97 @@ msgstr "Hallo {firstName}"
             .iter()
             .any(|diagnostic| diagnostic.code == "catalog.missing_locale"
                 && diagnostic.locale.as_deref() == Some("es")));
+    }
+
+    #[test]
+    fn accepts_runtime_literal_apostrophes_in_catalog_audit() {
+        let fixture = create_fixture_dir("catalog-audit-apostrophes");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+        fs::write(
+            locale_dir.join("en.po"),
+            r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Set your working hours and let clients book only when you're available."
+msgstr ""
+
+msgid "We've got {count, plural, one {one opening} other {# openings}}."
+msgstr ""
+"#,
+        )
+        .expect("write en");
+        fs::write(
+            locale_dir.join("de.po"),
+            r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Set your working hours and let clients book only when you're available."
+msgstr "Lege deine Arbeitszeiten fest, damit Kund:innen nur buchen, wenn du verfügbar bist."
+
+msgid "We've got {count, plural, one {one opening} other {# openings}}."
+msgstr "Wir haben {count, plural, one {einen freien Termin} other {# freie Termine}}."
+"#,
+        )
+        .expect("write de");
+
+        let result = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec!["de".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit");
+
+        assert!(!result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.invalid_syntax"));
+    }
+
+    #[test]
+    fn keeps_real_invalid_icu_syntax_in_catalog_audit() {
+        let fixture = create_fixture_dir("catalog-audit-invalid-icu");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+        fs::write(
+            locale_dir.join("en.po"),
+            r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Hello {name}"
+msgstr ""
+"#,
+        )
+        .expect("write en");
+        fs::write(
+            locale_dir.join("de.po"),
+            r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Hello {name}"
+msgstr "Hallo {{name}}"
+"#,
+        )
+        .expect("write de");
+
+        let result = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec!["de".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit");
+
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.invalid_syntax"
+                && diagnostic.locale.as_deref() == Some("de")));
     }
 
     fn config(root: &std::path::Path) -> CatalogArtifactConfig {

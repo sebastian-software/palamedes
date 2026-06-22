@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use ferrocat::{
-    compare_icu_messages, parse_icu, validate_icu_formatter_support, CompiledCatalogArtifact,
+    compare_icu_messages, validate_icu_formatter_support, CompiledCatalogArtifact,
     CompiledCatalogDiagnostic, CompiledCatalogIdIndex, DiagnosticSeverity, IcuArgumentKind,
     IcuCompatibilityOptions, IcuDiagnosticSeverity, IcuFormatter, IcuFormatterSupport,
 };
+
+use crate::runtime_icu::parse_runtime_icu;
 
 use super::types::{
     CatalogArtifactDiagnostic, CatalogArtifactMissingMessage, CatalogArtifactResult,
@@ -217,14 +219,6 @@ fn is_supported_runtime_date_time_style(style: Option<&str>) -> bool {
     };
 
     matches!(style, "short" | "medium" | "long" | "full")
-}
-
-fn parse_runtime_icu(message: &str) -> Option<ferrocat::IcuMessage> {
-    parse_icu(&runtime_icu_validation_view(message)).ok()
-}
-
-fn runtime_icu_validation_view(message: &str) -> String {
-    message.replace('\'', "''")
 }
 
 const fn runtime_icu_diagnostic_severity(severity: IcuDiagnosticSeverity) -> DiagnosticSeverity {
