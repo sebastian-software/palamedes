@@ -246,11 +246,12 @@ fn apply_replacement(
     replacement: &Replacement,
 ) -> PalamedesResult<()> {
     let start = string_wizard_offset(replacement.start)?;
-    let end = string_wizard_offset(replacement.end)?;
 
     if replacement.start == replacement.end {
         magic_string.append_left(start, replacement.text.clone());
     } else {
+        let end = string_wizard_offset(replacement.end)?;
+
         magic_string
             .update(start, end, replacement.text.clone())
             .map_err(|reason| PalamedesError::TransformEditFailed { reason })?;
