@@ -6,7 +6,7 @@ well-scoped changes are easiest to review.
 
 ## Prerequisites
 
-- Node.js `>=22`
+- Node.js `>=22.12`
 - pnpm via Corepack
 - Rust stable toolchain
 - GitHub CLI if you work on issue or PR automation locally
