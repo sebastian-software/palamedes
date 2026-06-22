@@ -150,6 +150,18 @@ pub enum PalamedesError {
         /// Joined parser diagnostics.
         messages: String,
     },
+    /// A transform source offset exceeded the source-map backend's supported range.
+    #[error("Transform source offset {offset} exceeds the supported 32-bit range.")]
+    TransformOffsetTooLarge {
+        /// Source byte offset that could not be represented.
+        offset: usize,
+    },
+    /// Applying a transform edit failed in the source-map backend.
+    #[error("Failed to apply transform edit: {reason}")]
+    TransformEditFailed {
+        /// Source-map backend error.
+        reason: String,
+    },
     /// Explicit author-facing message IDs are no longer supported.
     #[error(
         "Explicit message ids are no longer supported. Remove `id` and rely on message/context instead."
