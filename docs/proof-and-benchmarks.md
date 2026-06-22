@@ -27,7 +27,7 @@ evidence easy to inspect.
 | Catalog model         | Source-string-first, `.po`, `message + context` identity                          |
 | Native core           | Rust + `napi-rs`                                                                  |
 | Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                      |
-| Node requirement      | `>=22.12`                                                                         |
+| Node requirement      | `>=22.22`                                                                         |
 | Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                        |
 
 ## What Counts As Proof In This Repo

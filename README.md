@@ -1,7 +1,7 @@
 # Palamedes
 
 [![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
-[![Node >=22.12](https://img.shields.io/badge/node-%3E%3D22.12-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
+[![Node >=22.22](https://img.shields.io/badge/node-%3E%3D22.22-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
@@ -59,7 +59,7 @@ easier to review, and easier to carry from one framework to the next.
 ## Current Status
 
 - Recommended for new projects and teams that want cleaner i18n foundations
-- Verified today across Next.js, TanStack Start, SolidStart, Waku, and React Router on Node.js `>=22.12`
+- Verified today across Next.js, TanStack Start, SolidStart, Waku, and React Router on Node.js `>=22.22`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 - Pre-1.0 stability tiers and public API expectations are documented in [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)

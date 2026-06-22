@@ -1,7 +1,7 @@
 import { startTransition, StrictMode } from "react"
 import { hydrateRoot } from "react-dom/client"
 import { HydratedRouter } from "react-router/dom"
-import { DEFAULT_LOCALE, syncClientI18n } from "~/lib/i18n"
+import { DEFAULT_LOCALE, LOCALES, syncClientI18n, type Locale } from "~/lib/i18n"
 
 declare global {
   interface Window {
@@ -10,7 +10,10 @@ declare global {
 }
 
 async function bootstrap() {
-  const locale = window.__PALAMEDES_LOCALE__ ?? DEFAULT_LOCALE
+  const candidate = window.__PALAMEDES_LOCALE__
+  const locale: Locale = LOCALES.includes(candidate as Locale)
+    ? (candidate as Locale)
+    : DEFAULT_LOCALE
   await syncClientI18n(locale)
 
   startTransition(() => {
