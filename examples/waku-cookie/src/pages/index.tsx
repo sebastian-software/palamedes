@@ -1,7 +1,7 @@
 import { t } from "@palamedes/core/macro"
 import { Trans } from "@palamedes/react/macro"
 import { resolveCookieLocale } from "@palamedes/example-locale-shared"
-import { unstable_getHeaders } from "waku/server"
+import { unstable_getHeaders } from "waku/router/server"
 import { Counter } from "../components/Counter"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
 import { ServerActionProbe } from "../components/ServerActionProbe"
