@@ -6,8 +6,8 @@ use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::MachineTranslationMetadata as FerrocatMachineTranslationMetadata;
 use ferrocat::{
     parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
-    CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, ObsoleteStrategy,
-    ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, PluralEncoding,
+    CatalogMode, CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult,
+    ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode,
     SourceExtractedMessage, UpdateCatalogFileOptions,
 };
 use serde::{Deserialize, Serialize};
@@ -190,15 +190,11 @@ pub fn parse_catalog(request: &CatalogParseRequest) -> PalamedesResult<CatalogPa
             path: target_path,
             source,
         })?;
-    let parsed = ferrocat_parse_catalog(ParseCatalogOptions {
-        content: &content,
-        locale: Some(&request.locale),
-        source_locale: &request.source_locale,
-        plural_encoding: PluralEncoding::Icu,
-        strict: false,
-        ..ParseCatalogOptions::default()
-    })
-    .map_err(PalamedesError::from)?;
+    let mut options = ParseCatalogOptions::new(&content, &request.source_locale);
+    options.locale = Some(&request.locale);
+    options.mode = CatalogMode::IcuPo;
+
+    let parsed = ferrocat_parse_catalog(options).map_err(PalamedesError::from)?;
 
     Ok(public_parse_result(parsed))
 }
@@ -217,25 +213,22 @@ fn update_catalog_file_source_first(
             .collect::<Result<Vec<_>, _>>()?,
     );
 
-    let result = ferrocat_update_catalog_file(UpdateCatalogFileOptions {
-        target_path: &target_path,
-        locale: Some(&request.locale),
-        source_locale: &request.source_locale,
-        input,
-        plural_encoding: PluralEncoding::Icu,
-        obsolete_strategy: if request.clean {
-            ObsoleteStrategy::Delete
-        } else {
-            ObsoleteStrategy::Mark
-        },
-        overwrite_source_translations: true,
-        custom_header_attributes: Some(&custom_header_attributes),
-        include_origins: true,
-        include_line_numbers: true,
-        print_placeholders_in_comments: PlaceholderCommentMode::Enabled { limit: 3 },
-        ..UpdateCatalogFileOptions::default()
-    })
-    .map_err(PalamedesError::from)?;
+    let mut options = UpdateCatalogFileOptions::new(&target_path, &request.source_locale, input);
+    options.options.locale = Some(&request.locale);
+    options.options.mode = CatalogMode::IcuPo;
+    options.options.obsolete_strategy = if request.clean {
+        ObsoleteStrategy::Delete
+    } else {
+        ObsoleteStrategy::Mark
+    };
+    options.options.overwrite_source_translations = true;
+    options.options.render.custom_header_attributes = Some(&custom_header_attributes);
+    options.options.render.include_origins = true;
+    options.options.render.include_line_numbers = true;
+    options.options.render.print_placeholders_in_comments =
+        PlaceholderCommentMode::Enabled { limit: 3 };
+
+    let result = ferrocat_update_catalog_file(options).map_err(PalamedesError::from)?;
 
     Ok(public_update_result(result))
 }

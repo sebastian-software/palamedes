@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use ferrocat::{parse_catalog, NormalizedParsedCatalog, ParseCatalogOptions, PluralEncoding};
+use ferrocat::{parse_catalog, CatalogMode, NormalizedParsedCatalog, ParseCatalogOptions};
 
 use crate::error::{PalamedesError, PalamedesResult};
 
@@ -31,15 +31,11 @@ pub(super) fn load_catalogs(
             path: file.clone(),
             source,
         })?;
-        let parsed = parse_catalog(ParseCatalogOptions {
-            content: &content,
-            locale: Some(locale.as_str()),
-            source_locale: &config.source_locale,
-            plural_encoding: PluralEncoding::Icu,
-            strict: false,
-            ..ParseCatalogOptions::default()
-        })
-        .map_err(|source| PalamedesError::ParseCatalog {
+        let mut options = ParseCatalogOptions::new(&content, &config.source_locale);
+        options.locale = Some(locale.as_str());
+        options.mode = CatalogMode::IcuPo;
+
+        let parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
             path: file.clone(),
             source,
         })?;

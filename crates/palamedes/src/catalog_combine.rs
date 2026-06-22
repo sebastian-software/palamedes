@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use ferrocat::{
     combine_catalogs as ferrocat_combine_catalogs, CatalogCombineInput as FerrocatCombineInput,
-    CatalogStorageFormat, CombineCatalogOptions, OrderBy, PluralEncoding,
+    CatalogMode, CombineCatalogOptions, OrderBy,
 };
 use serde::{Deserialize, Serialize};
 
@@ -152,12 +152,12 @@ pub struct CatalogMergeResult {
 /// Returns an error when inputs are invalid, cannot be parsed, or contain
 /// rejected translation conflicts.
 pub fn combine_catalogs(request: CatalogCombineRequest) -> PalamedesResult<CatalogCombineResult> {
-    combine_catalog_contents(request, CatalogStorageFormat::Po)
+    combine_catalog_contents(request, CatalogMode::IcuPo)
 }
 
 fn combine_catalog_contents(
     request: CatalogCombineRequest,
-    storage_format: CatalogStorageFormat,
+    mode: CatalogMode,
 ) -> PalamedesResult<CatalogCombineResult> {
     let inputs = request
         .inputs
@@ -168,21 +168,17 @@ fn combine_catalog_contents(
         })
         .collect::<Vec<_>>();
 
-    let result = ferrocat_combine_catalogs(CombineCatalogOptions {
-        inputs: &inputs,
-        locale: request.locale.as_deref(),
-        source_locale: &request.source_locale,
-        storage_format,
-        plural_encoding: PluralEncoding::Icu,
-        conflict_strategy: request.conflict_strategy.into(),
-        selection: request.selection.into(),
-        order_by: OrderBy::Msgid,
-        include_origins: true,
-        include_line_numbers: true,
-        include_obsolete: request.include_obsolete,
-        ..CombineCatalogOptions::default()
-    })
-    .map_err(PalamedesError::from)?;
+    let mut options = CombineCatalogOptions::new(&inputs, &request.source_locale);
+    options.locale = request.locale.as_deref();
+    options.mode = mode;
+    options.conflict_strategy = request.conflict_strategy.into();
+    options.selection = request.selection.into();
+    options.order_by = OrderBy::Msgid;
+    options.include_origins = true;
+    options.include_line_numbers = true;
+    options.include_obsolete = request.include_obsolete;
+
+    let result = ferrocat_combine_catalogs(options).map_err(PalamedesError::from)?;
 
     Ok(CatalogCombineResult {
         content: result.content,
@@ -282,11 +278,11 @@ impl From<CatalogCombineSelection> for ferrocat::CatalogCombineSelection {
     }
 }
 
-impl From<CatalogMergeFormat> for CatalogStorageFormat {
+impl From<CatalogMergeFormat> for CatalogMode {
     fn from(value: CatalogMergeFormat) -> Self {
         match value {
-            CatalogMergeFormat::Po => Self::Po,
-            CatalogMergeFormat::Json => Self::Ndjson,
+            CatalogMergeFormat::Po => Self::IcuPo,
+            CatalogMergeFormat::Json => Self::IcuNdjson,
         }
     }
 }
