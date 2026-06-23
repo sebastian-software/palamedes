@@ -199,9 +199,9 @@ checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
 
 [[package]]
 name = "ferrocat"
-version = "1.1.1"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec752a5b60b7f537aa5a82f1a48c49834d325659817bd71854f79154116fec07"
+checksum = "ef826c9078b8f7ec87c105c991f0e0f4e900d5f30de5f4591829d01228ded67e"
 dependencies = [
  "ferrocat-icu",
  "ferrocat-po",
@@ -209,18 +209,18 @@ dependencies = [
 
 [[package]]
 name = "ferrocat-icu"
-version = "1.1.1"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f173ec75d8de91e0e35a407194d08485d2223677454f05b5da2db972b24df974"
+checksum = "72fbe26a76bec82113839d12983804bcbd23f0d16e12a8b16ddfda04dd61e4ed"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "ferrocat-po"
-version = "1.1.1"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2fa50979209270c31048ae3ab02e020b1d9693c0da916b8119a7c627ddcd759"
+checksum = "57ef06cd734d91a47309b8b459c55379ca6e2882523e073d0fdff0132cffeb38"
 dependencies = [
  "ferrocat-icu",
  "icu_locale",
@@ -850,6 +850,7 @@ name = "palamedes"
 version = "0.7.0"
 dependencies = [
  "ferrocat",
+ "ferrocat-po",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",

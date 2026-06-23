@@ -3,16 +3,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ferrocat::{
-    audit_catalogs as ferrocat_audit_catalogs, parse_catalog, CatalogAuditOptions,
-    CatalogAuditReport, CatalogMessage, CatalogMode, DiagnosticSeverity, EffectiveTranslationRef,
-    NormalizedParsedCatalog, ParseCatalogOptions,
+    parse_catalog, CatalogAuditOptions, CatalogMode, IcuSyntaxPolicy, NormalizedParsedCatalog,
+    ParseCatalogOptions,
+};
+use ferrocat_po::{
+    audit_catalogs_with_icu_options as ferrocat_audit_catalogs, CatalogAuditIcuOptions,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::message_metadata::MessageMetadataInput;
-use crate::runtime_icu::parse_runtime_icu;
 
 use super::catalog_artifact::{CatalogArtifactConfig, CatalogConfig};
 
@@ -147,13 +148,10 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
         options.metadata = &metadata;
         options.checks = request.checks.to_ferrocat_checks();
 
-        let mut report =
-            ferrocat_audit_catalogs(&catalogs, &options).map_err(PalamedesError::from)?;
-        align_report_with_runtime_icu_semantics(
-            &mut report,
-            &catalogs,
-            &request.config.source_locale,
-        );
+        let icu_options = CatalogAuditIcuOptions::new()
+            .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes);
+        let report = ferrocat_audit_catalogs(&catalogs, &options, &icu_options)
+            .map_err(PalamedesError::from)?;
         add_summary(&mut result.summary, &report.summary);
 
         let paths_by_locale = paths_by_locale(&request.config, catalog);
@@ -303,101 +301,6 @@ fn diagnostic_locale_from_name(code: &str, name: Option<&str>) -> Option<String>
     match code {
         "catalog.missing_locale" | "catalog.missing_source_locale" => name.map(str::to_owned),
         _ => None,
-    }
-}
-
-fn align_report_with_runtime_icu_semantics(
-    report: &mut CatalogAuditReport,
-    catalogs: &[&NormalizedParsedCatalog],
-    source_locale: &str,
-) {
-    let diagnostics = std::mem::take(&mut report.diagnostics);
-    report.diagnostics = diagnostics
-        .into_iter()
-        .filter(|diagnostic| {
-            diagnostic.code != "icu.invalid_syntax"
-                || !diagnostic_matches_runtime_valid_icu(diagnostic, catalogs, source_locale)
-        })
-        .collect();
-    refresh_report_summary(report);
-}
-
-fn diagnostic_matches_runtime_valid_icu(
-    diagnostic: &ferrocat::CatalogAuditDiagnostic,
-    catalogs: &[&NormalizedParsedCatalog],
-    source_locale: &str,
-) -> bool {
-    let Some(source_key) = &diagnostic.source_key else {
-        return false;
-    };
-    let Some(locale) = source_key.locale.as_deref() else {
-        return false;
-    };
-    let Some(catalog) = catalogs
-        .iter()
-        .copied()
-        .find(|catalog| catalog.parsed_catalog().locale.as_deref() == Some(locale))
-    else {
-        return false;
-    };
-    let Some(message) = catalog.get_by_parts(&source_key.msgid, source_key.msgctxt.as_deref())
-    else {
-        return false;
-    };
-
-    runtime_validates_all_strict_invalid_message_strings(message, locale == source_locale)
-}
-
-fn runtime_validates_all_strict_invalid_message_strings(
-    message: &CatalogMessage,
-    include_msgid: bool,
-) -> bool {
-    let mut invalid_values = Vec::new();
-    if include_msgid {
-        push_unique_message_value(&mut invalid_values, message.msgid.as_str());
-    }
-    match message.effective_translation() {
-        EffectiveTranslationRef::Singular(value) => {
-            push_unique_message_value(&mut invalid_values, value);
-        }
-        EffectiveTranslationRef::Plural(translations) => {
-            for value in translations.values().map(String::as_str) {
-                push_unique_message_value(&mut invalid_values, value);
-            }
-        }
-    }
-
-    let mut has_strict_invalid_value = false;
-    let all_strict_invalid_values_are_runtime_valid = invalid_values
-        .into_iter()
-        .filter(|value| !value.trim().is_empty())
-        .filter(|value| {
-            let invalid = ferrocat::parse_icu(value).is_err();
-            has_strict_invalid_value |= invalid;
-            invalid
-        })
-        .all(|value| parse_runtime_icu(value).is_some());
-
-    has_strict_invalid_value && all_strict_invalid_values_are_runtime_valid
-}
-
-fn push_unique_message_value<'a>(values: &mut Vec<&'a str>, value: &'a str) {
-    if !values.contains(&value) {
-        values.push(value);
-    }
-}
-
-fn refresh_report_summary(report: &mut CatalogAuditReport) {
-    report.summary.diagnostics = report.diagnostics.len();
-    report.summary.errors = 0;
-    report.summary.warnings = 0;
-    report.summary.infos = 0;
-    for diagnostic in &report.diagnostics {
-        match diagnostic.severity {
-            DiagnosticSeverity::Error => report.summary.errors += 1,
-            DiagnosticSeverity::Warning => report.summary.warnings += 1,
-            DiagnosticSeverity::Info => report.summary.infos += 1,
-        }
     }
 }
 
