@@ -248,6 +248,64 @@ msgstr ""
 }
 
 #[test]
+fn compile_catalog_artifact_selected_pseudolocalizes_with_ferrocat_runtime_syntax_policy() {
+    let fixture = create_fixture_dir("selected-catalog-artifact-pseudo-ferrocat");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    fs::write(
+        locale_dir.join("en.po"),
+        r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "You're {name}"
+msgstr ""
+
+msgid "Other"
+msgstr ""
+"#,
+    )
+    .expect("write en");
+
+    fs::write(
+        locale_dir.join("pseudo.po"),
+        r#"msgid ""
+msgstr ""
+"Language: pseudo\n"
+"#,
+    )
+    .expect("write pseudo");
+
+    let request = CatalogArtifactSelectedRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "pseudo".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: Some("pseudo".to_owned()),
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+            }],
+        },
+        resource_path: locale_dir.join("pseudo.po").to_string_lossy().into_owned(),
+        compiled_ids: vec![compiled_key("You're {name}", None)],
+    };
+    let result = compile_catalog_artifact_selected(&request).expect("selected catalog artifact");
+    let message = result
+        .messages
+        .get(&compiled_key("You're {name}", None))
+        .expect("pseudolocalized message");
+
+    assert_eq!(result.messages.len(), 1);
+    assert!(message.starts_with("[!! "));
+    assert!(message.ends_with(" !!]"));
+    assert!(message.contains("{name}"));
+    assert_ne!(message, "You're {name}");
+    assert!(result.diagnostics.is_empty());
+}
+
+#[test]
 fn compile_catalog_artifact_keeps_icu_compatibility_diagnostics_with_apostrophes() {
     let fixture = create_fixture_dir("catalog-artifact-apostrophe-compatibility");
     let locale_dir = fixture.join("src/locales");

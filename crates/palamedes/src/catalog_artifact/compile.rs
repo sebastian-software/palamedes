@@ -6,7 +6,7 @@ use ferrocat::{
     IcuPseudolocalizationOptions, IcuSyntaxPolicy,
 };
 
-use crate::error::PalamedesResult;
+use crate::error::{PalamedesError, PalamedesResult};
 
 use super::types::{
     CatalogArtifactDiagnostic, CatalogArtifactMissingMessage, CatalogArtifactResult,
@@ -30,7 +30,8 @@ pub(super) fn build_artifact_result(
             &artifact,
             &IcuPseudolocalizationOptions::new(),
             IcuSyntaxPolicy::RuntimeLiteralApostrophes,
-        )?
+        )
+        .map_err(PalamedesError::PseudolocalizeCatalogArtifact)?
     } else {
         artifact
     };
