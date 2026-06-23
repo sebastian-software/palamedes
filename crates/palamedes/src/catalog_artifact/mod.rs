@@ -9,15 +9,15 @@ mod tests;
 use std::path::PathBuf;
 
 use ferrocat::{
-    compile_catalog_artifact as ferrocat_compile_catalog_artifact,
-    compile_catalog_artifact_selected as ferrocat_compile_catalog_artifact_selected,
+    compile_catalog_artifact_selected_with_icu_options as ferrocat_compile_catalog_artifact_selected,
+    compile_catalog_artifact_with_icu_options as ferrocat_compile_catalog_artifact,
     CompileCatalogArtifactOptions, CompileSelectedCatalogArtifactOptions, CompiledCatalogIdIndex,
     CompiledKeyStrategy,
 };
 
 use crate::error::{PalamedesError, PalamedesResult};
 
-use self::compile::{align_diagnostics_with_runtime_icu_semantics, build_artifact_result};
+use self::compile::{build_artifact_result, runtime_icu_options};
 use self::load::LocaleCatalogs;
 use self::resolve::{ferrocat_fallback_chain, prepare_compilation};
 pub use self::types::{
@@ -52,20 +52,14 @@ pub fn compile_catalog_artifact(
     );
     let mut options =
         CompileCatalogArtifactOptions::new(&prepared.locale, &request.config.source_locale);
-    let compiled_id_index = CompiledCatalogIdIndex::new(&catalogs, CompiledKeyStrategy::FerrocatV1)
-        .map_err(PalamedesError::BuildCompiledIdIndex)?;
     options.fallback_chain = &ferrocat_fallback_chain;
     options.key_strategy = CompiledKeyStrategy::FerrocatV1;
     options.source_fallback = true;
     options.icu_compatibility = true;
 
-    let mut artifact = ferrocat_compile_catalog_artifact(&catalogs, &options)
+    let icu_options = runtime_icu_options();
+    let artifact = ferrocat_compile_catalog_artifact(&catalogs, &options, &icu_options)
         .map_err(PalamedesError::CompileCatalogArtifact)?;
-    align_diagnostics_with_runtime_icu_semantics(
-        &mut artifact,
-        &compiled_id_index,
-        &prepared.locale,
-    );
 
     Ok(build_artifact_result(
         artifact,
@@ -105,14 +99,14 @@ pub fn compile_catalog_artifact_selected(
     options.options.source_fallback = true;
     options.options.icu_compatibility = true;
 
-    let mut artifact =
-        ferrocat_compile_catalog_artifact_selected(&catalogs, &compiled_id_index, &options)
-            .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
-    align_diagnostics_with_runtime_icu_semantics(
-        &mut artifact,
+    let icu_options = runtime_icu_options();
+    let artifact = ferrocat_compile_catalog_artifact_selected(
+        &catalogs,
         &compiled_id_index,
-        &prepared.locale,
-    );
+        &options,
+        &icu_options,
+    )
+    .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
 
     Ok(build_artifact_result(
         artifact,

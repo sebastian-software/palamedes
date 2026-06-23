@@ -8,7 +8,8 @@ rust-version.workspace = true
 description = "Rust core for Palamedes."
 
 [dependencies]
-ferrocat = "1.1.1"
+ferrocat = "1.2.1"
+ferrocat-po = "1.2.1"
 oxc_allocator = "0.133.0"
 oxc_ast = "0.133.0"
 oxc_ast_visit = "0.133.0"

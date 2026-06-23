@@ -256,7 +256,7 @@ msgstr "Konnte {firstName}'s Daten nicht laden"
 }
 
 #[test]
-fn compile_catalog_artifact_keeps_invalid_icu_when_source_msgid_cannot_parse() {
+fn compile_catalog_artifact_accepts_runtime_valid_translation_when_source_msgid_cannot_parse() {
     let fixture = create_fixture_dir("catalog-artifact-apostrophe-source-invalid");
     let locale_dir = fixture.join("src/locales");
     fs::create_dir_all(&locale_dir).expect("locale dir");
@@ -300,7 +300,7 @@ msgstr "John's Daten konnten nicht geladen werden"
     };
     let result = compile_catalog_artifact(&request).expect("catalog artifact");
 
-    assert!(result.diagnostics.iter().any(|diagnostic| {
+    assert!(!result.diagnostics.iter().any(|diagnostic| {
         diagnostic.code == "compile.invalid_icu_message"
             && diagnostic.source_key.message == "{unclosed"
             && diagnostic.locale == "de"

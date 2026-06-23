@@ -26,7 +26,6 @@ mod diagnostic;
 mod error;
 mod extract;
 mod message_metadata;
-mod runtime_icu;
 mod transform;
 
 use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
@@ -71,7 +70,7 @@ pub use transform::{
 };
 
 /// Published `ferrocat` version used by the Rust core.
-pub const FERROCAT_VERSION: &str = "0.12.0";
+pub const FERROCAT_VERSION: &str = "1.2.1";
 
 /// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]
