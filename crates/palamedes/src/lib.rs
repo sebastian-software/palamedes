@@ -210,6 +210,15 @@ mod tests {
     }
 
     #[test]
+    fn ferrocat_version_matches_declared_dependency() {
+        let manifest = include_str!("../Cargo.toml");
+        let declared = dependency_version(manifest, "ferrocat")
+            .expect("ferrocat dependency should be declared");
+
+        assert_eq!(FERROCAT_VERSION, declared);
+    }
+
+    #[test]
     fn generates_internal_lookup_keys_via_ferrocat_v1() {
         assert_eq!(compiled_key("Hello", None), "mCRI2NMFS5Y");
     }
@@ -245,5 +254,45 @@ msgstr "Hallo"
             po.items[0].metadata.get("ferrocat-mt").map(String::as_str),
             Some("model=openai/gpt-5.5-high confidence=95 hash=abc")
         );
+    }
+
+    fn dependency_version<'a>(manifest: &'a str, name: &str) -> Option<&'a str> {
+        let mut in_dependencies = false;
+        for line in manifest.lines().map(str::trim) {
+            if line.starts_with('[') {
+                in_dependencies = line == "[dependencies]";
+                continue;
+            }
+            if !in_dependencies || line.starts_with('#') {
+                continue;
+            }
+
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            if key.trim() == name {
+                return dependency_value_version(value.trim());
+            }
+        }
+        None
+    }
+
+    fn dependency_value_version(value: &str) -> Option<&str> {
+        if let Some(value) = value.strip_prefix('"') {
+            return value.split('"').next();
+        }
+
+        value
+            .trim_start_matches('{')
+            .trim_end_matches('}')
+            .split(',')
+            .find_map(|entry| {
+                let (key, value) = entry.split_once('=')?;
+                if key.trim() == "version" {
+                    value.trim().strip_prefix('"')?.split('"').next()
+                } else {
+                    None
+                }
+            })
     }
 }
