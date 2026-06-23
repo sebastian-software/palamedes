@@ -61,13 +61,13 @@ pub fn compile_catalog_artifact(
     let artifact = ferrocat_compile_catalog_artifact(&catalogs, &options, &icu_options)
         .map_err(PalamedesError::CompileCatalogArtifact)?;
 
-    Ok(build_artifact_result(
+    build_artifact_result(
         artifact,
         prepared.watch_files,
         prepared.fallback_chain,
         request.config.pseudo_locale.as_deref(),
         &prepared.locale,
-    ))
+    )
 }
 
 /// Compiles a selected subset of runtime IDs for the requested locale.
@@ -108,11 +108,11 @@ pub fn compile_catalog_artifact_selected(
     )
     .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
 
-    Ok(build_artifact_result(
+    build_artifact_result(
         artifact,
         prepared.watch_files,
         prepared.fallback_chain,
         request.config.pseudo_locale.as_deref(),
         &prepared.locale,
-    ))
+    )
 }
