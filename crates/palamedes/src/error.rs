@@ -133,6 +133,9 @@ pub enum PalamedesError {
     /// Compiling a selected catalog artifact failed.
     #[error("Failed to compile selected catalog artifact: {0}")]
     CompileSelectedCatalogArtifact(ferrocat::ApiError),
+    /// Pseudolocalizing a compiled catalog artifact failed.
+    #[error("Failed to pseudolocalize catalog artifact: {0}")]
+    PseudolocalizeCatalogArtifact(ferrocat::ApiError),
     /// Catalog updates require non-empty messages.
     #[error("Catalog messages must not be empty")]
     EmptyCatalogMessage,
