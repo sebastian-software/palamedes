@@ -112,32 +112,12 @@
         },
         {
           "type": "json",
-          "path": "packages/core-node-darwin-x64/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
           "path": "packages/core-node-linux-arm64-gnu/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/core-node-linux-arm64-musl/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
           "path": "packages/core-node-linux-x64-gnu/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "packages/core-node-linux-x64-musl/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "packages/core-node-win32-arm64-msvc/package.json",
           "jsonpath": "$.version"
         },
         {

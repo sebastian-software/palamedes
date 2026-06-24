@@ -683,41 +683,21 @@ importers:
       '@palamedes/core-node-darwin-arm64':
         specifier: workspace:^
         version: link:../core-node-darwin-arm64
-      '@palamedes/core-node-darwin-x64':
-        specifier: workspace:^
-        version: link:../core-node-darwin-x64
       '@palamedes/core-node-linux-arm64-gnu':
         specifier: workspace:^
         version: link:../core-node-linux-arm64-gnu
-      '@palamedes/core-node-linux-arm64-musl':
-        specifier: workspace:^
-        version: link:../core-node-linux-arm64-musl
       '@palamedes/core-node-linux-x64-gnu':
         specifier: workspace:^
         version: link:../core-node-linux-x64-gnu
-      '@palamedes/core-node-linux-x64-musl':
-        specifier: workspace:^
-        version: link:../core-node-linux-x64-musl
-      '@palamedes/core-node-win32-arm64-msvc':
-        specifier: workspace:^
-        version: link:../core-node-win32-arm64-msvc
       '@palamedes/core-node-win32-x64-msvc':
         specifier: workspace:^
         version: link:../core-node-win32-x64-msvc
 
   packages/core-node-darwin-arm64: {}
 
-  packages/core-node-darwin-x64: {}
-
   packages/core-node-linux-arm64-gnu: {}
 
-  packages/core-node-linux-arm64-musl: {}
-
   packages/core-node-linux-x64-gnu: {}
-
-  packages/core-node-linux-x64-musl: {}
-
-  packages/core-node-win32-arm64-msvc: {}
 
   packages/core-node-win32-x64-msvc: {}
 

@@ -93,22 +93,10 @@ jobs:
         include:
           - package_name: "@palamedes/core-node-darwin-arm64"
             runner: macos-14
-          - package_name: "@palamedes/core-node-darwin-x64"
-            runner: macos-15-intel
           - package_name: "@palamedes/core-node-linux-x64-gnu"
             runner: ubuntu-24.04
-          - package_name: "@palamedes/core-node-linux-x64-musl"
-            runner: ubuntu-24.04
-            cargo_subcommand: zigbuild
-            cargo_target: x86_64-unknown-linux-musl
           - package_name: "@palamedes/core-node-linux-arm64-gnu"
             runner: ubuntu-24.04-arm
-          - package_name: "@palamedes/core-node-linux-arm64-musl"
-            runner: ubuntu-24.04-arm
-            cargo_subcommand: zigbuild
-            cargo_target: aarch64-unknown-linux-musl
-          - package_name: "@palamedes/core-node-win32-arm64-msvc"
-            runner: windows-11-arm
           - package_name: "@palamedes/core-node-win32-x64-msvc"
             runner: windows-2025
     runs-on: ${{ matrix.runner }}
@@ -135,25 +123,10 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Set up Zig for musl builds
-        if: matrix.cargo_subcommand == 'zigbuild'
-        uses: mlugg/setup-zig@v2
-
-      - name: Install cargo-zigbuild for musl builds
-        if: matrix.cargo_subcommand == 'zigbuild'
-        run: cargo install cargo-zigbuild --locked
-
-      - name: Install Rust target for musl builds
-        if: matrix.cargo_subcommand == 'zigbuild'
-        run: rustup target add "${{ matrix.cargo_target }}"
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build native package
-        env:
-          PALAMEDES_CARGO_SUBCOMMAND: ${{ matrix.cargo_subcommand }}
-          PALAMEDES_CARGO_TARGET: ${{ matrix.cargo_target }}
         run: pnpm --filter "${{ matrix.package_name }}" build
 
       - name: Smoke-test native package
