@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/core-node-win32-arm64-msvc",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Windows arm64 MSVC native bindings for @palamedes/core-node",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {

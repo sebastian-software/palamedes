@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.0...palamedes-v0.7.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **core:** accept literal apostrophes in catalog audit ([71f7a0d](https://github.com/sebastian-software/palamedes/commit/71f7a0d853a9960f330bfff38626e3c855f36630)), closes [#192](https://github.com/sebastian-software/palamedes/issues/192)
+
 ## [0.7.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.6.0...palamedes-v0.7.0) (2026-06-12)
 
 
