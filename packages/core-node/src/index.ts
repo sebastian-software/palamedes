@@ -7,10 +7,10 @@ import type {
   CatalogAuditRequest as GeneratedCatalogAuditRequest,
   CatalogAuditResult as GeneratedCatalogAuditResult,
   CatalogAuditSummary as GeneratedCatalogAuditSummary,
+  CatalogFileCombineRequest as GeneratedCatalogFileCombineRequest,
+  CatalogFileCombineResult as GeneratedCatalogFileCombineResult,
   CatalogCombineRequest as GeneratedCatalogCombineRequest,
   CatalogCombineResult as GeneratedCatalogCombineResult,
-  CatalogMergeRequest as GeneratedCatalogMergeRequest,
-  CatalogMergeResult as GeneratedCatalogMergeResult,
   CatalogArtifactConfig as GeneratedCatalogArtifactConfig,
   CatalogArtifactDiagnostic as GeneratedCatalogArtifactDiagnostic,
   CatalogArtifactMissingMessage as GeneratedCatalogArtifactMissingMessage,
@@ -88,31 +88,33 @@ export type CatalogCombineInput = {
   content: string
   label?: string
 }
-export type CatalogCombineConflictStrategy = "useFirst" | "useLast" | "error"
+export type CatalogConflictStrategy = "useFirst" | "useLast" | "error"
 export type CatalogCombineSelection = "all" | "unique" | { moreThan: number } | { lessThan: number }
 export type CatalogCombineRequest = {
   inputs: CatalogCombineInput[]
   sourceLocale: string
   locale?: string
-  conflictStrategy?: CatalogCombineConflictStrategy
+  conflictStrategy?: CatalogConflictStrategy
   selection?: CatalogCombineSelection
   includeObsolete?: boolean
 }
 export type CatalogCombineResult = Omit<GeneratedCatalogCombineResult, "diagnostics"> & {
   diagnostics: CatalogDiagnostic[]
 }
-export type CatalogMergeFormat = "po" | "json"
-export type CatalogMergeStrategy = "useFirst"
-export type CatalogMergeRequest = {
+export type CatalogFileFormat = "po" | "ndjson"
+export type CatalogFileCombineRequest = {
   inputPaths: string[]
   outputPath: string
-  format?: CatalogMergeFormat
+  format?: CatalogFileFormat
   sourceLocale: string
   locale?: string
-  strategy?: CatalogMergeStrategy
+  conflictStrategy?: CatalogConflictStrategy
 }
-export type CatalogMergeResult = Omit<GeneratedCatalogMergeResult, "format" | "diagnostics"> & {
-  format: CatalogMergeFormat
+export type CatalogFileCombineResult = Omit<
+  GeneratedCatalogFileCombineResult,
+  "format" | "diagnostics"
+> & {
+  format: CatalogFileFormat
   diagnostics: CatalogDiagnostic[]
 }
 export type CatalogAuditOptions = {
@@ -164,7 +166,7 @@ export type CatalogArtifactResult = Omit<GeneratedCatalogArtifactResult, "diagno
 type NativeBindings = GeneratedNativeBindings
 type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest
 type NativeCatalogCombineRequest = GeneratedCatalogCombineRequest
-type NativeCatalogMergeRequest = GeneratedCatalogMergeRequest
+type NativeCatalogFileCombineRequest = GeneratedCatalogFileCombineRequest
 type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
 type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
 
@@ -350,11 +352,11 @@ export function combineCatalogs(request: CatalogCombineRequest): CatalogCombineR
   }
 }
 
-export function mergeCatalogFiles(request: CatalogMergeRequest): CatalogMergeResult {
-  const result = native.mergeCatalogFiles(toNativeMergeRequest(request))
+export function combineCatalogFiles(request: CatalogFileCombineRequest): CatalogFileCombineResult {
+  const result = native.combineCatalogFiles(toNativeFileCombineRequest(request))
   return {
     ...result,
-    format: fromNativeMergeFormat(result.format),
+    format: fromNativeFileFormat(result.format),
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
   }
 }
@@ -373,7 +375,7 @@ function toNativeCombineRequest(request: CatalogCombineRequest): NativeCatalogCo
 }
 
 function toNativeConflictStrategy(
-  strategy: CatalogCombineConflictStrategy
+  strategy: CatalogConflictStrategy
 ): NonNullable<NativeCatalogCombineRequest["conflictStrategy"]> {
   switch (strategy) {
     case "useFirst": {
@@ -388,47 +390,43 @@ function toNativeConflictStrategy(
   }
 }
 
-function toNativeMergeRequest(request: CatalogMergeRequest): NativeCatalogMergeRequest {
+function toNativeFileCombineRequest(
+  request: CatalogFileCombineRequest
+): NativeCatalogFileCombineRequest {
   return {
     inputPaths: request.inputPaths,
     outputPath: request.outputPath,
-    format: request.format ? toNativeMergeFormat(request.format) : undefined,
+    format: request.format ? toNativeFileFormat(request.format) : undefined,
     sourceLocale: request.sourceLocale,
     locale: request.locale,
-    strategy: request.strategy ? toNativeMergeStrategy(request.strategy) : undefined,
+    conflictStrategy: request.conflictStrategy
+      ? toNativeConflictStrategy(request.conflictStrategy)
+      : undefined,
   }
 }
 
-function toNativeMergeFormat(
-  format: CatalogMergeFormat
-): NonNullable<NativeCatalogMergeRequest["format"]> {
+function toNativeFileFormat(
+  format: CatalogFileFormat
+): NonNullable<NativeCatalogFileCombineRequest["format"]> {
   switch (format) {
     case "po": {
       return "Po"
     }
-    case "json": {
-      return "Json"
+    case "ndjson": {
+      return "Ndjson"
     }
   }
 }
 
-function fromNativeMergeFormat(format: GeneratedCatalogMergeResult["format"]): CatalogMergeFormat {
+function fromNativeFileFormat(
+  format: GeneratedCatalogFileCombineResult["format"]
+): CatalogFileFormat {
   switch (format) {
     case "Po": {
       return "po"
     }
-    case "Json": {
-      return "json"
-    }
-  }
-}
-
-function toNativeMergeStrategy(
-  strategy: CatalogMergeStrategy
-): NonNullable<NativeCatalogMergeRequest["strategy"]> {
-  switch (strategy) {
-    case "useFirst": {
-      return "UseFirst"
+    case "Ndjson": {
+      return "ndjson"
     }
   }
 }

@@ -51,19 +51,19 @@ Git merge-driver workflows.
 
 ```bash
 pmds catalog merge ours.po theirs.po --output merged.po
-pmds catalog merge %A %B --output %A --format po --strategy use-first
+pmds catalog merge %A %B --output %A --format po --conflict-strategy use-first
 ```
 
 Options:
 
-| Option                     | Description                                                      |
-| -------------------------- | ---------------------------------------------------------------- |
-| `--output <path>`          | Required output path.                                            |
-| `-c, --config <path>`      | Use a specific config file when inferring `sourceLocale`.        |
-| `--format <format>`        | `po` or `json`. Inferred from paths when omitted.                |
-| `--strategy <strategy>`    | Currently `use-first`.                                           |
-| `--source-locale <locale>` | Source locale for catalog semantics. Defaults to config or `en`. |
-| `--locale <locale>`        | Locale of the merged catalog.                                    |
+| Option                           | Description                                                      |
+| -------------------------------- | ---------------------------------------------------------------- |
+| `--output <path>`                | Required output path.                                            |
+| `-c, --config <path>`            | Use a specific config file when inferring `sourceLocale`.        |
+| `--format <format>`              | `po` or `ndjson`. Inferred from paths when omitted.              |
+| `--conflict-strategy <strategy>` | `use-first`, `use-last`, or `error`.                             |
+| `--source-locale <locale>`       | Source locale for catalog semantics. Defaults to config or `en`. |
+| `--locale <locale>`              | Locale of the merged catalog.                                    |
 
 ## `pmds version`
 

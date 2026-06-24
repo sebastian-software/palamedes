@@ -76,8 +76,8 @@ catalog
   .argument("<inputs...>", "Input catalog files in precedence order")
   .requiredOption("--output <path>", "Output catalog path")
   .option("-c, --config <path>", "Path to palamedes.config.ts")
-  .option("--format <format>", "Catalog format: po or json")
-  .option("--strategy <strategy>", "Merge strategy", "use-first")
+  .option("--format <format>", "Catalog format: po or ndjson")
+  .option("--conflict-strategy <strategy>", "Catalog conflict strategy", "use-first")
   .option("--source-locale <locale>", "Source locale for catalog semantics")
   .option("--locale <locale>", "Locale of the merged catalog")
   .action(async (inputs: string[], options) => {

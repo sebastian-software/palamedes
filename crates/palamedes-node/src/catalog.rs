@@ -89,7 +89,7 @@ pub struct CatalogCombineInput {
 }
 
 #[napi(string_enum)]
-pub enum CatalogCombineConflictStrategy {
+pub enum CatalogConflictStrategy {
     UseFirst,
     UseLast,
     Error,
@@ -112,7 +112,7 @@ pub struct CatalogCombineRequest {
     pub inputs: Vec<CatalogCombineInput>,
     pub source_locale: String,
     pub locale: Option<String>,
-    pub conflict_strategy: Option<CatalogCombineConflictStrategy>,
+    pub conflict_strategy: Option<CatalogConflictStrategy>,
     pub selection: Option<Either<CatalogCombineSelectionName, CatalogCombineSelectionThreshold>>,
     pub include_obsolete: Option<bool>,
 }
@@ -135,30 +135,25 @@ pub struct CatalogCombineResult {
 }
 
 #[napi(string_enum)]
-pub enum CatalogMergeFormat {
+pub enum CatalogFileFormat {
     Po,
-    Json,
-}
-
-#[napi(string_enum)]
-pub enum CatalogMergeStrategy {
-    UseFirst,
+    Ndjson,
 }
 
 #[napi(object)]
-pub struct CatalogMergeRequest {
+pub struct CatalogFileCombineRequest {
     pub input_paths: Vec<String>,
     pub output_path: String,
-    pub format: Option<CatalogMergeFormat>,
+    pub format: Option<CatalogFileFormat>,
     pub source_locale: String,
     pub locale: Option<String>,
-    pub strategy: Option<CatalogMergeStrategy>,
+    pub conflict_strategy: Option<CatalogConflictStrategy>,
 }
 
 #[napi(object)]
-pub struct CatalogMergeResult {
+pub struct CatalogFileCombineResult {
     pub output_path: String,
-    pub format: CatalogMergeFormat,
+    pub format: CatalogFileFormat,
     pub stats: CatalogCombineStats,
     pub diagnostics: Vec<CatalogDiagnostic>,
 }
@@ -511,12 +506,12 @@ impl From<CatalogCombineInput> for palamedes::CatalogCombineInput {
     }
 }
 
-impl From<CatalogCombineConflictStrategy> for palamedes::CatalogCombineConflictStrategy {
-    fn from(value: CatalogCombineConflictStrategy) -> Self {
+impl From<CatalogConflictStrategy> for palamedes::CatalogConflictStrategy {
+    fn from(value: CatalogConflictStrategy) -> Self {
         match value {
-            CatalogCombineConflictStrategy::UseFirst => Self::UseFirst,
-            CatalogCombineConflictStrategy::UseLast => Self::UseLast,
-            CatalogCombineConflictStrategy::Error => Self::Error,
+            CatalogConflictStrategy::UseFirst => Self::UseFirst,
+            CatalogConflictStrategy::UseLast => Self::UseLast,
+            CatalogConflictStrategy::Error => Self::Error,
         }
     }
 }
@@ -534,8 +529,8 @@ impl TryFrom<CatalogCombineRequest> for palamedes::CatalogCombineRequest {
             source_locale: value.source_locale,
             locale: value.locale,
             conflict_strategy: value.conflict_strategy.map_or(
-                palamedes::CatalogCombineConflictStrategy::UseFirst,
-                palamedes::CatalogCombineConflictStrategy::from,
+                palamedes::CatalogConflictStrategy::UseFirst,
+                palamedes::CatalogConflictStrategy::from,
             ),
             selection: combine_selection(value.selection)?,
             include_obsolete: value.include_obsolete.unwrap_or(false),
@@ -568,66 +563,68 @@ impl TryFrom<palamedes::CatalogCombineResult> for CatalogCombineResult {
             diagnostics: value
                 .diagnostics
                 .into_iter()
-                .map(CatalogDiagnostic::from)
+                .map(|diagnostic| {
+                    CatalogDiagnostic::from(palamedes::CatalogDiagnostic::from(diagnostic))
+                })
                 .collect(),
         })
     }
 }
 
-impl From<CatalogMergeFormat> for palamedes::CatalogMergeFormat {
-    fn from(value: CatalogMergeFormat) -> Self {
+impl From<CatalogFileFormat> for palamedes::CatalogFileFormat {
+    fn from(value: CatalogFileFormat) -> Self {
         match value {
-            CatalogMergeFormat::Po => Self::Po,
-            CatalogMergeFormat::Json => Self::Json,
+            CatalogFileFormat::Po => Self::Po,
+            CatalogFileFormat::Ndjson => Self::Ndjson,
         }
     }
 }
 
-impl From<palamedes::CatalogMergeFormat> for CatalogMergeFormat {
-    fn from(value: palamedes::CatalogMergeFormat) -> Self {
+impl TryFrom<palamedes::CatalogFileFormat> for CatalogFileFormat {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::CatalogFileFormat) -> Result<Self> {
         match value {
-            palamedes::CatalogMergeFormat::Po => Self::Po,
-            palamedes::CatalogMergeFormat::Json => Self::Json,
+            palamedes::CatalogFileFormat::Po => Ok(Self::Po),
+            palamedes::CatalogFileFormat::Ndjson => Ok(Self::Ndjson),
+            // Ferrocat may add formats before Palamedes exposes them through
+            // the Node API. Fail explicitly until the TypeScript surface is extended.
+            _ => Err(napi::Error::from_reason(format!(
+                "Unsupported catalog file combine format: {value:?}. Expected `po` or `ndjson`."
+            ))),
         }
     }
 }
 
-impl From<CatalogMergeStrategy> for palamedes::CatalogMergeStrategy {
-    fn from(value: CatalogMergeStrategy) -> Self {
-        match value {
-            CatalogMergeStrategy::UseFirst => Self::UseFirst,
-        }
-    }
-}
-
-impl From<CatalogMergeRequest> for palamedes::CatalogMergeRequest {
-    fn from(value: CatalogMergeRequest) -> Self {
+impl From<CatalogFileCombineRequest> for palamedes::CatalogFileCombineRequest {
+    fn from(value: CatalogFileCombineRequest) -> Self {
         Self {
             input_paths: value.input_paths.into_iter().map(PathBuf::from).collect(),
             output_path: PathBuf::from(value.output_path),
-            format: value.format.map(palamedes::CatalogMergeFormat::from),
+            format: value.format.map(palamedes::CatalogFileFormat::from),
             source_locale: value.source_locale,
             locale: value.locale,
-            strategy: value.strategy.map_or(
-                palamedes::CatalogMergeStrategy::UseFirst,
-                palamedes::CatalogMergeStrategy::from,
-            ),
+            conflict_strategy: value
+                .conflict_strategy
+                .map_or(palamedes::CatalogConflictStrategy::UseFirst, Into::into),
         }
     }
 }
 
-impl TryFrom<palamedes::CatalogMergeResult> for CatalogMergeResult {
+impl TryFrom<palamedes::CatalogFileCombineResult> for CatalogFileCombineResult {
     type Error = napi::Error;
 
-    fn try_from(value: palamedes::CatalogMergeResult) -> Result<Self> {
+    fn try_from(value: palamedes::CatalogFileCombineResult) -> Result<Self> {
         Ok(Self {
             output_path: value.output_path.display().to_string(),
-            format: value.format.into(),
+            format: value.format.try_into()?,
             stats: value.stats.try_into()?,
             diagnostics: value
                 .diagnostics
                 .into_iter()
-                .map(CatalogDiagnostic::from)
+                .map(|diagnostic| {
+                    CatalogDiagnostic::from(palamedes::CatalogDiagnostic::from(diagnostic))
+                })
                 .collect(),
         })
     }
@@ -1174,16 +1171,18 @@ pub fn combine_catalogs(request: CatalogCombineRequest) -> Result<CatalogCombine
 
 #[napi]
 #[allow(clippy::needless_pass_by_value)]
-/// Merges exactly two catalog files and replaces the output after a successful merge.
+/// Combines exactly two catalog files and replaces the output after a successful combine.
 ///
 /// # Errors
 ///
 /// Returns an error when inputs are invalid, cannot be parsed, contain rejected
 /// conflicts, or the output cannot be replaced.
-pub fn merge_catalog_files(request: CatalogMergeRequest) -> Result<CatalogMergeResult> {
-    palamedes::merge_catalog_files(request.into())
+pub fn combine_catalog_files(
+    request: CatalogFileCombineRequest,
+) -> Result<CatalogFileCombineResult> {
+    palamedes::combine_catalog_files(request.into())
         .map_err(to_napi_error)
-        .and_then(CatalogMergeResult::try_from)
+        .and_then(CatalogFileCombineResult::try_from)
 }
 
 #[napi]

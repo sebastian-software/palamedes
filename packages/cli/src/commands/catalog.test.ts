@@ -9,7 +9,7 @@ import { mergeCatalog } from "./catalog"
 vi.mock("@palamedes/core-node", async () => {
   const { readFileSync, writeFileSync } = await import("node:fs")
 
-  function inferFormat(inputPaths: string[], outputPath: string): "po" | "json" {
+  function inferFormat(inputPaths: string[], outputPath: string): "po" | "ndjson" {
     const formats = [...inputPaths, outputPath].map((filePath) => {
       if (filePath.endsWith(".po")) {
         return "po"
@@ -19,7 +19,7 @@ vi.mock("@palamedes/core-node", async () => {
         filePath.endsWith(".ndjson") ||
         filePath.endsWith(".fcat.ndjson")
       ) {
-        return "json"
+        return "ndjson"
       }
       throw new Error("Could not infer catalog merge format")
     })
@@ -59,17 +59,18 @@ vi.mock("@palamedes/core-node", async () => {
       .filter((entry) => entry.length > 0)
   }
 
-  function countMessages(content: string, format: "po" | "json"): number {
+  function countMessages(content: string, format: "po" | "ndjson"): number {
     return format === "po"
       ? [...content.matchAll(/\n?msgid "([^"]+)"/g)].length
       : [...content.matchAll(/"id":"([^"]*)"/g)].length
   }
 
   return {
-    mergeCatalogFiles(request: {
+    combineCatalogFiles(request: {
       inputPaths: string[]
       outputPath: string
-      format?: "po" | "json"
+      format?: "po" | "ndjson"
+      conflictStrategy?: "useFirst" | "useLast" | "error"
     }) {
       const format = request.format ?? inferFormat(request.inputPaths, request.outputPath)
       const [firstPath, secondPath] = request.inputPaths
@@ -160,8 +161,8 @@ msgstr "Neu"
     expect(merged).toContain('msgid "New"')
   })
 
-  it("merges ferrocat ndjson catalogs through public json format", async () => {
-    const dir = await tempDir("json")
+  it("merges ferrocat ndjson catalogs through public ndjson format", async () => {
+    const dir = await tempDir("ndjson")
     const ours = path.join(dir, "ours.json")
     const theirs = path.join(dir, "theirs.json")
     const output = path.join(dir, "merged.json")
@@ -189,11 +190,11 @@ locale: de
 
     const result = await mergeCatalog([ours, theirs], {
       output,
-      format: "json",
+      format: "ndjson",
       sourceLocale: "en",
     })
 
-    expect(result.format).toBe("json")
+    expect(result.format).toBe("ndjson")
     const merged = await readFile(output, "utf8")
     expect(merged).toContain("format: ferrocat.ndjson.v1")
     expect(merged).toContain('"id":"Hello","str":"Hallo"')

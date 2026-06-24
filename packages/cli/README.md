@@ -77,32 +77,31 @@ locale is below the threshold.
 
 ### Catalog Merge
 
-`pmds catalog merge` merges exactly two catalog files with V1 `use-first`
-semantics. When both inputs contain the same semantic identity, the first input
-wins for translator-facing content; messages that only exist in the second
+`pmds catalog merge` combines exactly two catalog files. When both inputs
+contain the same semantic identity, `--conflict-strategy` controls how
+translator-facing conflicts are handled; messages that only exist in the second
 input are added.
 
 ```bash
-pnpm exec pmds catalog merge --format=po --strategy=use-first --output %A %A %B
+pnpm exec pmds catalog merge --format=po --conflict-strategy=use-first --output %A %A %B
 ```
 
 `--format` can be omitted when all input and output extensions are supported
 and match. `.po` maps to `po`; `.json`, `.ndjson`, and `.fcat.ndjson` map to
-`json`. The public `json` format is Ferrocat's source-first
-`ferrocat.ndjson.v1` storage format.
+Ferrocat's `ndjson` storage format.
 
 For Git merge-driver usage:
 
 ```gitattributes
 *.po merge=palamedes-catalog
-*.fcat.ndjson merge=palamedes-catalog-json
+*.fcat.ndjson merge=palamedes-catalog-ndjson
 ```
 
 ```bash
 git config merge.palamedes-catalog.driver \
-  'pmds catalog merge --format=po --strategy=use-first --output %A %A %B'
-git config merge.palamedes-catalog-json.driver \
-  'pmds catalog merge --format=json --strategy=use-first --output %A %A %B'
+  'pmds catalog merge --format=po --conflict-strategy=use-first --output %A %A %B'
+git config merge.palamedes-catalog-ndjson.driver \
+  'pmds catalog merge --format=ndjson --conflict-strategy=use-first --output %A %A %B'
 ```
 
 `--source-locale` is optional. The command uses an explicit value first, then

@@ -1,23 +1,24 @@
 import { loadPalamedesConfig } from "@palamedes/config"
 import {
-  mergeCatalogFiles,
-  type CatalogMergeFormat,
-  type CatalogMergeResult,
+  combineCatalogFiles,
+  type CatalogConflictStrategy,
+  type CatalogFileCombineResult,
+  type CatalogFileFormat,
 } from "@palamedes/core-node"
 
-export type CatalogMergeOptions = {
+export type CatalogFileCombineOptions = {
   config?: string
   output: string
   format?: string
-  strategy?: string
+  conflictStrategy?: string
   sourceLocale?: string
   locale?: string
 }
 
 export async function mergeCatalog(
   inputPaths: string[],
-  options: CatalogMergeOptions
-): Promise<CatalogMergeResult> {
+  options: CatalogFileCombineOptions
+): Promise<CatalogFileCombineResult> {
   if (!options.output) {
     throw new Error("Missing required --output path.")
   }
@@ -27,34 +28,42 @@ export async function mergeCatalog(
     )
   }
 
-  return mergeCatalogFiles({
+  return combineCatalogFiles({
     inputPaths,
     outputPath: options.output,
     format: normalizeFormat(options.format),
     sourceLocale: await resolveSourceLocale(options),
     locale: options.locale,
-    strategy: normalizeStrategy(options.strategy),
+    conflictStrategy: normalizeConflictStrategy(options.conflictStrategy),
   })
 }
 
-function normalizeFormat(value: string | undefined): CatalogMergeFormat | undefined {
+function normalizeFormat(value: string | undefined): CatalogFileFormat | undefined {
   if (value === undefined) {
     return undefined
   }
-  if (value === "po" || value === "json") {
+  if (value === "po" || value === "ndjson") {
     return value
   }
-  throw new Error("Invalid --format value. Expected `po` or `json`.")
+  throw new Error("Invalid --format value. Expected `po` or `ndjson`.")
 }
 
-function normalizeStrategy(value: string | undefined): "useFirst" {
+function normalizeConflictStrategy(value: string | undefined): CatalogConflictStrategy {
   if (value === undefined || value === "use-first") {
     return "useFirst"
   }
-  throw new Error("Invalid --strategy value. Expected `use-first`.")
+  if (value === "use-last") {
+    return "useLast"
+  }
+  if (value === "error") {
+    return "error"
+  }
+  throw new Error(
+    "Invalid --conflict-strategy value. Expected `use-first`, `use-last`, or `error`."
+  )
 }
 
-async function resolveSourceLocale(options: CatalogMergeOptions): Promise<string> {
+async function resolveSourceLocale(options: CatalogFileCombineOptions): Promise<string> {
   if (options.sourceLocale) {
     return options.sourceLocale
   }

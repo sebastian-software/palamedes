@@ -62,7 +62,7 @@ export interface CatalogCombineInput {
   content: string;
   label?: string;
 }
-export type CatalogCombineConflictStrategy = "UseFirst" | "UseLast" | "Error"
+export type CatalogConflictStrategy = "UseFirst" | "UseLast" | "Error"
 export type CatalogCombineSelectionName = "All" | "Unique"
 export interface CatalogCombineSelectionThreshold {
   moreThan?: number;
@@ -72,7 +72,7 @@ export interface CatalogCombineRequest {
   inputs: Array<CatalogCombineInput>;
   sourceLocale: string;
   locale?: string;
-  conflictStrategy?: CatalogCombineConflictStrategy;
+  conflictStrategy?: CatalogConflictStrategy;
   selection?: CatalogCombineSelectionName | CatalogCombineSelectionThreshold;
   includeObsolete?: boolean;
 }
@@ -89,19 +89,18 @@ export interface CatalogCombineResult {
   stats: CatalogCombineStats;
   diagnostics: Array<CatalogDiagnostic>;
 }
-export type CatalogMergeFormat = "Po" | "Json"
-export type CatalogMergeStrategy = "UseFirst"
-export interface CatalogMergeRequest {
+export type CatalogFileFormat = "Po" | "Ndjson"
+export interface CatalogFileCombineRequest {
   inputPaths: Array<string>;
   outputPath: string;
-  format?: CatalogMergeFormat;
+  format?: CatalogFileFormat;
   sourceLocale: string;
   locale?: string;
-  strategy?: CatalogMergeStrategy;
+  conflictStrategy?: CatalogConflictStrategy;
 }
-export interface CatalogMergeResult {
+export interface CatalogFileCombineResult {
   outputPath: string;
-  format: CatalogMergeFormat;
+  format: CatalogFileFormat;
   stats: CatalogCombineStats;
   diagnostics: Array<CatalogDiagnostic>;
 }
@@ -336,7 +335,7 @@ export interface NativeBindings {
   normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata;
   validateMessageMetadata(input: MessageMetadataInput): MessageMetadataValidationReport;
   combineCatalogs(request: CatalogCombineRequest): CatalogCombineResult;
-  mergeCatalogFiles(request: CatalogMergeRequest): CatalogMergeResult;
+  combineCatalogFiles(request: CatalogFileCombineRequest): CatalogFileCombineResult;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;
