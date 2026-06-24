@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.1...palamedes-v0.7.2) (2026-06-24)
+
+
+### Bug Fixes
+
+* **release:** publish supported native targets only ([5dd4db4](https://github.com/sebastian-software/palamedes/commit/5dd4db4084c12b84beab8c40217d10643a3b7738))
+
 ## [0.7.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.0...palamedes-v0.7.1) (2026-06-24)
 
 
