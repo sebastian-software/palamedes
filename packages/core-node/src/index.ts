@@ -189,12 +189,8 @@ function detectLinuxLibc(): "gnu" | "musl" | null {
 
 const SUPPORTED_NATIVE_PACKAGES = [
   "@palamedes/core-node-darwin-arm64",
-  "@palamedes/core-node-darwin-x64",
   "@palamedes/core-node-linux-arm64-gnu",
-  "@palamedes/core-node-linux-arm64-musl",
   "@palamedes/core-node-linux-x64-gnu",
-  "@palamedes/core-node-linux-x64-musl",
-  "@palamedes/core-node-win32-arm64-msvc",
   "@palamedes/core-node-win32-x64-msvc",
 ] as const
 
@@ -210,32 +206,16 @@ function getNativePackageName(): string {
     return "@palamedes/core-node-darwin-arm64"
   }
 
-  if (process.platform === "darwin" && process.arch === "x64") {
-    return "@palamedes/core-node-darwin-x64"
-  }
-
   if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "gnu") {
     return "@palamedes/core-node-linux-x64-gnu"
-  }
-
-  if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "musl") {
-    return "@palamedes/core-node-linux-x64-musl"
   }
 
   if (process.platform === "linux" && process.arch === "arm64" && detectLinuxLibc() === "gnu") {
     return "@palamedes/core-node-linux-arm64-gnu"
   }
 
-  if (process.platform === "linux" && process.arch === "arm64" && detectLinuxLibc() === "musl") {
-    return "@palamedes/core-node-linux-arm64-musl"
-  }
-
   if (process.platform === "win32" && process.arch === "x64") {
     return "@palamedes/core-node-win32-x64-msvc"
-  }
-
-  if (process.platform === "win32" && process.arch === "arm64") {
-    return "@palamedes/core-node-win32-arm64-msvc"
   }
 
   throw new Error(
