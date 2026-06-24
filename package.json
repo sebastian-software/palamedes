@@ -45,10 +45,10 @@
     "@playwright/test": "^1.61.0",
     "eslint": "^10.5.0",
     "eslint-config-setup": "^0.4.0",
-    "oxfmt": "^0.55.0",
-    "oxlint": "^1.70.0",
+    "oxfmt": "^0.56.0",
+    "oxlint": "^1.71.0",
     "typescript": "^6.0.3",
-    "vercel": "^54.14.5",
+    "vercel": "^54.15.0",
     "vitest": "^4.1.9"
   }
 }

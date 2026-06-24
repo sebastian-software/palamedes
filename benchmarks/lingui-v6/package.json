@@ -19,6 +19,6 @@
     "@lingui/format-po": "6.4.0",
     "@lingui/swc-plugin": "6.4.0",
     "@palamedes/core-node": "workspace:^",
-    "@swc/core": "1.15.41"
+    "@swc/core": "1.15.43"
   }
 }
