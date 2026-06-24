@@ -42,9 +42,9 @@ pub use catalog_audit::{
     CatalogAuditResult, CatalogAuditSummary,
 };
 pub use catalog_combine::{
-    combine_catalogs, merge_catalog_files, CatalogCombineConflictStrategy, CatalogCombineInput,
-    CatalogCombineRequest, CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats,
-    CatalogMergeFormat, CatalogMergeRequest, CatalogMergeResult, CatalogMergeStrategy,
+    combine_catalog_files, combine_catalogs, CatalogCombineInput, CatalogCombineRequest,
+    CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats, CatalogConflictStrategy,
+    CatalogFileCombineRequest, CatalogFileCombineResult, CatalogFileFormat,
 };
 pub use catalog_update::{
     parse_catalog, update_catalog_file, CatalogParseRequest, CatalogParseResult,
@@ -70,7 +70,7 @@ pub use transform::{
 };
 
 /// Published `ferrocat` version used by the Rust core.
-pub const FERROCAT_VERSION: &str = "1.2.1";
+pub const FERROCAT_VERSION: &str = "1.3.0";
 
 /// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]

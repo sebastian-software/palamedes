@@ -14,7 +14,7 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `normalizeMessageMetadata(input)`
 - `validateMessageMetadata(input)`
 - `combineCatalogs(request)`
-- `mergeCatalogFiles(request)`
+- `combineCatalogFiles(request)`
 - `compileCatalogArtifact(request)`
 - `compileCatalogArtifactSelected(request)`
 - `extractMessagesNative(source, filename)`

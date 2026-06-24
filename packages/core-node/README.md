@@ -52,7 +52,12 @@ targets Alpine-style environments.
 ## Example
 
 ```ts
-import { getNativeInfo, mergeCatalogFiles, parsePo, updateCatalogFile } from "@palamedes/core-node"
+import {
+  combineCatalogFiles,
+  getNativeInfo,
+  parsePo,
+  updateCatalogFile,
+} from "@palamedes/core-node"
 
 const info = getNativeInfo()
 const po = parsePo(`
@@ -67,7 +72,7 @@ updateCatalogFile({
   clean: false,
   messages: [{ message: "Hello {name}", extractedComments: [], origins: [] }],
 })
-mergeCatalogFiles({
+combineCatalogFiles({
   inputPaths: ["src/locales/de.po", "incoming/de.po"],
   outputPath: "src/locales/de.po",
   format: "po",
@@ -89,7 +94,7 @@ console.log(po.headers.Language)
 - `normalizeMessageMetadata(input)`
 - `validateMessageMetadata(input)`
 - `combineCatalogs(request)`
-- `mergeCatalogFiles(request)`
+- `combineCatalogFiles(request)`
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `extractMessagesNative(source, filename)`

@@ -206,7 +206,7 @@ driver:
 
 ```bash
 git config merge.palamedes-catalog.driver \
-  'pmds catalog merge --format=po --strategy=use-first --output %A %A %B'
+  'pmds catalog merge --format=po --conflict-strategy=use-first --output %A %A %B'
 ```
 
 For the full copy-paste path, including `.po` loading and the first translated
