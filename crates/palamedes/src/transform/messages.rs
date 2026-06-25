@@ -7,6 +7,7 @@ use oxc_ast::ast::{
 use oxc_span::GetSpan;
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::jsx_entities::decode_jsx_entities;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ValueBinding {
@@ -77,7 +78,9 @@ pub(super) fn extract_choice_options(object: &ObjectExpression<'_>) -> Vec<(Stri
 
 pub(super) fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
     match value {
-        JSXAttributeValue::StringLiteral(literal) => Some(literal.value.to_string()),
+        JSXAttributeValue::StringLiteral(literal) => {
+            Some(decode_jsx_entities(literal.value.as_str()))
+        }
         JSXAttributeValue::ExpressionContainer(container) => {
             jsx_expression_string_value(&container.expression)
         }
@@ -87,10 +90,10 @@ pub(super) fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Optio
 
 fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
     match expr {
-        JSXExpression::StringLiteral(literal) => Some(literal.value.to_string()),
-        JSXExpression::TemplateLiteral(template) => {
-            template.single_quasi().map(|value| value.to_string())
-        }
+        JSXExpression::StringLiteral(literal) => Some(decode_jsx_entities(literal.value.as_str())),
+        JSXExpression::TemplateLiteral(template) => template
+            .single_quasi()
+            .map(|value| decode_jsx_entities(value.as_str())),
         _ => None,
     }
 }
@@ -198,7 +201,7 @@ pub(super) fn clean_jsx_text(text: &str) -> String {
         }
     }
 
-    result
+    decode_jsx_entities(&result)
 }
 
 pub(super) fn opening_element_to_component(
@@ -278,7 +281,9 @@ fn extract_jsx_children_parts_with_state(
                 }
             }
             JSXChild::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
+                JSXExpression::StringLiteral(literal) => {
+                    parts.push(decode_jsx_entities(literal.value.as_str()));
+                }
                 expr => {
                     let binding =
                         jsx_value_binding(expr, source, "JSX expression", used_value_names)?;

@@ -55,6 +55,18 @@ describe("extractMessages", () => {
       expect(messages).toHaveLength(1)
       expect(messages[0].message).toBe("Hello {name}")
     })
+
+    it("decodes JSX entities before deriving extracted messages", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const a = <Trans>Green-e&reg; applies to US &amp; Canada only</Trans>
+        const b = <Trans message="Decision &quot;Model&quot; &#x26; review" />
+      `
+      const messages = extract(code)
+      expect(messages).toHaveLength(2)
+      expect(messages[0].message).toBe("Green-e® applies to US & Canada only")
+      expect(messages[1].message).toBe('Decision "Model" & review')
+    })
   })
 
   describe("macro calls", () => {

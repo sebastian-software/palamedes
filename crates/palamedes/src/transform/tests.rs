@@ -265,6 +265,55 @@ fn trans_jsx_macro_escapes_double_quotes_in_message_attribute() {
 }
 
 #[test]
+fn trans_jsx_macro_decodes_entities_before_deriving_message_id() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Green-e&reg; applies to US &amp; Canada only</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+    let message = "Green-e® applies to US & Canada only";
+
+    assert!(result
+        .code
+        .contains("message={\"Green-e® applies to US & Canada only\"}"));
+    assert!(result
+        .code
+        .contains(&format!("id=\"{}\"", compiled_key(message, None))));
+    assert_eq!(result.compiled_ids, vec![compiled_key(message, None)]);
+}
+
+#[test]
+fn trans_jsx_macro_decodes_message_attribute_entities() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans message=\"Decision &quot;Model&quot; &#x26; review\" />;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+    let message = "Decision \"Model\" & review";
+
+    assert!(result
+        .code
+        .contains("message={\"Decision \\\"Model\\\" & review\"}"));
+    assert_eq!(result.compiled_ids, vec![compiled_key(message, None)]);
+}
+
+#[test]
+fn choice_jsx_macro_decodes_option_attribute_entities() {
+    let result = transform_macros(
+        "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={count} one=\"# item &amp; fee\" other=\"# items &amp; fees\" />;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains("message: \"{count, plural, one {# item & fee} other {# items & fees}}\""));
+}
+
+#[test]
 fn wraps_choice_jsx_macro_when_used_as_jsx_child() {
     let result = transform_macros(
         "import { Plural } from \"@palamedes/react/macro\";\nfunction Demo({ totalRows }) { return <p><Plural value={totalRows} one=\"# row\" other=\"# rows\" /></p>; }\n",

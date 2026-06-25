@@ -209,6 +209,18 @@ export function Demo() {
     expect(result.code).not.toContain('message="Upload settlement data file with \\\"')
   })
 
+  it("decodes JSX entities before deriving transformed Trans messages", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans>Green-e&reg; applies to US &amp; Canada only</Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message={"Green-e® applies to US & Canada only"}')
+    expect(result.code).not.toContain("&amp;")
+    expect(result.code).not.toContain("&reg;")
+  })
+
   it("wraps JSX choice macro replacements when used as children", () => {
     const code = `
 import { Plural } from "@palamedes/react/macro";

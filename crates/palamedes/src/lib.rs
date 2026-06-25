@@ -25,6 +25,7 @@ mod catalog_update;
 mod diagnostic;
 mod error;
 mod extract;
+mod jsx_entities;
 mod message_metadata;
 mod transform;
 
