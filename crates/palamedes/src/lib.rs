@@ -71,7 +71,7 @@ pub use transform::{
 };
 
 /// Published `ferrocat` version used by the Rust core.
-pub const FERROCAT_VERSION: &str = "1.3.0";
+pub const FERROCAT_VERSION: &str = "1.3.1";
 
 /// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]
