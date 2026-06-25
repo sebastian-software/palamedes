@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.5](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.4...palamedes-v0.7.5) (2026-06-25)
+
+
+### Bug Fixes
+
+* **transform:** normalize rich-text placeholder whitespace ([9a5fc5a](https://github.com/sebastian-software/palamedes/commit/9a5fc5a6ae69f6ed8ea44d19b166df41a31dedd1))
+
 ## [0.7.4](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.3...palamedes-v0.7.4) (2026-06-25)
 
 
