@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.4](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.3...palamedes-v0.7.4) (2026-06-25)
+
+
+### Performance Improvements
+
+* **core:** release Ferrocat 1.3.1 catalog optimizations ([706ae81](https://github.com/sebastian-software/palamedes/commit/706ae81d54f1b5524659fbc301ee306a0bc33b90))
+
 ## [0.7.3](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.2...palamedes-v0.7.3) (2026-06-25)
 
 
