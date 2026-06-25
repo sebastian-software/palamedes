@@ -187,7 +187,7 @@ Median results from that run:
 - catalog artifact compile: `4.04 ms`
 
 This sample is a historical reference point. Current Palamedes builds use
-Ferrocat `0.11.0`; rerun the command above when you need fresh numbers for the
+Ferrocat `1.3.1`; rerun the command above when you need fresh numbers for the
 current release line. The benchmark script also prints the raw sample series and
 sampled peak RSS so the checked median and memory shape are easy to verify.
 
