@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.3](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.2...palamedes-v0.7.3) (2026-06-25)
+
+
+### Bug Fixes
+
+* **extractor:** decode jsx entities in message keys ([54b1c91](https://github.com/sebastian-software/palamedes/commit/54b1c9105bd120ea93d616798a576498a0f5ec62))
+* **extractor:** preserve raw jsx expression entities ([a681310](https://github.com/sebastian-software/palamedes/commit/a681310a71ccc5d1cfaeae335dcc1e91b51d1ae6))
+
 ## [0.7.2](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.1...palamedes-v0.7.2) (2026-06-24)
 
 
