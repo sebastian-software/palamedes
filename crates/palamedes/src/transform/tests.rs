@@ -300,6 +300,28 @@ fn trans_jsx_macro_decodes_message_attribute_entities() {
 }
 
 #[test]
+fn trans_jsx_macro_keeps_expression_string_entities_raw() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst child = <Trans>{\"A &amp; B\"}</Trans>;\nconst attr = <Trans message={\"Literal &amp; Value\"} />;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+    let child_message = "A &amp; B";
+    let attr_message = "Literal &amp; Value";
+
+    assert!(result.code.contains("message={\"A &amp; B\"}"));
+    assert!(result.code.contains("message={\"Literal &amp; Value\"}"));
+    assert_eq!(
+        result.compiled_ids,
+        vec![
+            compiled_key(child_message, None),
+            compiled_key(attr_message, None)
+        ]
+    );
+}
+
+#[test]
 fn choice_jsx_macro_decodes_option_attribute_entities() {
     let result = transform_macros(
         "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={count} one=\"# item &amp; fee\" other=\"# items &amp; fees\" />;\n",

@@ -221,6 +221,18 @@ const el = <Trans>Green-e&reg; applies to US &amp; Canada only</Trans>;
     expect(result.code).not.toContain("&reg;")
   })
 
+  it("keeps JSX expression string entities raw", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const child = <Trans>{"A &amp; B"}</Trans>;
+const attr = <Trans message={"Literal &amp; Value"} />;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message={"A &amp; B"}')
+    expect(result.code).toContain('message={"Literal &amp; Value"}')
+  })
+
   it("wraps JSX choice macro replacements when used as children", () => {
     const code = `
 import { Plural } from "@palamedes/react/macro";

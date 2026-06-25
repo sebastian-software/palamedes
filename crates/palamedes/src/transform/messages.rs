@@ -90,10 +90,10 @@ pub(super) fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Optio
 
 fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
     match expr {
-        JSXExpression::StringLiteral(literal) => Some(decode_jsx_entities(literal.value.as_str())),
-        JSXExpression::TemplateLiteral(template) => template
-            .single_quasi()
-            .map(|value| decode_jsx_entities(value.as_str())),
+        JSXExpression::StringLiteral(literal) => Some(literal.value.to_string()),
+        JSXExpression::TemplateLiteral(template) => {
+            template.single_quasi().map(|value| value.to_string())
+        }
         _ => None,
     }
 }
@@ -282,7 +282,7 @@ fn extract_jsx_children_parts_with_state(
             }
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => {
-                    parts.push(decode_jsx_entities(literal.value.as_str()));
+                    parts.push(literal.value.to_string());
                 }
                 expr => {
                     let binding =
