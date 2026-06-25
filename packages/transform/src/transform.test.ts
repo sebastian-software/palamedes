@@ -181,6 +181,20 @@ const el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;
     expect(result.code).toContain("components={{ 0: <strong />, 1: <strong /> }}")
   })
 
+  it("normalizes rich-text placeholder boundary whitespace", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const helper = <Trans>Reach out to your {" "}<a href="/advisor">advisor</a>{" "} for help.</Trans>;
+const confirm = <Trans>Delete {" "}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message={"Reach out to your <0>advisor</0> for help."}')
+    expect(result.code).toContain(
+      'message={"Delete <0>{selectedProjectName}</0>? This action cannot be undone."}'
+    )
+  })
+
   it("strips the message field when requested", () => {
     const code = `
 import { t } from "@palamedes/core/macro";

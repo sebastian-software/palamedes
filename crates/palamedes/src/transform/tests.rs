@@ -194,6 +194,34 @@ fn deduplicates_same_tag_component_placeholders_with_identical_markup() {
 }
 
 #[test]
+fn normalizes_trans_jsx_placeholder_boundary_whitespace() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Reach out to your {\" \"}<a href=\"/advisor\">advisor</a>{\" \"} for help.</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains("message={\"Reach out to your <0>advisor</0> for help.\"}"));
+}
+
+#[test]
+fn normalizes_trans_jsx_placeholder_before_punctuation() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Delete {\" \"}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains(
+        "message={\"Delete <0>{selectedProjectName}</0>? This action cannot be undone.\"}"
+    ));
+}
+
+#[test]
 fn preserves_use_client_directive_before_injected_imports() {
     let result = transform_macros(
         "\"use client\";\nimport { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello</Trans>;\n",
