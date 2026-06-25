@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::jsx_entities::decode_jsx_entities;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
@@ -707,7 +708,9 @@ fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> BTreeMap<String, S
 
 fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
     match value {
-        JSXAttributeValue::StringLiteral(literal) => Some(literal.value.to_string()),
+        JSXAttributeValue::StringLiteral(literal) => {
+            Some(decode_jsx_entities(literal.value.as_str()))
+        }
         JSXAttributeValue::ExpressionContainer(container) => {
             jsx_expression_string_value(&container.expression)
         }
@@ -717,10 +720,10 @@ fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
 
 fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
     match expr {
-        JSXExpression::StringLiteral(literal) => Some(literal.value.to_string()),
-        JSXExpression::TemplateLiteral(template) => {
-            template.single_quasi().map(|value| value.to_string())
-        }
+        JSXExpression::StringLiteral(literal) => Some(decode_jsx_entities(literal.value.as_str())),
+        JSXExpression::TemplateLiteral(template) => template
+            .single_quasi()
+            .map(|value| decode_jsx_entities(value.as_str())),
         _ => None,
     }
 }
@@ -786,7 +789,9 @@ fn extract_jsx_children_as_message_with_state(
                 }
             }
             JSXChild::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::StringLiteral(literal) => parts.push(literal.value.to_string()),
+                JSXExpression::StringLiteral(literal) => {
+                    parts.push(decode_jsx_entities(literal.value.as_str()));
+                }
                 expr => {
                     let Some(name) = jsx_expression_name(expr) else {
                         return Err(PalamedesError::UnnamedPlaceholder {
@@ -841,7 +846,7 @@ fn clean_jsx_text(text: &str) -> String {
         }
     }
 
-    result
+    decode_jsx_entities(&result)
 }
 
 fn extract_choice_options_from_jsx(opening_element: &JSXOpeningElement<'_>) -> ChoiceOptions {
@@ -1202,6 +1207,65 @@ mod tests {
             messages[0].message,
             "Accept <0>terms</0> and <1>privacy</1>"
         );
+    }
+
+    #[test]
+    fn decodes_jsx_entities_before_extracting_message_ids() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const child = <Trans>Green-e&reg; applies to US &amp; Canada only</Trans>
+              const attr = <Trans message="Decision &quot;Model&quot; &#x26; review" />
+              const expression = <Trans>{"A &amp; B"}</Trans>
+              const rich = <Trans>Accept <a href="/terms">terms &amp; conditions</a></Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "Green-e® applies to US & Canada only",
+                "Decision \"Model\" & review",
+                "A & B",
+                "Accept <0>terms & conditions</0>",
+            ]
+        );
+    }
+
+    #[test]
+    fn decodes_jsx_choice_attribute_entities() {
+        let messages = extract_messages(
+            r##"
+              import { Plural } from "@palamedes/react/macro"
+              const message = <Plural value={count} one="# item &amp; fee" other="# items &amp; fees" />
+            "##,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages[0].message,
+            "{count, plural, one {# item & fee} other {# items & fees}}"
+        );
+    }
+
+    #[test]
+    fn leaves_javascript_string_literal_entities_unchanged() {
+        let messages = extract_messages(
+            r#"
+              import { t } from "@palamedes/core/macro"
+              const message = t({ message: "Fish &amp; Chips" })
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(messages[0].message, "Fish &amp; Chips");
     }
 
     #[test]
