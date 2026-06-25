@@ -848,7 +848,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes"
-version = "0.7.4"
+version = "0.7.5"
 dependencies = [
  "ferrocat",
  "ferrocat-po",
@@ -865,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-node"
-version = "0.7.4"
+version = "0.7.5"
 dependencies = [
  "napi",
  "napi-build",
