@@ -61,11 +61,15 @@ describe("extractMessages", () => {
         import { Trans } from "@palamedes/react/macro"
         const a = <Trans>Green-e&reg; applies to US &amp; Canada only</Trans>
         const b = <Trans message="Decision &quot;Model&quot; &#x26; review" />
+        const c = <Trans>{"A &amp; B"}</Trans>
+        const d = <Trans message={"Literal &amp; Value"} />
       `
       const messages = extract(code)
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(4)
       expect(messages[0].message).toBe("Green-e® applies to US & Canada only")
       expect(messages[1].message).toBe('Decision "Model" & review')
+      expect(messages[2].message).toBe("A &amp; B")
+      expect(messages[3].message).toBe("Literal &amp; Value")
     })
   })
 

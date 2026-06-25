@@ -720,10 +720,10 @@ fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
 
 fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
     match expr {
-        JSXExpression::StringLiteral(literal) => Some(decode_jsx_entities(literal.value.as_str())),
-        JSXExpression::TemplateLiteral(template) => template
-            .single_quasi()
-            .map(|value| decode_jsx_entities(value.as_str())),
+        JSXExpression::StringLiteral(literal) => Some(literal.value.to_string()),
+        JSXExpression::TemplateLiteral(template) => {
+            template.single_quasi().map(|value| value.to_string())
+        }
         _ => None,
     }
 }
@@ -790,7 +790,7 @@ fn extract_jsx_children_as_message_with_state(
             }
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => {
-                    parts.push(decode_jsx_entities(literal.value.as_str()));
+                    parts.push(literal.value.to_string());
                 }
                 expr => {
                     let Some(name) = jsx_expression_name(expr) else {
@@ -1217,6 +1217,7 @@ mod tests {
               const child = <Trans>Green-e&reg; applies to US &amp; Canada only</Trans>
               const attr = <Trans message="Decision &quot;Model&quot; &#x26; review" />
               const expression = <Trans>{"A &amp; B"}</Trans>
+              const expressionAttr = <Trans message={"Literal &amp; Value"} />
               const rich = <Trans>Accept <a href="/terms">terms &amp; conditions</a></Trans>
             "#,
             "test.tsx",
@@ -1231,7 +1232,8 @@ mod tests {
             vec![
                 "Green-e® applies to US & Canada only",
                 "Decision \"Model\" & review",
-                "A & B",
+                "A &amp; B",
+                "Literal &amp; Value",
                 "Accept <0>terms & conditions</0>",
             ]
         );

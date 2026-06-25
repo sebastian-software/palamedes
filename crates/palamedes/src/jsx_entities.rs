@@ -19,14 +19,12 @@ pub(crate) fn decode_jsx_entities(input: &str) -> String {
 
         let entity_start = index + ch.len_utf8();
         let mut entity_end = None;
-        let mut candidate_is_valid = true;
         for (offset, entity_ch) in input[entity_start..].char_indices() {
             if entity_ch == ';' {
                 entity_end = Some(entity_start + offset);
                 break;
             }
             if !is_entity_candidate_char(entity_ch) {
-                candidate_is_valid = false;
                 break;
             }
         }
@@ -37,7 +35,7 @@ pub(crate) fn decode_jsx_entities(input: &str) -> String {
             continue;
         };
 
-        if !candidate_is_valid || entity_end == entity_start {
+        if entity_end == entity_start {
             decoded.push(ch);
             index += ch.len_utf8();
             continue;
@@ -123,6 +121,7 @@ fn decode_named_entity(entity: &str) -> Option<char> {
         "atilde" => Some('ã'),
         "auml" => Some('ä'),
         "brvbar" => Some('¦'),
+        "bull" => Some('•'),
         "ccedil" => Some('ç'),
         "cedil" => Some('¸'),
         "cent" => Some('¢'),
@@ -140,6 +139,7 @@ fn decode_named_entity(entity: &str) -> Option<char> {
         "frac14" => Some('¼'),
         "frac34" => Some('¾'),
         "gt" => Some('>'),
+        "hellip" => Some('…'),
         "iacute" => Some('í'),
         "icirc" => Some('î'),
         "iexcl" => Some('¡'),
@@ -155,6 +155,7 @@ fn decode_named_entity(entity: &str) -> Option<char> {
         "mdash" => Some('—'),
         "micro" => Some('µ'),
         "middot" => Some('·'),
+        "minus" => Some('−'),
         "nbsp" => Some('\u{00a0}'),
         "ndash" => Some('–'),
         "not" => Some('¬'),
@@ -204,8 +205,10 @@ mod tests {
     #[test]
     fn decodes_named_and_numeric_entities() {
         assert_eq!(
-            decode_jsx_entities("Green-e&reg; &amp; Canada &#34;ok&#x22; &rsquo; &mdash;"),
-            "Green-e® & Canada \"ok\" ’ —"
+            decode_jsx_entities(
+                "Green-e&reg; &amp; Canada &#34;ok&#x22; &rsquo; &mdash; &bull; &hellip; &minus;"
+            ),
+            "Green-e® & Canada \"ok\" ’ — • … −"
         );
     }
 
