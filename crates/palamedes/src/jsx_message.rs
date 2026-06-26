@@ -47,18 +47,39 @@ pub(crate) struct JoinedJsxMessage {
 }
 
 pub(crate) fn clean_jsx_text(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut last_was_whitespace = false;
+    // Mirror Babel's `cleanJSXElementLiteralChild`, which Lingui relies on:
+    // whitespace touching a line break is dropped, lines are trimmed, and the
+    // remaining lines are joined with a single space. This keeps message ids
+    // stable across transformers and avoids stray spaces around expression
+    // boundaries (e.g. `{value}` followed by `%` on the next line).
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let lines: Vec<&str> = normalized.split('\n').collect();
+    let last_non_empty_line = lines
+        .iter()
+        .rposition(|line| line.contains(|ch: char| ch != ' ' && ch != '\t'))
+        .unwrap_or(0);
 
-    for ch in text.chars() {
-        if ch.is_whitespace() {
-            if !last_was_whitespace {
-                result.push(' ');
-                last_was_whitespace = true;
-            }
-        } else {
-            result.push(ch);
-            last_was_whitespace = false;
+    let mut result = String::with_capacity(text.len());
+
+    for (index, line) in lines.iter().enumerate() {
+        let is_first_line = index == 0;
+        let is_last_line = index == lines.len() - 1;
+
+        let mut trimmed = line.replace('\t', " ");
+        if !is_first_line {
+            trimmed = trimmed.trim_start_matches(' ').to_string();
+        }
+        if !is_last_line {
+            trimmed = trimmed.trim_end_matches(' ').to_string();
+        }
+
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        result.push_str(&trimmed);
+        if index != last_non_empty_line {
+            result.push(' ');
         }
     }
 
@@ -256,5 +277,31 @@ mod tests {
     #[test]
     fn decodes_jsx_entities_after_collapsing_whitespace() {
         assert_eq!(clean_jsx_text("Green-e&reg;\n applies"), "Green-e® applies");
+    }
+
+    #[test]
+    fn drops_line_break_whitespace_before_trailing_text() {
+        // `{value}` then a newline before `%` must not introduce a space.
+        assert_eq!(clean_jsx_text("\n  %\n"), "%");
+        assert_eq!(
+            clean_jsx_text("\n  's sustainability program.\n"),
+            "'s sustainability program."
+        );
+    }
+
+    #[test]
+    fn keeps_trailing_space_on_text_line() {
+        assert_eq!(clean_jsx_text("\n  Match Score: "), "Match Score: ");
+    }
+
+    #[test]
+    fn drops_trailing_indent_after_open_paren() {
+        // `{location} (` newline `{period}` must collapse to `{location} ({period}`.
+        assert_eq!(clean_jsx_text(" (\n  "), " (");
+    }
+
+    #[test]
+    fn joins_multiline_text_with_single_space() {
+        assert_eq!(clean_jsx_text("\n  Hello\n  world\n"), "Hello world");
     }
 }

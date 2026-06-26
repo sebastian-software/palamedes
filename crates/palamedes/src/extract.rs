@@ -1410,6 +1410,32 @@ mod tests {
     }
 
     #[test]
+    fn preserves_lingui_inline_expression_spacing_across_line_breaks() {
+        let messages = extract_messages(
+            "
+              import { Trans } from \"@palamedes/react/macro\"
+              const paren = <Trans>\n  Allocate energy usage to business units for {locationName} (\n  {periodLabel}). Total: {totalMwh} MWh\n</Trans>
+              const percent = <Trans>\n  Match Score: {matchPercentage}\n  %\n</Trans>
+              const possessive = <Trans>\n  We just need a few details to connect you with {clientCompanyName}\n  's sustainability program.\n</Trans>
+            ",
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "Allocate energy usage to business units for {locationName} ({periodLabel}). Total: {totalMwh} MWh",
+                "Match Score: {matchPercentage}%",
+                "We just need a few details to connect you with {clientCompanyName}'s sustainability program.",
+            ]
+        );
+    }
+
+    #[test]
     fn normalizes_jsx_component_placeholder_boundary_whitespace() {
         let messages = extract_messages(
             r#"
