@@ -186,6 +186,10 @@ const el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;
 import { Trans } from "@palamedes/react/macro";
 const helper = <Trans>Reach out to your {" "}<a href="/advisor">advisor</a>{" "} for help.</Trans>;
 const confirm = <Trans>Delete {" "}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>;
+const tailored = <Trans>
+  Tailored to your {volume} MWh of annual electricity use in {countryName}
+  .
+</Trans>;
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
@@ -193,6 +197,21 @@ const confirm = <Trans>Delete {" "}<strong>{selectedProjectName}</strong> ? This
     expect(result.code).toContain(
       'message={"Delete <0>{selectedProjectName}</0>? This action cannot be undone."}'
     )
+    expect(result.code).toContain(
+      'message={"Tailored to your {volume} MWh of annual electricity use in {countryName}."}'
+    )
+  })
+
+  it("preserves leading separator spacing", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const price = <Trans> · \${priceFormatted}/MWh</Trans>;
+const manager = <Trans> — no manager</Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message={" · ${priceFormatted}/MWh"}')
+    expect(result.code).toContain('message={" — no manager"}')
   })
 
   it("strips the message field when requested", () => {

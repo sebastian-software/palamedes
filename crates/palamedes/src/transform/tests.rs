@@ -210,7 +210,7 @@ fn normalizes_trans_jsx_placeholder_boundary_whitespace() {
 #[test]
 fn normalizes_trans_jsx_placeholder_before_punctuation() {
     let result = transform_macros(
-        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Delete {\" \"}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>;\n",
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Delete {\" \"}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>;\nconst tailored = <Trans>\n  Tailored to your {volume} MWh of annual electricity use in {countryName}\n  .\n</Trans>;\n",
         "test.tsx",
         None,
     )
@@ -219,6 +219,24 @@ fn normalizes_trans_jsx_placeholder_before_punctuation() {
     assert!(result.code.contains(
         "message={\"Delete <0>{selectedProjectName}</0>? This action cannot be undone.\"}"
     ));
+    assert!(result.code.contains(
+        "message={\"Tailored to your {volume} MWh of annual electricity use in {countryName}.\"}"
+    ));
+}
+
+#[test]
+fn preserves_trans_jsx_leading_separator_spacing() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst price = <Trans> · ${priceFormatted}/MWh</Trans>;\nconst manager = <Trans> — no manager</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains("message={\" · ${priceFormatted}/MWh\"}"));
+    assert!(result.code.contains("message={\" — no manager\"}"));
 }
 
 #[test]
