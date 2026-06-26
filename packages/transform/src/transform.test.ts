@@ -282,6 +282,17 @@ export function Demo({ totalRows }: { totalRows: number }) {
     expect(result.code).toContain(")}</p>")
   })
 
+  it("rejects nested JSX message macros", () => {
+    const code = `
+import { Plural, Trans } from "@palamedes/react/macro";
+const el = <Trans><Plural value={contractCount} one="# contract" other="# contracts" /> ({capacityMW} MW)</Trans>;
+`
+
+    expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(
+      /Nested i18n macro is not extractable as a single message at test\.tsx:3:\d+/
+    )
+  })
+
   it("keeps JSX choice macro replacements as expressions outside JSX children", () => {
     const code = `
 import { Plural } from "@palamedes/react/macro";

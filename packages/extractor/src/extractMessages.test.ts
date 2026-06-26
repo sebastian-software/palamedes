@@ -254,6 +254,17 @@ describe("extractMessages", () => {
       expect(() => extract(code)).toThrow(/stable placeholder name/)
     })
 
+    it("rejects nested JSX message macros", () => {
+      const code = `
+        import { Plural, Trans } from "@palamedes/react/macro"
+        const x = <Trans><Plural value={contractCount} one="# contract" other="# contracts" /> ({capacityMW} MW)</Trans>
+      `
+
+      expect(() => extract(code)).toThrow(
+        /Nested i18n macro is not extractable as a single message at test\.tsx:3:\d+/
+      )
+    })
+
     it("rejects unnamed choice value placeholders", () => {
       const code = `
         import { plural } from "@palamedes/core/macro"

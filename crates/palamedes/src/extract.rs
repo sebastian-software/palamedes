@@ -10,8 +10,9 @@ use crate::jsx_message::{
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
-    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, MemberExpression,
-    ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression, TemplateLiteral,
+    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXFragment, JSXOpeningElement,
+    MemberExpression, ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression,
+    TemplateLiteral,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -109,6 +110,17 @@ impl LineLocator {
             Err(index) => index,
         }
     }
+
+    fn get_location(&self, offset: usize) -> (usize, usize) {
+        let line = self.get_line(offset);
+        let line_start = self
+            .line_starts
+            .get(line.saturating_sub(1))
+            .copied()
+            .unwrap_or(0);
+
+        (line, offset.saturating_sub(line_start) + 1)
+    }
 }
 
 struct MacroCollector {
@@ -189,6 +201,12 @@ impl<'a> ExtractionVisitor<'a> {
         )
     }
 
+    fn location(&self, span_start: usize) -> String {
+        let (line, column) = self.line_locator.get_location(span_start);
+
+        format!("{}:{line}:{column}", self.filename)
+    }
+
     fn imported_macro_name(&self, local_name: &str, expected: &[&str]) -> Option<&str> {
         self.imported_macros.get(local_name).and_then(|macro_info| {
             expected
@@ -213,6 +231,15 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             tag_name.as_str(),
             &["Trans", "Plural", "Select", "SelectOrdinal"],
         ) {
+            if let Some(nested) =
+                nested_message_macro_in_children(&it.children, self.imported_macros)
+            {
+                self.fail(PalamedesError::NestedMessageMacro {
+                    location: self.location(nested.span.start as usize),
+                });
+                return;
+            }
+
             match extract_from_jsx_element(
                 it,
                 macro_name,
@@ -330,6 +357,85 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
 
         walk::walk_call_expression(self, it);
     }
+}
+
+fn nested_message_macro_in_children<'a>(
+    children: &'a [JSXChild<'a>],
+    imported_macros: &HashMap<String, ImportedMacro>,
+) -> Option<&'a JSXElement<'a>> {
+    for child in children {
+        match child {
+            JSXChild::Element(element) => {
+                if is_jsx_message_macro(element, imported_macros) {
+                    return Some(element);
+                }
+                if let Some(nested) =
+                    nested_message_macro_in_children(&element.children, imported_macros)
+                {
+                    return Some(nested);
+                }
+            }
+            JSXChild::Fragment(fragment) => {
+                if let Some(nested) = nested_message_macro_in_fragment(fragment, imported_macros) {
+                    return Some(nested);
+                }
+            }
+            JSXChild::ExpressionContainer(container) => {
+                if let Some(nested) =
+                    nested_message_macro_in_jsx_expression(&container.expression, imported_macros)
+                {
+                    return Some(nested);
+                }
+            }
+            JSXChild::Text(_) | JSXChild::Spread(_) => {}
+        }
+    }
+
+    None
+}
+
+fn nested_message_macro_in_fragment<'a>(
+    fragment: &'a JSXFragment<'a>,
+    imported_macros: &HashMap<String, ImportedMacro>,
+) -> Option<&'a JSXElement<'a>> {
+    nested_message_macro_in_children(&fragment.children, imported_macros)
+}
+
+fn nested_message_macro_in_jsx_expression<'a>(
+    expr: &'a JSXExpression<'a>,
+    imported_macros: &HashMap<String, ImportedMacro>,
+) -> Option<&'a JSXElement<'a>> {
+    match expr {
+        JSXExpression::JSXElement(element) => {
+            if is_jsx_message_macro(element, imported_macros) {
+                Some(element)
+            } else {
+                nested_message_macro_in_children(&element.children, imported_macros)
+            }
+        }
+        JSXExpression::JSXFragment(fragment) => {
+            nested_message_macro_in_fragment(fragment, imported_macros)
+        }
+        _ => None,
+    }
+}
+
+fn is_jsx_message_macro(
+    element: &JSXElement<'_>,
+    imported_macros: &HashMap<String, ImportedMacro>,
+) -> bool {
+    let Some(tag_name) = element.opening_element.name.get_identifier_name() else {
+        return false;
+    };
+
+    imported_macros
+        .get(tag_name.as_str())
+        .is_some_and(|macro_info| {
+            matches!(
+                macro_info.imported_name.as_str(),
+                "Trans" | "Plural" | "Select" | "SelectOrdinal"
+            )
+        })
 }
 
 fn identifier_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
@@ -973,8 +1079,9 @@ pub fn extract_messages(
 /// # Errors
 ///
 /// Returns an error only for fatal authoring failures such as explicit message
-/// IDs. Read, parse, and non-fatal extraction failures are returned in
-/// `failed_files` so callers can preserve the CLI's warning-oriented behavior.
+/// IDs or nested message macros. Read, parse, and non-fatal extraction failures
+/// are returned in `failed_files` so callers can preserve the CLI's
+/// warning-oriented behavior.
 pub fn extract_catalog_messages_from_files(
     request: ExtractCatalogMessagesRequest,
 ) -> PalamedesResult<ExtractCatalogMessagesResult> {
@@ -1001,8 +1108,11 @@ pub fn extract_catalog_messages_from_files(
 
         let extracted = match extract_messages(&source, file) {
             Ok(messages) => messages,
-            Err(PalamedesError::ExplicitMessageIdsUnsupported) => {
-                return Err(PalamedesError::ExplicitMessageIdsUnsupported);
+            Err(
+                error @ (PalamedesError::ExplicitMessageIdsUnsupported
+                | PalamedesError::NestedMessageMacro { .. }),
+            ) => {
+                return Err(error);
             }
             Err(error) => {
                 failed_files.push(ExtractCatalogFileFailure {
@@ -1363,6 +1473,23 @@ mod tests {
     }
 
     #[test]
+    fn rejects_nested_jsx_message_macros() {
+        let error = extract_messages(
+            r##"
+              import { Plural, Trans } from "@palamedes/react/macro"
+              const message = <Trans><Plural value={contractCount} one="# contract" other="# contracts" /> ({capacityMW} MW)</Trans>
+            "##,
+            "test.tsx",
+        )
+        .expect_err("nested message macros should fail");
+        let message = error.to_string();
+
+        assert!(message.contains("Nested i18n macro is not extractable as a single message"));
+        assert!(message.contains("test.tsx:3:"));
+        assert!(message.contains("Move the full sentence into <Plural> branches"));
+    }
+
+    #[test]
     fn batch_extracts_deduped_catalog_messages_with_relative_origins() {
         let root = temp_root("batch-relative");
         let src = root.join("src");
@@ -1519,6 +1646,30 @@ mod tests {
         .expect_err("explicit IDs should fail");
 
         assert!(error.to_string().contains("Explicit message ids"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_keeps_nested_jsx_message_macros_fatal() {
+        let root = temp_root("batch-nested-message-macro");
+        fs::create_dir_all(&root).expect("root dir");
+        let source = root.join("bad.tsx");
+        fs::write(
+            &source,
+            r##"
+              import { Plural, Trans } from "@palamedes/react/macro"
+              const message = <Trans><Plural value={count} one="# item" other="# items" /> total</Trans>
+            "##,
+        )
+        .expect("source");
+
+        let error = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![source.to_string_lossy().into_owned()],
+        })
+        .expect_err("nested message macros should fail");
+
+        assert!(error.to_string().contains("Nested i18n macro"));
         fs::remove_dir_all(root).expect("cleanup");
     }
 
