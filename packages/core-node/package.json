@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/core-node",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "Thin Node.js wrapper around the Palamedes Rust core",
   "keywords": [
     "palamedes",
