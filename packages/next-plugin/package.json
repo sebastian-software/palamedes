@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/next-plugin",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "Next.js integration for Palamedes using OXC-based macro transformation",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",

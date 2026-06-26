@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.7](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.6...palamedes-v0.7.7) (2026-06-26)
+
+
+### Bug Fixes
+
+* **core:** align JSX separator whitespace ([80d87ab](https://github.com/sebastian-software/palamedes/commit/80d87ab1e65ec1b05c330b399afce0ffaacd814b))
+* **core:** preserve literal JSX brace text boundaries ([dd26425](https://github.com/sebastian-software/palamedes/commit/dd26425d7778c49ad185ce88b337f0a180c8fca4))
+
 ## [0.7.6](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.5...palamedes-v0.7.6) (2026-06-26)
 
 
