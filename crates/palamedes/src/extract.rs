@@ -1298,6 +1298,10 @@ mod tests {
             r#"
               import { Trans } from "@palamedes/react/macro"
               const message = <Trans>Delete {" "}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>
+              const tailored = <Trans>
+                Tailored to your {volume} MWh of annual electricity use in {countryName}
+                .
+              </Trans>
             "#,
             "test.tsx",
         )
@@ -1306,6 +1310,31 @@ mod tests {
         assert_eq!(
             messages[0].message,
             "Delete <0>{selectedProjectName}</0>? This action cannot be undone."
+        );
+        assert_eq!(
+            messages[1].message,
+            "Tailored to your {volume} MWh of annual electricity use in {countryName}."
+        );
+    }
+
+    #[test]
+    fn preserves_leading_jsx_separator_spacing() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const price = <Trans> · ${priceFormatted}/MWh</Trans>
+              const manager = <Trans> — no manager</Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![" · ${priceFormatted}/MWh", " — no manager"]
         );
     }
 

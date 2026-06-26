@@ -79,6 +79,10 @@ describe("extractMessages", () => {
         const target = <Trans><strong>100%</strong> Clean Energy by {" "}<strong>{targetYear}</strong></Trans>
         const details = <Trans><strong>Dates & Capacity:</strong> {" "}commercial_operation_date, project_capacity_mw, buyer_capacity_mw</Trans>
         const confirm = <Trans>Delete {" "}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>
+        const tailored = <Trans>
+          Tailored to your {volume} MWh of annual electricity use in {countryName}
+          .
+        </Trans>
       `
       const messages = extract(code)
 
@@ -87,6 +91,21 @@ describe("extractMessages", () => {
         "<0>100%</0> Clean Energy by <1>{targetYear}</1>",
         "<0>Dates & Capacity:</0> commercial_operation_date, project_capacity_mw, buyer_capacity_mw",
         "Delete <0>{selectedProjectName}</0>? This action cannot be undone.",
+        "Tailored to your {volume} MWh of annual electricity use in {countryName}.",
+      ])
+    })
+
+    it("preserves leading separator spacing", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const price = <Trans> · \${priceFormatted}/MWh</Trans>
+        const manager = <Trans> — no manager</Trans>
+      `
+      const messages = extract(code)
+
+      expect(messages.map((message) => message.message)).toStrictEqual([
+        " · ${priceFormatted}/MWh",
+        " — no manager",
       ])
     })
   })
