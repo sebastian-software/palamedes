@@ -428,6 +428,21 @@ fn wraps_choice_jsx_macro_when_used_as_jsx_child() {
 }
 
 #[test]
+fn rejects_nested_jsx_message_macros() {
+    let error = transform_macros(
+        "import { Plural, Trans } from \"@palamedes/react/macro\";\nconst el = <Trans><Plural value={contractCount} one=\"# contract\" other=\"# contracts\" /> ({capacityMW} MW)</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect_err("nested message macros should fail");
+    let message = error.to_string();
+
+    assert!(message.contains("Nested i18n macro is not extractable as a single message"));
+    assert!(message.contains("test.tsx:2:"));
+    assert!(message.contains("Move the full sentence into <Plural> branches"));
+}
+
+#[test]
 fn keeps_choice_jsx_macro_as_expression_outside_jsx_children() {
     let result = transform_macros(
         "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",

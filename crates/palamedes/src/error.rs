@@ -157,4 +157,12 @@ pub enum PalamedesError {
         /// Value names provided by values but not referenced by the message.
         extra: String,
     },
+    /// A JSX message macro was nested inside another JSX message macro.
+    #[error(
+        "Nested i18n macro is not extractable as a single message at {location}. Move the full sentence into <Plural> branches or use plural() so translators receive the complete sentence."
+    )]
+    NestedMessageMacro {
+        /// Source location of the nested macro.
+        location: String,
+    },
 }

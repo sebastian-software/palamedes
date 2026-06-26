@@ -136,7 +136,7 @@ pub fn transform_macros(
         return Ok(unchanged_result(source));
     }
 
-    let mut visitor = TransformVisitor::new(source, &collector.macro_imports, &options);
+    let mut visitor = TransformVisitor::new(filename, source, &collector.macro_imports, &options);
     visitor.visit_program(&parsed.program);
 
     if let Some(error) = visitor.error {
