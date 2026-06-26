@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.8](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.7...palamedes-v0.7.8) (2026-06-26)
+
+
+### Bug Fixes
+
+* **extractor:** detect nested macros in JSX expressions ([c529959](https://github.com/sebastian-software/palamedes/commit/c529959b03eefd35836128dfef16f9f7e766d0d3))
+* **extractor:** ignore render prop macros in nested scan ([41d507c](https://github.com/sebastian-software/palamedes/commit/41d507ca6552ab1ec33c74c134bfd64e2b7103d3))
+* **extractor:** reject nested message macros ([488a4fb](https://github.com/sebastian-software/palamedes/commit/488a4fb63edc5c04fb3381f92ca1c55fc20d985c))
+* **transform:** preserve self-closing rich placeholders ([76bf244](https://github.com/sebastian-software/palamedes/commit/76bf244f7be976332622ed188374e4e9e1d50f00))
+* **transform:** preserve spaces around inline empty placeholders ([611c554](https://github.com/sebastian-software/palamedes/commit/611c554135ad1a795f5dc58be8eec56476935a27))
+
 ## [0.7.7](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.6...palamedes-v0.7.7) (2026-06-26)
 
 
