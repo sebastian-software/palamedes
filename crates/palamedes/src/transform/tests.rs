@@ -211,6 +211,18 @@ fn trans_jsx_macro_uses_self_closing_empty_component_placeholders() {
 }
 
 #[test]
+fn trans_jsx_macro_preserves_inline_space_before_empty_component_placeholders_with_trailing_text() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Foo <Icon /> bar</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("message={\"Foo <0/> bar\"}"));
+}
+
+#[test]
 fn normalizes_trans_jsx_placeholder_boundary_whitespace() {
     let result = transform_macros(
         "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Reach out to your {\" \"}<a href=\"/advisor\">advisor</a>{\" \"} for help.</Trans>;\n",

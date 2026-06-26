@@ -56,6 +56,17 @@ describe("extractMessages", () => {
       expect(messages[0].message).toBe("I agree to the <0>Commercial Terms<1/></0>")
     })
 
+    it("preserves inline whitespace before self-closing placeholders with trailing text", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const x = <Trans>Foo <Icon /> bar</Trans>
+      `
+      const messages = extract(code)
+
+      expect(messages).toHaveLength(1)
+      expect(messages[0].message).toBe("Foo <0/> bar")
+    })
+
     it("extracts Solid Trans macros with the same semantics", () => {
       const code = `
         import { Trans } from "@palamedes/solid/macro"
