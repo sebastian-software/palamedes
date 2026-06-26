@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.9](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.8...palamedes-v0.7.9) (2026-06-26)
+
+
+### Bug Fixes
+
+* **extract:** match Lingui JSX whitespace at expression boundaries ([2826451](https://github.com/sebastian-software/palamedes/commit/28264516f44e91f4ab9d88aa9f6187bb6cbbfe51)), closes [#246](https://github.com/sebastian-software/palamedes/issues/246)
+
 ## [0.7.8](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.7...palamedes-v0.7.8) (2026-06-26)
 
 
