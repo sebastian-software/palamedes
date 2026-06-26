@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
-use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts};
+use crate::jsx_message::{
+    clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
+};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
@@ -772,13 +774,13 @@ fn extract_jsx_children_as_message(
 ) -> PalamedesResult<String> {
     let mut next_component_index = 0usize;
 
-    extract_jsx_children_as_message_with_state(children, &mut next_component_index)
+    Ok(extract_jsx_children_as_message_with_state(children, &mut next_component_index)?.message)
 }
 
 fn extract_jsx_children_as_message_with_state(
     children: &[JSXChild<'_>],
     next_component_index: &mut usize,
-) -> PalamedesResult<String> {
+) -> PalamedesResult<JoinedJsxMessage> {
     let mut parts = Vec::new();
 
     for child in children {
@@ -786,12 +788,12 @@ fn extract_jsx_children_as_message_with_state(
             JSXChild::Text(text) => {
                 let value = clean_jsx_text(text.value.as_str());
                 if !value.is_empty() {
-                    parts.push(value);
+                    parts.push(JsxMessagePart::Text(value));
                 }
             }
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => {
-                    parts.push(literal.value.to_string());
+                    parts.push(JsxMessagePart::Text(literal.value.to_string()));
                 }
                 expr => {
                     let Some(name) = jsx_expression_name(expr) else {
@@ -799,7 +801,7 @@ fn extract_jsx_children_as_message_with_state(
                             syntax: "JSX expression",
                         });
                     };
-                    parts.push(format!("{{{name}}}"));
+                    parts.push(JsxMessagePart::ValuePlaceholder(format!("{{{name}}}")));
                 }
             },
             JSXChild::Element(element) => {
@@ -809,15 +811,21 @@ fn extract_jsx_children_as_message_with_state(
                     &element.children,
                     next_component_index,
                 )?;
-                parts.push(format!("<{name}>{inner}</{name}>"));
+                parts.push(JsxMessagePart::ComponentPlaceholder(format!(
+                    "<{name}>{}</{name}>",
+                    inner.message
+                )));
             }
             JSXChild::Fragment(fragment) => {
                 let inner = extract_jsx_children_as_message_with_state(
                     &fragment.children,
                     next_component_index,
                 )?;
-                if !inner.is_empty() {
-                    parts.push(inner);
+                if !inner.message.is_empty() {
+                    parts.push(JsxMessagePart::Message {
+                        value: inner.message,
+                        ends_with_placeholder: inner.ends_with_placeholder,
+                    });
                 }
             }
             JSXChild::Spread(_) => {
@@ -1302,6 +1310,7 @@ mod tests {
                 Tailored to your {volume} MWh of annual electricity use in {countryName}
                 .
               </Trans>
+              const literalBraces = <Trans>{"{name}"} .</Trans>
             "#,
             "test.tsx",
         )
@@ -1315,6 +1324,7 @@ mod tests {
             messages[1].message,
             "Tailored to your {volume} MWh of annual electricity use in {countryName}."
         );
+        assert_eq!(messages[2].message, "{name} .");
     }
 
     #[test]
