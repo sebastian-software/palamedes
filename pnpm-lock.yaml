@@ -508,8 +508,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/runtime
       hono:
-        specifier: ^4.12.26
-        version: 4.12.26
+        specifier: ^4.12.27
+        version: 4.12.27
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -520,8 +520,8 @@ importers:
         specifier: ^19.2.7
         version: 19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7))
       waku:
-        specifier: 1.0.0-beta.3
-        version: 1.0.0-beta.3(@types/node@26.0.0)(esbuild@0.27.7)(jiti@2.7.0)(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
+        specifier: 1.0.0-beta.4
+        version: 1.0.0-beta.4(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -572,8 +572,8 @@ importers:
         specifier: ^19.2.7
         version: 19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7))
       waku:
-        specifier: 1.0.0-beta.3
-        version: 1.0.0-beta.3(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
+        specifier: 1.0.0-beta.4
+        version: 1.0.0-beta.4(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -6589,12 +6589,12 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
-  hono@4.12.19:
-    resolution: {integrity: sha512-xa3eYXYXx68XTT4hZ7dRzsXBhaq85ToSrlUJNoR0gwz/1Ap/CNwX47wfvV7pc/xWhjKVVkLT7zBJy8chhNguqQ==}
-    engines: {node: '>=16.9.0'}
-
   hono@4.12.26:
     resolution: {integrity: sha512-uyZtpnYxM9CmQ7QsQknM4zN8EftNqhON1qYeIKM0Se67CCEe2c44xyGURwB0axX2fBDu1dqHrHAc1hmNT8ITkw==}
+    engines: {node: '>=16.9.0'}
+
+  hono@4.12.27:
+    resolution: {integrity: sha512-1yrb/+w6HWQJrUCLkJ2IF5jNIPvvFkblV5RNOYl6bV+OA6p9GLcMpHFFGTosSvHvcAUibuUukRqhlYI4z32C7Q==}
     engines: {node: '>=16.9.0'}
 
   hookable@5.5.3:
@@ -9716,8 +9716,8 @@ packages:
     resolution: {integrity: sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==}
     engines: {node: '>=18'}
 
-  waku@1.0.0-beta.3:
-    resolution: {integrity: sha512-j8la6SzYX/pqqnjT/FTsr8de+jCwP4rthyV7IbRm/qEwECbUS0kXcG2VLs5TDGCumLnzq9uRl4iwocxG3+U8rQ==}
+  waku@1.0.0-beta.4:
+    resolution: {integrity: sha512-+n/dzqI8o/tbOsAh4uptBC1CqvgnH34Tzodqgx4a7o8EvvZjPEbEvtKb1PJeAYPnaiYd4cXOEazy5W9wDTjoAQ==}
     engines: {node: ^26.0.0 || ^24.0.0 || ^22.13.0}
     hasBin: true
     peerDependencies:
@@ -11074,9 +11074,9 @@ snapshots:
 
   '@fastify/busboy@2.1.1': {}
 
-  '@hono/node-server@2.0.5(hono@4.12.19)':
+  '@hono/node-server@2.0.5(hono@4.12.26)':
     dependencies:
-      hono: 4.12.19
+      hono: 4.12.26
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -15832,9 +15832,9 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
-  hono@4.12.19: {}
-
   hono@4.12.26: {}
+
+  hono@4.12.27: {}
 
   hookable@5.5.3: {}
 
@@ -19560,43 +19560,13 @@ snapshots:
     dependencies:
       xml-name-validator: 5.0.0
 
-  waku@1.0.0-beta.3(@types/node@26.0.0)(esbuild@0.27.7)(jiti@2.7.0)(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0):
+  waku@1.0.0-beta.4(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0):
     dependencies:
-      '@hono/node-server': 2.0.5(hono@4.12.19)
+      '@hono/node-server': 2.0.5(hono@4.12.26)
       '@vitejs/plugin-react': 6.0.3(vite@8.1.0(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0))
       '@vitejs/plugin-rsc': 0.5.26(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0))
       dotenv: 17.4.2
-      hono: 4.12.19
-      magic-string: 0.30.21
-      picocolors: 1.1.1
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-      react-server-dom-webpack: 19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7))
-      rsc-html-stream: 0.0.7
-      vite: 8.1.0(@types/node@26.0.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - '@rolldown/plugin-babel'
-      - '@types/node'
-      - '@vitejs/devtools'
-      - babel-plugin-react-compiler
-      - esbuild
-      - jiti
-      - less
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - terser
-      - tsx
-      - yaml
-
-  waku@1.0.0-beta.3(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0):
-    dependencies:
-      '@hono/node-server': 2.0.5(hono@4.12.19)
-      '@vitejs/plugin-react': 6.0.3(vite@8.1.0(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0))
-      '@vitejs/plugin-rsc': 0.5.26(react-dom@19.2.7(react@19.2.7))(react-server-dom-webpack@19.2.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(webpack@5.105.4(esbuild@0.27.7)))(react@19.2.7)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0))
-      dotenv: 17.4.2
-      hono: 4.12.19
+      hono: 4.12.26
       magic-string: 0.30.21
       picocolors: 1.1.1
       react: 19.2.7
