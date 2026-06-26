@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/solid",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "Solid runtime components and macro entry points for Palamedes",
   "keywords": [
     "palamedes",
