@@ -194,6 +194,23 @@ fn deduplicates_same_tag_component_placeholders_with_identical_markup() {
 }
 
 #[test]
+fn trans_jsx_macro_uses_self_closing_empty_component_placeholders() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>I agree to the <a href={COMMERCIAL_TERMS_URL}>Commercial Terms <ExternalLink className=\"inline\" /></a></Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains("message={\"I agree to the <0>Commercial Terms<1/></0>\"}"));
+    assert!(result
+        .code
+        .contains("components={{ 0: <a href={COMMERCIAL_TERMS_URL} />, 1: <ExternalLink className=\"inline\" /> }}"));
+}
+
+#[test]
 fn normalizes_trans_jsx_placeholder_boundary_whitespace() {
     let result = transform_macros(
         "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Reach out to your {\" \"}<a href=\"/advisor\">advisor</a>{\" \"} for help.</Trans>;\n",

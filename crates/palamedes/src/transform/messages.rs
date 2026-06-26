@@ -297,10 +297,16 @@ fn extract_jsx_children_parts_with_state(
                         used_value_names,
                         next_component_index,
                     )?;
-                parts.push(JsxMessagePart::ComponentPlaceholder(format!(
-                    "<{component_name}>{}</{component_name}>",
-                    inner_message.message
-                )));
+                let is_empty = inner_message.message.is_empty();
+                let value = if is_empty {
+                    format!("<{component_name}/>")
+                } else {
+                    format!(
+                        "<{component_name}>{}</{component_name}>",
+                        inner_message.message
+                    )
+                };
+                parts.push(JsxMessagePart::ComponentPlaceholder { value, is_empty });
                 append_unique_bindings(&mut values, inner_values);
                 components.push(ValueBinding {
                     expression: component_expression,

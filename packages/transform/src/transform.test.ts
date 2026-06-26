@@ -181,6 +181,19 @@ const el = <Trans><strong>A</strong> and <strong>B</strong></Trans>;
     expect(result.code).toContain("components={{ 0: <strong />, 1: <strong /> }}")
   })
 
+  it("uses Lingui-compatible self-closing placeholders for empty rich-text children", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans>I agree to the <a href={COMMERCIAL_TERMS_URL}>Commercial Terms <ExternalLink className="inline" /></a></Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message={"I agree to the <0>Commercial Terms<1/></0>"}')
+    expect(result.code).toContain(
+      'components={{ 0: <a href={COMMERCIAL_TERMS_URL} />, 1: <ExternalLink className="inline" /> }}'
+    )
+  })
+
   it("normalizes rich-text placeholder boundary whitespace", () => {
     const code = `
 import { Trans } from "@palamedes/react/macro";

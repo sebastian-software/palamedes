@@ -4,7 +4,10 @@ use crate::jsx_entities::decode_jsx_entities;
 pub(crate) enum JsxMessagePart {
     Text(String),
     ValuePlaceholder(String),
-    ComponentPlaceholder(String),
+    ComponentPlaceholder {
+        value: String,
+        is_empty: bool,
+    },
     Message {
         value: String,
         ends_with_placeholder: bool,
@@ -14,22 +17,26 @@ pub(crate) enum JsxMessagePart {
 impl JsxMessagePart {
     fn as_str(&self) -> &str {
         match self {
-            Self::Text(value)
-            | Self::ValuePlaceholder(value)
-            | Self::ComponentPlaceholder(value)
-            | Self::Message { value, .. } => value,
+            Self::Text(value) | Self::ValuePlaceholder(value) | Self::Message { value, .. } => {
+                value
+            }
+            Self::ComponentPlaceholder { value, .. } => value,
         }
     }
 
     fn ends_with_placeholder(&self) -> bool {
         match self {
             Self::Text(_) => false,
-            Self::ValuePlaceholder(_) | Self::ComponentPlaceholder(_) => true,
+            Self::ValuePlaceholder(_) | Self::ComponentPlaceholder { .. } => true,
             Self::Message {
                 ends_with_placeholder,
                 ..
             } => *ends_with_placeholder,
         }
+    }
+
+    fn is_empty_component_placeholder(&self) -> bool {
+        matches!(self, Self::ComponentPlaceholder { is_empty: true, .. })
     }
 }
 
@@ -84,6 +91,11 @@ fn push_jsx_message_part(
     }
 
     let mut next = part_value;
+
+    if part.is_empty_component_placeholder() {
+        let trimmed_len = message.trim_end_matches(char::is_whitespace).len();
+        message.truncate(trimmed_len);
+    }
 
     if !message.is_empty() {
         if message.ends_with(char::is_whitespace) && next.starts_with(char::is_whitespace) {
@@ -183,6 +195,21 @@ mod tests {
         assert_eq!(
             join_jsx_message_parts(&[JsxMessagePart::Text(" — no manager".to_string())]).message,
             " — no manager"
+        );
+    }
+
+    #[test]
+    fn uses_self_closing_empty_component_placeholders() {
+        assert_eq!(
+            join_jsx_message_parts(&[
+                JsxMessagePart::Text("Commercial Terms ".to_string()),
+                JsxMessagePart::ComponentPlaceholder {
+                    value: "<0/>".to_string(),
+                    is_empty: true,
+                },
+            ])
+            .message,
+            "Commercial Terms<0/>"
         );
     }
 
