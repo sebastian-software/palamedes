@@ -1562,7 +1562,7 @@ mod tests {
         )
         .expect("nested message macros in render prop attributes should not fail");
 
-        assert_eq!(messages[0].message, "<0></0>");
+        assert_eq!(messages[0].message, "<0/>");
     }
 
     #[test]

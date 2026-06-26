@@ -392,7 +392,7 @@ const el = <Trans><List renderItem={() => <Plural value={count} one="one" other=
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
-    expect(result.code).toContain('message={"<0></0>"}')
+    expect(result.code).toContain('message={"<0/>"}')
     expect(result.code).toContain("renderItem={() => <Plural")
   })
 

@@ -314,7 +314,7 @@ describe("extractMessages", () => {
 
       const messages = extract(code)
 
-      expect(messages[0].message).toBe("<0></0>")
+      expect(messages[0].message).toBe("<0/>")
     })
 
     it("rejects unnamed choice value placeholders", () => {

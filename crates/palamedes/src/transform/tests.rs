@@ -480,7 +480,7 @@ fn allows_nested_jsx_message_macros_inside_render_prop_attributes() {
     )
     .expect("nested message macros in render prop attributes should not fail");
 
-    assert!(result.code.contains("message={\"<0></0>\"}"));
+    assert!(result.code.contains("message={\"<0/>\"}"));
     assert!(result.code.contains("renderItem={() => <Plural"));
 }
 
