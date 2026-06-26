@@ -26,6 +26,7 @@ mod diagnostic;
 mod error;
 mod extract;
 mod jsx_entities;
+mod jsx_message;
 mod message_metadata;
 mod transform;
 
