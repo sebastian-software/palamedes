@@ -443,6 +443,19 @@ fn rejects_nested_jsx_message_macros_inside_map_callbacks() {
 }
 
 #[test]
+fn allows_nested_jsx_message_macros_inside_render_prop_attributes() {
+    let result = transform_macros(
+        "import { Plural, Trans } from \"@palamedes/react/macro\";\nconst el = <Trans><List renderItem={() => <Plural value={count} one=\"one\" other=\"other\" />} /></Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("nested message macros in render prop attributes should not fail");
+
+    assert!(result.code.contains("message={\"<0></0>\"}"));
+    assert!(result.code.contains("renderItem={() => <Plural"));
+}
+
+#[test]
 fn keeps_choice_jsx_macro_as_expression_outside_jsx_children() {
     let result = transform_macros(
         "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",

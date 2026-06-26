@@ -362,6 +362,17 @@ const el = ${jsx};
     }
   })
 
+  it("allows nested JSX message macros in render prop attributes", () => {
+    const code = `
+import { Plural, Trans } from "@palamedes/react/macro";
+const el = <Trans><List renderItem={() => <Plural value={count} one="one" other="other" />} /></Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message={"<0></0>"}')
+    expect(result.code).toContain("renderItem={() => <Plural")
+  })
+
   it("rejects unnamed choice value placeholders", () => {
     const code = `
 import { plural } from "@palamedes/core/macro";
