@@ -69,8 +69,13 @@ pub(crate) fn join_jsx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessa
     let mut message = String::new();
     let mut ends_with_placeholder = false;
 
-    for part in parts {
-        push_jsx_message_part(&mut message, &mut ends_with_placeholder, part);
+    for (index, part) in parts.iter().enumerate() {
+        push_jsx_message_part(
+            &mut message,
+            &mut ends_with_placeholder,
+            part,
+            should_trim_before_empty_component_placeholder(part, &parts[index + 1..]),
+        );
     }
 
     JoinedJsxMessage {
@@ -83,6 +88,7 @@ fn push_jsx_message_part(
     message: &mut String,
     ends_with_placeholder: &mut bool,
     part: &JsxMessagePart,
+    trim_before_empty_component_placeholder: bool,
 ) {
     let part_value = part.as_str();
 
@@ -92,7 +98,7 @@ fn push_jsx_message_part(
 
     let mut next = part_value;
 
-    if part.is_empty_component_placeholder() {
+    if trim_before_empty_component_placeholder {
         let trimmed_len = message.trim_end_matches(char::is_whitespace).len();
         message.truncate(trimmed_len);
     }
@@ -112,6 +118,16 @@ fn push_jsx_message_part(
     if !next.trim_end_matches(char::is_whitespace).is_empty() {
         *ends_with_placeholder = part.ends_with_placeholder();
     }
+}
+
+fn should_trim_before_empty_component_placeholder(
+    part: &JsxMessagePart,
+    remaining: &[JsxMessagePart],
+) -> bool {
+    // Lingui emits terminal empty rich children compactly (`Text<0/>`), but
+    // keeping spaces before followed-by-text placeholders avoids word joins.
+    part.is_empty_component_placeholder()
+        && remaining.iter().all(|part| part.as_str().trim().is_empty())
 }
 
 fn trim_message_edges(message: &str) -> String {
@@ -210,6 +226,22 @@ mod tests {
             ])
             .message,
             "Commercial Terms<0/>"
+        );
+    }
+
+    #[test]
+    fn preserves_inline_space_around_empty_component_placeholders_with_trailing_text() {
+        assert_eq!(
+            join_jsx_message_parts(&[
+                JsxMessagePart::Text("Foo ".to_string()),
+                JsxMessagePart::ComponentPlaceholder {
+                    value: "<0/>".to_string(),
+                    is_empty: true,
+                },
+                JsxMessagePart::Text(" bar".to_string()),
+            ])
+            .message,
+            "Foo <0/> bar"
         );
     }
 

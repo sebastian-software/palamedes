@@ -194,6 +194,16 @@ const el = <Trans>I agree to the <a href={COMMERCIAL_TERMS_URL}>Commercial Terms
     )
   })
 
+  it("preserves inline whitespace before self-closing placeholders with trailing text", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans>Foo <Icon /> bar</Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message={"Foo <0/> bar"}')
+  })
+
   it("normalizes rich-text placeholder boundary whitespace", () => {
     const code = `
 import { Trans } from "@palamedes/react/macro";

@@ -1295,6 +1295,20 @@ mod tests {
     }
 
     #[test]
+    fn preserves_inline_whitespace_before_empty_component_placeholders_with_trailing_text() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const message = <Trans>Foo <Icon /> bar</Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(messages[0].message, "Foo <0/> bar");
+    }
+
+    #[test]
     fn normalizes_jsx_component_placeholder_boundary_whitespace() {
         let messages = extract_messages(
             r#"
