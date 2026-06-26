@@ -46,6 +46,16 @@ describe("extractMessages", () => {
       expect(messages[0].message).toBe("Accept <0>terms</0> and <1>privacy</1>")
     })
 
+    it("uses Lingui-compatible self-closing placeholders for empty rich-text children", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const x = <Trans>I agree to the <a href={COMMERCIAL_TERMS_URL}>Commercial Terms <ExternalLink className="inline" /></a></Trans>
+      `
+      const messages = extract(code)
+      expect(messages).toHaveLength(1)
+      expect(messages[0].message).toBe("I agree to the <0>Commercial Terms<1/></0>")
+    })
+
     it("extracts Solid Trans macros with the same semantics", () => {
       const code = `
         import { Trans } from "@palamedes/solid/macro"

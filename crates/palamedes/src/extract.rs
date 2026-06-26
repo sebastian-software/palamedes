@@ -811,10 +811,13 @@ fn extract_jsx_children_as_message_with_state(
                     &element.children,
                     next_component_index,
                 )?;
-                parts.push(JsxMessagePart::ComponentPlaceholder(format!(
-                    "<{name}>{}</{name}>",
-                    inner.message
-                )));
+                let is_empty = inner.message.is_empty();
+                let value = if is_empty {
+                    format!("<{name}/>")
+                } else {
+                    format!("<{name}>{}</{name}>", inner.message)
+                };
+                parts.push(JsxMessagePart::ComponentPlaceholder { value, is_empty });
             }
             JSXChild::Fragment(fragment) => {
                 let inner = extract_jsx_children_as_message_with_state(
@@ -1272,6 +1275,23 @@ mod tests {
         .expect("messages should extract");
 
         assert_eq!(messages[0].message, "<0>A</0> and <1>B</1>");
+    }
+
+    #[test]
+    fn uses_self_closing_jsx_component_placeholders_for_empty_children() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const message = <Trans>I agree to the <a href={COMMERCIAL_TERMS_URL}>Commercial Terms <ExternalLink className="inline" /></a></Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages[0].message,
+            "I agree to the <0>Commercial Terms<1/></0>"
+        );
     }
 
     #[test]
