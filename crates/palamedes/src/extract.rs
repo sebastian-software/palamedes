@@ -10,9 +10,8 @@ use crate::jsx_message::{
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
-    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXFragment, JSXOpeningElement,
-    MemberExpression, ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression,
-    TemplateLiteral,
+    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, MemberExpression,
+    ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression, TemplateLiteral,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -231,11 +230,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             tag_name.as_str(),
             &["Trans", "Plural", "Select", "SelectOrdinal"],
         ) {
-            if let Some(nested) =
+            if let Some(nested_start) =
                 nested_message_macro_in_children(&it.children, self.imported_macros)
             {
                 self.fail(PalamedesError::NestedMessageMacro {
-                    location: self.location(nested.span.start as usize),
+                    location: self.location(nested_start),
                 });
                 return;
             }
@@ -362,61 +361,48 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
 fn nested_message_macro_in_children<'a>(
     children: &'a [JSXChild<'a>],
     imported_macros: &HashMap<String, ImportedMacro>,
-) -> Option<&'a JSXElement<'a>> {
-    for child in children {
-        match child {
-            JSXChild::Element(element) => {
-                if is_jsx_message_macro(element, imported_macros) {
-                    return Some(element);
-                }
-                if let Some(nested) =
-                    nested_message_macro_in_children(&element.children, imported_macros)
-                {
-                    return Some(nested);
-                }
+) -> Option<usize> {
+    NestedMessageMacroFinder::find_in_children(children, imported_macros)
+}
+
+struct NestedMessageMacroFinder<'a> {
+    imported_macros: &'a HashMap<String, ImportedMacro>,
+    nested_start: Option<usize>,
+}
+
+impl<'a> NestedMessageMacroFinder<'a> {
+    fn find_in_children(
+        children: &[JSXChild<'a>],
+        imported_macros: &'a HashMap<String, ImportedMacro>,
+    ) -> Option<usize> {
+        let mut finder = Self {
+            imported_macros,
+            nested_start: None,
+        };
+
+        for child in children {
+            finder.visit_jsx_child(child);
+            if finder.nested_start.is_some() {
+                break;
             }
-            JSXChild::Fragment(fragment) => {
-                if let Some(nested) = nested_message_macro_in_fragment(fragment, imported_macros) {
-                    return Some(nested);
-                }
-            }
-            JSXChild::ExpressionContainer(container) => {
-                if let Some(nested) =
-                    nested_message_macro_in_jsx_expression(&container.expression, imported_macros)
-                {
-                    return Some(nested);
-                }
-            }
-            JSXChild::Text(_) | JSXChild::Spread(_) => {}
         }
+
+        finder.nested_start
     }
-
-    None
 }
 
-fn nested_message_macro_in_fragment<'a>(
-    fragment: &'a JSXFragment<'a>,
-    imported_macros: &HashMap<String, ImportedMacro>,
-) -> Option<&'a JSXElement<'a>> {
-    nested_message_macro_in_children(&fragment.children, imported_macros)
-}
+impl<'a> Visit<'a> for NestedMessageMacroFinder<'a> {
+    fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        if self.nested_start.is_some() {
+            return;
+        }
 
-fn nested_message_macro_in_jsx_expression<'a>(
-    expr: &'a JSXExpression<'a>,
-    imported_macros: &HashMap<String, ImportedMacro>,
-) -> Option<&'a JSXElement<'a>> {
-    match expr {
-        JSXExpression::JSXElement(element) => {
-            if is_jsx_message_macro(element, imported_macros) {
-                Some(element)
-            } else {
-                nested_message_macro_in_children(&element.children, imported_macros)
-            }
+        if is_jsx_message_macro(it, self.imported_macros) {
+            self.nested_start = Some(it.span.start as usize);
+            return;
         }
-        JSXExpression::JSXFragment(fragment) => {
-            nested_message_macro_in_fragment(fragment, imported_macros)
-        }
-        _ => None,
+
+        walk::walk_jsx_element(self, it);
     }
 }
 
@@ -1487,6 +1473,43 @@ mod tests {
         assert!(message.contains("Nested i18n macro is not extractable as a single message"));
         assert!(message.contains("test.tsx:3:"));
         assert!(message.contains("Move the full sentence into <Plural> branches"));
+    }
+
+    #[test]
+    fn rejects_nested_jsx_message_macros_inside_conditional_and_logical_expressions() {
+        for source in [
+            r#"
+              import { Plural, Trans } from "@palamedes/react/macro"
+              const message = <Trans>{showCount ? <Plural value={count} one="one" other="other" /> : null}</Trans>
+            "#,
+            r#"
+              import { Plural, Trans } from "@palamedes/react/macro"
+              const message = <Trans>{showCount && <Plural value={count} one="one" other="other" />}</Trans>
+            "#,
+        ] {
+            let error = extract_messages(source, "test.tsx")
+                .expect_err("nested message macros in JSX expressions should fail");
+            let message = error.to_string();
+
+            assert!(message.contains("Nested i18n macro is not extractable as a single message"));
+            assert!(!message.contains("stable placeholder name"));
+        }
+    }
+
+    #[test]
+    fn rejects_nested_jsx_message_macros_inside_map_callbacks() {
+        let error = extract_messages(
+            r#"
+              import { Plural, Trans } from "@palamedes/react/macro"
+              const message = <Trans>{items.map((item) => <Plural value={item.count} one="one" other="other" />)}</Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect_err("nested message macros in map callbacks should fail");
+        let message = error.to_string();
+
+        assert!(message.contains("Nested i18n macro is not extractable as a single message"));
+        assert!(!message.contains("stable placeholder name"));
     }
 
     #[test]

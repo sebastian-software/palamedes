@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use oxc_ast::ast::{
-    CallExpression, JSXChild, JSXElement, JSXExpression, JSXFragment, TaggedTemplateExpression,
-};
+use oxc_ast::ast::{CallExpression, JSXChild, JSXElement, TaggedTemplateExpression};
 use oxc_ast_visit::{walk, Visit};
 
 use crate::error::PalamedesError;
@@ -93,14 +91,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             macro_info.imported_name.as_str(),
             "Trans" | "Plural" | "Select" | "SelectOrdinal"
         ) {
-            if let Some(nested) = nested_message_macro_in_children(&it.children, self.macro_imports)
+            if let Some(nested_start) =
+                nested_message_macro_in_children(&it.children, self.macro_imports)
             {
                 self.fail(PalamedesError::NestedMessageMacro {
-                    location: source_location(
-                        self.source,
-                        self.filename,
-                        nested.span.start as usize,
-                    ),
+                    location: source_location(self.source, self.filename, nested_start),
                 });
                 return;
             }
@@ -285,61 +280,48 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 fn nested_message_macro_in_children<'a>(
     children: &'a [JSXChild<'a>],
     macro_imports: &HashMap<String, ImportedMacro>,
-) -> Option<&'a JSXElement<'a>> {
-    for child in children {
-        match child {
-            JSXChild::Element(element) => {
-                if is_jsx_message_macro(element, macro_imports) {
-                    return Some(element);
-                }
-                if let Some(nested) =
-                    nested_message_macro_in_children(&element.children, macro_imports)
-                {
-                    return Some(nested);
-                }
+) -> Option<usize> {
+    NestedMessageMacroFinder::find_in_children(children, macro_imports)
+}
+
+struct NestedMessageMacroFinder<'a> {
+    macro_imports: &'a HashMap<String, ImportedMacro>,
+    nested_start: Option<usize>,
+}
+
+impl<'a> NestedMessageMacroFinder<'a> {
+    fn find_in_children(
+        children: &[JSXChild<'a>],
+        macro_imports: &'a HashMap<String, ImportedMacro>,
+    ) -> Option<usize> {
+        let mut finder = Self {
+            macro_imports,
+            nested_start: None,
+        };
+
+        for child in children {
+            finder.visit_jsx_child(child);
+            if finder.nested_start.is_some() {
+                break;
             }
-            JSXChild::Fragment(fragment) => {
-                if let Some(nested) = nested_message_macro_in_fragment(fragment, macro_imports) {
-                    return Some(nested);
-                }
-            }
-            JSXChild::ExpressionContainer(container) => {
-                if let Some(nested) =
-                    nested_message_macro_in_jsx_expression(&container.expression, macro_imports)
-                {
-                    return Some(nested);
-                }
-            }
-            JSXChild::Text(_) | JSXChild::Spread(_) => {}
         }
+
+        finder.nested_start
     }
-
-    None
 }
 
-fn nested_message_macro_in_fragment<'a>(
-    fragment: &'a JSXFragment<'a>,
-    macro_imports: &HashMap<String, ImportedMacro>,
-) -> Option<&'a JSXElement<'a>> {
-    nested_message_macro_in_children(&fragment.children, macro_imports)
-}
+impl<'a> Visit<'a> for NestedMessageMacroFinder<'a> {
+    fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        if self.nested_start.is_some() {
+            return;
+        }
 
-fn nested_message_macro_in_jsx_expression<'a>(
-    expr: &'a JSXExpression<'a>,
-    macro_imports: &HashMap<String, ImportedMacro>,
-) -> Option<&'a JSXElement<'a>> {
-    match expr {
-        JSXExpression::JSXElement(element) => {
-            if is_jsx_message_macro(element, macro_imports) {
-                Some(element)
-            } else {
-                nested_message_macro_in_children(&element.children, macro_imports)
-            }
+        if is_jsx_message_macro(it, self.macro_imports) {
+            self.nested_start = Some(it.span.start as usize);
+            return;
         }
-        JSXExpression::JSXFragment(fragment) => {
-            nested_message_macro_in_fragment(fragment, macro_imports)
-        }
-        _ => None,
+
+        walk::walk_jsx_element(self, it);
     }
 }
 
