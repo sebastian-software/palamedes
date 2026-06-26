@@ -404,6 +404,11 @@ impl<'a> Visit<'a> for NestedMessageMacroFinder<'a> {
 
         walk::walk_jsx_element(self, it);
     }
+
+    fn visit_jsx_opening_element(&mut self, _it: &JSXOpeningElement<'a>) {
+        // Attributes and render props execute in their own render context; they are not part
+        // of the enclosing <Trans> message body.
+    }
 }
 
 fn is_jsx_message_macro(
@@ -1544,6 +1549,20 @@ mod tests {
 
         assert!(message.contains("Nested i18n macro is not extractable as a single message"));
         assert!(!message.contains("stable placeholder name"));
+    }
+
+    #[test]
+    fn allows_nested_jsx_message_macros_inside_render_prop_attributes() {
+        let messages = extract_messages(
+            r#"
+              import { Plural, Trans } from "@palamedes/react/macro"
+              const message = <Trans><List renderItem={() => <Plural value={count} one="one" other="other" />} /></Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("nested message macros in render prop attributes should not fail");
+
+        assert_eq!(messages[0].message, "<0></0>");
     }
 
     #[test]

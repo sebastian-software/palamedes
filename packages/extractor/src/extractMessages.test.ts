@@ -306,6 +306,17 @@ describe("extractMessages", () => {
       }
     })
 
+    it("allows nested JSX message macros in render prop attributes", () => {
+      const code = `
+        import { Plural, Trans } from "@palamedes/react/macro"
+        const x = <Trans><List renderItem={() => <Plural value={count} one="one" other="other" />} /></Trans>
+      `
+
+      const messages = extract(code)
+
+      expect(messages[0].message).toBe("<0></0>")
+    })
+
     it("rejects unnamed choice value placeholders", () => {
       const code = `
         import { plural } from "@palamedes/core/macro"

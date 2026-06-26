@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use oxc_ast::ast::{CallExpression, JSXChild, JSXElement, TaggedTemplateExpression};
+use oxc_ast::ast::{
+    CallExpression, JSXChild, JSXElement, JSXOpeningElement, TaggedTemplateExpression,
+};
 use oxc_ast_visit::{walk, Visit};
 
 use crate::error::PalamedesError;
@@ -322,6 +324,11 @@ impl<'a> Visit<'a> for NestedMessageMacroFinder<'a> {
         }
 
         walk::walk_jsx_element(self, it);
+    }
+
+    fn visit_jsx_opening_element(&mut self, _it: &JSXOpeningElement<'a>) {
+        // Attributes and render props execute in their own render context; they are not part
+        // of the enclosing <Trans> message body.
     }
 }
 
