@@ -8,7 +8,9 @@ use oxc_span::GetSpan;
 
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
-use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts};
+use crate::jsx_message::{
+    clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ValueBinding {
@@ -234,13 +236,15 @@ pub(super) fn extract_jsx_children_parts(
     let mut used_value_names = HashMap::<String, String>::new();
     let mut next_component_index = 0usize;
 
-    extract_jsx_children_parts_with_state(
+    let (joined_message, values, components) = extract_jsx_children_parts_with_state(
         children,
         source,
         solid_wrappers,
         &mut used_value_names,
         &mut next_component_index,
-    )
+    )?;
+
+    Ok((joined_message.message, values, components))
 }
 
 fn extract_jsx_children_parts_with_state(
@@ -249,7 +253,7 @@ fn extract_jsx_children_parts_with_state(
     solid_wrappers: bool,
     used_value_names: &mut HashMap<String, String>,
     next_component_index: &mut usize,
-) -> PalamedesResult<(String, Vec<ValueBinding>, Vec<ValueBinding>)> {
+) -> PalamedesResult<(JoinedJsxMessage, Vec<ValueBinding>, Vec<ValueBinding>)> {
     let mut parts = Vec::new();
     let mut values = Vec::new();
     let mut components = Vec::new();
@@ -259,17 +263,20 @@ fn extract_jsx_children_parts_with_state(
             JSXChild::Text(text) => {
                 let value = clean_jsx_text(text.value.as_str());
                 if !value.is_empty() {
-                    parts.push(value);
+                    parts.push(JsxMessagePart::Text(value));
                 }
             }
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => {
-                    parts.push(literal.value.to_string());
+                    parts.push(JsxMessagePart::Text(literal.value.to_string()));
                 }
                 expr => {
                     let binding =
                         jsx_value_binding(expr, source, "JSX expression", used_value_names)?;
-                    parts.push(format!("{{{}}}", binding.name));
+                    parts.push(JsxMessagePart::ValuePlaceholder(format!(
+                        "{{{}}}",
+                        binding.name
+                    )));
                     push_unique_binding(&mut values, binding);
                 }
             },
@@ -290,9 +297,10 @@ fn extract_jsx_children_parts_with_state(
                         used_value_names,
                         next_component_index,
                     )?;
-                parts.push(format!(
-                    "<{component_name}>{inner_message}</{component_name}>"
-                ));
+                parts.push(JsxMessagePart::ComponentPlaceholder(format!(
+                    "<{component_name}>{}</{component_name}>",
+                    inner_message.message
+                )));
                 append_unique_bindings(&mut values, inner_values);
                 components.push(ValueBinding {
                     expression: component_expression,
@@ -309,8 +317,11 @@ fn extract_jsx_children_parts_with_state(
                         used_value_names,
                         next_component_index,
                     )?;
-                if !inner_message.is_empty() {
-                    parts.push(inner_message);
+                if !inner_message.message.is_empty() {
+                    parts.push(JsxMessagePart::Message {
+                        value: inner_message.message,
+                        ends_with_placeholder: inner_message.ends_with_placeholder,
+                    });
                 }
                 append_unique_bindings(&mut values, inner_values);
                 components.extend(inner_components);

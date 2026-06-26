@@ -83,6 +83,7 @@ describe("extractMessages", () => {
           Tailored to your {volume} MWh of annual electricity use in {countryName}
           .
         </Trans>
+        const literalBraces = <Trans>{"{name}"} .</Trans>
       `
       const messages = extract(code)
 
@@ -92,6 +93,7 @@ describe("extractMessages", () => {
         "<0>Dates & Capacity:</0> commercial_operation_date, project_capacity_mw, buyer_capacity_mw",
         "Delete <0>{selectedProjectName}</0>? This action cannot be undone.",
         "Tailored to your {volume} MWh of annual electricity use in {countryName}.",
+        "{name} .",
       ])
     })
 

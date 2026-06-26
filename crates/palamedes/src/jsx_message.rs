@@ -1,5 +1,44 @@
 use crate::jsx_entities::decode_jsx_entities;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum JsxMessagePart {
+    Text(String),
+    ValuePlaceholder(String),
+    ComponentPlaceholder(String),
+    Message {
+        value: String,
+        ends_with_placeholder: bool,
+    },
+}
+
+impl JsxMessagePart {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Text(value)
+            | Self::ValuePlaceholder(value)
+            | Self::ComponentPlaceholder(value)
+            | Self::Message { value, .. } => value,
+        }
+    }
+
+    fn ends_with_placeholder(&self) -> bool {
+        match self {
+            Self::Text(_) => false,
+            Self::ValuePlaceholder(_) | Self::ComponentPlaceholder(_) => true,
+            Self::Message {
+                ends_with_placeholder,
+                ..
+            } => *ends_with_placeholder,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct JoinedJsxMessage {
+    pub(crate) message: String,
+    pub(crate) ends_with_placeholder: bool,
+}
+
 pub(crate) fn clean_jsx_text(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let mut last_was_whitespace = false;
@@ -19,34 +58,48 @@ pub(crate) fn clean_jsx_text(text: &str) -> String {
     decode_jsx_entities(&result)
 }
 
-pub(crate) fn join_jsx_message_parts(parts: &[String]) -> String {
+pub(crate) fn join_jsx_message_parts(parts: &[JsxMessagePart]) -> JoinedJsxMessage {
     let mut message = String::new();
+    let mut ends_with_placeholder = false;
 
     for part in parts {
-        push_jsx_message_part(&mut message, part);
+        push_jsx_message_part(&mut message, &mut ends_with_placeholder, part);
     }
 
-    trim_message_edges(&message)
+    JoinedJsxMessage {
+        message: trim_message_edges(&message),
+        ends_with_placeholder,
+    }
 }
 
-fn push_jsx_message_part(message: &mut String, part: &str) {
-    if part.is_empty() {
+fn push_jsx_message_part(
+    message: &mut String,
+    ends_with_placeholder: &mut bool,
+    part: &JsxMessagePart,
+) {
+    let part_value = part.as_str();
+
+    if part_value.is_empty() {
         return;
     }
 
-    let mut next = part;
+    let mut next = part_value;
 
     if !message.is_empty() {
         if message.ends_with(char::is_whitespace) && next.starts_with(char::is_whitespace) {
             next = next.trim_start_matches(char::is_whitespace);
         }
 
-        if ends_with_message_placeholder(message) && starts_with_whitespace_then_punctuation(next) {
+        if *ends_with_placeholder && starts_with_whitespace_then_punctuation(next) {
             next = next.trim_start_matches(char::is_whitespace);
         }
     }
 
     message.push_str(next);
+
+    if !next.trim_end_matches(char::is_whitespace).is_empty() {
+        *ends_with_placeholder = part.ends_with_placeholder();
+    }
 }
 
 fn trim_message_edges(message: &str) -> String {
@@ -58,34 +111,6 @@ fn trim_message_edges(message: &str) -> String {
     }
 
     trimmed.to_string()
-}
-
-fn ends_with_message_placeholder(value: &str) -> bool {
-    ends_with_component_placeholder(value) || ends_with_value_placeholder(value)
-}
-
-fn ends_with_component_placeholder(value: &str) -> bool {
-    let Some(before_closing_angle) = value.strip_suffix('>') else {
-        return false;
-    };
-    let Some(tag_start) = before_closing_angle.rfind("</") else {
-        return false;
-    };
-
-    before_closing_angle[tag_start + 2..]
-        .chars()
-        .all(|ch| ch.is_ascii_digit())
-}
-
-fn ends_with_value_placeholder(value: &str) -> bool {
-    let Some(before_closing_brace) = value.strip_suffix('}') else {
-        return false;
-    };
-    let Some(placeholder_start) = before_closing_brace.rfind('{') else {
-        return false;
-    };
-
-    is_placeholder_name(&before_closing_brace[placeholder_start + 1..])
 }
 
 fn starts_with_whitespace_then_punctuation(value: &str) -> bool {
@@ -114,53 +139,59 @@ fn starts_with_leading_separator(value: &str) -> bool {
         .is_some_and(|ch| matches!(ch, '·' | '—'))
 }
 
-fn is_placeholder_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    if !(first == '_' || first == '$' || first.is_ascii_alphabetic()) {
-        return false;
-    }
-
-    chars.all(|ch| ch == '_' || ch == '$' || ch.is_ascii_alphanumeric())
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{clean_jsx_text, join_jsx_message_parts};
+    use super::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
 
     #[test]
     fn trims_whitespace_before_punctuation_after_value_placeholders() {
         let parts = vec![
-            "Tailored to your ".to_string(),
-            "{volume}".to_string(),
-            " MWh in ".to_string(),
-            "{countryName}".to_string(),
-            " .".to_string(),
+            JsxMessagePart::Text("Tailored to your ".to_string()),
+            JsxMessagePart::ValuePlaceholder("{volume}".to_string()),
+            JsxMessagePart::Text(" MWh in ".to_string()),
+            JsxMessagePart::ValuePlaceholder("{countryName}".to_string()),
+            JsxMessagePart::Text(" .".to_string()),
         ];
 
         assert_eq!(
-            join_jsx_message_parts(&parts),
+            join_jsx_message_parts(&parts).message,
             "Tailored to your {volume} MWh in {countryName}."
         );
     }
 
     #[test]
+    fn preserves_whitespace_before_punctuation_after_literal_brace_text() {
+        let parts = vec![
+            JsxMessagePart::Text("{name}".to_string()),
+            JsxMessagePart::Text(" .".to_string()),
+        ];
+
+        assert_eq!(join_jsx_message_parts(&parts).message, "{name} .");
+    }
+
+    #[test]
     fn preserves_leading_separator_spacing() {
         assert_eq!(
-            join_jsx_message_parts(&[" · $".to_string(), "{priceFormatted}/MWh".to_string()]),
+            join_jsx_message_parts(&[
+                JsxMessagePart::Text(" · $".to_string()),
+                JsxMessagePart::ValuePlaceholder("{priceFormatted}".to_string()),
+                JsxMessagePart::Text("/MWh".to_string())
+            ])
+            .message,
             " · ${priceFormatted}/MWh"
         );
         assert_eq!(
-            join_jsx_message_parts(&[" — no manager".to_string()]),
+            join_jsx_message_parts(&[JsxMessagePart::Text(" — no manager".to_string())]).message,
             " — no manager"
         );
     }
 
     #[test]
     fn still_trims_indentation_before_normal_text() {
-        assert_eq!(join_jsx_message_parts(&[" Hello".to_string()]), "Hello");
+        assert_eq!(
+            join_jsx_message_parts(&[JsxMessagePart::Text(" Hello".to_string())]).message,
+            "Hello"
+        );
     }
 
     #[test]

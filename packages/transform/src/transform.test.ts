@@ -190,6 +190,7 @@ const tailored = <Trans>
   Tailored to your {volume} MWh of annual electricity use in {countryName}
   .
 </Trans>;
+const literalBraces = <Trans>{"{name}"} .</Trans>;
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
@@ -200,6 +201,7 @@ const tailored = <Trans>
     expect(result.code).toContain(
       'message={"Tailored to your {volume} MWh of annual electricity use in {countryName}."}'
     )
+    expect(result.code).toContain('message={"{name} ."}')
   })
 
   it("preserves leading separator spacing", () => {
