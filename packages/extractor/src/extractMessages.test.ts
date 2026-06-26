@@ -71,6 +71,24 @@ describe("extractMessages", () => {
       expect(messages[2].message).toBe("A &amp; B")
       expect(messages[3].message).toBe("Literal &amp; Value")
     })
+
+    it("normalizes rich-text placeholder boundary whitespace", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const helper = <Trans>Reach out to your {" "}<a href="/advisor">advisor</a>{" "} for help.</Trans>
+        const target = <Trans><strong>100%</strong> Clean Energy by {" "}<strong>{targetYear}</strong></Trans>
+        const details = <Trans><strong>Dates & Capacity:</strong> {" "}commercial_operation_date, project_capacity_mw, buyer_capacity_mw</Trans>
+        const confirm = <Trans>Delete {" "}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>
+      `
+      const messages = extract(code)
+
+      expect(messages.map((message) => message.message)).toStrictEqual([
+        "Reach out to your <0>advisor</0> for help.",
+        "<0>100%</0> Clean Energy by <1>{targetYear}</1>",
+        "<0>Dates & Capacity:</0> commercial_operation_date, project_capacity_mw, buyer_capacity_mw",
+        "Delete <0>{selectedProjectName}</0>? This action cannot be undone.",
+      ])
+    })
   })
 
   describe("macro calls", () => {
