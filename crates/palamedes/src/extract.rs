@@ -827,7 +827,7 @@ fn extract_jsx_children_as_message_with_state(
         }
     }
 
-    Ok(parts.join("").trim().to_string())
+    Ok(join_jsx_message_parts(&parts))
 }
 
 fn clean_jsx_text(text: &str) -> String {
@@ -847,6 +847,69 @@ fn clean_jsx_text(text: &str) -> String {
     }
 
     decode_jsx_entities(&result)
+}
+
+fn join_jsx_message_parts(parts: &[String]) -> String {
+    let mut message = String::new();
+
+    for part in parts {
+        push_jsx_message_part(&mut message, part);
+    }
+
+    message.trim().to_string()
+}
+
+fn push_jsx_message_part(message: &mut String, part: &str) {
+    if part.is_empty() {
+        return;
+    }
+
+    let mut next = part;
+
+    if !message.is_empty() {
+        if message.ends_with(char::is_whitespace) && next.starts_with(char::is_whitespace) {
+            next = next.trim_start_matches(char::is_whitespace);
+        }
+
+        if ends_with_component_placeholder(message) && starts_with_whitespace_then_punctuation(next)
+        {
+            next = next.trim_start_matches(char::is_whitespace);
+        }
+    }
+
+    message.push_str(next);
+}
+
+fn ends_with_component_placeholder(value: &str) -> bool {
+    let Some(before_closing_angle) = value.strip_suffix('>') else {
+        return false;
+    };
+    let Some(tag_start) = before_closing_angle.rfind("</") else {
+        return false;
+    };
+
+    before_closing_angle[tag_start + 2..]
+        .chars()
+        .all(|ch| ch.is_ascii_digit())
+}
+
+fn starts_with_whitespace_then_punctuation(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+
+    if !first.is_whitespace() {
+        return false;
+    }
+
+    chars
+        .find(|ch| !ch.is_whitespace())
+        .is_some_and(is_message_punctuation)
+}
+
+fn is_message_punctuation(ch: char) -> bool {
+    matches!(ch, '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '}')
 }
 
 fn extract_choice_options_from_jsx(opening_element: &JSXOpeningElement<'_>) -> ChoiceOptions {
@@ -1282,6 +1345,49 @@ mod tests {
         .expect("messages should extract");
 
         assert_eq!(messages[0].message, "<0>A</0> and <1>B</1>");
+    }
+
+    #[test]
+    fn normalizes_jsx_component_placeholder_boundary_whitespace() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const helper = <Trans>Reach out to your {" "}<a href="/advisor">advisor</a>{" "} for help.</Trans>
+              const target = <Trans><strong>100%</strong> Clean Energy by {" "}<strong>{targetYear}</strong></Trans>
+              const details = <Trans><strong>Dates & Capacity:</strong> {" "}commercial_operation_date, project_capacity_mw, buyer_capacity_mw</Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "Reach out to your <0>advisor</0> for help.",
+                "<0>100%</0> Clean Energy by <1>{targetYear}</1>",
+                "<0>Dates & Capacity:</0> commercial_operation_date, project_capacity_mw, buyer_capacity_mw",
+            ]
+        );
+    }
+
+    #[test]
+    fn normalizes_jsx_component_placeholder_before_punctuation() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const message = <Trans>Delete {" "}<strong>{selectedProjectName}</strong> ? This action cannot be undone.</Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages[0].message,
+            "Delete <0>{selectedProjectName}</0>? This action cannot be undone."
+        );
     }
 
     #[test]
