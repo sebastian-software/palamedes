@@ -443,6 +443,35 @@ fn rejects_nested_jsx_message_macros() {
 }
 
 #[test]
+fn rejects_nested_jsx_message_macros_inside_conditional_and_logical_expressions() {
+    for source in [
+        "import { Plural, Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>{showCount ? <Plural value={count} one=\"one\" other=\"other\" /> : null}</Trans>;\n",
+        "import { Plural, Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>{showCount && <Plural value={count} one=\"one\" other=\"other\" />}</Trans>;\n",
+    ] {
+        let error = transform_macros(source, "test.tsx", None)
+            .expect_err("nested message macros in JSX expressions should fail");
+        let message = error.to_string();
+
+        assert!(message.contains("Nested i18n macro is not extractable as a single message"));
+        assert!(!message.contains("stable placeholder name"));
+    }
+}
+
+#[test]
+fn rejects_nested_jsx_message_macros_inside_map_callbacks() {
+    let error = transform_macros(
+        "import { Plural, Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>{items.map((item) => <Plural value={item.count} one=\"one\" other=\"other\" />)}</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect_err("nested message macros in map callbacks should fail");
+    let message = error.to_string();
+
+    assert!(message.contains("Nested i18n macro is not extractable as a single message"));
+    assert!(!message.contains("stable placeholder name"));
+}
+
+#[test]
 fn keeps_choice_jsx_macro_as_expression_outside_jsx_children() {
     let result = transform_macros(
         "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={count} one=\"# item\" other=\"# items\" />;\n",

@@ -363,6 +363,28 @@ const el = <Trans>Hello {firstName + lastName}</Trans>;
     expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(/stable placeholder name/)
   })
 
+  it("rejects nested JSX message macros in expression containers", () => {
+    const cases = [
+      `<Trans>{showCount ? <Plural value={count} one="one" other="other" /> : null}</Trans>`,
+      `<Trans>{showCount && <Plural value={count} one="one" other="other" />}</Trans>`,
+      `<Trans>{items.map((item) => <Plural value={item.count} one="one" other="other" />)}</Trans>`,
+    ]
+
+    for (const jsx of cases) {
+      const code = `
+import { Plural, Trans } from "@palamedes/react/macro";
+const el = ${jsx};
+`
+
+      expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(
+        /Nested i18n macro is not extractable as a single message/
+      )
+      expect(() => transformPalamedesMacros(code, "test.tsx")).not.toThrow(
+        /stable placeholder name/
+      )
+    }
+  })
+
   it("rejects unnamed choice value placeholders", () => {
     const code = `
 import { plural } from "@palamedes/core/macro";
