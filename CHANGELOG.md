@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.12...palamedes-v0.8.0) (2026-06-27)
+
+
+### Features
+
+* **config:** default PO origins to git root ([c68950e](https://github.com/sebastian-software/palamedes/commit/c68950e378d16fac29a75fa8939c92f458abf1bb))
+
+
+### Bug Fixes
+
+* **cli:** keep parent include PO origins relative ([bfe5431](https://github.com/sebastian-software/palamedes/commit/bfe543180b7c24543e0bc775a1c2b5371462f72c))
+
 ## [0.7.12](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.11...palamedes-v0.7.12) (2026-06-27)
 
 
