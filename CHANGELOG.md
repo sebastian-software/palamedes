@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.11](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.10...palamedes-v0.7.11) (2026-06-27)
+
+
+### Bug Fixes
+
+* **transform:** accept fallback choice values ([d261341](https://github.com/sebastian-software/palamedes/commit/d261341da9fc9278a3e03e612edb73a92a61912b))
+
 ## [0.7.10](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.9...palamedes-v0.7.10) (2026-06-27)
 
 
