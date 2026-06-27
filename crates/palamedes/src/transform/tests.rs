@@ -662,13 +662,39 @@ fn rejects_unnamed_jsx_placeholders() {
 }
 
 #[test]
-fn rejects_unnamed_choice_value_placeholders() {
-    let error = transform_macros(
-        "import { plural } from \"@palamedes/core/macro\";\nconst msg = plural(count + 1, { one: \"# item\", other: \"# items\" });\n",
+fn accepts_computed_defaulted_and_literal_choice_values() {
+    let result = transform_macros(
+        "import { plural } from \"@palamedes/core/macro\";\nconst computed = plural(periodCounts[period] ?? 0, { one: \"# entry\", other: \"# entries\" });\nconst literal = plural(21, { one: \"# month\", other: \"# months\" });\n",
         "test.ts",
         None,
     )
-    .expect_err("unnamed choice value should fail");
+    .expect("choice values should support fallback placeholder names");
 
-    assert!(error.to_string().contains("stable placeholder name"));
+    assert!(result
+        .code
+        .contains("message: \"{period, plural, one {# entry} other {# entries}}\""));
+    assert!(result
+        .code
+        .contains("{ period: periodCounts[period] ?? 0 }"));
+    assert!(result
+        .code
+        .contains("message: \"{value, plural, one {# month} other {# months}}\""));
+    assert!(result.code.contains("{ value: 21 }"));
+}
+
+#[test]
+fn accepts_defaulted_jsx_choice_values() {
+    let result = transform_macros(
+        "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={node.locationCount ?? 0} one=\"# location\" other=\"# locations\" />;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("JSX choice values should support fallback placeholder names");
+
+    assert!(result
+        .code
+        .contains("message: \"{locationCount, plural, one {# location} other {# locations}}\""));
+    assert!(result
+        .code
+        .contains("{ locationCount: node.locationCount ?? 0 }"));
 }

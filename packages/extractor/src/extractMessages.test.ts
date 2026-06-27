@@ -317,13 +317,21 @@ describe("extractMessages", () => {
       expect(messages[0].message).toBe("<0/>")
     })
 
-    it("rejects unnamed choice value placeholders", () => {
+    it("accepts computed, defaulted, and literal choice values", () => {
       const code = `
         import { plural } from "@palamedes/core/macro"
-        const x = plural(count + 1, { one: "# item", other: "# items" })
+        import { Plural } from "@palamedes/react/macro"
+        const computed = plural(periodCounts[period] ?? 0, { one: "# entry", other: "# entries" })
+        const literal = plural(21, { one: "# month", other: "# months" })
+        const jsx = <Plural value={node.locationCount ?? 0} one="# location" other="# locations" />
       `
+      const messages = extract(code)
 
-      expect(() => extract(code)).toThrow(/stable placeholder name/)
+      expect(messages.map((message) => message.message)).toEqual([
+        "{period, plural, one {# entry} other {# entries}}",
+        "{value, plural, one {# month} other {# months}}",
+        "{locationCount, plural, one {# location} other {# locations}}",
+      ])
     })
   })
 })
