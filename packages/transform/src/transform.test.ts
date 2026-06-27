@@ -350,6 +350,38 @@ export function ResultCount({ filtered, total }: { filtered: number; total: numb
     expect(result.code).not.toContain(': (\n        {getI18n()._("')
   })
 
+  it("keeps JSX choice macro replacements as expressions in nested JSX ternary branches", () => {
+    const code = `
+import { Plural, Trans } from "@palamedes/react/macro";
+
+function ResultCount({ shownCount, totalCount, quickSearch }) {
+  return (
+    <section>
+      <header>
+        <Trans>Marketplace</Trans>
+      </header>
+      <button>
+        <Trans>Buy now</Trans>
+      </button>
+      <p>
+        {quickSearch.trim() && shownCount !== totalCount ? (
+          <Trans>
+            Showing {shownCount} of {totalCount} products
+          </Trans>
+        ) : (
+          <Plural one="# product" other="# products" value={shownCount} />
+        )}
+      </p>
+    </section>
+  );
+}
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain(') : (\n          getI18n()._("')
+    expect(result.code).not.toContain(') : (\n          {getI18n()._("')
+  })
+
   it("accepts getter call value names for JSX choice macros", () => {
     const code = `
 import { Plural } from "@palamedes/react/macro";
