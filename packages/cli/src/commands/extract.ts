@@ -131,7 +131,7 @@ async function extractFromCatalog(
 
   const extractStartedAt = Date.now()
   const result = extractCatalogMessagesFromFiles({
-    rootDir,
+    rootDir: config.sourceReferenceRoot,
     files,
   })
   const extractMs = Date.now() - extractStartedAt

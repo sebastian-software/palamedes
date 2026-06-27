@@ -117,6 +117,7 @@ import { defineConfig } from "@palamedes/config"
 export default defineConfig({
   locales: ["en", "de"],
   sourceLocale: "en",
+  sourceReferenceRoot: "git",
   catalogs: [
     {
       path: "src/locales/{locale}",
@@ -125,6 +126,11 @@ export default defineConfig({
   ],
 })
 ```
+
+`sourceReferenceRoot` controls PO `#:` references written by `pmds extract`.
+The default is `"git"`, so monorepo references are emitted relative to the
+nearest Git repository root. Use `"lingui"` or `"config"` to keep references
+relative to the config directory, matching Lingui's default behavior.
 
 ## Related Packages
 

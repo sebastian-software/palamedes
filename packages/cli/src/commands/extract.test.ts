@@ -101,6 +101,25 @@ describe("extract", () => {
     const enCatalog = normalizePo(
       await readFile(path.join(appDir, "locales", "en", "messages.po"), "utf8")
     )
+    expect(findItem(enCatalog.items, "Dashboard")?.references).toStrictEqual([
+      "apps/web/app/page.tsx:3",
+    ])
+    expect(findItem(enCatalog.items, "Shared action")?.references).toStrictEqual([
+      "packages/ui/src/shared-card.tsx:3",
+    ])
+  })
+
+  it("supports Lingui-compatible config-root PO references", async () => {
+    const appDir = await createMonorepoFixture({ sourceReferenceRoot: "lingui" })
+
+    await extract({
+      config: path.join(appDir, "palamedes.config.ts"),
+      clean: true,
+    })
+
+    const enCatalog = normalizePo(
+      await readFile(path.join(appDir, "locales", "en", "messages.po"), "utf8")
+    )
     expect(findItem(enCatalog.items, "Dashboard")?.references).toStrictEqual(["app/page.tsx:3"])
     expect(findItem(enCatalog.items, "Shared action")?.references).toStrictEqual([
       "../../packages/ui/src/shared-card.tsx:3",
@@ -143,12 +162,16 @@ async function copyFixture(): Promise<string> {
   return targetDir
 }
 
-async function createMonorepoFixture(): Promise<string> {
+async function createMonorepoFixture(
+  options: { sourceReferenceRoot?: "lingui" } = {}
+): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "palamedes-cli-monorepo-"))
   tempDirs.push(dir)
 
-  const appDir = path.join(dir, "repo", "apps", "web")
-  const sharedDir = path.join(dir, "repo", "packages", "ui", "src")
+  const repoDir = path.join(dir, "repo")
+  const appDir = path.join(repoDir, "apps", "web")
+  const sharedDir = path.join(repoDir, "packages", "ui", "src")
+  await mkdir(path.join(repoDir, ".git"), { recursive: true })
   await mkdir(path.join(appDir, "app"), { recursive: true })
   await mkdir(sharedDir, { recursive: true })
 
@@ -159,6 +182,7 @@ async function createMonorepoFixture(): Promise<string> {
 export default defineConfig({
   sourceLocale: "en",
   locales: ["en", "de"],
+  ${options.sourceReferenceRoot ? `sourceReferenceRoot: "${options.sourceReferenceRoot}",` : ""}
   catalogs: [
     {
       path: "locales/{locale}/messages",

@@ -11,6 +11,7 @@ export const CONFIG_FILENAMES = [
 ] as const
 
 export type PalamedesFallbackLocales = string[] | Record<string, string[]>
+export type PalamedesSourceReferenceRoot = "git" | "lingui" | "config" | (string & {})
 
 export type PalamedesCatalogConfig = {
   path: string
@@ -23,13 +24,15 @@ export type PalamedesConfig = {
   sourceLocale: string
   fallbackLocales?: PalamedesFallbackLocales
   pseudoLocale?: string
+  sourceReferenceRoot?: PalamedesSourceReferenceRoot
   catalogs: PalamedesCatalogConfig[]
 }
 
 export type LoadedPalamedesConfig = {
   configPath: string
   rootDir: string
-} & PalamedesConfig
+  sourceReferenceRoot: string
+} & Omit<PalamedesConfig, "sourceReferenceRoot">
 
 export type LoadPalamedesConfigOptions = {
   cwd?: string
@@ -142,17 +145,55 @@ function unwrapModule(loaded: unknown): unknown {
   return loaded
 }
 
-function normalizeConfig(config: PalamedesConfig, configPath: string): LoadedPalamedesConfig {
+async function normalizeConfig(
+  config: PalamedesConfig,
+  configPath: string
+): Promise<LoadedPalamedesConfig> {
+  const rootDir = path.dirname(configPath)
   return {
-    ...config,
     configPath,
-    rootDir: path.dirname(configPath),
+    rootDir,
     locales: [...config.locales],
+    sourceLocale: config.sourceLocale,
+    ...(config.fallbackLocales !== undefined ? { fallbackLocales: config.fallbackLocales } : {}),
+    ...(config.pseudoLocale !== undefined ? { pseudoLocale: config.pseudoLocale } : {}),
+    sourceReferenceRoot: await resolveSourceReferenceRoot(config.sourceReferenceRoot, rootDir),
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       include: [...catalog.include],
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
+  }
+}
+
+async function resolveSourceReferenceRoot(
+  value: PalamedesSourceReferenceRoot | undefined,
+  rootDir: string
+): Promise<string> {
+  if (value === undefined || value === "git") {
+    return (await findGitRoot(rootDir)) ?? rootDir
+  }
+
+  if (value === "lingui" || value === "config") {
+    return rootDir
+  }
+
+  return path.resolve(rootDir, value)
+}
+
+async function findGitRoot(startDir: string): Promise<string | undefined> {
+  let current = path.resolve(startDir)
+
+  while (true) {
+    if (await fileExists(path.join(current, ".git"))) {
+      return current
+    }
+
+    const parent = path.dirname(current)
+    if (parent === current) {
+      return undefined
+    }
+    current = parent
   }
 }
 
@@ -191,6 +232,15 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
   if (record.pseudoLocale !== undefined && typeof record.pseudoLocale !== "string") {
     throw new TypeError(
       `Invalid Palamedes config in ${configPath}: "pseudoLocale" must be a string when provided.`
+    )
+  }
+
+  if (
+    record.sourceReferenceRoot !== undefined &&
+    (typeof record.sourceReferenceRoot !== "string" || record.sourceReferenceRoot.length === 0)
+  ) {
+    throw new TypeError(
+      `Invalid Palamedes config in ${configPath}: "sourceReferenceRoot" must be a non-empty string when provided.`
     )
   }
 
