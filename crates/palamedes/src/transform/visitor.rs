@@ -32,7 +32,7 @@ pub(super) struct TransformVisitor<'a> {
     pub needs_runtime_import: bool,
     pub trans_import_modules: HashSet<String>,
     pub error: Option<PalamedesError>,
-    jsx_child_element_depth: usize,
+    jsx_child_element_spans: Vec<(usize, usize)>,
 }
 
 impl<'a> TransformVisitor<'a> {
@@ -52,7 +52,7 @@ impl<'a> TransformVisitor<'a> {
             needs_runtime_import: false,
             trans_import_modules: HashSet::new(),
             error: None,
-            jsx_child_element_depth: 0,
+            jsx_child_element_spans: Vec::new(),
         }
     }
 
@@ -70,6 +70,14 @@ impl<'a> TransformVisitor<'a> {
         {
             self.compiled_ids.push(compiled_id.to_owned());
         }
+    }
+
+    fn is_current_jsx_child_element(&self, element: &JSXElement<'_>) -> bool {
+        self.jsx_child_element_spans
+            .last()
+            .is_some_and(|(start, end)| {
+                *start == element.span.start as usize && *end == element.span.end as usize
+            })
     }
 }
 
@@ -123,12 +131,13 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
-                let text =
-                    if macro_info.imported_name != "Trans" && self.jsx_child_element_depth > 0 {
-                        format!("{{{text}}}")
-                    } else {
-                        text
-                    };
+                let text = if macro_info.imported_name != "Trans"
+                    && self.is_current_jsx_child_element(it)
+                {
+                    format!("{{{text}}}")
+                } else {
+                    text
+                };
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
                     end: it.span.end as usize,
@@ -156,10 +165,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
     }
 
     fn visit_jsx_child(&mut self, it: &JSXChild<'a>) {
-        if matches!(it, JSXChild::Element(_)) {
-            self.jsx_child_element_depth += 1;
+        if let JSXChild::Element(element) = it {
+            self.jsx_child_element_spans
+                .push((element.span.start as usize, element.span.end as usize));
             walk::walk_jsx_child(self, it);
-            self.jsx_child_element_depth -= 1;
+            self.jsx_child_element_spans.pop();
         } else {
             walk::walk_jsx_child(self, it);
         }

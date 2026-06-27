@@ -538,6 +538,20 @@ fn keeps_choice_jsx_macro_as_expression_in_jsx_ternary_branch() {
 }
 
 #[test]
+fn keeps_choice_jsx_macro_as_expression_in_nested_jsx_ternary_branch() {
+    let result = transform_macros(
+        "import { Plural, Trans } from \"@palamedes/react/macro\";\nfunction ResultCount({ shownCount, totalCount, quickSearch }) {\n  return (\n    <section>\n      <header>\n        <Trans>Marketplace</Trans>\n      </header>\n      <button>\n        <Trans>Buy now</Trans>\n      </button>\n      <p>\n        {quickSearch.trim() && shownCount !== totalCount ? (\n          <Trans>\n            Showing {shownCount} of {totalCount} products\n          </Trans>\n        ) : (\n          <Plural one=\"# product\" other=\"# products\" value={shownCount} />\n        )}\n      </p>\n    </section>\n  );\n}\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains("<Trans id=\""));
+    assert!(result.code.contains(") : (\n          getI18n()._(\""));
+    assert!(!result.code.contains(") : (\n          {getI18n()._(\""));
+}
+
+#[test]
 fn accepts_getter_call_choice_jsx_value_names() {
     let result = transform_macros(
         "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={getDemand()} one=\"# unit\" other=\"# units\" />;\n",
