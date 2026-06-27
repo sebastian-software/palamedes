@@ -524,6 +524,35 @@ fn keeps_choice_jsx_macro_as_expression_in_jsx_child_expression_container() {
 }
 
 #[test]
+fn keeps_choice_jsx_macro_as_expression_in_jsx_ternary_branch() {
+    let result = transform_macros(
+        "import { Plural, Trans } from \"@palamedes/react/macro\";\nfunction ResultCount({ filtered, total }: { filtered: number; total: number }) {\n  return <p>{filtered !== total ? (<Trans>Showing {filtered} of {total} items</Trans>) : (<Plural one=\"# item\" other=\"# items\" value={total} />)}</p>;\n}\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains(": (getI18n()._(\""));
+    assert!(!result.code.contains(": ({getI18n()._(\""));
+    assert!(!result.code.contains(": ({{getI18n()._(\""));
+}
+
+#[test]
+fn accepts_getter_call_choice_jsx_value_names() {
+    let result = transform_macros(
+        "import { Plural } from \"@palamedes/react/macro\";\nconst el = <Plural value={getDemand()} one=\"# unit\" other=\"# units\" />;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("transform should accept the same getter value names as extraction");
+
+    assert!(result
+        .code
+        .contains("message: \"{demand, plural, one {# unit} other {# units}}\""));
+    assert!(result.code.contains("{ demand: getDemand() }"));
+}
+
+#[test]
 fn rejects_explicit_ids() {
     let error = transform_macros(
         "import { t } from \"@palamedes/core/macro\";\nconst msg = t({ id: \"greeting\", message: \"Hello\" });\n",
