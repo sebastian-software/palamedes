@@ -77,6 +77,63 @@ describe("loadPalamedesConfig", () => {
     expect(config.catalogs[0]?.exclude).toStrictEqual(["src/ignore"])
   })
 
+  it("uses the nearest git root as the default source reference root", async () => {
+    const fixtureDir = await createTempDir()
+    const appDir = path.join(fixtureDir, "apps", "web")
+
+    await mkdir(path.join(fixtureDir, ".git"), { recursive: true })
+    await mkdir(appDir, { recursive: true })
+    await writeFile(
+      path.join(appDir, "palamedes.config.ts"),
+      `
+        export default {
+          locales: ["en"],
+          sourceLocale: "en",
+          catalogs: [
+            {
+              path: "locales/{locale}/messages",
+              include: ["app"],
+            },
+          ],
+        }
+      `
+    )
+
+    const config = await loadPalamedesConfig({ cwd: appDir })
+
+    expect(config.rootDir).toBe(appDir)
+    expect(config.sourceReferenceRoot).toBe(fixtureDir)
+  })
+
+  it("supports Lingui-compatible config-root source references", async () => {
+    const fixtureDir = await createTempDir()
+    const appDir = path.join(fixtureDir, "apps", "web")
+
+    await mkdir(path.join(fixtureDir, ".git"), { recursive: true })
+    await mkdir(appDir, { recursive: true })
+    await writeFile(
+      path.join(appDir, "palamedes.config.ts"),
+      `
+        export default {
+          locales: ["en"],
+          sourceLocale: "en",
+          sourceReferenceRoot: "lingui",
+          catalogs: [
+            {
+              path: "locales/{locale}/messages",
+              include: ["src"],
+            },
+          ],
+        }
+      `
+    )
+
+    const config = await loadPalamedesConfig({ cwd: appDir })
+
+    expect(config.rootDir).toBe(appDir)
+    expect(config.sourceReferenceRoot).toBe(appDir)
+  })
+
   it("fails validation for invalid config shapes", async () => {
     const fixtureDir = await createTempDir()
     await writeFile(

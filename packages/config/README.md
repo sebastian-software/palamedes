@@ -19,6 +19,8 @@ import { defineConfig } from "@palamedes/config"
 export default defineConfig({
   locales: ["en", "de"],
   sourceLocale: "en",
+  // Optional: use "lingui" for config-root source references.
+  sourceReferenceRoot: "git",
   catalogs: [
     {
       path: "src/locales/{locale}",
@@ -42,6 +44,11 @@ export default defineConfig({
 - `pseudoLocale` marks a generated pseudo-locale used for layout and hardcoded
   string checks. Plugin integrations skip `failOnMissing` failures for that
   locale while keeping strict checks for real locales.
+- `sourceReferenceRoot` controls the root used for PO `#:` source references.
+  The default is `"git"`, which emits paths relative to the nearest Git
+  repository root and falls back to the config directory when no Git root is
+  available. Use `"lingui"` or `"config"` for Lingui-compatible references
+  relative to the config directory, or pass a custom path.
 
 See [Pseudo-localization and fallback locales](https://github.com/sebastian-software/palamedes/blob/main/docs/pseudo-localization.md)
 for examples and the recommended development workflow.
