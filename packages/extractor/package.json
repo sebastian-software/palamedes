@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/extractor",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "description": "Native message extractor for Palamedes macro syntax",
   "keywords": [
     "palamedes",

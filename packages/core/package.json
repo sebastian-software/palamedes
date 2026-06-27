@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/core",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "description": "Palamedes-owned i18n instance and macro entry points",
   "keywords": [
     "palamedes",
