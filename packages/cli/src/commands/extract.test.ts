@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises"
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -90,6 +90,23 @@ describe("extract", () => {
     expect(await readCatalog(fixtureDir, "de")).toBe(firstDeCatalog)
   })
 
+  it("emits relative PO references for parent-directory monorepo includes", async () => {
+    const appDir = await createMonorepoFixture()
+
+    await extract({
+      config: path.join(appDir, "palamedes.config.ts"),
+      clean: true,
+    })
+
+    const enCatalog = normalizePo(
+      await readFile(path.join(appDir, "locales", "en", "messages.po"), "utf8")
+    )
+    expect(findItem(enCatalog.items, "Dashboard")?.references).toStrictEqual(["app/page.tsx:3"])
+    expect(findItem(enCatalog.items, "Shared action")?.references).toStrictEqual([
+      "../../packages/ui/src/shared-card.tsx:3",
+    ])
+  })
+
   it("emits timing JSON with glob and extract buckets", async () => {
     const fixtureDir = await copyFixture()
     process.env.PALAMEDES_TIMING_JSON = "1"
@@ -124,6 +141,54 @@ async function copyFixture(): Promise<string> {
   tempDirs.push(dir)
   await cp(FIXTURE_DIR, targetDir, { recursive: true })
   return targetDir
+}
+
+async function createMonorepoFixture(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "palamedes-cli-monorepo-"))
+  tempDirs.push(dir)
+
+  const appDir = path.join(dir, "repo", "apps", "web")
+  const sharedDir = path.join(dir, "repo", "packages", "ui", "src")
+  await mkdir(path.join(appDir, "app"), { recursive: true })
+  await mkdir(sharedDir, { recursive: true })
+
+  await writeFile(
+    path.join(appDir, "palamedes.config.ts"),
+    `import { defineConfig } from "@palamedes/config";
+
+export default defineConfig({
+  sourceLocale: "en",
+  locales: ["en", "de"],
+  catalogs: [
+    {
+      path: "locales/{locale}/messages",
+      include: ["app", "../../packages/ui/src"],
+    },
+  ],
+});
+`,
+    "utf8"
+  )
+  await writeFile(
+    path.join(appDir, "app", "page.tsx"),
+    `import { t } from "@palamedes/core/macro";
+export function Page() {
+  return t\`Dashboard\`;
+}
+`,
+    "utf8"
+  )
+  await writeFile(
+    path.join(sharedDir, "shared-card.tsx"),
+    `import { t } from "@palamedes/core/macro";
+export function SharedCard() {
+  return t\`Shared action\`;
+}
+`,
+    "utf8"
+  )
+
+  return appDir
 }
 
 async function readCatalog(fixtureDir: string, locale: string): Promise<string> {
