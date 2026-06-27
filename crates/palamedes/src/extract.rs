@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
@@ -1162,9 +1163,76 @@ pub fn extract_catalog_messages_from_files(
 fn relative_origin_file(root_dir: &Path, file: &str) -> String {
     let path = Path::new(file);
     path.strip_prefix(root_dir)
-        .unwrap_or(path)
+        .map(Path::to_path_buf)
+        .or_else(|_| relative_path_from(root_dir, path).ok_or(()))
+        .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()
         .replace('\\', "/")
+}
+
+fn relative_path_from(root_dir: &Path, path: &Path) -> Option<PathBuf> {
+    if root_dir.is_absolute() != path.is_absolute() {
+        return None;
+    }
+
+    if path_prefix(root_dir) != path_prefix(path) {
+        return None;
+    }
+
+    let root_components = normalized_path_components(root_dir);
+    let path_components = normalized_path_components(path);
+    let common_len = root_components
+        .iter()
+        .zip(path_components.iter())
+        .take_while(|(root, path)| root == path)
+        .count();
+
+    let mut relative = PathBuf::new();
+    for _ in common_len..root_components.len() {
+        relative.push("..");
+    }
+    for component in &path_components[common_len..] {
+        relative.push(component);
+    }
+
+    if relative.as_os_str().is_empty() {
+        relative.push(".");
+    }
+
+    Some(relative)
+}
+
+fn path_prefix(path: &Path) -> Option<OsString> {
+    path.components().find_map(|component| match component {
+        std::path::Component::Prefix(prefix) => Some(prefix.as_os_str().to_os_string()),
+        _ => None,
+    })
+}
+
+fn normalized_path_components(path: &Path) -> Vec<OsString> {
+    let mut normalized: Vec<OsString> = Vec::new();
+
+    for component in path.components() {
+        match component {
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {}
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if normalized
+                    .last()
+                    .is_some_and(|previous| previous.as_os_str() != "..")
+                {
+                    normalized.pop();
+                } else {
+                    normalized.push(component.as_os_str().to_os_string());
+                }
+            }
+            std::path::Component::Normal(_) => {
+                normalized.push(component.as_os_str().to_os_string());
+            }
+        }
+    }
+
+    normalized
 }
 
 fn add_extracted_message(
@@ -1717,6 +1785,44 @@ mod tests {
                 .expect("placeholder expression"),
             &vec!["user.name".to_string()]
         );
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_extracts_parent_include_origins_relative_to_root_dir() {
+        let root = temp_root("batch-parent-relative");
+        let app = root.join("apps").join("web");
+        let shared_src = root.join("packages").join("ui").join("src");
+        fs::create_dir_all(&app).expect("app dir");
+        fs::create_dir_all(&shared_src).expect("shared src dir");
+        let shared = shared_src.join("shared-card.tsx");
+        fs::write(
+            &shared,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              export const label = t`Shared action`
+            "#,
+        )
+        .expect("shared source");
+
+        let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: app.to_string_lossy().into_owned(),
+            files: vec![shared.to_string_lossy().into_owned()],
+        })
+        .expect("batch extraction");
+
+        let shared_action = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Shared action")
+            .expect("shared message");
+        assert_eq!(shared_action.origins.len(), 1);
+        assert_eq!(
+            shared_action.origins[0].file,
+            "../../packages/ui/src/shared-card.tsx"
+        );
+        assert!(!shared_action.origins[0].file.starts_with('/'));
 
         fs::remove_dir_all(root).expect("cleanup");
     }
