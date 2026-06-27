@@ -327,6 +327,40 @@ const text = <Plural one="# row" other="# rows" value={totalRows} />;
     expect(result.code).not.toContain("const text = {getI18n()._")
   })
 
+  it("keeps JSX choice macro replacements as expressions in ternary branches", () => {
+    const code = `
+import { Plural, Trans } from "@palamedes/react/macro";
+export function ResultCount({ filtered, total }: { filtered: number; total: number }) {
+  return (
+    <p>
+      {filtered !== total ? (
+        <Trans>
+          Showing {filtered} of {total} items
+        </Trans>
+      ) : (
+        <Plural one="# item" other="# items" value={total} />
+      )}
+    </p>
+  );
+}
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain(': (\n        getI18n()._("')
+    expect(result.code).not.toContain(': (\n        {getI18n()._("')
+  })
+
+  it("accepts getter call value names for JSX choice macros", () => {
+    const code = `
+import { Plural } from "@palamedes/react/macro";
+const text = <Plural one="# unit" other="# units" value={getDemand()} />;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message: "{demand, plural, one {# unit} other {# units}}"')
+    expect(result.code).toContain("{ demand: getDemand() }")
+  })
+
   it("rejects explicit ids in macro authoring", () => {
     const code = `
 import { t } from "@palamedes/core/macro";

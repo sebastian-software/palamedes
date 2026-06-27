@@ -153,9 +153,23 @@ pub(super) fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
         JSXExpression::ComputedMemberExpression(member) => {
             member.static_property_name().map(|name| name.to_string())
         }
+        JSXExpression::CallExpression(call) => getter_name(call.callee_name()?),
         JSXExpression::ParenthesizedExpression(expr) => expression_name(&expr.expression),
         _ => None,
     }
+}
+
+fn getter_name(name: &str) -> Option<String> {
+    if !name.starts_with("get") || name.len() <= 3 {
+        return None;
+    }
+    let suffix = &name[3..];
+    let first = suffix.chars().next()?;
+    first.is_ascii_uppercase().then(|| {
+        let mut result = first.to_ascii_lowercase().to_string();
+        result.push_str(&suffix[first.len_utf8()..]);
+        result
+    })
 }
 
 pub(super) fn extract_choice_options_from_jsx(
