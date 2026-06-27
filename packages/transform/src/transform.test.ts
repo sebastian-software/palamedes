@@ -430,13 +430,31 @@ const el = <Trans><List renderItem={() => <Plural value={count} one="one" other=
     expect(result.code).toContain("renderItem={() => <Plural")
   })
 
-  it("rejects unnamed choice value placeholders", () => {
+  it("accepts computed, defaulted, and literal choice values", () => {
     const code = `
 import { plural } from "@palamedes/core/macro";
-const msg = plural(count + 1, { one: "# item", other: "# items" });
+const computed = plural(periodCounts[period] ?? 0, { one: "# entry", other: "# entries" });
+const literal = plural(21, { one: "# month", other: "# months" });
 `
+    const result = transformPalamedesMacros(code, "test.ts")
 
-    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/stable placeholder name/)
+    expect(result.code).toContain('message: "{period, plural, one {# entry} other {# entries}}"')
+    expect(result.code).toContain("{ period: periodCounts[period] ?? 0 }")
+    expect(result.code).toContain('message: "{value, plural, one {# month} other {# months}}"')
+    expect(result.code).toContain("{ value: 21 }")
+  })
+
+  it("accepts defaulted JSX choice values", () => {
+    const code = `
+import { Plural } from "@palamedes/react/macro";
+const el = <Plural value={node.locationCount ?? 0} one="# location" other="# locations" />;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain(
+      'message: "{locationCount, plural, one {# location} other {# locations}}"'
+    )
+    expect(result.code).toContain("{ locationCount: node.locationCount ?? 0 }")
   })
 
   it("leaves legacy Lingui macro imports untouched", () => {

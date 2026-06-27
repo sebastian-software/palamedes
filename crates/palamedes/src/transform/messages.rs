@@ -18,6 +18,8 @@ pub(super) struct ValueBinding {
     pub name: String,
 }
 
+const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
+
 pub(super) fn identifier_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
     match expr.without_parentheses() {
         Expression::Identifier(identifier) => Some(identifier.name.as_str()),
@@ -134,13 +136,11 @@ pub(super) fn extract_jsx_value_binding(
         };
 
         let mut used_value_names = HashMap::<String, String>::new();
-        return jsx_value_binding(
+        return Ok(Some(choice_jsx_value_binding(
             &container.expression,
             source,
-            "JSX choice value expression",
             &mut used_value_names,
-        )
-        .map(Some);
+        )));
     }
 
     Ok(None)
@@ -150,10 +150,17 @@ pub(super) fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
     match expr {
         JSXExpression::Identifier(identifier) => Some(identifier.name.to_string()),
         JSXExpression::StaticMemberExpression(member) => Some(member.property.name.to_string()),
-        JSXExpression::ComputedMemberExpression(member) => {
-            member.static_property_name().map(|name| name.to_string())
-        }
+        JSXExpression::ComputedMemberExpression(member) => member
+            .static_property_name()
+            .map(|name| name.to_string())
+            .or_else(|| expression_name(&member.expression)),
         JSXExpression::CallExpression(call) => getter_name(call.callee_name()?),
+        JSXExpression::LogicalExpression(logical) if logical.operator.is_coalesce() => {
+            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
+        }
+        JSXExpression::LogicalExpression(logical) if logical.operator.is_or() => {
+            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
+        }
         JSXExpression::ParenthesizedExpression(expr) => expression_name(&expr.expression),
         _ => None,
     }
@@ -377,15 +384,22 @@ fn append_unique_bindings(bindings: &mut Vec<ValueBinding>, incoming: Vec<ValueB
 pub(super) fn expression_name(expr: &Expression<'_>) -> Option<String> {
     let expr = expr.without_parentheses();
 
-    if let Expression::Identifier(identifier) = expr {
-        return Some(identifier.name.to_string());
+    match expr {
+        Expression::Identifier(identifier) => Some(identifier.name.to_string()),
+        Expression::StaticMemberExpression(member) => Some(member.property.name.to_string()),
+        Expression::ComputedMemberExpression(member) => member
+            .static_property_name()
+            .map(|name| name.to_string())
+            .or_else(|| expression_name(&member.expression)),
+        Expression::CallExpression(call) => getter_name(call.callee_name()?),
+        Expression::LogicalExpression(logical) if logical.operator.is_coalesce() => {
+            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
+        }
+        Expression::LogicalExpression(logical) if logical.operator.is_or() => {
+            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
+        }
+        _ => None,
     }
-
-    if let Some(member) = expr.as_member_expression() {
-        return member.static_property_name().map(ToString::to_string);
-    }
-
-    None
 }
 
 pub(super) fn expression_source(expr: &Expression<'_>, source: &str) -> String {
@@ -437,6 +451,19 @@ pub(super) fn expression_binding(
     Ok(ValueBinding { expression, name })
 }
 
+pub(super) fn choice_expression_binding(
+    expr: &Expression<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> ValueBinding {
+    let expression = expression_source(expr, source);
+    let preferred_name =
+        expression_name(expr).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
+    let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
+
+    ValueBinding { expression, name }
+}
+
 fn jsx_expression_source(expr: &JSXExpression<'_>, source: &str) -> Option<String> {
     match expr {
         JSXExpression::EmptyExpression(_) => None,
@@ -460,6 +487,19 @@ pub(super) fn jsx_value_binding(
     let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
 
     Ok(ValueBinding { expression, name })
+}
+
+pub(super) fn choice_jsx_value_binding(
+    expr: &JSXExpression<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> ValueBinding {
+    let expression = jsx_expression_source(expr, source).unwrap_or_default();
+    let preferred_name =
+        jsx_expression_name(expr).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
+    let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
+
+    ValueBinding { expression, name }
 }
 
 pub(super) fn template_to_message(

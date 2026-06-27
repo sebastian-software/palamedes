@@ -9,7 +9,7 @@ use oxc_span::GetSpan;
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::messages::{
-    build_icu_message, escape_string, expression_binding, expression_source,
+    build_icu_message, choice_expression_binding, escape_string, expression_source,
     extract_choice_options, extract_choice_options_from_jsx, extract_jsx_children_parts,
     extract_jsx_value_binding, extract_object_properties, first_argument_object, jsx_attributes,
     template_to_message, ValueBinding,
@@ -255,12 +255,7 @@ pub(super) fn transform_choice_call(
     };
 
     let mut used_value_names = std::collections::HashMap::new();
-    let value_binding = expression_binding(
-        value_expr,
-        source,
-        "choice value expression",
-        &mut used_value_names,
-    )?;
+    let value_binding = choice_expression_binding(value_expr, source, &mut used_value_names);
     let value_name = value_binding.name.clone();
     let choice_options = extract_choice_options(choice_object);
 

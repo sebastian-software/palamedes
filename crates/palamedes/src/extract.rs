@@ -24,6 +24,7 @@ const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
     "@palamedes/solid/macro",
 ];
 type ChoiceOptions = Vec<(String, String)>;
+const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
 
 #[derive(Debug, Clone)]
 struct ImportedMacro {
@@ -652,11 +653,8 @@ fn extract_from_choice_call(
     if options.is_empty() {
         return Ok(None);
     }
-    let Some(value_name) = argument_expression_name(value_arg) else {
-        return Err(PalamedesError::UnnamedPlaceholder {
-            syntax: "choice value expression",
-        });
-    };
+    let value_name = argument_expression_name(value_arg)
+        .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
 
     let format = match macro_name {
         "plural" => "plural",
@@ -842,11 +840,10 @@ fn extract_jsx_value_name(
             continue;
         };
 
-        return jsx_expression_name(&container.expression).map(Some).ok_or(
-            PalamedesError::UnnamedPlaceholder {
-                syntax: "JSX choice value expression",
-            },
-        );
+        return Ok(Some(
+            jsx_expression_name(&container.expression)
+                .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string()),
+        ));
     }
 
     Ok(None)
@@ -856,10 +853,17 @@ fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
     match expr {
         JSXExpression::Identifier(identifier) => Some(identifier.name.to_string()),
         JSXExpression::StaticMemberExpression(member) => Some(member.property.name.to_string()),
-        JSXExpression::ComputedMemberExpression(member) => {
-            member.static_property_name().map(|name| name.to_string())
-        }
+        JSXExpression::ComputedMemberExpression(member) => member
+            .static_property_name()
+            .map(|name| name.to_string())
+            .or_else(|| expression_name(&member.expression)),
         JSXExpression::CallExpression(call) => getter_name(call.callee_name()?),
+        JSXExpression::LogicalExpression(logical) if logical.operator.is_coalesce() => {
+            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
+        }
+        JSXExpression::LogicalExpression(logical) if logical.operator.is_or() => {
+            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
+        }
         JSXExpression::ParenthesizedExpression(expr) => expression_name(&expr.expression),
         _ => None,
     }
@@ -989,10 +993,17 @@ fn argument_expression_name(arg: &Argument<'_>) -> Option<String> {
     match arg {
         Argument::Identifier(identifier) => Some(identifier.name.to_string()),
         Argument::StaticMemberExpression(member) => Some(member.property.name.to_string()),
-        Argument::ComputedMemberExpression(member) => {
-            member.static_property_name().map(|name| name.to_string())
-        }
+        Argument::ComputedMemberExpression(member) => member
+            .static_property_name()
+            .map(|name| name.to_string())
+            .or_else(|| expression_name(&member.expression)),
         Argument::CallExpression(call) => getter_name(call.callee_name()?),
+        Argument::LogicalExpression(logical) if logical.operator.is_coalesce() => {
+            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
+        }
+        Argument::LogicalExpression(logical) if logical.operator.is_or() => {
+            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
+        }
         Argument::ParenthesizedExpression(expr) => expression_name(&expr.expression),
         _ => None,
     }
@@ -1006,11 +1017,26 @@ fn expression_name(expr: &Expression<'_>) -> Option<String> {
     }
 
     if let Some(member) = expr.as_member_expression() {
-        return member.static_property_name().map(ToString::to_string);
+        return match member {
+            MemberExpression::ComputedMemberExpression(member) => member
+                .static_property_name()
+                .map(|name| name.to_string())
+                .or_else(|| expression_name(&member.expression)),
+            MemberExpression::StaticMemberExpression(member) => {
+                Some(member.property.name.to_string())
+            }
+            MemberExpression::PrivateFieldExpression(_) => None,
+        };
     }
 
     if let Expression::CallExpression(call) = expr {
         return getter_name(call.callee_name()?);
+    }
+
+    if let Expression::LogicalExpression(logical) = expr {
+        if logical.operator.is_coalesce() || logical.operator.is_or() {
+            return expression_name(&logical.left).or_else(|| expression_name(&logical.right));
+        }
     }
 
     None
@@ -1347,6 +1373,47 @@ mod tests {
         assert_eq!(
             messages[0].message,
             "{count, plural, one {# item & fee} other {# items & fees}}"
+        );
+    }
+
+    #[test]
+    fn extracts_computed_defaulted_and_literal_choice_values() {
+        let messages = extract_messages(
+            r##"
+              import { plural } from "@palamedes/core/macro"
+              const computed = plural(periodCounts[period] ?? 0, { one: "# entry", other: "# entries" })
+              const literal = plural(21, { one: "# month", other: "# months" })
+            "##,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "{period, plural, one {# entry} other {# entries}}",
+                "{value, plural, one {# month} other {# months}}",
+            ]
+        );
+    }
+
+    #[test]
+    fn extracts_defaulted_jsx_choice_values() {
+        let messages = extract_messages(
+            r##"
+              import { Plural } from "@palamedes/react/macro"
+              const message = <Plural value={node.locationCount ?? 0} one="# location" other="# locations" />
+            "##,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages[0].message,
+            "{locationCount, plural, one {# location} other {# locations}}"
         );
     }
 
