@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.12](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.11...palamedes-v0.7.12) (2026-06-27)
+
+
+### Bug Fixes
+
+* **transform:** keep nested choice branches as expressions ([d204513](https://github.com/sebastian-software/palamedes/commit/d204513e14e4af6e3ee6662481029be1fa03784c))
+
 ## [0.7.11](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.10...palamedes-v0.7.11) (2026-06-27)
 
 
