@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.10](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.9...palamedes-v0.7.10) (2026-06-27)
+
+
+### Bug Fixes
+
+* **transform:** align JSX choice value handling ([7835a58](https://github.com/sebastian-software/palamedes/commit/7835a589c906e8734bd98a8414c70d06b62f9305))
+
 ## [0.7.9](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.8...palamedes-v0.7.9) (2026-06-26)
 
 
