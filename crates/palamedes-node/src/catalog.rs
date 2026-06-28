@@ -382,6 +382,7 @@ pub struct CatalogModuleResult {
 
 struct CatalogModuleRenderOptions {
     locale: String,
+    resource_path: String,
     pseudo_locale: Option<String>,
     fail_on_missing: bool,
     fail_on_compile_error: bool,
@@ -1239,18 +1240,30 @@ pub fn compile_catalog_artifact(request: CatalogArtifactRequest) -> Result<Catal
 /// Returns an error when catalog compilation fails, missing translations are
 /// configured as fatal, or compile diagnostics are configured as fatal.
 pub fn compile_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResult> {
+    let CatalogModuleRequest {
+        config,
+        resource_path,
+        locale,
+        pseudo_locale,
+        fail_on_missing,
+        fail_on_compile_error,
+        missing_failure_hint,
+        compile_failure_hint,
+        diagnostics_warning_hint,
+    } = request;
     let render_options = CatalogModuleRenderOptions {
-        locale: request.locale,
-        pseudo_locale: request.pseudo_locale,
-        fail_on_missing: request.fail_on_missing.unwrap_or(false),
-        fail_on_compile_error: request.fail_on_compile_error.unwrap_or(false),
-        missing_failure_hint: request.missing_failure_hint,
-        compile_failure_hint: request.compile_failure_hint,
-        diagnostics_warning_hint: request.diagnostics_warning_hint,
+        locale,
+        resource_path: resource_path.clone(),
+        pseudo_locale,
+        fail_on_missing: fail_on_missing.unwrap_or(false),
+        fail_on_compile_error: fail_on_compile_error.unwrap_or(false),
+        missing_failure_hint,
+        compile_failure_hint,
+        diagnostics_warning_hint,
     };
     let artifact_request = CatalogArtifactRequest {
-        config: request.config,
-        resource_path: request.resource_path,
+        config,
+        resource_path,
     }
     .into();
 
@@ -1317,15 +1330,22 @@ fn create_catalog_module_result(
     }
 
     Ok(CatalogModuleResult {
-        code: render_catalog_module(&artifact.messages)?,
+        code: render_catalog_module(&artifact.messages, &options.locale, &options.resource_path)?,
         warnings,
         watch_files: artifact.watch_files,
     })
 }
 
-fn render_catalog_module(messages: &std::collections::BTreeMap<String, String>) -> Result<String> {
-    let messages = serde_json::to_string(messages)
-        .map_err(|error| napi::Error::from_reason(error.to_string()))?;
+fn render_catalog_module(
+    messages: &std::collections::BTreeMap<String, String>,
+    locale: &str,
+    resource_path: &str,
+) -> Result<String> {
+    let messages = serde_json::to_string(messages).map_err(|error| {
+        napi::Error::from_reason(format!(
+            "Failed to render catalog module for locale {locale} at {resource_path}: {error}"
+        ))
+    })?;
     Ok(format!(
         "export const messages={messages};export default {{ messages }};"
     ))

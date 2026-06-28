@@ -125,6 +125,9 @@ msgstr "Hallo"
     const rootDir = await createTempDir()
     const enCatalog = path.join(rootDir, "locales", "en")
     const deCatalog = path.join(rootDir, "locales", "de")
+    const lineSeparators = `Line${String.fromCharCode(8232)}Paragraph${String.fromCharCode(
+      8233
+    )}End`
 
     await mkdir(enCatalog, { recursive: true })
     await mkdir(deCatalog, { recursive: true })
@@ -139,6 +142,9 @@ msgstr "zeta"
 
 msgid "alpha"
 msgstr "alpha"
+
+msgid "line-separators"
+msgstr "line-separators"
 `
     )
     await writeFile(
@@ -152,6 +158,9 @@ msgstr "Z"
 
 msgid "alpha"
 msgstr "A"
+
+msgid "line-separators"
+msgstr "${lineSeparators}"
 `
     )
 
@@ -167,6 +176,7 @@ msgstr "A"
     const messageIds = Object.keys(artifact.messages)
 
     expect(messageIds).toStrictEqual([...messageIds].sort())
+    expect(JSON.stringify(artifact.messages)).toContain(lineSeparators)
     expect(module.code).toBe(
       `export const messages=${JSON.stringify(artifact.messages)};export default { messages };`
     )

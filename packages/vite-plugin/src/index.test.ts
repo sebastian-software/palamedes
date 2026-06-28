@@ -51,7 +51,11 @@ describe("palamedes vite plugin", () => {
     expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
       "/repo/src/locales/de.po",
-      expect.objectContaining({ locale: "de" })
+      expect.objectContaining({
+        locale: "de",
+        failOnMissing: false,
+        failOnCompileError: false,
+      })
     )
   })
 
