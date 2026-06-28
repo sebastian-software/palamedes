@@ -4,10 +4,10 @@ import path from "node:path"
 
 const packageDir = path.resolve(import.meta.dirname, "..")
 const binDir = path.join(packageDir, "bin")
-const targetPath = path.join(binDir, "pmds")
 const require = createRequire(import.meta.url)
 const packageName = resolvePlatformPackage()
 const binaryName = process.platform === "win32" ? "pmds.exe" : "pmds"
+const targetPath = path.join(binDir, binaryName)
 
 try {
   const packageJson = require.resolve(`${packageName}/package.json`)
@@ -25,6 +25,9 @@ try {
 }
 
 function resolvePlatformPackage() {
+  if (process.platform === "darwin" && process.arch === "x64") {
+    return "@palamedes/cli-darwin-x64"
+  }
   if (process.platform === "darwin" && process.arch === "arm64") {
     return "@palamedes/cli-darwin-arm64"
   }
