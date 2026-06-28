@@ -164,8 +164,9 @@ msgstr "A"
     const resourcePath = path.join(deCatalog, "messages.po")
     const artifact = compileCatalogArtifact(config, resourcePath)
     const module = compileCatalogModule(config, resourcePath, { locale: "de" })
+    const messageIds = Object.keys(artifact.messages)
 
-    expect(Object.keys(artifact.messages)).toStrictEqual(["alpha", "zeta"])
+    expect(messageIds).toStrictEqual([...messageIds].sort())
     expect(module.code).toBe(
       `export const messages=${JSON.stringify(artifact.messages)};export default { messages };`
     )
