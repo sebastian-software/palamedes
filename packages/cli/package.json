@@ -39,7 +39,6 @@
   },
   "optionalDependencies": {
     "@palamedes/cli-darwin-arm64": "workspace:^",
-    "@palamedes/cli-darwin-x64": "workspace:^",
     "@palamedes/cli-linux-arm64-gnu": "workspace:^",
     "@palamedes/cli-linux-x64-gnu": "workspace:^",
     "@palamedes/cli-win32-x64-msvc": "workspace:^"

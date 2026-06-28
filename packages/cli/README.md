@@ -35,6 +35,13 @@ Or run it without adding it to your project first:
 pnpm dlx @palamedes/cli extract
 ```
 
+The npm package currently publishes native binaries for:
+
+- macOS arm64
+- Linux x64 glibc
+- Linux arm64 glibc
+- Windows x64 MSVC
+
 ## Usage
 
 ```bash

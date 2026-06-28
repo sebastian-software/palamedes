@@ -25,9 +25,6 @@ try {
 }
 
 function resolvePlatformPackage() {
-  if (process.platform === "darwin" && process.arch === "x64") {
-    return "@palamedes/cli-darwin-x64"
-  }
   if (process.platform === "darwin" && process.arch === "arm64") {
     return "@palamedes/cli-darwin-arm64"
   }

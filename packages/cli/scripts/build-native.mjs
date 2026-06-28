@@ -10,10 +10,6 @@ const targets = {
     platform: "darwin",
     arch: "arm64",
   },
-  "@palamedes/cli-darwin-x64": {
-    platform: "darwin",
-    arch: "x64",
-  },
   "@palamedes/cli-linux-x64-gnu": {
     platform: "linux",
     arch: "x64",

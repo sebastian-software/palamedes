@@ -612,9 +612,6 @@ importers:
       '@palamedes/cli-darwin-arm64':
         specifier: workspace:^
         version: link:../cli-darwin-arm64
-      '@palamedes/cli-darwin-x64':
-        specifier: workspace:^
-        version: link:../cli-darwin-x64
       '@palamedes/cli-linux-arm64-gnu':
         specifier: workspace:^
         version: link:../cli-linux-arm64-gnu
@@ -626,8 +623,6 @@ importers:
         version: link:../cli-win32-x64-msvc
 
   packages/cli-darwin-arm64: {}
-
-  packages/cli-darwin-x64: {}
 
   packages/cli-linux-arm64-gnu: {}
 

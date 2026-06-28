@@ -97,8 +97,6 @@ jobs:
             runner: macos-14
           - package_name: "@palamedes/cli-darwin-arm64"
             runner: macos-14
-          - package_name: "@palamedes/cli-darwin-x64"
-            runner: macos-13
           - package_name: "@palamedes/core-node-linux-x64-gnu"
             runner: ubuntu-24.04
           - package_name: "@palamedes/cli-linux-x64-gnu"

@@ -107,11 +107,6 @@
         },
         {
           "type": "json",
-          "path": "packages/cli-darwin-x64/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
           "path": "packages/cli-linux-arm64-gnu/package.json",
           "jsonpath": "$.version"
         },
