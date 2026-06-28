@@ -46,7 +46,7 @@ major/minor/patch sense.
 
 Palamedes treats these as stable adoption surfaces:
 
-- `palamedes.config.*` schema and config discovery
+- `palamedes.yaml` schema and config discovery
 - source-string-first PO catalogs using `message + context` identity
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs

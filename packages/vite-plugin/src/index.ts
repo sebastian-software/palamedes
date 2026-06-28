@@ -41,7 +41,7 @@ export type PalamedesPluginOptions = {
   enablePoLoader?: boolean
 
   /**
-   * Path to palamedes.config.js/ts.
+   * Path to a Palamedes config file.
    * If not provided, searches for config automatically.
    */
   configPath?: string

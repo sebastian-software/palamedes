@@ -16,31 +16,24 @@ through `@palamedes/solid` and `vite-plugin-solid`.
 
 ```bash
 pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli @palamedes/config @vitejs/plugin-react vite typescript
+pnpm add -D @palamedes/cli @vitejs/plugin-react vite typescript
 ```
 
 For Solid, swap the host package pair:
 
 ```bash
 pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli @palamedes/config vite-plugin-solid vite typescript
+pnpm add -D @palamedes/cli vite-plugin-solid vite typescript
 ```
 
-## 2. Add `palamedes.config.ts`
+## 2. Add `palamedes.yaml`
 
-```ts
-import { defineConfig } from "@palamedes/config"
-
-export default defineConfig({
-  locales: ["en", "de"],
-  sourceLocale: "en",
-  catalogs: [
-    {
-      path: "src/locales/{locale}",
-      include: ["src"],
-    },
-  ],
-})
+```yaml
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
 ```
 
 ## 3. Wire the Vite plugin

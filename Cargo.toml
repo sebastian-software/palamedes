@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/palamedes", "crates/palamedes-node"]
+members = ["crates/palamedes", "crates/palamedes-cli", "crates/palamedes-node"]
 resolver = "2"
 
 [workspace.package]

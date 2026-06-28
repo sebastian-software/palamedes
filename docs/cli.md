@@ -1,6 +1,7 @@
 # CLI Reference
 
 The `@palamedes/cli` package publishes `pmds`.
+It is a native Rust binary; npm is only a distribution mechanism.
 
 ## `pmds extract`
 
@@ -9,7 +10,7 @@ catalogs.
 
 ```bash
 pmds extract
-pmds extract --config ./palamedes.config.ts
+pmds extract --config ./palamedes.yaml
 pmds extract --clean
 pmds extract --watch
 pmds extract --verbose

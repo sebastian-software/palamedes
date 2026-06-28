@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 
 const root = process.cwd()
-const nativePackagePattern = /^@palamedes\/core-node-.+/
+const nativePackagePattern = /^@palamedes\/(?:core-node|cli)-.+/
 
 function readJson(file) {
   return JSON.parse(readFileSync(path.join(root, file), "utf8"))
@@ -36,6 +36,11 @@ const requiredTomlExtraFiles = [
   },
   {
     type: "toml",
+    path: "crates/palamedes-cli/Cargo.toml",
+    jsonpath: "$.package.version",
+  },
+  {
+    type: "toml",
     path: "Cargo.lock",
     jsonpath: '$.package[?(@.name.value=="palamedes")].version',
   },
@@ -43,6 +48,11 @@ const requiredTomlExtraFiles = [
     type: "toml",
     path: "Cargo.lock",
     jsonpath: '$.package[?(@.name.value=="palamedes-node")].version',
+  },
+  {
+    type: "toml",
+    path: "Cargo.lock",
+    jsonpath: '$.package[?(@.name.value=="palamedes-cli")].version',
   },
 ]
 
@@ -143,8 +153,10 @@ for (const requiredFile of requiredTomlExtraFiles) {
 for (const [name, version] of [
   ["palamedes", cargoManifestVersion("crates/palamedes/Cargo.toml")],
   ["palamedes-node", cargoManifestVersion("crates/palamedes-node/Cargo.toml")],
+  ["palamedes-cli", cargoManifestVersion("crates/palamedes-cli/Cargo.toml")],
   ["Cargo.lock palamedes", cargoLockVersion("palamedes")],
   ["Cargo.lock palamedes-node", cargoLockVersion("palamedes-node")],
+  ["Cargo.lock palamedes-cli", cargoLockVersion("palamedes-cli")],
 ]) {
   if (version !== expectedVersion) {
     fail(`${name} has version ${version}, expected ${expectedVersion}`)

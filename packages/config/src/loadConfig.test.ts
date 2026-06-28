@@ -45,6 +45,82 @@ describe("loadPalamedesConfig", () => {
     expect(config.catalogs[0]?.path).toBe("src/locales/{locale}")
   })
 
+  it("loads a palamedes.yaml file with native field names", async () => {
+    const fixtureDir = await createTempDir()
+
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        locales: [en, de]
+        source-locale: en
+        source-reference-root: config
+        catalogs:
+          - path: src/locales/{locale}
+            include: [src]
+            exclude: [src/generated]
+      `
+    )
+
+    const config = await loadPalamedesConfig({ cwd: fixtureDir })
+
+    expect(config.rootDir).toBe(fixtureDir)
+    expect(config.sourceLocale).toBe("en")
+    expect(config.sourceReferenceRoot).toBe(fixtureDir)
+    expect(config.catalogs[0]).toStrictEqual({
+      path: "src/locales/{locale}",
+      include: ["src"],
+      exclude: ["src/generated"],
+    })
+  })
+
+  it("loads palamedes.toml as a secondary config format", async () => {
+    const fixtureDir = await createTempDir()
+
+    await writeFile(
+      path.join(fixtureDir, "palamedes.toml"),
+      `
+        locales = ["en", "de"]
+        source-locale = "en"
+        source-reference-root = "config"
+
+        [[catalogs]]
+        path = "src/locales/{locale}"
+        include = ["src"]
+      `
+    )
+
+    const config = await loadPalamedesConfig({ cwd: fixtureDir })
+
+    expect(config.configPath).toBe(path.join(fixtureDir, "palamedes.toml"))
+    expect(config.sourceLocale).toBe("en")
+    expect(config.sourceReferenceRoot).toBe(fixtureDir)
+  })
+
+  it("loads palamedes.json as a secondary config format", async () => {
+    const fixtureDir = await createTempDir()
+
+    await writeFile(
+      path.join(fixtureDir, "palamedes.json"),
+      JSON.stringify({
+        locales: ["en", "de"],
+        "source-locale": "en",
+        "source-reference-root": "config",
+        catalogs: [
+          {
+            path: "src/locales/{locale}",
+            include: ["src"],
+          },
+        ],
+      })
+    )
+
+    const config = await loadPalamedesConfig({ cwd: fixtureDir })
+
+    expect(config.configPath).toBe(path.join(fixtureDir, "palamedes.json"))
+    expect(config.sourceLocale).toBe("en")
+    expect(config.sourceReferenceRoot).toBe(fixtureDir)
+  })
+
   it("loads an explicitly provided config path", async () => {
     const fixtureDir = await createTempDir()
     const configPath = path.join(fixtureDir, "custom.config.ts")

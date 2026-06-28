@@ -4,10 +4,13 @@ pnpm-debug.log*
 dist/
 *.tsbuildinfo
 .DS_Store
+.claude/
 .env
 .env.local
 target/
 packages/core-node/palamedes-node.node
+packages/core-node-*/palamedes-node.node
+packages/cli-*/bin/
 .vercel/
 examples/**/.vercel/
 

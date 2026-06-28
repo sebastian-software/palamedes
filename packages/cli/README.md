@@ -5,11 +5,11 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The Palamedes command-line interface for keeping local catalogs healthy.
+The native Palamedes command-line interface for keeping local catalogs healthy.
 
-This is the package behind the `pmds` binary. Use it when you want extraction,
-catalog updates, and catalog QA in local development or CI without wiring the
-lower-level APIs yourself.
+This is the npm distribution package behind the Rust `pmds` binary. Use it when
+you want extraction, catalog updates, and catalog QA in local development or CI
+without wiring the lower-level APIs yourself.
 
 ## When To Use This Package
 
@@ -35,13 +35,20 @@ Or run it without adding it to your project first:
 pnpm dlx @palamedes/cli extract
 ```
 
+The npm package currently publishes native binaries for:
+
+- macOS arm64
+- Linux x64 glibc
+- Linux arm64 glibc
+- Windows x64 MSVC
+
 ## Usage
 
 ```bash
 pnpm exec pmds extract
 pnpm exec pmds extract --watch
 pnpm exec pmds extract --clean
-pnpm exec pmds extract --config ./palamedes.config.ts
+pnpm exec pmds extract --config ./palamedes.yaml
 pnpm exec pmds extract --verbose
 pnpm exec pmds audit
 pnpm exec pmds audit --json
@@ -105,29 +112,23 @@ git config merge.palamedes-catalog-ndjson.driver \
 ```
 
 `--source-locale` is optional. The command uses an explicit value first, then
-`palamedes.config.*` when available, then `en`.
+the configured Palamedes config when available, then `en`.
 
 ## Configuration
 
-`@palamedes/cli` uses `palamedes.config.ts` or `palamedes.config.js`.
+`@palamedes/cli` uses `palamedes.yaml` by default. It also supports
+`palamedes.yml`, `palamedes.json`, and `palamedes.toml`.
 
-```ts
-import { defineConfig } from "@palamedes/config"
-
-export default defineConfig({
-  locales: ["en", "de"],
-  sourceLocale: "en",
-  sourceReferenceRoot: "git",
-  catalogs: [
-    {
-      path: "src/locales/{locale}",
-      include: ["src"],
-    },
-  ],
-})
+```yaml
+locales: [en, de]
+source-locale: en
+source-reference-root: git
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
 ```
 
-`sourceReferenceRoot` controls PO `#:` references written by `pmds extract`.
+`source-reference-root` controls PO `#:` references written by `pmds extract`.
 The default is `"git"`, so monorepo references are emitted relative to the
 nearest Git repository root. Use `"lingui"` or `"config"` to keep references
 relative to the config directory, matching Lingui's default behavior.

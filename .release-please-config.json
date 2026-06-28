@@ -77,6 +77,11 @@
         },
         {
           "type": "toml",
+          "path": "crates/palamedes-cli/Cargo.toml",
+          "jsonpath": "$.package.version"
+        },
+        {
+          "type": "toml",
           "path": "Cargo.lock",
           "jsonpath": "$.package[?(@.name.value==\"palamedes\")].version"
         },
@@ -86,8 +91,33 @@
           "jsonpath": "$.package[?(@.name.value==\"palamedes-node\")].version"
         },
         {
+          "type": "toml",
+          "path": "Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value==\"palamedes-cli\")].version"
+        },
+        {
           "type": "json",
           "path": "packages/cli/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli-darwin-arm64/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli-linux-arm64-gnu/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli-linux-x64-gnu/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli-win32-x64-msvc/package.json",
           "jsonpath": "$.version"
         },
         {

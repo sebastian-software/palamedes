@@ -95,11 +95,19 @@ jobs:
         include:
           - package_name: "@palamedes/core-node-darwin-arm64"
             runner: macos-14
+          - package_name: "@palamedes/cli-darwin-arm64"
+            runner: macos-14
           - package_name: "@palamedes/core-node-linux-x64-gnu"
+            runner: ubuntu-24.04
+          - package_name: "@palamedes/cli-linux-x64-gnu"
             runner: ubuntu-24.04
           - package_name: "@palamedes/core-node-linux-arm64-gnu"
             runner: ubuntu-24.04-arm
+          - package_name: "@palamedes/cli-linux-arm64-gnu"
+            runner: ubuntu-24.04-arm
           - package_name: "@palamedes/core-node-win32-x64-msvc"
+            runner: windows-2025
+          - package_name: "@palamedes/cli-win32-x64-msvc"
             runner: windows-2025
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -131,8 +139,18 @@ jobs:
       - name: Build native package
         run: pnpm --filter "${{ matrix.package_name }}" build
 
-      - name: Smoke-test native package
+      - name: Smoke-test native Node package
+        if: startsWith(matrix.package_name, '@palamedes/core-node-')
         run: pnpm --filter "${{ matrix.package_name }}" exec node --input-type=module -e "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); const native = require('./palamedes-node.node'); if (typeof native.transformMacros !== 'function') process.exit(1)"
+
+      - name: Smoke-test native CLI package
+        if: startsWith(matrix.package_name, '@palamedes/cli-')
+        run: >
+          pnpm --filter "${{ matrix.package_name }}" exec node --input-type=module -e
+          "import { execFileSync } from 'node:child_process';
+          const bin = process.platform === 'win32' ? './bin/pmds.exe' : './bin/pmds';
+          const out = execFileSync(bin, ['version'], { encoding: 'utf8' });
+          if (!out.includes('pmds (Palamedes)')) process.exit(1)"
 
       - name: Publish native package
         run: pnpm --filter "${{ matrix.package_name }}" publish --access public --no-git-checks

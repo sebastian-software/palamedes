@@ -1,6 +1,7 @@
 # `@palamedes/config`
 
-`@palamedes/config` loads and validates `palamedes.config.*` files.
+`@palamedes/config` loads and validates Palamedes data config files and legacy
+`palamedes.config.*` files.
 
 ## Exports
 
@@ -19,6 +20,10 @@
 
 Supported file names:
 
+- `palamedes.yaml`
+- `palamedes.yml`
+- `palamedes.json`
+- `palamedes.toml`
 - `palamedes.config.ts`
 - `palamedes.config.js`
 - `palamedes.config.mjs`
