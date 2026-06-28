@@ -5,5 +5,5 @@
     "jsxImportSource": "solid-js",
     "types": ["vinxi/types/client"]
   },
-  "include": ["src", "app.config.ts", "palamedes.config.ts"]
+  "include": ["src", "app.config.ts"]
 }

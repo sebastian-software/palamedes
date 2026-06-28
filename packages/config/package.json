@@ -44,7 +44,9 @@
     "access": "public"
   },
   "dependencies": {
-    "jiti": "^2.7.0"
+    "jiti": "^2.7.0",
+    "smol-toml": "^1.6.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",

@@ -8,6 +8,7 @@ const generatedAndBuildIgnores = {
     "**/dist/**",
     "**/node_modules/**",
     "**/.next/**",
+    "**/.claude/**",
     "**/.nitro/**",
     "**/.output/**",
     "**/.tanstack/**",

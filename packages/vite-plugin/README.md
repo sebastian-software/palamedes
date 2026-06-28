@@ -68,19 +68,12 @@ export default defineConfig({
 })
 ```
 
-```ts
-import { defineConfig } from "@palamedes/config"
-
-export default defineConfig({
-  locales: ["en", "de"],
-  sourceLocale: "en",
-  catalogs: [
-    {
-      path: "src/locales/{locale}",
-      include: ["src"],
-    },
-  ],
-})
+```yaml
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
 ```
 
 Transformed code expects `getI18n()` from `@palamedes/runtime`, so register the active client i18n instance before translated code executes.
@@ -94,7 +87,7 @@ palamedes({
   include: /\.(tsx?|jsx?|mjs|cjs)$/,
   exclude: /node_modules/,
   enablePoLoader: true,
-  configPath: "./palamedes.config.ts",
+  configPath: "./palamedes.yaml",
   failOnMissing: false,
   failOnCompileError: false,
   runtimeModule: "@palamedes/runtime",

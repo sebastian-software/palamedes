@@ -1,0 +1,30 @@
+{
+  "name": "@palamedes/cli-linux-x64-gnu",
+  "version": "0.8.0",
+  "description": "Linux x64 glibc native CLI binary for @palamedes/cli",
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/cli-linux-x64-gnu"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "type": "commonjs",
+  "files": [
+    "README.md",
+    "bin/"
+  ],
+  "scripts": {
+    "build": "node ../cli/scripts/build-native.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ]
+}

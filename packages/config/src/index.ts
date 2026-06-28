@@ -1,9 +1,16 @@
 import path from "node:path"
+import { readFile } from "node:fs/promises"
 import { access } from "node:fs/promises"
 import { constants } from "node:fs"
 import createJiti from "jiti"
+import { parse as parseToml } from "smol-toml"
+import { parse as parseYaml } from "yaml"
 
 export const CONFIG_FILENAMES = [
+  "palamedes.yaml",
+  "palamedes.yml",
+  "palamedes.json",
+  "palamedes.toml",
   "palamedes.config.ts",
   "palamedes.config.js",
   "palamedes.config.mjs",
@@ -28,6 +35,19 @@ export type PalamedesConfig = {
   catalogs: PalamedesCatalogConfig[]
 }
 
+type PalamedesDataConfig = {
+  locales?: unknown
+  "source-locale"?: unknown
+  source_locale?: unknown
+  "fallback-locales"?: unknown
+  fallback_locales?: unknown
+  "pseudo-locale"?: unknown
+  pseudo_locale?: unknown
+  "source-reference-root"?: unknown
+  source_reference_root?: unknown
+  catalogs?: unknown
+}
+
 export type LoadedPalamedesConfig = {
   configPath: string
   rootDir: string
@@ -49,17 +69,65 @@ export async function loadPalamedesConfig(
 ): Promise<LoadedPalamedesConfig> {
   const cwd = path.resolve(options.cwd ?? process.cwd())
   const configPath = await resolveConfigPath(cwd, options.configPath)
-  const jiti = createJiti(import.meta.url, {
-    interopDefault: true,
-  })
-  const loaded = jiti(configPath) as unknown
-  const config = unwrapModule(loaded)
+  const config = await loadConfigFile(configPath)
 
   if (!options.skipValidation) {
     validateConfig(config, configPath)
   }
 
   return normalizeConfig(config as PalamedesConfig, configPath)
+}
+
+async function loadConfigFile(configPath: string): Promise<unknown> {
+  if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
+    return normalizeDataConfig(parseYaml(await readFile(configPath, "utf8")) as PalamedesDataConfig)
+  }
+
+  if (configPath.endsWith(".json")) {
+    return normalizeDataConfig(
+      JSON.parse(await readFile(configPath, "utf8")) as PalamedesDataConfig
+    )
+  }
+
+  if (configPath.endsWith(".toml")) {
+    return normalizeDataConfig(parseToml(await readFile(configPath, "utf8")) as PalamedesDataConfig)
+  }
+
+  const jiti = createJiti(import.meta.url, {
+    interopDefault: true,
+  })
+  return unwrapModule(jiti(configPath) as unknown)
+}
+
+function normalizeDataConfig(config: PalamedesDataConfig): PalamedesConfig {
+  const fallbackLocales = getConfigValue(config, "fallback-locales", "fallback_locales")
+  const pseudoLocale = getConfigValue(config, "pseudo-locale", "pseudo_locale")
+  const sourceReferenceRoot = getConfigValue(
+    config,
+    "source-reference-root",
+    "source_reference_root"
+  )
+
+  return {
+    locales: config.locales as string[],
+    sourceLocale: getConfigValue(config, "source-locale", "source_locale") as string,
+    ...(fallbackLocales !== undefined
+      ? { fallbackLocales: fallbackLocales as PalamedesFallbackLocales }
+      : {}),
+    ...(pseudoLocale !== undefined ? { pseudoLocale: pseudoLocale as string } : {}),
+    ...(sourceReferenceRoot !== undefined
+      ? { sourceReferenceRoot: sourceReferenceRoot as PalamedesSourceReferenceRoot }
+      : {}),
+    catalogs: config.catalogs as PalamedesCatalogConfig[],
+  }
+}
+
+function getConfigValue(
+  config: PalamedesDataConfig,
+  canonicalKey: keyof PalamedesDataConfig,
+  legacyKey: keyof PalamedesDataConfig
+): unknown {
+  return config[canonicalKey] ?? config[legacyKey]
 }
 
 export function resolveCatalogPath(

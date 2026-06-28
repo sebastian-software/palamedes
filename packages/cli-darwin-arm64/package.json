@@ -1,0 +1,30 @@
+{
+  "name": "@palamedes/cli-darwin-arm64",
+  "version": "0.8.0",
+  "description": "Darwin arm64 native CLI binary for @palamedes/cli",
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/cli-darwin-arm64"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "type": "commonjs",
+  "files": [
+    "README.md",
+    "bin/"
+  ],
+  "scripts": {
+    "build": "node ../cli/scripts/build-native.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ]
+}

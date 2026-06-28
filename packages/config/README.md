@@ -7,27 +7,20 @@
 
 Lean config loading for Palamedes projects.
 
-Use `@palamedes/config` when you want to author or load `palamedes.config.ts`
-files with a small, predictable shape: locales, source locale, fallback policy,
-and catalog locations.
+Use `@palamedes/config` when framework integrations need to load Palamedes
+config files. It supports canonical `palamedes.yaml` files, secondary
+`palamedes.yml`, `palamedes.json`, and `palamedes.toml` data files, and the
+legacy `palamedes.config.ts/js/mjs/cjs` TypeScript/JavaScript formats.
 
 ## Minimal Example
 
-```ts
-import { defineConfig } from "@palamedes/config"
-
-export default defineConfig({
-  locales: ["en", "de"],
-  sourceLocale: "en",
-  // Optional: use "lingui" for config-root source references.
-  sourceReferenceRoot: "git",
-  catalogs: [
-    {
-      path: "src/locales/{locale}",
-      include: ["src"],
-    },
-  ],
-})
+```yaml
+locales: [en, de]
+source-locale: en
+source-reference-root: git
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
 ```
 
 ## Exports
@@ -39,12 +32,12 @@ export default defineConfig({
 
 ## Configuration Notes
 
-- `fallbackLocales` defines the fallback chain for missing translations. It can
+- `fallback-locales` defines the fallback chain for missing translations. It can
   be one shared array or a per-locale map.
-- `pseudoLocale` marks a generated pseudo-locale used for layout and hardcoded
+- `pseudo-locale` marks a generated pseudo-locale used for layout and hardcoded
   string checks. Plugin integrations skip `failOnMissing` failures for that
   locale while keeping strict checks for real locales.
-- `sourceReferenceRoot` controls the root used for PO `#:` source references.
+- `source-reference-root` controls the root used for PO `#:` source references.
   The default is `"git"`, which emits paths relative to the nearest Git
   repository root and falls back to the config directory when no Git root is
   available. Use `"lingui"` or `"config"` for Lingui-compatible references

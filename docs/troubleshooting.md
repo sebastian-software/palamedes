@@ -103,7 +103,7 @@ Fix:
 
 - Confirm the app build uses `@palamedes/vite-plugin` or
   `@palamedes/next-plugin`.
-- Keep `.po` files under the catalog path configured in `palamedes.config.ts`.
+- Keep `.po` files under the catalog path configured in `palamedes.yaml`.
 - In framework examples, prefer per-locale dynamic imports when only one active
   locale should be loaded into the client bundle.
 - Run `pnpm exec pmds extract` after adding new messages so catalogs exist.
@@ -129,8 +129,8 @@ Fix:
 - Add the missing translations to the locale catalog.
 - Run `pnpm exec pmds extract` after changing source messages.
 - Run `pnpm exec pmds audit --fail-on error` to inspect catalog diagnostics.
-- If the locale is a generated pseudo-locale, set `pseudoLocale` in
-  `palamedes.config.ts`; plugin integrations skip missing-translation failures
+- If the locale is a generated pseudo-locale, set `pseudo-locale` in
+  `palamedes.yaml`; plugin integrations skip missing-translation failures
   for that locale.
 
 ## `failOnCompileError` Breaks The Build
@@ -217,7 +217,7 @@ strings are not extracted.
 
 Fix:
 
-- Check `palamedes.config.ts` and expand `catalogs[].include` if needed.
+- Check `palamedes.yaml` and expand `catalogs[].include` if needed.
 - Use supported macro imports from `@palamedes/core/macro`,
   `@palamedes/react/macro`, or `@palamedes/solid/macro`.
 - Run `pnpm exec pmds extract --clean` after deleting or moving many messages.

@@ -22,7 +22,7 @@ The current proof:
   browser-verified through the same Playwright-based flow used in CI.
 - The screenshots above are generated from versioned repo artifacts, not a
   marketing mockup.
-- Fourteen ADRs explain the runtime model, message identity, native boundary,
+- Sixteen ADRs explain the runtime model, message identity, native boundary,
   adapter architecture, and the work deliberately kept out of scope.
 - Benchmark commands and fixtures are checked in so the numbers can be rerun
   locally.
@@ -133,7 +133,7 @@ Base install:
 
 ```bash
 pnpm add @palamedes/core @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli @palamedes/config
+pnpm add -D @palamedes/cli
 ```
 
 Then add the host-specific package pair:
@@ -172,20 +172,13 @@ export default defineConfig({
 })
 ```
 
-```ts
-// palamedes.config.ts
-import { defineConfig } from "@palamedes/config"
-
-export default defineConfig({
-  locales: ["en", "de"],
-  sourceLocale: "en",
-  catalogs: [
-    {
-      path: "src/locales/{locale}",
-      include: ["src"],
-    },
-  ],
-})
+```yaml
+# palamedes.yaml
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
 ```
 
 ```ts
@@ -258,6 +251,8 @@ The same foundation also matters for future translation workflows:
 - [ADR-012: Translation augmentation boundary](https://github.com/sebastian-software/palamedes/blob/main/adr/012-translation-augmentation-boundary.md)
 - [ADR-013: Defer CLI worker parallelism until benchmarked need](https://github.com/sebastian-software/palamedes/blob/main/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md)
 - [ADR-014: Native transform source maps](https://github.com/sebastian-software/palamedes/blob/main/adr/014-native-transform-source-maps.md)
+- [ADR-015: Runtime formatter subset diagnostics](https://github.com/sebastian-software/palamedes/blob/main/adr/015-runtime-formatter-subset-diagnostics.md)
+- [ADR-016: Native CLI and YAML-first configuration](https://github.com/sebastian-software/palamedes/blob/main/adr/016-native-cli-and-yaml-first-configuration.md)
 - [`llms.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms.txt) and [`llms-full.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms-full.txt) for AI coding assistants
 - [Comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
 - [Migration playbook from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
