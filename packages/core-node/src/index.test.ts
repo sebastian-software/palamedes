@@ -123,9 +123,24 @@ msgstr "Hallo"
 
   it("renders catalog modules with the same message order as artifact objects", async () => {
     const rootDir = await createTempDir()
+    const enCatalog = path.join(rootDir, "locales", "en")
     const deCatalog = path.join(rootDir, "locales", "de")
 
+    await mkdir(enCatalog, { recursive: true })
     await mkdir(deCatalog, { recursive: true })
+    await writeFile(
+      path.join(enCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: en\\n"
+
+msgid "zeta"
+msgstr "zeta"
+
+msgid "alpha"
+msgstr "alpha"
+`
+    )
     await writeFile(
       path.join(deCatalog, "messages.po"),
       `msgid ""
