@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use napi::bindgen_prelude::{Either, Result};
@@ -353,11 +353,42 @@ pub struct CatalogArtifactDiagnostic {
 
 #[napi(object)]
 pub struct CatalogArtifactResult {
-    pub messages: HashMap<String, String>,
+    pub messages: BTreeMap<String, String>,
     pub watch_files: Vec<String>,
     pub missing: Vec<CatalogArtifactMissingMessage>,
     pub diagnostics: Vec<CatalogArtifactDiagnostic>,
     pub resolved_locale_chain: Option<Vec<String>>,
+}
+
+#[napi(object)]
+pub struct CatalogModuleRequest {
+    pub config: crate::catalog_config::CatalogArtifactConfig,
+    pub resource_path: String,
+    pub locale: String,
+    pub pseudo_locale: Option<String>,
+    pub fail_on_missing: Option<bool>,
+    pub fail_on_compile_error: Option<bool>,
+    pub missing_failure_hint: Option<String>,
+    pub compile_failure_hint: Option<String>,
+    pub diagnostics_warning_hint: Option<String>,
+}
+
+#[napi(object)]
+pub struct CatalogModuleResult {
+    pub code: String,
+    pub warnings: Vec<String>,
+    pub watch_files: Vec<String>,
+}
+
+struct CatalogModuleRenderOptions {
+    locale: String,
+    resource_path: String,
+    pseudo_locale: Option<String>,
+    fail_on_missing: bool,
+    fail_on_compile_error: bool,
+    missing_failure_hint: Option<String>,
+    compile_failure_hint: Option<String>,
+    diagnostics_warning_hint: Option<String>,
 }
 
 impl From<CatalogOrigin> for palamedes::CatalogUpdateOrigin {
@@ -1057,7 +1088,7 @@ impl From<palamedes::CatalogArtifactDiagnostic> for CatalogArtifactDiagnostic {
 impl From<palamedes::CatalogArtifactResult> for CatalogArtifactResult {
     fn from(value: palamedes::CatalogArtifactResult) -> Self {
         Self {
-            messages: value.messages.into_iter().collect(),
+            messages: value.messages,
             watch_files: value.watch_files,
             missing: value
                 .missing
@@ -1202,6 +1233,46 @@ pub fn compile_catalog_artifact(request: CatalogArtifactRequest) -> Result<Catal
 
 #[napi]
 #[allow(clippy::needless_pass_by_value)]
+/// Compiles a catalog and renders the JavaScript module consumed by bundlers.
+///
+/// # Errors
+///
+/// Returns an error when catalog compilation fails, missing translations are
+/// configured as fatal, or compile diagnostics are configured as fatal.
+pub fn compile_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResult> {
+    let CatalogModuleRequest {
+        config,
+        resource_path,
+        locale,
+        pseudo_locale,
+        fail_on_missing,
+        fail_on_compile_error,
+        missing_failure_hint,
+        compile_failure_hint,
+        diagnostics_warning_hint,
+    } = request;
+    let render_options = CatalogModuleRenderOptions {
+        locale,
+        resource_path: resource_path.clone(),
+        pseudo_locale,
+        fail_on_missing: fail_on_missing.unwrap_or(false),
+        fail_on_compile_error: fail_on_compile_error.unwrap_or(false),
+        missing_failure_hint,
+        compile_failure_hint,
+        diagnostics_warning_hint,
+    };
+    let artifact_request = CatalogArtifactRequest {
+        config,
+        resource_path,
+    }
+    .into();
+
+    let artifact = palamedes::compile_catalog_artifact(&artifact_request).map_err(to_napi_error)?;
+    create_catalog_module_result(artifact, &render_options)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
 /// Compiles a selected subset of runtime IDs for a requested locale.
 ///
 /// # Errors
@@ -1215,4 +1286,148 @@ pub fn compile_catalog_artifact_selected(
     palamedes::compile_catalog_artifact_selected(&request)
         .map(CatalogArtifactResult::from)
         .map_err(to_napi_error)
+}
+
+fn create_catalog_module_result(
+    artifact: palamedes::CatalogArtifactResult,
+    options: &CatalogModuleRenderOptions,
+) -> Result<CatalogModuleResult> {
+    if options.pseudo_locale.as_deref() != Some(options.locale.as_str())
+        && !artifact.missing.is_empty()
+        && options.fail_on_missing
+    {
+        return Err(napi::Error::from_reason(append_hint(
+            create_missing_error_message(&options.locale, &artifact.missing),
+            options.missing_failure_hint.as_deref(),
+        )));
+    }
+
+    let mut warnings = Vec::new();
+    if !artifact.diagnostics.is_empty() {
+        let error_diagnostics = artifact
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.severity == palamedes::CatalogArtifactDiagnosticSeverity::Error
+            })
+            .collect::<Vec<_>>();
+
+        if options.fail_on_compile_error && !error_diagnostics.is_empty() {
+            return Err(napi::Error::from_reason(append_hint(
+                create_compile_error_message(&options.locale, &error_diagnostics),
+                options.compile_failure_hint.as_deref(),
+            )));
+        }
+
+        warnings.push(append_hint(
+            create_diagnostic_message(&options.locale, &artifact.diagnostics),
+            if options.fail_on_compile_error {
+                None
+            } else {
+                options.diagnostics_warning_hint.as_deref()
+            },
+        ));
+    }
+
+    Ok(CatalogModuleResult {
+        code: render_catalog_module(&artifact.messages, &options.locale, &options.resource_path)?,
+        warnings,
+        watch_files: artifact.watch_files,
+    })
+}
+
+fn render_catalog_module(
+    messages: &std::collections::BTreeMap<String, String>,
+    locale: &str,
+    resource_path: &str,
+) -> Result<String> {
+    let messages = serde_json::to_string(messages).map_err(|error| {
+        napi::Error::from_reason(format!(
+            "Failed to render catalog module for locale {locale} at {resource_path}: {error}"
+        ))
+    })?;
+    Ok(format!(
+        "export const messages={messages};export default {{ messages }};"
+    ))
+}
+
+fn create_missing_error_message(
+    locale: &str,
+    missing_messages: &[palamedes::CatalogArtifactMissingMessage],
+) -> String {
+    let lines = missing_messages
+        .iter()
+        .map(|missing| render_source_key(&missing.source_key))
+        .collect::<Vec<_>>();
+    format!(
+        "Failed to compile catalog for locale {locale}!\n\nMissing {} translation(s):\n{}",
+        missing_messages.len(),
+        lines.join("\n")
+    )
+}
+
+fn create_diagnostic_message(
+    locale: &str,
+    diagnostics: &[palamedes::CatalogArtifactDiagnostic],
+) -> String {
+    let lines = diagnostics
+        .iter()
+        .map(|diagnostic| {
+            let source = render_source_key(&diagnostic.source_key);
+            format!(
+                "[{}] {} ({})\n{}\nSource: {source}",
+                render_diagnostic_severity(&diagnostic.severity),
+                diagnostic.code,
+                diagnostic.locale,
+                diagnostic.message
+            )
+        })
+        .collect::<Vec<_>>();
+    format!(
+        "Catalog diagnostics for locale {locale}:\n\n{}",
+        lines.join("\n\n")
+    )
+}
+
+fn create_compile_error_message(
+    locale: &str,
+    diagnostics: &[&palamedes::CatalogArtifactDiagnostic],
+) -> String {
+    let lines = diagnostics
+        .iter()
+        .map(|diagnostic| {
+            let source = render_source_key(&diagnostic.source_key);
+            format!(
+                "{}\nCode: {}\nLocale: {}\nSource: {source}",
+                diagnostic.message, diagnostic.code, diagnostic.locale
+            )
+        })
+        .collect::<Vec<_>>();
+    format!(
+        "Failed to compile catalog for locale {locale}!\n\nCompilation error for {} translation(s):\n{}",
+        diagnostics.len(),
+        lines.join("\n\n")
+    )
+}
+
+fn render_diagnostic_severity(severity: &palamedes::CatalogArtifactDiagnosticSeverity) -> &str {
+    match severity {
+        palamedes::CatalogArtifactDiagnosticSeverity::Info => "info",
+        palamedes::CatalogArtifactDiagnosticSeverity::Warning => "warning",
+        palamedes::CatalogArtifactDiagnosticSeverity::Error => "error",
+    }
+}
+
+fn render_source_key(source_key: &palamedes::CatalogArtifactSourceKey) -> String {
+    match source_key.context.as_deref() {
+        Some(context) => format!("{} [context: {context}]", source_key.message),
+        None => source_key.message.clone(),
+    }
+}
+
+fn append_hint(message: String, hint: Option<&str>) -> String {
+    match hint {
+        Some(hint) => format!("{message}\n\n{hint}"),
+        None => message,
+    }
 }

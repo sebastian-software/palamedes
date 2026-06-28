@@ -13,7 +13,7 @@ const moduleLoader = Module as unknown as {
 const originalLoad = moduleLoader._load
 
 const loadPalamedesConfig = vi.fn()
-const compileCatalogArtifact = vi.fn()
+const compileCatalogModule = vi.fn()
 
 beforeEach(() => {
   loadPalamedesConfig.mockResolvedValue({
@@ -24,10 +24,9 @@ beforeEach(() => {
     fallbackLocales: undefined,
     catalogs: [{ path: "src/locales/{locale}", include: ["src"] }],
   })
-  compileCatalogArtifact.mockReturnValue({
-    messages: { greeting: "Hallo" },
-    missing: [],
-    diagnostics: [],
+  compileCatalogModule.mockReturnValue({
+    code: 'export const messages={"greeting":"Hallo"};export default { messages };',
+    warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
   vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -37,7 +36,7 @@ beforeEach(() => {
       return { loadPalamedesConfig }
     }
     if (request === "@palamedes/core-node") {
-      return { compileCatalogArtifact }
+      return { compileCatalogModule }
     }
     return originalLoad.call(Module, request, parent, isMain)
   }
@@ -57,36 +56,30 @@ describe("palamedes-po-loader.cjs", () => {
       'export const messages={"greeting":"Hallo"};export default { messages };'
     )
     expect(result.dependencies).toStrictEqual(["/repo/src/locales/en.po"])
-    expect(compileCatalogArtifact).toHaveBeenCalledWith(
+    expect(compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
-      "/repo/src/locales/de.po"
+      "/repo/src/locales/de.po",
+      expect.objectContaining({
+        locale: "de",
+        pseudoLocale: "pseudo",
+        failOnMissing: false,
+        failOnCompileError: false,
+      })
     )
   })
 
   it("fails missing translations when configured", async () => {
-    compileCatalogArtifact.mockReturnValue({
-      messages: {},
-      missing: [{ sourceKey: { message: "Hello" } }],
-      diagnostics: [],
-      watchFiles: [],
+    compileCatalogModule.mockImplementation(() => {
+      throw new Error("Missing 1 translation")
     })
 
     await expect(runLoader({ failOnMissing: true })).rejects.toThrow(/Missing 1 translation/)
   })
 
   it("warns diagnostics when compile errors are not fatal", async () => {
-    compileCatalogArtifact.mockReturnValue({
-      messages: {},
-      missing: [],
-      diagnostics: [
-        {
-          severity: "error",
-          code: "icu.missing_argument",
-          message: "Missing argument",
-          sourceKey: { message: "Hello {name}" },
-          locale: "de",
-        },
-      ],
+    compileCatalogModule.mockReturnValue({
+      code: "export const messages={};export default { messages };",
+      warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
     })
 
@@ -98,19 +91,8 @@ describe("palamedes-po-loader.cjs", () => {
   })
 
   it("fails compile diagnostics when configured", async () => {
-    compileCatalogArtifact.mockReturnValue({
-      messages: {},
-      missing: [],
-      diagnostics: [
-        {
-          severity: "error",
-          code: "icu.missing_argument",
-          message: "Missing argument",
-          sourceKey: { message: "Hello {name}" },
-          locale: "de",
-        },
-      ],
-      watchFiles: [],
+    compileCatalogModule.mockImplementation(() => {
+      throw new Error("Compilation error for 1 translation")
     })
 
     await expect(runLoader({ failOnCompileError: true })).rejects.toThrow(
