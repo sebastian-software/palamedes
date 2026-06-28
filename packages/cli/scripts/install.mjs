@@ -1,17 +1,17 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { createRequire } from "node:module"
 import path from "node:path"
 
 const packageDir = path.resolve(import.meta.dirname, "..")
 const binDir = path.join(packageDir, "bin")
 const require = createRequire(import.meta.url)
-const packageName = resolvePlatformPackage()
 const binaryName = process.platform === "win32" ? "pmds.exe" : "pmds"
 const targetPath = path.join(binDir, binaryName)
+const packageName = resolvePlatformPackage()
 
 try {
-  const packageJson = require.resolve(`${packageName}/package.json`)
-  const sourcePath = path.join(path.dirname(packageJson), "bin", binaryName)
+  const nativePackageDir = resolvePackageDir(packageName)
+  const sourcePath = path.join(nativePackageDir, "bin", binaryName)
   if (!existsSync(sourcePath)) {
     console.warn(
       `Palamedes CLI optional package ${packageName} is installed but has no binary yet.`
@@ -20,8 +20,30 @@ try {
   }
   mkdirSync(binDir, { recursive: true })
   copyFileSync(sourcePath, targetPath)
+  if (process.platform !== "win32") {
+    chmodSync(targetPath, 0o755)
+  }
 } catch {
-  console.warn(`Palamedes CLI binary package ${packageName} is not installed for this platform.`)
+  console.warn(
+    `Palamedes CLI binary package ${packageName} is not installed for this platform. ` +
+      `Install optional dependencies or add ${packageName} explicitly for native pmds support.`
+  )
+}
+
+function resolvePackageDir(packageName) {
+  try {
+    return path.dirname(require.resolve(`${packageName}/package.json`))
+  } catch (error) {
+    const workspacePackageDir = path.resolve(
+      packageDir,
+      "..",
+      packageName.replace("@palamedes/", "")
+    )
+    if (existsSync(path.join(workspacePackageDir, "package.json"))) {
+      return workspacePackageDir
+    }
+    throw error
+  }
 }
 
 function resolvePlatformPackage() {
@@ -37,5 +59,9 @@ function resolvePlatformPackage() {
   if (process.platform === "win32" && process.arch === "x64") {
     return "@palamedes/cli-win32-x64-msvc"
   }
-  throw new Error(`Unsupported platform for Palamedes CLI: ${process.platform}/${process.arch}`)
+  console.warn(
+    `Palamedes CLI does not publish a native binary for ${process.platform}/${process.arch}. ` +
+      "Supported targets are darwin/arm64, linux/x64 glibc, linux/arm64 glibc, and win32/x64."
+  )
+  process.exit(0)
 }

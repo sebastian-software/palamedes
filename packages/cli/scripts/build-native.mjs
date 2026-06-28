@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
 
@@ -59,3 +59,6 @@ if (!existsSync(sourcePath)) {
 
 mkdirSync(binDir, { recursive: true })
 copyFileSync(sourcePath, targetPath)
+if (process.platform !== "win32") {
+  chmodSync(targetPath, 0o755)
+}
