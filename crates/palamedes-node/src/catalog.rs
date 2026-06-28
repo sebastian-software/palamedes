@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use napi::bindgen_prelude::{Either, Result};
@@ -353,7 +353,7 @@ pub struct CatalogArtifactDiagnostic {
 
 #[napi(object)]
 pub struct CatalogArtifactResult {
-    pub messages: HashMap<String, String>,
+    pub messages: BTreeMap<String, String>,
     pub watch_files: Vec<String>,
     pub missing: Vec<CatalogArtifactMissingMessage>,
     pub diagnostics: Vec<CatalogArtifactDiagnostic>,
@@ -1087,7 +1087,7 @@ impl From<palamedes::CatalogArtifactDiagnostic> for CatalogArtifactDiagnostic {
 impl From<palamedes::CatalogArtifactResult> for CatalogArtifactResult {
     fn from(value: palamedes::CatalogArtifactResult) -> Self {
         Self {
-            messages: value.messages.into_iter().collect(),
+            messages: value.messages,
             watch_files: value.watch_files,
             missing: value
                 .missing

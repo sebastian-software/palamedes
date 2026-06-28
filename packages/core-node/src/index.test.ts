@@ -4,7 +4,13 @@ import path from "node:path"
 
 import { afterEach, describe, expect, it } from "vitest"
 
-import { compileCatalogModule, getNativeInfo, parsePo, transformMacrosNative } from "./index"
+import {
+  compileCatalogArtifact,
+  compileCatalogModule,
+  getNativeInfo,
+  parsePo,
+  transformMacrosNative,
+} from "./index"
 
 type SourceMapLike = {
   mappings?: string
@@ -113,6 +119,41 @@ msgstr "Hallo"
     expect(result.code).toContain("Hallo")
     expect(result.warnings).toStrictEqual([])
     expect(result.watchFiles).toContain(path.join(deCatalog, "messages.po"))
+  })
+
+  it("renders catalog modules with the same message order as artifact objects", async () => {
+    const rootDir = await createTempDir()
+    const deCatalog = path.join(rootDir, "locales", "de")
+
+    await mkdir(deCatalog, { recursive: true })
+    await writeFile(
+      path.join(deCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "zeta"
+msgstr "Z"
+
+msgid "alpha"
+msgstr "A"
+`
+    )
+
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+    const resourcePath = path.join(deCatalog, "messages.po")
+    const artifact = compileCatalogArtifact(config, resourcePath)
+    const module = compileCatalogModule(config, resourcePath, { locale: "de" })
+
+    expect(Object.keys(artifact.messages)).toStrictEqual(["alpha", "zeta"])
+    expect(module.code).toBe(
+      `export const messages=${JSON.stringify(artifact.messages)};export default { messages };`
+    )
   })
 })
 
