@@ -9,8 +9,7 @@ import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter } from "vite"
 import { loadPalamedesConfig, type LoadedPalamedesConfig } from "@palamedes/config"
-import { compileCatalogArtifact } from "@palamedes/core-node"
-import { createCatalogLoaderResult } from "@palamedes/transform/catalog-loader"
+import { compileCatalogModule } from "@palamedes/core-node"
 import { transformPalamedesMacros } from "@palamedes/transform"
 import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
 
@@ -215,7 +214,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         const cfg = await getConfigLazy()
         const cleanId = stripQuery(id)
-        const result = compileCatalogArtifact(
+        const locale = path.basename(cleanId, ".po")
+        const result = compileCatalogModule(
           {
             rootDir: cfg.rootDir,
             locales: cfg.locales,
@@ -224,29 +224,26 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             pseudoLocale: cfg.pseudoLocale,
             catalogs: cfg.catalogs,
           },
-          cleanId
+          cleanId,
+          {
+            locale,
+            pseudoLocale: cfg.pseudoLocale,
+            failOnMissing,
+            failOnCompileError,
+            missingFailureHint:
+              "You see this error because `failOnMissing=true` in Vite plugin configuration.",
+            compileFailureHint:
+              "These errors fail the build because `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
+            diagnosticsWarningHint:
+              "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
+          }
         )
 
         result.watchFiles.forEach((file: string) => this.addWatchFile(file))
-        const locale = path.basename(cleanId, ".po")
-
-        const loaderResult = createCatalogLoaderResult(result, {
-          locale,
-          pseudoLocale: cfg.pseudoLocale,
-          failOnMissing,
-          failOnCompileError,
-          missingFailureHint:
-            "You see this error because `failOnMissing=true` in Vite plugin configuration.",
-          compileFailureHint:
-            "These errors fail the build because `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
-          diagnosticsWarningHint:
-            "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
-        })
-
-        loaderResult.warnings.forEach((warning) => console.warn(warning))
+        result.warnings.forEach((warning) => console.warn(warning))
 
         return {
-          code: loaderResult.code,
+          code: result.code,
           map: null,
         }
       },

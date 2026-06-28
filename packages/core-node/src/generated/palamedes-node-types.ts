@@ -228,6 +228,22 @@ export interface CatalogArtifactResult {
   diagnostics: Array<CatalogArtifactDiagnostic>;
   resolvedLocaleChain?: Array<string>;
 }
+export interface CatalogModuleRequest {
+  config: CatalogArtifactConfig;
+  resourcePath: string;
+  locale: string;
+  pseudoLocale?: string;
+  failOnMissing?: boolean;
+  failOnCompileError?: boolean;
+  missingFailureHint?: string;
+  compileFailureHint?: string;
+  diagnosticsWarningHint?: string;
+}
+export interface CatalogModuleResult {
+  code: string;
+  warnings: Array<string>;
+  watchFiles: Array<string>;
+}
 export interface CatalogArtifactCatalogConfig {
   path: string;
   include: Array<string>;
@@ -337,6 +353,7 @@ export interface NativeBindings {
   combineCatalogs(request: CatalogCombineRequest): CatalogCombineResult;
   combineCatalogFiles(request: CatalogFileCombineRequest): CatalogFileCombineResult;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
+  compileCatalogModule(request: CatalogModuleRequest): CatalogModuleResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;
   extractCatalogMessagesFromFiles(request: ExtractCatalogMessagesRequest): ExtractCatalogMessagesResult;

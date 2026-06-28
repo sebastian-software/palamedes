@@ -1186,6 +1186,7 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "palamedes",
+ "serde_json",
 ]
 
 [[package]]

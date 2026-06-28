@@ -18,6 +18,8 @@ import type {
   CatalogArtifactResult as GeneratedCatalogArtifactResult,
   CatalogArtifactSelectedRequest as GeneratedCatalogArtifactSelectedRequest,
   CatalogArtifactSourceKey as GeneratedCatalogArtifactSourceKey,
+  CatalogModuleRequest as GeneratedCatalogModuleRequest,
+  CatalogModuleResult as GeneratedCatalogModuleResult,
   CatalogDiagnostic as GeneratedCatalogDiagnostic,
   CatalogOrigin as GeneratedCatalogOrigin,
   CatalogParseRequest as GeneratedCatalogParseRequest,
@@ -162,6 +164,16 @@ export type CatalogArtifactConfig = GeneratedCatalogArtifactConfig
 export type CatalogArtifactResult = Omit<GeneratedCatalogArtifactResult, "diagnostics"> & {
   diagnostics: CatalogArtifactDiagnostic[]
 }
+export type CatalogModuleOptions = {
+  locale: string
+  pseudoLocale?: string
+  failOnMissing?: boolean
+  failOnCompileError?: boolean
+  missingFailureHint?: string
+  compileFailureHint?: string
+  diagnosticsWarningHint?: string
+}
+export type CatalogModuleResult = GeneratedCatalogModuleResult
 
 type NativeBindings = GeneratedNativeBindings
 type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest
@@ -169,6 +181,7 @@ type NativeCatalogCombineRequest = GeneratedCatalogCombineRequest
 type NativeCatalogFileCombineRequest = GeneratedCatalogFileCombineRequest
 type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
 type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
+type NativeCatalogModuleRequest = GeneratedCatalogModuleRequest
 
 function detectLinuxLibc(): "gnu" | "musl" | null {
   if (process.platform !== "linux") {
@@ -468,6 +481,25 @@ export function compileCatalogArtifactSelected(
       severity: mapNativeDiagnosticSeverity(diagnostic.severity),
     })),
   }
+}
+
+export function compileCatalogModule(
+  config: CatalogArtifactConfig,
+  resourcePath: string,
+  options: CatalogModuleOptions
+): CatalogModuleResult {
+  const request: NativeCatalogModuleRequest = {
+    config,
+    resourcePath,
+    locale: options.locale,
+    pseudoLocale: options.pseudoLocale,
+    failOnMissing: options.failOnMissing,
+    failOnCompileError: options.failOnCompileError,
+    missingFailureHint: options.missingFailureHint,
+    compileFailureHint: options.compileFailureHint,
+    diagnosticsWarningHint: options.diagnosticsWarningHint,
+  }
+  return native.compileCatalogModule(request)
 }
 
 export function extractMessagesNative(source: string, filename: string): NativeExtractedMessage[] {

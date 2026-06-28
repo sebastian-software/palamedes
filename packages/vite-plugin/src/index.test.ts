@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   loadPalamedesConfig: vi.fn(),
-  compileCatalogArtifact: vi.fn(),
+  compileCatalogModule: vi.fn(),
   transformPalamedesMacros: vi.fn(),
 }))
 
@@ -11,7 +11,7 @@ vi.mock("@palamedes/config", () => ({
 }))
 
 vi.mock("@palamedes/core-node", () => ({
-  compileCatalogArtifact: mocks.compileCatalogArtifact,
+  compileCatalogModule: mocks.compileCatalogModule,
 }))
 
 vi.mock("@palamedes/transform", () => ({
@@ -30,10 +30,9 @@ beforeEach(() => {
     fallbackLocales: undefined,
     catalogs: [{ path: "src/locales/{locale}", include: ["src"] }],
   })
-  mocks.compileCatalogArtifact.mockReturnValue({
-    messages: { greeting: "Hallo" },
-    missing: [],
-    diagnostics: [],
+  mocks.compileCatalogModule.mockReturnValue({
+    code: 'export const messages={"greeting":"Hallo"};export default { messages };',
+    warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
   vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -49,18 +48,16 @@ describe("palamedes vite plugin", () => {
       map: null,
     })
     expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/en.po")
-    expect(mocks.compileCatalogArtifact).toHaveBeenCalledWith(
+    expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
-      "/repo/src/locales/de.po"
+      "/repo/src/locales/de.po",
+      expect.objectContaining({ locale: "de" })
     )
   })
 
   it("fails missing translations when configured", async () => {
-    mocks.compileCatalogArtifact.mockReturnValue({
-      messages: {},
-      missing: [{ sourceKey: { message: "Hello" } }],
-      diagnostics: [],
-      watchFiles: [],
+    mocks.compileCatalogModule.mockImplementation(() => {
+      throw new Error("Missing 1 translation")
     })
 
     await expect(runPoTransform({}, { failOnMissing: true })).rejects.toThrow(
@@ -69,18 +66,9 @@ describe("palamedes vite plugin", () => {
   })
 
   it("warns diagnostics when compile errors are not fatal", async () => {
-    mocks.compileCatalogArtifact.mockReturnValue({
-      messages: {},
-      missing: [],
-      diagnostics: [
-        {
-          severity: "error",
-          code: "icu.missing_argument",
-          message: "Missing argument",
-          sourceKey: { message: "Hello {name}" },
-          locale: "de",
-        },
-      ],
+    mocks.compileCatalogModule.mockReturnValue({
+      code: "export const messages={};export default { messages };",
+      warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
     })
 
