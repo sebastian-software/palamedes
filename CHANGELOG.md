@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.8.0...palamedes-v0.9.0) (2026-06-28)
+
+
+### Features
+
+* make pmds a native rust cli ([a6ab3db](https://github.com/sebastian-software/palamedes/commit/a6ab3dbcc4d1e5ffc84f304363ff02afcf35e40c))
+* render vite catalog modules in rust ([07ef4f1](https://github.com/sebastian-software/palamedes/commit/07ef4f148a773c1dea3fecbb29686b144832f762))
+
 ## [0.8.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.7.12...palamedes-v0.8.0) (2026-06-27)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/config",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Lean config loading for Palamedes projects",
   "keywords": [
     "palamedes",
