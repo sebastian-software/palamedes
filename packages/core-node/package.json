@@ -51,6 +51,7 @@
     "@palamedes/core-node-darwin-arm64": "workspace:^",
     "@palamedes/core-node-linux-arm64-gnu": "workspace:^",
     "@palamedes/core-node-linux-x64-gnu": "workspace:^",
+    "@palamedes/core-node-linux-x64-musl": "workspace:^",
     "@palamedes/core-node-win32-x64-msvc": "workspace:^"
   },
   "devDependencies": {

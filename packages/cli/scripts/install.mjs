@@ -47,11 +47,16 @@ function resolvePackageDir(packageName) {
 }
 
 function resolvePlatformPackage() {
+  const libc = detectLinuxLibc()
+
   if (process.platform === "darwin" && process.arch === "arm64") {
     return "@palamedes/cli-darwin-arm64"
   }
-  if (process.platform === "linux" && process.arch === "x64") {
+  if (process.platform === "linux" && process.arch === "x64" && libc === "glibc") {
     return "@palamedes/cli-linux-x64-gnu"
+  }
+  if (process.platform === "linux" && process.arch === "x64" && libc === "musl") {
+    return "@palamedes/cli-linux-x64-musl"
   }
   if (process.platform === "linux" && process.arch === "arm64") {
     return "@palamedes/cli-linux-arm64-gnu"
@@ -61,7 +66,22 @@ function resolvePlatformPackage() {
   }
   console.warn(
     `Palamedes CLI does not publish a native binary for ${process.platform}/${process.arch}. ` +
-      "Supported targets are darwin/arm64, linux/x64 glibc, linux/arm64 glibc, and win32/x64."
+      "Supported targets are darwin/arm64, linux/x64 glibc, linux/x64 musl, linux/arm64 glibc, and win32/x64."
   )
   process.exit(0)
+}
+
+function detectLinuxLibc() {
+  if (process.platform !== "linux") {
+    return null
+  }
+
+  const report = process.report?.getReport?.()
+  const glibcVersion = report?.header?.glibcVersionRuntime
+
+  if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
+    return "glibc"
+  }
+
+  return "musl"
 }

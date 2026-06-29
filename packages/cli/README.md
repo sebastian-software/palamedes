@@ -39,6 +39,7 @@ The npm package currently publishes native binaries for:
 
 - macOS arm64
 - Linux x64 glibc
+- Linux x64 musl
 - Linux arm64 glibc
 - Windows x64 MSVC
 

@@ -1,12 +1,12 @@
 {
-  "name": "@palamedes/cli-linux-arm64-gnu",
+  "name": "@palamedes/cli-linux-x64-musl",
   "version": "0.9.0",
-  "description": "Linux arm64 glibc native CLI binary for @palamedes/cli",
+  "description": "Linux x64 musl native CLI binary for @palamedes/cli",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
-    "directory": "packages/cli-linux-arm64-gnu"
+    "directory": "packages/cli-linux-x64-musl"
   },
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "license": "MIT",
@@ -25,9 +25,9 @@
     "linux"
   ],
   "cpu": [
-    "arm64"
+    "x64"
   ],
   "libc": [
-    "glibc"
+    "musl"
   ]
 }

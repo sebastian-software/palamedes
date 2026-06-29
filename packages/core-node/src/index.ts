@@ -204,6 +204,7 @@ const SUPPORTED_NATIVE_PACKAGES = [
   "@palamedes/core-node-darwin-arm64",
   "@palamedes/core-node-linux-arm64-gnu",
   "@palamedes/core-node-linux-x64-gnu",
+  "@palamedes/core-node-linux-x64-musl",
   "@palamedes/core-node-win32-x64-msvc",
 ] as const
 
@@ -221,6 +222,10 @@ function getNativePackageName(): string {
 
   if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "gnu") {
     return "@palamedes/core-node-linux-x64-gnu"
+  }
+
+  if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "musl") {
+    return "@palamedes/core-node-linux-x64-musl"
   }
 
   if (process.platform === "linux" && process.arch === "arm64" && detectLinuxLibc() === "gnu") {
