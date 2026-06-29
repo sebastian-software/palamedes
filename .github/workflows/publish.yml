@@ -95,26 +95,41 @@ jobs:
         include:
           - package_name: "@palamedes/core-node-darwin-arm64"
             runner: macos-14
+            rust_target: ""
           - package_name: "@palamedes/cli-darwin-arm64"
             runner: macos-14
+            rust_target: ""
           - package_name: "@palamedes/core-node-linux-x64-gnu"
             runner: ubuntu-24.04
+            rust_target: ""
           - package_name: "@palamedes/cli-linux-x64-gnu"
             runner: ubuntu-24.04
+            rust_target: ""
+          - package_name: "@palamedes/core-node-linux-x64-musl"
+            runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-musl
+          - package_name: "@palamedes/cli-linux-x64-musl"
+            runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-musl
           - package_name: "@palamedes/core-node-linux-arm64-gnu"
             runner: ubuntu-24.04-arm
+            rust_target: ""
           - package_name: "@palamedes/cli-linux-arm64-gnu"
             runner: ubuntu-24.04-arm
+            rust_target: ""
           - package_name: "@palamedes/core-node-win32-x64-msvc"
             runner: windows-2025
+            rust_target: ""
           - package_name: "@palamedes/cli-win32-x64-msvc"
             runner: windows-2025
+            rust_target: ""
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       id-token: write
     env:
       NPM_CONFIG_PROVENANCE: true
+      PALAMEDES_ALLOW_CROSS_NATIVE: ${{ matrix.rust_target != '' && '1' || '0' }}
       PALAMEDES_RUST_PROFILE: release
 
     steps:
@@ -133,6 +148,14 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Add musl Rust target
+        if: matrix.rust_target != ''
+        run: rustup target add "${{ matrix.rust_target }}"
+
+      - name: Install musl toolchain
+        if: matrix.rust_target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -140,16 +163,41 @@ jobs:
         run: pnpm --filter "${{ matrix.package_name }}" build
 
       - name: Smoke-test native Node package
-        if: startsWith(matrix.package_name, '@palamedes/core-node-')
+        if: startsWith(matrix.package_name, '@palamedes/core-node-') && matrix.rust_target == ''
         run: pnpm --filter "${{ matrix.package_name }}" exec node --input-type=module -e "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); const native = require('./palamedes-node.node'); if (typeof native.transformMacros !== 'function') process.exit(1)"
 
+      - name: Smoke-test musl native Node package
+        if: startsWith(matrix.package_name, '@palamedes/core-node-') && matrix.rust_target == 'x86_64-unknown-linux-musl'
+        run: >
+          docker run --rm
+          -v "$PWD:/workspace"
+          -w "/workspace/packages/core-node-linux-x64-musl"
+          node:24-alpine
+          node --input-type=module -e
+          "import { createRequire } from 'node:module';
+          const require = createRequire(import.meta.url);
+          const native = require('./palamedes-node.node');
+          if (typeof native.transformMacros !== 'function') process.exit(1)"
+
       - name: Smoke-test native CLI package
-        if: startsWith(matrix.package_name, '@palamedes/cli-')
+        if: startsWith(matrix.package_name, '@palamedes/cli-') && matrix.rust_target == ''
         run: >
           pnpm --filter "${{ matrix.package_name }}" exec node --input-type=module -e
           "import { execFileSync } from 'node:child_process';
           const bin = process.platform === 'win32' ? './bin/pmds.exe' : './bin/pmds';
           const out = execFileSync(bin, ['version'], { encoding: 'utf8' });
+          if (!out.includes('pmds (Palamedes)')) process.exit(1)"
+
+      - name: Smoke-test musl native CLI package
+        if: startsWith(matrix.package_name, '@palamedes/cli-') && matrix.rust_target == 'x86_64-unknown-linux-musl'
+        run: >
+          docker run --rm
+          -v "$PWD:/workspace"
+          -w "/workspace/packages/cli-linux-x64-musl"
+          node:24-alpine
+          node --input-type=module -e
+          "import { execFileSync } from 'node:child_process';
+          const out = execFileSync('./bin/pmds', ['version'], { encoding: 'utf8' });
           if (!out.includes('pmds (Palamedes)')) process.exit(1)"
 
       - name: Publish native package

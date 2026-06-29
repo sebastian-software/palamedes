@@ -189,21 +189,37 @@ function detectLinuxLibc(): "gnu" | "musl" | null {
   }
 
   const report = process.report?.getReport?.() as
-    | { header?: { glibcVersionRuntime?: string } }
+    | { header?: { glibcVersionRuntime?: string }; sharedObjects?: string[] }
     | undefined
-  const glibcVersion = report?.header?.glibcVersionRuntime
+  const header = report?.header
+  const glibcVersion = header?.glibcVersionRuntime
 
   if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
     return "gnu"
   }
 
-  return "musl"
+  const sharedObjects = Array.isArray(report?.sharedObjects) ? report.sharedObjects : []
+
+  if (sharedObjects.some((sharedObject) => sharedObject.includes("musl"))) {
+    return "musl"
+  }
+
+  if (
+    sharedObjects.some(
+      (sharedObject) => sharedObject.includes("libc.so.6") || sharedObject.includes("ld-linux")
+    )
+  ) {
+    return "gnu"
+  }
+
+  return null
 }
 
 const SUPPORTED_NATIVE_PACKAGES = [
   "@palamedes/core-node-darwin-arm64",
   "@palamedes/core-node-linux-arm64-gnu",
   "@palamedes/core-node-linux-x64-gnu",
+  "@palamedes/core-node-linux-x64-musl",
   "@palamedes/core-node-win32-x64-msvc",
 ] as const
 
@@ -215,15 +231,21 @@ function getPlatformTriple(): string {
 }
 
 function getNativePackageName(): string {
+  const linuxLibc = detectLinuxLibc()
+
   if (process.platform === "darwin" && process.arch === "arm64") {
     return "@palamedes/core-node-darwin-arm64"
   }
 
-  if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "gnu") {
+  if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "gnu") {
     return "@palamedes/core-node-linux-x64-gnu"
   }
 
-  if (process.platform === "linux" && process.arch === "arm64" && detectLinuxLibc() === "gnu") {
+  if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "musl") {
+    return "@palamedes/core-node-linux-x64-musl"
+  }
+
+  if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "gnu") {
     return "@palamedes/core-node-linux-arm64-gnu"
   }
 

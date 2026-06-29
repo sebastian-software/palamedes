@@ -1,22 +1,27 @@
 {
-  "name": "@palamedes/cli-linux-arm64-gnu",
+  "name": "@palamedes/core-node-linux-x64-musl",
   "version": "0.9.0",
-  "description": "Linux arm64 glibc native CLI binary for @palamedes/cli",
+  "description": "Linux x64 musl native bindings for @palamedes/core-node",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git",
-    "directory": "packages/cli-linux-arm64-gnu"
+    "directory": "packages/core-node-linux-x64-musl"
   },
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "license": "MIT",
   "type": "commonjs",
+  "main": "./palamedes-node.node",
   "files": [
+    "LICENSE",
     "README.md",
-    "bin/"
+    "palamedes-node.node"
   ],
   "scripts": {
-    "build": "node ../cli/scripts/build-native.mjs"
+    "build": "node ../core-node/scripts/build-native.mjs"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   },
   "publishConfig": {
     "access": "public"
@@ -25,9 +30,9 @@
     "linux"
   ],
   "cpu": [
-    "arm64"
+    "x64"
   ],
   "libc": [
-    "glibc"
+    "musl"
   ]
 }

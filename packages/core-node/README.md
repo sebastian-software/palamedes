@@ -39,10 +39,12 @@ The package loads one of these platform packages behind the scenes:
 
 - `@palamedes/core-node-darwin-arm64`
 - `@palamedes/core-node-linux-x64-gnu`
+- `@palamedes/core-node-linux-x64-musl`
 - `@palamedes/core-node-linux-arm64-gnu`
 - `@palamedes/core-node-win32-x64-msvc`
 
-Linux packages currently target glibc distributions.
+Linux x64 packages are split by libc, so Alpine and other musl environments use
+the musl package while glibc distributions use the GNU package.
 
 ## Example
 

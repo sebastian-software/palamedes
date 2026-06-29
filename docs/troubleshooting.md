@@ -179,8 +179,9 @@ Fix:
 - Reinstall from a clean lockfile if the optional package was pruned.
 - Confirm the current platform is supported by the published native package
   list.
-- If running in Alpine or another musl Linux environment, use a supported glibc
-  image until a musl package is available.
+- If running in Alpine or another musl Linux environment, confirm the package
+  manager kept the `linux-x64-musl` optional dependency instead of pruning
+  optional packages.
 
 ## Translation Exists But Does Not Render
 

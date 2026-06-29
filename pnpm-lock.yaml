@@ -618,6 +618,9 @@ importers:
       '@palamedes/cli-linux-x64-gnu':
         specifier: workspace:^
         version: link:../cli-linux-x64-gnu
+      '@palamedes/cli-linux-x64-musl':
+        specifier: workspace:^
+        version: link:../cli-linux-x64-musl
       '@palamedes/cli-win32-x64-msvc':
         specifier: workspace:^
         version: link:../cli-win32-x64-msvc
@@ -627,6 +630,8 @@ importers:
   packages/cli-linux-arm64-gnu: {}
 
   packages/cli-linux-x64-gnu: {}
+
+  packages/cli-linux-x64-musl: {}
 
   packages/cli-win32-x64-msvc: {}
 
@@ -691,6 +696,9 @@ importers:
       '@palamedes/core-node-linux-x64-gnu':
         specifier: workspace:^
         version: link:../core-node-linux-x64-gnu
+      '@palamedes/core-node-linux-x64-musl':
+        specifier: workspace:^
+        version: link:../core-node-linux-x64-musl
       '@palamedes/core-node-win32-x64-msvc':
         specifier: workspace:^
         version: link:../core-node-win32-x64-msvc
@@ -700,6 +708,8 @@ importers:
   packages/core-node-linux-arm64-gnu: {}
 
   packages/core-node-linux-x64-gnu: {}
+
+  packages/core-node-linux-x64-musl: {}
 
   packages/core-node-win32-x64-msvc: {}
 

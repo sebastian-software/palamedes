@@ -19,6 +19,12 @@ const targets = {
     arch: "x64",
     libc: "glibc",
   },
+  "@palamedes/core-node-linux-x64-musl": {
+    platform: "linux",
+    arch: "x64",
+    libc: "musl",
+    rustTarget: "x86_64-unknown-linux-musl",
+  },
   "@palamedes/core-node-linux-arm64-gnu": {
     platform: "linux",
     arch: "arm64",
@@ -54,7 +60,12 @@ if (process.platform !== target.platform || process.arch !== target.arch) {
   process.exit(0)
 }
 
-if (target.platform === "linux" && target.libc && detectLinuxLibc() !== target.libc) {
+if (
+  target.platform === "linux" &&
+  target.libc &&
+  detectLinuxLibc() !== target.libc &&
+  (!target.rustTarget || process.env.PALAMEDES_ALLOW_CROSS_NATIVE !== "1")
+) {
   console.log(`Skipping native build for ${packageJson.name} due to libc mismatch`)
   process.exit(0)
 }
@@ -78,6 +89,10 @@ if (profile === "release") {
   cargoArgs.push("--release")
 }
 
+if (target.rustTarget) {
+  cargoArgs.push("--target", target.rustTarget)
+}
+
 execFileSync("cargo", cargoArgs, {
   cwd: repoRoot,
   stdio: "inherit",
@@ -85,7 +100,9 @@ execFileSync("cargo", cargoArgs, {
 
 const binaryName =
   process.platform === "win32" ? "palamedes_node.dll" : `libpalamedes_node.${extension}`
-const sourcePath = path.join(repoRoot, "target", profile, binaryName)
+const sourcePath = target.rustTarget
+  ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
+  : path.join(repoRoot, "target", profile, binaryName)
 const targetPath = path.join(packageDir, "palamedes-node.node")
 
 if (!existsSync(sourcePath)) {
