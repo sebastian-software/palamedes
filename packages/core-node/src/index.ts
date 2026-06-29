@@ -189,21 +189,30 @@ function detectLinuxLibc(): "gnu" | "musl" | null {
   }
 
   const report = process.report?.getReport?.() as
-    | { header?: { glibcVersionRuntime?: string } }
+    | { header?: { glibcVersionRuntime?: string }; sharedObjects?: string[] }
     | undefined
   const header = report?.header
-
-  if (!header) {
-    return null
-  }
-
-  const glibcVersion = header.glibcVersionRuntime
+  const glibcVersion = header?.glibcVersionRuntime
 
   if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
     return "gnu"
   }
 
-  return "musl"
+  const sharedObjects = Array.isArray(report?.sharedObjects) ? report.sharedObjects : []
+
+  if (sharedObjects.some((sharedObject) => sharedObject.includes("musl"))) {
+    return "musl"
+  }
+
+  if (
+    sharedObjects.some(
+      (sharedObject) => sharedObject.includes("libc.so.6") || sharedObject.includes("ld-linux")
+    )
+  ) {
+    return "gnu"
+  }
+
+  return null
 }
 
 const SUPPORTED_NATIVE_PACKAGES = [

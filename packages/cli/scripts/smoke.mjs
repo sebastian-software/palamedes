@@ -63,17 +63,25 @@ function detectLinuxLibc() {
   }
 
   const report = process.report?.getReport?.()
-  const header = report?.header
-
-  if (!header) {
-    return null
-  }
-
-  const glibcVersion = header.glibcVersionRuntime
+  const glibcVersion = report?.header?.glibcVersionRuntime
 
   if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
     return "glibc"
   }
 
-  return "musl"
+  const sharedObjects = Array.isArray(report?.sharedObjects) ? report.sharedObjects : []
+
+  if (sharedObjects.some((sharedObject) => sharedObject.includes("musl"))) {
+    return "musl"
+  }
+
+  if (
+    sharedObjects.some(
+      (sharedObject) => sharedObject.includes("libc.so.6") || sharedObject.includes("ld-linux")
+    )
+  ) {
+    return "glibc"
+  }
+
+  return null
 }
