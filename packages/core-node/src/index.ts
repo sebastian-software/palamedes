@@ -191,7 +191,13 @@ function detectLinuxLibc(): "gnu" | "musl" | null {
   const report = process.report?.getReport?.() as
     | { header?: { glibcVersionRuntime?: string } }
     | undefined
-  const glibcVersion = report?.header?.glibcVersionRuntime
+  const header = report?.header
+
+  if (!header) {
+    return null
+  }
+
+  const glibcVersion = header.glibcVersionRuntime
 
   if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
     return "gnu"
@@ -216,19 +222,21 @@ function getPlatformTriple(): string {
 }
 
 function getNativePackageName(): string {
+  const linuxLibc = detectLinuxLibc()
+
   if (process.platform === "darwin" && process.arch === "arm64") {
     return "@palamedes/core-node-darwin-arm64"
   }
 
-  if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "gnu") {
+  if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "gnu") {
     return "@palamedes/core-node-linux-x64-gnu"
   }
 
-  if (process.platform === "linux" && process.arch === "x64" && detectLinuxLibc() === "musl") {
+  if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "musl") {
     return "@palamedes/core-node-linux-x64-musl"
   }
 
-  if (process.platform === "linux" && process.arch === "arm64" && detectLinuxLibc() === "gnu") {
+  if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "gnu") {
     return "@palamedes/core-node-linux-arm64-gnu"
   }
 

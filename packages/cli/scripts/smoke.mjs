@@ -47,7 +47,7 @@ function resolvePlatformPackage() {
   if (process.platform === "linux" && process.arch === "x64" && libc === "musl") {
     return "@palamedes/cli-linux-x64-musl"
   }
-  if (process.platform === "linux" && process.arch === "arm64") {
+  if (process.platform === "linux" && process.arch === "arm64" && libc === "glibc") {
     return "@palamedes/cli-linux-arm64-gnu"
   }
   if (process.platform === "win32" && process.arch === "x64") {
@@ -63,7 +63,13 @@ function detectLinuxLibc() {
   }
 
   const report = process.report?.getReport?.()
-  const glibcVersion = report?.header?.glibcVersionRuntime
+  const header = report?.header
+
+  if (!header) {
+    return null
+  }
+
+  const glibcVersion = header.glibcVersionRuntime
 
   if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
     return "glibc"
