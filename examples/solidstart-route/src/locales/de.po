@@ -1,73 +1,94 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: palamedes-solidstart-route\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: palamedes\n"
 
-msgid "Palamedes in SolidStart with one runtime model."
-msgstr "Palamedes in SolidStart mit einem Laufzeitmodell."
+msgid "Add to cart"
+msgstr "In den Warenkorb"
 
-msgid "This example proves a route-based locale flow in SolidStart with SSR, locale segments, host-mapping suggestions, .po imports, and localized server queries."
-msgstr "Dieses Beispiel zeigt einen routenbasierten Sprachfluss in SolidStart mit SSR, Sprachsegmenten in der URL, Host-Mapping-Hinweisen, .po-Importen und lokalisierten Server-Abfragen."
+msgid "Attendees"
+msgstr "Teilnehmer"
 
-msgid "Locale suggestion"
-msgstr "Sprachempfehlung"
+msgid "Availability"
+msgstr "Verfügbarkeit"
+
+msgid "Behind the scenes"
+msgstr "Hinter den Kulissen"
+
+msgid "Berlin, Germany"
+msgstr "Berlin, Deutschland"
+
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
+
+msgid "Conference pass"
+msgstr "Konferenzpass"
+
+msgid "Currency"
+msgstr "Währung"
+
+msgid "Date"
+msgstr "Datum"
+
+msgid "Fewer tickets"
+msgstr "Weniger Tickets"
+
+msgid "Locale"
+msgstr "Sprache"
+
+msgid "Localized live with Palamedes"
+msgstr "Live lokalisiert mit Palamedes"
+
+msgid "More tickets"
+msgstr "Mehr Tickets"
+
+msgid "Number"
+msgstr "Zahl"
+
+msgid "Plural"
+msgstr "Plural"
+
+msgid "Refresh server result"
+msgstr "Serverergebnis aktualisieren"
+
+msgid "Rendered with SolidStart"
+msgstr "Gerendert mit SolidStart"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "Server query confirmed locale {locale}."
+msgstr "Server-Query bestätigte Sprache {locale}."
 
 msgid "Switch to the recommended locale"
 msgstr "Zur empfohlenen Sprache wechseln"
 
-msgid "Current locale:"
-msgstr "Aktuelle Sprache:"
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten deine Tickets."
 
-msgid "Server-rendered proof"
-msgstr "Serverseitiger Beweis"
+msgid "Total"
+msgstr "Gesamt"
 
-msgid "SSR translation happens before the page reaches the browser."
-msgstr "Die SSR-Uebersetzung passiert, bevor die Seite den Browser erreicht."
+msgid "Venue"
+msgstr "Ort"
 
-msgid "This panel was rendered on the server for locale {localeLabel}."
-msgstr "Dieses Panel wurde auf dem Server fuer die Sprache {localeLabel} gerendert."
+msgid "Welcome back, {attendeeName}."
+msgstr "Willkommen zurück, {attendeeName}."
 
-msgid "Rendered on server"
-msgstr "Auf dem Server gerendert"
+msgid "each"
+msgstr "pro Stück"
 
-msgid "Client interaction"
-msgstr "Client-Interaktion"
+msgid "one switch, every format"
+msgstr "ein Klick, alle Formate"
 
-msgid "Counter example"
-msgstr "Zaehlerbeispiel"
-
-msgid "You clicked # time"
-msgstr "Du hast # Mal geklickt"
-
-msgid "You clicked # times"
-msgstr "Du hast # Mal geklickt"
-
-msgid "Click me"
-msgstr "Klick mich"
-
-msgid "Server query proof"
-msgstr "Server-Abfrage-Beweis"
-
-msgid "Localized server query result"
-msgstr "Lokalisiertes Ergebnis der Server-Abfrage"
-
-msgid "Run the request to fetch a server-localized result."
-msgstr "Fuehre die Anfrage aus, um ein serverlokalisiertes Ergebnis zu holen."
-
-msgid "Ask server for localized status"
-msgstr "Server nach lokalisiertem Status fragen"
-
-msgid "Server locale"
+msgid "server locale"
 msgstr "Server-Sprache"
 
-msgid "Handled at"
-msgstr "Bearbeitet um"
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
 
-msgid "Localized message"
-msgstr "Lokalisierte Nachricht"
-
-msgid "Server query confirmed locale {locale}."
-msgstr "Die Server-Abfrage hat die Sprache {locale} bestaetigt."
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"

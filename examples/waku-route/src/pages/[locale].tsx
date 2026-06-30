@@ -1,10 +1,12 @@
 import { t } from "@palamedes/core/macro"
 import { Trans } from "@palamedes/react/macro"
+import { EVENT } from "@palamedes/example-ui"
 import type { PageProps } from "waku/router"
 import { unstable_getHeaders } from "waku/router/server"
-import { Counter } from "../components/Counter"
+import { ClientReady } from "../components/ClientReady"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ServerActionProbe } from "../components/ServerActionProbe"
+import { ProofPanel } from "../components/ProofPanel"
+import { TicketPanel } from "../components/TicketPanel"
 import {
   activateServerI18n,
   createBanner,
@@ -13,7 +15,7 @@ import {
   type Locale,
 } from "../lib/i18n"
 
-type ProbeResult = null | {
+type ProbeResult = {
   handledAt: string
   locale: Locale
   localeLabel: string
@@ -43,51 +45,59 @@ export default async function RoutePage({ locale }: PageProps<"/[locale]">) {
 
   return (
     <>
-      <title>Waku Route Locale Example</title>
+      <title>Frontend Stage · Palamedes + Waku</title>
+
+      {banner ? (
+        <div className="notice" role="status">
+          <span className="notice-text">{banner.description}</span>
+          <a
+            className="notice-cta"
+            data-testid="locale-suggestion-cta"
+            href={banner.recommendedUrl}
+          >
+            <Trans>Switch to the recommended locale</Trans>
+          </a>
+        </div>
+      ) : null}
+
+      <header className="topbar">
+        <div className="brand">
+          <b>Frontend Stage</b>
+          <span className="brand-meta">Berlin · 2026</span>
+        </div>
+        <LocaleSwitcher locale={currentLocale} />
+      </header>
 
       <section className="hero">
-        <p className="kicker">Waku</p>
-        <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
-        <p>
+        <p className="eyebrow">
+          <span className="dot" aria-hidden="true" />
+          <Trans>Localized live with Palamedes</Trans>
+        </p>
+        <h1>
+          <Trans>Book your seat at Frontend Stage 2026</Trans>
+        </h1>
+        <p className="greet">{t`Welcome back, ${EVENT.attendeeName}.`}</p>
+        <p className="lede">
           <Trans>
-            This route-based Waku example keeps locale in the URL, shows host or Accept-Language
-            mismatch hints, and localizes server components plus server actions.
+            Three days of talks on the craft of building for the web. Choose your tickets below.
           </Trans>
         </p>
-        {banner ? (
-          <section className="panel" style={{ borderColor: "#d97706", background: "#fff7ed" }}>
-            <p className="kicker">
-              <Trans>Locale suggestion</Trans>
-            </p>
-            <p className="muted">{banner.description}</p>
-            <a className="button" data-testid="locale-suggestion-cta" href={banner.recommendedUrl}>
-              <Trans>Switch to the recommended locale</Trans>
-            </a>
-          </section>
-        ) : null}
-        <LocaleSwitcher locale={currentLocale} />
-        <p className="muted" style={{ marginTop: "1rem" }}>
-          <Trans>Current locale:</Trans>{" "}
-          <strong data-testid="server-locale-value">{localeLabel}</strong>
-        </p>
       </section>
 
-      <section className="grid cols-2">
-        <section className="panel">
-          <p className="kicker">
-            <Trans>Server-rendered proof</Trans>
-          </p>
-          <h2>
-            <Trans>SSR translation happens before the page reaches the browser.</Trans>
-          </h2>
-          <p className="muted">
-            {t`This panel was rendered on the server for locale ${localeLabel}.`}
-          </p>
-        </section>
+      <div className="grid">
+        <TicketPanel locale={currentLocale} />
+        <ProofPanel locale={currentLocale} runProbe={runProbe} />
+      </div>
 
-        <Counter locale={currentLocale} />
-        <ServerActionProbe locale={currentLocale} runProbe={runProbe} />
-      </section>
+      <footer className="foot">
+        <span className="foot-badge">Palamedes</span>
+        <Trans>Rendered with Waku</Trans>
+        {" · "}
+        <Trans>server locale</Trans>{" "}
+        <strong data-testid="server-locale-value">{localeLabel}</strong>
+      </footer>
+
+      <ClientReady />
     </>
   )
 }

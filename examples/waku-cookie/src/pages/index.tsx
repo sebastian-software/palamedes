@@ -1,13 +1,15 @@
 import { t } from "@palamedes/core/macro"
 import { Trans } from "@palamedes/react/macro"
+import { EVENT } from "@palamedes/example-ui"
 import { resolveCookieLocale } from "@palamedes/example-locale-shared"
 import { unstable_getHeaders } from "waku/router/server"
-import { Counter } from "../components/Counter"
+import { ClientReady } from "../components/ClientReady"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
-import { ServerActionProbe } from "../components/ServerActionProbe"
+import { ProofPanel } from "../components/ProofPanel"
+import { TicketPanel } from "../components/TicketPanel"
 import { activateServerI18n, getLocaleLabel, type Locale } from "../lib/i18n"
 
-type ProbeResult = null | {
+type ProbeResult = {
   handledAt: string
   locale: Locale
   localeLabel: string
@@ -16,7 +18,7 @@ type ProbeResult = null | {
 
 export default async function CookiePage() {
   const headers = unstable_getHeaders()
-  const { locale, source } = resolveCookieLocale({
+  const { locale } = resolveCookieLocale({
     acceptLanguageHeader: headers["accept-language"],
     cookieHeader: headers.cookie,
   })
@@ -39,51 +41,46 @@ export default async function CookiePage() {
 
   return (
     <>
-      <title>Waku Cookie Locale Example</title>
+      <title>Frontend Stage · Palamedes + Waku</title>
+
+      <header className="topbar">
+        <div className="brand">
+          <b>Frontend Stage</b>
+          <span className="brand-meta">Berlin · 2026</span>
+        </div>
+        <LocaleSwitcher locale={locale} />
+      </header>
 
       <section className="hero">
-        <p className="kicker">Waku</p>
-        <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
-        <p>
+        <p className="eyebrow">
+          <span className="dot" aria-hidden="true" />
+          <Trans>Localized live with Palamedes</Trans>
+        </p>
+        <h1>
+          <Trans>Book your seat at Frontend Stage 2026</Trans>
+        </h1>
+        <p className="greet">{t`Welcome back, ${EVENT.attendeeName}.`}</p>
+        <p className="lede">
           <Trans>
-            This cookie-based Waku example derives the first locale from Accept-Language, persists
-            it with a cookie write endpoint, and keeps server components plus server actions
-            localized.
+            Three days of talks on the craft of building for the web. Choose your tickets below.
           </Trans>
         </p>
-        <LocaleSwitcher locale={locale} />
       </section>
 
-      <section className="grid cols-2">
-        <section className="panel">
-          <p className="kicker">
-            <Trans>Server-rendered proof</Trans>
-          </p>
-          <h2>
-            <Trans>SSR translation happens before the page reaches the browser.</Trans>
-          </h2>
-          <p className="muted">
-            {t`This panel was rendered on the server for locale ${localeLabel}.`}
-          </p>
-          <div className="stats">
-            <div>
-              <span className="eyebrow">
-                <Trans>Locale source</Trans>
-              </span>
-              <strong>{source}</strong>
-            </div>
-            <div>
-              <span className="eyebrow">
-                <Trans>Current locale</Trans>
-              </span>
-              <strong data-testid="server-locale-value">{localeLabel}</strong>
-            </div>
-          </div>
-        </section>
+      <div className="grid">
+        <TicketPanel locale={locale} />
+        <ProofPanel locale={locale} runProbe={runProbe} />
+      </div>
 
-        <Counter locale={locale} />
-        <ServerActionProbe locale={locale} runProbe={runProbe} />
-      </section>
+      <footer className="foot">
+        <span className="foot-badge">Palamedes</span>
+        <Trans>Rendered with Waku</Trans>
+        {" · "}
+        <Trans>server locale</Trans>{" "}
+        <strong data-testid="server-locale-value">{localeLabel}</strong>
+      </footer>
+
+      <ClientReady />
     </>
   )
 }

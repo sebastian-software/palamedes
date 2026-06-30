@@ -1,47 +1,35 @@
-import { defineMessage, t } from "@palamedes/core/macro"
+import { defineMessage } from "@palamedes/core/macro"
 import type { MessageDescriptor, PalamedesI18n } from "@palamedes/core"
+import { EVENT } from "@palamedes/example-ui"
 import { ClientLocaleBoundary } from "@/components/ClientLocaleBoundary"
-import { LanguageSwitcher } from "@/components/LanguageSwitcher"
-import { Counter } from "@/components/Counter"
-import { ServerActionProbe } from "@/components/ServerActionProbe"
+import { ClientReady } from "@/components/ClientReady"
+import { LocaleSwitcher } from "@/components/LocaleSwitcher"
+import { ProofPanel } from "@/components/ProofPanel"
+import { TicketPanel } from "@/components/TicketPanel"
 import { createActiveServerI18n } from "@/lib/i18n.server"
-import { getLocaleLabel, LOCALES } from "@/lib/i18n"
+import { getLocaleLabel } from "@/lib/i18n"
 
-const welcomeMessage = defineMessage({
-  message: "Welcome to Palamedes",
+// Server-rendered strings resolve through the concrete request-local i18n
+// instance (see `translate` below). Direct `<Trans>`/`t` macros are reserved
+// for the client components, where the client i18n scope is active; the RSC
+// server scope is addressed explicitly here.
+const eyebrowMessage = defineMessage({
+  message: "Localized live with Palamedes",
 }) as unknown as MessageDescriptor
-const descriptionMessage = defineMessage({
-  message:
-    "This cookie-based Next.js example derives the first locale from Accept-Language, persists it in a cookie, and keeps server components plus server actions localized from the request state.",
+const headlineMessage = defineMessage({
+  message: "Book your seat at Frontend Stage 2026",
 }) as unknown as MessageDescriptor
-const languageMessage = defineMessage({ message: "Language" }) as unknown as MessageDescriptor
-const serverComponentProofMessage = defineMessage({
-  message: "Server Component Proof",
+const greetMessage = defineMessage({
+  message: "Welcome back, {attendeeName}.",
 }) as unknown as MessageDescriptor
-const serverSectionMessage = defineMessage({
-  message: "This section was rendered on the server for locale {localeLabel}.",
+const ledeMessage = defineMessage({
+  message: "Three days of talks on the craft of building for the web. Choose your tickets below.",
+}) as unknown as MessageDescriptor
+const renderedWithMessage = defineMessage({
+  message: "Rendered with Next.js",
 }) as unknown as MessageDescriptor
 const serverLocaleMessage = defineMessage({
-  message: "Server locale",
-}) as unknown as MessageDescriptor
-const localeSourceMessage = defineMessage({
-  message: "Locale source",
-}) as unknown as MessageDescriptor
-const directServerMacroMessage = defineMessage({
-  message: "Direct server macro",
-}) as unknown as MessageDescriptor
-const cookieStrategyMessage = defineMessage({
-  message: "Cookie strategy",
-}) as unknown as MessageDescriptor
-const cookieStrategyDescriptionMessage = defineMessage({
-  message:
-    "Without a locale cookie, the server picks the best supported language from Accept-Language. After switching, the cookie becomes authoritative.",
-}) as unknown as MessageDescriptor
-const renderedOnServerMessage = defineMessage({
-  message: "Rendered on server",
-}) as unknown as MessageDescriptor
-const poweredByMessage = defineMessage({
-  message: "Powered by @palamedes/next-plugin",
+  message: "server locale",
 }) as unknown as MessageDescriptor
 
 function translate(
@@ -53,81 +41,50 @@ function translate(
   return i18n._(id, values, descriptor)
 }
 
-function DirectServerMacroProbe() {
-  return t({ message: "Direct server macro ran inside the request scope." })
-}
-
-// This is a Server Component!
-// Direct macros compile to getI18n()._() and resolve through the request-local server scope.
-// When the user changes language, router.refresh() is called,
-// which causes the server to re-render with the new locale from the cookie.
-
 export default async function Home() {
-  const { i18n, locale, source } = await createActiveServerI18n()
+  const { i18n, locale } = await createActiveServerI18n()
   const localeLabel = getLocaleLabel(locale)
-  const renderedAt = new Date().toISOString()
 
   return (
-    <main style={{ padding: "2rem", maxWidth: "600px", margin: "0 auto" }}>
-      <h1>{translate(i18n, welcomeMessage)}</h1>
+    <main className="page-shell">
+      <header className="topbar">
+        <div className="brand">
+          <b>Frontend Stage</b>
+          <span className="brand-meta">Berlin · 2026</span>
+        </div>
+        <ClientLocaleBoundary locale={locale}>
+          <LocaleSwitcher locale={locale} />
+        </ClientLocaleBoundary>
+      </header>
 
-      <p style={{ color: "#666" }}>{translate(i18n, descriptionMessage)}</p>
-
-      <section style={{ marginTop: "2rem" }}>
-        <h2>{translate(i18n, languageMessage)}</h2>
-        <LanguageSwitcher locale={locale} locales={LOCALES} />
-        <p style={{ color: "#666" }}>{translate(i18n, cookieStrategyDescriptionMessage)}</p>
-      </section>
-
-      <section style={{ marginTop: "2rem" }}>
-        <h2>{translate(i18n, serverComponentProofMessage)}</h2>
-        <p style={{ color: "#666" }}>{translate(i18n, serverSectionMessage, { localeLabel })}</p>
-        <dl
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 12rem) minmax(0, 1fr)",
-            gap: "0.5rem 1rem",
-          }}
-        >
-          <dt>{translate(i18n, serverLocaleMessage)}</dt>
-          <dd data-testid="server-locale-value" style={{ margin: 0 }}>
-            {localeLabel}
-          </dd>
-          <dt>{translate(i18n, localeSourceMessage)}</dt>
-          <dd style={{ margin: 0 }}>{source}</dd>
-          <dt>{translate(i18n, directServerMacroMessage)}</dt>
-          <dd data-testid="direct-server-macro-value" style={{ margin: 0 }}>
-            <DirectServerMacroProbe />
-          </dd>
-          <dt>{translate(i18n, renderedOnServerMessage)}</dt>
-          <dd style={{ margin: 0 }}>
-            <code>{renderedAt}</code>
-          </dd>
-        </dl>
-      </section>
-
-      <section style={{ marginTop: "2rem" }}>
-        <h2>{translate(i18n, cookieStrategyMessage)}</h2>
-        <p style={{ color: "#666" }}>{translate(i18n, cookieStrategyDescriptionMessage)}</p>
+      <section className="hero">
+        <p className="eyebrow">
+          <span className="dot" aria-hidden="true" />
+          {translate(i18n, eyebrowMessage)}
+        </p>
+        <h1>{translate(i18n, headlineMessage)}</h1>
+        <p className="greet">
+          {translate(i18n, greetMessage, { attendeeName: EVENT.attendeeName })}
+        </p>
+        <p className="lede">{translate(i18n, ledeMessage)}</p>
       </section>
 
       <ClientLocaleBoundary locale={locale}>
-        <Counter />
-        <ServerActionProbe locale={locale} />
+        <div className="grid">
+          <TicketPanel locale={locale} />
+          <ProofPanel locale={locale} />
+        </div>
       </ClientLocaleBoundary>
 
-      {/* Footer rendered on server with direct macros / Trans */}
-      <footer
-        style={{
-          marginTop: "3rem",
-          paddingTop: "1rem",
-          borderTop: "1px solid #eee",
-          color: "#999",
-          fontSize: "0.875rem",
-        }}
-      >
-        {translate(i18n, poweredByMessage)}
+      <footer className="foot">
+        <span className="foot-badge">Palamedes</span>
+        {translate(i18n, renderedWithMessage)}
+        {" · "}
+        {translate(i18n, serverLocaleMessage)}{" "}
+        <strong data-testid="server-locale-value">{localeLabel}</strong>
       </footer>
+
+      <ClientReady />
     </main>
   )
 }

@@ -1,17 +1,18 @@
 import { t } from "@palamedes/core/macro"
 import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
+import { EVENT } from "@palamedes/example-ui"
 import type { LocaleBanner } from "@palamedes/example-locale-shared"
-import { Counter } from "./Counter"
+import { ClientReady } from "./ClientReady"
 import { LocaleSwitcher } from "./LocaleSwitcher"
-import { ServerFunctionProbe } from "./ServerFunctionProbe"
+import { ProofPanel } from "./ProofPanel"
+import { TicketPanel } from "./TicketPanel"
 import { syncClientI18n, type Locale } from "../lib/i18n"
 
 export function RouteLocalePage({
   banner,
   locale,
   localeLabel,
-  renderedAt,
 }: {
   banner: LocaleBanner | null
   locale: Locale
@@ -22,65 +23,57 @@ export function RouteLocalePage({
 
   return (
     <main className="page-shell">
+      {banner ? (
+        <div className="notice" role="status">
+          <span className="notice-text">{banner.description}</span>
+          <a
+            className="notice-cta"
+            data-testid="locale-suggestion-cta"
+            href={banner.recommendedUrl}
+          >
+            <Trans>Switch to the recommended locale</Trans>
+          </a>
+        </div>
+      ) : null}
+
+      <header className="topbar">
+        <div className="brand">
+          <b>Frontend Stage</b>
+          <span className="brand-meta">Berlin · 2026</span>
+        </div>
+        <LocaleSwitcher locale={locale} />
+      </header>
+
       <section className="hero">
-        <p className="kicker">TanStack Start</p>
-        <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
-        <p>
+        <p className="eyebrow">
+          <span className="dot" aria-hidden="true" />
+          <Trans>Localized live with Palamedes</Trans>
+        </p>
+        <h1>
+          <Trans>Book your seat at Frontend Stage 2026</Trans>
+        </h1>
+        <p className="greet">{t`Welcome back, ${EVENT.attendeeName}.`}</p>
+        <p className="lede">
           <Trans>
-            This example proves a route-based locale flow in TanStack Start with SSR, locale
-            segments, host-mapping suggestions, .po imports, and localized server functions.
+            Three days of talks on the craft of building for the web. Choose your tickets below.
           </Trans>
         </p>
-        {banner ? (
-          <div className="panel" style={{ borderColor: "#d97706", background: "#fff7ed" }}>
-            <p className="kicker">
-              <Trans>Locale suggestion</Trans>
-            </p>
-            <p className="muted">{banner.description}</p>
-            <a className="button" data-testid="locale-suggestion-cta" href={banner.recommendedUrl}>
-              <Trans>Switch to the recommended locale</Trans>
-            </a>
-          </div>
-        ) : null}
-        <div className="button-row">
-          <LocaleSwitcher locale={locale} />
-        </div>
-        <p className="footer-note">
-          <Trans>Current locale:</Trans>{" "}
-          <strong data-testid="server-locale-value">{localeLabel}</strong>
-        </p>
       </section>
 
-      <section className="grid cols-2">
-        <section className="panel">
-          <p className="kicker">
-            <Trans>Server-rendered proof</Trans>
-          </p>
-          <h2>
-            <Trans>SSR translation happens before the page reaches the browser.</Trans>
-          </h2>
-          <p className="muted">
-            {t`This panel was rendered on the server for locale ${localeLabel}.`}
-          </p>
-          <div className="stats">
-            <div>
-              <span className="eyebrow">
-                <Trans>Rendered on server</Trans>
-              </span>
-              <code>{renderedAt}</code>
-            </div>
-            <div>
-              <span className="eyebrow">.po</span>
-              <strong>
-                <Trans>Loaded through the Palamedes Vite plugin</Trans>
-              </strong>
-            </div>
-          </div>
-        </section>
+      <div className="grid">
+        <TicketPanel locale={locale} />
+        <ProofPanel locale={locale} />
+      </div>
 
-        <Counter locale={locale} />
-        <ServerFunctionProbe locale={locale} />
-      </section>
+      <footer className="foot">
+        <span className="foot-badge">Palamedes</span>
+        <Trans>Rendered with TanStack Start</Trans>
+        {" · "}
+        <Trans>server locale</Trans>{" "}
+        <strong data-testid="server-locale-value">{localeLabel}</strong>
+      </footer>
+
+      <ClientReady />
     </main>
   )
 }

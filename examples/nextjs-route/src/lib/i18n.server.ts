@@ -1,7 +1,7 @@
 import "server-only"
 
 import { headers } from "next/headers"
-import { setServerI18nGetter } from "@palamedes/runtime"
+import { createServerI18nScope } from "@palamedes/runtime/server"
 import type { PalamedesI18n } from "@palamedes/core"
 import {
   createRouteLocaleBanner,
@@ -10,6 +10,8 @@ import {
   type LocaleSource,
 } from "@palamedes/example-locale-shared"
 import { createExampleI18n, DEFAULT_LOCALE, type Locale, ROUTE_HOSTS, loadMessages } from "./i18n"
+
+export const serverI18nScope = createServerI18nScope<PalamedesI18n>()
 
 export async function getRouteLocale(paramsLocale?: string): Promise<{
   banner: LocaleBanner | null
@@ -46,7 +48,7 @@ export async function createActiveServerI18n(locale: Locale): Promise<{
 
   i18n.load(locale, messages)
   i18n.activate(locale)
-  setServerI18nGetter(() => i18n)
+  serverI18nScope.activate(i18n)
 
   return {
     i18n,

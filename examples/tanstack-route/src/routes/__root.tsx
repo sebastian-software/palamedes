@@ -1,12 +1,12 @@
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
-import appCss from "../styles.css?url"
+import appCss from "@palamedes/example-ui/styles.css?url"
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "TanStack Start + Palamedes" },
+      { title: "Frontend Stage · Palamedes + TanStack Start" },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
   }),

@@ -9,12 +9,12 @@ declare global {
   }
 }
 
-async function bootstrap() {
+function bootstrap() {
   const candidate = window.__PALAMEDES_LOCALE__
   const locale: Locale = LOCALES.includes(candidate as Locale)
     ? (candidate as Locale)
     : DEFAULT_LOCALE
-  await syncClientI18n(locale)
+  syncClientI18n(locale)
 
   startTransition(() => {
     hydrateRoot(
@@ -26,4 +26,4 @@ async function bootstrap() {
   })
 }
 
-void bootstrap()
+bootstrap()

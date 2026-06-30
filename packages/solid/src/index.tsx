@@ -12,7 +12,10 @@ import { getI18n } from "@palamedes/runtime"
 type WrapperComponent = (children: JSX.Element) => JSX.Element
 
 export type TransProps = {
-  id: string
+  // `id` is optional in authored source: components are written with `message`
+  // (or choice props) and the Palamedes compiler transform injects the resolved
+  // `id` at build time. Hand-written runtime usage may still pass `id` directly.
+  id?: string
   values?: Record<string, unknown>
   components?: Record<string, WrapperComponent | JSX.Element>
 } & MessageDescriptor
@@ -60,8 +63,9 @@ export function Trans({
   comment,
 }: TransProps): JSX.Element {
   const i18n = getI18n<PalamedesI18n>()
-  const pattern = i18n.getMessage(id, {
-    id,
+  const resolvedId = id ?? message ?? ""
+  const pattern = i18n.getMessage(resolvedId, {
+    id: resolvedId,
     message,
     context,
     comment,
