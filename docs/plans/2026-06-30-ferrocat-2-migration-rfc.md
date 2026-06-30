@@ -139,9 +139,9 @@ the configured storage format:
 | Line numbers | Render option could include line numbers | line-number serialization removed | Keep extraction line data for diagnostics only; stop writing catalog line numbers. |
 | Machine metadata | `MachineTranslationMetadata { model, modified, confidence, hash }` | `MachineMetadata { lock, ai? }` | Expose `machine`; expose AI confidence as `0..1`, not percent. |
 | Obsolete state | boolean-ish public usage | `CatalogMessage.obsolete` is optional metadata | Treat parsed obsolete as `message.obsolete.is_some()`. |
-| Fuzzy audit | high-level `fuzzy_flags` check | removed from high-level audit checks | Remove high-level audit support; keep raw PO fuzzy reporting where PO flags are parsed directly. |
+| Fuzzy audit/reporting | high-level `fuzzy_flags` check and PO flag reporting | fuzzy is intentionally not part of the Ferrocat 2.0 model | Remove fuzzy audit and report semantics entirely; do not preserve raw PO fuzzy behavior. |
 | Vector types | plain `Vec` in several call sites | `SmallVec` / `PoVec` internally | Convert explicitly at the Palamedes boundary. |
-| Obsolete metadata | immediate mark/delete | supports obsolete metadata such as `obsolete-since` | Add explicit age-based cleanup option later in this migration; preserve `--clean` as immediate delete. |
+| Obsolete metadata | immediate mark/delete | supports obsolete metadata such as `obsolete-since` | Make `--clean` delete entries obsolete for at least 30 days; add `--force-clean` for immediate delete. |
 
 ## Public API Shape
 
@@ -201,6 +201,11 @@ sorting, and developer feedback.
 
 `CatalogOrigin` is parsed-catalog-facing and reflects what is stored in the
 catalog after Ferrocat 2.0: `file#scope`, not synthetic source line numbers.
+`scope` should represent the named source container around a translation, such
+as a component name, function name, or similar named authoring unit. It is not a
+replacement for gettext context and should not be derived from `msgctxt` by
+default. Ferrocat docs should clarify this contract separately; that follow-up
+is tracked in [ferrocat#176](https://github.com/sebastian-software/ferrocat/issues/176).
 
 When projecting extracted messages into Ferrocat update input:
 
@@ -236,25 +241,17 @@ Rules:
 
 ### Obsolete Metadata
 
-Preserve current behavior:
+Adopt age-based cleanup in this migration.
 
-- default extraction marks obsolete entries
-- `--clean` deletes obsolete entries immediately
+Rules:
 
-Add a deliberate cleanup path for Ferrocat 2.0 obsolete metadata:
+- default extraction marks obsolete entries and records `obsolete-since`
+- `--clean` deletes entries that have been obsolete for at least 30 days
+- `--force-clean` deletes obsolete entries immediately
+- the 30-day window is fixed for now, not configurable
 
-- support `obsolete-since`
-- add an explicit update / CLI option for age-based cleanup
-- do not overload `--clean`; it remains immediate delete
-
-Proposed CLI name:
-
-```bash
-pmds extract --clean-obsolete-older-than 90d
-```
-
-The exact duration syntax can be decided during implementation, but the option
-must be explicit and test-covered.
+This gives normal cleanup a safer default while still keeping an explicit
+escape hatch for repositories that want immediate deletion.
 
 ## Implementation Plan
 
@@ -289,15 +286,11 @@ must be explicit and test-covered.
   - audit loading
   - report paths where supported
 
-Report handling needs special care because current report logic reads raw PO
-flags for fuzzy counts. The migration should either:
-
-- keep fuzzy counts as a PO-only report feature and document that FCL reports do
-  not expose fuzzy counts, or
-- add a format-aware report reader that can derive translated / missing counts
-  through Ferrocat normalized parsed catalogs while keeping PO-only fuzzy counts.
-
-The second option is preferred because it keeps `pmds report` useful for FCL.
+Report handling needs a format-aware reader that derives translated and missing
+counts through Ferrocat normalized parsed catalogs. Fuzzy should not be carried
+forward as a PO-only report concept. Ferrocat 2.0 deliberately does not model
+fuzzy entries because they encourage half-correct translations to survive in
+catalogs.
 
 ### 3. CLI Migration
 
@@ -305,6 +298,8 @@ Update `pmds` behavior:
 
 - config accepts `catalogs[].format: po | fcl`
 - `pmds extract` writes `.po` by default and `.fcl` when configured
+- `pmds extract --clean` removes entries obsolete for at least 30 days
+- `pmds extract --force-clean` removes obsolete entries immediately
 - `pmds audit` reads configured PO and FCL catalogs
 - `pmds report` resolves configured PO and FCL paths
 - `pmds catalog merge --format=fcl` is supported
@@ -351,7 +346,7 @@ TypeScript and N-API surfaces must also change:
 - expose `MachineMetadata { lock, ai? }`
 - expose AI confidence as `number` in `0..1`
 - remove `fuzzyFlags` from high-level audit check options
-- keep raw PO fuzzy reporting where Palamedes still parses PO flags directly
+- remove raw PO fuzzy reporting from public Palamedes report semantics
 
 ### 5. Documentation
 
@@ -366,12 +361,13 @@ Update:
 Documentation should say:
 
 - PO remains default
-- FCL is opt-in
+- FCL is opt-in and worth using when teams want a canonical, generated,
+  merge-friendly catalog format with cleaner machine-owned metadata
 - NDJSON has been removed from Palamedes public APIs
 - merge-driver examples use `.po` and `.fcl`
-- `--clean` deletes immediately
-- age-based obsolete cleanup is an explicit option if implemented in this
-  migration
+- `--clean` deletes entries obsolete for at least 30 days
+- `--force-clean` deletes obsolete entries immediately
+- fuzzy is not part of the Palamedes/Ferrocat 2.0 catalog model
 
 ### 6. Tests
 
@@ -394,10 +390,11 @@ Add focused tests before relying on broad gates:
 - AI provenance round trip
 - AI confidence remains `0..1`
 - stale machine metadata is dropped
-- `--clean` still immediately deletes obsolete entries
+- `--clean` deletes entries obsolete for at least 30 days
+- `--force-clean` immediately deletes obsolete entries
 - `obsolete-since` metadata round trip
-- age-based obsolete cleanup, if included in this migration
-- raw PO fuzzy report behavior remains covered
+- fixed 30-day obsolete cleanup
+- raw PO fuzzy flags are not exposed through report behavior
 - high-level audit no longer exposes `fuzzyFlags`
 
 ## Validation Plan
@@ -436,8 +433,7 @@ Type generation:
 4. Update N-API and TypeScript wrappers.
 5. Replace docs, examples, fixtures, and generated snapshots that still reflect
    Ferrocat 1.x / NDJSON output.
-6. Add obsolete metadata cleanup support if the first five steps remain small
-   enough to review safely; otherwise split it into a follow-up PR.
+6. Add fixed 30-day obsolete cleanup and immediate `--force-clean`.
 7. Run the full validation matrix before publishing.
 
 ## Risks and Mitigations
@@ -449,20 +445,20 @@ Type generation:
 | Legacy compatibility code bloats the migration | Treat Ferrocat 2.0 as the compatibility floor and update old fixtures instead of reading them. |
 | Parsed origins lose useful diagnostic data | Keep extraction line/column data in extraction diagnostics and update requests; only parsed catalog origins drop line numbers. |
 | Machine metadata semantics are misunderstood | Rename the public field to `machine` and document `lock` / `ai` separately from translation content. |
-| Fuzzy audit removal looks like a regression | Preserve raw PO fuzzy reporting in `pmds report`; remove only the high-level Ferrocat audit toggle. |
-| Obsolete cleanup policy becomes implicit | Keep `--clean` unchanged and make age-based cleanup an explicit option. |
+| Fuzzy removal looks like a regression | Document that fuzzy is intentionally not modeled because it preserves half-correct translations. |
+| Obsolete cleanup policy becomes implicit | Make `--clean` fixed 30-day cleanup and reserve `--force-clean` for immediate delete. |
 | TypeScript generated and wrapper types drift | Regenerate native types and keep wrapper conversion tests for `po` / `fcl`. |
 
-## Open Questions
+## Resolved Follow-Up Decisions
 
-- Should `scope` be derived from message context by default, or should it stay
-  empty until Palamedes has a product-level scope concept?
-- Should `pmds report` expose `fuzzy: 0` for FCL, omit fuzzy data, or mark it as
-  not applicable in JSON output?
-- What duration syntax should age-based obsolete cleanup use: `90d`, ISO-8601
-  durations, or a numeric day count?
-- Should FCL examples live beside PO examples in first-run docs, or only in
-  advanced CLI/config docs until adoption is proven?
+- `scope` means the named source container around a translation, such as a
+  component or function. It is not derived from `msgctxt` by default.
+- Fuzzy is removed from Palamedes audit and report semantics.
+- `--clean` is fixed 30-day obsolete cleanup.
+- `--force-clean` is immediate obsolete cleanup.
+- FCL should be marketed positively in docs, including its canonical,
+  merge-friendly generated format and machine-metadata advantages, while PO
+  remains the first-run default.
 
 ## Acceptance Criteria
 
@@ -478,6 +474,8 @@ Type generation:
 - Machine metadata exposes `MachineMetadata { lock, ai? }`.
 - AI confidence is represented as `0..1`.
 - `fuzzyFlags` is removed from high-level audit options.
-- Raw PO fuzzy report behavior remains intact.
-- Obsolete metadata behavior is deliberate and tested.
+- Raw PO fuzzy report behavior is removed.
+- `--clean` performs fixed 30-day obsolete cleanup.
+- `--force-clean` performs immediate obsolete cleanup.
+- Obsolete metadata behavior is deliberate and tested in the first migration.
 - Full Rust and TypeScript validation passes.
