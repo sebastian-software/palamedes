@@ -9,6 +9,13 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: "Publish the current release version even without a release commit"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -28,17 +35,24 @@ jobs:
       - name: Detect release commit
         id: release
         shell: bash
+        env:
+          FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_publish && 'true' || 'false' }}
         run: |
           set -euo pipefail
 
-          base_ref="${{ github.event.before }}"
-          if [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
-            base_ref="$(git rev-parse HEAD^)"
-          fi
-
           has_release_commit=false
-          if git log --format=%s "$base_ref..${{ github.sha }}" | grep -Eq '^chore: release '; then
+
+          if [ "$FORCE_PUBLISH" = "true" ]; then
             has_release_commit=true
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            base_ref="${{ github.event.before }}"
+            if [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+              base_ref="$(git rev-parse HEAD^)"
+            fi
+
+            if git log --format=%s "$base_ref..${{ github.sha }}" | grep -Eq '^chore: release '; then
+              has_release_commit=true
+            fi
           fi
 
           if [ "$has_release_commit" = true ]; then
@@ -201,7 +215,7 @@ jobs:
           if (!out.includes('pmds (Palamedes)')) process.exit(1)"
 
       - name: Publish native package
-        run: pnpm --filter "${{ matrix.package_name }}" publish --access public --no-git-checks
+        run: node ./scripts/publish-package-if-needed.mjs "${{ matrix.package_name }}"
 
   publish-js:
     needs:
@@ -250,19 +264,17 @@ jobs:
           build
 
       - name: Publish JavaScript packages
-        run: >
-          pnpm -r
-          --filter @palamedes/core
-          --filter @palamedes/config
-          --filter @palamedes/runtime
-          --filter @palamedes/core-node
-          --filter @palamedes/transform
-          --filter @palamedes/extractor
-          --filter @palamedes/react
-          --filter @palamedes/solid
-          --filter @palamedes/cli
-          --filter @palamedes/vite-plugin
-          --filter @palamedes/next-plugin
-          --filter palamedes
-          --filter create-palamedes
-          publish --no-git-checks
+        run: |
+          node ./scripts/publish-package-if-needed.mjs @palamedes/core
+          node ./scripts/publish-package-if-needed.mjs @palamedes/config
+          node ./scripts/publish-package-if-needed.mjs @palamedes/runtime
+          node ./scripts/publish-package-if-needed.mjs @palamedes/core-node
+          node ./scripts/publish-package-if-needed.mjs @palamedes/transform
+          node ./scripts/publish-package-if-needed.mjs @palamedes/extractor
+          node ./scripts/publish-package-if-needed.mjs @palamedes/react
+          node ./scripts/publish-package-if-needed.mjs @palamedes/solid
+          node ./scripts/publish-package-if-needed.mjs @palamedes/cli
+          node ./scripts/publish-package-if-needed.mjs @palamedes/vite-plugin
+          node ./scripts/publish-package-if-needed.mjs @palamedes/next-plugin
+          node ./scripts/publish-package-if-needed.mjs palamedes
+          node ./scripts/publish-package-if-needed.mjs create-palamedes
