@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import "@palamedes/example-ui/styles.css"
 import { initI18nServer } from "@/lib/i18n.server"
 
 export const metadata: Metadata = {
@@ -12,7 +13,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang={locale}>
-      <body style={{ fontFamily: "system-ui", margin: 0 }}>{children}</body>
+      <body>{children}</body>
     </html>
   )
 }

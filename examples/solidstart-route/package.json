@@ -12,6 +12,7 @@
   "dependencies": {
     "@palamedes/core": "workspace:^",
     "@palamedes/example-locale-shared": "workspace:^",
+    "@palamedes/example-ui": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/solid": "workspace:^",
     "@solidjs/router": "^0.16.1",

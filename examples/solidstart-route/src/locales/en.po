@@ -1,73 +1,94 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: palamedes-solidstart-route\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: palamedes\n"
 
-msgid "Palamedes in SolidStart with one runtime model."
-msgstr "Palamedes in SolidStart with one runtime model."
+msgid "Add to cart"
+msgstr "Add to cart"
 
-msgid "This example proves a route-based locale flow in SolidStart with SSR, locale segments, host-mapping suggestions, .po imports, and localized server queries."
-msgstr "This example proves a route-based locale flow in SolidStart with SSR, locale segments, host-mapping suggestions, .po imports, and localized server queries."
+msgid "Attendees"
+msgstr "Attendees"
 
-msgid "Locale suggestion"
-msgstr "Locale suggestion"
+msgid "Availability"
+msgstr "Availability"
+
+msgid "Behind the scenes"
+msgstr "Behind the scenes"
+
+msgid "Berlin, Germany"
+msgstr "Berlin, Germany"
+
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Book your seat at Frontend Stage 2026"
+
+msgid "Conference pass"
+msgstr "Conference pass"
+
+msgid "Currency"
+msgstr "Currency"
+
+msgid "Date"
+msgstr "Date"
+
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
+
+msgid "Locale"
+msgstr "Locale"
+
+msgid "Localized live with Palamedes"
+msgstr "Localized live with Palamedes"
+
+msgid "More tickets"
+msgstr "More tickets"
+
+msgid "Number"
+msgstr "Number"
+
+msgid "Plural"
+msgstr "Plural"
+
+msgid "Refresh server result"
+msgstr "Refresh server result"
+
+msgid "Rendered with SolidStart"
+msgstr "Rendered with SolidStart"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "Server query confirmed locale {locale}."
+msgstr "Server query confirmed locale {locale}."
 
 msgid "Switch to the recommended locale"
 msgstr "Switch to the recommended locale"
 
-msgid "Current locale:"
-msgstr "Current locale:"
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Three days of talks on the craft of building for the web. Choose your tickets below."
 
-msgid "Server-rendered proof"
-msgstr "Server-rendered proof"
+msgid "Total"
+msgstr "Total"
 
-msgid "SSR translation happens before the page reaches the browser."
-msgstr "SSR translation happens before the page reaches the browser."
+msgid "Venue"
+msgstr "Venue"
 
-msgid "This panel was rendered on the server for locale {localeLabel}."
-msgstr "This panel was rendered on the server for locale {localeLabel}."
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."
 
-msgid "Rendered on server"
-msgstr "Rendered on server"
+msgid "each"
+msgstr "each"
 
-msgid "Client interaction"
-msgstr "Client interaction"
+msgid "one switch, every format"
+msgstr "one switch, every format"
 
-msgid "Counter example"
-msgstr "Counter example"
+msgid "server locale"
+msgstr "server locale"
 
-msgid "You clicked # time"
-msgstr "You clicked # time"
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
 
-msgid "You clicked # times"
-msgstr "You clicked # times"
-
-msgid "Click me"
-msgstr "Click me"
-
-msgid "Server query proof"
-msgstr "Server query proof"
-
-msgid "Localized server query result"
-msgstr "Localized server query result"
-
-msgid "Run the request to fetch a server-localized result."
-msgstr "Run the request to fetch a server-localized result."
-
-msgid "Ask server for localized status"
-msgstr "Ask server for localized status"
-
-msgid "Server locale"
-msgstr "Server locale"
-
-msgid "Handled at"
-msgstr "Handled at"
-
-msgid "Localized message"
-msgstr "Localized message"
-
-msgid "Server query confirmed locale {locale}."
-msgstr "Server query confirmed locale {locale}."
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# seat left} other {# seats left}}"

@@ -3,98 +3,89 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Language: es\n"
-"Language-Team: \n"
-"Last-Translator: \n"
 "MIME-Version: 1.0\n"
-"PO-Revision-Date: 2025-12-13 14:04+0100\n"
-"POT-Creation-Date: 2025-12-13 14:04+0100\n"
-"Project-Id-Version: \n"
-"Report-Msgid-Bugs-To: \n"
 "X-Generator: palamedes\n"
 
-#: src/components/Counter.tsx:40
-msgid "Click me"
-msgstr "Haz clic"
+msgid "Add to cart"
+msgstr "Añadir al carrito"
 
-#: src/components/ServerActionProbe.tsx:45
-msgid "Ask server for localized status"
-msgstr "Pedir al servidor un estado localizado"
+msgid "Attendees"
+msgstr "Asistentes"
 
-#: src/components/Counter.tsx:20
-msgid "Counter Example"
-msgstr "Ejemplo del contador"
+msgid "Availability"
+msgstr "Disponibilidad"
 
-#: src/components/ServerActionProbe.tsx:31
-msgid ""
-"This button calls a dedicated server action that reads the active locale"
-" from the request cookie and returns localized text from the server."
-msgstr ""
-"Este boton llama a una accion dedicada del servidor que lee el idioma"
-" activo desde la cookie de la solicitud y devuelve texto localizado desde el"
-" servidor."
+msgid "Behind the scenes"
+msgstr "Entre bastidores"
 
-#: src/components/ServerActionProbe.tsx:75
-msgid "Run the action to fetch a server-localized result."
-msgstr "Ejecuta la accion para obtener un resultado localizado del servidor."
+msgid "Berlin, Germany"
+msgstr "Berlín, Alemania"
 
-#: src/app/page.tsx:25
-msgid "Language"
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Reserva tu plaza en Frontend Stage 2026"
+
+msgid "Conference pass"
+msgstr "Pase de conferencia"
+
+msgid "Currency"
+msgstr "Moneda"
+
+msgid "Date"
+msgstr "Fecha"
+
+msgid "Fewer tickets"
+msgstr "Menos entradas"
+
+msgid "Locale"
 msgstr "Idioma"
 
-#: src/components/ServerActionProbe.tsx:32
-msgid "Server Action Proof"
-msgstr "Prueba de la accion del servidor"
+msgid "Localized live with Palamedes"
+msgstr "Localizado en vivo con Palamedes"
 
-#: src/app/page.tsx:31
-msgid "Server Component Proof"
-msgstr "Prueba del componente del servidor"
+msgid "More tickets"
+msgstr "Más entradas"
 
-#: src/components/ServerActionProbe.tsx:65
-#: src/app/page.tsx:42
-msgid "Server locale"
-msgstr "Idioma del servidor"
+msgid "Number"
+msgstr "Número"
 
-#: src/components/ServerActionProbe.tsx:69
-#: src/app/page.tsx:44
-msgid "Handled at"
-msgstr "Atendido en"
+msgid "Plural"
+msgstr "Plural"
 
-#: src/components/ServerActionProbe.tsx:73
-msgid "Localized message"
-msgstr "Mensaje localizado"
+msgid "Refresh server result"
+msgstr "Actualizar resultado del servidor"
 
-#: src/app/page.tsx:47
-msgid "Rendered on server"
-msgstr "Renderizado en el servidor"
+msgid "Rendered with Waku"
+msgstr "Renderizado con Waku"
 
-#: src/app/page.tsx:36
-msgid "This section was rendered on the server for locale {localeLabel}."
-msgstr "Esta seccion se renderizo en el servidor para el idioma {localeLabel}."
+msgid "Server"
+msgstr "Servidor"
 
-#: src/app/page.tsx:33
-msgid "Powered by <0>@palamedes/next-plugin</0>"
-msgstr "Impulsado por <0>@palamedes/next-plugin</0>"
-
-#: src/app/page.tsx:33
-msgid "Powered by @palamedes/next-plugin"
-msgstr "Impulsado por @palamedes/next-plugin"
-
-#: src/app/page.tsx:21
-msgid ""
-"This example demonstrates the Palamedes-owned runtime with the OXC-based macro"
-" transformer in a Next.js App Router project. No Babel required!"
-msgstr ""
-"Este ejemplo muestra la runtime propia de Palamedes con el transformador de"
-" macros basado en OXC en un proyecto Next.js App Router. No se necesita Babel."
-
-#: src/app/page.tsx:18
-msgid "Welcome to Palamedes"
-msgstr "Bienvenido a Palamedes"
-
-#: src/lib/actions.ts:29
 msgid "Server action confirmed locale {locale}."
-msgstr "La accion del servidor confirmo el idioma {locale}."
+msgstr "La acción de servidor confirmó el idioma {locale}."
 
-#: src/components/Counter.tsx:23
-msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"
-msgstr "{count, plural, one {Has hecho clic # vez} other {Has hecho clic # veces}}"
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Tres días de charlas sobre el oficio de construir para la web. Elige tus entradas abajo."
+
+msgid "Total"
+msgstr "Total"
+
+msgid "Venue"
+msgstr "Lugar"
+
+msgid "Welcome back, {attendeeName}."
+msgstr "Hola de nuevo, {attendeeName}."
+
+msgid "each"
+msgstr "cada una"
+
+msgid "one switch, every format"
+msgstr "un clic, todos los formatos"
+
+msgid "server locale"
+msgstr "idioma del servidor"
+
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
+
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"

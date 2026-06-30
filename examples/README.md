@@ -74,6 +74,19 @@ Those helpers stay headless on purpose. The examples still own routing, form
 submission, and locale policy, but they no longer need to reimplement the same
 frontend substrate in each app.
 
+Every example also renders the same booking ("Frontend Stage 2026") so the ten
+apps are visually identical regardless of framework. The whole visual layer is
+one shared stylesheet plus one shared content source, proving that only the
+markup and locale strategy differ across frameworks, not the design:
+
+- [packages/example-ui](/Users/sebastian/Workspace/business/palamedes/packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by all ten apps
+
+The booking surfaces every common i18n need in a real context: translated
+copy, plural seat counts, a personalized greeting variable, and locale-aware
+number, currency, date, and time formatting through ICU message arguments
+(`{amount, number, ::currency/EUR}`, `{when, date, full}`). One locale switch
+re-renders all of it at once.
+
 Shared locale and routing proof logic lives in the internal package:
 
 - [packages/example-locale-shared](/Users/sebastian/Workspace/business/palamedes/packages/example-locale-shared)

@@ -3,142 +3,89 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Language: en\n"
-"Language-Team: \n"
-"Last-Translator: \n"
 "MIME-Version: 1.0\n"
-"PO-Revision-Date: 2025-12-13 14:04+0100\n"
-"POT-Creation-Date: 2025-12-13 14:04+0100\n"
-"Project-Id-Version: \n"
-"Report-Msgid-Bugs-To: \n"
 "X-Generator: palamedes\n"
 
-#: src/components/ServerActionProbe.tsx:58
-msgid "Ask server for localized status"
-msgstr "Ask server for localized status"
+msgid "Add to cart"
+msgstr "Add to cart"
 
-#: src/components/Counter.tsx:36
-msgid "Click me"
-msgstr "Click me"
+msgid "Attendees"
+msgstr "Attendees"
 
-#: src/components/Counter.tsx:13
-msgid "Client interaction"
-msgstr "Client interaction"
+msgid "Availability"
+msgstr "Availability"
 
-#: src/app/page.tsx:20
-msgid "Cookie strategy"
-msgstr "Cookie strategy"
+msgid "Behind the scenes"
+msgstr "Behind the scenes"
 
-#: src/components/Counter.tsx:16
-msgid "Counter Example"
-msgstr "Counter Example"
+msgid "Berlin, Germany"
+msgstr "Berlin, Germany"
 
-#: src/app/page.tsx:19
-msgid "Direct server macro"
-msgstr "Direct server macro"
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Book your seat at Frontend Stage 2026"
 
-#: src/app/page.tsx:37
-msgid "Direct server macro ran inside the request scope."
-msgstr "Direct server macro ran inside the request scope."
+msgid "Conference pass"
+msgstr "Conference pass"
 
-#: src/components/ServerActionProbe.tsx:74
-msgid "Handled at"
-msgstr "Handled at"
+msgid "Currency"
+msgstr "Currency"
 
-#: src/app/page.tsx:14
-msgid "Language"
-msgstr "Language"
+msgid "Date"
+msgstr "Date"
 
-#: src/app/page.tsx:18
-msgid "Locale source"
-msgstr "Locale source"
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
 
-#: src/components/ServerActionProbe.tsx:80
-msgid "Localized message"
-msgstr "Localized message"
+msgid "Locale"
+msgstr "Locale"
 
-#: src/components/ServerActionProbe.tsx:36
-msgid "Localized server action result"
-msgstr "Localized server action result"
+msgid "Localized live with Palamedes"
+msgstr "Localized live with Palamedes"
 
-#~ #: src/app/page.tsx:33
-#~ msgid "Powered by <0>@palamedes/next-plugin</0>"
-#~ msgstr "Powered by <0>@palamedes/next-plugin</0>"
+msgid "More tickets"
+msgstr "More tickets"
 
-#: src/app/page.tsx:25
-msgid "Powered by @palamedes/next-plugin"
-msgstr "Powered by @palamedes/next-plugin"
+msgid "Number"
+msgstr "Number"
 
-#: src/app/page.tsx:24
-msgid "Rendered on server"
-msgstr "Rendered on server"
+msgid "Plural"
+msgstr "Plural"
 
-#: src/components/ServerActionProbe.tsx:86
-msgid "Run the action to fetch a server-localized result."
-msgstr "Run the action to fetch a server-localized result."
+msgid "Refresh server result"
+msgstr "Refresh server result"
 
-#~ #: src/components/ServerActionProbe.tsx:32
-#~ msgid "Server Action Proof"
-#~ msgstr "Server Action Proof"
+msgid "Rendered with Next.js"
+msgstr "Rendered with Next.js"
 
-#: src/app/page.tsx:15
-msgid "Server Component Proof"
-msgstr "Server Component Proof"
+msgid "Server"
+msgstr "Server"
 
-#: src/lib/actions.ts:10
 msgid "Server action confirmed locale {locale}."
 msgstr "Server action confirmed locale {locale}."
 
-#: src/components/ServerActionProbe.tsx:33
-msgid "Server action proof"
-msgstr "Server action proof"
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Three days of talks on the craft of building for the web. Choose your tickets below."
 
-#: src/components/ServerActionProbe.tsx:70
-#: src/app/page.tsx:17
-msgid "Server locale"
-msgstr "Server locale"
+msgid "Total"
+msgstr "Total"
 
-#: src/components/ServerActionProbe.tsx:39
-msgid ""
-"This button calls a dedicated server action that reads the active locale from "
-"the request cookie and returns localized text from the server."
-msgstr ""
-"This button calls a dedicated server action that reads the active locale from "
-"the request cookie and returns localized text from the server."
+msgid "Venue"
+msgstr "Venue"
 
-#: src/app/page.tsx:11
-msgid ""
-"This cookie-based Next.js example derives the first locale from "
-"Accept-Language, persists it in a cookie, and keeps server components plus "
-"server actions localized from the request state."
-msgstr ""
-"This cookie-based Next.js example derives the first locale from "
-"Accept-Language, persists it in a cookie, and keeps server components plus "
-"server actions localized from the request state."
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."
 
-#~ #: src/app/page.tsx:21
-#~ msgid ""
-#~ "This example demonstrates the Palamedes-owned runtime with the OXC-based macro"
-#~ " transformer in a Next.js App Router project. No Babel required!"
-#~ msgstr ""
-#~ "This example demonstrates the Palamedes-owned runtime with the OXC-based macro"
-#~ " transformer in a Next.js App Router project. No Babel required!"
+msgid "each"
+msgstr "each"
 
-#: src/app/page.tsx:16
-msgid "This section was rendered on the server for locale {localeLabel}."
-msgstr "This section was rendered on the server for locale {localeLabel}."
+msgid "one switch, every format"
+msgstr "one switch, every format"
 
-#: src/app/page.tsx:10
-msgid "Welcome to Palamedes"
-msgstr "Welcome to Palamedes"
+msgid "server locale"
+msgstr "server locale"
 
-#: src/app/page.tsx:21
-msgid ""
-"Without a locale cookie, the server picks the best supported language from "
-"Accept-Language. After switching, the cookie becomes authoritative."
-msgstr ""
-"Without a locale cookie, the server picks the best supported language from "
-"Accept-Language. After switching, the cookie becomes authoritative."
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
 
-#: src/components/Counter.tsx:19
-msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"
-msgstr "{count, plural, one {You clicked # time} other {You clicked # times}}"
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# seat left} other {# seats left}}"

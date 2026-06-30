@@ -1,5 +1,6 @@
 import { useTransition } from "react"
 import { buildLocaleSwitchItems } from "@palamedes/react"
+import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "../lib/i18n"
 import { LOCALES, LOCALE_LABELS } from "../lib/i18n"
 import { setLocaleCookie } from "../lib/server-functions"
@@ -10,7 +11,7 @@ type LocaleSwitcherProps = {
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
   const [isPending, startTransition] = useTransition()
-  const localeSwitchItems = buildLocaleSwitchItems({
+  const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
@@ -24,19 +25,24 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
   }
 
   return (
-    <div className="button-row">
-      {localeSwitchItems.map((item) => (
-        <button
-          key={item.locale}
-          data-testid={item.testId}
-          className={`chip${item.active ? " active" : ""}`}
-          disabled={isPending}
-          onClick={() => handleLocaleChange(item.locale)}
-          type="button"
-        >
-          {item.label}
-        </button>
-      ))}
+    <div className="switcher">
+      <span className="switcher-label">
+        <Trans>Locale</Trans>
+      </span>
+      <div className="seg" role="group" aria-label="Language">
+        {items.map((item) => (
+          <button
+            key={item.locale}
+            data-testid={item.testId}
+            aria-pressed={item.active}
+            disabled={isPending}
+            onClick={() => handleLocaleChange(item.locale)}
+            type="button"
+          >
+            {item.locale.toUpperCase()}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

@@ -10,7 +10,7 @@ import {
 
 import type { Route } from "./+types/root"
 import { DEFAULT_LOCALE, resolveLocaleFromRequest } from "~/lib/i18n"
-import "./app.css"
+import "@palamedes/example-ui/styles.css"
 
 declare global {
   interface Window {

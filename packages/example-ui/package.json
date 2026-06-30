@@ -1,0 +1,37 @@
+{
+  "name": "@palamedes/example-ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared visual design for the Palamedes example matrix: one stylesheet and one content source rendered identically across every framework.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./styles.css": "./styles/styles.css",
+    "./styles/styles.css": "./styles/styles.css"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "dist/",
+    "styles/"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "stub": "unbuild --stub"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "unbuild": "^3.6.1"
+  }
+}

@@ -3,98 +3,92 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Language: es\n"
-"Language-Team: \n"
-"Last-Translator: \n"
 "MIME-Version: 1.0\n"
-"PO-Revision-Date: 2026-03-19 12:00+0100\n"
-"POT-Creation-Date: 2026-03-19 12:00+0100\n"
-"Project-Id-Version: \n"
-"Report-Msgid-Bugs-To: \n"
 "X-Generator: palamedes\n"
 
-msgid "Click me"
-msgstr "Haz clic"
+msgid "Add to cart"
+msgstr "Añadir al carrito"
 
-msgid "Client interaction"
-msgstr "Interaccion del cliente"
+msgid "Attendees"
+msgstr "Asistentes"
 
-msgid "Counter Example"
-msgstr "Ejemplo del contador"
+msgid "Availability"
+msgstr "Disponibilidad"
 
-msgid "Current locale:"
-msgstr "Idioma actual:"
+msgid "Behind the scenes"
+msgstr "Entre bastidores"
 
-msgid "Handled at"
-msgstr "Atendido en"
+msgid "Berlin, Germany"
+msgstr "Berlín, Alemania"
 
-msgid "Loaded through the Palamedes Vite plugin"
-msgstr "Cargado mediante el plugin Vite de Palamedes"
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Reserva tu plaza en Frontend Stage 2026"
 
-msgid "Localized message"
-msgstr "Mensaje localizado"
+msgid "Conference pass"
+msgstr "Pase de conferencia"
 
-msgid "Localized server function result"
-msgstr "Resultado localizado de la funcion del servidor"
+msgid "Currency"
+msgstr "Moneda"
 
-msgid "No Lingui-owned runtime package is required here."
-msgstr "Aqui no se necesita ningun paquete runtime de Lingui."
+msgid "Date"
+msgstr "Fecha"
 
-msgid "Palamedes without framework-specific runtime wrappers."
-msgstr "Palamedes sin wrappers runtime especificos del framework."
+msgid "Fewer tickets"
+msgstr "Menos entradas"
+
+msgid "Locale"
+msgstr "Idioma"
+
+msgid "Localized live with Palamedes"
+msgstr "Localizado en vivo con Palamedes"
+
+msgid "More tickets"
+msgstr "Más entradas"
+
+msgid "Number"
+msgstr "Número"
+
+msgid "Plural"
+msgstr "Plural"
 
 msgid "Refresh server result"
 msgstr "Actualizar resultado del servidor"
 
-msgid "Rendered on server"
-msgstr "Renderizado en el servidor"
+msgid "Rendered with TanStack Start"
+msgstr "Renderizado con TanStack Start"
 
-msgid "SSR translation happens before the page reaches the browser."
-msgstr "La traduccion SSR ocurre antes de que la pagina llegue al navegador."
-
-msgid "Server function proof"
-msgstr "Prueba de la funcion del servidor"
-
-msgid "Server locale"
-msgstr "Idioma del servidor"
+msgid "Server"
+msgstr "Servidor"
 
 msgid "Server function confirmed locale {locale}."
-msgstr "La funcion del servidor confirmo el idioma {locale}."
+msgstr "La función de servidor confirmó el idioma {locale}."
 
-msgid "Server-rendered proof"
-msgstr "Prueba de renderizado del servidor"
+msgid "Switch to the recommended locale"
+msgstr "Cambiar al idioma recomendado"
 
-msgid ""
-"This example proves the existing Vite-based Palamedes setup works in TanStack"
-" Start with SSR, locale switching, .po imports, and localized server functions."
-msgstr ""
-"Este ejemplo demuestra que la integracion existente de Palamedes sobre Vite"
-" funciona en TanStack Start con SSR, cambio de idioma, imports .po y"
-" funciones de servidor localizadas."
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Tres días de charlas sobre el oficio de construir para la web. Elige tus entradas abajo."
 
-msgid "This panel was rendered on the server for locale {localeLabel}."
-msgstr "Este panel se renderizo en el servidor para el idioma {localeLabel}."
+msgid "Total"
+msgstr "Total"
 
-msgid ""
-"The text below is returned from a TanStack Start server function after the"
-" server activates the Palamedes locale for the current request."
-msgstr ""
-"El texto de abajo vuelve desde una funcion de servidor de TanStack Start"
-" despues de que el servidor activa el idioma de Palamedes para esta solicitud."
+msgid "Venue"
+msgstr "Lugar"
 
-msgid "Waiting for the first server roundtrip..."
-msgstr "Esperando el primer viaje de ida y vuelta al servidor..."
+msgid "Welcome back, {attendeeName}."
+msgstr "Hola de nuevo, {attendeeName}."
 
-msgid "What this proves"
-msgstr "Que demuestra esto"
+msgid "each"
+msgstr "cada una"
 
-msgid "{count, plural, one {You clicked # time} other {You clicked # times}}"
-msgstr "{count, plural, one {Has hecho clic # vez} other {Has hecho clic # veces}}"
+msgid "one switch, every format"
+msgstr "un clic, todos los formatos"
 
-msgid "Macros come from @palamedes/core/macro and @palamedes/react/macro."
-msgstr "Los macros vienen de @palamedes/core/macro y @palamedes/react/macro."
+msgid "server locale"
+msgstr "idioma del servidor"
 
-msgid "SSR uses a request-local i18n instance via setServerI18nGetter()."
-msgstr "SSR usa una instancia i18n local de la solicitud via setServerI18nGetter()."
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
 
-msgid "Client interactions reuse the same provider-free runtime model."
-msgstr "Las interacciones del cliente reutilizan el mismo modelo runtime sin provider."
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"

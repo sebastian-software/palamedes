@@ -1,25 +1,19 @@
-import { Form, Link, useActionData } from "react-router"
 import { t } from "@palamedes/core/macro"
-import { buildLocaleSwitchItems } from "@palamedes/react"
 import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
+import { EVENT } from "@palamedes/example-ui"
 import type { Route } from "./+types/locale-home"
-import { Counter } from "~/components/Counter"
+import { ClientReady } from "~/components/ClientReady"
+import { LocaleSwitcher } from "~/components/LocaleSwitcher"
+import { ProofPanel } from "~/components/ProofPanel"
+import { TicketPanel } from "~/components/TicketPanel"
 import {
-  LOCALES,
   activateServerI18n,
+  getLocaleLabel,
   getRouteBanner,
+  normalizeLocale,
   syncClientI18n,
-  type Locale,
 } from "~/lib/i18n"
-
-function normalizeLocale(value: string): Locale {
-  return LOCALES.includes(value as Locale) ? (value as Locale) : "en"
-}
-
-function getLocaleLabel(locale: Locale) {
-  return locale === "de" ? "Deutsch" : locale === "es" ? "Espanol" : "English"
-}
 
 export function meta({ params }: Route.MetaArgs) {
   return [
@@ -33,19 +27,18 @@ export function meta({ params }: Route.MetaArgs) {
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   const locale = normalizeLocale(params.locale)
-  await activateServerI18n(locale)
+  activateServerI18n(locale)
 
   return {
     banner: getRouteBanner(request, locale),
     locale,
     localeLabel: getLocaleLabel(locale),
-    renderedAt: new Date().toISOString(),
   }
 }
 
 export async function action({ params }: Route.ActionArgs) {
   const locale = normalizeLocale(params.locale)
-  await activateServerI18n(locale)
+  activateServerI18n(locale)
 
   return {
     proof: {
@@ -58,129 +51,63 @@ export async function action({ params }: Route.ActionArgs) {
 }
 
 export default function LocaleHome({ loaderData }: Route.ComponentProps) {
-  const actionData = useActionData<typeof action>()
-  const localeLabel = loaderData.localeLabel
-  const localeSwitchItems = buildLocaleSwitchItems({
-    locales: LOCALES,
-    currentLocale: loaderData.locale,
-    labels: {
-      de: "Deutsch",
-      en: "English",
-      es: "Espanol",
-    },
-  })
+  const { banner, locale, localeLabel } = loaderData
 
-  useClientLocale(loaderData.locale, syncClientI18n)
+  useClientLocale(locale, syncClientI18n)
 
   return (
     <main className="page-shell">
+      {banner ? (
+        <div className="notice" role="status">
+          <span className="notice-text">{banner.description}</span>
+          <a
+            className="notice-cta"
+            data-testid="locale-suggestion-cta"
+            href={banner.recommendedUrl}
+          >
+            <Trans>Switch to the recommended locale</Trans>
+          </a>
+        </div>
+      ) : null}
+
+      <header className="topbar">
+        <div className="brand">
+          <b>Frontend Stage</b>
+          <span className="brand-meta">Berlin · 2026</span>
+        </div>
+        <LocaleSwitcher locale={locale} />
+      </header>
+
       <section className="hero">
-        <p className="kicker">React Router</p>
-        <h1>{t`Palamedes without framework-specific runtime wrappers.`}</h1>
-        <p>
+        <p className="eyebrow">
+          <span className="dot" aria-hidden="true" />
+          <Trans>Localized live with Palamedes</Trans>
+        </p>
+        <h1>
+          <Trans>Book your seat at Frontend Stage 2026</Trans>
+        </h1>
+        <p className="greet">{t`Welcome back, ${EVENT.attendeeName}.`}</p>
+        <p className="lede">
           <Trans>
-            This route-based React Router example keeps locale in the URL, surfaces host or
-            Accept-Language mismatches, and localizes SSR plus route actions.
+            Three days of talks on the craft of building for the web. Choose your tickets below.
           </Trans>
         </p>
-        {loaderData.banner ? (
-          <section className="panel" style={{ borderColor: "#d97706", background: "#fff7ed" }}>
-            <p className="kicker">
-              <Trans>Locale suggestion</Trans>
-            </p>
-            <p className="muted">{loaderData.banner.description}</p>
-            <a
-              className="button"
-              data-testid="locale-suggestion-cta"
-              href={loaderData.banner.recommendedUrl}
-            >
-              <Trans>Switch to the recommended locale</Trans>
-            </a>
-          </section>
-        ) : null}
-        <div className="button-row">
-          {localeSwitchItems.map((item) => (
-            <Link
-              key={item.locale}
-              className={`chip${item.active ? " active" : ""}`}
-              data-testid={item.testId}
-              to={`/${item.locale}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
       </section>
 
-      <section className="grid cols-2">
-        <section className="panel">
-          <p className="kicker">
-            <Trans>Server-rendered proof</Trans>
-          </p>
-          <h2>
-            <Trans>SSR translation happens before the page reaches the browser.</Trans>
-          </h2>
-          <p className="muted">
-            {t`This panel was rendered on the server for locale ${localeLabel}.`}
-          </p>
-          <div className="stats">
-            <div>
-              <span className="eyebrow">
-                <Trans>Current locale</Trans>
-              </span>
-              <strong data-testid="server-locale-value">{localeLabel}</strong>
-            </div>
-            <div>
-              <span className="eyebrow">
-                <Trans>Rendered on server</Trans>
-              </span>
-              <code>{loaderData.renderedAt}</code>
-            </div>
-          </div>
-        </section>
+      <div className="grid">
+        <TicketPanel locale={locale} />
+        <ProofPanel locale={locale} />
+      </div>
 
-        <Counter locale={loaderData.locale} />
+      <footer className="foot">
+        <span className="foot-badge">Palamedes</span>
+        <Trans>Rendered with React Router</Trans>
+        {" · "}
+        <Trans>server locale</Trans>{" "}
+        <strong data-testid="server-locale-value">{localeLabel}</strong>
+      </footer>
 
-        <section className="panel">
-          <p className="kicker">
-            <Trans>Server action proof</Trans>
-          </p>
-          <h2>
-            <Trans>Localized action result</Trans>
-          </h2>
-          <Form method="post">
-            <button className="button" data-testid="server-proof-trigger" type="submit">
-              <Trans>Ask server for localized status</Trans>
-            </button>
-          </Form>
-          {actionData?.proof ? (
-            <div className="stats">
-              <div>
-                <span className="eyebrow">
-                  <Trans>Server locale</Trans>
-                </span>
-                <strong>{actionData.proof.localeLabel}</strong>
-              </div>
-              <div>
-                <span className="eyebrow">
-                  <Trans>Handled at</Trans>
-                </span>
-                <code>{actionData.proof.handledAt}</code>
-              </div>
-              <div>
-                <span className="eyebrow">
-                  <Trans>Localized message</Trans>
-                </span>
-                <strong data-testid="server-proof-message">{actionData.proof.message}</strong>
-              </div>
-            </div>
-          ) : (
-            <p className="muted">
-              <Trans>Run the action to fetch a server-localized result.</Trans>
-            </p>
-          )}
-        </section>
-      </section>
+      <ClientReady />
     </main>
   )
 }
