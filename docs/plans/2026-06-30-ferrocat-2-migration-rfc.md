@@ -40,6 +40,9 @@ Compatibility probe:
   FCL.
 - Expose FCL as an opt-in public format for extraction, audit, compilation,
   merge, and host APIs.
+- Treat Ferrocat 2.0 as the catalog compatibility floor. Palamedes has no real
+  external catalog users yet, so the implementation does not need to load,
+  import, or preserve Ferrocat 1.x catalog content.
 - Align Palamedes' public catalog data model with Ferrocat 2.0 origins and
   machine metadata.
 - Preserve source extraction locations for diagnostics without serializing
@@ -50,6 +53,8 @@ Compatibility probe:
 - Do not make FCL the default catalog format in this migration.
 - Do not add an NDJSON compatibility shim. Existing public NDJSON surfaces
   should become FCL surfaces.
+- Do not add Ferrocat 1.x catalog compatibility readers, migration importers,
+  or best-effort loaders for old serialized catalog metadata.
 - Do not mirror Ferrocat's full low-level API in Palamedes.
 - Do not turn this plan into a durable ADR yet.
 - Do not change runtime compiled message identity beyond what the storage
@@ -73,6 +78,26 @@ Palamedes should expose it only through Palamedes-shaped workflows:
 FCL storage policy and machine lock / AI provenance may later deserve an ADR
 if they become durable product policy. For now, this document should stay under
 `docs/plans` as an active implementation plan.
+
+## Compatibility Stance
+
+Palamedes can be strict here. There are no real external Palamedes catalog users
+yet, so the migration does not need a legacy content-loading story.
+
+The implementation should:
+
+- update checked-in fixtures, examples, generated snapshots, and docs to the new
+  format model
+- fail clearly on unsupported Ferrocat 1.x / NDJSON catalog inputs instead of
+  silently coercing them
+- keep PO as the default for newly generated Palamedes catalogs
+- support PO and FCL only through Ferrocat 2.0 semantics
+- avoid adding migration code whose only purpose is to read old Palamedes
+  pre-release catalog output
+
+This keeps the migration smaller and makes review easier: any remaining
+compatibility work must justify itself as an internal fixture/docs cleanup need,
+not as a user-facing upgrade guarantee.
 
 ## Recommended Product Decision
 
@@ -109,6 +134,7 @@ the configured storage format:
 | ---- | -------------------------------- | ---------------------- | ------------------- |
 | Catalog format enum | `Po`, `Ndjson` | `Po`, `Fcl` | Replace public `ndjson` / `Ndjson` with `fcl` / `Fcl`; no shim. |
 | Catalog mode | PO hardcoded in many paths | FCL has first-class mode | Resolve `CatalogMode::IcuPo` or `CatalogMode::IcuFcl` from storage format. |
+| Legacy content loading | old pre-release Palamedes outputs may exist in fixtures or branches | Ferrocat 2.0 is the floor | Update or delete old fixtures; do not implement v1 catalog readers. |
 | Origins | `file` plus optional line | `file` plus optional `scope` | Serialize origins as `file#scope`; expose parsed origins as `{ file, scope? }`. |
 | Line numbers | Render option could include line numbers | line-number serialization removed | Keep extraction line data for diagnostics only; stop writing catalog line numbers. |
 | Machine metadata | `MachineTranslationMetadata { model, modified, confidence, hash }` | `MachineMetadata { lock, ai? }` | Expose `machine`; expose AI confidence as `0..1`, not percent. |
@@ -246,6 +272,8 @@ must be explicit and test-covered.
 - Remove `include_line_numbers` usage.
 - Add the new parsed `CatalogOrigin { file, scope? }` type.
 - Keep extraction-origin line data internal to extraction/update request paths.
+- Remove or rewrite old fixtures that rely on Ferrocat 1.x serialized metadata
+  instead of adding compatibility parsing.
 
 ### 2. Catalog Storage Abstraction
 
@@ -357,6 +385,8 @@ Add focused tests before relying on broad gates:
 - FCL merge round trip
 - `.fcl` merge format inference
 - `CatalogFileFormat` no longer accepts NDJSON
+- unsupported Ferrocat 1.x / NDJSON catalog inputs fail clearly where they enter
+  Palamedes public workflows
 - origins serialize as `file#scope`
 - parsed catalog origins expose `{ file, scope? }`
 - source extraction still keeps line data for diagnostics and stable sorting
@@ -399,12 +429,13 @@ Type generation:
 
 ## Rollout Strategy
 
-1. Land the Rust dependency and compile-only API migration with PO behavior
-   preserved.
+1. Land the Rust dependency and compile-only API migration with current PO
+   workflow behavior preserved for newly generated catalogs.
 2. Add `CatalogStorageFormat` and format-aware catalog resolution.
 3. Add FCL through extraction, audit, compile, parse, and merge.
 4. Update N-API and TypeScript wrappers.
-5. Replace docs and examples.
+5. Replace docs, examples, fixtures, and generated snapshots that still reflect
+   Ferrocat 1.x / NDJSON output.
 6. Add obsolete metadata cleanup support if the first five steps remain small
    enough to review safely; otherwise split it into a follow-up PR.
 7. Run the full validation matrix before publishing.
@@ -414,7 +445,8 @@ Type generation:
 | Risk | Mitigation |
 | ---- | ---------- |
 | FCL support becomes a leaky Ferrocat mirror | Keep public APIs workflow-shaped and config-driven. |
-| Existing PO users see behavior drift | Test PO default paths before FCL-specific tests. |
+| PO default behavior regresses while changing the storage layer | Test PO default paths before FCL-specific tests. |
+| Legacy compatibility code bloats the migration | Treat Ferrocat 2.0 as the compatibility floor and update old fixtures instead of reading them. |
 | Parsed origins lose useful diagnostic data | Keep extraction line/column data in extraction diagnostics and update requests; only parsed catalog origins drop line numbers. |
 | Machine metadata semantics are misunderstood | Rename the public field to `machine` and document `lock` / `ai` separately from translation content. |
 | Fuzzy audit removal looks like a regression | Preserve raw PO fuzzy reporting in `pmds report`; remove only the high-level Ferrocat audit toggle. |
@@ -437,6 +469,7 @@ Type generation:
 - `ferrocat`, `ferrocat-po`, and `ferrocat-icu` resolve to `2.0.0`.
 - `FERROCAT_VERSION` reports `2.0.0`.
 - Public Palamedes APIs expose `fcl` / `Fcl`, not `ndjson` / `Ndjson`.
+- Palamedes has no Ferrocat 1.x catalog loader or NDJSON compatibility shim.
 - Configured catalogs default to PO and can opt into FCL.
 - CLI merge supports `--format=fcl` and `.fcl` inference.
 - Extraction, audit, compile, parse, and merge work for FCL.
