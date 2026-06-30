@@ -12,7 +12,8 @@ if (!packageName) {
   process.exit(1)
 }
 
-const packageJson = findWorkspacePackage(packageName)
+const workspacePackage = findWorkspacePackage(packageName)
+const packageJson = workspacePackage.packageJson
 const packageSpec = `${packageName}@${packageJson.version}`
 const viewResult = spawnSync("pnpm", ["view", packageSpec, "version"], {
   cwd: root,
@@ -36,14 +37,19 @@ if (dryRun) {
   process.exit(0)
 }
 
-const publishResult = spawnSync(
-  "pnpm",
-  ["--filter", packageName, "publish", "--access", "public", "--no-git-checks"],
-  {
-    cwd: root,
-    stdio: "inherit",
-  }
-)
+const publishResult = isNativeArtifactPackage(packageJson)
+  ? spawnSync("npm", ["publish", workspacePackage.directory, "--access", "public"], {
+      cwd: root,
+      stdio: "inherit",
+    })
+  : spawnSync(
+      "pnpm",
+      ["--filter", packageName, "publish", "--access", "public", "--no-git-checks"],
+      {
+        cwd: root,
+        stdio: "inherit",
+      }
+    )
 process.exit(publishResult.status ?? 1)
 
 function findWorkspacePackage(name) {
@@ -55,7 +61,10 @@ function findWorkspacePackage(name) {
 
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"))
     if (packageJson.name === name) {
-      return packageJson
+      return {
+        directory: path.join(root, "packages", directory),
+        packageJson,
+      }
     }
   }
 
@@ -67,7 +76,19 @@ function isMissingPackageVersion(output) {
   return (
     output.includes("404 Not Found") ||
     output.includes("[ERR_PNPM_FETCH_404]") ||
+    output.includes("[ERR_PNPM_PACKAGE_NOT_FOUND]") ||
     output.includes("[E404]") ||
+    output.includes("No matching version found for") ||
     output.includes("is not in the npm registry")
+  )
+}
+
+function isNativeArtifactPackage(packageJson) {
+  return (
+    typeof packageJson.name === "string" &&
+    (packageJson.name.startsWith("@palamedes/core-node-") ||
+      packageJson.name.startsWith("@palamedes/cli-")) &&
+    Array.isArray(packageJson.os) &&
+    Array.isArray(packageJson.cpu)
   )
 }

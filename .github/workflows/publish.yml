@@ -173,6 +173,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Configure musl Node addon linker
+        if: matrix.package_name == '@palamedes/core-node-linux-x64-musl'
+        run: |
+          echo 'RUSTFLAGS=-C target-feature=-crt-static' >> "$GITHUB_ENV"
+          echo 'CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc' >> "$GITHUB_ENV"
+
       - name: Build native package
         run: pnpm --filter "${{ matrix.package_name }}" build
 
