@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/cli-darwin-arm64",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Darwin arm64 native CLI binary for @palamedes/cli",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {

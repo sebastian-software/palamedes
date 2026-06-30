@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.10.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.9.0...palamedes-v0.10.0) (2026-06-30)
+
+
+### Features
+
+* **release:** add linux x64 musl native packages ([1d32765](https://github.com/sebastian-software/palamedes/commit/1d32765fb40e9d457ac841b8ca4c7d4b48a2ba9c))
+* **release:** add linux x64 musl native packages ([aa37892](https://github.com/sebastian-software/palamedes/commit/aa37892c5d7f65ce7fcf27794711f6422f49cdec))
+
+
+### Bug Fixes
+
+* make release publishing retryable ([32f4c1f](https://github.com/sebastian-software/palamedes/commit/32f4c1fba1594753922e8b86438a85f774ce6340))
+* make release publishing retryable ([ed7fe73](https://github.com/sebastian-software/palamedes/commit/ed7fe7357ec81292b64e48ff90d50f2215ebda37))
+* **release:** avoid unknown libc musl fallback ([449434a](https://github.com/sebastian-software/palamedes/commit/449434a2f32878f9f659479edb3217a6a02c4069))
+* **release:** tighten native libc selection ([0f78265](https://github.com/sebastian-software/palamedes/commit/0f78265f485c5c7f58cb5464a1a52258e09a29d3))
+
 ## [0.9.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.8.0...palamedes-v0.9.0) (2026-06-28)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/transform",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Native macro transformer for Palamedes macros without Babel",
   "keywords": [
     "i18n",
