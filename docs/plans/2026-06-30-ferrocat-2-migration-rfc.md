@@ -53,8 +53,8 @@ Compatibility probe:
 - Do not make FCL the default catalog format in this migration.
 - Do not add an NDJSON compatibility shim. Existing public NDJSON surfaces
   should become FCL surfaces.
-- Do not add Ferrocat 1.x catalog compatibility readers, migration importers,
-  or best-effort loaders for old serialized catalog metadata.
+- Do not add Ferrocat 1.x catalog compatibility readers or best-effort loaders
+  for old serialized catalog metadata.
 - Do not mirror Ferrocat's full low-level API in Palamedes.
 - Do not turn this plan into a durable ADR yet.
 - Do not change runtime compiled message identity beyond what the storage
@@ -94,6 +94,9 @@ The implementation should:
 - support PO and FCL only through Ferrocat 2.0 semantics
 - avoid adding migration code whose only purpose is to read old Palamedes
   pre-release catalog output
+- provide an explicit PO-to-FCL conversion path for supported current PO
+  catalogs, because that is a real opt-in adoption workflow rather than a
+  legacy loader
 
 This keeps the migration smaller and makes review easier: any remaining
 compatibility work must justify itself as an internal fixture/docs cleanup need,
@@ -304,7 +307,46 @@ Update `pmds` behavior:
 - `pmds report` resolves configured PO and FCL paths
 - `pmds catalog merge --format=fcl` is supported
 - `.fcl` extension inference works for merge input and output paths
+- `pmds catalog convert --to=fcl` converts supported PO catalogs to FCL while
+  preserving translations
 - `--format=ndjson` is removed
+
+Add a catalog conversion workflow:
+
+```bash
+pmds catalog convert src/locales/de.po --to=fcl --output src/locales/de.fcl
+pmds catalog convert --config palamedes.yaml --to=fcl
+```
+
+File mode converts one input catalog to one output catalog. Config mode converts
+all configured catalog files for all configured locales from the current storage
+format to the requested target format. Because Palamedes config paths are
+extensionless, config mode can write `.fcl` files beside existing `.po` files
+without deleting the originals.
+
+Conversion rules:
+
+- parse the source catalog through Ferrocat 2.0, not through a v1 compatibility
+  reader
+- preserve active source identities, target translations, contexts, plurals,
+  comments, origins, obsolete metadata, and machine metadata where Ferrocat can
+  represent them in the target format
+- preserve source and target locale headers in the target format
+- fail before writing output when the source contains fuzzy entries, because
+  fuzzy is intentionally not part of the Palamedes/Ferrocat 2.0 model
+- write atomically and leave the source catalog untouched
+- print a summary of converted, skipped, and failed catalogs
+
+Config mode should print the required follow-up config change:
+
+```yaml
+catalogs:
+  - path: src/locales/{locale}
+    format: fcl
+```
+
+An automatic config rewrite can be added only if it can preserve the selected
+config format well enough. It is not required for the initial migration command.
 
 Update merge docs from NDJSON to FCL:
 
@@ -368,6 +410,8 @@ Documentation should say:
 - `--clean` deletes entries obsolete for at least 30 days
 - `--force-clean` deletes obsolete entries immediately
 - fuzzy is not part of the Palamedes/Ferrocat 2.0 catalog model
+- `pmds catalog convert --to=fcl` lets teams switch from PO to FCL while keeping
+  their translations
 
 ### 6. Tests
 
@@ -379,6 +423,12 @@ Add focused tests before relying on broad gates:
 - FCL audit round trip
 - FCL compile round trip
 - FCL merge round trip
+- PO-to-FCL single-file conversion preserves translations, contexts, plurals,
+  comments, origins, obsolete metadata, and machine metadata where representable
+- PO-to-FCL config conversion writes `.fcl` files for all configured locales and
+  leaves `.po` sources untouched
+- PO-to-FCL conversion fails without writing output when the PO source contains
+  fuzzy entries
 - `.fcl` merge format inference
 - `CatalogFileFormat` no longer accepts NDJSON
 - unsupported Ferrocat 1.x / NDJSON catalog inputs fail clearly where they enter
@@ -431,10 +481,11 @@ Type generation:
 2. Add `CatalogStorageFormat` and format-aware catalog resolution.
 3. Add FCL through extraction, audit, compile, parse, and merge.
 4. Update N-API and TypeScript wrappers.
-5. Replace docs, examples, fixtures, and generated snapshots that still reflect
+5. Add PO-to-FCL conversion for single files and configured catalog sets.
+6. Replace docs, examples, fixtures, and generated snapshots that still reflect
    Ferrocat 1.x / NDJSON output.
-6. Add fixed 30-day obsolete cleanup and immediate `--force-clean`.
-7. Run the full validation matrix before publishing.
+7. Add fixed 30-day obsolete cleanup and immediate `--force-clean`.
+8. Run the full validation matrix before publishing.
 
 ## Risks and Mitigations
 
@@ -443,6 +494,7 @@ Type generation:
 | FCL support becomes a leaky Ferrocat mirror | Keep public APIs workflow-shaped and config-driven. |
 | PO default behavior regresses while changing the storage layer | Test PO default paths before FCL-specific tests. |
 | Legacy compatibility code bloats the migration | Treat Ferrocat 2.0 as the compatibility floor and update old fixtures instead of reading them. |
+| FCL adoption is too hard for existing PO catalogs | Provide explicit PO-to-FCL conversion that preserves translations without adding transparent legacy loading. |
 | Parsed origins lose useful diagnostic data | Keep extraction line/column data in extraction diagnostics and update requests; only parsed catalog origins drop line numbers. |
 | Machine metadata semantics are misunderstood | Rename the public field to `machine` and document `lock` / `ai` separately from translation content. |
 | Fuzzy removal looks like a regression | Document that fuzzy is intentionally not modeled because it preserves half-correct translations. |
@@ -459,6 +511,7 @@ Type generation:
 - FCL should be marketed positively in docs, including its canonical,
   merge-friendly generated format and machine-metadata advantages, while PO
   remains the first-run default.
+- PO-to-FCL conversion is in scope as an explicit adoption workflow.
 
 ## Acceptance Criteria
 
@@ -468,6 +521,8 @@ Type generation:
 - Palamedes has no Ferrocat 1.x catalog loader or NDJSON compatibility shim.
 - Configured catalogs default to PO and can opt into FCL.
 - CLI merge supports `--format=fcl` and `.fcl` inference.
+- CLI conversion supports single-file and config-wide PO-to-FCL migration while
+  preserving translations.
 - Extraction, audit, compile, parse, and merge work for FCL.
 - Parsed origins expose `{ file, scope? }`.
 - Source extraction still retains line data for diagnostics and stable output.
