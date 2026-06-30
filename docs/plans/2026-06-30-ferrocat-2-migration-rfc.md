@@ -19,6 +19,7 @@ Primary sources:
 
 - [ferrocat 2.0.0](https://crates.io/crates/ferrocat/2.0.0)
 - [ferrocat-po 2.0.0](https://crates.io/crates/ferrocat-po/2.0.0)
+- [ferrocat-cli 2.0.0](https://crates.io/crates/ferrocat-cli/2.0.0)
 - [ferrocat v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-v1.3.2...ferrocat-v2.0.0)
 - [ferrocat-po v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-po-v1.3.2...ferrocat-po-v2.0.0)
 
@@ -78,6 +79,47 @@ Palamedes should expose it only through Palamedes-shaped workflows:
 FCL storage policy and machine lock / AI provenance may later deserve an ADR
 if they become durable product policy. For now, this document should stay under
 `docs/plans` as an active implementation plan.
+
+## Relationship to ferrocat-cli
+
+`ferrocat-cli` is now available as `ferrocat-cli` `2.0.0` on crates.io and
+publishes a `ferrocat` binary.
+
+The current Ferrocat CLI surface is useful, but intentionally narrower than the
+Palamedes CLI surface:
+
+- `ferrocat audit` audits explicitly supplied source and target catalogs.
+- `--storage po|fcl` selects PO or FCL.
+- `--format text|json` selects human-readable or structured output.
+- Inputs are passed as `--source` and repeated `--target <locale=path>` values.
+- It does not read `palamedes.yaml`.
+- It does not run Palamedes extraction, report, compile, merge-driver, or
+  PO-to-FCL conversion workflows.
+
+This should shape the Palamedes migration in two ways:
+
+- `pmds audit` remains the primary Palamedes command because it is config-aware
+  and can stay aligned with Palamedes metadata, pseudo-locale, source-reference,
+  and workflow conventions.
+- Palamedes docs can mention `ferrocat audit` as an optional lower-level
+  diagnostic tool for teams that want to inspect raw PO/FCL catalogs outside a
+  Palamedes project.
+
+Example optional raw-catalog audit:
+
+```bash
+cargo install ferrocat-cli --version 2.0.0
+ferrocat audit \
+  --source-locale en \
+  --source src/locales/en.fcl \
+  --target de=src/locales/de.fcl \
+  --storage fcl \
+  --format json
+```
+
+Do not make Palamedes depend on the external `ferrocat` binary for its own
+implementation. Palamedes should continue to call Ferrocat libraries directly
+through the Rust core so npm/native distribution remains self-contained.
 
 ## Compatibility Stance
 
@@ -405,6 +447,8 @@ Documentation should say:
 - PO remains default
 - FCL is opt-in and worth using when teams want a canonical, generated,
   merge-friendly catalog format with cleaner machine-owned metadata
+- `pmds audit` is the Palamedes-first audit command; `ferrocat audit` can be
+  documented as an optional low-level raw-catalog diagnostic command
 - NDJSON has been removed from Palamedes public APIs
 - merge-driver examples use `.po` and `.fcl`
 - `--clean` deletes entries obsolete for at least 30 days
@@ -474,6 +518,21 @@ Type generation:
 - ensure generated native enum output is `"Po" | "Fcl"`
 - ensure public wrapper output is `"po" | "fcl"`
 
+Optional cross-check:
+
+```bash
+cargo install ferrocat-cli --version 2.0.0
+ferrocat audit \
+  --source-locale en \
+  --source <source.fcl> \
+  --target de=<target.fcl> \
+  --storage fcl \
+  --format json
+```
+
+This is a diagnostic comparison only. It must not replace Palamedes' own
+config-aware test coverage.
+
 ## Rollout Strategy
 
 1. Land the Rust dependency and compile-only API migration with current PO
@@ -492,6 +551,7 @@ Type generation:
 | Risk | Mitigation |
 | ---- | ---------- |
 | FCL support becomes a leaky Ferrocat mirror | Keep public APIs workflow-shaped and config-driven. |
+| Users are confused by `pmds audit` and `ferrocat audit` | Document `pmds` as the project/config-aware workflow and `ferrocat` as an optional raw-catalog diagnostic. |
 | PO default behavior regresses while changing the storage layer | Test PO default paths before FCL-specific tests. |
 | Legacy compatibility code bloats the migration | Treat Ferrocat 2.0 as the compatibility floor and update old fixtures instead of reading them. |
 | FCL adoption is too hard for existing PO catalogs | Provide explicit PO-to-FCL conversion that preserves translations without adding transparent legacy loading. |
