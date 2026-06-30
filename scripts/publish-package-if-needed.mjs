@@ -15,10 +15,15 @@ if (!packageName) {
 const workspacePackage = findWorkspacePackage(packageName)
 const packageJson = workspacePackage.packageJson
 const packageSpec = `${packageName}@${packageJson.version}`
-const viewResult = spawnSync("pnpm", ["view", packageSpec, "version"], {
+const viewResult = spawnSync(command("pnpm"), ["view", packageSpec, "version"], {
   cwd: root,
   encoding: "utf8",
 })
+
+if (viewResult.error) {
+  console.error(viewResult.error)
+  process.exit(1)
+}
 
 if (viewResult.status === 0) {
   console.log(`${packageSpec} is already published; skipping.`)
@@ -38,19 +43,29 @@ if (dryRun) {
 }
 
 const publishResult = isNativeArtifactPackage(packageJson)
-  ? spawnSync("npm", ["publish", workspacePackage.directory, "--access", "public"], {
+  ? spawnSync(command("npm"), ["publish", workspacePackage.directory, "--access", "public"], {
       cwd: root,
       stdio: "inherit",
     })
   : spawnSync(
-      "pnpm",
+      command("pnpm"),
       ["--filter", packageName, "publish", "--access", "public", "--no-git-checks"],
       {
         cwd: root,
         stdio: "inherit",
       }
     )
+
+if (publishResult.error) {
+  console.error(publishResult.error)
+  process.exit(1)
+}
+
 process.exit(publishResult.status ?? 1)
+
+function command(name) {
+  return process.platform === "win32" ? `${name}.cmd` : name
+}
 
 function findWorkspacePackage(name) {
   for (const directory of readdirSync(path.join(root, "packages"))) {
