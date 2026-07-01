@@ -9,13 +9,6 @@ type TicketPanelProps = {
   locale: Locale
 }
 
-// A member expression (`props.quantity`) gives the macro a stable placeholder
-// name while staying reactive through Solid's prop getters, so the ticket count
-// is both translated via the catalog and updated as the stepper changes.
-function QuantityLabel(props: { quantity: number }) {
-  return <b>{plural(props.quantity, { one: "# ticket", other: "# tickets" })}</b>
-}
-
 export function TicketPanel(_props: TicketPanelProps) {
   const [quantity, setQuantity] = createSignal(1)
   const when = new Date(EVENT.startsAt)
@@ -81,7 +74,7 @@ export function TicketPanel(_props: TicketPanelProps) {
       <div class="buy">
         <div class="qty-row">
           <span class="qty-label">
-            <QuantityLabel quantity={quantity()} />
+            <b>{plural(quantity(), { one: "# ticket", other: "# tickets" })}</b>
             {" · "}
             <Fmt
               message="{amount, number, ::currency/EUR}"
