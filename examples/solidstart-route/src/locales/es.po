@@ -87,8 +87,8 @@ msgstr "un clic, todos los formatos"
 msgid "server locale"
 msgstr "idioma del servidor"
 
-msgid "{quantity, plural, one {# ticket} other {# tickets}}"
-msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
+msgid "{value, plural, one {# ticket} other {# tickets}}"
+msgstr "{value, plural, one {# entrada} other {# entradas}}"
 
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"

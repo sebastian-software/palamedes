@@ -27,6 +27,11 @@
       "import": "./dist/client.mjs",
       "require": "./dist/client.cjs"
     },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.mjs",
+      "require": "./dist/runtime.cjs"
+    },
     "./macro": {
       "types": "./dist/macro.d.ts",
       "import": "./dist/macro.mjs",

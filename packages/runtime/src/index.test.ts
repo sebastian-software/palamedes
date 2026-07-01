@@ -8,6 +8,7 @@ import {
   resetI18nRuntime,
   setClientI18n,
   setServerI18nGetter,
+  subscribeClientI18n,
 } from "./index"
 
 function createTestI18n(locale = "en"): I18nInstance {
@@ -38,6 +39,23 @@ describe("@palamedes/runtime", () => {
     setClientI18n(i18n)
 
     expect(getI18n()).toBe(i18n)
+  })
+
+  it("notifies subscribers on every setClientI18n call, including re-activation", () => {
+    const seen: Array<string | undefined> = []
+    const unsubscribe = subscribeClientI18n((i18n) => seen.push(i18n.locale))
+
+    const i18n = createTestI18n("en")
+    setClientI18n(i18n)
+
+    // Same instance, re-activated in place: still notifies so bindings re-render.
+    i18n.locale = "de"
+    setClientI18n(i18n)
+
+    unsubscribe()
+    setClientI18n(createTestI18n("es"))
+
+    expect(seen).toStrictEqual(["en", "de"])
   })
 
   it("resolves the request-local server instance", () => {

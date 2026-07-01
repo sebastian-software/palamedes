@@ -10,6 +10,10 @@ const CLIENT_I18N_KEY = Symbol.for("palamedes.runtime.clientI18n")
 let clientI18n: I18nInstance | undefined
 let serverI18nGetter: ServerI18nGetter | undefined
 
+type ClientI18nListener = (i18n: I18nInstance) => void
+
+const clientI18nListeners = new Set<ClientI18nListener>()
+
 function globalClientState(): typeof globalThis & { [CLIENT_I18N_KEY]?: I18nInstance } {
   return globalThis as typeof globalThis & { [CLIENT_I18N_KEY]?: I18nInstance }
 }
@@ -21,7 +25,27 @@ function isServerEnvironment(): boolean {
 export function setClientI18n<T extends I18nInstance>(i18n: T): T {
   clientI18n = i18n
   globalClientState()[CLIENT_I18N_KEY] = i18n
+  for (const listener of clientI18nListeners) {
+    listener(i18n)
+  }
   return i18n
+}
+
+/**
+ * Subscribe to `setClientI18n` calls. Framework bindings use this to bridge the
+ * framework-agnostic client i18n into their own reactivity system (e.g. a Solid
+ * signal), so components re-render when the active locale changes on the client.
+ *
+ * The listener also fires when the same instance is re-activated in place, since
+ * `setClientI18n` is expected to be called on every locale switch.
+ *
+ * Returns an unsubscribe function.
+ */
+export function subscribeClientI18n(listener: ClientI18nListener): () => void {
+  clientI18nListeners.add(listener)
+  return () => {
+    clientI18nListeners.delete(listener)
+  }
 }
 
 export function setServerI18nGetter<T extends I18nInstance>(getter: ServerI18nGetter<T>): void {

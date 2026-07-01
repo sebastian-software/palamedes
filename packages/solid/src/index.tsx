@@ -7,7 +7,22 @@ import type {
   MessageNode,
   PalamedesI18n,
 } from "@palamedes/core"
-import { getI18n } from "@palamedes/runtime"
+
+import { getI18n } from "./runtime"
+
+export {
+  buildLocaleSwitchItems,
+  type BuildLocaleSwitchItemsOptions,
+  type LocaleSwitchItem,
+} from "@palamedes/core/locale"
+
+// Read the active i18n while registering the enclosing Solid computation as a
+// subscriber, so it re-runs when the client locale changes. The components below
+// return accessors (plain functions), which Solid tracks — that is where this
+// read is picked up.
+function useReactiveI18n(): PalamedesI18n {
+  return getI18n<PalamedesI18n>()
+}
 
 type WrapperComponent = (children: JSX.Element) => JSX.Element
 
@@ -40,20 +55,6 @@ export type SelectProps = {
   [key: string]: string | number | undefined
 }
 
-export type LocaleSwitchItem<TLocale extends string = string> = {
-  active: boolean
-  label: string
-  locale: TLocale
-  testId: string
-}
-
-export type BuildLocaleSwitchItemsOptions<TLocale extends string> = {
-  currentLocale: TLocale
-  labels?: Partial<Record<TLocale, string>>
-  locales: readonly TLocale[]
-  testIdPrefix?: string
-}
-
 export function Trans({
   id,
   message,
@@ -62,59 +63,42 @@ export function Trans({
   context,
   comment,
 }: TransProps): JSX.Element {
-  const i18n = getI18n<PalamedesI18n>()
   const resolvedId = id ?? message ?? ""
-  const pattern = i18n.getMessage(resolvedId, {
-    id: resolvedId,
-    message,
-    context,
-    comment,
-  })
 
-  return renderNodes(
-    parseMessagePattern(pattern),
-    values ?? {},
-    components ?? {},
-    i18n.locale
-  ) as unknown as JSX.Element
+  // Returning an accessor (a plain function) makes Solid track it: it re-runs on
+  // a client locale switch, so the rendered nodes follow the active i18n.
+  return (() => {
+    const i18n = useReactiveI18n()
+    const pattern = i18n.getMessage(resolvedId, {
+      id: resolvedId,
+      message,
+      context,
+      comment,
+    })
+
+    return renderNodes(parseMessagePattern(pattern), values ?? {}, components ?? {}, i18n.locale)
+  }) as unknown as JSX.Element
 }
 
 export function Plural({ value, ...choices }: PluralProps): JSX.Element {
-  const i18n = getI18n<PalamedesI18n>()
-  return i18n._(
-    { message: buildChoiceMessage("value", "plural", choices) },
-    { value }
-  ) as JSX.Element
+  return (() => {
+    const i18n = useReactiveI18n()
+    return i18n._({ message: buildChoiceMessage("value", "plural", choices) }, { value })
+  }) as unknown as JSX.Element
 }
 
 export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): JSX.Element {
-  const i18n = getI18n<PalamedesI18n>()
-  return i18n._(
-    { message: buildChoiceMessage("value", "selectordinal", choices) },
-    { value }
-  ) as JSX.Element
+  return (() => {
+    const i18n = useReactiveI18n()
+    return i18n._({ message: buildChoiceMessage("value", "selectordinal", choices) }, { value })
+  }) as unknown as JSX.Element
 }
 
 export function Select({ value, ...choices }: SelectProps): JSX.Element {
-  const i18n = getI18n<PalamedesI18n>()
-  return i18n._(
-    { message: buildChoiceMessage("value", "select", choices) },
-    { value }
-  ) as JSX.Element
-}
-
-export function buildLocaleSwitchItems<TLocale extends string>({
-  currentLocale,
-  labels,
-  locales,
-  testIdPrefix = "locale-switch",
-}: BuildLocaleSwitchItemsOptions<TLocale>): Array<LocaleSwitchItem<TLocale>> {
-  return locales.map((locale) => ({
-    active: locale === currentLocale,
-    label: labels?.[locale] ?? locale,
-    locale,
-    testId: `${testIdPrefix}-${locale}`,
-  }))
+  return (() => {
+    const i18n = useReactiveI18n()
+    return i18n._({ message: buildChoiceMessage("value", "select", choices) }, { value })
+  }) as unknown as JSX.Element
 }
 
 function buildChoiceMessage(

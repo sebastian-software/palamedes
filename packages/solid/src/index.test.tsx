@@ -1,10 +1,10 @@
 /* @jsxImportSource solid-js */
-import { createRoot, createSignal } from "solid-js"
+import { createRenderEffect, createRoot, createSignal } from "solid-js"
 import { renderToString } from "solid-js/web/dist/server.js"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { createI18n } from "@palamedes/core"
-import { resetI18nRuntime, setServerI18nGetter } from "@palamedes/runtime"
+import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
 
 import { Plural, Trans, buildLocaleSwitchItems } from "./index"
 import { createClientLocaleEffect } from "./client"
@@ -12,6 +12,7 @@ import { createClientLocaleEffect } from "./client"
 describe("@palamedes/solid", () => {
   afterEach(() => {
     resetI18nRuntime()
+    delete (globalThis as { window?: unknown }).window
   })
 
   it("renders Trans without a provider by reading the active runtime instance", () => {
@@ -25,6 +26,43 @@ describe("@palamedes/solid", () => {
     const html = renderToString(() => <Trans id="footer" message="Powered by Palamedes" />)
 
     expect(html).toBe("Bereitgestellt von Palamedes")
+  })
+
+  it("re-renders Trans output when the client locale switches", async () => {
+    // Pretend we are on the client so `getI18n` reads the client instance.
+    ;(globalThis as { window?: unknown }).window = {}
+
+    const i18n = createI18n()
+    i18n.load("en", { title: "Book your seat" })
+    i18n.load("de", { title: "Sichere dir deinen Platz" })
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const outputs: string[] = []
+
+    await new Promise<void>((resolve) => {
+      createRoot((dispose) => {
+        const render = Trans({ id: "title", message: "Book your seat" }) as unknown as () => unknown
+
+        createRenderEffect(() => {
+          outputs.push([render()].flat().join(""))
+        })
+
+        // Switch outside the initial render batch so the reactive update flushes.
+        queueMicrotask(() => {
+          // A client locale switch re-activates the same instance and republishes it.
+          i18n.activate("de")
+          setClientI18n(i18n)
+
+          queueMicrotask(() => {
+            dispose()
+            resolve()
+          })
+        })
+      })
+    })
+
+    expect(outputs).toStrictEqual(["Book your seat", "Sichere dir deinen Platz"])
   })
 
   it("renders plural output through the active runtime instance", () => {
