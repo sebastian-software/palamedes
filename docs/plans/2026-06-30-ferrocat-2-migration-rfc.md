@@ -378,6 +378,10 @@ Update `pmds` behavior:
 - `pmds audit` reads configured PO and FCL catalogs
 - `pmds report` resolves configured PO and FCL paths
 - `pmds catalog merge --format=fcl` is supported
+- `pmds catalog merge` accepts `--base <path>` so Git merge drivers can pass
+  the ancestor `%O`; if a selected backend cannot use an ancestor, document
+  that limitation explicitly instead of faking a 3-way merge with duplicate
+  `%A` input
 - `.fcl` extension inference works for merge input and output paths
 - `pmds catalog convert --to=fcl` converts supported PO catalogs to FCL while
   preserving translations
@@ -435,11 +439,15 @@ Update merge docs from NDJSON to FCL:
 *.fcl merge=palamedes-catalog-fcl
 ```
 
+Remove old NDJSON gitattributes entries such as `*.ndjson` or
+`*.fcat.ndjson` during migration, and replace any old NDJSON merge-driver
+configuration with the PO/FCL drivers below.
+
 ```bash
 git config merge.palamedes-catalog.driver \
-  'pmds catalog merge --format=po --conflict-strategy=use-first --output %A %A %B'
+  'pmds catalog merge --format=po --conflict-strategy=use-first --base %O --output %A %A %B'
 git config merge.palamedes-catalog-fcl.driver \
-  'pmds catalog merge --format=fcl --conflict-strategy=use-first --output %A %A %B'
+  'pmds catalog merge --format=fcl --conflict-strategy=use-first --base %O --output %A %A %B'
 ```
 
 ### 4. N-API and TypeScript Migration
@@ -488,7 +496,8 @@ Documentation should say:
 - `pmds audit` is the Palamedes-first audit command; `ferrocat audit` can be
   documented as an optional low-level raw-catalog diagnostic command
 - NDJSON has been removed from Palamedes public APIs
-- merge-driver examples use `.po` and `.fcl`
+- merge-driver examples use `.po` and `.fcl`, pass Git's ancestor `%O` via
+  `--base`, and remove old NDJSON gitattributes and driver examples
 - `--clean` deletes dated obsolete entries older than the fixed 30-day window
 - `--clean` keeps obsolete entries without `obsolete-since`
 - `--force-clean` deletes obsolete entries immediately, including undated ones
@@ -518,6 +527,9 @@ Add focused tests before relying on broad gates:
 - config `format: ndjson` fails with an error that suggests `format: fcl`
 - pseudo-locale generation works with configured `format: fcl`
 - `.fcl` merge format inference
+- Git merge-driver examples pass `%O` through `--base` instead of duplicating
+  `%A` as the ancestor
+- migration docs remove old NDJSON gitattributes and merge-driver config
 - `CatalogFileFormat` no longer accepts NDJSON
 - unsupported Ferrocat 1.x / NDJSON catalog inputs fail clearly where they enter
   Palamedes public workflows
@@ -643,6 +655,8 @@ config-aware test coverage.
 - Existing `format: ndjson` config fails with a diagnostic that suggests
   `format: fcl`.
 - CLI merge supports `--format=fcl` and `.fcl` inference.
+- Git merge-driver docs use `%O` via `--base` and include removal of old
+  NDJSON gitattributes and driver configuration.
 - CLI conversion supports single-file and config-wide PO-to-FCL migration while
   preserving translations.
 - CLI does not expose reverse FCL-to-PO conversion in this migration.
