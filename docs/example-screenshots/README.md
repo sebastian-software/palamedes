@@ -10,10 +10,17 @@ Refresh them with:
 pnpm capture:example-screenshots
 ```
 
-Each example has two screenshots:
+Each example has two screenshots. They are intentionally captured in two
+different locales — that language change is the expected outcome of the
+verification flow, **not** a hydration glitch or a discarded server render:
 
-- **Initial**: initial SSR-visible state
-- **Interactive**: post-interaction state after locale switching and the localized server interaction flow
+- **Initial**: the server-rendered state on first load, in **English**.
+- **Interactive**: the same page in **German**, captured after the verifier
+  clicks the locale switch and runs the localized server interaction. For the
+  cookie strategy the choice is persisted and the server re-renders in German
+  (a real server round-trip); for the route strategy it is a client navigation
+  to the localized path. In both cases the switch is asserted to apply without
+  hydration errors and without throwing away the server render.
 
 ## Next.js
 
