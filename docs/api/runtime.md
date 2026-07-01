@@ -7,6 +7,7 @@ macro output.
 
 - `getI18n<T>()`
 - `setClientI18n(i18n)`
+- `subscribeClientI18n(listener)`
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
 - `I18nInstance`
@@ -38,6 +39,22 @@ On the client, `getI18n()` reads the instance registered with
 
 `getI18n()` throws a descriptive error when no active client instance or server
 getter result is available. Initialize the runtime before translated code runs.
+
+## `subscribeClientI18n(listener)`
+
+Registers a listener invoked on every `setClientI18n()` call, including
+re-activation of the same instance in place. Returns an unsubscribe function.
+
+This is the bridge framework bindings use to connect the framework-agnostic
+client runtime to their own reactivity system. `@palamedes/solid/runtime`, for
+example, feeds it into a Solid signal so translated output re-renders on a live
+locale switch. Application code rarely calls this directly.
+
+```ts
+const unsubscribe = subscribeClientI18n((i18n) => {
+  // react to the newly activated client instance
+})
+```
 
 ## Server Runtime
 

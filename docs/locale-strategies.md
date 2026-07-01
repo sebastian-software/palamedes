@@ -48,6 +48,71 @@ When host mapping disagrees with the rendered locale, the example shows the same
 info bar used for `Accept-Language` mismatches, but the CTA points to the
 canonical host plus path for the recommended locale.
 
+## Switching Mechanism: Reload vs. Live
+
+Locale *strategy* (cookie vs. route) is independent from the *switching
+mechanism* — how a new locale reaches an already-running client. There are two
+mechanisms, and the choice matters more for robustness than the strategy does.
+
+### Reload (recommended default)
+
+A switch triggers a full document load in the new locale: writing the cookie and
+calling `window.location.assign(...)`, or hard-loading the new locale URL.
+
+- the whole app re-renders from a single, consistent server locale
+- there is no client-side reactivity contract to uphold
+- module-level caches, memoized `Intl` formatters, and already-fetched data are
+  discarded and rebuilt, so mixed-locale states cannot occur
+- the only cost is the reload UX: a brief flash, scroll reset, and refetch
+
+The cookie examples use this mechanism.
+
+### Live (opt-in)
+
+A switch swaps the active client i18n in place and re-renders reactively, with no
+document load. The route examples use this mechanism — client-side navigation via
+the router keeps the app mounted.
+
+Live switching is a whole-app reactivity contract: **every** value derived from
+the locale must either live in the reactive graph or be keyed by locale. In
+practice the failure mode is rarely the translation components — it is the larger
+components with their own state or caches:
+
+- memoized `Intl.NumberFormat` / `Intl.DateTimeFormat` instances not keyed by locale
+- data fetched server-side or cached client-side in the previous locale
+- third-party components that snapshot strings on mount
+
+Any of these silently goes stale and produces a mixed-locale UI. The library
+cannot enforce this discipline for you; it is an ongoing cost you accept per app.
+
+### Recommendation
+
+Prefer reload. It is simpler, has no reactivity contract, and structurally rules
+out the mixed-locale class of bugs. Because locale changes are rare and
+deliberate, that robustness is almost always worth the small reload UX cost.
+Reach for live only when instant, state-preserving switches are a genuine product
+requirement and the team is prepared to key every locale-derived value.
+
+### Enabling live switching (Solid)
+
+Reload needs nothing beyond a normal server render. Live switching in Solid has
+two opt-in pieces:
+
+- `createClientLocaleEffect(localeAccessor, syncClientI18n)` pushes locale changes
+  into the client runtime
+- point the macro transform at Solid's reactive runtime so `t` / `plural` output
+  follows the switch:
+
+  ```ts
+  // app.config.ts
+  palamedes({ runtimeModule: "@palamedes/solid/runtime" })
+  ```
+
+`<Trans>` / `<Plural>` / `<Select>` / `<SelectOrdinal>` track the active instance
+on their own and follow a live switch even with the default `runtimeModule`. Only
+the macro `t` / `plural` calls depend on the reactive `runtimeModule` — so wire
+both, or use reload.
+
 ## Why The Matrix Is Split Per Framework
 
 Each framework family implements routing, request state, and server-side actions
