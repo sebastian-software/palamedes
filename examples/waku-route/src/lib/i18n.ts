@@ -7,6 +7,7 @@ import {
   createRouteLocaleBanner,
   isLocale,
   normalizeLocale,
+  parseChoiceLocale,
   type HostLocaleConfig,
   type Locale,
 } from "@palamedes/example-locale-shared"
@@ -60,6 +61,7 @@ export function syncClientI18n(locale: Locale) {
 export function createBanner(headers: Record<string, string | undefined>, locale: Locale) {
   return createRouteLocaleBanner({
     acceptLanguageHeader: headers["accept-language"],
+    choiceLocale: parseChoiceLocale(headers.cookie),
     currentLocale: locale,
     hostConfig: HOSTS,
     pathname: `/${locale}`,

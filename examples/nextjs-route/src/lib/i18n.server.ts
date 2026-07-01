@@ -5,6 +5,7 @@ import { createServerI18nScope } from "@palamedes/runtime/server"
 import type { PalamedesI18n } from "@palamedes/core"
 import {
   createRouteLocaleBanner,
+  parseChoiceLocale,
   resolveRouteLocale,
   type LocaleBanner,
   type LocaleSource,
@@ -29,6 +30,7 @@ export async function getRouteLocale(paramsLocale?: string): Promise<{
   return {
     banner: createRouteLocaleBanner({
       acceptLanguageHeader: headerStore.get("accept-language"),
+      choiceLocale: parseChoiceLocale(headerStore.get("cookie")),
       currentLocale: resolved.locale,
       hostConfig: ROUTE_HOSTS,
       pathname,

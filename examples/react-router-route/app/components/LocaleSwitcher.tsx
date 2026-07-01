@@ -1,4 +1,5 @@
 import { Link } from "react-router"
+import { serializeChoiceCookie } from "@palamedes/example-locale-shared"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "~/lib/i18n"
@@ -27,6 +28,9 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
             data-testid={item.testId}
             aria-current={item.active ? "page" : undefined}
             to={`/${item.locale}`}
+            onClick={() => {
+              document.cookie = serializeChoiceCookie(item.locale)
+            }}
           >
             {item.locale.toUpperCase()}
           </Link>

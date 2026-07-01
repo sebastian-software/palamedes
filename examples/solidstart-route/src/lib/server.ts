@@ -4,6 +4,7 @@ import { t } from "@palamedes/core/macro"
 import {
   createRouteLocaleBanner,
   normalizeLocale as normalizeSharedLocale,
+  parseChoiceLocale,
 } from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
 import { getLocaleLabel, normalizeLocale, ROUTE_HOSTS } from "./i18n"
@@ -20,6 +21,7 @@ export const loadRoutePageData = query(async (routeLocale: string) => {
   return {
     banner: createRouteLocaleBanner({
       acceptLanguageHeader: event?.request.headers.get("accept-language"),
+      choiceLocale: parseChoiceLocale(event?.request.headers.get("cookie")),
       currentLocale: locale,
       hostConfig: ROUTE_HOSTS,
       pathname: requestUrl.pathname,

@@ -1,5 +1,6 @@
 import { For } from "solid-js"
 import { A } from "@solidjs/router"
+import { serializeChoiceCookie } from "@palamedes/example-locale-shared"
 import { buildLocaleSwitchItems } from "@palamedes/solid"
 import { Trans } from "@palamedes/solid/macro"
 import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n"
@@ -28,6 +29,9 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
               data-testid={item.testId}
               aria-current={item.active ? "page" : undefined}
               href={`/${item.locale}`}
+              onClick={() => {
+                document.cookie = serializeChoiceCookie(item.locale)
+              }}
             >
               {item.locale.toUpperCase()}
             </A>

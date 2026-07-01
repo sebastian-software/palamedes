@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router"
+import { serializeChoiceCookie } from "@palamedes/example-locale-shared"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "../lib/i18n"
@@ -28,6 +29,9 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
             aria-current={item.active ? "page" : undefined}
             to="/$locale"
             params={{ locale: item.locale }}
+            onClick={() => {
+              document.cookie = serializeChoiceCookie(item.locale)
+            }}
           >
             {item.locale.toUpperCase()}
           </Link>

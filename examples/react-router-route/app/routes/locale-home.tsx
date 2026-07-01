@@ -6,6 +6,7 @@ import type { Route } from "./+types/locale-home"
 import { ClientReady } from "~/components/ClientReady"
 import { LocaleSwitcher } from "~/components/LocaleSwitcher"
 import { ProofPanel } from "~/components/ProofPanel"
+import { SuggestionBanner } from "~/components/SuggestionBanner"
 import { TicketPanel } from "~/components/TicketPanel"
 import {
   activateServerI18n,
@@ -58,16 +59,12 @@ export default function LocaleHome({ loaderData }: Route.ComponentProps) {
   return (
     <main className="page-shell">
       {banner ? (
-        <div className="notice" role="status">
-          <span className="notice-text">{banner.description}</span>
-          <a
-            className="notice-cta"
-            data-testid="locale-suggestion-cta"
-            href={banner.recommendedUrl}
-          >
-            <Trans>Switch to the recommended locale</Trans>
-          </a>
-        </div>
+        <SuggestionBanner
+          currentLocale={locale}
+          description={banner.description}
+          recommendedLocale={banner.recommendedLocale}
+          recommendedUrl={banner.recommendedUrl}
+        />
       ) : null}
 
       <header className="topbar">

@@ -6,6 +6,7 @@ import {
   createRouteLocaleBanner,
   getPreferredLocale,
   normalizeLocale as normalizeSharedLocale,
+  parseChoiceLocale,
 } from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
 import { getLocaleLabel, ROUTE_HOSTS, normalizeLocale } from "./i18n"
@@ -29,6 +30,7 @@ export const loadHomePageData = createServerFn({ method: "GET" })
     return {
       banner: createRouteLocaleBanner({
         acceptLanguageHeader: getRequestHeader("accept-language"),
+        choiceLocale: parseChoiceLocale(getRequestHeader("cookie")),
         currentLocale: locale,
         hostConfig: ROUTE_HOSTS,
         pathname: `/${locale}`,

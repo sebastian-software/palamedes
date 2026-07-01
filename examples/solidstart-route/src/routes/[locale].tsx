@@ -7,6 +7,7 @@ import { EVENT } from "@palamedes/example-ui"
 import { ClientReady } from "../components/ClientReady"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
 import { ProofPanel } from "../components/ProofPanel"
+import { SuggestionBanner } from "../components/SuggestionBanner"
 import { TicketPanel } from "../components/TicketPanel"
 import { syncClientI18n } from "../lib/i18n"
 import { loadRoutePageData } from "../lib/server"
@@ -28,16 +29,12 @@ function RoutePageContent(props: { data: RoutePageData }) {
     <main class="page-shell">
       <Show when={props.data.banner}>
         {(banner) => (
-          <div class="notice" role="status">
-            <span class="notice-text">{banner().description}</span>
-            <a
-              class="notice-cta"
-              data-testid="locale-suggestion-cta"
-              href={banner().recommendedUrl}
-            >
-              <Trans>Switch to the recommended locale</Trans>
-            </a>
-          </div>
+          <SuggestionBanner
+            currentLocale={props.data.locale}
+            description={banner().description}
+            recommendedLocale={banner().recommendedLocale}
+            recommendedUrl={banner().recommendedUrl}
+          />
         )}
       </Show>
 
@@ -87,12 +84,5 @@ export default function LocalePage() {
   const params = useParams()
   const pageData = createAsync(() => loadRoutePageData(params.locale))
 
-  return (
-    <Show when={pageData()}>
-      {(page) => {
-        const data = page()
-        return <RoutePageContent data={data} />
-      }}
-    </Show>
-  )
+  return <Show when={pageData()}>{(page) => <RoutePageContent data={page()} />}</Show>
 }

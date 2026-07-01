@@ -1,6 +1,10 @@
 export const DEFAULT_LOCALE = "en"
 export const LOCALES = ["en", "de", "es"] as const
 export const LOCALE_COOKIE = "locale"
+// Records a deliberate locale decision (switcher click, banner CTA or dismiss)
+// so the route strategy can stop suggesting the browser language once the user
+// has made an explicit choice — while still informing on an unintended landing.
+export const LOCALE_CHOICE_COOKIE = "locale-choice"
 
 export type Locale = (typeof LOCALES)[number]
 export type LocaleSource = "accept-language" | "cookie" | "default" | "host" | "route"
@@ -71,21 +75,35 @@ export function getPort(host: string | null | undefined): string | null {
   return match?.[1] ?? null
 }
 
-export function parseCookieLocale(cookieHeader: string | null | undefined): Locale | null {
+function readCookie(cookieHeader: string | null | undefined, name: string): string | null {
   if (!cookieHeader) {
     return null
   }
 
   for (const segment of cookieHeader.split(";")) {
     const [rawKey, rawValue] = segment.split("=")
-    if (rawKey?.trim() !== LOCALE_COOKIE) {
-      continue
+    if (rawKey?.trim() === name) {
+      return rawValue?.trim() ?? null
     }
-
-    return normalizeLocale(rawValue?.trim())
   }
 
   return null
+}
+
+export function parseCookieLocale(cookieHeader: string | null | undefined): Locale | null {
+  const value = readCookie(cookieHeader, LOCALE_COOKIE)
+  return value ? normalizeLocale(value) : null
+}
+
+/** Reads the deliberate-choice cookie; null when unset or invalid. */
+export function parseChoiceLocale(cookieHeader: string | null | undefined): Locale | null {
+  const value = readCookie(cookieHeader, LOCALE_CHOICE_COOKIE)
+  return isLocale(value) ? value : null
+}
+
+/** Cookie string for `document.cookie` recording a deliberate locale choice. */
+export function serializeChoiceCookie(locale: Locale): string {
+  return `${LOCALE_CHOICE_COOKIE}=${locale}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax`
 }
 
 export function parseAcceptLanguage(header: string | null | undefined): string[] {
@@ -234,6 +252,7 @@ export function buildCanonicalUrl(options: {
 
 export function createRouteLocaleBanner(options: {
   acceptLanguageHeader?: string | null
+  choiceLocale?: Locale | null
   currentLocale: Locale
   hostConfig?: HostLocaleConfig
   pathname: string
@@ -260,14 +279,19 @@ export function createRouteLocaleBanner(options: {
     }
   }
 
-  const preferredLocale = getPreferredLocale(options.acceptLanguageHeader)
+  // A deliberate earlier choice (switcher, CTA or dismiss — recorded in the
+  // choice cookie) overrides the raw browser language. So an explicit decision
+  // stops the suggestion, while an unintended landing (e.g. a bookmark to /en
+  // by a German speaker) still gets informed exactly once. The host mismatch
+  // above is unaffected — a wrong host for the locale is a real routing bug.
+  const preferredLocale = options.choiceLocale ?? getPreferredLocale(options.acceptLanguageHeader)
   if (preferredLocale === options.currentLocale) {
     return null
   }
 
   return {
     currentLocale: options.currentLocale,
-    description: `Your browser prefers ${getLocaleLabel(preferredLocale)}, but this page is currently rendering ${getLocaleLabel(options.currentLocale)}.`,
+    description: `You prefer ${getLocaleLabel(preferredLocale)}, but this page is currently rendering ${getLocaleLabel(options.currentLocale)}.`,
     reason: "accept-language",
     recommendedLocale: preferredLocale,
     recommendedUrl: buildCanonicalUrl({

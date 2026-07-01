@@ -6,6 +6,7 @@ import type { LocaleBanner } from "@palamedes/example-locale-shared"
 import { ClientReady } from "./ClientReady"
 import { LocaleSwitcher } from "./LocaleSwitcher"
 import { ProofPanel } from "./ProofPanel"
+import { SuggestionBanner } from "./SuggestionBanner"
 import { TicketPanel } from "./TicketPanel"
 import { syncClientI18n, type Locale } from "../lib/i18n"
 
@@ -24,16 +25,12 @@ export function RouteLocalePage({
   return (
     <main className="page-shell">
       {banner ? (
-        <div className="notice" role="status">
-          <span className="notice-text">{banner.description}</span>
-          <a
-            className="notice-cta"
-            data-testid="locale-suggestion-cta"
-            href={banner.recommendedUrl}
-          >
-            <Trans>Switch to the recommended locale</Trans>
-          </a>
-        </div>
+        <SuggestionBanner
+          currentLocale={locale}
+          description={banner.description}
+          recommendedLocale={banner.recommendedLocale}
+          recommendedUrl={banner.recommendedUrl}
+        />
       ) : null}
 
       <header className="topbar">

@@ -6,6 +6,7 @@ import { unstable_getHeaders } from "waku/router/server"
 import { ClientReady } from "../components/ClientReady"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
 import { ProofPanel } from "../components/ProofPanel"
+import { SuggestionBanner } from "../components/SuggestionBanner"
 import { TicketPanel } from "../components/TicketPanel"
 import {
   activateServerI18n,
@@ -48,16 +49,12 @@ export default async function RoutePage({ locale }: PageProps<"/[locale]">) {
       <title>Frontend Stage · Palamedes + Waku</title>
 
       {banner ? (
-        <div className="notice" role="status">
-          <span className="notice-text">{banner.description}</span>
-          <a
-            className="notice-cta"
-            data-testid="locale-suggestion-cta"
-            href={banner.recommendedUrl}
-          >
-            <Trans>Switch to the recommended locale</Trans>
-          </a>
-        </div>
+        <SuggestionBanner
+          currentLocale={currentLocale}
+          description={banner.description}
+          recommendedLocale={banner.recommendedLocale}
+          recommendedUrl={banner.recommendedUrl}
+        />
       ) : null}
 
       <header className="topbar">

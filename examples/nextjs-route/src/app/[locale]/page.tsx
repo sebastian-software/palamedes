@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { defineMessage } from "@palamedes/core/macro"
 import type { MessageDescriptor, PalamedesI18n } from "@palamedes/core"
 import { EVENT } from "@palamedes/example-ui"
@@ -6,6 +5,7 @@ import { ClientLocaleBoundary } from "@/components/ClientLocaleBoundary"
 import { ClientReady } from "@/components/ClientReady"
 import { LocaleSwitcher } from "@/components/LocaleSwitcher"
 import { ProofPanel } from "@/components/ProofPanel"
+import { SuggestionBanner } from "@/components/SuggestionBanner"
 import { TicketPanel } from "@/components/TicketPanel"
 import { createActiveServerI18n, getRouteLocale } from "@/lib/i18n.server"
 import { getLocaleLabel, type Locale } from "@/lib/i18n"
@@ -54,16 +54,13 @@ export default async function RouteHome({ params }: { params: Promise<{ locale: 
   return (
     <main className="page-shell">
       {banner ? (
-        <div className="notice" role="status">
-          <span className="notice-text">{banner.description}</span>
-          <Link
-            className="notice-cta"
-            data-testid="locale-suggestion-cta"
-            href={banner.recommendedUrl}
-          >
-            {translate(i18n, switchToRecommendedMessage)}
-          </Link>
-        </div>
+        <SuggestionBanner
+          ctaLabel={translate(i18n, switchToRecommendedMessage)}
+          currentLocale={locale}
+          description={banner.description}
+          recommendedLocale={banner.recommendedLocale}
+          recommendedUrl={banner.recommendedUrl}
+        />
       ) : null}
 
       <header className="topbar">

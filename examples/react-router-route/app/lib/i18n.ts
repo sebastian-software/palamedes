@@ -9,6 +9,7 @@ import {
   getLocaleLabel,
   getPreferredLocale,
   normalizeLocale,
+  parseChoiceLocale,
   type HostLocaleConfig,
   type Locale,
 } from "@palamedes/example-locale-shared"
@@ -82,6 +83,7 @@ export function resolveLocaleFromRequest(request: Request): Locale {
 export function getRouteBanner(request: Request, locale: Locale) {
   return createRouteLocaleBanner({
     acceptLanguageHeader: request.headers.get("accept-language"),
+    choiceLocale: parseChoiceLocale(request.headers.get("cookie")),
     currentLocale: locale,
     hostConfig: ROUTE_HOSTS,
     pathname: `/${locale}`,
