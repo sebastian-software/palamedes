@@ -1,30 +1,33 @@
 import type { CatalogMessages } from "@palamedes/core"
 import { createI18n } from "@palamedes/core"
 import { setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
-import {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_LABELS,
-  createRouteLocaleBanner,
-  getLocaleLabel,
-  getPreferredLocale,
-  normalizeLocale,
-  parseChoiceLocale,
-  type HostLocaleConfig,
-  type Locale,
-} from "@palamedes/example-locale-shared"
+import { defineLocaleControls } from "@palamedes/core/locale"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
 import { messages as esMessages } from "../locales/es.po"
 
-export { DEFAULT_LOCALE, LOCALES, LOCALE_LABELS, getLocaleLabel, normalizeLocale, type Locale }
+export const LOCALES = ["en", "de", "es"] as const
+export const DEFAULT_LOCALE = "en"
+export type Locale = (typeof LOCALES)[number]
 
-export const ROUTE_HOSTS: HostLocaleConfig = {
-  locales: {
-    en: "en.lvh.me",
-    de: "de.lvh.me",
-    es: "es.lvh.me",
+/** Headless locale controls for this demo (route strategy + host map). */
+export const locales = defineLocaleControls<Locale>({
+  locales: LOCALES,
+  defaultLocale: DEFAULT_LOCALE,
+  hosts: {
+    locales: {
+      en: "en.lvh.me",
+      de: "de.lvh.me",
+      es: "es.lvh.me",
+    },
   },
+})
+
+export const LOCALE_LABELS = locales.labels
+export const normalizeLocale = locales.normalizeLocale
+
+export function getLocaleLabel(locale: Locale): string {
+  return locales.label(locale)
 }
 
 // Demo catalogs are tiny, so they ship statically. That keeps client locale
@@ -66,7 +69,7 @@ export function syncClientI18n(locale: Locale) {
 }
 
 export function getRootRedirectLocale(request: Request) {
-  return getPreferredLocale(request.headers.get("accept-language"))
+  return locales.preferredLocale(request.headers.get("accept-language"))
 }
 
 export function resolveLocaleFromRequest(request: Request): Locale {
@@ -81,11 +84,10 @@ export function resolveLocaleFromRequest(request: Request): Locale {
 }
 
 export function getRouteBanner(request: Request, locale: Locale) {
-  return createRouteLocaleBanner({
+  return locales.suggest({
     acceptLanguageHeader: request.headers.get("accept-language"),
-    choiceLocale: parseChoiceLocale(request.headers.get("cookie")),
+    cookieHeader: request.headers.get("cookie"),
     currentLocale: locale,
-    hostConfig: ROUTE_HOSTS,
     pathname: `/${locale}`,
     requestHost: request.headers.get("host"),
   })

@@ -70,9 +70,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -122,9 +119,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -174,9 +168,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -241,9 +232,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -308,9 +296,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -354,9 +339,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -400,9 +382,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -461,9 +440,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -522,9 +498,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -580,9 +553,6 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@palamedes/example-locale-shared':
-        specifier: workspace:^
-        version: link:../../packages/example-locale-shared
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
@@ -744,18 +714,6 @@ importers:
   packages/core-node-win32-x64-msvc: {}
 
   packages/create-palamedes: {}
-
-  packages/example-locale-shared:
-    devDependencies:
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      unbuild:
-        specifier: ^3.6.1
-        version: 3.6.1(typescript@6.0.3)
-      vitest:
-        specifier: ^4.1.9
-        version: 4.1.9(@edge-runtime/vm@3.2.0)(@types/node@22.20.0)(jsdom@29.1.1)(vite@8.1.0(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0))
 
   packages/example-ui:
     devDependencies:

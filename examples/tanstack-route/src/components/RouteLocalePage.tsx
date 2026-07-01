@@ -2,7 +2,7 @@ import { t } from "@palamedes/core/macro"
 import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
-import type { LocaleBanner } from "@palamedes/example-locale-shared"
+import type { LocaleSuggestion } from "@palamedes/core/locale"
 import { ClientReady } from "./ClientReady"
 import { LocaleSwitcher } from "./LocaleSwitcher"
 import { ProofPanel } from "./ProofPanel"
@@ -15,7 +15,7 @@ export function RouteLocalePage({
   locale,
   localeLabel,
 }: {
-  banner: LocaleBanner | null
+  banner: LocaleSuggestion<Locale> | null
   locale: Locale
   localeLabel: string
   renderedAt: string

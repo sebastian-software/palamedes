@@ -2,17 +2,11 @@ import { createServerFn } from "@tanstack/react-start"
 import { getRequestHeader } from "@tanstack/react-start/server"
 import { redirect } from "@tanstack/react-router"
 import { t } from "@palamedes/core/macro"
-import {
-  createRouteLocaleBanner,
-  getPreferredLocale,
-  normalizeLocale as normalizeSharedLocale,
-  parseChoiceLocale,
-} from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
-import { getLocaleLabel, ROUTE_HOSTS, normalizeLocale } from "./i18n"
+import { getLocaleLabel, locales, normalizeLocale } from "./i18n"
 
 export const resolveRootRedirect = createServerFn({ method: "GET" }).handler(async () => {
-  const locale = getPreferredLocale(getRequestHeader("accept-language"))
+  const locale = locales.preferredLocale(getRequestHeader("accept-language"))
   throw redirect({
     to: "/$locale",
     params: { locale },
@@ -24,15 +18,14 @@ export const loadHomePageData = createServerFn({ method: "GET" })
     locale: normalizeLocale(data?.locale),
   }))
   .handler(async ({ data }) => {
-    const locale = normalizeSharedLocale(data.locale)
+    const locale = data.locale
     activateServerI18n(locale)
 
     return {
-      banner: createRouteLocaleBanner({
+      banner: locales.suggest({
         acceptLanguageHeader: getRequestHeader("accept-language"),
-        choiceLocale: parseChoiceLocale(getRequestHeader("cookie")),
+        cookieHeader: getRequestHeader("cookie"),
         currentLocale: locale,
-        hostConfig: ROUTE_HOSTS,
         pathname: `/${locale}`,
         requestHost: getRequestHeader("host"),
       }),
@@ -47,7 +40,7 @@ export const getLocalizedServerStatus = createServerFn({ method: "GET" })
     locale: normalizeLocale(data?.locale),
   }))
   .handler(async ({ data }) => {
-    const locale = normalizeSharedLocale(data.locale)
+    const locale = data.locale
     activateServerI18n(locale)
 
     return {

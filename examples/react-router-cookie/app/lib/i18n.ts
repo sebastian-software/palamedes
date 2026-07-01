@@ -1,19 +1,28 @@
 import type { CatalogMessages } from "@palamedes/core"
 import { createI18n } from "@palamedes/core"
 import { setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
-import {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_COOKIE,
-  LOCALE_LABELS,
-  resolveCookieLocale,
-  type Locale,
-} from "@palamedes/example-locale-shared"
+import { defineLocaleControls } from "@palamedes/core/locale"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
 import { messages as esMessages } from "../locales/es.po"
 
-export { DEFAULT_LOCALE, LOCALES, LOCALE_COOKIE, LOCALE_LABELS, type Locale }
+export const LOCALES = ["en", "de", "es"] as const
+export const DEFAULT_LOCALE = "en"
+export const LOCALE_COOKIE = "locale"
+export type Locale = (typeof LOCALES)[number]
+
+/** Headless locale controls for this demo (cookie strategy). */
+export const locales = defineLocaleControls<Locale>({
+  locales: LOCALES,
+  defaultLocale: DEFAULT_LOCALE,
+  cookies: { locale: LOCALE_COOKIE },
+})
+
+export const LOCALE_LABELS = locales.labels
+
+export function getLocaleLabel(locale: Locale): string {
+  return locales.label(locale)
+}
 
 // Demo catalogs are tiny, so they ship statically. That keeps client locale
 // activation synchronous, which matters during hydration: translated components
@@ -31,10 +40,6 @@ export function loadMessages(locale: Locale): CatalogMessages {
 
 export function createExampleI18n() {
   return createI18n()
-}
-
-export function getLocaleLabel(locale: Locale): string {
-  return LOCALE_LABELS[locale]
 }
 
 export function activateServerI18n(locale: Locale) {
@@ -58,7 +63,8 @@ export function syncClientI18n(locale: Locale) {
 }
 
 export function resolveLocaleFromRequest(request: Request) {
-  return resolveCookieLocale({
+  return locales.resolve({
+    strategy: "cookie",
     acceptLanguageHeader: request.headers.get("accept-language"),
     cookieHeader: request.headers.get("cookie"),
   })

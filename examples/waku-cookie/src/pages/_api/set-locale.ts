@@ -1,8 +1,8 @@
-import { normalizeLocale } from "@palamedes/example-locale-shared"
+import { locales } from "../../lib/i18n"
 
 export async function POST(request: Request): Promise<Response> {
   const formData = await request.formData()
-  const locale = normalizeLocale(formData.get("locale"))
+  const locale = locales.normalizeLocale(formData.get("locale"))
   const location = new URL("/", request.url)
 
   return new Response(null, {

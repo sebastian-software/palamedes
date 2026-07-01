@@ -2,15 +2,15 @@ import { query } from "@solidjs/router"
 import { getRequestEvent } from "solid-js/web"
 import { setCookie } from "vinxi/http"
 import { t } from "@palamedes/core/macro"
-import { normalizeLocale, resolveCookieLocale } from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
-import { getLocaleLabel, LOCALE_COOKIE, type Locale } from "./i18n"
+import { getLocaleLabel, LOCALE_COOKIE, type Locale, locales } from "./i18n"
 
 export const loadHomePageData = query(async () => {
   "use server"
 
   const event = getRequestEvent()
-  const resolved = resolveCookieLocale({
+  const resolved = locales.resolve({
+    strategy: "cookie",
     acceptLanguageHeader: event?.request.headers.get("accept-language"),
     cookieHeader: event?.request.headers.get("cookie"),
   })
@@ -28,7 +28,7 @@ export const loadHomePageData = query(async () => {
 export async function setLocaleCookie(locale: Locale) {
   "use server"
 
-  setCookie(LOCALE_COOKIE, normalizeLocale(locale), {
+  setCookie(LOCALE_COOKIE, locales.normalizeLocale(locale), {
     maxAge: 60 * 60 * 24 * 365,
     path: "/",
     sameSite: "lax",
@@ -39,7 +39,8 @@ export const getLocalizedServerStatus = query(async () => {
   "use server"
 
   const event = getRequestEvent()
-  const resolved = resolveCookieLocale({
+  const resolved = locales.resolve({
+    strategy: "cookie",
     acceptLanguageHeader: event?.request.headers.get("accept-language"),
     cookieHeader: event?.request.headers.get("cookie"),
   })

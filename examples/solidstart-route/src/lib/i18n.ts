@@ -1,27 +1,32 @@
 import type { CatalogMessages } from "@palamedes/core"
 import { createI18n } from "@palamedes/core"
 import { setClientI18n } from "@palamedes/runtime"
-import {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_COOKIE,
-  LOCALE_LABELS,
-  type HostLocaleConfig,
-  type Locale,
-} from "@palamedes/example-locale-shared"
+import { defineLocaleControls } from "@palamedes/core/locale"
 import { messages as deMessages } from "../locales/de.po"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as esMessages } from "../locales/es.po"
 
-export { DEFAULT_LOCALE, LOCALES, LOCALE_COOKIE, LOCALE_LABELS, type Locale }
+export const LOCALES = ["en", "de", "es"] as const
+export const DEFAULT_LOCALE = "en"
+export const LOCALE_COOKIE = "locale"
+export type Locale = (typeof LOCALES)[number]
 
-export const ROUTE_HOSTS: HostLocaleConfig = {
-  locales: {
-    en: "en.lvh.me",
-    de: "de.lvh.me",
-    es: "es.lvh.me",
+/** Headless locale controls for this demo (route strategy + host map). */
+export const locales = defineLocaleControls<Locale>({
+  locales: LOCALES,
+  defaultLocale: DEFAULT_LOCALE,
+  cookies: { locale: LOCALE_COOKIE },
+  hosts: {
+    locales: {
+      en: "en.lvh.me",
+      de: "de.lvh.me",
+      es: "es.lvh.me",
+    },
   },
-}
+})
+
+export const LOCALE_LABELS = locales.labels
+export const normalizeLocale = locales.normalizeLocale
 
 export const localeMessages: Record<Locale, CatalogMessages> = {
   en: enMessages,
@@ -35,14 +40,8 @@ export function createExampleI18n() {
   return createI18n()
 }
 
-export function normalizeLocale(value: unknown): Locale {
-  return typeof value === "string" && LOCALES.includes(value as Locale)
-    ? (value as Locale)
-    : DEFAULT_LOCALE
-}
-
 export function getLocaleLabel(locale: Locale): string {
-  return LOCALE_LABELS[locale]
+  return locales.label(locale)
 }
 
 export function syncClientI18n(locale: Locale) {

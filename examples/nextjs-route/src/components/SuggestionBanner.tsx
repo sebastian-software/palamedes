@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { serializeChoiceCookie, type Locale } from "@palamedes/example-locale-shared"
+import { type Locale, locales } from "@/lib/i18n"
 
 type SuggestionBannerProps = {
   ctaLabel: string
@@ -25,7 +25,7 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         data-testid="locale-suggestion-cta"
         href={props.recommendedUrl}
         onClick={() => {
-          document.cookie = serializeChoiceCookie(props.recommendedLocale)
+          document.cookie = locales.serializeChoice(props.recommendedLocale)
         }}
       >
         {props.ctaLabel}
@@ -35,7 +35,7 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         className="notice-dismiss"
         data-testid="locale-suggestion-dismiss"
         onClick={() => {
-          document.cookie = serializeChoiceCookie(props.currentLocale)
+          document.cookie = locales.serializeChoice(props.currentLocale)
           setDismissed(true)
         }}
         type="button"

@@ -5,8 +5,8 @@ import { cookies } from "next/headers"
 import { headers } from "next/headers"
 import { createServerI18nScope } from "@palamedes/runtime/server"
 import type { PalamedesI18n } from "@palamedes/core"
-import { resolveCookieLocale, type LocaleSource } from "@palamedes/example-locale-shared"
-import { createExampleI18n, type Locale, loadMessages } from "./i18n"
+import type { LocaleSource } from "@palamedes/core/locale"
+import { createExampleI18n, type Locale, loadMessages, locales } from "./i18n"
 
 export const serverI18nScope = createServerI18nScope<PalamedesI18n>()
 
@@ -16,12 +16,11 @@ export const serverI18nScope = createServerI18nScope<PalamedesI18n>()
 export async function getLocale(): Promise<{ locale: Locale; source: LocaleSource }> {
   const cookieStore = await cookies()
   const headerStore = await headers()
-  const resolved = resolveCookieLocale({
+  return locales.resolve({
+    strategy: "cookie",
     acceptLanguageHeader: headerStore.get("accept-language"),
     cookieHeader: headerStore.get("cookie") ?? cookieStore.toString(),
   })
-
-  return resolved
 }
 
 /**

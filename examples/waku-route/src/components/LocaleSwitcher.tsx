@@ -1,11 +1,10 @@
 "use client"
 
 import { Link } from "waku/router/client"
-import { serializeChoiceCookie } from "@palamedes/example-locale-shared"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
-import { LOCALES, LOCALE_LABELS, syncClientI18n, type Locale } from "../lib/i18n"
+import { LOCALES, LOCALE_LABELS, locales, syncClientI18n, type Locale } from "../lib/i18n"
 
 type LocaleSwitcherProps = {
   locale: Locale
@@ -32,7 +31,7 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
             aria-current={item.active ? "page" : undefined}
             to={`/${item.locale}` as never}
             onClick={() => {
-              document.cookie = serializeChoiceCookie(item.locale)
+              document.cookie = locales.serializeChoice(item.locale)
             }}
           >
             {item.locale.toUpperCase()}

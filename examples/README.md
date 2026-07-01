@@ -87,9 +87,10 @@ number, currency, date, and time formatting through ICU message arguments
 (`{amount, number, ::currency/EUR}`, `{when, date, full}`). One locale switch
 re-renders all of it at once.
 
-Shared locale and routing proof logic lives in the internal package:
-
-- [packages/example-locale-shared](/Users/sebastian/Workspace/business/palamedes/packages/example-locale-shared)
+Each demo wires its locale controls through the public
+[`@palamedes/core/locale`](../packages/core/src/locale.ts) surface
+(`defineLocaleControls`), so locale resolution, the deliberate-choice cookie,
+and the suggestion decision are shared library code rather than a per-demo copy.
 
 ## Catalog Loading And Bundle Size
 

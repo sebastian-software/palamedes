@@ -1,11 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { serializeChoiceCookie } from "@palamedes/example-locale-shared"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "@/lib/i18n"
-import { LOCALE_LABELS, LOCALES } from "@/lib/i18n"
+import { LOCALE_LABELS, LOCALES, locales } from "@/lib/i18n"
 
 type LocaleSwitcherProps = {
   locale: Locale
@@ -31,7 +30,7 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
             aria-current={item.active ? "page" : undefined}
             href={`/${item.locale}`}
             onClick={() => {
-              document.cookie = serializeChoiceCookie(item.locale)
+              document.cookie = locales.serializeChoice(item.locale)
             }}
           >
             {item.locale.toUpperCase()}

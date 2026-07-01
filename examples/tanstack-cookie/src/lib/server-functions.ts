@@ -1,12 +1,12 @@
 import { createServerFn } from "@tanstack/react-start"
 import { getRequestHeader, setCookie } from "@tanstack/react-start/server"
 import { t } from "@palamedes/core/macro"
-import { resolveCookieLocale } from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
-import { getLocaleLabel, LOCALE_COOKIE, normalizeLocale } from "./i18n"
+import { getLocaleLabel, LOCALE_COOKIE, locales, normalizeLocale } from "./i18n"
 
 function getResolvedLocale() {
-  return resolveCookieLocale({
+  return locales.resolve({
+    strategy: "cookie",
     acceptLanguageHeader: getRequestHeader("accept-language"),
     cookieHeader: getRequestHeader("cookie"),
   })

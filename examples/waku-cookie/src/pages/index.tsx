@@ -1,13 +1,12 @@
 import { t } from "@palamedes/core/macro"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
-import { resolveCookieLocale } from "@palamedes/example-locale-shared"
 import { unstable_getHeaders } from "waku/router/server"
 import { ClientReady } from "../components/ClientReady"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
 import { ProofPanel } from "../components/ProofPanel"
 import { TicketPanel } from "../components/TicketPanel"
-import { activateServerI18n, getLocaleLabel, type Locale } from "../lib/i18n"
+import { activateServerI18n, getLocaleLabel, type Locale, locales } from "../lib/i18n"
 
 type ProbeResult = {
   handledAt: string
@@ -18,7 +17,8 @@ type ProbeResult = {
 
 export default async function CookiePage() {
   const headers = unstable_getHeaders()
-  const { locale } = resolveCookieLocale({
+  const { locale } = locales.resolve({
+    strategy: "cookie",
     acceptLanguageHeader: headers["accept-language"],
     cookieHeader: headers.cookie,
   })

@@ -1,10 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { serializeChoiceCookie, type Locale } from "@palamedes/example-locale-shared"
 import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
-import { syncClientI18n } from "../lib/i18n"
+import { type Locale, locales, syncClientI18n } from "../lib/i18n"
 
 type SuggestionBannerProps = {
   currentLocale: Locale
@@ -28,7 +27,7 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         data-testid="locale-suggestion-cta"
         href={props.recommendedUrl}
         onClick={() => {
-          document.cookie = serializeChoiceCookie(props.recommendedLocale)
+          document.cookie = locales.serializeChoice(props.recommendedLocale)
         }}
       >
         <Trans>Switch to the recommended locale</Trans>
@@ -38,7 +37,7 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         className="notice-dismiss"
         data-testid="locale-suggestion-dismiss"
         onClick={() => {
-          document.cookie = serializeChoiceCookie(props.currentLocale)
+          document.cookie = locales.serializeChoice(props.currentLocale)
           setDismissed(true)
         }}
         type="button"

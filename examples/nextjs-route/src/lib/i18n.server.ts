@@ -3,36 +3,30 @@ import "server-only"
 import { headers } from "next/headers"
 import { createServerI18nScope } from "@palamedes/runtime/server"
 import type { PalamedesI18n } from "@palamedes/core"
-import {
-  createRouteLocaleBanner,
-  parseChoiceLocale,
-  resolveRouteLocale,
-  type LocaleBanner,
-  type LocaleSource,
-} from "@palamedes/example-locale-shared"
-import { createExampleI18n, DEFAULT_LOCALE, type Locale, ROUTE_HOSTS, loadMessages } from "./i18n"
+import type { LocaleSource, LocaleSuggestion } from "@palamedes/core/locale"
+import { createExampleI18n, DEFAULT_LOCALE, type Locale, loadMessages, locales } from "./i18n"
 
 export const serverI18nScope = createServerI18nScope<PalamedesI18n>()
 
 export async function getRouteLocale(paramsLocale?: string): Promise<{
-  banner: LocaleBanner | null
+  banner: LocaleSuggestion<Locale> | null
   locale: Locale
   source: LocaleSource
 }> {
   const headerStore = await headers()
   const pathname =
     paramsLocale && paramsLocale !== DEFAULT_LOCALE ? `/${paramsLocale}` : `/${paramsLocale ?? ""}`
-  const resolved = resolveRouteLocale({
+  const resolved = locales.resolve({
+    strategy: "route",
     acceptLanguageHeader: headerStore.get("accept-language"),
     routeLocale: paramsLocale,
   })
 
   return {
-    banner: createRouteLocaleBanner({
+    banner: locales.suggest({
       acceptLanguageHeader: headerStore.get("accept-language"),
-      choiceLocale: parseChoiceLocale(headerStore.get("cookie")),
+      cookieHeader: headerStore.get("cookie"),
       currentLocale: resolved.locale,
-      hostConfig: ROUTE_HOSTS,
       pathname,
       requestHost: headerStore.get("host"),
     }),

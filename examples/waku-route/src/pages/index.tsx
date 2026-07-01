@@ -1,10 +1,10 @@
-import { getPreferredLocale } from "@palamedes/example-locale-shared"
 import { unstable_getHeaders } from "waku/router/server"
 import { unstable_redirect } from "waku/router/server"
+import { locales } from "../lib/i18n"
 
 export default function IndexPage() {
   const headers = unstable_getHeaders()
-  const locale = getPreferredLocale(headers["accept-language"])
+  const locale = locales.preferredLocale(headers["accept-language"])
 
   unstable_redirect(`/${locale}`)
 }
