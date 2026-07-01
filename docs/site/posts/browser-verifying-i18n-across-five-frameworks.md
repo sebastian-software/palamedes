@@ -34,7 +34,7 @@ that usually hide i18n bugs:
 The screenshots are versioned in the repo:
 
 - [example screenshots](../../example-screenshots/README.md)
-- [matrix visual](../assets/palamedes-framework-matrix.png)
+- [matrix visual](../assets/palamedes-localized-matrix.png)
 
 The useful detail is that the screenshots are not hand-picked marketing
 images. They come from the same Playwright-based verification flow that checks

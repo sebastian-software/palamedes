@@ -1,26 +1,23 @@
 # Site Assets
 
-## `palamedes-framework-matrix.png`
+## `palamedes-localized-matrix.png`
 
-This image is generated from the versioned screenshots in
-`docs/example-screenshots`.
+The README hero. It shows one example demo rendered in three locales side by
+side, so the localization story is visible at a glance: switch language and the
+copy, plural seat counts, currency, and dates all change together.
 
-Source screenshots:
+It intentionally shows a single framework. Every framework and locale strategy
+renders the same design, so repeating ten near-identical screenshots would add
+noise, not proof. The per-framework, per-strategy captures live in
+[`docs/example-screenshots`](../../example-screenshots) and are what CI
+regenerates.
 
-- `nextjs-cookie-initial.png`
-- `nextjs-route-initial.png`
-- `tanstack-cookie-initial.png`
-- `tanstack-route-initial.png`
-- `solidstart-cookie-initial.png`
-- `solidstart-route-initial.png`
-- `waku-cookie-initial.png`
-- `waku-route-initial.png`
-- `react-router-cookie-initial.png`
-- `react-router-route-initial.png`
-
-It is a public-facing proof asset, not a hand-drawn mockup. Refresh the source
-screenshots with:
+It is public-facing proof generated from a real, running build, not a
+hand-drawn mockup. Regenerate it by serving any example and running the
+builder against its port:
 
 ```bash
-pnpm capture:example-screenshots
+pnpm --filter @palamedes/example-tanstack-cookie build
+pnpm --filter @palamedes/example-tanstack-cookie preview &
+node scripts/build-readme-hero.mjs --port 4020 --out docs/site/assets/palamedes-localized-matrix.png
 ```

@@ -14,14 +14,17 @@ Waku, React Router, Vite, and backend servers.
 
 We are not asking you to trust a slogan. The repo shows the work.
 
-![Palamedes verification matrix](docs/site/assets/palamedes-framework-matrix.png)
+![The same booking rendered in English, German, and Spanish, identical across every framework](docs/site/assets/palamedes-localized-matrix.png)
 
 The current proof:
 
 - Five framework families, each with cookie and route locale strategies, are
   browser-verified through the same Playwright-based flow used in CI.
-- The screenshots above are generated from versioned repo artifacts, not a
-  marketing mockup.
+- The image above is one demo in three locales: switch language and the copy,
+  plural seat counts, currency, and dates all change together. Every framework
+  and strategy renders the same design, so per-framework captures live in
+  [docs/example-screenshots](docs/example-screenshots) instead of repeating the
+  same picture here. All of it is versioned browser output, not a mockup.
 - Sixteen ADRs explain the runtime model, message identity, native boundary,
   adapter architecture, and the work deliberately kept out of scope.
 - Benchmark commands and fixtures are checked in so the numbers can be rerun

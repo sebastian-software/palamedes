@@ -48,7 +48,7 @@ The first public round is now organized around visible proof instead of broad
 positioning claims:
 
 - [Homepage proof copy](./site/index.mdx)
-- [Verification matrix image](./site/assets/palamedes-framework-matrix.png)
+- [Verification matrix image](./site/assets/palamedes-localized-matrix.png)
 - [Round 1 post drafts](./site/posts/README.md)
 
 Drafts included in this round:
