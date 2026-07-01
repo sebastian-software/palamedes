@@ -156,9 +156,7 @@ test("matrix example browser contract", async () => {
   }
 
   await page.goto(example.hostMismatchUrl, { waitUntil: "domcontentloaded" })
-  await page
-    .getByTestId("locale-suggestion-cta")
-    .waitFor({ state: "visible", timeout: 15_000 })
+  await page.getByTestId("locale-suggestion-cta").waitFor({ state: "visible", timeout: 15_000 })
   await page
     .getByTestId("locale-suggestion-cta")
     .click({ force: true, noWaitAfter: true, timeout: 15_000 })
