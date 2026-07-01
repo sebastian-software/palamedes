@@ -109,6 +109,24 @@ fn transforms_plural_choice_macros() {
 }
 
 #[test]
+fn transforms_plural_choice_with_signal_accessor() {
+    let result = transform_macros(
+        "import { plural } from \"@palamedes/core/macro\";\nconst msg = plural(count(), { one: \"# item\", other: \"# items\" });\n",
+        "test.ts",
+        None,
+    )
+    .expect("transform should succeed");
+
+    // A reactive signal read keeps its accessor name instead of falling back to
+    // the generic "value" placeholder.
+    assert!(result
+        .code
+        .contains("message: \"{count, plural, one {# item} other {# items}}\""));
+    assert!(result.code.contains("{ count: count() }"));
+    assert!(!result.code.contains("{value, plural"));
+}
+
+#[test]
 fn transforms_select_ordinal_choice_macros() {
     let result = transform_macros(
         "import { selectOrdinal } from \"@palamedes/core/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",
