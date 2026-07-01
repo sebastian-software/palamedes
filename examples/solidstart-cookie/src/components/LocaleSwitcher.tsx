@@ -1,7 +1,8 @@
 import { createSignal, For } from "solid-js"
 import { buildLocaleSwitchItems } from "@palamedes/solid"
 import { Trans } from "@palamedes/solid/macro"
-import { LOCALES, LOCALE_COOKIE, LOCALE_LABELS, type Locale } from "../lib/i18n"
+import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n"
+import { setLocaleCookie } from "../lib/server"
 
 type LocaleSwitcherProps = {
   locale: Locale
@@ -18,8 +19,9 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
 
   function handleLocaleChange(nextLocale: Locale) {
     setIsPending(true)
-    document.cookie = `${LOCALE_COOKIE}=${nextLocale}; path=/; max-age=${60 * 60 * 24 * 365}`
-    window.location.assign("/")
+    void setLocaleCookie(nextLocale).then(() => {
+      window.location.assign("/")
+    })
   }
 
   return (

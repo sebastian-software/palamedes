@@ -1,9 +1,10 @@
 import { query } from "@solidjs/router"
 import { getRequestEvent } from "solid-js/web"
+import { setCookie } from "vinxi/http"
 import { t } from "@palamedes/core/macro"
-import { resolveCookieLocale } from "@palamedes/example-locale-shared"
+import { normalizeLocale, resolveCookieLocale } from "@palamedes/example-locale-shared"
 import { activateServerI18n } from "./i18n.server"
-import { getLocaleLabel } from "./i18n"
+import { getLocaleLabel, LOCALE_COOKIE, type Locale } from "./i18n"
 
 export const loadHomePageData = query(async () => {
   "use server"
@@ -23,6 +24,16 @@ export const loadHomePageData = query(async () => {
     source: resolved.source,
   }
 }, "solidstart-cookie:home")
+
+export async function setLocaleCookie(locale: Locale) {
+  "use server"
+
+  setCookie(LOCALE_COOKIE, normalizeLocale(locale), {
+    maxAge: 60 * 60 * 24 * 365,
+    path: "/",
+    sameSite: "lax",
+  })
+}
 
 export const getLocalizedServerStatus = query(async () => {
   "use server"

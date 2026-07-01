@@ -4,7 +4,8 @@ import { useTransition } from "react"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "@/lib/i18n"
-import { LOCALE_COOKIE, LOCALE_LABELS, LOCALES } from "@/lib/i18n"
+import { LOCALE_LABELS, LOCALES } from "@/lib/i18n"
+import { setLocaleAction } from "@/lib/actions"
 
 type LocaleSwitcherProps = {
   locale: Locale
@@ -19,9 +20,8 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
   })
 
   function handleLocaleChange(nextLocale: Locale) {
-    startTransition(() => {
-      document.cookie = `${LOCALE_COOKIE}=${nextLocale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`
-      window.location.assign("/")
+    startTransition(async () => {
+      await setLocaleAction(nextLocale)
     })
   }
 
