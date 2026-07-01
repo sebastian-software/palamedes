@@ -1,5 +1,5 @@
-import { createSignal, For } from "solid-js"
-import { useNavigate } from "@solidjs/router"
+import { For } from "solid-js"
+import { A } from "@solidjs/router"
 import { buildLocaleSwitchItems } from "@palamedes/solid"
 import { Trans } from "@palamedes/solid/macro"
 import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n"
@@ -9,19 +9,12 @@ type LocaleSwitcherProps = {
 }
 
 export function LocaleSwitcher(props: LocaleSwitcherProps) {
-  const navigate = useNavigate()
-  const [isPending, setIsPending] = createSignal(false)
   const localeSwitchItems = () =>
     buildLocaleSwitchItems({
       locales: LOCALES,
       currentLocale: props.locale,
       labels: LOCALE_LABELS,
     })
-
-  function handleLocaleChange(nextLocale: Locale) {
-    setIsPending(true)
-    navigate(`/${nextLocale}`)
-  }
 
   return (
     <div class="switcher">
@@ -31,15 +24,13 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
       <div class="seg" role="group" aria-label="Language">
         <For each={localeSwitchItems()}>
           {(item) => (
-            <button
+            <A
               data-testid={item.testId}
-              aria-pressed={item.active}
-              disabled={isPending()}
-              onClick={() => handleLocaleChange(item.locale)}
-              type="button"
+              aria-current={item.active ? "page" : undefined}
+              href={`/${item.locale}`}
             >
               {item.locale.toUpperCase()}
-            </button>
+            </A>
           )}
         </For>
       </div>

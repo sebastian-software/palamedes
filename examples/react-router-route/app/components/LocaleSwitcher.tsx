@@ -25,7 +25,7 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
           <Link
             key={item.locale}
             data-testid={item.testId}
-            aria-pressed={item.active}
+            aria-current={item.active ? "page" : undefined}
             to={`/${item.locale}`}
           >
             {item.locale.toUpperCase()}

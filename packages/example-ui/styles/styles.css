@@ -159,7 +159,8 @@ a {
   gap: 2px;
 }
 
-.seg button {
+.seg button,
+.seg a {
   appearance: none;
   border: 0;
   background: transparent;
@@ -171,16 +172,21 @@ a {
   padding: 0.34rem 0.8rem;
   border-radius: 999px;
   color: var(--ink-soft);
+  text-decoration: none;
   transition:
     color 0.18s,
     background 0.18s;
 }
 
-.seg button:hover {
+.seg button:hover,
+.seg a:hover {
   color: var(--ink);
 }
 
-.seg button[aria-pressed="true"] {
+/* Cookie switchers use <button aria-pressed>; route switchers use <a
+   aria-current="page"> — both light up as the active pill. */
+.seg button[aria-pressed="true"],
+.seg a[aria-current="page"] {
   background: var(--ink);
   color: var(--paper);
 }

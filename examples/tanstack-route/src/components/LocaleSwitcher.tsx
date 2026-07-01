@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router"
+import { Link } from "@tanstack/react-router"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "../lib/i18n"
@@ -9,16 +9,11 @@ type LocaleSwitcherProps = {
 }
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
-  const navigate = useNavigate()
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
   })
-
-  function handleLocaleChange(nextLocale: Locale) {
-    navigate({ to: "/$locale", params: { locale: nextLocale } })
-  }
 
   return (
     <div className="switcher">
@@ -27,15 +22,15 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
       </span>
       <div className="seg" role="group" aria-label="Language">
         {items.map((item) => (
-          <button
+          <Link
             key={item.locale}
             data-testid={item.testId}
-            aria-pressed={item.active}
-            onClick={() => handleLocaleChange(item.locale)}
-            type="button"
+            aria-current={item.active ? "page" : undefined}
+            to="/$locale"
+            params={{ locale: item.locale }}
           >
             {item.locale.toUpperCase()}
-          </button>
+          </Link>
         ))}
       </div>
     </div>

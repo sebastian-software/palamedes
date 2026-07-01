@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "waku/router/client"
+import { Link } from "waku/router/client"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
@@ -12,16 +12,11 @@ type LocaleSwitcherProps = {
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
   useClientLocale(locale, syncClientI18n)
-  const router = useRouter()
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
   })
-
-  function handleLocaleChange(nextLocale: Locale) {
-    router.push(`/${nextLocale}` as never)
-  }
 
   return (
     <div className="switcher">
@@ -30,15 +25,14 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
       </span>
       <div className="seg" role="group" aria-label="Language">
         {items.map((item) => (
-          <button
+          <Link
             key={item.locale}
             data-testid={item.testId}
-            aria-pressed={item.active}
-            onClick={() => handleLocaleChange(item.locale)}
-            type="button"
+            aria-current={item.active ? "page" : undefined}
+            to={`/${item.locale}` as never}
           >
             {item.locale.toUpperCase()}
-          </button>
+          </Link>
         ))}
       </div>
     </div>
