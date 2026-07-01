@@ -324,6 +324,14 @@ fn extract_from_catalog(
         eprintln!("Found {} files to extract from", files.len());
     }
 
+    if files.is_empty() {
+        eprintln!(
+            "Warning: catalog '{}' matched no source files (include: {}); writing an empty catalog.",
+            catalog.path,
+            catalog.include.join(", ")
+        );
+    }
+
     let extract_started_at = Instant::now();
     let result = extract_catalog_messages_from_files(palamedes::ExtractCatalogMessagesRequest {
         root_dir: config.source_reference_root.to_string_lossy().into_owned(),
@@ -430,8 +438,13 @@ fn normalized_include_patterns(catalog: &ConfigCatalog, config: &LoadedConfig) -
         .include
         .iter()
         .map(|pattern| {
-            let resolved = config.resolve_pattern(pattern);
-            if !pattern.contains('*') && !pattern.contains('.') {
+            // Collapse `.`/`./` segments so dot paths resolve to a real
+            // directory (`.` -> the config root) instead of a literal `/.`
+            // fragment that silently matches no source files. Expand bare
+            // directories to a recursive source glob; pass through anything
+            // that already points at a file or contains glob syntax.
+            let resolved: PathBuf = config.resolve_pattern(pattern).components().collect();
+            if resolved.is_dir() {
                 format!("{}/**/*.{{js,jsx,ts,tsx}}", resolved.to_string_lossy())
             } else {
                 resolved.to_string_lossy().into_owned()
@@ -928,6 +941,37 @@ mod tests {
 
         let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
         assert!(output.contains("#: app/page.tsx:2"));
+    }
+
+    #[test]
+    fn extract_matches_dot_path_include() {
+        let app = temp_dir("extract-dot");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en, de]
+source-locale: en
+source-reference-root: config
+catalogs:
+  - path: locales/{locale}/messages
+    include: ["."]
+"#,
+        )
+        .expect("write config");
+        fs::write(
+            app.join("app/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport const title = t`Dashboard`;\n",
+        )
+        .expect("write source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        run_extraction(&config, &extract_options()).expect("extract");
+
+        let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
+        assert!(
+            output.contains("msgid \"Dashboard\""),
+            "dot-path include should extract messages, got:\n{output}"
+        );
     }
 
     #[test]
