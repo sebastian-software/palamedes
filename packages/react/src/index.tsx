@@ -11,6 +11,12 @@ import type {
   PalamedesI18n,
 } from "@palamedes/core"
 
+export {
+  buildLocaleSwitchItems,
+  type BuildLocaleSwitchItemsOptions,
+  type LocaleSwitchItem,
+} from "@palamedes/core/locale"
+
 export type TransProps = {
   // `id` is optional in authored source: components are written with `message`
   // (or choice props) and the Palamedes compiler transform injects the resolved
@@ -38,20 +44,6 @@ export type SelectProps = {
   value: string | number
   other: string
   [key: string]: string | number | undefined
-}
-
-export type LocaleSwitchItem<TLocale extends string = string> = {
-  active: boolean
-  label: string
-  locale: TLocale
-  testId: string
-}
-
-export type BuildLocaleSwitchItemsOptions<TLocale extends string> = {
-  currentLocale: TLocale
-  labels?: Partial<Record<TLocale, string>>
-  locales: readonly TLocale[]
-  testIdPrefix?: string
 }
 
 export function Trans({
@@ -90,20 +82,6 @@ export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): ReactN
 export function Select({ value, ...choices }: SelectProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
   return <>{i18n._({ message: buildChoiceMessage("value", "select", choices) }, { value })}</>
-}
-
-export function buildLocaleSwitchItems<TLocale extends string>({
-  currentLocale,
-  labels,
-  locales,
-  testIdPrefix = "locale-switch",
-}: BuildLocaleSwitchItemsOptions<TLocale>): Array<LocaleSwitchItem<TLocale>> {
-  return locales.map((locale) => ({
-    active: locale === currentLocale,
-    label: labels?.[locale] ?? locale,
-    locale,
-    testId: `${testIdPrefix}-${locale}`,
-  }))
 }
 
 function buildChoiceMessage(

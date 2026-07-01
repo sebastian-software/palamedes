@@ -26,6 +26,11 @@
       "types": "./dist/macro.d.ts",
       "import": "./dist/macro.mjs",
       "require": "./dist/macro.cjs"
+    },
+    "./locale": {
+      "types": "./dist/locale.d.ts",
+      "import": "./dist/locale.mjs",
+      "require": "./dist/locale.cjs"
     }
   },
   "main": "./dist/index.cjs",
@@ -38,7 +43,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts",
+    "test": "vitest run --globals",
     "stub": "unbuild --stub"
   },
   "engines": {
