@@ -1,66 +1,67 @@
-# Alle Examples gemeinsam im Container betreiben
+# Running all examples together in one container
 
-Dieses Dokument beschreibt, wie alle zehn Palamedes-Example-Apps gemeinsam in
-**einem** Podman-Container laufen – jede auf ihrem festen Port. Grundlage sind das
-`Containerfile` im Repo-Root und der Supervisor `scripts/container/start-all.mjs`.
+This document describes how to run all ten Palamedes example apps together in
+**one** Podman container – each on its own fixed port. It builds on the
+`Containerfile` in the repo root and the supervisor
+`scripts/container/start-all.mjs`.
 
-> Ein Reverse-Proxy, der jeden Port auf eine eigene Domain mappt, ist bewusst
-> **nicht** Teil dieses Setups. Die festen Ports existieren genau dafür, dass ein
-> solcher Proxy später davor gesetzt werden kann (siehe „Ausblick").
+> A reverse proxy that maps each port to its own domain is intentionally **not**
+> part of this setup. The fixed ports exist precisely so such a proxy can be put
+> in front later (see "Outlook").
 
-## Voraussetzungen
+## Prerequisites
 
-- [Podman](https://podman.io/) installiert
-- Ausreichend Ressourcen für zehn gleichzeitige SSR-Node-Server (mehrere GB RAM
-  empfohlen)
+- [Podman](https://podman.io/) installed
+- Enough resources for ten concurrent SSR Node servers (several GB of RAM
+  recommended)
 
-Ein Rust- oder Node-Setup auf dem Host ist **nicht** nötig: Der Build-Stage des
-Containers bringt Node, pnpm und die Rust-Toolchain selbst mit und baut das native
-`@palamedes/core-node`-Addon sowie alle Examples im Image.
+A Rust or Node setup on the host is **not** required: the container's build stage
+brings Node, pnpm and the Rust toolchain itself and builds the native
+`@palamedes/core-node` addon plus all examples inside the image.
 
-## Image bauen
+## Build the image
 
 ```bash
 podman build -f Containerfile -t palamedes-examples .
 ```
 
-Der Build ist mehrstufig:
+The build is multi-stage:
 
-1. **Build-Stage** (glibc/Debian): `pnpm install`, `pnpm build` (baut die Packages
-   inkl. nativem Addon via `cargo` im Release-Profil) und `pnpm build:examples`
-   (baut alle zehn Apps). Die `cargo`-Kompilierung verlängert den ersten Build
-   spürbar.
-2. **Runtime-Stage** (schlankeres Debian-Slim): übernimmt das fertige Workspace
-   und startet den Supervisor. Die Dev-Dependencies bleiben installiert, weil
-   TanStacks `vite preview` und SolidStarts `vinxi start` daraus stammen.
+1. **Build stage** (glibc/Debian): `pnpm install`, `pnpm build` (builds the
+   packages including the native addon via `cargo` in release profile) and
+   `pnpm build:examples` (builds all ten apps). The `cargo` compilation makes the
+   first build noticeably longer.
+2. **Runtime stage** (slimmer Debian slim): takes over the finished workspace and
+   starts the supervisor. Dev dependencies stay installed because TanStack's
+   `vite preview` and SolidStart's `vinxi start` come from them.
 
-## Container starten
+## Start the container
 
-Die zu veröffentlichenden Ports werden aus der Matrix generiert, damit der
-Startbefehl nicht von den tatsächlich gebundenen Ports abdriftet:
+The published ports are generated from the matrix so the run command never drifts
+from the ports the servers actually bind:
 
 ```bash
 podman run --init $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
 ```
 
-Ausgeschrieben entspricht das `-p 4010:4010 -p 4011:4011 … -p 4051:4051`.
+Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4051:4051`.
 
-- `--init` sorgt dafür, dass reparentete Kindprozesse sauber eingesammelt werden.
-  Das Image bringt zusätzlich `tini` als Entrypoint mit, sodass das Reaping auch
-  ohne `--init` funktioniert (z. B. später via Compose/Quadlet).
-- **Restart-Verhalten:** Der Supervisor arbeitet fail-fast – stirbt ein Server,
-  endet der Container mit Fehlercode. Für einen dauerhaften Demo-Betrieb daher
-  ohne `--rm` starten und `--restart=on-failure` ergänzen; für einen einmaligen
-  Vordergrund-Lauf `--rm` verwenden und den Abbruch bewusst in Kauf nehmen.
+- `--init` ensures reparented child processes are reaped cleanly. The image also
+  ships `tini` as its entrypoint, so reaping works even without `--init` (e.g.
+  later via Compose/Quadlet).
+- **Restart behavior:** the supervisor is fail-fast – if one server dies, the
+  container exits with an error code. For a long-running demo, start without
+  `--rm` and add `--restart=on-failure`; for a one-off foreground run, use `--rm`
+  and accept the shutdown.
 
-Der Supervisor startet alle Apps aus `scripts/example-matrix.mjs`, präfixt deren
-Ausgabe mit der Example-ID (`[nextjs-cookie] …`) und beendet den Container
-absichtlich mit Fehlercode, sobald ein Server unerwartet stirbt (fail-fast).
-`podman stop` beendet alle zehn Server über weitergeleitetes `SIGTERM`.
+The supervisor starts all apps from `scripts/example-matrix.mjs`, prefixes their
+output with the example id (`[nextjs-cookie] …`), and intentionally exits the
+container with an error code as soon as a server dies unexpectedly (fail-fast).
+`podman stop` terminates all ten servers via forwarded `SIGTERM`.
 
-## Port-Übersicht
+## Port overview
 
-| Port | Example | Strategie |
+| Port | Example | Strategy |
 | ---- | ------------------------ | ------ |
 | 4010 | `nextjs-cookie` | cookie |
 | 4011 | `nextjs-route` | route |
@@ -73,41 +74,43 @@ absichtlich mit Fehlercode, sobald ein Server unerwartet stirbt (fail-fast).
 | 4050 | `solidstart-cookie` | cookie |
 | 4051 | `solidstart-route` | route |
 
-`scripts/example-matrix.mjs` ist die einzige Quelle der Wahrheit für die Ports.
-Der Supervisor bindet automatisch danach, und der oben gezeigte
-`print-podman-ports.mjs`-Aufruf generiert die `-p`-Flags ebenfalls daraus – beide
-ziehen also ohne manuellen Eingriff nach. Nur die statische `EXPOSE`-Zeile im
-`Containerfile` ist rein informativ und muss bei einer Portänderung von Hand
-nachgezogen werden.
+`scripts/example-matrix.mjs` is the single source of truth for the ports. The
+supervisor binds according to it automatically, and the `print-podman-ports.mjs`
+call shown above generates the `-p` flags from it too – both follow along with no
+manual step. Only the static `EXPOSE` line in the `Containerfile` is purely
+informational and must be updated by hand when a port changes.
 
-## Host-Binding
+## Host binding
 
-Alle Server lauschen im Container auf `0.0.0.0`, damit ein externer Reverse-Proxy
-die veröffentlichten Ports erreicht. Zwei Frameworks binden lokal sonst nur an
-`127.0.0.1`; der Supervisor überschreibt das container-spezifisch, ohne die
-Beispiel-`package.json` zu ändern:
+All servers listen on `0.0.0.0` inside the container so an external reverse proxy
+can reach the published ports. Some frameworks otherwise bind only to
+`127.0.0.1`; the supervisor overrides that in a container-specific way, without
+touching the example `package.json` files:
 
-- **SolidStart** (`vinxi`): `HOST=0.0.0.0` per Umgebungsvariable
-- **TanStack** (`vite preview`): zusätzliches `--host 0.0.0.0` auf der Kommandozeile
+- **SolidStart** (`vinxi`): `HOST=0.0.0.0` via environment variable
+- **TanStack** (`vite preview`): the hardcoded `--host 127.0.0.1` in the script
+  cannot be reliably overridden by an appended flag (Vite's CLI parser collects
+  repeated flags into an array), so the supervisor runs `vite preview` directly
+  with a single `--host 0.0.0.0`
 
-Next.js und React Router binden bereits `0.0.0.0` bzw. respektieren `HOST`. Waku
-wird über `HOST=0.0.0.0` gesteuert; bestätige beim ersten Container-Lauf die
-externe Erreichbarkeit von `4030`/`4031`, falls `waku start` `HOST` nicht
-respektiert.
+Next.js and React Router already bind `0.0.0.0` / honor `HOST`. Waku is driven via
+`HOST=0.0.0.0`; on the first container run, confirm external reachability of
+`4030`/`4031` in case `waku start` does not honor `HOST`.
 
-## Prüfen
+## Check
 
-Nach dem Start liefert jeder Port eine Antwort (Cookie-Strategie auf `/`,
-Route-Strategie auf `/en`):
+After startup each port returns a response (cookie strategy on `/`, route
+strategy on `/en`):
 
 ```bash
 curl -sf http://127.0.0.1:4010/ >/dev/null && echo "nextjs-cookie ok"
 curl -sf http://127.0.0.1:4011/en >/dev/null && echo "nextjs-route ok"
-# … analog für die übrigen Ports
+# … likewise for the remaining ports
 ```
 
-## Ausblick (nicht Teil dieses Setups)
+## Outlook (not part of this setup)
 
-- Ein externer Reverse-Proxy (z. B. Caddy, Traefik oder nginx) mappt jeden Port
-  auf eine eigene Domain und terminiert TLS.
-- Optionaler Betrieb als systemd-Dienst über eine Podman-Quadlet-`.container`-Unit.
+- An external reverse proxy (e.g. Caddy, Traefik or nginx) maps each port to its
+  own domain and terminates TLS.
+- Optionally run the container as a systemd service via a Podman Quadlet
+  `.container` unit.
