@@ -41,14 +41,14 @@ The published ports are generated from the matrix so the run command never drift
 from the ports the servers actually bind:
 
 ```bash
-podman run --init $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
+podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
 ```
 
 Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4051:4051`.
 
-- `--init` ensures reparented child processes are reaped cleanly. The image also
-  ships `tini` as its entrypoint, so reaping works even without `--init` (e.g.
-  later via Compose/Quadlet).
+- **Init/reaping:** the image ships `tini` as its entrypoint, so reparented child
+  processes are reaped cleanly with no extra flag (also works later via
+  Compose/Quadlet). An additional `--init` is unnecessary but harmless.
 - **Restart behavior:** the supervisor is fail-fast – if one server dies, the
   container exits with an error code. For a long-running demo, start without
   `--rm` and add `--restart=on-failure`; for a one-off foreground run, use `--rm`

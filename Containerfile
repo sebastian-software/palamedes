@@ -66,8 +66,11 @@ USER node
 
 # Fixed ports — informational only; the authoritative list is
 # scripts/example-matrix.mjs. Publish them without drift via:
-#   podman run --init $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
+#   podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
 EXPOSE 4010 4011 4020 4021 4030 4031 4040 4041 4050 4051
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+# tini is the init/reaper (no external `--init` needed). `-s` registers it as a
+# subreaper so reaping still works if it ends up not as PID 1 (e.g. when the
+# container is additionally started with `--init`).
+ENTRYPOINT ["/usr/bin/tini", "-s", "--"]
 CMD ["node", "scripts/container/start-all.mjs"]

@@ -1,18 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CONTAINER_HOST, buildStartArgs, buildStartEnv, extraStartArgsFor } from "./start-plan.mjs"
-
-describe("extraStartArgsFor", () => {
-  it("makes Next.js bind the container host explicitly", () => {
-    expect(extraStartArgsFor("nextjs")).toEqual(["-H", CONTAINER_HOST])
-  })
-
-  it("adds no CLI override for env-driven frameworks (incl. tanstack, handled elsewhere)", () => {
-    expect(extraStartArgsFor("tanstack")).toEqual([])
-    expect(extraStartArgsFor("solidstart")).toEqual([])
-    expect(extraStartArgsFor("waku")).toEqual([])
-    expect(extraStartArgsFor("react-router")).toEqual([])
-  })
-})
+import { CONTAINER_HOST, buildStartArgs, buildStartEnv } from "./start-plan.mjs"
 
 describe("buildStartArgs", () => {
   it("runs vite preview directly for tanstack with a single host/port", () => {
@@ -27,17 +14,14 @@ describe("buildStartArgs", () => {
     ])
   })
 
-  it("appends the Next.js host override after a -- separator", () => {
-    expect(buildStartArgs({ framework: "nextjs", start: ["start"] })).toEqual([
-      "start",
-      "--",
-      "-H",
-      CONTAINER_HOST,
-    ])
+  it("runs the matrix start script unchanged for Next.js (binds 0.0.0.0 by default)", () => {
+    expect(buildStartArgs({ framework: "nextjs", start: ["start"] })).toEqual(["start"])
   })
 
-  it("leaves the start script untouched when no override is needed", () => {
+  it("leaves the start script untouched for env-driven frameworks", () => {
     expect(buildStartArgs({ framework: "waku", start: ["start"] })).toEqual(["start"])
+    expect(buildStartArgs({ framework: "react-router", start: ["start"] })).toEqual(["start"])
+    expect(buildStartArgs({ framework: "solidstart", start: ["start"] })).toEqual(["start"])
   })
 })
 
