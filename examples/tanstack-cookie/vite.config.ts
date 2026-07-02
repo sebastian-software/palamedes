@@ -5,4 +5,7 @@ import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
   plugins: [tanstackStart(), palamedes(), react()],
+  preview: {
+    allowedHosts: [".examples.palamedes.dev"],
+  },
 })
