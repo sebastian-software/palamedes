@@ -50,8 +50,8 @@ canonical host plus path for the recommended locale.
 
 ## Switching Mechanism: Reload vs. Live
 
-Locale *strategy* (cookie vs. route) is independent from the *switching
-mechanism* — how a new locale reaches an already-running client. There are two
+Locale _strategy_ (cookie vs. route) is independent from the _switching
+mechanism_ — how a new locale reaches an already-running client. There are two
 mechanisms, and the choice matters more for robustness than the strategy does.
 
 ### Reload (recommended default)
