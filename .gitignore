@@ -37,3 +37,8 @@ benchmarks/*/.swc/
 
 # Browser verification artifacts
 .vitest-attachments/
+
+# SF plugin runtime state (config.json stays tracked)
+.sf-plugin/*
+!.sf-plugin/config.json
+docs/plan/
