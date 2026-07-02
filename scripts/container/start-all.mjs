@@ -77,6 +77,11 @@ function shutdown(reason, exitCode) {
     return
   }
   shuttingDown = true
+  // Set the exit code up front so it holds however the event loop drains: the
+  // children can die and release every active handle (stdio pipes reaching EOF)
+  // before the unref'd poll below ever fires, which would otherwise let the
+  // process exit 0 and defeat restart-on-failure policies.
+  process.exitCode = exitCode
   log(`shutting down (${reason})`)
 
   for (const { child } of children) {
@@ -90,13 +95,12 @@ function shutdown(reason, exitCode) {
   }, FORCE_KILL_TIMEOUT_MS)
   forceTimer.unref()
 
+  // Poll + backstop only flush buffered stdout (incl. the crash reason) and
+  // guarantee the process exits; the exit code is already set above.
   const poll = setInterval(() => {
     if (allStopped()) {
       clearInterval(poll)
       clearTimeout(forceTimer)
-      // Set the exit code and let the event loop drain so buffered stdout (incl.
-      // the crash reason) flushes; a short backstop guarantees the process exits.
-      process.exitCode = exitCode
       setTimeout(() => process.exit(exitCode), 200).unref()
     }
   }, 100)
