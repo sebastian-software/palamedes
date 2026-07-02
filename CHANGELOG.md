@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.1...palamedes-v0.11.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* **examples:** allow deployed preview host for tanstack examples ([#276](https://github.com/sebastian-software/palamedes/issues/276)) ([58878fe](https://github.com/sebastian-software/palamedes/commit/58878fe848530c88511d096b4a021a937d124759))
+
 ## [0.11.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.0...palamedes-v0.11.1) (2026-07-02)
 
 
