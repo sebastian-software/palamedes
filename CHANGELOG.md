@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.0...palamedes-v0.11.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **ci:** build examples container for amd64 (x86_64 target host) ([#274](https://github.com/sebastian-software/palamedes/issues/274)) ([efdf6da](https://github.com/sebastian-software/palamedes/commit/efdf6da74ef49ad51c2d89bbf20849e44b038843))
+
 ## [0.11.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.10.0...palamedes-v0.11.0) (2026-07-02)
 
 
