@@ -29,7 +29,7 @@ Container Registry, so you can pull instead of build:
 podman pull ghcr.io/sebastian-software/palamedes-examples:latest
 ```
 
-The image is built for `linux/amd64`. To build it yourself (e.g. on arm64), use
+The image is built for `linux/arm64`. To build it yourself (e.g. on amd64), use
 the next section.
 
 ## Build the image
