@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.2...palamedes-v0.11.3) (2026-07-02)
+
+
+### Bug Fixes
+
+* **ci:** unblock native package publish on Windows and musl ([#278](https://github.com/sebastian-software/palamedes/issues/278)) ([bb65f13](https://github.com/sebastian-software/palamedes/commit/bb65f13ea857533109ae5a5ab038e15c4315fccf))
+
 ## [0.11.2](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.1...palamedes-v0.11.2) (2026-07-02)
 
 
