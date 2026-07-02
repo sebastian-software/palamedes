@@ -14,7 +14,7 @@
 # --- Build stage -------------------------------------------------------------
 # glibc (Debian) base so the native @palamedes/core-node addon builds for
 # linux-*-gnu without cross-compilation.
-FROM node:22-bookworm AS build
+FROM node:24-bookworm AS build
 
 # Rust toolchain (for the native N-API addon) plus build essentials.
 RUN apt-get update \
@@ -44,7 +44,7 @@ RUN rm -rf target && rm -rf examples/*/.next/cache
 # --- Runtime stage -----------------------------------------------------------
 # Dev dependencies stay installed on purpose: TanStack's `vite preview` and
 # SolidStart's `vinxi start` live in devDependencies, so we do not prune them.
-FROM node:22-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 
