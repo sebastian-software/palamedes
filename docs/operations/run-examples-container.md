@@ -74,18 +74,18 @@ container with an error code as soon as a server dies unexpectedly (fail-fast).
 
 ## Port overview
 
-| Port | Example | Strategy |
-| ---- | ------------------------ | ------ |
-| 4010 | `nextjs-cookie` | cookie |
-| 4011 | `nextjs-route` | route |
-| 4020 | `tanstack-cookie` | cookie |
-| 4021 | `tanstack-route` | route |
-| 4030 | `waku-cookie` | cookie |
-| 4031 | `waku-route` | route |
-| 4040 | `react-router-cookie` | cookie |
-| 4041 | `react-router-route` | route |
-| 4050 | `solidstart-cookie` | cookie |
-| 4051 | `solidstart-route` | route |
+| Port | Example               | Strategy |
+| ---- | --------------------- | -------- |
+| 4010 | `nextjs-cookie`       | cookie   |
+| 4011 | `nextjs-route`        | route    |
+| 4020 | `tanstack-cookie`     | cookie   |
+| 4021 | `tanstack-route`      | route    |
+| 4030 | `waku-cookie`         | cookie   |
+| 4031 | `waku-route`          | route    |
+| 4040 | `react-router-cookie` | cookie   |
+| 4041 | `react-router-route`  | route    |
+| 4050 | `solidstart-cookie`   | cookie   |
+| 4051 | `solidstart-route`    | route    |
 
 `scripts/example-matrix.mjs` is the single source of truth for the ports. The
 supervisor binds according to it automatically, and the `print-podman-ports.mjs`
