@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.11.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.10.0...palamedes-v0.11.0) (2026-07-02)
+
+
+### Features
+
+* **core:** add headless @palamedes/core/locale controls ([5b78fad](https://github.com/sebastian-software/palamedes/commit/5b78fad685990acae23d77e4714c57640db1242f))
+* **examples:** run all examples side by side in one container ([#272](https://github.com/sebastian-software/palamedes/issues/272)) ([ba54ef4](https://github.com/sebastian-software/palamedes/commit/ba54ef42774b3cffd5e3dd0f9380b4a5f0a8cfd7))
+* **examples:** stop the locale banner from nagging after an explicit choice ([af03646](https://github.com/sebastian-software/palamedes/commit/af03646bcc00669d895bc94abb59dd71f445d495))
+* **examples:** unify the example matrix on one shared design ([47a42ab](https://github.com/sebastian-software/palamedes/commit/47a42abbad2607ddc2ab2d3d39719712e15be3cd))
+
+
+### Bug Fixes
+
+* **cli:** match dot-path includes and warn on empty catalogs ([b2ae950](https://github.com/sebastian-software/palamedes/commit/b2ae95047cbe963ac932f12e660aff4128f40e36))
+* **examples:** render route locale switchers as links, style both elements ([2296ebb](https://github.com/sebastian-software/palamedes/commit/2296ebbdb9120b733c9f5f9a459d3d1e195c62d2))
+* **release:** handle follow-up native publish failures ([1825938](https://github.com/sebastian-software/palamedes/commit/182593847e22bfd26f5c46230cfdfb6d5c2fb4be))
+* **release:** handle follow-up native publish failures ([1345842](https://github.com/sebastian-software/palamedes/commit/1345842e751e8225a7cab9c2801aaa7457e209a0))
+* **release:** repair native publish reruns ([0346cef](https://github.com/sebastian-software/palamedes/commit/0346cef61922a7a16f8584d63d34df1a86c95540))
+* **release:** repair native publish reruns ([682539c](https://github.com/sebastian-software/palamedes/commit/682539c27b6bdf95e67122c14cdd98024b4a8432))
+* **solid:** make Trans and t/plural follow client-side locale switches ([8e5f21e](https://github.com/sebastian-software/palamedes/commit/8e5f21e16084dfab6b205b2c7fcf6656d1b5f1f2))
+
 ## [0.10.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.9.0...palamedes-v0.10.0) (2026-06-30)
 
 
