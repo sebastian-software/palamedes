@@ -6,14 +6,14 @@
 
 ## Summary
 
-Palamedes should offer the *behavior* of choosing and switching a locale —
+Palamedes should offer the _behavior_ of choosing and switching a locale —
 resolution, the deliberate-choice cookie, and the suggestion banner logic — as
 an optional, headless part of the public library, next to `t` / `Trans`.
 
 Today this mechanism is fully implemented but lives in the **private**
 `@palamedes/example-locale-shared` package, so every demo (and every real user)
 that wants a locale switcher plus a "you may prefer German" hint has to rebuild
-the same wheel. The one piece that *is* already public — `buildLocaleSwitchItems`
+the same wheel. The one piece that _is_ already public — `buildLocaleSwitchItems`
 in `@palamedes/react` and `@palamedes/solid` — proves the intended shape:
 Palamedes hands over **data and decisions**, the user renders the UI.
 
@@ -52,7 +52,7 @@ re-exports, and all opinionated UI and router wiring kept out of the library.
   built-in CSS in the core. At most optional, unstyled recipes or a separate
   `-ui` package later.
 - **No router abstraction.** `next/link`, Solid's `<A>`, Waku `Link`, TanStack
-  `Link` are too different to wrap. The library says *which* locale and *which*
+  `Link` are too different to wrap. The library says _which_ locale and _which_
   target URL; the user wires their own router. This is the hard boundary and
   the reason the current switchers stay framework-local.
 - **No change to `t` / `Trans` / extraction.** This is additive.
@@ -113,9 +113,9 @@ Everything hardcoded in the demo becomes a config object created once:
 type LocaleControlsConfig<L extends string> = {
   locales: readonly L[]
   defaultLocale: L
-  labels?: Partial<Record<L, string>>          // else Intl.DisplayNames
+  labels?: Partial<Record<L, string>> // else Intl.DisplayNames
   cookies?: { locale?: string; choice?: string } // default "locale" / "locale-choice"
-  hosts?: HostLocaleConfig<L>                    // optional host strategy
+  hosts?: HostLocaleConfig<L> // optional host strategy
 }
 
 const locales = defineLocaleControls({
@@ -158,8 +158,8 @@ Beyond that, the framework layer is optional convenience, not required:
 ```ts
 // @palamedes/react/locale  (and @palamedes/solid/locale) — OPTIONAL
 
-recordLocaleChoice(locales, locale)   // one-liner: document.cookie = serializeChoice(...)
-useLocaleSuggestion(suggestion)       // { dismissed, dismiss(), acceptTo(url) }
+recordLocaleChoice(locales, locale) // one-liner: document.cookie = serializeChoice(...)
+useLocaleSuggestion(suggestion) // { dismissed, dismiss(), acceptTo(url) }
 ```
 
 `recordLocaleChoice` is a trivial wrapper over the core `serializeChoice`, and
