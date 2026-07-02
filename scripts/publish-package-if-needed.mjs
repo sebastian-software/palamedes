@@ -3,6 +3,10 @@ import { existsSync, readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 
 const root = process.cwd()
+// On Windows the package manager binaries resolve to `pnpm.cmd`/`npm.cmd`.
+// Node refuses to spawn `.cmd`/`.bat` files without a shell (CVE-2024-27980),
+// so run through the shell there; POSIX keeps the direct, unquoted spawn.
+const useShell = process.platform === "win32"
 const args = process.argv.slice(2)
 const dryRun = args.includes("--dry-run")
 const packageName = args.find((arg) => !arg.startsWith("--"))
@@ -18,6 +22,7 @@ const packageSpec = `${packageName}@${packageJson.version}`
 const viewResult = spawnSync(command("pnpm"), ["view", packageSpec, "version"], {
   cwd: root,
   encoding: "utf8",
+  shell: useShell,
 })
 
 if (viewResult.error) {
@@ -46,6 +51,7 @@ const publishResult = isNativeArtifactPackage(packageJson)
   ? spawnSync(command("npm"), ["publish", workspacePackage.directory, "--access", "public"], {
       cwd: root,
       stdio: "inherit",
+      shell: useShell,
     })
   : spawnSync(
       command("pnpm"),
@@ -53,6 +59,7 @@ const publishResult = isNativeArtifactPackage(packageJson)
       {
         cwd: root,
         stdio: "inherit",
+        shell: useShell,
       }
     )
 
