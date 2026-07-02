@@ -7,8 +7,9 @@ They prove the current Palamedes story across five framework families and two
 locale strategies while preserving the same underlying runtime and identity
 model.
 
-The matrix is intended to be run locally and validated in CI. Public hosting is
-optional and not part of the default example story.
+The matrix is intended to be run locally and validated in CI — that remains the
+canonical verification path. All ten examples are also publicly accessible as a
+live reference at `*.examples.palamedes.dev`.
 
 ## What This Matrix Proves
 
@@ -19,6 +20,25 @@ optional and not part of the default example story.
 
 That is the real point of the matrix. It is not a pile of demos. It is the
 evidence behind the claim that Palamedes stays coherent across frameworks.
+
+## Live Demos
+
+All ten matrix examples are publicly deployed as a live reference. Switch
+language in any of them and watch copy, plural seat counts, currency, and dates
+change together — the same design across every framework.
+
+| Framework | Locale strategy | Live demo |
+| -------------- | --------------- | --------- |
+| Next.js | cookie | [nextjs-cookie.examples.palamedes.dev](https://nextjs-cookie.examples.palamedes.dev) |
+| Next.js | route | [nextjs-route.examples.palamedes.dev](https://nextjs-route.examples.palamedes.dev) |
+| TanStack Start | cookie | [tanstack-cookie.examples.palamedes.dev](https://tanstack-cookie.examples.palamedes.dev) |
+| TanStack Start | route | [tanstack-route.examples.palamedes.dev](https://tanstack-route.examples.palamedes.dev) |
+| Waku | cookie | [waku-cookie.examples.palamedes.dev](https://waku-cookie.examples.palamedes.dev) |
+| Waku | route | [waku-route.examples.palamedes.dev](https://waku-route.examples.palamedes.dev) |
+| React Router | cookie | [react-router-cookie.examples.palamedes.dev](https://react-router-cookie.examples.palamedes.dev) |
+| React Router | route | [react-router-route.examples.palamedes.dev](https://react-router-route.examples.palamedes.dev) |
+| SolidStart | cookie | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev) |
+| SolidStart | route | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev) |
 
 ## Locale Strategy Matrix
 

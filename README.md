@@ -30,6 +30,8 @@ The current proof:
 - Benchmark commands and fixtures are checked in so the numbers can be rerun
   locally.
 
+**Try it live.** The full framework matrix is deployed at `*.examples.palamedes.dev`. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together — the same design across every framework. Full list in [examples/README](examples/README.md).
+
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,
 diagnostics, and runtime artifact compilation.
@@ -244,7 +246,7 @@ The same foundation also matters for future translation workflows:
 - [Troubleshooting common setup failures](https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md)
 - [Pseudo-localization and fallback locale config](https://github.com/sebastian-software/palamedes/blob/main/docs/pseudo-localization.md)
 - [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
-- [Optional demo deployment note](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
+- [Live demo deployments](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
 - [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
 - [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
