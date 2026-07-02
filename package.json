@@ -16,6 +16,7 @@
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "examples:matrix": "node ./scripts/print-example-matrix.mjs",
+    "container:ports": "node ./scripts/container/print-podman-ports.mjs",
     "deploy:examples": "node ./scripts/deploy-examples.mjs",
     "capture:example-screenshots": "node ./scripts/capture-example-screenshots.mjs",
     "verify:examples": "pnpm build && node ./scripts/verify-examples-all.mjs",

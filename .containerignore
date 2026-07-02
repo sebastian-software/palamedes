@@ -1,0 +1,41 @@
+# Keep the build context small and host-free. node_modules, cargo target/ and any
+# host-built *.node addon must NOT leak into the image — a fresh install and a
+# fresh native build happen inside the build stage. Everything listed here is
+# regenerated in-image.
+
+.git
+.github
+
+# Dependencies and native build artifacts (rebuilt in-image)
+node_modules
+**/node_modules
+target
+**/*.node
+
+# Build outputs (rebuilt in-image)
+dist
+**/dist
+.next
+**/.next
+.output
+**/.output
+.vinxi
+**/.vinxi
+.nitro
+**/.nitro
+.tanstack
+**/.tanstack
+.lingui
+**/.lingui
+**/build/server
+
+# Plugin runtime state and local tooling
+.sf-plugin
+.vercel
+**/.vercel
+.vitest-attachments
+
+# Misc
+*.log
+.DS_Store
+*.tsbuildinfo
