@@ -19,6 +19,19 @@ A Rust or Node setup on the host is **not** required: the container's build stag
 brings Node, pnpm and the Rust toolchain itself and builds the native
 `@palamedes/core-node` addon plus all examples inside the image.
 
+## Pull the published image
+
+On every release (a release-please "release" PR merged to `main`), the
+`Publish Examples Container` workflow builds the image and pushes it to the GitHub
+Container Registry, so you can pull instead of build:
+
+```bash
+podman pull ghcr.io/sebastian-software/palamedes-examples:latest
+```
+
+The image is built for `linux/amd64`. To build it yourself (e.g. on arm64), use
+the next section.
+
 ## Build the image
 
 ```bash

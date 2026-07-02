@@ -1,0 +1,108 @@
+name: Publish Examples Container
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: "Build and push the examples container even without a release commit"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-examples-container-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Mirror publish.yml: only proceed when a release-please "chore: release <version>"
+  # commit just landed on main (i.e. a release PR was merged), or on a manual
+  # force_publish dispatch.
+  determine-release:
+    runs-on: ubuntu-24.04
+    outputs:
+      should_publish: ${{ steps.release.outputs.should_publish }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect release commit
+        id: release
+        shell: bash
+        env:
+          FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_publish && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+
+          has_release_commit=false
+
+          if [ "$FORCE_PUBLISH" = "true" ]; then
+            has_release_commit=true
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            base_ref="${{ github.event.before }}"
+            if [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+              base_ref="$(git rev-parse HEAD^)"
+            fi
+
+            if git log --format=%s "$base_ref..${{ github.sha }}" | grep -Eq '^chore: release '; then
+              has_release_commit=true
+            fi
+          fi
+
+          if [ "$has_release_commit" = true ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-push:
+    needs: determine-release
+    if: needs.determine-release.outputs.should_publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/palamedes-examples
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      # linux/amd64 only: the Containerfile compiles the native Rust addon at
+      # build time, so an emulated arm64 build would be prohibitively slow.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Containerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
