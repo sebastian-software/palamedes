@@ -27,7 +27,9 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ENV PALAMEDES_RUST_PROFILE=release
 
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@11.1.3 --activate
+# corepack provisions pnpm at the exact version pinned in package.json
+# (packageManager) on first use — no hardcoded version here.
+RUN corepack enable
 
 COPY . .
 
@@ -53,11 +55,12 @@ ENV NODE_ENV=production
 RUN apt-get update \
   && apt-get install -y --no-install-recommends tini \
   && rm -rf /var/lib/apt/lists/*
-# Global pnpm so the unprivileged `node` user can run the example start scripts.
-RUN npm install -g pnpm@11.1.3
 
 WORKDIR /app
 COPY --from=build --chown=node:node /app /app
+# Global pnpm at the version pinned in package.json (packageManager) so the
+# unprivileged `node` user can run the example start scripts.
+RUN npm install -g "pnpm@$(node -p 'require("./package.json").packageManager.split("@")[1].split("+")[0]')"
 # Run the ten public servers as a non-root user (least privilege).
 USER node
 
