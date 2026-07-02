@@ -65,8 +65,9 @@ jobs:
   build-and-push:
     needs: determine-release
     if: needs.determine-release.outputs.should_publish == 'true'
-    # Native arm64 runner so the Containerfile's Rust addon builds without emulation.
-    runs-on: ubuntu-24.04-arm
+    # Native x86_64 runner (the target host arch) so the Containerfile's Rust addon
+    # builds without emulation.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -94,15 +95,15 @@ jobs:
             type=raw,value=latest
             type=sha,format=long
 
-      # linux/arm64 only, built natively on the arm64 runner: the Containerfile
-      # compiles the native Rust addon at build time, so an emulated build would
-      # be prohibitively slow.
+      # linux/amd64 only (the target host arch), built natively on the x86_64
+      # runner: the Containerfile compiles the native Rust addon at build time, so
+      # an emulated build would be prohibitively slow.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Containerfile
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
