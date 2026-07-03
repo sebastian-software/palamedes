@@ -17,18 +17,18 @@ Deployment section below.
 All ten examples are publicly accessible. Switch language in any of them and
 watch copy, plural seat counts, currency, and dates change together.
 
-| Framework | Locale strategy | Live demo |
-| -------------- | --------------- | --------- |
-| Next.js | cookie | [nextjs-cookie.examples.palamedes.dev](https://nextjs-cookie.examples.palamedes.dev) |
-| Next.js | route | [nextjs-route.examples.palamedes.dev](https://nextjs-route.examples.palamedes.dev) |
-| TanStack Start | cookie | [tanstack-cookie.examples.palamedes.dev](https://tanstack-cookie.examples.palamedes.dev) |
-| TanStack Start | route | [tanstack-route.examples.palamedes.dev](https://tanstack-route.examples.palamedes.dev) |
-| Waku | cookie | [waku-cookie.examples.palamedes.dev](https://waku-cookie.examples.palamedes.dev) |
-| Waku | route | [waku-route.examples.palamedes.dev](https://waku-route.examples.palamedes.dev) |
-| React Router | cookie | [react-router-cookie.examples.palamedes.dev](https://react-router-cookie.examples.palamedes.dev) |
-| React Router | route | [react-router-route.examples.palamedes.dev](https://react-router-route.examples.palamedes.dev) |
-| SolidStart | cookie | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev) |
-| SolidStart | route | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev) |
+| Framework      | Locale strategy | Live demo                                                                                        |
+| -------------- | --------------- | ------------------------------------------------------------------------------------------------ |
+| Next.js        | cookie          | [nextjs-cookie.examples.palamedes.dev](https://nextjs-cookie.examples.palamedes.dev)             |
+| Next.js        | route           | [nextjs-route.examples.palamedes.dev](https://nextjs-route.examples.palamedes.dev)               |
+| TanStack Start | cookie          | [tanstack-cookie.examples.palamedes.dev](https://tanstack-cookie.examples.palamedes.dev)         |
+| TanStack Start | route           | [tanstack-route.examples.palamedes.dev](https://tanstack-route.examples.palamedes.dev)           |
+| Waku           | cookie          | [waku-cookie.examples.palamedes.dev](https://waku-cookie.examples.palamedes.dev)                 |
+| Waku           | route           | [waku-route.examples.palamedes.dev](https://waku-route.examples.palamedes.dev)                   |
+| React Router   | cookie          | [react-router-cookie.examples.palamedes.dev](https://react-router-cookie.examples.palamedes.dev) |
+| React Router   | route           | [react-router-route.examples.palamedes.dev](https://react-router-route.examples.palamedes.dev)   |
+| SolidStart     | cookie          | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)     |
+| SolidStart     | route           | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev)       |
 
 ## Optional Manual Deployments
 

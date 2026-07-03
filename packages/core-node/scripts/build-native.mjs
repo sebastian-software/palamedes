@@ -83,7 +83,8 @@ if (!extension) {
   throw new Error(`Unsupported platform for Palamedes native build: ${process.platform}`)
 }
 
-const cargoArgs = ["build", "--package", "palamedes-node"]
+const muslNodeAddon = packageJson.name === "@palamedes/core-node-linux-x64-musl"
+const cargoArgs = [muslNodeAddon ? "rustc" : "build", "--package", "palamedes-node"]
 
 if (profile === "release") {
   cargoArgs.push("--release")
@@ -91,6 +92,23 @@ if (profile === "release") {
 
 if (target.rustTarget) {
   cargoArgs.push("--target", target.rustTarget)
+}
+
+if (muslNodeAddon) {
+  // Keep the crt-static override scoped to the final N-API cdylib. Applying it
+  // through RUSTFLAGS also changes dependency cdylib builds such as
+  // oxc_sourcemap, which makes musl-gcc look for a shared libgcc_s that the
+  // Ubuntu musl toolchain does not provide.
+  cargoArgs.push(
+    "--lib",
+    "--",
+    "-C",
+    "target-feature=-crt-static",
+    "-C",
+    "panic=abort",
+    "-C",
+    "link-self-contained=+unwind"
+  )
 }
 
 execFileSync("cargo", cargoArgs, {
