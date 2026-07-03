@@ -11,6 +11,7 @@ import type {
   CatalogFileCombineResult as GeneratedCatalogFileCombineResult,
   CatalogCombineRequest as GeneratedCatalogCombineRequest,
   CatalogCombineResult as GeneratedCatalogCombineResult,
+  CatalogArtifactCatalogConfig as GeneratedCatalogArtifactCatalogConfig,
   CatalogArtifactConfig as GeneratedCatalogArtifactConfig,
   CatalogArtifactDiagnostic as GeneratedCatalogArtifactDiagnostic,
   CatalogArtifactMissingMessage as GeneratedCatalogArtifactMissingMessage,
@@ -42,7 +43,7 @@ import type {
   MessageOriginMetadata as GeneratedMessageOriginMetadata,
   MessageSelectorKind as GeneratedMessageSelectorKind,
   MessageSelectorMetadata as GeneratedMessageSelectorMetadata,
-  MachineTranslationMetadata as GeneratedMachineTranslationMetadata,
+  MachineMetadata as GeneratedMachineMetadata,
   NativeBindings as GeneratedNativeBindings,
   NativeExtractedMessage as GeneratedNativeExtractedMessage,
   NativeInfo as GeneratedNativeInfo,
@@ -60,14 +61,12 @@ export type ParsedPoItem = GeneratedParsedPoItem
 export type ParsedPoFile = GeneratedParsedPoFile
 export type CatalogOrigin = GeneratedCatalogOrigin
 export type CatalogUpdateMessage = GeneratedCatalogUpdateMessage
-export type CatalogUpdateRequest = GeneratedCatalogUpdateRequest
 export type CatalogUpdateStats = GeneratedCatalogUpdateStats
 export type ExtractCatalogFileFailure = GeneratedExtractCatalogFileFailure
 export type ExtractCatalogMessagesRequest = GeneratedExtractCatalogMessagesRequest
 export type ExtractCatalogMessagesResult = GeneratedExtractCatalogMessagesResult
-export type CatalogParseRequest = GeneratedCatalogParseRequest
 export type ParsedCatalogMessage = GeneratedParsedCatalogMessage
-export type MachineTranslationMetadata = GeneratedMachineTranslationMetadata
+export type MachineMetadata = GeneratedMachineMetadata
 export type CatalogAuditCheckOptions = GeneratedCatalogAuditCheckOptions
 export type CatalogAuditSummary = GeneratedCatalogAuditSummary
 export type CatalogDiagnosticSeverity = "info" | "warning" | "error"
@@ -103,7 +102,14 @@ export type CatalogCombineRequest = {
 export type CatalogCombineResult = Omit<GeneratedCatalogCombineResult, "diagnostics"> & {
   diagnostics: CatalogDiagnostic[]
 }
-export type CatalogFileFormat = "po" | "ndjson"
+export type CatalogFileFormat = "po" | "fcl"
+export type CatalogConfigFormat = CatalogFileFormat
+export type CatalogUpdateRequest = Omit<GeneratedCatalogUpdateRequest, "format"> & {
+  format?: CatalogConfigFormat
+}
+export type CatalogParseRequest = Omit<GeneratedCatalogParseRequest, "format"> & {
+  format?: CatalogConfigFormat
+}
 export type CatalogFileCombineRequest = {
   inputPaths: string[]
   outputPath: string
@@ -160,7 +166,12 @@ export type CatalogArtifactDiagnostic = Omit<GeneratedCatalogArtifactDiagnostic,
 export type CatalogArtifactFallbackLocales = NonNullable<
   GeneratedCatalogArtifactConfig["fallbackLocales"]
 >
-export type CatalogArtifactConfig = GeneratedCatalogArtifactConfig
+export type CatalogArtifactCatalogConfig = Omit<GeneratedCatalogArtifactCatalogConfig, "format"> & {
+  format?: CatalogConfigFormat
+}
+export type CatalogArtifactConfig = Omit<GeneratedCatalogArtifactConfig, "catalogs"> & {
+  catalogs: CatalogArtifactCatalogConfig[]
+}
 export type CatalogArtifactResult = Omit<GeneratedCatalogArtifactResult, "diagnostics"> & {
   diagnostics: CatalogArtifactDiagnostic[]
 }
@@ -182,6 +193,8 @@ type NativeCatalogFileCombineRequest = GeneratedCatalogFileCombineRequest
 type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
 type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
 type NativeCatalogModuleRequest = GeneratedCatalogModuleRequest
+type NativeCatalogUpdateRequest = GeneratedCatalogUpdateRequest
+type NativeCatalogParseRequest = GeneratedCatalogParseRequest
 
 function detectLinuxLibc(): "gnu" | "musl" | null {
   if (process.platform !== "linux") {
@@ -303,7 +316,7 @@ export function parsePo(source: string): ParsedPoFile {
 }
 
 export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult {
-  const result = native.updateCatalogFile(request)
+  const result = native.updateCatalogFile(toNativeUpdateRequest(request))
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
@@ -311,7 +324,7 @@ export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateR
 }
 
 export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
-  const result = native.parseCatalog(request)
+  const result = native.parseCatalog(toNativeParseRequest(request))
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
@@ -323,7 +336,7 @@ export function auditCatalogs(
   options: CatalogAuditOptions = {}
 ): CatalogAuditResult {
   const request: NativeCatalogAuditRequest = {
-    config,
+    config: toNativeArtifactConfig(config),
     locales: options.locales,
     checks: options.checks,
     metadata: options.metadata,
@@ -427,9 +440,39 @@ function toNativeFileFormat(
     case "po": {
       return "Po"
     }
-    case "ndjson": {
-      return "Ndjson"
+    case "fcl": {
+      return "Fcl"
     }
+  }
+}
+
+function toNativeConfigFormat(
+  format: CatalogConfigFormat
+): NonNullable<GeneratedCatalogArtifactCatalogConfig["format"]> {
+  return toNativeFileFormat(format)
+}
+
+function toNativeUpdateRequest(request: CatalogUpdateRequest): NativeCatalogUpdateRequest {
+  return {
+    ...request,
+    format: request.format ? toNativeConfigFormat(request.format) : undefined,
+  }
+}
+
+function toNativeParseRequest(request: CatalogParseRequest): NativeCatalogParseRequest {
+  return {
+    ...request,
+    format: request.format ? toNativeConfigFormat(request.format) : undefined,
+  }
+}
+
+function toNativeArtifactConfig(config: CatalogArtifactConfig): GeneratedCatalogArtifactConfig {
+  return {
+    ...config,
+    catalogs: config.catalogs.map((catalog) => ({
+      ...catalog,
+      format: catalog.format ? toNativeConfigFormat(catalog.format) : undefined,
+    })),
   }
 }
 
@@ -440,8 +483,8 @@ function fromNativeFileFormat(
     case "Po": {
       return "po"
     }
-    case "Ndjson": {
-      return "ndjson"
+    case "Fcl": {
+      return "fcl"
     }
   }
 }
@@ -470,7 +513,7 @@ export function compileCatalogArtifact(
   resourcePath: string
 ): CatalogArtifactResult {
   const request: NativeCatalogArtifactRequest = {
-    config,
+    config: toNativeArtifactConfig(config),
     resourcePath,
   }
   const result = native.compileCatalogArtifact(request)
@@ -490,7 +533,7 @@ export function compileCatalogArtifactSelected(
   compiledIds: string[]
 ): CatalogArtifactResult {
   const request: NativeCatalogArtifactSelectedRequest = {
-    config,
+    config: toNativeArtifactConfig(config),
     resourcePath,
     compiledIds,
   }
@@ -511,7 +554,7 @@ export function compileCatalogModule(
   options: CatalogModuleOptions
 ): CatalogModuleResult {
   const request: NativeCatalogModuleRequest = {
-    config,
+    config: toNativeArtifactConfig(config),
     resourcePath,
     locale: options.locale,
     pseudoLocale: options.pseudoLocale,

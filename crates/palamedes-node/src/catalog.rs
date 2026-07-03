@@ -4,13 +4,22 @@ use std::path::PathBuf;
 use napi::bindgen_prelude::{Either, Result};
 use napi_derive::napi;
 
-use crate::catalog_config::{CatalogArtifactRequest, CatalogArtifactSelectedRequest};
+use crate::catalog_config::{
+    CatalogArtifactRequest, CatalogArtifactSelectedRequest, CatalogConfigFormat,
+};
 use crate::shared::{checked_u32, to_napi_error};
 
 #[napi(object)]
 pub struct CatalogOrigin {
     pub file: String,
     pub line: u32,
+    pub scope: Option<String>,
+}
+
+#[napi(object)]
+pub struct ParsedCatalogOrigin {
+    pub file: String,
+    pub scope: Option<String>,
 }
 
 #[napi(object)]
@@ -28,6 +37,8 @@ pub struct CatalogUpdateRequest {
     pub locale: String,
     pub source_locale: String,
     pub clean: bool,
+    pub force_clean: Option<bool>,
+    pub format: Option<CatalogConfigFormat>,
     pub messages: Vec<CatalogUpdateMessage>,
 }
 
@@ -54,6 +65,7 @@ pub struct CatalogParseRequest {
     pub target_path: String,
     pub locale: String,
     pub source_locale: String,
+    pub format: Option<CatalogConfigFormat>,
 }
 
 #[napi(object)]
@@ -61,17 +73,22 @@ pub struct ParsedCatalogMessage {
     pub message: String,
     pub context: Option<String>,
     pub comments: Vec<String>,
-    pub origins: Vec<CatalogOrigin>,
+    pub origins: Vec<ParsedCatalogOrigin>,
     pub obsolete: bool,
-    pub machine_translation: Option<MachineTranslationMetadata>,
+    pub translated: bool,
+    pub machine: Option<MachineMetadata>,
 }
 
 #[napi(object)]
-pub struct MachineTranslationMetadata {
+pub struct MachineMetadata {
+    pub lock: String,
+    pub ai: Option<AiProvenance>,
+}
+
+#[napi(object)]
+pub struct AiProvenance {
     pub model: String,
-    pub modified: Option<String>,
-    pub confidence: Option<u8>,
-    pub hash: String,
+    pub confidence: Option<f64>,
 }
 
 #[napi(object)]
@@ -137,7 +154,7 @@ pub struct CatalogCombineResult {
 #[napi(string_enum)]
 pub enum CatalogFileFormat {
     Po,
-    Ndjson,
+    Fcl,
 }
 
 #[napi(object)]
@@ -186,7 +203,6 @@ pub struct CatalogAuditCheckOptions {
     pub icu_syntax: Option<bool>,
     pub icu_compatibility: Option<bool>,
     pub semantic_metadata: Option<bool>,
-    pub fuzzy_flags: Option<bool>,
     pub obsolete_entries: Option<bool>,
 }
 
@@ -396,6 +412,7 @@ impl From<CatalogOrigin> for palamedes::CatalogUpdateOrigin {
         Self {
             file: value.file,
             line: value.line,
+            scope: value.scope,
         }
     }
 }
@@ -423,6 +440,11 @@ impl From<CatalogUpdateRequest> for palamedes::CatalogUpdateRequest {
             locale: value.locale,
             source_locale: value.source_locale,
             clean: value.clean,
+            force_clean: value.force_clean.unwrap_or(false),
+            format: value
+                .format
+                .map(palamedes::PalamedesCatalogFormat::from)
+                .unwrap_or_default(),
             messages: value
                 .messages
                 .into_iter()
@@ -437,6 +459,16 @@ impl From<palamedes::CatalogUpdateOrigin> for CatalogOrigin {
         Self {
             file: value.file,
             line: value.line,
+            scope: value.scope,
+        }
+    }
+}
+
+impl From<palamedes::CatalogOriginMetadata> for ParsedCatalogOrigin {
+    fn from(value: palamedes::CatalogOriginMetadata) -> Self {
+        Self {
+            file: value.file,
+            scope: value.scope,
         }
     }
 }
@@ -479,6 +511,10 @@ impl From<CatalogParseRequest> for palamedes::CatalogParseRequest {
             target_path: value.target_path,
             locale: value.locale,
             source_locale: value.source_locale,
+            format: value
+                .format
+                .map(palamedes::PalamedesCatalogFormat::from)
+                .unwrap_or_default(),
         }
     }
 }
@@ -489,22 +525,32 @@ impl From<palamedes::ParsedCatalogMessage> for ParsedCatalogMessage {
             message: value.message,
             context: value.context,
             comments: value.comments,
-            origins: value.origins.into_iter().map(CatalogOrigin::from).collect(),
+            origins: value
+                .origins
+                .into_iter()
+                .map(ParsedCatalogOrigin::from)
+                .collect(),
             obsolete: value.obsolete,
-            machine_translation: value
-                .machine_translation
-                .map(MachineTranslationMetadata::from),
+            translated: value.translated,
+            machine: value.machine.map(MachineMetadata::from),
         }
     }
 }
 
-impl From<palamedes::MachineTranslationMetadata> for MachineTranslationMetadata {
-    fn from(value: palamedes::MachineTranslationMetadata) -> Self {
+impl From<palamedes::MachineMetadata> for MachineMetadata {
+    fn from(value: palamedes::MachineMetadata) -> Self {
+        Self {
+            lock: value.lock,
+            ai: value.ai.map(AiProvenance::from),
+        }
+    }
+}
+
+impl From<palamedes::AiProvenance> for AiProvenance {
+    fn from(value: palamedes::AiProvenance) -> Self {
         Self {
             model: value.model,
-            modified: value.modified,
-            confidence: value.confidence,
-            hash: value.hash,
+            confidence: value.confidence.map(f64::from),
         }
     }
 }
@@ -606,7 +652,7 @@ impl From<CatalogFileFormat> for palamedes::CatalogFileFormat {
     fn from(value: CatalogFileFormat) -> Self {
         match value {
             CatalogFileFormat::Po => Self::Po,
-            CatalogFileFormat::Ndjson => Self::Ndjson,
+            CatalogFileFormat::Fcl => Self::Fcl,
         }
     }
 }
@@ -617,12 +663,7 @@ impl TryFrom<palamedes::CatalogFileFormat> for CatalogFileFormat {
     fn try_from(value: palamedes::CatalogFileFormat) -> Result<Self> {
         match value {
             palamedes::CatalogFileFormat::Po => Ok(Self::Po),
-            palamedes::CatalogFileFormat::Ndjson => Ok(Self::Ndjson),
-            // Ferrocat may add formats before Palamedes exposes them through
-            // the Node API. Fail explicitly until the TypeScript surface is extended.
-            _ => Err(napi::Error::from_reason(format!(
-                "Unsupported catalog file combine format: {value:?}. Expected `po` or `ndjson`."
-            ))),
+            palamedes::CatalogFileFormat::Fcl => Ok(Self::Fcl),
         }
     }
 }
@@ -691,7 +732,6 @@ impl From<CatalogAuditCheckOptions> for palamedes::CatalogAuditCheckOptions {
             icu_syntax: value.icu_syntax,
             icu_compatibility: value.icu_compatibility,
             semantic_metadata: value.semantic_metadata,
-            fuzzy_flags: value.fuzzy_flags,
             obsolete_entries: value.obsolete_entries,
         }
     }

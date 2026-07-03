@@ -56,6 +56,7 @@ describe("loadPalamedesConfig", () => {
         source-reference-root: config
         catalogs:
           - path: src/locales/{locale}
+            format: fcl
             include: [src]
             exclude: [src/generated]
       `
@@ -68,9 +69,30 @@ describe("loadPalamedesConfig", () => {
     expect(config.sourceReferenceRoot).toBe(fixtureDir)
     expect(config.catalogs[0]).toStrictEqual({
       path: "src/locales/{locale}",
+      format: "fcl",
       include: ["src"],
       exclude: ["src/generated"],
     })
+  })
+
+  it("rejects the removed ndjson catalog format with an FCL migration hint", async () => {
+    const fixtureDir = await createTempDir()
+
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        locales: [en, de]
+        source-locale: en
+        catalogs:
+          - path: src/locales/{locale}
+            format: ndjson
+            include: [src]
+      `
+    )
+
+    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+      /"catalogs\[0\]\.format" value "ndjson" is no longer supported; use "fcl"/
+    )
   })
 
   it("loads palamedes.toml as a secondary config format", async () => {
