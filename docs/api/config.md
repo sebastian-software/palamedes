@@ -46,6 +46,16 @@ export default defineConfig({
 })
 ```
 
+PO is the default catalog storage. Opt into FCL by adding `format: "fcl"`:
+
+```ts
+export default defineConfig({
+  locales: ["en", "de"],
+  sourceLocale: "en",
+  catalogs: [{ path: "src/locales/{locale}", format: "fcl", include: ["src"] }],
+})
+```
+
 ## `loadPalamedesConfig(options?)`
 
 Searches from `cwd` for a supported config file unless `configPath` is passed.

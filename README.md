@@ -34,7 +34,9 @@ The current proof:
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,
-diagnostics, and runtime artifact compilation.
+diagnostics, and runtime artifact compilation. PO remains the default catalog
+storage, and teams can opt into FCL when they want canonical, merge-friendly
+generated catalogs with cleaner machine-owned metadata.
 
 ## Why Teams Pick Palamedes
 
@@ -42,7 +44,7 @@ diagnostics, and runtime artifact compilation.
 - Familiar macro-style authoring without carrying older compatibility paths forward
 - Fast transforms, extraction, catalog updates, audits, and compile steps
 - Source-string-first catalogs that translators can inspect and teams can trust
-- Semantic catalog merging for Git merge-driver workflows without gettext
+- Semantic PO/FCL catalog merging for Git merge-driver workflows
 - A local foundation for future managed translation workflows without giving up repo ownership
 
 ## What Makes It Feel Better
@@ -221,7 +223,7 @@ Palamedes is opinionated in a few places:
 
 - `message + context` is the semantic identity
 - `getI18n()` is the public runtime model
-- catalog parsing, updates, audits, and ICU QA live in `ferrocat`
+- catalog parsing, updates, audits, PO/FCL storage, and ICU QA live in `ferrocat`
 - host adapters render modules while the core stays portable
 
 That gives teams more than a benchmark number:
