@@ -10,6 +10,7 @@ const useShell = process.platform === "win32"
 const args = process.argv.slice(2)
 const dryRun = args.includes("--dry-run")
 const packageName = args.find((arg) => !arg.startsWith("--"))
+const prereleaseTag = process.env.PALAMEDES_NPM_PRERELEASE_TAG?.trim() || "next"
 
 if (!packageName) {
   console.error("Usage: node ./scripts/publish-package-if-needed.mjs <package-name> [--dry-run]")
@@ -19,6 +20,7 @@ if (!packageName) {
 const workspacePackage = findWorkspacePackage(packageName)
 const packageJson = workspacePackage.packageJson
 const packageSpec = `${packageName}@${packageJson.version}`
+const publishTagArgs = npmPublishTagArgs(packageJson.version)
 const viewResult = spawnSync(command("pnpm"), ["view", packageSpec, "version"], {
   cwd: root,
   encoding: "utf8",
@@ -43,19 +45,32 @@ if (!isMissingPackageVersion(viewOutput)) {
 }
 
 if (dryRun) {
-  console.log(`${packageSpec} is not published yet; dry-run stops before publishing.`)
+  const tagDescription = publishTagArgs.length > 0 ? ` with npm dist-tag ${publishTagArgs[1]}` : ""
+  console.log(`${packageSpec} is not published yet; dry-run would publish${tagDescription}.`)
   process.exit(0)
 }
 
 const publishResult = isNativeArtifactPackage(packageJson)
-  ? spawnSync(command("npm"), ["publish", workspacePackage.directory, "--access", "public"], {
-      cwd: root,
-      stdio: "inherit",
-      shell: useShell,
-    })
+  ? spawnSync(
+      command("npm"),
+      ["publish", workspacePackage.directory, "--access", "public", ...publishTagArgs],
+      {
+        cwd: root,
+        stdio: "inherit",
+        shell: useShell,
+      }
+    )
   : spawnSync(
       command("pnpm"),
-      ["--filter", packageName, "publish", "--access", "public", "--no-git-checks"],
+      [
+        "--filter",
+        packageName,
+        "publish",
+        "--access",
+        "public",
+        "--no-git-checks",
+        ...publishTagArgs,
+      ],
       {
         cwd: root,
         stdio: "inherit",
@@ -72,6 +87,23 @@ process.exit(publishResult.status ?? 1)
 
 function command(name) {
   return process.platform === "win32" ? `${name}.cmd` : name
+}
+
+function npmPublishTagArgs(version) {
+  if (!isPrereleaseVersion(version)) {
+    return []
+  }
+
+  if (prereleaseTag === "latest") {
+    console.error("Refusing to publish a prerelease with npm dist-tag latest.")
+    process.exit(1)
+  }
+
+  return ["--tag", prereleaseTag]
+}
+
+function isPrereleaseVersion(version) {
+  return /^\d+\.\d+\.\d+-[0-9A-Za-z.-]+$/.test(version)
 }
 
 function findWorkspacePackage(name) {
