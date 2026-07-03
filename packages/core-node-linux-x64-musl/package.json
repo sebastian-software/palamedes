@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/core-node-linux-x64-musl",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "description": "Linux x64 musl native bindings for @palamedes/core-node",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {

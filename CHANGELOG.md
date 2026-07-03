@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.4](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.3...palamedes-v0.11.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **ci:** repair main pipeline formatting and musl addon build ([372dc4f](https://github.com/sebastian-software/palamedes/commit/372dc4f05ac3392c0d1039851147854ff78e33a6))
+* **ci:** repair main pipeline formatting and musl addon build ([b1bf8e4](https://github.com/sebastian-software/palamedes/commit/b1bf8e4b13c3106e6706f35640bad64c2e3f885b))
+
 ## [0.11.3](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.2...palamedes-v0.11.3) (2026-07-02)
 
 
