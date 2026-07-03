@@ -1,12 +1,13 @@
-# RFC: Ferrocat 2.0 Migration
+# RFC: Ferrocat 2.x Migration
 
 **Status:** Active plan
-**Date:** 2026-06-30
+**Date:** 2026-06-30 (updated 2026-07-03 for the Ferrocat 2.1.0 baseline)
 **Owner:** Palamedes maintainers
+**Tracking issue:** [palamedes#285](https://github.com/sebastian-software/palamedes/issues/285)
 
 ## Summary
 
-Palamedes should migrate from Ferrocat `1.3.1` to Ferrocat `2.0.0` as a
+Palamedes should migrate from Ferrocat `1.3.1` to Ferrocat `2.1.0` as a
 product migration, not as a minimal compatibility patch.
 
 The recommended direction is to make Ferrocat Catalog Lines (FCL) a public
@@ -17,27 +18,46 @@ N-API boundary, TypeScript wrapper, tests, and documentation.
 
 Primary sources:
 
-- [ferrocat 2.0.0](https://crates.io/crates/ferrocat/2.0.0)
-- [ferrocat-po 2.0.0](https://crates.io/crates/ferrocat-po/2.0.0)
-- [ferrocat-cli 2.0.0](https://crates.io/crates/ferrocat-cli/2.0.0)
-- [ferrocat v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-v1.3.1...ferrocat-v2.0.0)
-- [ferrocat-po v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-po-v1.3.1...ferrocat-po-v2.0.0)
+- [ferrocat 2.1.0](https://crates.io/crates/ferrocat/2.1.0)
+- [ferrocat-po 2.1.0](https://crates.io/crates/ferrocat-po/2.1.0)
+- [ferrocat-cli 2.1.0](https://crates.io/crates/ferrocat-cli/2.1.0)
+- [ferrocat v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-v1.3.1...ferrocat-v2.1.0)
+- [ferrocat-po v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-po-v1.3.1...ferrocat-po-v2.1.0)
+- [Releases and upgrading guide](https://ferrocat.dev/guide/upgrading), including
+  the 2.1.0 cleanup window and the announced 2.2 API cleanup
+- ADRs [0021](https://ferrocat.dev/architecture/adr/0021-drop-source-line-numbers),
+  [0022](https://ferrocat.dev/architecture/adr/0022-machine-managed-value-integrity-and-ai-provenance),
+  [0023](https://ferrocat.dev/architecture/adr/0023-drop-gettext-flags-merge-comments),
+  [0024](https://ferrocat.dev/architecture/adr/0024-origin-scope-anchor),
+  [0025](https://ferrocat.dev/architecture/adr/0025-obsolete-age-and-cleanup)
 
 Version baseline: Palamedes currently pins `ferrocat` and `ferrocat-po` at
-`1.3.1`. Upstream `1.3.2` tags exist, but this migration should be reviewed as
-the real Palamedes dependency jump from `1.3.1` to `2.0.0`.
+`1.3.1`. Upstream has since released `2.0.0` (2026-06-30) and `2.1.0`
+(2026-07-02). This migration targets `2.1.0` directly: `2.1.0` is a reviewed
+cleanup window for accidental public API coupling left after `2.0.0`, and
+landing on it avoids adapting to an API surface that upstream has already
+revised.
 
 Compatibility probe:
 
 - A scratch migration against `origin/main` found that, after the mechanical
   Ferrocat 2.0 API adaptations, `cargo check --workspace --locked` passes.
+- The probe predates `2.1.0`. The 2.1 cleanups are source-level breaks, but
+  they are small renames and construction changes with direct replacements
+  documented in the upgrade guide.
 - The main risk is therefore API and product-shape correctness, not unknown
   compiler breakage.
 
 ## Goals
 
-- Upgrade `ferrocat`, `ferrocat-po`, and `ferrocat-icu` to `2.0.0`.
+- Upgrade `ferrocat`, `ferrocat-po`, and `ferrocat-icu` to `2.1.0`.
 - Update `FERROCAT_VERSION`, `Cargo.lock`, and native type output.
+- Absorb the 2.1.0 breaking cleanups: renamed entry points, the new `MsgStr`
+  accessors, opaque `PoVec` construction, and `#[non_exhaustive]` options with
+  builder setters.
+- Adopt the announced 2.2 API style now so the next Ferrocat cleanup is a
+  non-event: ICU configuration embedded in the operations' options values and
+  `DiagnosticCode` constants instead of string comparisons.
 - Replace public `ndjson` / `Ndjson` catalog file format surfaces with
   `fcl` / `Fcl`.
 - Keep PO as the default catalog format.
@@ -45,7 +65,7 @@ Compatibility probe:
   FCL.
 - Expose FCL as an opt-in public format for extraction, audit, compilation,
   merge, and host APIs.
-- Treat Ferrocat 2.0 as the catalog compatibility floor. Palamedes has no real
+- Treat Ferrocat 2.x as the catalog compatibility floor. Palamedes has no real
   external catalog users yet, so the implementation does not need to load,
   import, or preserve Ferrocat 1.x catalog content.
 - Align Palamedes' public catalog data model with Ferrocat 2.0 origins and
@@ -53,8 +73,13 @@ Compatibility probe:
 - Preserve source extraction locations for diagnostics without serializing
   synthetic line numbers into catalogs.
 - Decide the Palamedes release signal before implementation lands. Current
-  Palamedes packages are `0.10.0`, so the default should be a breaking pre-1.0
-  minor release with migration notes, not an automatic Palamedes `2.0.0`.
+  Palamedes packages are `0.11.4`. The recommended vehicle is Palamedes
+  `1.0.0` in lockstep: the public surface breaks either way, Ferrocat 2.x is
+  the catalog foundation Palamedes wants to stabilize on, and the 2.2-proofing
+  in this migration removes the last anticipated breaking change to the stable
+  surfaces. A breaking pre-1.0 minor (`0.12.0`) remains the documented
+  fallback if review rejects the 1.0 promise; see
+  [palamedes#285](https://github.com/sebastian-software/palamedes/issues/285).
 
 ## Non-Goals
 
@@ -91,7 +116,7 @@ if they become durable product policy. For now, this document should stay under
 
 ## Relationship to ferrocat-cli
 
-`ferrocat-cli` is now available as `ferrocat-cli` `2.0.0` on crates.io and
+`ferrocat-cli` is now available as `ferrocat-cli` `2.1.0` on crates.io and
 publishes a `ferrocat` binary.
 
 The current Ferrocat CLI surface is useful, but intentionally narrower than the
@@ -117,7 +142,7 @@ This should shape the Palamedes migration in two ways:
 Example optional raw-catalog audit:
 
 ```bash
-cargo install ferrocat-cli --version 2.0.0
+cargo install ferrocat-cli --version 2.1.0
 ferrocat audit \
   --source-locale en \
   --source src/locales/en.fcl \
@@ -142,7 +167,7 @@ The implementation should:
 - fail clearly on unsupported Ferrocat 1.x / NDJSON catalog inputs instead of
   silently coercing them
 - keep PO as the default for newly generated Palamedes catalogs
-- support PO and FCL only through Ferrocat 2.0 semantics
+- support PO and FCL only through Ferrocat 2.x semantics
 - avoid adding migration code whose only purpose is to read old Palamedes
   pre-release catalog output
 - provide an explicit PO-to-FCL conversion path for supported current PO
@@ -188,20 +213,26 @@ through Palamedes config, CLI, N-API, or TypeScript surfaces in this migration.
 
 ## Breaking Changes to Absorb
 
-| Area                   | Ferrocat 1.x / current Palamedes                                    | Ferrocat 2.0 direction                                                                                 | Palamedes migration                                                                                                                                                |
-| ---------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Catalog format enum    | `Po`, `Ndjson`                                                      | `Po`, `Fcl`                                                                                            | Replace public `ndjson` / `Ndjson` with `fcl` / `Fcl`; no shim.                                                                                                    |
-| Catalog mode           | PO hardcoded in many paths                                          | FCL has first-class mode                                                                               | Resolve `CatalogMode::IcuPo` or `CatalogMode::IcuFcl` from storage format.                                                                                         |
-| PO semantics           | Palamedes treats PO as ICU-message PO                               | Ferrocat exposes both `IcuPo` and `GettextPo`                                                          | Keep Palamedes PO mapped to `IcuPo`; do not expose `GettextPo`.                                                                                                    |
-| Legacy content loading | old pre-release Palamedes outputs may exist in fixtures or branches | Ferrocat 2.0 is the floor                                                                              | Update or delete old fixtures; do not implement v1 catalog readers.                                                                                                |
-| Origins                | `file` plus optional line                                           | `file` plus optional `scope`                                                                           | Serialize origins as `file#scope`; expose parsed origins as `{ file, scope? }`.                                                                                    |
-| Line numbers           | Render option could include line numbers                            | line-number serialization removed                                                                      | Keep extraction line data for diagnostics only; stop writing catalog line numbers.                                                                                 |
-| Machine metadata       | `MachineTranslationMetadata { model, modified, confidence, hash }`  | `MachineMetadata { lock, ai? }`                                                                        | Expose `machine`; expose AI confidence as `0..1`, not percent.                                                                                                     |
-| Obsolete state         | boolean-ish public usage                                            | `CatalogMessage.obsolete` is optional metadata                                                         | Treat parsed obsolete as `message.obsolete.is_some()`.                                                                                                             |
-| Fuzzy audit/reporting  | high-level `fuzzy_flags` check and PO flag reporting                | fuzzy is not a catalog semantics concept, but raw PO flags are still parsed                            | Remove fuzzy audit and report semantics; use raw PO fuzzy detection only to reject unsupported conversion input before writing.                                    |
-| Vector types           | plain `Vec` in several call sites                                   | `SmallVec` / `PoVec` internally                                                                        | Convert explicitly at the Palamedes boundary.                                                                                                                      |
-| Obsolete metadata      | immediate mark/delete                                               | supports obsolete metadata such as `obsolete-since`; date-based cleanup keeps undated obsolete entries | Make `--clean` delete entries with `obsolete-since` at least 30 days old and keep undated obsolete entries; add `--force-clean` for deleting all obsolete entries. |
-| Palamedes release      | all packages currently publish as `0.10.0`                          | public config, CLI, N-API, and TypeScript surfaces change                                              | Ship with explicit migration notes and release notes; choose the exact pre-1.0 minor or 1.0/2.0 vehicle before implementation.                                     |
+| Area                                   | Ferrocat 1.x / current Palamedes                                                                                       | Ferrocat 2.x direction                                                                                                            | Palamedes migration                                                                                                                                                |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Catalog format enum                    | `Po`, `Ndjson`                                                                                                         | `Po`, `Fcl`                                                                                                                       | Replace public `ndjson` / `Ndjson` with `fcl` / `Fcl`; no shim.                                                                                                    |
+| Catalog mode                           | PO hardcoded in many paths                                                                                             | FCL has first-class mode                                                                                                          | Resolve `CatalogMode::IcuPo` or `CatalogMode::IcuFcl` from storage format.                                                                                         |
+| PO semantics                           | Palamedes treats PO as ICU-message PO                                                                                  | Ferrocat exposes both `IcuPo` and `GettextPo`                                                                                     | Keep Palamedes PO mapped to `IcuPo`; do not expose `GettextPo`.                                                                                                    |
+| Legacy content loading                 | old pre-release Palamedes outputs may exist in fixtures or branches                                                    | Ferrocat 2.x is the floor                                                                                                         | Update or delete old fixtures; do not implement v1 catalog readers.                                                                                                |
+| Origins                                | `file` plus optional line                                                                                              | `file` plus optional `scope`                                                                                                      | Serialize origins as `file#scope`; expose parsed origins as `{ file, scope? }`.                                                                                    |
+| Line numbers                           | Render option could include line numbers                                                                               | line-number serialization removed                                                                                                 | Keep extraction line data for diagnostics only; stop writing catalog line numbers.                                                                                 |
+| Machine metadata                       | `MachineTranslationMetadata { model, modified, confidence, hash }`                                                     | `MachineMetadata { lock, ai? }`                                                                                                   | Expose `machine`; expose AI confidence as `0..1`, not percent.                                                                                                     |
+| Obsolete state                         | boolean-ish public usage                                                                                               | `CatalogMessage.obsolete` is optional metadata                                                                                    | Treat parsed obsolete as `message.obsolete.is_some()`.                                                                                                             |
+| Fuzzy audit/reporting                  | high-level `fuzzy_flags` check and PO flag reporting                                                                   | fuzzy is not a catalog semantics concept, but raw PO flags are still parsed                                                       | Remove fuzzy audit and report semantics; use raw PO fuzzy detection only to reject unsupported conversion input before writing.                                    |
+| Vector types                           | plain `Vec` in several call sites                                                                                      | `SmallVec` / `PoVec` internally                                                                                                   | Convert explicitly at the Palamedes boundary.                                                                                                                      |
+| Obsolete metadata                      | immediate mark/delete                                                                                                  | supports obsolete metadata such as `obsolete-since`; date-based cleanup keeps undated obsolete entries                            | Make `--clean` delete entries with `obsolete-since` at least 30 days old and keep undated obsolete entries; add `--force-clean` for deleting all obsolete entries. |
+| Renamed entry points (2.1)             | `catalog_review`, `catalog_coverage`, `has_selectordinal`, `MergeExtractedMessage`                                     | `review_catalogs`, `measure_catalog_coverage`, `has_select_ordinal`, `MergeMessageInput`; the old names and the alias are removed | Mechanical rename at all call sites.                                                                                                                               |
+| `MsgStr` accessors (2.1)               | `first_str()`, `first()` returning owned-ish values                                                                    | `first()` returns `Option<&str>`, `first_str()` removed, iterator items are `&str`                                                | Handle the empty-translation case explicitly at the boundary.                                                                                                      |
+| `PoVec` construction (2.1)             | `SmallVec<[T; 1]>` visible in public signatures                                                                        | `PoVec` is an opaque newtype; reads stay slice-like                                                                               | Construct via `From<Vec<T>>` / `.into()`; compare via `.as_slice()`.                                                                                               |
+| Options construction (2.1)             | struct literals / functional record update                                                                             | options structs are `#[non_exhaustive]` with `new()` + `with_*()` builders                                                        | Build all Ferrocat options through the builder chains.                                                                                                             |
+| ICU options entry points (2.2 preview) | `audit_catalogs_with_icu_options`, `compile_catalog_artifact*_with_icu_options`, `pseudolocalize_*_with_syntax_policy` | cross-product call variants are removed in 2.2; ICU config moves onto the options values                                          | Adopt `with_icu_options(...)` / `with_syntax_policy(...)` on the options structs now.                                                                              |
+| Diagnostic codes (2.2 preview)         | plain `String` comparisons                                                                                             | `DiagnosticCode` newtype with exported `diagnostic_codes` constants; JSON output unchanged                                        | Compare against the constants; keep report JSON consumers untouched.                                                                                               |
+| Palamedes release                      | all packages currently publish as `0.11.4`                                                                             | public config, CLI, N-API, and TypeScript surfaces change                                                                         | Recommended vehicle is `1.0.0` in lockstep with migration notes; breaking `0.12.0` is the fallback. Decide before implementation lands.                            |
 
 ## Public API Shape
 
@@ -329,12 +360,22 @@ escape hatch for repositories that want immediate deletion.
 
 ### 1. Rust Dependency and Core API Pass
 
-- Upgrade `ferrocat`, `ferrocat-po`, and `ferrocat-icu` to `2.0.0`.
-- Update `FERROCAT_VERSION` to `2.0.0`.
+- Upgrade `ferrocat`, `ferrocat-po`, and `ferrocat-icu` to `2.1.0`.
+- Update `FERROCAT_VERSION` to `2.1.0`.
 - Run the lockfile update.
-- Replace removed imports and type names.
-- Convert `SmallVec` / `PoVec` values into Palamedes public `Vec` values at the
+- Replace removed imports and type names, including the 2.1 renames:
+  `catalog_review` to `review_catalogs`, `catalog_coverage` to
+  `measure_catalog_coverage`, `has_selectordinal` to `has_select_ordinal`,
+  and `MergeExtractedMessage` to `MergeMessageInput`.
+- Move `MsgStr` access to the 2.1 accessors: `first()` returns
+  `Option<&str>`, `first_str()` is gone, and iterator items are `&str`.
+- Construct `PoVec`-typed fields via `.into()` and compare via `.as_slice()`;
+  convert `SmallVec` / `PoVec` values into Palamedes public `Vec` values at the
   API boundary.
+- Build all Ferrocat options through `new()` + `with_*()` builders; no struct
+  literals or functional record update against `#[non_exhaustive]` types.
+- Use the 2.1 ergonomic helpers where they remove local glue, such as
+  `CatalogMessageKey::with_context` and `MsgStr::plural`.
 - Replace `CatalogMessage.obsolete` boolean assumptions with
   `CatalogMessage.obsolete.is_some()`.
 - Replace `message.machine_translation` with `message.machine`.
@@ -344,7 +385,33 @@ escape hatch for repositories that want immediate deletion.
 - Remove or rewrite old fixtures that rely on Ferrocat 1.x serialized metadata
   instead of adding compatibility parsing.
 
-### 2. Catalog Storage Abstraction
+### 2. Options and Diagnostics Modernization (2.2-Proofing)
+
+Upstream has published the next cleanup batch in the upgrade guide, and
+Palamedes currently sits on exactly the entry points scheduled for removal:
+
+- `audit_catalogs_with_icu_options` in `catalog_audit.rs`
+- `compile_catalog_artifact_with_icu_options` and
+  `compile_catalog_artifact_selected_with_icu_options` in
+  `catalog_artifact/mod.rs`
+- `pseudolocalize_compiled_catalog_artifact_with_syntax_policy` in
+  `catalog_artifact/compile.rs`
+
+Tasks:
+
+- Move ICU syntax policy onto the operations' options values:
+  `CatalogAuditOptions::new(locale).with_icu_options(...)`,
+  `CompileCatalogArtifactOptions::new(locale, source).with_icu_options(...)`,
+  and `CompiledCatalogPseudolocalizationOptions::new().with_syntax_policy(...)`.
+- Drop the cross-product `*_with_icu_options` / `*_with_syntax_policy` call
+  variants.
+- Replace string comparisons on diagnostic codes with the `DiagnosticCode`
+  newtype and the exported `ferrocat::diagnostic_codes` constants. Report JSON
+  output stays identical, so N-API and TypeScript consumers are unaffected.
+- Record in `DECISIONS.md` that the options-builder style is the standard
+  Ferrocat integration idiom, so future cleanups stay mechanical.
+
+### 3. Catalog Storage Abstraction
 
 - Add `PalamedesCatalogFormat` to Rust core catalog config.
 - Default the storage format to PO.
@@ -366,7 +433,7 @@ forward as a high-level Palamedes report concept. It may still be detected from
 raw PO parsing during conversion or audit entry-point validation so Palamedes can
 reject unsupported fuzzy input before writing output.
 
-### 3. CLI Migration
+### 4. CLI Migration
 
 Update `pmds` behavior:
 
@@ -450,7 +517,7 @@ git config merge.palamedes-catalog-fcl.driver \
   'pmds catalog merge --format=fcl --conflict-strategy=use-first --base %O --output %A %A %B'
 ```
 
-### 4. N-API and TypeScript Migration
+### 5. N-API and TypeScript Migration
 
 Regenerate and then review native type output.
 
@@ -478,7 +545,7 @@ TypeScript and N-API surfaces must also change:
 - remove `fuzzyFlags` from high-level audit check options
 - remove raw PO fuzzy reporting from public Palamedes report semantics
 
-### 5. Documentation
+### 6. Documentation
 
 Update:
 
@@ -507,7 +574,7 @@ Documentation should say:
   their translations
 - existing `format: ndjson` config should be changed to `format: fcl`
 
-### 6. Tests
+### 7. Tests
 
 Add focused tests before relying on broad gates:
 
@@ -579,7 +646,7 @@ Type generation:
 Optional cross-check:
 
 ```bash
-cargo install ferrocat-cli --version 2.0.0
+cargo install ferrocat-cli --version 2.1.0
 ferrocat audit \
   --source-locale en \
   --source <source.fcl> \
@@ -593,18 +660,23 @@ config-aware test coverage.
 
 ## Rollout Strategy
 
-1. Land the Rust dependency and compile-only API migration with current PO
-   workflow behavior preserved for newly generated catalogs.
-2. Add `PalamedesCatalogFormat` and format-aware catalog resolution.
-3. Add FCL through extraction, audit, compile, parse, and merge.
-4. Update N-API and TypeScript wrappers.
-5. Add PO-to-FCL conversion for single files and configured catalog sets.
-6. Replace docs, examples, fixtures, and generated snapshots that still reflect
+1. Land the Rust dependency and compile-only API migration (including the 2.1
+   renames and construction changes) with current PO workflow behavior
+   preserved for newly generated catalogs.
+2. Land the options and diagnostics modernization (2.2-proofing) as a small,
+   reviewable step.
+3. Add `PalamedesCatalogFormat` and format-aware catalog resolution.
+4. Add FCL through extraction, audit, compile, parse, and merge.
+5. Update N-API and TypeScript wrappers.
+6. Add PO-to-FCL conversion for single files and configured catalog sets.
+7. Replace docs, examples, fixtures, and generated snapshots that still reflect
    Ferrocat 1.x / NDJSON output.
-7. Add fixed 30-day obsolete cleanup and immediate `--force-clean`.
-8. Decide and document the Palamedes release vehicle, changelog entry, and
+8. Add fixed 30-day obsolete cleanup and immediate `--force-clean`.
+9. Decide and document the Palamedes release vehicle, changelog entry, and
    migration notes before publishing.
-9. Run the full validation matrix before publishing.
+10. Run the full validation matrix before publishing, and record before/after
+    `pnpm benchmark:proof` numbers so the 2.1 performance work is visible in
+    the upgrade PR.
 
 ## Risks and Mitigations
 
@@ -613,7 +685,7 @@ config-aware test coverage.
 | FCL support becomes a leaky Ferrocat mirror                    | Keep public APIs workflow-shaped and config-driven.                                                                                                                             |
 | Users are confused by `pmds audit` and `ferrocat audit`        | Document `pmds` as the project/config-aware workflow and `ferrocat` as an optional raw-catalog diagnostic.                                                                      |
 | PO default behavior regresses while changing the storage layer | Test PO default paths before FCL-specific tests.                                                                                                                                |
-| Legacy compatibility code bloats the migration                 | Treat Ferrocat 2.0 as the compatibility floor and update old fixtures instead of reading them.                                                                                  |
+| Legacy compatibility code bloats the migration                 | Treat Ferrocat 2.x as the compatibility floor and update old fixtures instead of reading them.                                                                                  |
 | FCL adoption is too hard for existing PO catalogs              | Provide explicit PO-to-FCL conversion that preserves translations without adding transparent legacy loading.                                                                    |
 | Parsed origins lose useful diagnostic data                     | Keep extraction line/column data in extraction diagnostics and update requests; only parsed catalog origins drop line numbers.                                                  |
 | Machine metadata semantics are misunderstood                   | Rename the public field to `machine` and document `lock` / `ai` separately from translation content.                                                                            |
@@ -621,6 +693,7 @@ config-aware test coverage.
 | Obsolete cleanup policy becomes implicit                       | Make `--clean` fixed 30-day cleanup for dated obsolete entries, document that undated obsolete entries are kept, and reserve `--force-clean` for deleting all obsolete entries. |
 | TypeScript generated and wrapper types drift                   | Regenerate native types and keep wrapper conversion tests for `po` / `fcl`.                                                                                                     |
 | Breaking changes are under-communicated                        | Follow `docs/stability.md`: publish migration notes and release notes even during pre-1.0.                                                                                      |
+| Ferrocat 2.2 cleanup breaks Palamedes again                    | Adopt options-embedded ICU configuration and `DiagnosticCode` constants now, per the published upgrade guide.                                                                   |
 
 ## Resolved Follow-Up Decisions
 
@@ -641,13 +714,25 @@ config-aware test coverage.
 - PO-to-FCL conversion is in scope as an explicit adoption workflow.
 - FCL-to-PO conversion is out of scope for the initial migration.
 - Pseudo-locale generation must work the same way for PO and FCL catalogs.
-- Palamedes does not automatically become `2.0.0`; the release vehicle must
-  follow the pre-1.0 stability policy and include migration notes.
+- Palamedes does not automatically mirror Ferrocat's version. The recommended
+  release vehicle is Palamedes `1.0.0` with an updated `docs/stability.md`
+  and migration notes; a breaking `0.12.0` per the pre-1.0 stability policy is
+  the fallback. The final call is made in
+  [palamedes#285](https://github.com/sebastian-software/palamedes/issues/285)
+  before implementation lands.
 
 ## Acceptance Criteria
 
-- `ferrocat`, `ferrocat-po`, and `ferrocat-icu` resolve to `2.0.0`.
-- `FERROCAT_VERSION` reports `2.0.0`.
+- `ferrocat`, `ferrocat-po`, and `ferrocat-icu` resolve to `2.1.0`.
+- `FERROCAT_VERSION` reports `2.1.0`.
+- No usage of the pre-2.1 names remains (`catalog_review`, `catalog_coverage`,
+  `has_selectordinal`, `MergeExtractedMessage`, `MsgStr::first_str`).
+- Ferrocat options are constructed exclusively through `new()` + `with_*()`
+  builders.
+- No usage of the `*_with_icu_options` / `*_with_syntax_policy` call variants
+  remains; ICU configuration flows through the options values.
+- Diagnostic code comparisons use `DiagnosticCode` / `diagnostic_codes`
+  constants; report JSON output is unchanged.
 - Public Palamedes APIs expose `fcl` / `Fcl`, not `ndjson` / `Ndjson`.
 - Palamedes has no Ferrocat 1.x catalog loader or NDJSON compatibility shim.
 - Configured catalogs default to PO and can opt into FCL.
