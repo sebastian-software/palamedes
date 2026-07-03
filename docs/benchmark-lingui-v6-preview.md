@@ -90,6 +90,10 @@ Before any timing run, the harness validates:
 - extract: normalized `message + context` keys match the generated manifest
 - compile: both toolchains compile the same `de.po` catalog without errors and with the expected message count
 
+This harness intentionally stays PO-based because Lingui's comparable catalog
+path is PO. FCL is a Palamedes storage option and is covered by the
+catalog-format workflow, not by this head-to-head Lingui benchmark.
+
 There are also smoke checks against checked-in repo sources:
 
 - transform parity for Palamedes, Lingui Babel, and Lingui SWC on the checked-in benchmark fixtures

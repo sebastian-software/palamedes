@@ -8,8 +8,9 @@
 The Node.js wrapper around Palamedes' native core.
 
 Use this package when you are building tooling on top of Palamedes and want
-direct access to the careful parts of the system: catalog updates, audits,
-metadata validation, `.po` parsing, extraction, and macro transformation.
+direct access to the careful parts of the system: PO/FCL catalog updates,
+audits, metadata validation, `.po` parsing, extraction, and macro
+transformation.
 
 The public catalog model is source-string-first: `message + context` is the
 semantic identity, while compact lookup keys remain internal compile/runtime
@@ -75,6 +76,12 @@ combineCatalogFiles({
   format: "po",
   sourceLocale: "en",
 })
+combineCatalogFiles({
+  inputPaths: ["src/locales/de.fcl", "incoming/de.fcl"],
+  outputPath: "src/locales/de.fcl",
+  format: "fcl",
+  sourceLocale: "en",
+})
 
 console.log(info.palamedesVersion)
 console.log(po.headers.Language)
@@ -102,6 +109,9 @@ Catalog operations use Ferrocat for parsing, updates, audits, ICU authoring
 diagnostics, metadata validation, and deterministic combine workflows. That
 keeps custom tooling close to the same semantics used by the official CLI and
 framework plugins.
+
+The wrapper exposes lowercase public format values (`"po"` and `"fcl"`) while
+mapping to the native Ferrocat-backed API internally.
 
 ## Related Packages
 

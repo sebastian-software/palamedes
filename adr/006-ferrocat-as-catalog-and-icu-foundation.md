@@ -37,6 +37,7 @@ That means Palamedes needs a clean boundary, not just a dependency swap.
 - PO parsing and serialization
 - catalog update semantics
 - normalized parsed-catalog access
+- PO and FCL storage semantics
 - ICU parsing and validation
 - plural and gettext-adjacent catalog behavior
 - other reusable host-neutral catalog primitives
@@ -71,3 +72,5 @@ Rejected because it recreates the fragmentation that the Rust-first architecture
 - Remaining local catalog logic in Palamedes should be treated as candidate delegation material, not as a permanent second foundation.
 - New generic catalog or ICU helpers should default to `ferrocat` unless they are clearly product-specific.
 - Catalog compilation/export for runtime maps can now be delegated to Ferrocat's artifact APIs and compiled-key contract, while Palamedes remains responsible for host-side module rendering and config-aware orchestration.
+- Palamedes exposes PO and FCL as product-shaped storage choices; it should not expose lower-level Ferrocat modes such as gettext-compatible PO through config or host APIs without a separate product decision.
+- Ferrocat option values should be built with the upstream `new()` and `with_*()` builder style, so future Ferrocat cleanup releases stay mechanical.

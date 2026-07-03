@@ -4,6 +4,11 @@
 export interface CatalogOrigin {
   file: string;
   line: number;
+  scope?: string;
+}
+export interface ParsedCatalogOrigin {
+  file: string;
+  scope?: string;
 }
 export interface CatalogUpdateMessage {
   message: string;
@@ -17,6 +22,8 @@ export interface CatalogUpdateRequest {
   locale: string;
   sourceLocale: string;
   clean: boolean;
+  forceClean?: boolean;
+  format?: CatalogConfigFormat;
   messages: Array<CatalogUpdateMessage>;
 }
 export interface CatalogUpdateStats {
@@ -37,20 +44,24 @@ export interface CatalogParseRequest {
   targetPath: string;
   locale: string;
   sourceLocale: string;
+  format?: CatalogConfigFormat;
 }
 export interface ParsedCatalogMessage {
   message: string;
   context?: string;
   comments: Array<string>;
-  origins: Array<CatalogOrigin>;
+  origins: Array<ParsedCatalogOrigin>;
   obsolete: boolean;
-  machineTranslation?: MachineTranslationMetadata;
+  translated: boolean;
+  machine?: MachineMetadata;
 }
-export interface MachineTranslationMetadata {
+export interface MachineMetadata {
+  lock: string;
+  ai?: AiProvenance;
+}
+export interface AiProvenance {
   model: string;
-  modified?: string;
   confidence?: number;
-  hash: string;
 }
 export interface CatalogParseResult {
   locale?: string;
@@ -89,7 +100,7 @@ export interface CatalogCombineResult {
   stats: CatalogCombineStats;
   diagnostics: Array<CatalogDiagnostic>;
 }
-export type CatalogFileFormat = "Po" | "Ndjson"
+export type CatalogFileFormat = "Po" | "Fcl"
 export interface CatalogFileCombineRequest {
   inputPaths: Array<string>;
   outputPath: string;
@@ -121,7 +132,6 @@ export interface CatalogAuditCheckOptions {
   icuSyntax?: boolean;
   icuCompatibility?: boolean;
   semanticMetadata?: boolean;
-  fuzzyFlags?: boolean;
   obsoleteEntries?: boolean;
 }
 export interface CatalogAuditRequest {
@@ -246,9 +256,11 @@ export interface CatalogModuleResult {
 }
 export interface CatalogArtifactCatalogConfig {
   path: string;
+  format?: CatalogConfigFormat;
   include: Array<string>;
   exclude?: Array<string>;
 }
+export type CatalogConfigFormat = "Po" | "Fcl"
 export interface CatalogArtifactConfig {
   rootDir: string;
   locales: Array<string>;

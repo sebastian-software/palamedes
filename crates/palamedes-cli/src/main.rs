@@ -12,10 +12,10 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
 use notify::{RecursiveMode, Watcher};
 use palamedes::{
-    audit_catalogs, combine_catalog_files, extract_catalog_messages_from_files, parse_po,
-    update_catalog_file, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
-    CatalogConflictStrategy, CatalogFileCombineRequest, CatalogFileFormat, CatalogUpdateMessage,
-    CatalogUpdateRequest, JsPoItem,
+    audit_catalogs, combine_catalog_files, extract_catalog_messages_from_files, parse_catalog,
+    parse_po, update_catalog_file, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
+    CatalogConflictStrategy, CatalogFileCombineRequest, CatalogFileFormat, CatalogParseRequest,
+    CatalogUpdateMessage, CatalogUpdateRequest,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -55,6 +55,9 @@ struct ExtractOptions {
     /// Remove obsolete messages from catalogs.
     #[arg(long)]
     clean: bool,
+    /// Remove obsolete messages immediately, including entries without obsolete-since.
+    #[arg(long)]
+    force_clean: bool,
     /// Show verbose output.
     #[arg(short, long)]
     verbose: bool,
@@ -108,6 +111,8 @@ struct CatalogCommand {
 enum CatalogSubcommand {
     /// Merge two catalog files with semantic use-first behavior.
     Merge(MergeOptions),
+    /// Convert configured PO catalogs to another Palamedes storage format.
+    Convert(ConvertOptions),
 }
 
 #[derive(Debug, Args)]
@@ -124,6 +129,9 @@ struct MergeOptions {
     /// Catalog format.
     #[arg(long)]
     format: Option<MergeFormat>,
+    /// Ancestor catalog path supplied by Git merge drivers.
+    #[arg(long)]
+    base: Option<PathBuf>,
     /// Catalog conflict strategy.
     #[arg(long, default_value = "use-first")]
     conflict_strategy: MergeConflictStrategy,
@@ -135,10 +143,36 @@ struct MergeOptions {
     locale: Option<String>,
 }
 
+#[derive(Debug, Args)]
+struct ConvertOptions {
+    /// Input catalog file for single-file conversion.
+    input: Option<PathBuf>,
+    /// Path to a Palamedes config file for config-wide conversion.
+    #[arg(short, long)]
+    config: Option<PathBuf>,
+    /// Target catalog format.
+    #[arg(long)]
+    to: ConvertFormat,
+    /// Output catalog path for single-file conversion.
+    #[arg(long)]
+    output: Option<PathBuf>,
+    /// Source locale for single-file conversion.
+    #[arg(long, default_value = "en")]
+    source_locale: String,
+    /// Locale for single-file conversion.
+    #[arg(long)]
+    locale: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ConvertFormat {
+    Fcl,
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum MergeFormat {
     Po,
-    Ndjson,
+    Fcl,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -164,6 +198,14 @@ enum CliError {
     Json(#[from] serde_json::Error),
     #[error("Catalog merge requires exactly two input files, received {0}.")]
     InvalidMergeInputCount(usize),
+    #[error("Catalog convert requires either an input file or --config.")]
+    MissingConvertInput,
+    #[error("Catalog convert --output can only be used with a single input file.")]
+    InvalidConvertOutput,
+    #[error("Catalog convert --to=fcl only supports PO source catalogs.")]
+    UnsupportedConvertSource,
+    #[error("Catalog convert refused {path} because fuzzy PO entries are not supported for FCL conversion.")]
+    FuzzyCatalogInput { path: PathBuf },
     #[error("Invalid --fail-if-below value. Expected a percent from 0 to 100.")]
     InvalidThreshold,
     #[error("Catalog audit failed with {errors} error(s).")]
@@ -213,7 +255,6 @@ struct LocaleCompletenessReport {
     total: usize,
     translated: usize,
     missing: usize,
-    fuzzy: usize,
     percent: f64,
 }
 
@@ -229,7 +270,6 @@ struct MutableLocaleStats {
     total: usize,
     translated: usize,
     missing: usize,
-    fuzzy: usize,
 }
 
 fn main() {
@@ -247,6 +287,7 @@ fn run() -> Result<(), CliError> {
         Command::Report(options) => run_report(options).map(|_| ()),
         Command::Catalog(command) => match command.command {
             CatalogSubcommand::Merge(options) => run_catalog_merge(options).map(|_| ()),
+            CatalogSubcommand::Convert(options) => run_catalog_convert(options).map(|_| ()),
         },
         Command::Version => {
             println!("pmds (Palamedes) v{}", env!("CARGO_PKG_VERSION"));
@@ -367,10 +408,10 @@ fn write_catalog(
     options: &ExtractOptions,
 ) -> Result<u128, CliError> {
     let started_at = Instant::now();
-    let po_path = config
+    let catalog_path = config
         .resolve_catalog_path(&catalog.path, locale)
-        .with_extension("po");
-    if let Some(parent) = po_path.parent() {
+        .with_extension(catalog.format.extension());
+    if let Some(parent) = catalog_path.parent() {
         fs::create_dir_all(parent).map_err(|source| CliError::Io {
             path: parent.to_path_buf(),
             source,
@@ -378,15 +419,17 @@ fn write_catalog(
     }
 
     let result = update_catalog_file(CatalogUpdateRequest {
-        target_path: po_path.to_string_lossy().into_owned(),
+        target_path: catalog_path.to_string_lossy().into_owned(),
         locale: locale.to_owned(),
         source_locale: config.source_locale.clone(),
         clean: options.clean,
+        force_clean: options.force_clean,
+        format: catalog.format,
         messages: messages.to_vec(),
     })?;
 
     if options.verbose {
-        eprintln!("  -> {}", po_path.display());
+        eprintln!("  -> {}", catalog_path.display());
         for diagnostic in result.diagnostics {
             eprintln!("Warning: {}: {}", diagnostic.code, diagnostic.message);
         }
@@ -682,7 +725,6 @@ fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<Completenes
                     total: 0,
                     translated: 0,
                     missing: 0,
-                    fuzzy: 0,
                 },
             )
         })
@@ -691,13 +733,20 @@ fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<Completenes
     for catalog in &config.catalogs {
         let source_path = config
             .resolve_catalog_path(&catalog.path, &config.source_locale)
-            .with_extension("po");
-        let source_catalog = read_po(&source_path)?;
+            .with_extension(catalog.format.extension());
+        let source_catalog = read_catalog_for_report(
+            &source_path,
+            &config.source_locale,
+            &config.source_locale,
+            catalog.format,
+        )?;
         let source_messages = source_catalog
-            .items
-            .iter()
-            .filter(|item| is_reportable_message(item))
-            .map(to_message_key)
+            .into_iter()
+            .filter(|message| !message.obsolete)
+            .map(|message| MessageKey {
+                message: message.message,
+                context: message.context,
+            })
             .collect::<Vec<_>>();
 
         for locale in locales {
@@ -713,27 +762,36 @@ fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<Completenes
 
             let target_path = config
                 .resolve_catalog_path(&catalog.path, locale)
-                .with_extension("po");
-            let target_catalog = read_po_if_exists(&target_path)?;
-            let target_messages = target_catalog
-                .map(|catalog| {
-                    catalog
-                        .items
-                        .into_iter()
-                        .filter(is_reportable_message)
-                        .map(|item| (to_message_key(&item), item))
-                        .collect::<BTreeMap<_, _>>()
+                .with_extension(catalog.format.extension());
+            let target_messages = if target_path.exists() {
+                read_catalog_for_report(
+                    &target_path,
+                    &config.source_locale,
+                    locale,
+                    catalog.format,
+                )?
+                .into_iter()
+                .filter(|message| !message.obsolete)
+                .map(|message| {
+                    (
+                        MessageKey {
+                            message: message.message,
+                            context: message.context,
+                        },
+                        message.translated,
+                    )
                 })
-                .unwrap_or_default();
+                .collect::<BTreeMap<_, _>>()
+            } else {
+                BTreeMap::new()
+            };
 
             for source_message in &source_messages {
                 let Some(target) = target_messages.get(source_message) else {
                     locale_stats.missing += 1;
                     continue;
                 };
-                if target.flags.get("fuzzy").copied().unwrap_or(false) {
-                    locale_stats.fuzzy += 1;
-                } else if is_translated(target) {
+                if *target {
                     locale_stats.translated += 1;
                 } else {
                     locale_stats.missing += 1;
@@ -755,10 +813,24 @@ fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<Completenes
                 total: locale.total,
                 translated: locale.translated,
                 missing: locale.missing,
-                fuzzy: locale.fuzzy,
             })
             .collect(),
     })
+}
+
+fn read_catalog_for_report(
+    path: &Path,
+    source_locale: &str,
+    locale: &str,
+    format: palamedes::PalamedesCatalogFormat,
+) -> Result<Vec<palamedes::ParsedCatalogMessage>, CliError> {
+    let result = parse_catalog(&CatalogParseRequest {
+        target_path: path.to_string_lossy().into_owned(),
+        locale: locale.to_owned(),
+        source_locale: source_locale.to_owned(),
+        format,
+    })?;
+    Ok(result.messages)
 }
 
 fn read_po(path: &Path) -> Result<palamedes::JsPoFile, CliError> {
@@ -767,32 +839,6 @@ fn read_po(path: &Path) -> Result<palamedes::JsPoFile, CliError> {
         source,
     })?;
     Ok(parse_po(&source)?)
-}
-
-fn read_po_if_exists(path: &Path) -> Result<Option<palamedes::JsPoFile>, CliError> {
-    match fs::read_to_string(path) {
-        Ok(source) => Ok(Some(parse_po(&source)?)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(source) => Err(CliError::Io {
-            path: path.to_path_buf(),
-            source,
-        }),
-    }
-}
-
-fn is_reportable_message(item: &JsPoItem) -> bool {
-    !item.obsolete && !item.msgid.is_empty()
-}
-
-fn to_message_key(item: &JsPoItem) -> MessageKey {
-    MessageKey {
-        message: item.msgid.clone(),
-        context: item.msgctxt.clone(),
-    }
-}
-
-fn is_translated(item: &JsPoItem) -> bool {
-    !item.msgstr.is_empty() && item.msgstr.iter().all(|value| !value.trim().is_empty())
 }
 
 fn resolve_report_locales(config: &LoadedConfig, selected: &[String]) -> Vec<String> {
@@ -837,17 +883,16 @@ fn print_report(result: &CompletenessReport) {
         + 2;
 
     println!(
-        "{:<locale_column_width$}Translated  Missing  Fuzzy  Complete",
+        "{:<locale_column_width$}Translated  Missing  Complete",
         "Locale"
     );
     for locale in &result.locales {
         let translated = format!("{}/{}", locale.translated, locale.total);
         println!(
-            "{:<locale_column_width$}{:<11} {:<8} {:<6} {}",
+            "{:<locale_column_width$}{:<11} {:<8} {}",
             locale.locale,
             translated,
             locale.missing,
-            locale.fuzzy,
             format_percent(locale.percent)
         );
     }
@@ -880,12 +925,17 @@ fn run_catalog_merge(
         },
     };
 
+    let mut input_paths = options.inputs;
+    if let Some(base) = options.base {
+        input_paths.push(base);
+    }
+
     Ok(combine_catalog_files(CatalogFileCombineRequest {
-        input_paths: options.inputs,
+        input_paths,
         output_path: options.output,
         format: options.format.map(|format| match format {
             MergeFormat::Po => CatalogFileFormat::Po,
-            MergeFormat::Ndjson => CatalogFileFormat::Ndjson,
+            MergeFormat::Fcl => CatalogFileFormat::Fcl,
         }),
         source_locale,
         locale: options.locale,
@@ -895,6 +945,123 @@ fn run_catalog_merge(
             MergeConflictStrategy::Error => CatalogConflictStrategy::Error,
         },
     })?)
+}
+
+fn run_catalog_convert(options: ConvertOptions) -> Result<(), CliError> {
+    match (options.input, options.config) {
+        (Some(input), config_path) => {
+            let output = options
+                .output
+                .unwrap_or_else(|| input.with_extension(convert_extension(options.to)));
+            convert_one_catalog(
+                &input,
+                &output,
+                &options.source_locale,
+                options.locale.as_deref(),
+                options.to,
+            )?;
+            println!("Converted {} -> {}", input.display(), output.display());
+            if config_path.is_some() {
+                println!(
+                    "Single-file input provided; --config was not used for catalog selection."
+                );
+            }
+            Ok(())
+        }
+        (None, Some(config_path)) => {
+            if options.output.is_some() {
+                return Err(CliError::InvalidConvertOutput);
+            }
+            let config = load_config(
+                &std::env::current_dir().expect("current dir"),
+                Some(&config_path),
+            )?;
+            let mut converted = 0usize;
+            let mut skipped = 0usize;
+            for catalog in &config.catalogs {
+                if catalog.format != palamedes::PalamedesCatalogFormat::Po {
+                    skipped += config.locales.len();
+                    continue;
+                }
+                for locale in &config.locales {
+                    let input = config
+                        .resolve_catalog_path(&catalog.path, locale)
+                        .with_extension(catalog.format.extension());
+                    if !input.exists() {
+                        skipped += 1;
+                        continue;
+                    }
+                    let output = config
+                        .resolve_catalog_path(&catalog.path, locale)
+                        .with_extension(convert_extension(options.to));
+                    convert_one_catalog(
+                        &input,
+                        &output,
+                        &config.source_locale,
+                        Some(locale),
+                        options.to,
+                    )?;
+                    converted += 1;
+                }
+            }
+            println!("Converted {converted} catalog(s), skipped {skipped}.");
+            println!(
+                "Update Palamedes config catalogs to use `format: fcl` before switching workflows."
+            );
+            Ok(())
+        }
+        (None, None) => Err(CliError::MissingConvertInput),
+    }
+}
+
+fn convert_one_catalog(
+    input: &Path,
+    output: &Path,
+    source_locale: &str,
+    locale: Option<&str>,
+    to: ConvertFormat,
+) -> Result<(), CliError> {
+    if input.extension().and_then(|ext| ext.to_str()) != Some("po") {
+        return Err(CliError::UnsupportedConvertSource);
+    }
+    reject_fuzzy_po(input)?;
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|source| CliError::Io {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    }
+    combine_catalog_files(CatalogFileCombineRequest {
+        input_paths: vec![input.to_path_buf()],
+        output_path: output.to_path_buf(),
+        format: Some(match to {
+            ConvertFormat::Fcl => CatalogFileFormat::Fcl,
+        }),
+        source_locale: source_locale.to_owned(),
+        locale: locale.map(str::to_owned),
+        conflict_strategy: CatalogConflictStrategy::UseFirst,
+    })?;
+    Ok(())
+}
+
+fn reject_fuzzy_po(path: &Path) -> Result<(), CliError> {
+    let catalog = read_po(path)?;
+    if catalog
+        .items
+        .iter()
+        .any(|item| item.flags.get("fuzzy").copied().unwrap_or(false))
+    {
+        return Err(CliError::FuzzyCatalogInput {
+            path: path.to_path_buf(),
+        });
+    }
+    Ok(())
+}
+
+const fn convert_extension(to: ConvertFormat) -> &'static str {
+    match to {
+        ConvertFormat::Fcl => "fcl",
+    }
 }
 
 #[cfg(test)]
@@ -922,7 +1089,7 @@ mod tests {
 
         let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
         assert!(output.contains("msgid \"Dashboard\""));
-        assert!(output.contains("#: apps/web/app/page.tsx:2"));
+        assert!(output.contains("#: apps/web/app/page.tsx"));
     }
 
     #[test]
@@ -940,7 +1107,7 @@ mod tests {
         run_extraction(&config, &extract_options()).expect("extract");
 
         let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
-        assert!(output.contains("#: app/page.tsx:2"));
+        assert!(output.contains("#: app/page.tsx"));
     }
 
     #[test]
@@ -975,7 +1142,7 @@ catalogs:
     }
 
     #[test]
-    fn report_counts_translated_missing_and_fuzzy_messages() {
+    fn report_counts_translated_and_missing_messages() {
         let app = temp_dir("report");
         write_config(&app, None);
         fs::create_dir_all(app.join("locales/en")).expect("create source locale");
@@ -995,8 +1162,7 @@ catalogs:
         let report = build_report(&config, &["de".to_owned()]).expect("build report");
 
         assert_eq!(report.locales[0].total, 2);
-        assert_eq!(report.locales[0].translated, 0);
-        assert_eq!(report.locales[0].fuzzy, 1);
+        assert_eq!(report.locales[0].translated, 1);
         assert_eq!(report.locales[0].missing, 1);
     }
 
@@ -1024,6 +1190,7 @@ source-locale: en
             config: None,
             watch: false,
             clean: false,
+            force_clean: false,
             verbose: false,
         }
     }

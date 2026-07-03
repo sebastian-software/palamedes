@@ -440,7 +440,7 @@ impl From<ferrocat::MessageMetadataDiagnostic> for MessageMetadataDiagnostic {
     fn from(value: ferrocat::MessageMetadataDiagnostic) -> Self {
         Self {
             severity: value.severity.into(),
-            code: value.code,
+            code: value.code.to_string(),
             message: value.message,
             name: value.name,
         }

@@ -1,15 +1,16 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
-use ferrocat::MachineTranslationMetadata as FerrocatMachineTranslationMetadata;
 use ferrocat::{
     parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
-    CatalogMode, CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult,
-    ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode,
-    SourceExtractedMessage, UpdateCatalogFileOptions,
+    CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, EffectiveTranslationRef,
+    ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, RenderOptions,
+    SourceExtractedMessage, UpdateCatalogFileOptions, UpdateCatalogOptions,
 };
+use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
 use serde::{Deserialize, Serialize};
 
 /// Source origin used for catalog updates and parsed catalog messages.
@@ -20,6 +21,20 @@ pub struct CatalogUpdateOrigin {
     pub file: String,
     /// 1-based source line.
     pub line: u32,
+    /// Optional stable source scope, such as a component or function name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+}
+
+/// Source origin stored in parsed catalogs.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogOriginMetadata {
+    /// Source filename.
+    pub file: String,
+    /// Optional stable source scope, such as a component or function name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 /// Source-first extracted message used for catalog updates.
@@ -54,6 +69,12 @@ pub struct CatalogUpdateRequest {
     pub source_locale: String,
     /// Whether obsolete messages should be deleted instead of marked.
     pub clean: bool,
+    /// Whether obsolete messages should be deleted immediately, including undated entries.
+    #[serde(default)]
+    pub force_clean: bool,
+    /// Catalog storage format.
+    #[serde(default)]
+    pub format: super::catalog_artifact::PalamedesCatalogFormat,
     /// Extracted messages to project into the catalog.
     pub messages: Vec<CatalogUpdateMessage>,
 }
@@ -68,6 +89,9 @@ pub struct CatalogParseRequest {
     pub locale: String,
     /// Source locale used for parsing semantics.
     pub source_locale: String,
+    /// Catalog storage format.
+    #[serde(default)]
+    pub format: super::catalog_artifact::PalamedesCatalogFormat,
 }
 
 /// Result of updating a catalog file.
@@ -130,37 +154,52 @@ pub struct ParsedCatalogMessage {
     pub comments: Vec<String>,
     /// Source origins attached to the message.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub origins: Vec<CatalogUpdateOrigin>,
+    pub origins: Vec<CatalogOriginMetadata>,
     /// Whether the message is obsolete.
     pub obsolete: bool,
+    /// Whether the effective translation is non-empty.
+    pub translated: bool,
     /// Machine-translation provenance for the current translation, when present.
-    #[serde(rename = "machineTranslation", skip_serializing_if = "Option::is_none")]
-    pub machine_translation: Option<MachineTranslationMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine: Option<MachineMetadata>,
 }
 
-/// Machine-translation metadata attached to one translated catalog entry.
+/// Machine metadata attached to one translated catalog entry.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MachineTranslationMetadata {
-    /// Model identifier used to produce the translation.
-    pub model: String,
-    /// Time when the machine-generated translation was last modified.
+pub struct MachineMetadata {
+    /// Integrity lock for the current translation payload.
+    pub lock: String,
+    /// Optional AI provenance for machine-managed content.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub modified: Option<String>,
-    /// Optional model confidence from 0 to 100.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub confidence: Option<u8>,
-    /// Change-detection hash for the current translation payload.
-    pub hash: String,
+    pub ai: Option<AiProvenance>,
 }
 
-impl From<FerrocatMachineTranslationMetadata> for MachineTranslationMetadata {
-    fn from(value: FerrocatMachineTranslationMetadata) -> Self {
+/// AI provenance for machine-managed content.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiProvenance {
+    /// Model identifier used to produce the translation.
+    pub model: String,
+    /// Optional model confidence in the 0..1 interval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
+}
+
+impl From<FerrocatMachineMetadata> for MachineMetadata {
+    fn from(value: FerrocatMachineMetadata) -> Self {
+        Self {
+            lock: value.lock,
+            ai: value.ai.map(AiProvenance::from),
+        }
+    }
+}
+
+impl From<FerrocatAiProvenance> for AiProvenance {
+    fn from(value: FerrocatAiProvenance) -> Self {
         Self {
             model: value.model,
-            modified: value.modified,
             confidence: value.confidence,
-            hash: value.hash,
         }
     }
 }
@@ -190,9 +229,9 @@ pub fn parse_catalog(request: &CatalogParseRequest) -> PalamedesResult<CatalogPa
             path: target_path,
             source,
         })?;
-    let mut options = ParseCatalogOptions::new(&content, &request.source_locale);
-    options.locale = Some(&request.locale);
-    options.mode = CatalogMode::IcuPo;
+    let options = ParseCatalogOptions::new(&content, &request.source_locale)
+        .with_locale(&request.locale)
+        .with_mode(request.format.ferrocat_mode());
 
     let parsed = ferrocat_parse_catalog(options).map_err(PalamedesError::from)?;
 
@@ -213,20 +252,34 @@ fn update_catalog_file_source_first(
             .collect::<Result<Vec<_>, _>>()?,
     );
 
-    let mut options = UpdateCatalogFileOptions::new(&target_path, &request.source_locale, input);
-    options.options.locale = Some(&request.locale);
-    options.options.mode = CatalogMode::IcuPo;
-    options.options.obsolete_strategy = if request.clean {
+    let now = current_iso_date();
+    let obsolete_strategy = if request.force_clean {
         ObsoleteStrategy::Delete
+    } else if request.clean {
+        ObsoleteStrategy::DropObsoleteBefore(clean_cutoff_date(&now))
     } else {
         ObsoleteStrategy::Mark
     };
-    options.options.overwrite_source_translations = true;
-    options.options.render.custom_header_attributes = Some(&custom_header_attributes);
-    options.options.render.include_origins = true;
-    options.options.render.include_line_numbers = true;
-    options.options.render.print_placeholders_in_comments =
-        PlaceholderCommentMode::Enabled { limit: 3 };
+
+    let mut render = RenderOptions::default()
+        .with_include_origins(true)
+        .with_placeholder_comments(PlaceholderCommentMode::Enabled { limit: 3 });
+    if request.format == super::catalog_artifact::PalamedesCatalogFormat::Po {
+        render = render.with_custom_header_attributes(&custom_header_attributes);
+    }
+    let update_options = UpdateCatalogOptions::new(&request.source_locale, input)
+        .with_locale(&request.locale)
+        .with_mode(request.format.ferrocat_mode())
+        .with_obsolete_strategy(obsolete_strategy)
+        .with_overwrite_source_translations(true)
+        .with_render(render)
+        .with_now(&now);
+    let options = UpdateCatalogFileOptions::new(
+        &target_path,
+        &request.source_locale,
+        Vec::<SourceExtractedMessage>::new(),
+    )
+    .with_options(update_options);
 
     let result = ferrocat_update_catalog_file(options).map_err(PalamedesError::from)?;
 
@@ -243,7 +296,7 @@ fn project_message(message: CatalogUpdateMessage) -> PalamedesResult<SourceExtra
         .into_iter()
         .map(|origin| CatalogOrigin {
             file: origin.file,
-            line: Some(origin.line),
+            scope: origin.scope,
         })
         .collect::<Vec<_>>();
 
@@ -276,22 +329,24 @@ fn public_parse_result(parsed: ParsedCatalog) -> CatalogParseResult {
         messages: parsed
             .messages
             .into_iter()
-            .map(|message| ParsedCatalogMessage {
-                message: message.msgid,
-                context: message.msgctxt,
-                comments: message.comments,
-                origins: message
-                    .origin
-                    .into_iter()
-                    .map(|origin| CatalogUpdateOrigin {
-                        file: origin.file,
-                        line: origin.line.unwrap_or_default(),
-                    })
-                    .collect(),
-                obsolete: message.obsolete,
-                machine_translation: message
-                    .machine_translation
-                    .map(MachineTranslationMetadata::from),
+            .map(|message| {
+                let translated = is_effectively_translated(message.effective_translation());
+                ParsedCatalogMessage {
+                    message: message.msgid,
+                    context: message.msgctxt,
+                    comments: message.comments,
+                    origins: message
+                        .origin
+                        .into_iter()
+                        .map(|origin| CatalogOriginMetadata {
+                            file: origin.file,
+                            scope: origin.scope,
+                        })
+                        .collect(),
+                    obsolete: message.obsolete.is_some(),
+                    translated,
+                    machine: message.machine.map(MachineMetadata::from),
+                }
             })
             .collect(),
         diagnostics: parsed
@@ -300,6 +355,72 @@ fn public_parse_result(parsed: ParsedCatalog) -> CatalogParseResult {
             .map(CatalogDiagnostic::from)
             .collect(),
     }
+}
+
+fn is_effectively_translated(translation: EffectiveTranslationRef<'_>) -> bool {
+    match translation {
+        EffectiveTranslationRef::Singular(value) => !value.is_empty(),
+        EffectiveTranslationRef::Plural(values) => values.values().any(|value| !value.is_empty()),
+    }
+}
+
+fn current_iso_date() -> String {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let days = i64::try_from(seconds / 86_400).unwrap_or(i64::MAX);
+    iso_date_from_unix_days(days)
+}
+
+fn clean_cutoff_date(today: &str) -> String {
+    let Some(days) = unix_days_from_iso_date(today) else {
+        return today.to_owned();
+    };
+    iso_date_from_unix_days(days - 30)
+}
+
+fn iso_date_from_unix_days(days: i64) -> String {
+    let (year, month, day) = civil_from_days(days);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn unix_days_from_iso_date(value: &str) -> Option<i64> {
+    let mut parts = value.split('-');
+    let year = parts.next()?.parse::<i32>().ok()?;
+    let month = parts.next()?.parse::<u32>().ok()?;
+    let day = parts.next()?.parse::<u32>().ok()?;
+    (parts.next().is_none() && (1..=12).contains(&month) && (1..=31).contains(&day))
+        .then(|| days_from_civil(year, month, day))
+}
+
+fn civil_from_days(days: i64) -> (i32, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    let year = y + if month <= 2 { 1 } else { 0 };
+    (
+        i32::try_from(year).unwrap_or(i32::MAX),
+        u32::try_from(month).unwrap_or(1),
+        u32::try_from(day).unwrap_or(1),
+    )
+}
+
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let year = i64::from(year) - i64::from(month <= 2);
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let yoe = year - era * 400;
+    let month = i64::from(month);
+    let day = i64::from(day);
+    let doy = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
 }
 
 fn public_stats(stats: &CatalogStats) -> CatalogUpdateStats {
@@ -342,6 +463,8 @@ mod tests {
             locale: "en".to_owned(),
             source_locale: "en".to_owned(),
             clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
@@ -350,6 +473,7 @@ mod tests {
                 origins: vec![CatalogUpdateOrigin {
                     file: "src/App.tsx".to_owned(),
                     line: 3,
+                    scope: None,
                 }],
             }],
         })
@@ -381,6 +505,8 @@ mod tests {
             locale: "de".to_owned(),
             source_locale: "en".to_owned(),
             clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
@@ -397,13 +523,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_catalog_exposes_machine_translation_metadata() {
+    fn parse_catalog_exposes_machine_metadata() {
         let path = temp_file("machine-translation-parse");
         let hash = machine_translation_hash(EffectiveTranslationRef::Singular("Hallo"));
         std::fs::write(
             &path,
             format!(
-                "#@ ferrocat-mt model=openai/gpt-5.5-high modified=2026-05-12T10:30:00Z confidence=95 hash={hash}\n\
+                "#@ lock: {hash}\n\
+                 #@ ai: openai/gpt-5.5-high:0.95\n\
                  msgid \"Hello\"\n\
                  msgstr \"Hallo\"\n"
             ),
@@ -414,17 +541,18 @@ mod tests {
             target_path: path,
             locale: "de".to_owned(),
             source_locale: "en".to_owned(),
+            format: crate::PalamedesCatalogFormat::Po,
         })
         .expect("parse catalog");
 
         let metadata = parsed.messages[0]
-            .machine_translation
+            .machine
             .as_ref()
-            .expect("machine translation metadata");
-        assert_eq!(metadata.model, "openai/gpt-5.5-high");
-        assert_eq!(metadata.modified.as_deref(), Some("2026-05-12T10:30:00Z"));
-        assert_eq!(metadata.confidence, Some(95));
-        assert_eq!(metadata.hash, hash);
+            .expect("machine metadata");
+        assert_eq!(metadata.lock, hash);
+        let ai = metadata.ai.as_ref().expect("ai provenance");
+        assert_eq!(ai.model, "openai/gpt-5.5-high");
+        assert_eq!(ai.confidence, Some(0.95));
     }
 
     #[test]
@@ -434,7 +562,8 @@ mod tests {
         std::fs::write(
             &path,
             format!(
-                "#@ ferrocat-mt model=openai/gpt-5.5-high confidence=95 hash={hash}\n\
+                "#@ lock: {hash}\n\
+                 #@ ai: openai/gpt-5.5-high:0.95\n\
                  msgid \"Hello\"\n\
                  msgstr \"Hallo\"\n"
             ),
@@ -446,6 +575,8 @@ mod tests {
             locale: "de".to_owned(),
             source_locale: "en".to_owned(),
             clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
@@ -457,11 +588,12 @@ mod tests {
         .expect("update");
 
         let output = std::fs::read_to_string(&path).expect("read");
-        assert!(output.contains("#@ ferrocat-mt model=openai/gpt-5.5-high confidence=95 hash="));
+        assert!(output.contains("#@ lock: "));
+        assert!(output.contains("#@ ai: openai/gpt-5.5-high:0.95"));
     }
 
     #[test]
-    fn clean_removes_obsolete_entries() {
+    fn clean_keeps_undated_obsolete_entries() {
         let path = temp_file("clean");
         std::fs::write(
             &path,
@@ -479,6 +611,43 @@ mod tests {
             locale: "en".to_owned(),
             source_locale: "en".to_owned(),
             clean: true,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            messages: vec![CatalogUpdateMessage {
+                message: "Keep".to_owned(),
+                context: None,
+                placeholders: BTreeMap::new(),
+                extracted_comments: vec![],
+                origins: vec![],
+            }],
+        })
+        .expect("update");
+
+        let output = std::fs::read_to_string(&path).expect("read");
+        assert!(output.contains("Old"));
+    }
+
+    #[test]
+    fn force_clean_removes_undated_obsolete_entries() {
+        let path = temp_file("force-clean");
+        std::fs::write(
+            &path,
+            concat!(
+                "msgid \"Keep\"\n",
+                "msgstr \"\"\n\n",
+                "msgid \"Old\"\n",
+                "msgstr \"\"\n",
+            ),
+        )
+        .expect("write existing");
+
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
             messages: vec![CatalogUpdateMessage {
                 message: "Keep".to_owned(),
                 context: None,
@@ -502,6 +671,8 @@ mod tests {
             locale: "en".to_owned(),
             source_locale: "en".to_owned(),
             clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
             messages: vec![CatalogUpdateMessage {
                 message: "{count, plural, one {# item} other {# items}}".to_owned(),
                 context: None,
@@ -525,6 +696,8 @@ mod tests {
             locale: "en".to_owned(),
             source_locale: "en".to_owned(),
             clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello {0}".to_owned(),
                 context: None,

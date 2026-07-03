@@ -22,6 +22,7 @@ export type PalamedesSourceReferenceRoot = "git" | "lingui" | "config" | (string
 
 export type PalamedesCatalogConfig = {
   path: string
+  format?: "po" | "fcl"
   include: string[]
   exclude?: string[]
 }
@@ -228,6 +229,7 @@ async function normalizeConfig(
     sourceReferenceRoot: await resolveSourceReferenceRoot(config.sourceReferenceRoot, rootDir),
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
+      ...(catalog.format !== undefined ? { format: catalog.format } : {}),
       include: [...catalog.include],
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
@@ -367,6 +369,17 @@ function validateCatalog(catalog: unknown, configPath: string, index: number): v
   if (!Array.isArray(record.include) || record.include.some((value) => typeof value !== "string")) {
     throw new Error(
       `Invalid Palamedes config in ${configPath}: "catalogs[${index}].include" must be an array of strings.`
+    )
+  }
+
+  if (record.format !== undefined && record.format !== "po" && record.format !== "fcl") {
+    if (record.format === "ndjson") {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: "catalogs[${index}].format" value "ndjson" is no longer supported; use "fcl" for Ferrocat Catalog Lines.`
+      )
+    }
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].format" must be "po" or "fcl" when provided.`
     )
   }
 

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use ::config as config_rs;
-use palamedes::{CatalogArtifactConfig, CatalogConfig, FallbackLocales};
+use palamedes::{CatalogArtifactConfig, CatalogConfig, FallbackLocales, PalamedesCatalogFormat};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -46,6 +46,8 @@ pub struct LoadedConfig {
 #[serde(rename_all = "kebab-case")]
 pub struct ConfigCatalog {
     pub path: String,
+    #[serde(default)]
+    pub format: PalamedesCatalogFormat,
     pub include: Vec<String>,
     #[serde(default)]
     pub exclude: Vec<String>,
@@ -102,6 +104,7 @@ impl LoadedConfig {
                 .iter()
                 .map(|catalog| CatalogConfig {
                     path: catalog.path.clone(),
+                    format: catalog.format,
                 })
                 .collect(),
         }

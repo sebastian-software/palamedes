@@ -42,6 +42,11 @@ catalogs:
   repository root and falls back to the config directory when no Git root is
   available. Use `"lingui"` or `"config"` for Lingui-compatible references
   relative to the config directory, or pass a custom path.
+- `catalogs[].format` defaults to `"po"`. Set it to `"fcl"` to use Ferrocat
+  Catalog Lines for canonical, merge-friendly generated catalog storage.
+
+See [Catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
+for the PO/FCL storage boundary.
 
 See [Pseudo-localization and fallback locales](https://github.com/sebastian-software/palamedes/blob/main/docs/pseudo-localization.md)
 for examples and the recommended development workflow.

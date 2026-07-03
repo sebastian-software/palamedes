@@ -22,6 +22,10 @@ Then read the core execution model:
 5. [ADR-005: Universal `getI18n()` Runtime Model](./adr/005-universal-geti18n-runtime-model.md)
 6. [ADR-006: Ferrocat as Catalog and ICU Foundation](./adr/006-ferrocat-as-catalog-and-icu-foundation.md)
 
+ADR-006 also records the current Ferrocat integration rule: Palamedes exposes
+PO and FCL as product-shaped catalog storage formats, and uses Ferrocat builder
+options instead of struct literals at the dependency boundary.
+
 Finally read the host integration decisions:
 
 7. [ADR-007: Native Boundary and Distribution](./adr/007-native-boundary-and-distribution.md)

@@ -1,13 +1,13 @@
 # RFC: Ferrocat 2.x Migration
 
 **Status:** Active plan
-**Date:** 2026-06-30 (updated 2026-07-03 for the Ferrocat 2.1.0 baseline)
+**Date:** 2026-06-30 (updated 2026-07-03 for the Ferrocat 2.1.1 baseline)
 **Owner:** Palamedes maintainers
 **Tracking issue:** [palamedes#285](https://github.com/sebastian-software/palamedes/issues/285)
 
 ## Summary
 
-Palamedes should migrate from Ferrocat `1.3.1` to Ferrocat `2.1.0` as a
+Palamedes should migrate from Ferrocat `1.3.1` to Ferrocat `2.1.1` as a
 product migration, not as a minimal compatibility patch.
 
 The recommended direction is to make Ferrocat Catalog Lines (FCL) a public
@@ -18,13 +18,13 @@ N-API boundary, TypeScript wrapper, tests, and documentation.
 
 Primary sources:
 
-- [ferrocat 2.1.0](https://crates.io/crates/ferrocat/2.1.0)
-- [ferrocat-po 2.1.0](https://crates.io/crates/ferrocat-po/2.1.0)
-- [ferrocat-cli 2.1.0](https://crates.io/crates/ferrocat-cli/2.1.0)
-- [ferrocat v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-v1.3.1...ferrocat-v2.1.0)
-- [ferrocat-po v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-po-v1.3.1...ferrocat-po-v2.1.0)
+- [ferrocat 2.1.1](https://crates.io/crates/ferrocat/2.1.1)
+- [ferrocat-po 2.1.1](https://crates.io/crates/ferrocat-po/2.1.1)
+- [ferrocat-cli 2.1.1](https://crates.io/crates/ferrocat-cli/2.1.1)
+- [ferrocat v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-v1.3.1...ferrocat-v2.1.1)
+- [ferrocat-po v2 compare](https://github.com/sebastian-software/ferrocat/compare/ferrocat-po-v1.3.1...ferrocat-po-v2.1.1)
 - [Releases and upgrading guide](https://ferrocat.dev/guide/upgrading), including
-  the 2.1.0 cleanup window and the announced 2.2 API cleanup
+  the 2.1.1 cleanup window and the announced 2.2 API cleanup
 - ADRs [0021](https://ferrocat.dev/architecture/adr/0021-drop-source-line-numbers),
   [0022](https://ferrocat.dev/architecture/adr/0022-machine-managed-value-integrity-and-ai-provenance),
   [0023](https://ferrocat.dev/architecture/adr/0023-drop-gettext-flags-merge-comments),
@@ -32,17 +32,22 @@ Primary sources:
   [0025](https://ferrocat.dev/architecture/adr/0025-obsolete-age-and-cleanup)
 
 Version baseline: Palamedes currently pins `ferrocat` and `ferrocat-po` at
-`1.3.1`. Upstream has since released `2.0.0` (2026-06-30) and `2.1.0`
-(2026-07-02). This migration targets `2.1.0` directly: `2.1.0` is a reviewed
+`1.3.1`. Upstream has since released `2.0.0` (2026-06-30) and `2.1.1`
+(2026-07-02). This migration targets `2.1.1` directly: `2.1.1` is a reviewed
 cleanup window for accidental public API coupling left after `2.0.0`, and
 landing on it avoids adapting to an API surface that upstream has already
 revised.
+
+Implementation note: the originally reviewed plan targeted `2.1.0`, but the
+options-embedded ICU helpers used for the 2.2-proofing landed in the available
+`2.1.1` patch release. The migration therefore pins the Ferrocat crates to
+`2.1.1` instead of carrying the older cross-product entry points.
 
 Compatibility probe:
 
 - A scratch migration against `origin/main` found that, after the mechanical
   Ferrocat 2.0 API adaptations, `cargo check --workspace --locked` passes.
-- The probe predates `2.1.0`. The 2.1 cleanups are source-level breaks, but
+- The probe predates `2.1.1`. The 2.1 cleanups are source-level breaks, but
   they are small renames and construction changes with direct replacements
   documented in the upgrade guide.
 - The main risk is therefore API and product-shape correctness, not unknown
@@ -50,9 +55,9 @@ Compatibility probe:
 
 ## Goals
 
-- Upgrade `ferrocat`, `ferrocat-po`, and `ferrocat-icu` to `2.1.0`.
+- Upgrade `ferrocat`, `ferrocat-po`, and `ferrocat-icu` to `2.1.1`.
 - Update `FERROCAT_VERSION`, `Cargo.lock`, and native type output.
-- Absorb the 2.1.0 breaking cleanups: renamed entry points, the new `MsgStr`
+- Absorb the 2.1.1 breaking cleanups: renamed entry points, the new `MsgStr`
   accessors, opaque `PoVec` construction, and `#[non_exhaustive]` options with
   builder setters.
 - Adopt the announced 2.2 API style now so the next Ferrocat cleanup is a
@@ -116,7 +121,7 @@ if they become durable product policy. For now, this document should stay under
 
 ## Relationship to ferrocat-cli
 
-`ferrocat-cli` is now available as `ferrocat-cli` `2.1.0` on crates.io and
+`ferrocat-cli` is now available as `ferrocat-cli` `2.1.1` on crates.io and
 publishes a `ferrocat` binary.
 
 The current Ferrocat CLI surface is useful, but intentionally narrower than the
@@ -142,7 +147,7 @@ This should shape the Palamedes migration in two ways:
 Example optional raw-catalog audit:
 
 ```bash
-cargo install ferrocat-cli --version 2.1.0
+cargo install ferrocat-cli --version 2.1.1
 ferrocat audit \
   --source-locale en \
   --source src/locales/en.fcl \
@@ -360,8 +365,8 @@ escape hatch for repositories that want immediate deletion.
 
 ### 1. Rust Dependency and Core API Pass
 
-- Upgrade `ferrocat`, `ferrocat-po`, and `ferrocat-icu` to `2.1.0`.
-- Update `FERROCAT_VERSION` to `2.1.0`.
+- Upgrade `ferrocat`, `ferrocat-po`, and `ferrocat-icu` to `2.1.1`.
+- Update `FERROCAT_VERSION` to `2.1.1`.
 - Run the lockfile update.
 - Replace removed imports and type names, including the 2.1 renames:
   `catalog_review` to `review_catalogs`, `catalog_coverage` to
@@ -646,7 +651,7 @@ Type generation:
 Optional cross-check:
 
 ```bash
-cargo install ferrocat-cli --version 2.1.0
+cargo install ferrocat-cli --version 2.1.1
 ferrocat audit \
   --source-locale en \
   --source <source.fcl> \
@@ -723,8 +728,8 @@ config-aware test coverage.
 
 ## Acceptance Criteria
 
-- `ferrocat`, `ferrocat-po`, and `ferrocat-icu` resolve to `2.1.0`.
-- `FERROCAT_VERSION` reports `2.1.0`.
+- `ferrocat`, `ferrocat-po`, and `ferrocat-icu` resolve to `2.1.1`.
+- `FERROCAT_VERSION` reports `2.1.1`.
 - No usage of the pre-2.1 names remains (`catalog_review`, `catalog_coverage`,
   `has_selectordinal`, `MergeExtractedMessage`, `MsgStr::first_str`).
 - Ferrocat options are constructed exclusively through `new()` + `with_*()`

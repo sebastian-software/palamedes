@@ -25,6 +25,7 @@ The repo backs that claim with visible evidence:
 - two locale strategies per framework: cookie and route segment
 - versioned browser screenshots generated from the same Playwright verifier used in CI
 - reproducible benchmark commands for transform, extract, catalog update, and artifact compile
+- opt-in FCL catalog storage for canonical, merge-friendly generated catalogs
 - 16 ADRs that explain the product decisions, including what Palamedes deliberately does not own
 
 Start with the [example matrix](../../examples/README.md), the
@@ -67,6 +68,7 @@ Palamedes keeps the day-to-day model simpler:
 - identify messages with `message + context`
 - resolve the active runtime through `getI18n()`
 - let `ferrocat` own catalog parsing, updates, audits, and ICU diagnostics
+- choose PO by default or opt into FCL when a repo needs canonical generated catalog storage
 - keep framework adapters small
 
 Rust matters here because the careful work has one clear home. That keeps the

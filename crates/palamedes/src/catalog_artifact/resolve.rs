@@ -92,7 +92,7 @@ fn resolve_catalog_request(
 ) -> PalamedesResult<ResolvedCatalogRequest> {
     for catalog in &config.catalogs {
         let absolute_catalog_path = Path::new(&config.root_dir).join(&catalog.path);
-        let absolute_po_path = absolute_catalog_path.with_extension("po");
+        let absolute_po_path = absolute_catalog_path.with_extension(catalog.format.extension());
         let pattern = normalize_path(&absolute_po_path);
         let escaped = regex::escape(&pattern);
         let regex_pattern = escaped.replace("\\{locale\\}", "([^/]+)");
@@ -143,7 +143,8 @@ fn collect_watch_files(
 
     for catalog in &config.catalogs {
         let absolute_catalog_path = root_dir.join(&catalog.path);
-        let pattern = normalize_path(&absolute_catalog_path.with_extension("po"));
+        let pattern =
+            normalize_path(&absolute_catalog_path.with_extension(catalog.format.extension()));
         let primary_pattern = normalize_path(primary_file);
         let escaped = regex::escape(&pattern);
         let regex_pattern = escaped.replace("\\{locale\\}", "([^/]+)");
@@ -157,7 +158,7 @@ fn collect_watch_files(
             for locale in locale_chain {
                 let candidate = root_dir
                     .join(catalog.path.replace("{locale}", locale))
-                    .with_extension("po");
+                    .with_extension(catalog.format.extension());
                 if !files.contains(&candidate) {
                     files.push(candidate);
                 }

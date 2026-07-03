@@ -37,7 +37,7 @@ pub use catalog_artifact::{
     compile_catalog_artifact, compile_catalog_artifact_selected, CatalogArtifactConfig,
     CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity, CatalogArtifactMissingMessage,
     CatalogArtifactRequest, CatalogArtifactResult, CatalogArtifactSelectedRequest,
-    CatalogArtifactSourceKey, CatalogConfig, FallbackLocales,
+    CatalogArtifactSourceKey, CatalogConfig, FallbackLocales, PalamedesCatalogFormat,
 };
 pub use catalog_audit::{
     audit_catalogs, CatalogAuditCheckOptions, CatalogAuditDiagnostic, CatalogAuditRequest,
@@ -49,9 +49,9 @@ pub use catalog_combine::{
     CatalogFileCombineRequest, CatalogFileCombineResult, CatalogFileFormat,
 };
 pub use catalog_update::{
-    parse_catalog, update_catalog_file, CatalogParseRequest, CatalogParseResult,
-    CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, CatalogUpdateResponse,
-    CatalogUpdateStats, MachineTranslationMetadata, ParsedCatalogMessage,
+    parse_catalog, update_catalog_file, AiProvenance, CatalogOriginMetadata, CatalogParseRequest,
+    CatalogParseResult, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
+    CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage,
 };
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
@@ -72,7 +72,7 @@ pub use transform::{
 };
 
 /// Published `ferrocat` version used by the Rust core.
-pub const FERROCAT_VERSION: &str = "1.3.1";
+pub const FERROCAT_VERSION: &str = "2.1.1";
 
 /// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]
@@ -167,11 +167,11 @@ impl From<PoItem> for JsPoItem {
         Self {
             msgid: value.msgid,
             msgctxt: value.msgctxt,
-            references: value.references,
+            references: value.references.into(),
             msgid_plural: value.msgid_plural,
             msgstr,
-            comments: value.comments,
-            extracted_comments: value.extracted_comments,
+            comments: value.comments.into(),
+            extracted_comments: value.extracted_comments.into(),
             flags,
             metadata,
             obsolete: value.obsolete,
@@ -217,7 +217,7 @@ mod tests {
         let declared = dependency_version(manifest, "ferrocat")
             .expect("ferrocat dependency should be declared");
 
-        assert_eq!(FERROCAT_VERSION, declared);
+        assert_eq!(FERROCAT_VERSION, declared.trim_start_matches('='));
     }
 
     #[test]

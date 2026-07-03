@@ -3,6 +3,10 @@
 `@palamedes/next-plugin` wires Palamedes macro transformation and `.po` loading
 into Next.js.
 
+Catalog storage can be PO or FCL in `palamedes.yaml`, but this API is still a
+`.po` import loader. See [Catalog formats](../catalog-formats.md) for the
+storage/import boundary.
+
 ## Exports
 
 - `withPalamedes(baseConfig?, options?)`

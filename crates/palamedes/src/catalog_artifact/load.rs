@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use ferrocat::{parse_catalog, CatalogMode, NormalizedParsedCatalog, ParseCatalogOptions};
+use ferrocat::{parse_catalog, NormalizedParsedCatalog, ParseCatalogOptions};
 
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::resolve::normalize_path;
-use super::types::CatalogArtifactConfig;
+use super::types::{CatalogArtifactConfig, CatalogConfig};
 
 pub(super) type LocaleCatalogs = BTreeMap<String, NormalizedParsedCatalog>;
 
@@ -31,9 +31,11 @@ pub(super) fn load_catalogs(
             path: file.clone(),
             source,
         })?;
-        let mut options = ParseCatalogOptions::new(&content, &config.source_locale);
-        options.locale = Some(locale.as_str());
-        options.mode = CatalogMode::IcuPo;
+        let catalog = catalog_for_path(file, config)
+            .ok_or_else(|| PalamedesError::CouldNotInferLocale { path: file.clone() })?;
+        let options = ParseCatalogOptions::new(&content, &config.source_locale)
+            .with_locale(locale.as_str())
+            .with_mode(catalog.format.ferrocat_mode());
 
         let parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
             path: file.clone(),
@@ -59,7 +61,7 @@ fn infer_locale_from_path(path: &Path, config: &CatalogArtifactConfig) -> Option
     for catalog in &config.catalogs {
         let absolute_catalog_path = Path::new(&config.root_dir)
             .join(&catalog.path)
-            .with_extension("po");
+            .with_extension(catalog.format.extension());
         let pattern = normalize_path(&absolute_catalog_path);
         let escaped = regex::escape(&pattern);
         let regex_pattern = escaped.replace("\\{locale\\}", "([^/]+)");
@@ -69,4 +71,22 @@ fn infer_locale_from_path(path: &Path, config: &CatalogArtifactConfig) -> Option
         }
     }
     None
+}
+
+fn catalog_for_path<'a>(
+    path: &Path,
+    config: &'a CatalogArtifactConfig,
+) -> Option<&'a CatalogConfig> {
+    let normalized_resource = normalize_path(path);
+    config.catalogs.iter().find(|catalog| {
+        let absolute_catalog_path = Path::new(&config.root_dir)
+            .join(&catalog.path)
+            .with_extension(catalog.format.extension());
+        let pattern = normalize_path(&absolute_catalog_path);
+        let escaped = regex::escape(&pattern);
+        let regex_pattern = escaped.replace("\\{locale\\}", "([^/]+)");
+        regex::Regex::new(&format!("^{regex_pattern}$"))
+            .map(|matcher| matcher.is_match(&normalized_resource))
+            .unwrap_or(false)
+    })
 }

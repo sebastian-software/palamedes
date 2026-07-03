@@ -52,6 +52,10 @@ catalogs:
 
 Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure the active i18n instance is available on both the client and the server before translated code executes.
 
+Catalog storage can be PO or FCL in `palamedes.yaml`, but the current Next
+loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
+future adapter release explicitly documents `.fcl` imports.
+
 For App Router Server Components on the Node runtime, use a server-only module
 with `@palamedes/runtime/server`. This follows the official RSC shape: keep
 server code behind `server-only`, memoize request work with React `cache()`, and

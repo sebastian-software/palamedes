@@ -9,8 +9,15 @@ use napi_derive::napi;
 #[napi(object)]
 pub struct CatalogArtifactCatalogConfig {
     pub path: String,
+    pub format: Option<CatalogConfigFormat>,
     pub include: Vec<String>,
     pub exclude: Option<Vec<String>>,
+}
+
+#[napi(string_enum)]
+pub enum CatalogConfigFormat {
+    Po,
+    Fcl,
 }
 
 #[napi(object)]
@@ -40,7 +47,22 @@ impl From<CatalogArtifactCatalogConfig> for palamedes::CatalogConfig {
     fn from(value: CatalogArtifactCatalogConfig) -> Self {
         let _ = value.include;
         let _ = value.exclude;
-        Self { path: value.path }
+        Self {
+            path: value.path,
+            format: value
+                .format
+                .map(palamedes::PalamedesCatalogFormat::from)
+                .unwrap_or_default(),
+        }
+    }
+}
+
+impl From<CatalogConfigFormat> for palamedes::PalamedesCatalogFormat {
+    fn from(value: CatalogConfigFormat) -> Self {
+        match value {
+            CatalogConfigFormat::Po => Self::Po,
+            CatalogConfigFormat::Fcl => Self::Fcl,
+        }
     }
 }
 
