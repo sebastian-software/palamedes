@@ -50,6 +50,7 @@ The benchmark flow here focuses on the operations Palamedes claims to improve:
 - extract
 - catalog update
 - catalog artifact compile
+- end-to-end extract and catalog update workflows
 
 It uses a checked-in fixture corpus under
 [`benchmarks/proof-fixtures`](../benchmarks/proof-fixtures),
@@ -116,6 +117,27 @@ For the broader architectural picture, including `next-intl` and General Transla
 That separate harness measures Lingui macro rewrite through distinct Babel and
 SWC lanes instead of folding them into one number.
 
+For the end-to-end workflow comparison against Lingui and i18next-parser:
+
+```bash
+pnpm benchmark:e2e-workflow
+```
+
+Quick sample:
+
+```bash
+pnpm benchmark:e2e-workflow:quick
+```
+
+See the methodology and latest checked report here:
+
+- [End-to-end extract and catalog update benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
+
+That workflow benchmark times source discovery, source parsing needed for
+message extraction, extraction, catalog update/merge, and catalog writes in one
+CLI command per tool. It does not time runtime catalog/artifact compilation,
+type-checking, linting, bundling, or the post-run semantic validation step.
+
 ## Methodology
 
 - machine-local benchmark
@@ -123,6 +145,7 @@ SWC lanes instead of folding them into one number.
 - warmup runs before measurement
 - median reported for each operation
 - operations measured independently, not as a blended total
+- end-to-end workflow runs measured separately from isolated hot paths
 - sampled peak RSS reported from Node's `process.memoryUsage().rss`
 
 This is meant to be reproducible and honest, not a "best possible marketing
@@ -201,6 +224,38 @@ For the Ferrocat 2.x / Palamedes 1.0 migration PR, record a fresh
 with this historical baseline without turning machine-local numbers into a
 portable performance claim.
 
+## End-To-End Workflow Baseline
+
+Checked local sample, captured on July 3, 2026 with:
+
+```bash
+pnpm benchmark:e2e-workflow
+```
+
+Environment:
+
+- Node `v24.18.0`
+- macOS `darwin/arm64`
+- Palamedes CLI `0.11.4`
+- Lingui CLI `6.4.0`
+- i18next-parser CLI `9.4.0`
+
+Median results from that run:
+
+| Profile |  Palamedes |      Lingui | i18next-parser |
+| ------- | ---------: | ----------: | -------------: |
+| Small   | `33.53 ms` | `657.00 ms` |    `477.58 ms` |
+| Medium  | `42.92 ms` | `728.56 ms` |    `534.15 ms` |
+
+The harness validates that all three tools write the same active source-message
+set before publishing timings. It renders the same logical message inventory
+into each tool's idiomatic source shape, then measures scan, extract, catalog
+update, and file writes as one workflow.
+
+Treat these as machine-local workflow measurements, not universal claims. The
+raw report lives in
+[`benchmarks/e2e-workflow/results/latest.json`](../benchmarks/e2e-workflow/results/latest.json).
+
 ## What This Page Does Not Claim
 
 - It does not claim universal results across every machine or every codebase.
@@ -219,3 +274,4 @@ The goal is simpler: show the work and make local verification easy.
 - [Framework example notes](https://github.com/sebastian-software/palamedes/blob/main/docs/framework-example-notes.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
 - [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
+- [End-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)

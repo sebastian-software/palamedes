@@ -27,8 +27,12 @@ The current proof:
   same picture here. All of it is versioned browser output, not a mockup.
 - Sixteen ADRs explain the runtime model, message identity, native boundary,
   adapter architecture, and the work deliberately kept out of scope.
-- Benchmark commands and fixtures are checked in so the numbers can be rerun
-  locally.
+- Benchmark commands, fixtures, and machine-readable reports are checked in so
+  the numbers can be rerun locally. The end-to-end extract/update workflow
+  benchmark currently measures Palamedes at `33.53 ms` on the small profile and
+  `42.92 ms` on the medium profile on the checked machine-local run; the
+  Lingui and i18next-parser comparison numbers are documented in
+  [End-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md).
 
 **Try it live.** The full framework matrix is deployed at `*.examples.palamedes.dev`. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together — the same design across every framework. Full list in [examples/README](examples/README.md).
 
@@ -75,7 +79,7 @@ easier to review, and easier to carry from one framework to the next.
 
 - A browser-verified example matrix across five framework families
 - Versioned screenshots generated from the same Playwright-based verifier used in CI
-- Reproducible benchmark commands for transform, extract, catalog update, and compile steps
+- Reproducible benchmark commands for transform, extract, catalog update, compile steps, and end-to-end extract/update workflows
 - Structured catalog audit and metadata validation APIs backed by `ferrocat`
 - ADRs and architecture docs that explain the decisions behind the product
 - Public headless frontend primitives in `@palamedes/react` and `@palamedes/solid` that the matrix uses directly
@@ -252,6 +256,7 @@ The same foundation also matters for future translation workflows:
 - [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
 - [Live demo deployments](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
 - [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
+- [End-to-end workflow benchmark against Lingui and i18next-parser](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
 - [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
 - [Translation workflow surface](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-workflow-surface.md)

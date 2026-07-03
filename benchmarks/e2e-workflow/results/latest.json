@@ -1,0 +1,496 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "palamedes-e2e-extract-update-workflow",
+  "generatedAt": "2026-07-03T19:16:02.889Z",
+  "machineLocal": true,
+  "seed": 20260703,
+  "warmup": 3,
+  "runs": 7,
+  "validateOnly": false,
+  "environment": {
+    "nodeVersion": "v24.18.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "generatedAt": "2026-07-03T19:16:02.889Z"
+  },
+  "versions": {
+    "benchmarkPackage": "@palamedes/benchmark-e2e-workflow",
+    "palamedes": {
+      "cli": "pmds (Palamedes) v0.11.4"
+    },
+    "lingui": {
+      "cli": "6.4.0"
+    },
+    "i18nextParser": {
+      "cli": "9.4.0"
+    }
+  },
+  "methodology": {
+    "scope": "scan sources, extract messages, update catalogs, and write catalog files",
+    "corpus": "same generated logical message inventory rendered into each tool's idiomatic source shape",
+    "reset": "catalog files are reset to the same baseline state before every warmup and measured run",
+    "semanticCheck": "active catalog messages are normalized after each tool run and compared with the generated current inventory"
+  },
+  "profiles": [
+    {
+      "profile": "small",
+      "corpus": {
+        "fileCount": 80,
+        "messagesPerFile": 8,
+        "sourceMessageCount": 640,
+        "baselineMessageCount": 624,
+        "changedCount": 48,
+        "newCount": 64,
+        "removedCount": 48,
+        "sourceBytes": 22960
+      },
+      "validation": {
+        "expectedActiveMessages": 640,
+        "tools": {
+          "palamedes": {
+            "activeMessagesByLocale": {
+              "en": 640,
+              "de": 640
+            }
+          },
+          "lingui": {
+            "activeMessagesByLocale": {
+              "en": 640,
+              "de": 640
+            }
+          },
+          "i18next": {
+            "activeMessagesByLocale": {
+              "en": 640,
+              "de": 640
+            }
+          }
+        }
+      },
+      "results": [
+        {
+          "tool": "palamedes",
+          "version": "pmds (Palamedes) v0.11.4",
+          "profile": "small",
+          "fileCount": 80,
+          "sourceMessageCount": 640,
+          "baselineMessageCount": 624,
+          "changedCount": 48,
+          "newCount": 64,
+          "removedCount": 48,
+          "sourceBytes": 22960,
+          "warmup": 3,
+          "runs": 7,
+          "medianMs": 33.533583,
+          "rawSamplesMs": [
+            31.728583,
+            32.163417,
+            33.291917,
+            33.533583,
+            33.634875,
+            33.798417,
+            36.127375
+          ],
+          "stdoutBytes": 178,
+          "stderrBytes": 0,
+          "palamedesTiming": {
+            "totalMs": 27,
+            "globMs": 0,
+            "extractMs": 3,
+            "writeMs": 23,
+            "totalMessages": 640,
+            "totalFiles": 80
+          }
+        },
+        {
+          "tool": "lingui",
+          "version": "6.4.0",
+          "profile": "small",
+          "fileCount": 80,
+          "sourceMessageCount": 640,
+          "baselineMessageCount": 624,
+          "changedCount": 48,
+          "newCount": 64,
+          "removedCount": 48,
+          "sourceBytes": 22960,
+          "warmup": 3,
+          "runs": 7,
+          "medianMs": 657.002792,
+          "rawSamplesMs": [
+            653.425417,
+            653.967541,
+            654.482416,
+            657.002792,
+            666.810167,
+            668.272542,
+            685.573334
+          ],
+          "stdoutBytes": 787,
+          "stderrBytes": 18
+        },
+        {
+          "tool": "i18next",
+          "version": "9.4.0",
+          "profile": "small",
+          "fileCount": 80,
+          "sourceMessageCount": 640,
+          "baselineMessageCount": 624,
+          "changedCount": 48,
+          "newCount": 64,
+          "removedCount": 48,
+          "sourceBytes": 22960,
+          "warmup": 3,
+          "runs": 7,
+          "medianMs": 477.579042,
+          "rawSamplesMs": [
+            475.85675,
+            476.866417,
+            477.533709,
+            477.579042,
+            477.617917,
+            479.436167,
+            485.478084
+          ],
+          "stdoutBytes": 12753,
+          "stderrBytes": 0
+        }
+      ]
+    },
+    {
+      "profile": "medium",
+      "corpus": {
+        "fileCount": 240,
+        "messagesPerFile": 8,
+        "sourceMessageCount": 1920,
+        "baselineMessageCount": 1872,
+        "changedCount": 144,
+        "newCount": 192,
+        "removedCount": 144,
+        "sourceBytes": 68881
+      },
+      "validation": {
+        "expectedActiveMessages": 1920,
+        "tools": {
+          "palamedes": {
+            "activeMessagesByLocale": {
+              "en": 1920,
+              "de": 1920
+            }
+          },
+          "lingui": {
+            "activeMessagesByLocale": {
+              "en": 1920,
+              "de": 1920
+            }
+          },
+          "i18next": {
+            "activeMessagesByLocale": {
+              "en": 1920,
+              "de": 1920
+            }
+          }
+        }
+      },
+      "results": [
+        {
+          "tool": "palamedes",
+          "version": "pmds (Palamedes) v0.11.4",
+          "profile": "medium",
+          "fileCount": 240,
+          "sourceMessageCount": 1920,
+          "baselineMessageCount": 1872,
+          "changedCount": 144,
+          "newCount": 192,
+          "removedCount": 144,
+          "sourceBytes": 68881,
+          "warmup": 3,
+          "runs": 7,
+          "medianMs": 42.919542,
+          "rawSamplesMs": [
+            41.565166,
+            41.816584,
+            42.163833,
+            42.919542,
+            42.951209,
+            43.761791,
+            45.74775
+          ],
+          "stdoutBytes": 182,
+          "stderrBytes": 0,
+          "palamedesTiming": {
+            "totalMs": 37,
+            "globMs": 1,
+            "extractMs": 9,
+            "writeMs": 25,
+            "totalMessages": 1920,
+            "totalFiles": 240
+          }
+        },
+        {
+          "tool": "lingui",
+          "version": "6.4.0",
+          "profile": "medium",
+          "fileCount": 240,
+          "sourceMessageCount": 1920,
+          "baselineMessageCount": 1872,
+          "changedCount": 144,
+          "newCount": 192,
+          "removedCount": 144,
+          "sourceBytes": 68881,
+          "warmup": 3,
+          "runs": 7,
+          "medianMs": 728.56275,
+          "rawSamplesMs": [
+            721.121458,
+            721.133292,
+            722.158083,
+            728.56275,
+            729.426542,
+            732.136708,
+            740.805125
+          ],
+          "stdoutBytes": 787,
+          "stderrBytes": 18
+        },
+        {
+          "tool": "i18next",
+          "version": "9.4.0",
+          "profile": "medium",
+          "fileCount": 240,
+          "sourceMessageCount": 1920,
+          "baselineMessageCount": 1872,
+          "changedCount": 144,
+          "newCount": 192,
+          "removedCount": 144,
+          "sourceBytes": 68881,
+          "warmup": 3,
+          "runs": 7,
+          "medianMs": 534.149875,
+          "rawSamplesMs": [
+            529.638625,
+            530.54925,
+            531.615,
+            534.149875,
+            535.212666,
+            538.116084,
+            542.655208
+          ],
+          "stdoutBytes": 37529,
+          "stderrBytes": 0
+        }
+      ]
+    }
+  ],
+  "results": [
+    {
+      "tool": "palamedes",
+      "version": "pmds (Palamedes) v0.11.4",
+      "profile": "small",
+      "fileCount": 80,
+      "sourceMessageCount": 640,
+      "baselineMessageCount": 624,
+      "changedCount": 48,
+      "newCount": 64,
+      "removedCount": 48,
+      "sourceBytes": 22960,
+      "warmup": 3,
+      "runs": 7,
+      "medianMs": 33.533583,
+      "rawSamplesMs": [
+        31.728583,
+        32.163417,
+        33.291917,
+        33.533583,
+        33.634875,
+        33.798417,
+        36.127375
+      ],
+      "stdoutBytes": 178,
+      "stderrBytes": 0,
+      "palamedesTiming": {
+        "totalMs": 27,
+        "globMs": 0,
+        "extractMs": 3,
+        "writeMs": 23,
+        "totalMessages": 640,
+        "totalFiles": 80
+      }
+    },
+    {
+      "tool": "lingui",
+      "version": "6.4.0",
+      "profile": "small",
+      "fileCount": 80,
+      "sourceMessageCount": 640,
+      "baselineMessageCount": 624,
+      "changedCount": 48,
+      "newCount": 64,
+      "removedCount": 48,
+      "sourceBytes": 22960,
+      "warmup": 3,
+      "runs": 7,
+      "medianMs": 657.002792,
+      "rawSamplesMs": [
+        653.425417,
+        653.967541,
+        654.482416,
+        657.002792,
+        666.810167,
+        668.272542,
+        685.573334
+      ],
+      "stdoutBytes": 787,
+      "stderrBytes": 18
+    },
+    {
+      "tool": "i18next",
+      "version": "9.4.0",
+      "profile": "small",
+      "fileCount": 80,
+      "sourceMessageCount": 640,
+      "baselineMessageCount": 624,
+      "changedCount": 48,
+      "newCount": 64,
+      "removedCount": 48,
+      "sourceBytes": 22960,
+      "warmup": 3,
+      "runs": 7,
+      "medianMs": 477.579042,
+      "rawSamplesMs": [
+        475.85675,
+        476.866417,
+        477.533709,
+        477.579042,
+        477.617917,
+        479.436167,
+        485.478084
+      ],
+      "stdoutBytes": 12753,
+      "stderrBytes": 0
+    },
+    {
+      "tool": "palamedes",
+      "version": "pmds (Palamedes) v0.11.4",
+      "profile": "medium",
+      "fileCount": 240,
+      "sourceMessageCount": 1920,
+      "baselineMessageCount": 1872,
+      "changedCount": 144,
+      "newCount": 192,
+      "removedCount": 144,
+      "sourceBytes": 68881,
+      "warmup": 3,
+      "runs": 7,
+      "medianMs": 42.919542,
+      "rawSamplesMs": [
+        41.565166,
+        41.816584,
+        42.163833,
+        42.919542,
+        42.951209,
+        43.761791,
+        45.74775
+      ],
+      "stdoutBytes": 182,
+      "stderrBytes": 0,
+      "palamedesTiming": {
+        "totalMs": 37,
+        "globMs": 1,
+        "extractMs": 9,
+        "writeMs": 25,
+        "totalMessages": 1920,
+        "totalFiles": 240
+      }
+    },
+    {
+      "tool": "lingui",
+      "version": "6.4.0",
+      "profile": "medium",
+      "fileCount": 240,
+      "sourceMessageCount": 1920,
+      "baselineMessageCount": 1872,
+      "changedCount": 144,
+      "newCount": 192,
+      "removedCount": 144,
+      "sourceBytes": 68881,
+      "warmup": 3,
+      "runs": 7,
+      "medianMs": 728.56275,
+      "rawSamplesMs": [
+        721.121458,
+        721.133292,
+        722.158083,
+        728.56275,
+        729.426542,
+        732.136708,
+        740.805125
+      ],
+      "stdoutBytes": 787,
+      "stderrBytes": 18
+    },
+    {
+      "tool": "i18next",
+      "version": "9.4.0",
+      "profile": "medium",
+      "fileCount": 240,
+      "sourceMessageCount": 1920,
+      "baselineMessageCount": 1872,
+      "changedCount": 144,
+      "newCount": 192,
+      "removedCount": 144,
+      "sourceBytes": 68881,
+      "warmup": 3,
+      "runs": 7,
+      "medianMs": 534.149875,
+      "rawSamplesMs": [
+        529.638625,
+        530.54925,
+        531.615,
+        534.149875,
+        535.212666,
+        538.116084,
+        542.655208
+      ],
+      "stdoutBytes": 37529,
+      "stderrBytes": 0
+    }
+  ],
+  "comparisons": [
+    {
+      "profile": "small",
+      "baselineTool": "palamedes",
+      "comparedTool": "lingui",
+      "fasterTool": "palamedes",
+      "palamedesMedianMs": 33.533583,
+      "comparedMedianMs": 657.002792,
+      "speedupFactor": 19.592382716752933
+    },
+    {
+      "profile": "small",
+      "baselineTool": "palamedes",
+      "comparedTool": "i18next",
+      "fasterTool": "palamedes",
+      "palamedesMedianMs": 33.533583,
+      "comparedMedianMs": 477.579042,
+      "speedupFactor": 14.241813706575883
+    },
+    {
+      "profile": "medium",
+      "baselineTool": "palamedes",
+      "comparedTool": "lingui",
+      "fasterTool": "palamedes",
+      "palamedesMedianMs": 42.919542,
+      "comparedMedianMs": 728.56275,
+      "speedupFactor": 16.975082119935017
+    },
+    {
+      "profile": "medium",
+      "baselineTool": "palamedes",
+      "comparedTool": "i18next",
+      "fasterTool": "palamedes",
+      "palamedesMedianMs": 42.919542,
+      "comparedMedianMs": 534.149875,
+      "speedupFactor": 12.445376863527573
+    }
+  ]
+}

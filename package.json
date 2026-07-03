@@ -24,6 +24,8 @@
     "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
     "benchmark:proof:large": "pnpm build && node ./scripts/benchmark-proof.mjs --large-messages 10000",
+    "benchmark:e2e-workflow": "cargo build --release -p palamedes-cli && pnpm --filter @palamedes/benchmark-e2e-workflow benchmark",
+    "benchmark:e2e-workflow:quick": "cargo build --release -p palamedes-cli && pnpm --filter @palamedes/benchmark-e2e-workflow benchmark:quick",
     "benchmark:lingui-v6": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark",
     "benchmark:lingui-v6:quick": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark:quick",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
