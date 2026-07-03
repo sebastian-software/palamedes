@@ -49,6 +49,9 @@ That writes `src/locales/en.fcl` and `src/locales/de.fcl`.
 FCL is not NDJSON. The older `ndjson` config value is intentionally rejected;
 use `format: fcl` instead.
 
+For existing projects moving from old NDJSON catalog settings, see
+[Migrating to Palamedes 1.0](./migrations/1.0.0.md).
+
 ## Runtime Loading
 
 Catalog storage and framework module loading are related but separate:
@@ -76,3 +79,6 @@ pmds catalog convert --config palamedes.yaml --to fcl
 ```
 
 After conversion, update the matching catalog config to `format: fcl`.
+
+The full 1.0 migration checklist, including merge-driver cleanup and metadata
+shape changes, lives in [Migrating to Palamedes 1.0](./migrations/1.0.0.md).

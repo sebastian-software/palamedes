@@ -30,8 +30,8 @@ warnings because the runtime falls back to default `Intl` formatting.
 ## Stability
 
 This package is useful for integration tests and custom tooling, but it is a
-preview surface before 1.0. Generated type details may change as the native
-boundary evolves.
+preview surface. Generated type details may change as the native boundary
+evolves.
 
 Use `@palamedes/cli`, `@palamedes/vite-plugin`, or `@palamedes/next-plugin`
 when you do not need direct native access.

@@ -11,6 +11,7 @@ pub struct ExtractedMessageOrigin {
     pub filename: String,
     pub line: u32,
     pub column: Option<u32>,
+    pub scope: Option<String>,
 }
 
 #[napi(object)]
@@ -56,6 +57,7 @@ impl TryFrom<palamedes::ExtractedMessageRecord> for NativeExtractedMessage {
                 filename: value.origin.0,
                 line: checked_u32(value.origin.1, "origin.line")?,
                 column: checked_optional_u32(value.origin.2, "origin.column")?,
+                scope: value.scope,
             },
         })
     }

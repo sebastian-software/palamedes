@@ -43,6 +43,11 @@ options-embedded ICU helpers used for the 2.2-proofing landed in the available
 `2.1.1` patch release. The migration therefore pins the Ferrocat crates to
 `2.1.1` instead of carrying the older cross-product entry points.
 
+Release-decision update: the migration is shipping as Palamedes `1.0.0`, with
+SemVer-stable app-facing surfaces documented in
+[`docs/stability.md`](../stability.md) and migration notes in
+[`docs/migrations/1.0.0.md`](../migrations/1.0.0.md).
+
 Compatibility probe:
 
 - A scratch migration against `origin/main` found that, after the mechanical
@@ -77,14 +82,10 @@ Compatibility probe:
   machine metadata.
 - Preserve source extraction locations for diagnostics without serializing
   synthetic line numbers into catalogs.
-- Decide the Palamedes release signal before implementation lands. Current
-  Palamedes packages are `0.11.4`. The recommended vehicle is Palamedes
-  `1.0.0` in lockstep: the public surface breaks either way, Ferrocat 2.x is
-  the catalog foundation Palamedes wants to stabilize on, and the 2.2-proofing
-  in this migration removes the last anticipated breaking change to the stable
-  surfaces. A breaking pre-1.0 minor (`0.12.0`) remains the documented
-  fallback if review rejects the 1.0 promise; see
-  [palamedes#285](https://github.com/sebastian-software/palamedes/issues/285).
+- Ship the migration as Palamedes `1.0.0` in lockstep: the public surface
+  breaks either way, Ferrocat 2.x is the catalog foundation Palamedes wants to
+  stabilize on, and the 2.2-proofing in this migration removes the last
+  anticipated breaking change to the stable app-facing surfaces.
 
 ## Non-Goals
 
@@ -237,7 +238,7 @@ through Palamedes config, CLI, N-API, or TypeScript surfaces in this migration.
 | Options construction (2.1)             | struct literals / functional record update                                                                             | options structs are `#[non_exhaustive]` with `new()` + `with_*()` builders                                                        | Build all Ferrocat options through the builder chains.                                                                                                             |
 | ICU options entry points (2.2 preview) | `audit_catalogs_with_icu_options`, `compile_catalog_artifact*_with_icu_options`, `pseudolocalize_*_with_syntax_policy` | cross-product call variants are removed in 2.2; ICU config moves onto the options values                                          | Adopt `with_icu_options(...)` / `with_syntax_policy(...)` on the options structs now.                                                                              |
 | Diagnostic codes (2.2 preview)         | plain `String` comparisons                                                                                             | `DiagnosticCode` newtype with exported `diagnostic_codes` constants; JSON output unchanged                                        | Compare against the constants; keep report JSON consumers untouched.                                                                                               |
-| Palamedes release                      | all packages currently publish as `0.11.4`                                                                             | public config, CLI, N-API, and TypeScript surfaces change                                                                         | Recommended vehicle is `1.0.0` in lockstep with migration notes; breaking `0.12.0` is the fallback. Decide before implementation lands.                            |
+| Palamedes release                      | all packages currently publish as `0.11.4`                                                                             | public config, CLI, N-API, and TypeScript surfaces change                                                                         | Ship `1.0.0` in lockstep with migration notes and a breaking conventional commit.                                                                                  |
 
 ## Public API Shape
 
@@ -697,7 +698,7 @@ config-aware test coverage.
 | Fuzzy removal looks like a regression                          | Document that fuzzy is not high-level catalog semantics anymore, while conversion still rejects raw PO fuzzy flags before writing.                                              |
 | Obsolete cleanup policy becomes implicit                       | Make `--clean` fixed 30-day cleanup for dated obsolete entries, document that undated obsolete entries are kept, and reserve `--force-clean` for deleting all obsolete entries. |
 | TypeScript generated and wrapper types drift                   | Regenerate native types and keep wrapper conversion tests for `po` / `fcl`.                                                                                                     |
-| Breaking changes are under-communicated                        | Follow `docs/stability.md`: publish migration notes and release notes even during pre-1.0.                                                                                      |
+| Breaking changes are under-communicated                        | Follow `docs/stability.md`: publish migration notes and release notes for the 1.0 stabilization release.                                                                        |
 | Ferrocat 2.2 cleanup breaks Palamedes again                    | Adopt options-embedded ICU configuration and `DiagnosticCode` constants now, per the published upgrade guide.                                                                   |
 
 ## Resolved Follow-Up Decisions
@@ -719,12 +720,9 @@ config-aware test coverage.
 - PO-to-FCL conversion is in scope as an explicit adoption workflow.
 - FCL-to-PO conversion is out of scope for the initial migration.
 - Pseudo-locale generation must work the same way for PO and FCL catalogs.
-- Palamedes does not automatically mirror Ferrocat's version. The recommended
-  release vehicle is Palamedes `1.0.0` with an updated `docs/stability.md`
-  and migration notes; a breaking `0.12.0` per the pre-1.0 stability policy is
-  the fallback. The final call is made in
-  [palamedes#285](https://github.com/sebastian-software/palamedes/issues/285)
-  before implementation lands.
+- Palamedes does not automatically mirror Ferrocat's version. The release
+  vehicle is Palamedes `1.0.0` with an updated `docs/stability.md` and
+  migration notes in `docs/migrations/1.0.0.md`.
 
 ## Acceptance Criteria
 

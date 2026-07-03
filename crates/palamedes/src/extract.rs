@@ -10,9 +10,10 @@ use crate::jsx_message::{
 };
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, CallExpression, Expression, ImportDeclaration, ImportDeclarationSpecifier,
-    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, MemberExpression,
-    ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression, TemplateLiteral,
+    Argument, BindingPattern, CallExpression, Declaration, Expression, ImportDeclaration,
+    ImportDeclarationSpecifier, JSXAttributeValue, JSXChild, JSXElement, JSXExpression,
+    JSXOpeningElement, MemberExpression, ObjectExpression, ObjectPropertyKind,
+    TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -48,6 +49,9 @@ pub struct ExtractedMessageRecord {
     pub placeholders: Option<BTreeMap<String, String>>,
     /// Source origin as `(filename, line, column)`.
     pub origin: (String, usize, Option<usize>),
+    /// Optional stable source container name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 /// Request for extracting and aggregating catalog messages from source files.
@@ -165,6 +169,7 @@ struct ExtractionVisitor<'a> {
     imported_macros: &'a HashMap<String, ImportedMacro>,
     messages: Vec<ExtractedMessageRecord>,
     error: Option<PalamedesError>,
+    scope_stack: Vec<String>,
 }
 
 impl<'a> ExtractionVisitor<'a> {
@@ -181,6 +186,7 @@ impl<'a> ExtractionVisitor<'a> {
             imported_macros,
             messages: Vec::new(),
             error: None,
+            scope_stack: Vec::new(),
         }
     }
 
@@ -202,6 +208,18 @@ impl<'a> ExtractionVisitor<'a> {
         )
     }
 
+    fn current_scope(&self) -> Option<String> {
+        self.scope_stack.last().cloned()
+    }
+
+    fn push_scope(&mut self, scope: &str) {
+        self.scope_stack.push(scope.to_string());
+    }
+
+    fn pop_scope(&mut self) {
+        self.scope_stack.pop();
+    }
+
     fn location(&self, span_start: usize) -> String {
         let (line, column) = self.line_locator.get_location(span_start);
 
@@ -218,6 +236,35 @@ impl<'a> ExtractionVisitor<'a> {
 }
 
 impl<'a> Visit<'a> for ExtractionVisitor<'a> {
+    fn visit_declaration(&mut self, it: &Declaration<'a>) {
+        let scope = match it {
+            Declaration::FunctionDeclaration(function) => {
+                function.id.as_ref().map(|id| id.name.as_str().to_string())
+            }
+            _ => None,
+        };
+
+        if let Some(scope) = scope {
+            self.push_scope(&scope);
+            walk::walk_declaration(self, it);
+            self.pop_scope();
+        } else {
+            walk::walk_declaration(self, it);
+        }
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        let scope = function_like_initializer_name(it);
+
+        if let Some(scope) = scope {
+            self.push_scope(&scope);
+            walk::walk_variable_declarator(self, it);
+            self.pop_scope();
+        } else {
+            walk::walk_variable_declarator(self, it);
+        }
+    }
+
     fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
         if self.error.is_some() {
             return;
@@ -245,6 +292,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 it,
                 macro_name,
                 self.origin(it.span.start as usize),
+                self.current_scope(),
                 self.source,
             ) {
                 Ok(Some(message)) => self.push(message),
@@ -272,6 +320,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 match extract_from_tagged_template(
                     &it.quasi,
                     self.origin(it.span.start as usize),
+                    self.current_scope(),
                     self.source,
                     false,
                 ) {
@@ -289,6 +338,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             match extract_from_tagged_template(
                 &it.quasi,
                 self.origin(it.span.start as usize),
+                self.current_scope(),
                 self.source,
                 true,
             ) {
@@ -326,11 +376,13 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                         it,
                         macro_name,
                         self.origin(it.span.start as usize),
+                        self.current_scope(),
                     ),
                     _ => extract_from_descriptor_call(
                         it,
                         macro_name,
                         self.origin(it.span.start as usize),
+                        self.current_scope(),
                     ),
                 };
 
@@ -346,7 +398,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
         }
 
         if is_i18n_runtime_call(&it.callee, false) {
-            match extract_from_runtime_call(it, self.origin(it.span.start as usize)) {
+            match extract_from_runtime_call(
+                it,
+                self.origin(it.span.start as usize),
+                self.current_scope(),
+            ) {
                 Ok(Some(message)) => self.push(message),
                 Ok(None) => {}
                 Err(error) => {
@@ -506,6 +562,7 @@ fn extract_from_jsx_element(
     element: &JSXElement<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
+    scope: Option<String>,
     source: &str,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let attrs = jsx_attributes(&element.opening_element);
@@ -534,6 +591,7 @@ fn extract_from_jsx_element(
             context,
             placeholders: None,
             origin,
+            scope,
         }));
     }
 
@@ -570,6 +628,7 @@ fn extract_from_jsx_element(
             context,
             placeholders: None,
             origin,
+            scope,
         }));
     }
 
@@ -579,6 +638,7 @@ fn extract_from_jsx_element(
 fn extract_from_tagged_template(
     template: &TemplateLiteral<'_>,
     origin: (String, usize, Option<usize>),
+    scope: Option<String>,
     source: &str,
     _runtime: bool,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
@@ -593,6 +653,7 @@ fn extract_from_tagged_template(
         context: None,
         placeholders: (!placeholders.is_empty()).then_some(placeholders),
         origin,
+        scope,
     }))
 }
 
@@ -600,6 +661,7 @@ fn extract_from_descriptor_call(
     call: &CallExpression<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
+    scope: Option<String>,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(first_arg) = call.arguments.first() else {
         return Ok(None);
@@ -632,6 +694,7 @@ fn extract_from_descriptor_call(
         context,
         placeholders: None,
         origin,
+        scope,
     }))
 }
 
@@ -639,6 +702,7 @@ fn extract_from_choice_call(
     call: &CallExpression<'_>,
     macro_name: &str,
     origin: (String, usize, Option<usize>),
+    scope: Option<String>,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(value_arg) = call.arguments.first() else {
         return Ok(None);
@@ -672,6 +736,7 @@ fn extract_from_choice_call(
         context: None,
         placeholders: None,
         origin,
+        scope,
     }))
 }
 
@@ -703,6 +768,7 @@ fn is_i18n_runtime_call(expr: &Expression<'_>, allow_t: bool) -> bool {
 fn extract_from_runtime_call(
     call: &CallExpression<'_>,
     origin: (String, usize, Option<usize>),
+    scope: Option<String>,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(first_arg) = call.arguments.first() else {
         return Ok(None);
@@ -722,6 +788,7 @@ fn extract_from_runtime_call(
             context: props.get("context").cloned(),
             placeholders: None,
             origin,
+            scope,
         }));
     }
 
@@ -745,7 +812,42 @@ fn extract_from_runtime_call(
         context,
         placeholders: None,
         origin,
+        scope,
     }))
+}
+
+fn function_like_initializer_name(declarator: &VariableDeclarator<'_>) -> Option<String> {
+    let init = declarator.init.as_ref()?.without_parentheses();
+
+    is_function_like_expression(init)
+        .then(|| binding_identifier_name(&declarator.id))
+        .flatten()
+}
+
+fn is_function_like_expression(expr: &Expression<'_>) -> bool {
+    match expr.without_parentheses() {
+        Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => true,
+        Expression::CallExpression(call) => call
+            .arguments
+            .first()
+            .and_then(argument_expression)
+            .is_some_and(is_function_like_expression),
+        _ => false,
+    }
+}
+
+fn argument_expression<'a>(argument: &'a Argument<'a>) -> Option<&'a Expression<'a>> {
+    match argument {
+        Argument::SpreadElement(_) => None,
+        _ => argument.as_expression(),
+    }
+}
+
+fn binding_identifier_name(pattern: &BindingPattern<'_>) -> Option<String> {
+    match pattern {
+        BindingPattern::BindingIdentifier(identifier) => Some(identifier.name.to_string()),
+        _ => None,
+    }
 }
 
 fn template_to_message(
@@ -1273,7 +1375,7 @@ fn add_extracted_message(
     let origin = CatalogUpdateOrigin {
         file: relative_file.to_string(),
         line: u32::try_from(message.origin.1).unwrap_or(u32::MAX),
-        scope: None,
+        scope: message.scope.clone(),
     };
     if !entry.origins.contains(&origin) {
         entry.origins.push(origin);
@@ -1293,7 +1395,12 @@ impl From<AggregatedCatalogEntry> for CatalogUpdateMessage {
             extracted_comments,
             mut origins,
         } = value;
-        origins.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
+        origins.sort_by(|a, b| {
+            a.file
+                .cmp(&b.file)
+                .then(a.line.cmp(&b.line))
+                .then(a.scope.cmp(&b.scope))
+        });
 
         Self {
             message,
@@ -1824,6 +1931,80 @@ mod tests {
             "../../packages/ui/src/shared-card.tsx"
         );
         assert!(!shared_action.origins[0].file.starts_with('/'));
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_extracts_stable_origin_scopes_from_named_containers() {
+        let root = temp_root("batch-origin-scopes");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("src dir");
+        let app = src.join("App.tsx");
+        fs::write(
+            &app,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              import { Trans } from "@palamedes/react/macro"
+
+              export function CheckoutButton() {
+                return <Trans>Start checkout</Trans>
+              }
+
+              export const GET = () => {
+                return t`Route response`
+              }
+
+              export const WrappedButton = memo(() => {
+                return <Trans>Wrapped checkout</Trans>
+              })
+
+              export const topLevelLabel = t`Top level label`
+            "#,
+        )
+        .expect("source");
+
+        let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![app.to_string_lossy().into_owned()],
+        })
+        .expect("batch extraction");
+
+        let checkout = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Start checkout")
+            .expect("checkout message");
+        assert_eq!(checkout.origins.len(), 1);
+        assert_eq!(checkout.origins[0].file, "src/App.tsx");
+        assert_eq!(checkout.origins[0].scope.as_deref(), Some("CheckoutButton"));
+
+        let route = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Route response")
+            .expect("route message");
+        assert_eq!(route.origins.len(), 1);
+        assert_eq!(route.origins[0].file, "src/App.tsx");
+        assert_eq!(route.origins[0].scope.as_deref(), Some("GET"));
+
+        let wrapped = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Wrapped checkout")
+            .expect("wrapped message");
+        assert_eq!(wrapped.origins.len(), 1);
+        assert_eq!(wrapped.origins[0].file, "src/App.tsx");
+        assert_eq!(wrapped.origins[0].scope.as_deref(), Some("WrappedButton"));
+
+        let top_level = result
+            .messages
+            .iter()
+            .find(|message| message.message == "Top level label")
+            .expect("top-level message");
+        assert_eq!(top_level.origins.len(), 1);
+        assert_eq!(top_level.origins[0].file, "src/App.tsx");
+        assert_eq!(top_level.origins[0].scope, None);
 
         fs::remove_dir_all(root).expect("cleanup");
     }
