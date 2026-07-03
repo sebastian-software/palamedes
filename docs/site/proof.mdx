@@ -13,6 +13,8 @@ message is positive, but the repo still shows the work behind it.
 - message identity is stable around `message + context`
 - macro transform, extraction, catalog update, audit, and compile paths are
   backed by native tooling
+- end-to-end extract/update workflow numbers are checked with semantic catalog
+  validation before being published
 - the example matrix is exercised in CI with browser interaction checks
 
 ## What The Confidence Stack Looks Like
@@ -43,12 +45,14 @@ Benchmarks matter, but only in the scope the repo can honestly support:
 - extract
 - catalog update
 - catalog artifact compile
+- end-to-end extract/update workflows against Lingui and i18next-parser
 
 The benchmark language should stay disciplined:
 
 - no universal performance claims
 - no "Rust means fast" shortcut
 - no benchmark charts without methodology
+- no speedup claim without a checked report link
 
 ### 4. Architectural evidence
 
@@ -82,5 +86,6 @@ Avoid language like:
 - [Example screenshots](../example-screenshots/README.md)
 - [Verification matrix image](./assets/palamedes-localized-matrix.png)
 - [Proof and benchmarks](../proof-and-benchmarks.md)
+- [End-to-end workflow benchmark](../benchmark-e2e-workflow.md)
 - [Framework notes](../framework-example-notes.md)
 - [Round 1 posts](./posts/README.md)

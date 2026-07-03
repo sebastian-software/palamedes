@@ -1,0 +1,20 @@
+{
+  "name": "@palamedes/benchmark-e2e-workflow",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end extract and catalog update benchmark for Palamedes, Lingui, and i18next-parser",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "benchmark": "node ./src/run.mjs",
+    "benchmark:quick": "node ./src/run.mjs --warmup 1 --runs 3 --profile small",
+    "validate": "node ./src/run.mjs --validate-only --profile small"
+  },
+  "dependencies": {
+    "@lingui/cli": "6.4.0",
+    "@lingui/conf": "6.4.0",
+    "@lingui/format-po": "6.4.0",
+    "i18next-parser": "9.4.0"
+  }
+}
