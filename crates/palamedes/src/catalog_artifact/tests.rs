@@ -1,7 +1,7 @@
 use super::{
     compile_catalog_artifact, compile_catalog_artifact_selected, CatalogArtifactConfig,
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
-    CatalogConfig,
+    CatalogConfig, PalamedesCatalogFormat,
 };
 use ferrocat::compiled_key;
 use std::collections::BTreeSet;
@@ -51,6 +51,7 @@ msgstr "Hallo"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -115,6 +116,7 @@ msgstr "{name"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -185,6 +187,7 @@ msgstr ""
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("fr.po").to_string_lossy().into_owned(),
@@ -230,6 +233,7 @@ msgstr ""
             pseudo_locale: Some("pseudo".to_owned()),
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("pseudo.po").to_string_lossy().into_owned(),
@@ -286,6 +290,7 @@ msgstr ""
             pseudo_locale: Some("pseudo".to_owned()),
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("pseudo.po").to_string_lossy().into_owned(),
@@ -344,6 +349,7 @@ msgstr "Konnte {firstName}'s Daten nicht laden"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -405,6 +411,7 @@ msgstr "John's Daten konnten nicht geladen werden"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -457,6 +464,7 @@ msgstr "Hallo {firstName}"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -517,6 +525,7 @@ msgstr "Hallo"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -576,6 +585,7 @@ msgstr "Hallo {firstName}"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -612,6 +622,7 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_kinds() {
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -665,6 +676,7 @@ fn compile_catalog_artifact_selected_reports_runtime_unsupported_formatter_kinds
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -739,6 +751,7 @@ fn compile_catalog_artifact_reports_runtime_unsupported_formatter_styles() {
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -795,6 +808,7 @@ fn compile_catalog_artifact_allows_supported_runtime_formatter_subset() {
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
@@ -845,6 +859,7 @@ msgstr "Impossible d'ouvrir les regles"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         },
         resource_path: locale_dir.join("fr.po").to_string_lossy().into_owned(),

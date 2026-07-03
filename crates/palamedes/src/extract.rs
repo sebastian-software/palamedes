@@ -1273,6 +1273,7 @@ fn add_extracted_message(
     let origin = CatalogUpdateOrigin {
         file: relative_file.to_string(),
         line: u32::try_from(message.origin.1).unwrap_or(u32::MAX),
+        scope: None,
     };
     if !entry.origins.contains(&origin) {
         entry.origins.push(origin);

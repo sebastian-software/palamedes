@@ -10,8 +10,38 @@ use crate::error::{PalamedesError, PalamedesResult};
 
 pub use ferrocat::{
     CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats, CatalogConflictStrategy,
-    CatalogFileCombineResult, CatalogFileFormat,
 };
+
+/// Catalog file format exposed by Palamedes combine operations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CatalogFileFormat {
+    /// gettext PO catalog files.
+    Po,
+    /// Ferrocat Catalog Lines files.
+    Fcl,
+}
+
+/// Result returned by catalog file combine operations.
+#[derive(Debug)]
+pub struct CatalogFileCombineResult {
+    /// Output path replaced by the operation.
+    pub output_path: PathBuf,
+    /// File format used for reading inputs and writing the output.
+    pub format: CatalogFileFormat,
+    /// Summary counters for the operation.
+    pub stats: CatalogCombineStats,
+    /// Non-fatal diagnostics collected during processing.
+    pub diagnostics: Vec<ferrocat::Diagnostic>,
+}
+
+impl From<CatalogFileFormat> for ferrocat::CatalogFileFormat {
+    fn from(value: CatalogFileFormat) -> Self {
+        match value {
+            CatalogFileFormat::Po => Self::Po,
+            CatalogFileFormat::Fcl => Self::Fcl,
+        }
+    }
+}
 
 /// Request for combining multiple catalog contents into one catalog.
 #[derive(Debug)]
@@ -39,7 +69,7 @@ pub struct CatalogCombineInput {
     pub label: Option<String>,
 }
 
-/// Request for combining exactly two catalog files and writing the result.
+/// Request for combining catalog files and writing the result.
 #[derive(Debug)]
 pub struct CatalogFileCombineRequest {
     /// Input catalog file paths in precedence order.
@@ -79,20 +109,21 @@ fn combine_catalog_contents(
         })
         .collect::<Vec<_>>();
 
-    let mut options = CombineCatalogOptions::new(&inputs, &request.source_locale);
-    options.locale = request.locale.as_deref();
-    options.mode = mode;
-    options.conflict_strategy = request.conflict_strategy;
-    options.selection = request.selection;
-    options.order_by = OrderBy::Msgid;
-    options.include_origins = true;
-    options.include_line_numbers = true;
-    options.include_obsolete = request.include_obsolete;
+    let mut options = CombineCatalogOptions::new(&inputs, &request.source_locale)
+        .with_mode(mode)
+        .with_conflict_strategy(request.conflict_strategy)
+        .with_selection(request.selection)
+        .with_order_by(OrderBy::Msgid)
+        .with_include_origins(true)
+        .with_include_obsolete(request.include_obsolete);
+    if let Some(locale) = request.locale.as_deref() {
+        options = options.with_locale(locale);
+    }
 
     ferrocat_combine_catalogs(options).map_err(PalamedesError::from)
 }
 
-/// Combines exactly two catalog files and atomically replaces the requested output path.
+/// Combines catalog files and atomically replaces the requested output path.
 ///
 /// # Errors
 ///
@@ -102,7 +133,7 @@ fn combine_catalog_contents(
 pub fn combine_catalog_files(
     request: CatalogFileCombineRequest,
 ) -> PalamedesResult<CatalogFileCombineResult> {
-    if request.input_paths.len() != 2 {
+    if request.input_paths.is_empty() {
         return Err(PalamedesError::InvalidCatalogFileCombineInputCount {
             count: request.input_paths.len(),
         });
@@ -112,17 +143,34 @@ pub fn combine_catalog_files(
         &request.input_paths,
         &request.output_path,
         &request.source_locale,
-    );
-    options.format = request.format;
-    options.locale = request.locale.as_deref();
-    options.conflict_strategy = request.conflict_strategy;
-    options.selection = ferrocat::CatalogCombineSelection::All;
-    options.order_by = OrderBy::Msgid;
-    options.include_origins = true;
-    options.include_line_numbers = true;
-    options.include_obsolete = false;
+    )
+    .with_conflict_strategy(request.conflict_strategy)
+    .with_selection(ferrocat::CatalogCombineSelection::All)
+    .with_order_by(OrderBy::Msgid)
+    .with_include_origins(true)
+    .with_include_obsolete(false);
+    if let Some(format) = request.format {
+        options = options.with_format(format.into());
+    }
+    if let Some(locale) = request.locale.as_deref() {
+        options = options.with_locale(locale);
+    }
 
-    ferrocat_combine_catalog_files(options).map_err(PalamedesError::from)
+    let result = ferrocat_combine_catalog_files(options).map_err(PalamedesError::from)?;
+    Ok(CatalogFileCombineResult {
+        output_path: result.output_path,
+        format: match result.format {
+            ferrocat::CatalogFileFormat::Po => CatalogFileFormat::Po,
+            ferrocat::CatalogFileFormat::Fcl => CatalogFileFormat::Fcl,
+            _ => {
+                return Err(PalamedesError::UnsupportedCatalogFileFormat {
+                    format: format!("{:?}", result.format),
+                });
+            }
+        },
+        stats: result.stats,
+        diagnostics: result.diagnostics,
+    })
 }
 
 #[cfg(test)]
@@ -309,52 +357,33 @@ mod tests {
     }
 
     #[test]
-    fn combines_ndjson_files_with_ndjson_format() {
-        let dir = temp_dir("ndjson");
-        let ours = dir.join("ours.json");
-        let theirs = dir.join("theirs.json");
-        let output = dir.join("merged.json");
-        fs::write(
-            &ours,
-            concat!(
-                "---\n",
-                "format: ferrocat.ndjson.v1\n",
-                "source_locale: en\n",
-                "locale: de\n",
-                "---\n",
-                "{\"id\":\"Hello\",\"str\":\"Hallo\"}\n",
-            ),
-        )
-        .expect("write ours");
+    fn combines_fcl_files_with_fcl_format() {
+        let dir = temp_dir("fcl");
+        let ours = dir.join("ours.fcl");
+        let theirs = dir.join("theirs.fcl");
+        let output = dir.join("merged.fcl");
+        fs::write(&ours, "%FCL1\tsource=en\tlocale=de\nHello\t\tHallo\n").expect("write ours");
         fs::write(
             &theirs,
-            concat!(
-                "---\n",
-                "format: ferrocat.ndjson.v1\n",
-                "source_locale: en\n",
-                "locale: de\n",
-                "---\n",
-                "{\"id\":\"Hello\",\"str\":\"Servus\"}\n",
-                "{\"id\":\"New\",\"str\":\"Neu\",\"ctx\":\"nav\"}\n",
-            ),
+            "%FCL1\tsource=en\tlocale=de\nHello\t\tServus\nNew\tnav\tNeu\n",
         )
         .expect("write theirs");
 
         let result = combine_catalog_files(CatalogFileCombineRequest {
             input_paths: vec![ours, theirs],
             output_path: output.clone(),
-            format: Some(CatalogFileFormat::Ndjson),
+            format: Some(CatalogFileFormat::Fcl),
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
         })
         .expect("merge");
 
-        assert_eq!(result.format, CatalogFileFormat::Ndjson);
+        assert_eq!(result.format, CatalogFileFormat::Fcl);
         let merged = fs::read_to_string(output).expect("read output");
-        assert!(merged.contains("format: ferrocat.ndjson.v1"));
-        assert!(merged.contains("\"id\":\"Hello\",\"str\":\"Hallo\""));
-        assert!(merged.contains("\"id\":\"New\",\"str\":\"Neu\",\"ctx\":\"nav\""));
+        assert!(merged.starts_with("%FCL1"));
+        assert!(merged.contains("Hello\t\tHallo"));
+        assert!(merged.contains("New\tnav\tNeu"));
         assert!(!merged.contains("Servus"));
     }
 
@@ -362,21 +391,10 @@ mod tests {
     fn mixed_inferred_formats_leave_output_unchanged() {
         let dir = temp_dir("mixed-format");
         let ours = dir.join("ours.po");
-        let theirs = dir.join("theirs.ndjson");
+        let theirs = dir.join("theirs.fcl");
         let output = dir.join("merged.po");
         fs::write(&ours, "msgid \"Hello\"\nmsgstr \"Hallo\"\n").expect("write ours");
-        fs::write(
-            &theirs,
-            concat!(
-                "---\n",
-                "format: ferrocat.ndjson.v1\n",
-                "source_locale: en\n",
-                "locale: de\n",
-                "---\n",
-                "{\"id\":\"New\",\"str\":\"Neu\"}\n",
-            ),
-        )
-        .expect("write theirs");
+        fs::write(&theirs, "%FCL1\tsource=en\tlocale=de\nNew\t\tNeu\n").expect("write theirs");
         fs::write(&output, "unchanged").expect("write output");
 
         let error = combine_catalog_files(CatalogFileCombineRequest {

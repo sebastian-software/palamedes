@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
-use ferrocat::DiagnosticSeverity as FerrocatDiagnosticSeverity;
-use serde::{Deserialize, Serialize};
+use ferrocat::{
+    CatalogMode as FerrocatCatalogMode, DiagnosticSeverity as FerrocatDiagnosticSeverity,
+};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Request for compiling a full catalog artifact.
 #[derive(Debug, Deserialize)]
@@ -58,6 +60,57 @@ pub enum FallbackLocales {
 pub struct CatalogConfig {
     /// Catalog path pattern, usually containing `{locale}`.
     pub path: String,
+    /// Storage format for configured catalogs.
+    #[serde(default)]
+    pub format: PalamedesCatalogFormat,
+}
+
+/// Palamedes catalog storage format.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PalamedesCatalogFormat {
+    /// gettext PO catalogs.
+    #[default]
+    Po,
+    /// Ferrocat Catalog Lines catalogs.
+    Fcl,
+}
+
+impl<'de> Deserialize<'de> for PalamedesCatalogFormat {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "po" => Ok(Self::Po),
+            "fcl" => Ok(Self::Fcl),
+            "ndjson" => Err(serde::de::Error::custom(
+                "format: ndjson is no longer supported; use format: fcl for Ferrocat Catalog Lines",
+            )),
+            other => Err(serde::de::Error::custom(format!(
+                "unsupported catalog format `{other}`; expected `po` or `fcl`"
+            ))),
+        }
+    }
+}
+
+impl PalamedesCatalogFormat {
+    /// Returns the file extension used for this storage format.
+    pub const fn extension(self) -> &'static str {
+        match self {
+            Self::Po => "po",
+            Self::Fcl => "fcl",
+        }
+    }
+
+    /// Returns the Ferrocat catalog mode used by Palamedes for this format.
+    pub const fn ferrocat_mode(self) -> FerrocatCatalogMode {
+        match self {
+            Self::Po => FerrocatCatalogMode::IcuPo,
+            Self::Fcl => FerrocatCatalogMode::IcuFcl,
+        }
+    }
 }
 
 /// Host-neutral compiled catalog artifact.
@@ -167,7 +220,7 @@ impl From<ferrocat::CompiledCatalogDiagnostic> for CatalogArtifactDiagnostic {
     fn from(value: ferrocat::CompiledCatalogDiagnostic) -> Self {
         Self {
             severity: value.severity.into(),
-            code: value.code,
+            code: value.code.to_string(),
             message: value.message,
             compiled_id: value.key,
             source_key: CatalogArtifactSourceKey::new(value.msgid, value.msgctxt),

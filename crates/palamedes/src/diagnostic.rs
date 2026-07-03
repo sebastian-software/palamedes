@@ -67,7 +67,7 @@ impl From<ferrocat::Diagnostic> for CatalogDiagnostic {
 
         Self {
             severity: value.severity.into(),
-            code: value.code,
+            code: value.code.to_string(),
             message: value.message,
             source_key,
         }

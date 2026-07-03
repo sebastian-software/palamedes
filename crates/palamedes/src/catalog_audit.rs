@@ -3,12 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ferrocat::{
-    parse_catalog, CatalogAuditOptions, CatalogMode, IcuSyntaxPolicy, NormalizedParsedCatalog,
-    ParseCatalogOptions,
+    parse_catalog, CatalogAuditIcuOptions, CatalogAuditOptions, IcuSyntaxPolicy,
+    NormalizedParsedCatalog, ParseCatalogOptions,
 };
-use ferrocat_po::{
-    audit_catalogs_with_icu_options as ferrocat_audit_catalogs, CatalogAuditIcuOptions,
-};
+use ferrocat_po::audit_catalogs as ferrocat_audit_catalogs;
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
@@ -53,9 +51,6 @@ pub struct CatalogAuditCheckOptions {
     /// Validate source-side semantic message metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_metadata: Option<bool>,
-    /// Report existing `fuzzy` flags.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fuzzy_flags: Option<bool>,
     /// Report obsolete entries.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub obsolete_entries: Option<bool>,
@@ -143,15 +138,14 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
-        let mut options = CatalogAuditOptions::new(&request.config.source_locale);
-        options.locales = &locale_refs;
-        options.metadata = &metadata;
-        options.checks = request.checks.to_ferrocat_checks();
-
         let icu_options = CatalogAuditIcuOptions::new()
             .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes);
-        let report = ferrocat_audit_catalogs(&catalogs, &options, &icu_options)
-            .map_err(PalamedesError::from)?;
+        let options = CatalogAuditOptions::new(&request.config.source_locale)
+            .with_locales(&locale_refs)
+            .with_metadata(&metadata)
+            .with_checks(request.checks.to_ferrocat_checks())
+            .with_icu_options(icu_options);
+        let report = ferrocat_audit_catalogs(&catalogs, &options).map_err(PalamedesError::from)?;
         add_summary(&mut result.summary, &report.summary);
 
         let paths_by_locale = paths_by_locale(&request.config, catalog);
@@ -161,7 +155,10 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
                 .as_ref()
                 .and_then(|source_key| source_key.locale.clone())
                 .or_else(|| {
-                    diagnostic_locale_from_name(&diagnostic.code, diagnostic.name.as_deref())
+                    diagnostic_locale_from_name(
+                        diagnostic.code.as_ref(),
+                        diagnostic.name.as_deref(),
+                    )
                 });
             let catalog_path = locale
                 .as_deref()
@@ -170,7 +167,7 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
                 .unwrap_or_else(|| source_catalog_path(&request.config, catalog));
             result.diagnostics.push(CatalogAuditDiagnostic {
                 severity: diagnostic.severity.into(),
-                code: diagnostic.code,
+                code: diagnostic.code.to_string(),
                 message: diagnostic.message,
                 catalog_path: catalog_path.to_string_lossy().into_owned(),
                 locale,
@@ -205,9 +202,6 @@ impl CatalogAuditCheckOptions {
         }
         if let Some(value) = self.semantic_metadata {
             checks.semantic_metadata = value;
-        }
-        if let Some(value) = self.fuzzy_flags {
-            checks.fuzzy_flags = value;
         }
         if let Some(value) = self.obsolete_entries {
             checks.obsolete_entries = value;
@@ -255,9 +249,9 @@ fn load_audit_catalogs(
             path: path.clone(),
             source,
         })?;
-        let mut options = ParseCatalogOptions::new(&content, &config.source_locale);
-        options.locale = Some(locale.as_str());
-        options.mode = CatalogMode::IcuPo;
+        let options = ParseCatalogOptions::new(&content, &config.source_locale)
+            .with_locale(locale.as_str())
+            .with_mode(catalog.format.ferrocat_mode());
 
         let parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
             path: path.clone(),
@@ -290,7 +284,7 @@ fn paths_by_locale(
 fn catalog_path(config: &CatalogArtifactConfig, catalog: &CatalogConfig, locale: &str) -> PathBuf {
     Path::new(&config.root_dir)
         .join(catalog.path.replace("{locale}", locale))
-        .with_extension("po")
+        .with_extension(catalog.format.extension())
 }
 
 fn source_catalog_path(config: &CatalogArtifactConfig, catalog: &CatalogConfig) -> PathBuf {
@@ -319,7 +313,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{audit_catalogs, CatalogAuditCheckOptions, CatalogAuditRequest};
-    use crate::{CatalogArtifactConfig, CatalogConfig};
+    use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat};
 
     #[test]
     fn reports_missing_and_invalid_catalog_entries() {
@@ -470,6 +464,7 @@ msgstr "Hallo {{name}}"
             pseudo_locale: None,
             catalogs: vec![CatalogConfig {
                 path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
             }],
         }
     }

@@ -9,8 +9,8 @@ mod tests;
 use std::path::PathBuf;
 
 use ferrocat::{
-    compile_catalog_artifact_selected_with_icu_options as ferrocat_compile_catalog_artifact_selected,
-    compile_catalog_artifact_with_icu_options as ferrocat_compile_catalog_artifact,
+    compile_catalog_artifact as ferrocat_compile_catalog_artifact,
+    compile_catalog_artifact_selected as ferrocat_compile_catalog_artifact_selected,
     CompileCatalogArtifactOptions, CompileSelectedCatalogArtifactOptions, CompiledCatalogIdIndex,
     CompiledKeyStrategy,
 };
@@ -24,6 +24,7 @@ pub use self::types::{
     CatalogArtifactConfig, CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity,
     CatalogArtifactMissingMessage, CatalogArtifactRequest, CatalogArtifactResult,
     CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogConfig, FallbackLocales,
+    PalamedesCatalogFormat,
 };
 
 struct PreparedCompilation {
@@ -50,15 +51,20 @@ pub fn compile_catalog_artifact(
         &prepared.locale,
         &request.config.source_locale,
     );
-    let mut options =
-        CompileCatalogArtifactOptions::new(&prepared.locale, &request.config.source_locale);
-    options.fallback_chain = &ferrocat_fallback_chain;
-    options.key_strategy = CompiledKeyStrategy::FerrocatV1;
-    options.source_fallback = true;
-    options.icu_compatibility = true;
-
+    let ferrocat_fallback_chain_refs = ferrocat_fallback_chain
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     let icu_options = runtime_icu_options();
-    let artifact = ferrocat_compile_catalog_artifact(&catalogs, &options, &icu_options)
+    let options =
+        CompileCatalogArtifactOptions::new(&prepared.locale, &request.config.source_locale)
+            .with_fallback_chain(&ferrocat_fallback_chain_refs)
+            .with_key_strategy(CompiledKeyStrategy::FerrocatV1)
+            .with_source_fallback(true)
+            .with_icu_compatibility(true)
+            .with_icu_options(icu_options);
+
+    let artifact = ferrocat_compile_catalog_artifact(&catalogs, &options)
         .map_err(PalamedesError::CompileCatalogArtifact)?;
 
     build_artifact_result(
@@ -89,24 +95,33 @@ pub fn compile_catalog_artifact_selected(
         &prepared.locale,
         &request.config.source_locale,
     );
-    let mut options = CompileSelectedCatalogArtifactOptions::new(
+    let ferrocat_fallback_chain_refs = ferrocat_fallback_chain
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let icu_options = runtime_icu_options();
+    let artifact_options =
+        CompileCatalogArtifactOptions::new(&prepared.locale, &request.config.source_locale)
+            .with_fallback_chain(&ferrocat_fallback_chain_refs)
+            .with_key_strategy(CompiledKeyStrategy::FerrocatV1)
+            .with_source_fallback(true)
+            .with_icu_compatibility(true)
+            .with_icu_options(icu_options);
+    let compiled_id_refs = request
+        .compiled_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let options = CompileSelectedCatalogArtifactOptions::new(
         &prepared.locale,
         &request.config.source_locale,
-        &request.compiled_ids,
-    );
-    options.options.fallback_chain = &ferrocat_fallback_chain;
-    options.options.key_strategy = CompiledKeyStrategy::FerrocatV1;
-    options.options.source_fallback = true;
-    options.options.icu_compatibility = true;
-
-    let icu_options = runtime_icu_options();
-    let artifact = ferrocat_compile_catalog_artifact_selected(
-        &catalogs,
-        &compiled_id_index,
-        &options,
-        &icu_options,
+        &compiled_id_refs,
     )
-    .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
+    .with_options(artifact_options);
+
+    let artifact =
+        ferrocat_compile_catalog_artifact_selected(&catalogs, &compiled_id_index, &options)
+            .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
 
     build_artifact_result(
         artifact,

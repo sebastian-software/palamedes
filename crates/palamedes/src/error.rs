@@ -26,11 +26,17 @@ pub enum PalamedesError {
         /// Underlying filesystem error.
         source: std::io::Error,
     },
-    /// A catalog file-combine request must include exactly two inputs.
-    #[error("Catalog file combine requires exactly two input files, received {count}.")]
+    /// A catalog file-combine request must include at least two inputs.
+    #[error("Catalog file combine requires at least two input files, received {count}.")]
     InvalidCatalogFileCombineInputCount {
         /// Number of input files provided.
         count: usize,
+    },
+    /// Ferrocat returned a catalog file format Palamedes does not expose.
+    #[error("Unsupported catalog file combine format: {format}")]
+    UnsupportedCatalogFileFormat {
+        /// Unsupported format label.
+        format: String,
     },
     /// A configured catalog glob/path could not be compiled to a matcher.
     #[error("Invalid catalog path pattern {pattern}: {source}")]
