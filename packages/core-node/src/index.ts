@@ -149,8 +149,12 @@ export type MessageMetadataValidationReport = Omit<
   diagnostics: MessageMetadataDiagnostic[]
 }
 
+export type NativeExtractedMessageOrigin = [filename: string, line: number, column?: number] & {
+  scope?: string
+}
+
 export type NativeExtractedMessage = Omit<GeneratedNativeExtractedMessage, "origin"> & {
-  origin: [filename: string, line: number, column?: number]
+  origin: NativeExtractedMessageOrigin
 }
 
 export type NativeTransformOptions = GeneratedNativeTransformOptions
@@ -568,10 +572,19 @@ export function compileCatalogModule(
 }
 
 export function extractMessagesNative(source: string, filename: string): NativeExtractedMessage[] {
-  return native.extractMessages(source, filename).map((message) => ({
-    ...message,
-    origin: [message.origin.filename, message.origin.line, message.origin.column],
-  }))
+  return native.extractMessages(source, filename).map((message) => {
+    const origin: NativeExtractedMessageOrigin = [
+      message.origin.filename,
+      message.origin.line,
+      message.origin.column,
+    ]
+    origin.scope = message.origin.scope
+
+    return {
+      ...message,
+      origin,
+    }
+  })
 }
 
 export function extractCatalogMessagesFromFiles(

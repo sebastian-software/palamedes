@@ -227,6 +227,24 @@ describe("extractMessages", () => {
       expect(messages[0].origin[0]).toBe("test.ts")
     })
 
+    it("exposes stable origin scope when extraction finds a named container", async () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        export function CheckoutButton() {
+          return <Trans>Start checkout</Trans>
+        }
+      `
+      const messages: ExtractedMessageInfo[] = []
+
+      await extractor.extract("test.tsx", code, (message) => {
+        messages.push(message)
+      })
+
+      expect(messages).toHaveLength(1)
+      expect(messages[0].origin[0]).toBe("test.tsx")
+      expect(messages[0].origin.scope).toBe("CheckoutButton")
+    })
+
     it("does not hide fatal native extraction errors", async () => {
       const code = `
         import { t } from "@palamedes/core/macro"

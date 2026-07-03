@@ -282,6 +282,7 @@ export interface ExtractedMessageOrigin {
   filename: string;
   line: number;
   column?: number;
+  scope?: string;
 }
 export interface NativeExtractedMessage {
   message: string;
