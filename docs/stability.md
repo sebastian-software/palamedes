@@ -34,7 +34,8 @@ major/minor/patch sense.
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                         |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                           |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                   |
-| Source-string-first `.po` catalogs                    | Stable   | Message identity is `message + context`. Catalog files remain user-owned.                                                      |
+| Source-string-first PO catalogs                       | Stable   | Message identity is `message + context`. Catalog files remain user-owned.                                                      |
+| FCL catalog storage                                   | Preview  | Supported through config, CLI, and native catalog APIs; app-facing framework imports remain PO-loader based for now.           |
 | Macro syntax                                          | Stable   | Supported macros remain the authoring model. Unsupported explicit IDs are not a compatibility target.                          |
 | `@palamedes/core-node`                                | Preview  | It is usable directly, but primarily exists as the JS boundary to the Rust core. Generated type details may change before 1.0. |
 | Platform native packages                              | Internal | `@palamedes/core-node-*` packages are optional dependency carriers for native binaries. Apps should not import them directly.  |
@@ -48,6 +49,7 @@ Palamedes treats these as stable adoption surfaces:
 
 - `palamedes.yaml` schema and config discovery
 - source-string-first PO catalogs using `message + context` identity
+- documented FCL storage configuration and conversion workflows
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs
 - runtime access through `getI18n()`
@@ -67,6 +69,7 @@ adoption:
 
 - generated native binding type details
 - compiled artifact internals
+- FCL import support in framework adapters
 - package layout for new native platform targets
 - benchmark fixture shape and reporting fields
 - internal package boundaries between plugins and transform/core-node helpers

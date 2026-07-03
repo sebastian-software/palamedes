@@ -3,6 +3,10 @@
 `@palamedes/vite-plugin` transforms Palamedes macro imports and compiles `.po`
 imports inside Vite builds.
 
+Catalog storage can be PO or FCL in `palamedes.yaml`, but this API is still a
+`.po` import loader. See [Catalog formats](../catalog-formats.md) for the
+storage/import boundary.
+
 ## Exports
 
 - `palamedes(options?)`

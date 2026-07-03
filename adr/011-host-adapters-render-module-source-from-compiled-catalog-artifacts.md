@@ -5,7 +5,9 @@
 
 ## Context
 
-Palamedes compiles `.po` catalogs into runtime lookup maps, but Vite and Next do not consume that data directly. They consume generated JavaScript modules.
+Palamedes compiles configured catalogs into runtime lookup maps, but Vite and
+Next do not consume that data directly. They consume generated JavaScript
+modules.
 
 The Rust core previously combined both responsibilities:
 
@@ -29,7 +31,7 @@ The rules are:
 
 The intended stack is:
 
-- Rust core compiles `.po` catalogs into runtime-ready message maps
+- Rust core compiles configured PO or FCL catalogs into runtime-ready message maps
 - `palamedes-node` exposes that artifact through typed N-API bindings
 - Vite and Next adapters render the final module source for their host environment
 
@@ -49,3 +51,5 @@ Rejected for now because the rendering logic is small and duplication in the hos
 - `CatalogArtifactResult` exposes `messages` instead of `code`.
 - Host adapters are responsible for rendering their own module source.
 - The core becomes more host-neutral and easier to reuse outside the current Vite/Next integrations.
+- Catalog storage can evolve from PO-only to PO/FCL without moving JavaScript
+  module rendering back into Rust.

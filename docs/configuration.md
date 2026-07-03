@@ -56,6 +56,9 @@ storage extension. Palamedes appends `.po` by default or `.fcl` when
 `format` accepts `po` and `fcl`. `ndjson` is no longer supported; use `fcl`
 for Ferrocat Catalog Lines.
 
+See [Catalog formats](./catalog-formats.md) for the product boundary between
+PO storage, FCL storage, and the current framework `.po` import loaders.
+
 `include` and `exclude` are resolved relative to the config file directory.
 When an include entry is a directory-like path, extraction scans JavaScript and
 TypeScript files below it.

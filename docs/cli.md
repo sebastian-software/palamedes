@@ -90,6 +90,9 @@ catalogs:
     include: [src]
 ```
 
+See [Catalog formats](./catalog-formats.md) for when to keep PO storage and
+when to opt into FCL.
+
 ## `pmds version`
 
 Prints the installed CLI version.

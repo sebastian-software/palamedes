@@ -45,6 +45,9 @@ catalogs:
 - `catalogs[].format` defaults to `"po"`. Set it to `"fcl"` to use Ferrocat
   Catalog Lines for canonical, merge-friendly generated catalog storage.
 
+See [Catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
+for the PO/FCL storage boundary.
+
 See [Pseudo-localization and fallback locales](https://github.com/sebastian-software/palamedes/blob/main/docs/pseudo-localization.md)
 for examples and the recommended development workflow.
 

@@ -242,6 +242,7 @@ The same foundation also matters for future translation workflows:
 ## Proof And Adoption Docs
 
 - [MDX-ready messaging source for homepage/docs](https://github.com/sebastian-software/palamedes/blob/main/docs/site/index.mdx)
+- [Catalog formats: PO and FCL](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 - [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
 - [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
 - [Example matrix and local/CI verification story](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)

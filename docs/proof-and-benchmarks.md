@@ -24,7 +24,7 @@ evidence easy to inspect.
 | Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring |
 | Supported frameworks  | Verified examples for Next.js, TanStack Start, SolidStart, Waku, and React Router |
 | Runtime model         | `@palamedes/runtime` with `getI18n()`                                             |
-| Catalog model         | Source-string-first, `.po`, `message + context` identity                          |
+| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in         |
 | Native core           | Rust + `napi-rs`                                                                  |
 | Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                      |
 | Node requirement      | `>=22.22`                                                                         |
@@ -34,7 +34,7 @@ evidence easy to inspect.
 
 - first-party multi-framework example matrix with cookie and route locale strategies
 - a native core with typed bindings
-- source-string-first catalog semantics backed by `ferrocat`
+- source-string-first PO/FCL catalog semantics backed by `ferrocat`
 - structured catalog audits and ICU metadata validation
 - reproducible local benchmark commands
 - versioned browser screenshots generated from the same CI browser flows
@@ -160,8 +160,13 @@ run can measure:
 - catalog update time for the generated message set
 - catalog artifact compile time for the generated PO catalog
 
-Set `--large-messages` to enable that section. The default benchmark remains
-small and quick so it is still useful during routine local checks.
+Set `--large-messages` to enable that section. The benchmark intentionally keeps
+PO as the baseline catalog storage because PO is the default app-facing format
+and the Lingui comparison harness is PO-based. Use the catalog-format tests and
+CLI conversion workflow to validate FCL behavior separately.
+
+The default benchmark remains small and quick so it is still useful during
+routine local checks.
 
 ## Local Baseline
 
@@ -187,7 +192,7 @@ Median results from that run:
 - catalog artifact compile: `4.04 ms`
 
 This sample is a historical reference point. Current Palamedes builds use
-Ferrocat `1.3.1`; rerun the command above when you need fresh numbers for the
+Ferrocat `2.1.1`; rerun the command above when you need fresh numbers for the
 current release line. The benchmark script also prints the raw sample series and
 sampled peak RSS so the checked median and memory shape are easy to verify.
 
@@ -202,6 +207,7 @@ The goal is simpler: show the work and make local verification easy.
 ## Related Proof Assets
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [Catalog formats: PO and FCL](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 - [Example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
 - [Framework example notes](https://github.com/sebastian-software/palamedes/blob/main/docs/framework-example-notes.md)

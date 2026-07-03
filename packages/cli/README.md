@@ -70,6 +70,9 @@ For local performance checks, set `PALAMEDES_TIMING_JSON=1` on `pmds extract`.
 The command prints a machine-readable timing line with total, glob, extract,
 and catalog-write timings.
 
+See [Catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
+for when to keep PO storage and when to opt into FCL.
+
 ### Completeness Report
 
 `pmds report` prints a per-locale translation-management view:

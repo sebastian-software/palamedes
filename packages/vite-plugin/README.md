@@ -78,6 +78,10 @@ catalogs:
 
 Transformed code expects `getI18n()` from `@palamedes/runtime`, so register the active client i18n instance before translated code executes.
 
+Catalog storage can be PO or FCL in `palamedes.yaml`, but the current Vite
+loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
+future adapter release explicitly documents `.fcl` imports.
+
 ## Options
 
 ```ts
