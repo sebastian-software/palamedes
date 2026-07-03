@@ -196,6 +196,11 @@ Ferrocat `2.1.1`; rerun the command above when you need fresh numbers for the
 current release line. The benchmark script also prints the raw sample series and
 sampled peak RSS so the checked median and memory shape are easy to verify.
 
+For the Ferrocat 2.x / Palamedes 1.0 migration PR, record a fresh
+`pnpm benchmark:proof` run in the PR description so reviewers can compare it
+with this historical baseline without turning machine-local numbers into a
+portable performance claim.
+
 ## What This Page Does Not Claim
 
 - It does not claim universal results across every machine or every codebase.
@@ -208,6 +213,7 @@ The goal is simpler: show the work and make local verification easy.
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 - [Catalog formats: PO and FCL](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
+- [Migrating to Palamedes 1.0](https://github.com/sebastian-software/palamedes/blob/main/docs/migrations/1.0.0.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 - [Example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
 - [Framework example notes](https://github.com/sebastian-software/palamedes/blob/main/docs/framework-example-notes.md)
