@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/cli",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "description": "Palamedes CLI for fast message extraction workflows",
   "keywords": [
     "i18n",
