@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.4...palamedes-v1.0.0) (2026-07-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* Palamedes 1.0 documents the Ferrocat 2 catalog migration, removes NDJSON migration paths, and promotes stable app-facing surfaces to SemVer.
+
+### Features
+
+* **benchmarks:** add end-to-end workflow comparison ([7888450](https://github.com/sebastian-software/palamedes/commit/788845048a30cf33477cd0959239a1599d81e5a0))
+* **cli:** add FCL catalog workflows ([4f9c05d](https://github.com/sebastian-software/palamedes/commit/4f9c05daba2b6b7426172f2b06cd5854dfc3a821))
+* **core:** migrate catalogs to Ferrocat FCL ([640ffdd](https://github.com/sebastian-software/palamedes/commit/640ffdd66faee4c2cab47ceee8aca219e4582eba))
+* **examples:** add authoritative subdomain locale strategy across all frameworks ([#291](https://github.com/sebastian-software/palamedes/issues/291)) ([1494a0a](https://github.com/sebastian-software/palamedes/commit/1494a0a63fe43762b723f2aa757639bc1b3fc53c))
+* **extract:** emit stable origin scopes ([18245db](https://github.com/sebastian-software/palamedes/commit/18245db52863a45a06b4cfbf8e3bb8810014c89b))
+* **locale:** add top-level-domain (tld) locale strategy with examples ([#293](https://github.com/sebastian-software/palamedes/issues/293)) ([995a7c1](https://github.com/sebastian-software/palamedes/commit/995a7c102ea9c3b2a73948c4d2b1978f87f63f98))
+* **node:** expose FCL catalog formats ([60d5707](https://github.com/sebastian-software/palamedes/commit/60d5707030b12a8e0bb7a365f217e44f0acfaaa4))
+
+
+### Bug Fixes
+
+* **release:** bump minor instead of major for pre-1.0 breaking changes ([#294](https://github.com/sebastian-software/palamedes/issues/294)) ([c19d831](https://github.com/sebastian-software/palamedes/commit/c19d83163f5b2f625cf2321ced1d7b8202ee1f32))
+
+
+### Documentation
+
+* prepare Palamedes 1.0 migration ([724067c](https://github.com/sebastian-software/palamedes/commit/724067ca20e9825a6552095508b21cf5aed6d3fb))
+
 ## [0.11.4](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.3...palamedes-v0.11.4) (2026-07-03)
 
 
