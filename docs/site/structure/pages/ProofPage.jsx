@@ -30,10 +30,9 @@ export function ProofPage() {
       <Section id="benchmarks">
         <h2>The workflow you feel every day: extract & update.</h2>
         <p>
-          The end-to-end benchmark measures what a developer actually waits
-          for: scan sources, extract messages, update catalogs, write files.
-          Same generated message inventory, rendered into each tool's
-          idiomatic source shape, semantically validated after every run.
+          The end-to-end benchmark measures what a developer actually waits for: scan sources,
+          extract messages, update catalogs, write files. Same generated message inventory, rendered
+          into each tool's idiomatic source shape, semantically validated after every run.
         </p>
         <BenchmarkChart
           title="Small corpus — 80 files, 640 messages (median of 7 runs)"
@@ -53,9 +52,9 @@ export function ProofPage() {
           methodologyHref="…/docs/benchmark-e2e-workflow.md"
         />
         <Callout tone="honest">
-          These are machine-local numbers from the checked-in report, not a
-          marketing average. Your hardware will differ; the ratios are the
-          signal. Commands to reproduce: <code>pnpm benchmark:e2e-workflow</code>.
+          These are machine-local numbers from the checked-in report, not a marketing average. Your
+          hardware will differ; the ratios are the signal. Commands to reproduce:{" "}
+          <code>pnpm benchmark:e2e-workflow</code>.
         </Callout>
       </Section>
 
@@ -90,10 +89,9 @@ export function ProofPage() {
       <Section id="catalog-qa">
         <h2>Fast would be worthless if the catalogs were wrong.</h2>
         <p>
-          Catalog semantics live in one dedicated engine (ferrocat): parsing,
-          merging, structured audits, and ICU authoring diagnostics. The
-          benchmark harness validates every tool run semantically — message
-          inventories are compared, not just timed.
+          Catalog semantics live in one dedicated engine (ferrocat): parsing, merging, structured
+          audits, and ICU authoring diagnostics. The benchmark harness validates every tool run
+          semantically — message inventories are compared, not just timed.
         </p>
         <FeatureGrid
           columns={3}
@@ -121,10 +119,9 @@ export function ProofPage() {
       <Section id="adrs">
         <h2>16 decisions, written down before you depend on them.</h2>
         <p>
-          The ADRs cover message identity, the native boundary, adapter
-          architecture — and, just as deliberately, what Palamedes refuses to
-          own. Reading them is the fastest way to know if our tradeoffs match
-          yours.
+          The ADRs cover message identity, the native boundary, adapter architecture — and, just as
+          deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if
+          our tradeoffs match yours.
         </p>
         <LinkList
           links={[

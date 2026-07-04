@@ -22,14 +22,14 @@ links they carry.
 
 ## Sitemap
 
-| Route          | File                                             | Job of the page                                                        |
-| -------------- | ------------------------------------------------ | ---------------------------------------------------------------------- |
-| `/`            | [`pages/HomePage.jsx`](pages/HomePage.jsx)       | Convert: one model across frameworks, proof-first, clear next step     |
-| `/frameworks`  | [`pages/FrameworksPage.jsx`](pages/FrameworksPage.jsx) | Show the 5×4 verified matrix and live demos per framework       |
-| `/proof`       | [`pages/ProofPage.jsx`](pages/ProofPage.jsx)     | Benchmarks, verification story, screenshots — the evidence page        |
-| `/get-started` | [`pages/GetStartedPage.jsx`](pages/GetStartedPage.jsx) | The 5-minute path from install to first rendered translation    |
-| `/compare`     | [`pages/ComparisonPage.jsx`](pages/ComparisonPage.jsx) | Honest positioning vs Lingui, next-intl, and GT                  |
-| `/blog`        | [`pages/BlogIndexPage.jsx`](pages/BlogIndexPage.jsx)   | Founder-led posts; reuses `docs/site/posts/`                     |
+| Route          | File                                                   | Job of the page                                                    |
+| -------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `/`            | [`pages/HomePage.jsx`](pages/HomePage.jsx)             | Convert: one model across frameworks, proof-first, clear next step |
+| `/frameworks`  | [`pages/FrameworksPage.jsx`](pages/FrameworksPage.jsx) | Show the 5×4 verified matrix and live demos per framework          |
+| `/proof`       | [`pages/ProofPage.jsx`](pages/ProofPage.jsx)           | Benchmarks, verification story, screenshots — the evidence page    |
+| `/get-started` | [`pages/GetStartedPage.jsx`](pages/GetStartedPage.jsx) | The 5-minute path from install to first rendered translation       |
+| `/compare`     | [`pages/ComparisonPage.jsx`](pages/ComparisonPage.jsx) | Honest positioning vs Lingui, next-intl, and GT                    |
+| `/blog`        | [`pages/BlogIndexPage.jsx`](pages/BlogIndexPage.jsx)   | Founder-led posts; reuses `docs/site/posts/`                       |
 
 Every page shares `<SiteNav>` and `<SiteFooter>` from `components.jsx`.
 

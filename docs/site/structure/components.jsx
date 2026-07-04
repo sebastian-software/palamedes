@@ -32,7 +32,9 @@ export function SiteNav() {
       </NavLinks>
       <NavActions>
         <GitHubStarsButton repo="sebastian-software/palamedes" />
-        <Button variant="primary" href="/get-started">Get started</Button>
+        <Button variant="primary" href="/get-started">
+          Get started
+        </Button>
       </NavActions>
     </nav>
   )
