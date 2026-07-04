@@ -26,11 +26,10 @@ export function ComparisonPage() {
       <Section id="lingui">
         <h2>Palamedes vs Lingui</h2>
         <p>
-          Lingui is the closest neighbor — same authoring instinct, same
-          source-string-first heart. Palamedes is the stricter end state of
-          that idea: one runtime model instead of several entry points, one
-          native engine for catalogs instead of plugin layers, and adapters
-          that stay thin.
+          Lingui is the closest neighbor — same authoring instinct, same source-string-first heart.
+          Palamedes is the stricter end state of that idea: one runtime model instead of several
+          entry points, one native engine for catalogs instead of plugin layers, and adapters that
+          stay thin.
         </p>
         <CompareTable
           criteria={[
@@ -73,10 +72,9 @@ export function ComparisonPage() {
           ]}
         />
         <Callout tone="honest">
-          Pick Lingui if you need its ecosystem breadth or plugins Palamedes
-          doesn't have yet. If you're starting fresh — or mid-migration
-          anyway — the playbook shows how existing .po catalogs usually carry
-          over unchanged.
+          Pick Lingui if you need its ecosystem breadth or plugins Palamedes doesn't have yet. If
+          you're starting fresh — or mid-migration anyway — the playbook shows how existing .po
+          catalogs usually carry over unchanged.
         </Callout>
         <LinkList
           links={[
@@ -90,9 +88,9 @@ export function ComparisonPage() {
       <Section id="next-intl">
         <h2>Palamedes vs next-intl</h2>
         <p>
-          Different mental model, both valid. next-intl centers on message
-          files with keys and is deeply Next.js-native. Palamedes centers on
-          source strings in your components and stays framework-portable.
+          Different mental model, both valid. next-intl centers on message files with keys and is
+          deeply Next.js-native. Palamedes centers on source strings in your components and stays
+          framework-portable.
         </p>
         <FeatureGrid
           columns={2}
@@ -115,10 +113,9 @@ export function ComparisonPage() {
       <Section id="gt">
         <h2>Palamedes vs General Translation</h2>
         <p>
-          A category difference, not a feature race. GT is a translation
-          platform — hosted workflows, AI translation, delivery. Palamedes is
-          local-first tooling: your repo owns the catalogs, the QA, and the
-          history. The two concerns can even stack: Palamedes as the local
+          A category difference, not a feature race. GT is a translation platform — hosted
+          workflows, AI translation, delivery. Palamedes is local-first tooling: your repo owns the
+          catalogs, the QA, and the history. The two concerns can even stack: Palamedes as the local
           foundation, a service layer on top.
         </p>
       </Section>

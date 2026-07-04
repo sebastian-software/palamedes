@@ -45,9 +45,8 @@ export function FrameworksPage() {
           demoUrl={(f, s) => `https://${f}-${s}.examples.palamedes.dev`}
         />
         <p className="caption">
-          All 20 apps are verified in CI with the same Playwright-driven
-          browser flow: SSR output, locale switching, localized server
-          actions. Screenshots are versioned in the repo.
+          All 20 apps are verified in CI with the same Playwright-driven browser flow: SSR output,
+          locale switching, localized server actions. Screenshots are versioned in the repo.
         </p>
       </Section>
 
@@ -139,14 +138,11 @@ export function FrameworksPage() {
       <Section id="backend">
         <h2>And it doesn't stop at the frontend.</h2>
         <p>
-          The same getI18n() model runs in Hono and Express with request-local
-          locale resolution — transactional emails, API error messages, and
-          PDF generation speak the user's language from the same catalogs.
+          The same getI18n() model runs in Hono and Express with request-local locale resolution —
+          transactional emails, API error messages, and PDF generation speak the user's language
+          from the same catalogs.
         </p>
-        <Button
-          variant="secondary"
-          href="…/docs/backend-servers.md"
-        >
+        <Button variant="secondary" href="…/docs/backend-servers.md">
           Backend servers guide
         </Button>
       </Section>

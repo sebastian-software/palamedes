@@ -29,10 +29,9 @@ export function GetStartedPage() {
       <StackPicker options={["Vite + React", "Vite + Solid", "Next.js"]} />
 
       <Callout tone="honest">
-        Heads-up: install the scoped <code>@palamedes/*</code> packages. The
-        top-level <code>palamedes</code> and <code>create-palamedes</code>{" "}
-        names are reserved for a future one-command setup and are not the
-        entry point today.
+        Heads-up: install the scoped <code>@palamedes/*</code> packages. The top-level{" "}
+        <code>palamedes</code> and <code>create-palamedes</code> names are reserved for a future
+        one-command setup and are not the entry point today.
       </Callout>
 
       <StepFlow

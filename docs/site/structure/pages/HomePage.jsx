@@ -23,9 +23,7 @@ export function HomePage() {
           href: "https://nextjs-cookie.examples.palamedes.dev",
         }}
         visual={
-          <LocaleMatrixAnimation
-            fallbackSrc="…/docs/site/assets/palamedes-localized-matrix.png"
-          />
+          <LocaleMatrixAnimation fallbackSrc="…/docs/site/assets/palamedes-localized-matrix.png" />
         }
       />
 
@@ -58,10 +56,9 @@ export function HomePage() {
       <Section id="model">
         <h2>Your i18n setup should not splinter when your framework changes.</h2>
         <p>
-          Most teams relearn internationalization with every migration: new
-          runtime, new message IDs, new catalog quirks. Palamedes keeps the
-          parts you touch every day stable — and lets the framework be the
-          only thing that changes.
+          Most teams relearn internationalization with every migration: new runtime, new message
+          IDs, new catalog quirks. Palamedes keeps the parts you touch every day stable — and lets
+          the framework be the only thing that changes.
         </p>
         <FeatureGrid
           columns={3}
@@ -148,9 +145,9 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
       <Section id="proof">
         <h2>We don't ask you to trust a slogan. The repo shows the work.</h2>
         <p>
-          Every framework/strategy combination is a real app, deployed live and
-          re-verified in CI through the same Playwright flow. Every benchmark
-          number links to a checked-in, re-runnable report.
+          Every framework/strategy combination is a real app, deployed live and re-verified in CI
+          through the same Playwright flow. Every benchmark number links to a checked-in,
+          re-runnable report.
         </p>
         <FrameworkMatrix
           frameworks={[
@@ -193,12 +190,11 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
       <Section id="maintainer" layout="two-column">
         <h2>Built from repeat experience, not a weekend take.</h2>
         <p>
-          Palamedes is maintained by Sebastian Software GmbH. It is the third
-          generation of source-string-first JavaScript i18n tooling from the
-          same author — from gettext-style macro systems in qooxdoo to a
-          full enterprise Lingui migration at Regrello (acquired by
-          Salesforce in 2025). The lessons are written down as 16 ADRs before
-          you depend on the tool.
+          Palamedes is maintained by Sebastian Software GmbH. It is the third generation of
+          source-string-first JavaScript i18n tooling from the same author — from gettext-style
+          macro systems in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by
+          Salesforce in 2025). The lessons are written down as 16 ADRs before you depend on the
+          tool.
         </p>
         <LinkList
           links={[
