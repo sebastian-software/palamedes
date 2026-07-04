@@ -60,7 +60,6 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "bump-minor-pre-major": true,
       "package-name": "palamedes",
       "component": "palamedes",
       "changelog-path": "CHANGELOG.md",
