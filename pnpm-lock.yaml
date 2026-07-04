@@ -246,7 +246,7 @@ importers:
         version: link:../../packages/runtime
       next:
         specifier: ^16.2.9
-        version: 16.2.9(@babel/core@8.0.1)(@playwright/test@1.61.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 16.2.9(@playwright/test@1.61.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react:
         specifier: ^19.2.7
         version: 19.2.7
