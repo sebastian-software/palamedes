@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.0.0...palamedes-v1.1.0) (2026-07-04)
+
+
+### Features
+
+* **examples:** map the .com tld to en for the tld demos ([#299](https://github.com/sebastian-software/palamedes/issues/299)) ([e4ebbd4](https://github.com/sebastian-software/palamedes/commit/e4ebbd41ee205fc1b07bf2094ff6e7227878a5f4))
+
+
+### Bug Fixes
+
+* **release:** build musl cdylib addon via target-scoped RUSTFLAGS ([#296](https://github.com/sebastian-software/palamedes/issues/296)) ([c1dcdee](https://github.com/sebastian-software/palamedes/commit/c1dcdee5a14b76500c8c4f08dcd11fd44df3700b))
+
 ## [1.0.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v0.11.4...palamedes-v1.0.0) (2026-07-04)
 
 
