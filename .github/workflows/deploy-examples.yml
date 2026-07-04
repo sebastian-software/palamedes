@@ -22,6 +22,9 @@ on:
           - react-router-cookie
           - react-router-route
           - react-router-subdomain
+          - tanstack-tld
+          - waku-tld
+          - react-router-tld
 
 concurrency:
   group: deploy-examples-${{ github.ref }}-${{ github.event_name }}

@@ -1,7 +1,7 @@
 # Locale Strategies In The Example Matrix
 
-The example matrix proves three authoritative locale strategies — cookie, route,
-and subdomain — plus one derived host mapping behavior on top of the route
+The example matrix proves four authoritative locale strategies — cookie, route,
+subdomain, and tld — plus one derived host mapping behavior on top of the route
 strategy.
 
 ## Cookie Strategy
@@ -75,6 +75,46 @@ alongside cookie and route, and needs no per-locale host map: the same
 `hosts: { mode: "subdomain" }` configuration works unchanged across `lvh.me`
 locally and `*.examples.palamedes.dev` in production, because the locale is read
 from the label rather than compared to a fixed host.
+
+## TLD Strategy
+
+TLD examples make the top-level domain (the rightmost DNS label) authoritative
+for the locale:
+
+- `<app>.examples.palamedes-i18n.de` -> `de`
+- `<app>.examples.palamedes-i18n.fr` -> `fr`
+- `<app>.examples.palamedes-i18n.com` -> fallback (not authoritative)
+
+TLD examples follow this rule set:
+
+- the tld is resolved by `resolve({ strategy: "tld", requestHost })`, three-tiered:
+  1. a tld label that already _is_ a supported locale is authoritative
+     automatically (`.de` -> `de`, `.es` -> `es`, `.fr` -> `fr`), because the
+     country code equals the language code
+  2. a tld whose label is not a language code is authoritative only when listed
+     in the `tld` map (`hosts: { mode: "tld", tld: { at: "de", uk: "en" } }`)
+  3. anything else is deliberately not authoritative and falls back to the best
+     `Accept-Language` match (region tags expand, so `de-CH` yields `de`), then
+     the default locale
+- there is no `/:locale/...` path prefix; the locale lives in the domain
+- switching locale swaps the top-level domain (the control swaps the rightmost
+  label via `canonicalUrl`), so it is always a full document load. The default
+  locale has no authoritative tld of its own and switches to `defaultTld`
+  (`hosts: { mode: "tld", defaultTld: "com" }`, so `en` -> `.com`), which then
+  renders `en` through the fallback above
+
+### Why `.com` and `.ch` are not authoritative
+
+Unlike the subdomain label — which the operator fully controls, so the label can
+simply _be_ the locale — real top-level domains carry meaning the app does not
+own. `.com` is generic and maps to no single language, so it is left unmapped and
+serves the default locale through the `Accept-Language` fallback. `.ch`
+(Switzerland) has four official languages, so it _cannot_ be authoritative for one
+of them; it too stays unmapped and follows the browser's regional preference
+(`de-CH` -> `de`). Country codes whose language is unambiguous but differs from
+the code (`.at` -> German, `.uk` -> English) are opt-in through the `tld` map.
+This is why the tld strategy resolves through an explicit, three-tiered policy
+rather than the subdomain strategy's pure label-is-locale rule.
 
 ## Switching Mechanism: Reload vs. Live
 

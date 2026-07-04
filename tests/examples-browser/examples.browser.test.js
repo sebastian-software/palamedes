@@ -29,15 +29,32 @@ function activeExample() {
     screenshotDir: process.env.PALAMEDES_SCREENSHOT_DIR ?? "",
     strategy: process.env.PALAMEDES_VERIFY_STRATEGY ?? "",
     subdomainUrl: process.env.PALAMEDES_VERIFY_SUBDOMAIN_URL ?? "",
+    tldUrl: process.env.PALAMEDES_VERIFY_TLD_URL ?? "",
   }
+}
+
+// The tld strategy derives the locale from a real top-level domain, so the
+// browser must reach four distinct domains locally. Chromium's host resolver
+// rules map them to the loopback dev server without touching DNS or /etc/hosts.
+const TLD_TEST_HOSTS = [
+  "palamedes-i18n.com",
+  "palamedes-i18n.de",
+  "palamedes-i18n.es",
+  "palamedes-i18n.fr",
+]
+
+function tldHostResolverArgs() {
+  const rules = TLD_TEST_HOSTS.map((host) => `MAP ${host} 127.0.0.1`).join(",")
+  return [`--host-resolver-rules=${rules}`]
 }
 
 function routeUrl(baseUrl) {
   return `${baseUrl}/en`
 }
 
-async function launchPage() {
+async function launchPage(launchArgs = []) {
   browser = await chromium.launch({
+    args: launchArgs,
     executablePath: resolveChromiumExecutable(),
     headless: true,
   })
@@ -101,13 +118,15 @@ test("matrix example browser contract", async () => {
   const example = activeExample()
   expect(example.id).not.toBe("")
 
-  const page = await launchPage()
+  const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [])
   const initialUrl =
     example.strategy === "route"
       ? routeUrl(example.baseUrl)
       : example.strategy === "subdomain"
         ? example.subdomainUrl
-        : `${example.baseUrl}/`
+        : example.strategy === "tld"
+          ? example.tldUrl
+          : `${example.baseUrl}/`
   await page.goto(initialUrl, { waitUntil: "domcontentloaded" })
 
   await expect.poll(() => currentServerLocale(page)).toContain("English")
@@ -149,6 +168,29 @@ test("matrix example browser contract", async () => {
       .click({ force: true, noWaitAfter: true, timeout: 15_000 })
     await page.waitForURL(/de\.lvh\.me/)
     expect(page.url()).toContain("de.lvh.me")
+    await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
+
+    await waitForClientReady(page)
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="server-proof-trigger"]')?.click()
+    })
+    await expect
+      .poll(
+        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+      )
+      .toContain("de")
+    await captureScreenshot(page, example, "interactive")
+    return
+  }
+
+  if (example.strategy === "tld") {
+    // Switching locale swaps the top-level domain (the .com host becomes a .de
+    // host); the tld is authoritative for the locale, so the path stays "/".
+    await page
+      .getByTestId("locale-switch-de")
+      .click({ force: true, noWaitAfter: true, timeout: 15_000 })
+    await page.waitForURL(/palamedes-i18n\.de/)
+    expect(page.url()).toContain("palamedes-i18n.de")
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
 
     await waitForClientReady(page)

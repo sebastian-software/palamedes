@@ -3,15 +3,16 @@
 These examples are the strongest visible proof that Palamedes is more than a
 single-framework integration.
 
-They prove the current Palamedes story across five framework families and three
+They prove the current Palamedes story across five framework families and four
 locale strategies while preserving the same underlying runtime and identity
 model.
 
 The matrix is intended to be run locally and validated in CI — that remains the
-canonical verification path. All fifteen examples are also publicly accessible as
-a live reference at `*.examples.palamedes.dev` (the subdomain demos additionally
-require per-example wildcard DNS records — see
-[docs/demo-deployments.md](../docs/demo-deployments.md)).
+canonical verification path. All twenty examples are also publicly accessible as
+a live reference: the cookie, route, and subdomain demos at `*.examples.palamedes.dev`
+(the subdomain demos additionally require per-example wildcard DNS records), and
+the tld demos at `<framework>.examples.palamedes-i18n.{com,de,es,fr}` — see
+[docs/demo-deployments.md](../docs/demo-deployments.md) for hosting details.
 
 ## What This Matrix Proves
 
@@ -25,11 +26,13 @@ evidence behind the claim that Palamedes stays coherent across frameworks.
 
 ## Live Demos
 
-All fifteen matrix examples are publicly deployed as a live reference. Switch
+All twenty matrix examples are publicly deployed as a live reference. Switch
 language in any of them and watch copy, plural seat counts, currency, and dates
 change together — the same design across every framework. For the subdomain demos
 the locale is the leftmost DNS label (`en.`/`de.`/`es.`); the links below use
-`en.` as the entry point.
+`en.` as the entry point. For the tld demos the locale is derived from the
+top-level domain (`.de`→de, `.es`→es, `.fr`→fr); the links below use `.com` as
+the non-authoritative entry point.
 
 | Framework      | Locale strategy | Live demo                                                                                                    |
 | -------------- | --------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -48,6 +51,11 @@ the locale is the leftmost DNS label (`en.`/`de.`/`es.`); the links below use
 | SolidStart     | cookie          | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)                 |
 | SolidStart     | route           | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev)                   |
 | SolidStart     | subdomain       | [en.solidstart-subdomain.examples.palamedes.dev](https://en.solidstart-subdomain.examples.palamedes.dev)     |
+| Next.js        | tld             | [nextjs.examples.palamedes-i18n.com](https://nextjs.examples.palamedes-i18n.com)                             |
+| TanStack Start | tld             | [tanstack.examples.palamedes-i18n.com](https://tanstack.examples.palamedes-i18n.com)                         |
+| Waku           | tld             | [waku.examples.palamedes-i18n.com](https://waku.examples.palamedes-i18n.com)                                 |
+| React Router   | tld             | [react-router.examples.palamedes-i18n.com](https://react-router.examples.palamedes-i18n.com)                 |
+| SolidStart     | tld             | [solidstart.examples.palamedes-i18n.com](https://solidstart.examples.palamedes-i18n.com)                     |
 
 ## Locale Strategy Matrix
 
@@ -99,6 +107,23 @@ These examples prove:
 - locale switching as a full document load to the sibling host (leftmost label swapped)
 - SSR with localized server actions or server functions
 
+### TLD-Derived Locale
+
+- [examples/nextjs-tld](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-tld)
+- [examples/tanstack-tld](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-tld)
+- [examples/solidstart-tld](/Users/sebastian/Workspace/business/palamedes/examples/solidstart-tld)
+- [examples/waku-tld](/Users/sebastian/Workspace/business/palamedes/examples/waku-tld)
+- [examples/react-router-tld](/Users/sebastian/Workspace/business/palamedes/examples/react-router-tld)
+
+These examples prove:
+
+- the rightmost DNS label (TLD) as the authoritative locale (`.de` → de), no `/:locale/...` prefix
+- three-level resolution: automatic when country code equals language code, explicit tld map for others, otherwise `Accept-Language` or default
+- `.com` is non-authoritative — falls back to `Accept-Language` or the default locale (en)
+- `resolve({ strategy: "tld", requestHost })` with `hosts: { mode: "tld", defaultTld: "com" }`
+- locale switching as a full document reload with the TLD swapped
+- SSR with localized server actions or server functions
+
 ## Shared Runtime Model
 
 All matrix examples use the same public Palamedes stack:
@@ -119,12 +144,12 @@ Those helpers stay headless on purpose. The examples still own routing, form
 submission, and locale policy, but they no longer need to reimplement the same
 frontend substrate in each app.
 
-Every example also renders the same booking ("Frontend Stage 2026") so the ten
+Every example also renders the same booking ("Frontend Stage 2026") so the twenty
 apps are visually identical regardless of framework. The whole visual layer is
 one shared stylesheet plus one shared content source, proving that only the
 markup and locale strategy differ across frameworks, not the design:
 
-- [packages/example-ui](../packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by all ten apps
+- [packages/example-ui](../packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by all twenty apps
 
 The booking surfaces every common i18n need in a real context: translated
 copy, plural seat counts, a personalized greeting variable, and locale-aware
@@ -187,7 +212,7 @@ Together they cover:
 - locale switching
 - localized server action or server function output after interaction
 
-For the decision model behind cookie, route, subdomain, and domain handling, see:
+For the decision model behind cookie, route, subdomain, tld, and domain handling, see:
 
 - [docs/locale-strategies.md](/Users/sebastian/Workspace/business/palamedes/docs/locale-strategies.md)
 - [docs/framework-example-notes.md](/Users/sebastian/Workspace/business/palamedes/docs/framework-example-notes.md)
@@ -201,15 +226,20 @@ The example scripts use a fixed port layout so the apps can run in parallel:
 - `4010` `nextjs-cookie`
 - `4011` `nextjs-route`
 - `4012` `nextjs-subdomain`
+- `4013` `nextjs-tld`
 - `4020` `tanstack-cookie`
 - `4021` `tanstack-route`
 - `4022` `tanstack-subdomain`
+- `4023` `tanstack-tld`
 - `4030` `waku-cookie`
 - `4031` `waku-route`
 - `4032` `waku-subdomain`
+- `4033` `waku-tld`
 - `4040` `react-router-cookie`
 - `4041` `react-router-route`
 - `4042` `react-router-subdomain`
+- `4043` `react-router-tld`
 - `4050` `solidstart-cookie`
 - `4051` `solidstart-route`
 - `4052` `solidstart-subdomain`
+- `4053` `solidstart-tld`

@@ -332,6 +332,143 @@ export const EXAMPLE_MATRIX = [
       },
     ],
   },
+  {
+    id: "nextjs-tld",
+    framework: "nextjs",
+    strategy: "tld",
+    port: 4013,
+    deployable: false,
+    vercelProject: "palamedes-nextjs-tld",
+    publicHost: "palamedes-nextjs-tld.vercel.app",
+    cwd: path.join(ROOT, "examples/nextjs-tld"),
+    build: ["build"],
+    start: ["start"],
+    smokeChecks: [
+      {
+        headers: { host: "palamedes-i18n.de:4013" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "palamedes-i18n.fr:4013" },
+        path: "/",
+        substrings: ["français", "places restantes"],
+      },
+      {
+        // `.com` is not an authoritative TLD: the locale falls back to the browser
+        // preference (Accept-Language `de` -> German).
+        headers: { host: "palamedes-i18n.com:4013", "accept-language": "de" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
+  },
+  {
+    id: "tanstack-tld",
+    framework: "tanstack",
+    strategy: "tld",
+    port: 4023,
+    deployable: true,
+    vercelProject: "palamedes-tanstack-tld",
+    publicHost: "palamedes-tanstack-tld.vercel.app",
+    cwd: path.join(ROOT, "examples/tanstack-tld"),
+    build: ["build"],
+    start: ["preview"],
+    smokeChecks: [
+      {
+        headers: { host: "palamedes-i18n.de:4023" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "palamedes-i18n.fr:4023" },
+        path: "/",
+        substrings: ["français", "places restantes"],
+      },
+      {
+        headers: { host: "palamedes-i18n.com:4023", "accept-language": "de" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
+  },
+  {
+    id: "waku-tld",
+    framework: "waku",
+    strategy: "tld",
+    port: 4033,
+    deployable: true,
+    vercelProject: "palamedes-waku-tld",
+    publicHost: "palamedes-waku-tld.vercel.app",
+    cwd: path.join(ROOT, "examples/waku-tld"),
+    build: ["build"],
+    start: ["start"],
+    // See waku-cookie/route/subdomain: the RSC shell hides localized text from a
+    // plain fetch, so the Node smoke only confirms boot; browser tests cover output.
+    smokeChecks: [],
+  },
+  {
+    id: "react-router-tld",
+    framework: "react-router",
+    strategy: "tld",
+    port: 4043,
+    deployable: true,
+    vercelProject: "palamedes-reactrouter-tld",
+    publicHost: "palamedes-reactrouter-tld.vercel.app",
+    cwd: path.join(ROOT, "examples/react-router-tld"),
+    build: ["build"],
+    start: ["start"],
+    smokeChecks: [
+      {
+        headers: { host: "palamedes-i18n.de:4043" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "palamedes-i18n.fr:4043" },
+        path: "/",
+        substrings: ["français", "places restantes"],
+      },
+      {
+        headers: { host: "palamedes-i18n.com:4043", "accept-language": "de" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
+  },
+  {
+    id: "solidstart-tld",
+    framework: "solidstart",
+    strategy: "tld",
+    port: 4053,
+    deployable: false,
+    vercelProject: "",
+    publicHost: "",
+    cwd: path.join(ROOT, "examples/solidstart-tld"),
+    build: ["build"],
+    start: ["start"],
+    startEnv: {
+      HOST: "127.0.0.1",
+      PORT: "4053",
+    },
+    smokeChecks: [
+      {
+        headers: { host: "palamedes-i18n.de:4053" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "palamedes-i18n.fr:4053" },
+        path: "/",
+        substrings: ["français", "places restantes"],
+      },
+      {
+        headers: { host: "palamedes-i18n.com:4053", "accept-language": "de" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
+  },
 ]
 
 export function parseExampleArgs(argv) {

@@ -1,0 +1,94 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+msgid "Add to cart"
+msgstr "In den Warenkorb"
+
+msgid "Attendees"
+msgstr "Teilnehmer"
+
+msgid "Availability"
+msgstr "Verfügbarkeit"
+
+msgid "Behind the scenes"
+msgstr "Hinter den Kulissen"
+
+msgid "Berlin, Germany"
+msgstr "Berlin, Deutschland"
+
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
+
+msgid "Conference pass"
+msgstr "Konferenzpass"
+
+msgid "Currency"
+msgstr "Währung"
+
+msgid "Date"
+msgstr "Datum"
+
+msgid "Fewer tickets"
+msgstr "Weniger Tickets"
+
+msgid "Locale"
+msgstr "Sprache"
+
+msgid "Localized live with Palamedes"
+msgstr "Live lokalisiert mit Palamedes"
+
+msgid "More tickets"
+msgstr "Mehr Tickets"
+
+msgid "Number"
+msgstr "Zahl"
+
+msgid "Plural"
+msgstr "Plural"
+
+msgid "Refresh server result"
+msgstr "Serverergebnis aktualisieren"
+
+msgid "Rendered with TanStack Start"
+msgstr "Gerendert mit TanStack Start"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "Server function confirmed locale {locale}."
+msgstr "Serverfunktion bestätigte Sprache {locale}."
+
+msgid "Switch to the recommended locale"
+msgstr "Zur empfohlenen Sprache wechseln"
+
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten deine Tickets."
+
+msgid "Total"
+msgstr "Gesamt"
+
+msgid "Venue"
+msgstr "Ort"
+
+msgid "Welcome back, {attendeeName}."
+msgstr "Willkommen zurück, {attendeeName}."
+
+msgid "each"
+msgstr "pro Stück"
+
+msgid "one switch, every format"
+msgstr "ein Klick, alle Formate"
+
+msgid "server locale"
+msgstr "Server-Sprache"
+
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
+
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
