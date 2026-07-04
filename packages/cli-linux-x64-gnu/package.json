@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/cli-linux-x64-gnu",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Linux x64 glibc native CLI binary for @palamedes/cli",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {

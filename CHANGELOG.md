@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.1.0...palamedes-v1.1.1) (2026-07-04)
+
+
+### Bug Fixes
+
+* **release:** build musl node addon with the default self-contained linker ([#300](https://github.com/sebastian-software/palamedes/issues/300)) ([530a778](https://github.com/sebastian-software/palamedes/commit/530a778cdcfdd69a07677c7e76cef09675f705b7))
+
 ## [1.1.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.0.0...palamedes-v1.1.0) (2026-07-04)
 
 
