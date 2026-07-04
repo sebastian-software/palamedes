@@ -355,11 +355,11 @@ export const EXAMPLE_MATRIX = [
         substrings: ["français", "places restantes"],
       },
       {
-        // `.com` is not an authoritative TLD: the locale falls back to the browser
-        // preference (Accept-Language `de` -> German).
+        // `.com` maps to `en` (explicit tld override), so it is authoritative and
+        // wins over the browser preference (Accept-Language `de`).
         headers: { host: "palamedes-i18n.com:4013", "accept-language": "de" },
         path: "/",
-        substrings: ["Deutsch", "Plätze frei"],
+        substrings: ["English", "seats left"],
       },
     ],
   },
@@ -386,9 +386,11 @@ export const EXAMPLE_MATRIX = [
         substrings: ["français", "places restantes"],
       },
       {
+        // `.com` maps to `en` (explicit tld override), so it is authoritative and
+        // wins over the browser preference (Accept-Language `de`).
         headers: { host: "palamedes-i18n.com:4023", "accept-language": "de" },
         path: "/",
-        substrings: ["Deutsch", "Plätze frei"],
+        substrings: ["English", "seats left"],
       },
     ],
   },
@@ -430,9 +432,11 @@ export const EXAMPLE_MATRIX = [
         substrings: ["français", "places restantes"],
       },
       {
+        // `.com` maps to `en` (explicit tld override), so it is authoritative and
+        // wins over the browser preference (Accept-Language `de`).
         headers: { host: "palamedes-i18n.com:4043", "accept-language": "de" },
         path: "/",
-        substrings: ["Deutsch", "Plätze frei"],
+        substrings: ["English", "seats left"],
       },
     ],
   },
@@ -463,9 +467,11 @@ export const EXAMPLE_MATRIX = [
         substrings: ["français", "places restantes"],
       },
       {
+        // `.com` maps to `en` (explicit tld override), so it is authoritative and
+        // wins over the browser preference (Accept-Language `de`).
         headers: { host: "palamedes-i18n.com:4053", "accept-language": "de" },
         path: "/",
-        substrings: ["Deutsch", "Plätze frei"],
+        substrings: ["English", "seats left"],
       },
     ],
   },
