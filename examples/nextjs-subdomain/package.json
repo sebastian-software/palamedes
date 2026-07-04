@@ -1,0 +1,30 @@
+{
+  "name": "@palamedes/example-nextjs-subdomain",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 4012",
+    "build": "next build && node ../../scripts/normalize-next-required-server-files.mjs",
+    "start": "next start --port 4012",
+    "extract": "pmds extract"
+  },
+  "dependencies": {
+    "@palamedes/core": "workspace:^",
+    "@palamedes/example-ui": "workspace:^",
+    "@palamedes/react": "workspace:^",
+    "@palamedes/runtime": "workspace:^",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@palamedes/cli": "workspace:^",
+    "@palamedes/config": "workspace:^",
+    "@palamedes/next-plugin": "workspace:^",
+    "@types/node": "^22.20.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3"
+  }
+}

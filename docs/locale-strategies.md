@@ -1,7 +1,8 @@
 # Locale Strategies In The Example Matrix
 
-The example matrix proves two primary locale strategies and one derived host
-mapping behavior.
+The example matrix proves three authoritative locale strategies — cookie, route,
+and subdomain — plus one derived host mapping behavior on top of the route
+strategy.
 
 ## Cookie Strategy
 
@@ -47,6 +48,33 @@ The examples treat host mapping as:
 When host mapping disagrees with the rendered locale, the example shows the same
 info bar used for `Accept-Language` mismatches, but the CTA points to the
 canonical host plus path for the recommended locale.
+
+## Subdomain Strategy
+
+Subdomain examples make the leftmost DNS label authoritative for the locale:
+
+- `de.<app>-subdomain.examples.palamedes.dev` -> `de`
+
+Subdomain examples follow this rule set:
+
+- the leftmost host label is authoritative, resolved by
+  `resolve({ strategy: "subdomain", requestHost })`; there is no `/:locale/...`
+  path prefix
+- `Accept-Language` is advisory, not authoritative: if the browser prefers
+  another supported locale, the page shows the same info bar with a switch CTA
+- an unknown or missing leftmost label falls back to the best `Accept-Language`
+  match, then the default locale
+- switching locale loads a different host (the control swaps the leftmost label
+  via `canonicalUrl`), so it is always a full document load — the live switching
+  mechanism below does not apply
+
+This is distinct from the host mapping above. Host mapping is a *validation
+signal on top of* the route strategy, matched against fully configured per-locale
+hosts. The subdomain strategy is a third *authoritative* resolution source
+alongside cookie and route, and needs no per-locale host map: the same
+`hosts: { mode: "subdomain" }` configuration works unchanged across `lvh.me`
+locally and `*.examples.palamedes.dev` in production, because the locale is read
+from the label rather than compared to a fixed host.
 
 ## Switching Mechanism: Reload vs. Live
 

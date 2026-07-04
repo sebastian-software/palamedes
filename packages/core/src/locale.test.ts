@@ -18,6 +18,12 @@ const hosted = defineLocaleControls({
   },
 })
 
+const subdomained = defineLocaleControls({
+  locales: ["en", "de", "es"] as const,
+  defaultLocale: "en",
+  hosts: { mode: "subdomain" },
+})
+
 describe("locale controls", () => {
   it("resolves cookie locale before accept-language", () => {
     expect(
@@ -126,5 +132,119 @@ describe("locale controls", () => {
     const items = buildLocaleSwitchItems({ currentLocale: "en", locales: ["en", "de"] as const })
     expect(items).toHaveLength(2)
     expect(items[0]?.active).toBe(true)
+  })
+})
+
+describe("subdomain strategy", () => {
+  it("resolves the locale authoritatively from the leftmost host label", () => {
+    expect(
+      subdomained.resolve({ strategy: "subdomain", requestHost: "de.example.com" })
+    ).toStrictEqual({ locale: "de", source: "subdomain" })
+  })
+
+  it("strips the port and lowercases the label before matching", () => {
+    expect(
+      subdomained.resolve({ strategy: "subdomain", requestHost: "DE.lvh.me:4012" })
+    ).toStrictEqual({ locale: "de", source: "subdomain" })
+  })
+
+  it("beats accept-language: the host wins over the browser preference", () => {
+    expect(
+      subdomained.resolve({
+        strategy: "subdomain",
+        requestHost: "es.nextjs-subdomain.examples.palamedes.dev",
+        acceptLanguageHeader: "de",
+      })
+    ).toStrictEqual({ locale: "es", source: "subdomain" })
+  })
+
+  it("falls back to accept-language for an unknown leftmost label", () => {
+    expect(
+      subdomained.resolve({
+        strategy: "subdomain",
+        requestHost: "www.example.com",
+        acceptLanguageHeader: "de",
+      })
+    ).toStrictEqual({ locale: "de", source: "accept-language" })
+  })
+
+  it("treats a language-shaped but unsupported label as unknown", () => {
+    // "fr" looks like a locale but is not in the supported set.
+    expect(
+      subdomained.resolve({
+        strategy: "subdomain",
+        requestHost: "fr.example.com",
+        acceptLanguageHeader: "de",
+      })
+    ).toStrictEqual({ locale: "de", source: "accept-language" })
+  })
+
+  it("falls back to the default locale when no host is given", () => {
+    expect(subdomained.resolve({ strategy: "subdomain" })).toStrictEqual({
+      locale: "en",
+      source: "default",
+    })
+  })
+
+  it("builds switch urls by swapping the leftmost label and keeping the path", () => {
+    expect(
+      subdomained.canonicalUrl({
+        locale: "en",
+        pathname: "/checkout",
+        requestHost: "de.nextjs-subdomain.examples.palamedes.dev",
+        search: "?seat=1",
+      })
+    ).toBe("http://en.nextjs-subdomain.examples.palamedes.dev/checkout?seat=1")
+  })
+
+  it("preserves the request port in switch urls", () => {
+    expect(
+      subdomained.canonicalUrl({
+        locale: "es",
+        pathname: "/",
+        requestHost: "de.lvh.me:4012",
+      })
+    ).toBe("http://es.lvh.me:4012/")
+  })
+
+  it("prepends the locale label when the host has none yet", () => {
+    expect(
+      subdomained.canonicalUrl({
+        locale: "de",
+        pathname: "/",
+        requestHost: "nextjs-subdomain.examples.palamedes.dev",
+      })
+    ).toBe("http://de.nextjs-subdomain.examples.palamedes.dev/")
+  })
+
+  it("returns a bare path when no request host is available", () => {
+    expect(
+      subdomained.canonicalUrl({ locale: "de", pathname: "/checkout", search: "?seat=1" })
+    ).toBe("/checkout?seat=1")
+  })
+
+  it("raises no host banner when the host matches the rendered locale", () => {
+    // Accept-Language also matches, so the only banner that could fire is the
+    // host one — and it must stay silent because the host encodes the locale.
+    expect(
+      subdomained.suggest({
+        acceptLanguageHeader: "de",
+        currentLocale: "de",
+        pathname: "/",
+        requestHost: "de.lvh.me:4012",
+      })
+    ).toBeNull()
+  })
+
+  it("still surfaces an accept-language mismatch under the subdomain strategy", () => {
+    const suggestion = subdomained.suggest({
+      acceptLanguageHeader: "es",
+      currentLocale: "de",
+      pathname: "/",
+      requestHost: "de.lvh.me:4012",
+    })
+    expect(suggestion?.reason).toBe("accept-language")
+    expect(suggestion?.recommendedLocale).toBe("es")
+    expect(suggestion?.recommendedUrl).toBe("http://es.lvh.me:4012/")
   })
 })

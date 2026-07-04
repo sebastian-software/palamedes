@@ -5,11 +5,21 @@
  * `docs/plans/2026-07-01-locale-controls-library-rfc.md`.
  */
 
-export type LocaleSource = "accept-language" | "cookie" | "default" | "host" | "route"
+export type LocaleSource = "accept-language" | "cookie" | "default" | "host" | "route" | "subdomain"
 
-/** Maps each locale to the host that canonically serves it (host strategy). */
+/**
+ * Host-based locale configuration.
+ *
+ * - `mode: "map"` (default): each locale maps to a full, canonical host, matched
+ *   exactly against the request host. Used by the route examples as a validation
+ *   signal on top of `/:locale/...`.
+ * - `mode: "subdomain"`: the leftmost DNS label of the request host *is* the
+ *   locale (`de.example.com` -> `de`). Base-domain-independent, so it needs no
+ *   per-locale host map and works unchanged across `lvh.me` and production.
+ */
 export type HostLocaleConfig<TLocale extends string> = {
-  locales: Partial<Record<TLocale, string>>
+  mode?: "map" | "subdomain"
+  locales?: Partial<Record<TLocale, string>>
   defaultHost?: string | null
 }
 
@@ -176,10 +186,11 @@ export type LocaleControls<TLocale extends string> = {
 
   /** Resolve the active locale for a request, per strategy. */
   resolve(options: {
-    strategy: "cookie" | "route"
+    strategy: "cookie" | "route" | "subdomain"
     acceptLanguageHeader?: string | null
     cookieHeader?: string | null
     routeLocale?: string | null
+    requestHost?: string | null
   }): { locale: TLocale; source: LocaleSource }
 
   /** The deliberate-choice cookie value, or null when unset/invalid. */
@@ -256,15 +267,51 @@ export function defineLocaleControls<TLocale extends string>(
   const serializeChoice = (locale: TLocale): string =>
     `${choiceCookie}=${locale}; Path=/; Max-Age=${CHOICE_MAX_AGE_SECONDS}; SameSite=Lax`
 
+  /** The leftmost DNS label of the host, if it is a supported locale. */
+  const extractSubdomainLocale = (requestHost: string | null | undefined): TLocale | null => {
+    const firstLabel = stripPort(requestHost)?.split(".")[0]?.toLowerCase()
+    return isLocale(firstLabel) ? (firstLabel as TLocale) : null
+  }
+
+  /**
+   * Return the host with its leftmost label set to `locale`: replace the label
+   * when it is already a locale, otherwise prepend one. Mirrors
+   * `replaceLocaleInPath` for the subdomain strategy.
+   */
+  const swapSubdomainLabel = (
+    requestHost: string | null | undefined,
+    locale: TLocale
+  ): string | null => {
+    const stripped = stripPort(requestHost)
+    if (!stripped) {
+      return null
+    }
+
+    const parts = stripped.split(".")
+    if (parts.length > 0 && isLocale(parts[0]?.toLowerCase())) {
+      parts[0] = locale
+    } else {
+      parts.unshift(locale)
+    }
+
+    return parts.join(".")
+  }
+
   const resolve = (options: {
-    strategy: "cookie" | "route"
+    strategy: "cookie" | "route" | "subdomain"
     acceptLanguageHeader?: string | null
     cookieHeader?: string | null
     routeLocale?: string | null
+    requestHost?: string | null
   }): { locale: TLocale; source: LocaleSource } => {
     if (options.strategy === "route") {
       if (isLocale(options.routeLocale)) {
         return { locale: options.routeLocale, source: "route" }
+      }
+    } else if (options.strategy === "subdomain") {
+      const subdomainLocale = extractSubdomainLocale(options.requestHost)
+      if (subdomainLocale) {
+        return { locale: subdomainLocale, source: "subdomain" }
       }
     } else {
       const cookieLocale = readCookieLocale(options.cookieHeader)
@@ -303,13 +350,18 @@ export function defineLocaleControls<TLocale extends string>(
       return null
     }
 
+    if (config.hosts.mode === "subdomain") {
+      return extractSubdomainLocale(requestHost)
+    }
+
     const normalizedHost = stripPort(requestHost)
     if (!normalizedHost) {
       return null
     }
 
+    const hostLocales = config.hosts.locales ?? {}
     for (const locale of config.locales) {
-      if (stripPort(config.hosts.locales[locale]) === normalizedHost) {
+      if (stripPort(hostLocales[locale]) === normalizedHost) {
         return locale
       }
     }
@@ -321,8 +373,18 @@ export function defineLocaleControls<TLocale extends string>(
     return null
   }
 
-  const getCanonicalHost = (locale: TLocale, fallbackHost?: string | null): string | null =>
-    config.hosts?.locales[locale] ?? stripPort(fallbackHost) ?? config.hosts?.defaultHost ?? null
+  const getCanonicalHost = (locale: TLocale, fallbackHost?: string | null): string | null => {
+    if (config.hosts?.mode === "subdomain") {
+      return swapSubdomainLabel(fallbackHost, locale)
+    }
+
+    return (
+      config.hosts?.locales?.[locale] ??
+      stripPort(fallbackHost) ??
+      config.hosts?.defaultHost ??
+      null
+    )
+  }
 
   const canonicalUrl = (options: {
     locale: TLocale
@@ -330,7 +392,12 @@ export function defineLocaleControls<TLocale extends string>(
     requestHost?: string | null
     search?: string | null
   }): string => {
-    const canonicalPath = replaceLocaleInPath(options.pathname, options.locale)
+    // In subdomain mode the locale lives in the host, not the path, so the path
+    // is kept as-is; every other mode carries the locale in the URL prefix.
+    const canonicalPath =
+      config.hosts?.mode === "subdomain"
+        ? options.pathname
+        : replaceLocaleInPath(options.pathname, options.locale)
     const canonicalHost = config.hosts
       ? getCanonicalHost(options.locale, options.requestHost)
       : null

@@ -217,6 +217,121 @@ export const EXAMPLE_MATRIX = [
       },
     ],
   },
+  {
+    id: "nextjs-subdomain",
+    framework: "nextjs",
+    strategy: "subdomain",
+    port: 4012,
+    deployable: false,
+    vercelProject: "palamedes-nextjs-subdomain",
+    publicHost: "palamedes-nextjs-subdomain.vercel.app",
+    cwd: path.join(ROOT, "examples/nextjs-subdomain"),
+    build: ["build"],
+    start: ["start"],
+    smokeChecks: [
+      {
+        headers: { host: "de.lvh.me:4012" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "en.lvh.me:4012", "accept-language": "de" },
+        path: "/",
+        substrings: ["currently rendering", "Switch to the recommended locale"],
+      },
+    ],
+  },
+  {
+    id: "tanstack-subdomain",
+    framework: "tanstack",
+    strategy: "subdomain",
+    port: 4022,
+    deployable: true,
+    vercelProject: "palamedes-tanstack-subdomain",
+    publicHost: "palamedes-tanstack-subdomain.vercel.app",
+    cwd: path.join(ROOT, "examples/tanstack-subdomain"),
+    build: ["build"],
+    start: ["preview"],
+    smokeChecks: [
+      {
+        headers: { host: "de.lvh.me:4022" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "en.lvh.me:4022", "accept-language": "de" },
+        path: "/",
+        substrings: ["currently rendering", "Switch to the recommended locale"],
+      },
+    ],
+  },
+  {
+    id: "waku-subdomain",
+    framework: "waku",
+    strategy: "subdomain",
+    port: 4032,
+    deployable: true,
+    vercelProject: "palamedes-waku-subdomain",
+    publicHost: "palamedes-waku-subdomain.vercel.app",
+    cwd: path.join(ROOT, "examples/waku-subdomain"),
+    build: ["build"],
+    start: ["start"],
+    // See waku-cookie/route: the RSC shell hides localized text from a plain
+    // fetch, so the Node smoke only confirms boot; browser tests cover output.
+    smokeChecks: [],
+  },
+  {
+    id: "react-router-subdomain",
+    framework: "react-router",
+    strategy: "subdomain",
+    port: 4042,
+    deployable: true,
+    vercelProject: "palamedes-reactrouter-subdomain",
+    publicHost: "palamedes-reactrouter-subdomain.vercel.app",
+    cwd: path.join(ROOT, "examples/react-router-subdomain"),
+    build: ["build"],
+    start: ["start"],
+    smokeChecks: [
+      {
+        headers: { host: "de.lvh.me:4042" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "en.lvh.me:4042", "accept-language": "de" },
+        path: "/",
+        substrings: ["currently rendering", "Switch to the recommended locale"],
+      },
+    ],
+  },
+  {
+    id: "solidstart-subdomain",
+    framework: "solidstart",
+    strategy: "subdomain",
+    port: 4052,
+    deployable: false,
+    vercelProject: "",
+    publicHost: "",
+    cwd: path.join(ROOT, "examples/solidstart-subdomain"),
+    build: ["build"],
+    start: ["start"],
+    startEnv: {
+      HOST: "127.0.0.1",
+      PORT: "4052",
+    },
+    smokeChecks: [
+      {
+        headers: { host: "de.lvh.me:4052" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "en.lvh.me:4052", "accept-language": "de" },
+        path: "/",
+        substrings: ["currently rendering", "Switch to the recommended locale"],
+      },
+    ],
+  },
 ]
 
 export function parseExampleArgs(argv) {

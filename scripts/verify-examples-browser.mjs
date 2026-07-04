@@ -127,6 +127,10 @@ function runVitest(example, options) {
           PALAMEDES_VERIFY_FRAMEWORK: example.framework,
           PALAMEDES_VERIFY_HOST_MISMATCH_URL:
             example.strategy === "route" ? `http://de.lvh.me:${example.port}/en` : "",
+          // Subdomain examples encode the locale in the leftmost host label, and
+          // 127.0.0.1 has none, so the browser test enters through a locale host.
+          PALAMEDES_VERIFY_SUBDOMAIN_URL:
+            example.strategy === "subdomain" ? `http://en.lvh.me:${example.port}/` : "",
           PALAMEDES_VERIFY_STRATEGY: example.strategy,
           PALAMEDES_CAPTURE_SCREENSHOTS: options.captureScreenshots ? "1" : "0",
           PALAMEDES_SCREENSHOT_DIR: options.screenshotDir,

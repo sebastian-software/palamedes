@@ -28,6 +28,7 @@ function activeExample() {
     id: process.env.PALAMEDES_VERIFY_EXAMPLE_ID ?? "",
     screenshotDir: process.env.PALAMEDES_SCREENSHOT_DIR ?? "",
     strategy: process.env.PALAMEDES_VERIFY_STRATEGY ?? "",
+    subdomainUrl: process.env.PALAMEDES_VERIFY_SUBDOMAIN_URL ?? "",
   }
 }
 
@@ -102,7 +103,11 @@ test("matrix example browser contract", async () => {
 
   const page = await launchPage()
   const initialUrl =
-    example.strategy === "route" ? routeUrl(example.baseUrl) : `${example.baseUrl}/`
+    example.strategy === "route"
+      ? routeUrl(example.baseUrl)
+      : example.strategy === "subdomain"
+        ? example.subdomainUrl
+        : `${example.baseUrl}/`
   await page.goto(initialUrl, { waitUntil: "domcontentloaded" })
 
   await expect.poll(() => currentServerLocale(page)).toContain("English")
@@ -121,6 +126,29 @@ test("matrix example browser contract", async () => {
     }
 
     await page.reload({ waitUntil: "domcontentloaded" })
+    await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
+
+    await waitForClientReady(page)
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="server-proof-trigger"]')?.click()
+    })
+    await expect
+      .poll(
+        async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+      )
+      .toContain("de")
+    await captureScreenshot(page, example, "interactive")
+    return
+  }
+
+  if (example.strategy === "subdomain") {
+    // Switching locale loads a different host (de.<base>); the leftmost DNS
+    // label is authoritative, so the path stays "/".
+    await page
+      .getByTestId("locale-switch-de")
+      .click({ force: true, noWaitAfter: true, timeout: 15_000 })
+    await page.waitForURL(/de\.lvh\.me/)
+    expect(page.url()).toContain("de.lvh.me")
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
 
     await waitForClientReady(page)

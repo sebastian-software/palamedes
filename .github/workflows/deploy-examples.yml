@@ -15,10 +15,13 @@ on:
           - all
           - tanstack-cookie
           - tanstack-route
+          - tanstack-subdomain
           - waku-cookie
           - waku-route
+          - waku-subdomain
           - react-router-cookie
           - react-router-route
+          - react-router-subdomain
 
 concurrency:
   group: deploy-examples-${{ github.ref }}-${{ github.event_name }}
