@@ -50,11 +50,31 @@ These come from [`docs/site/comparison.mdx`](../comparison.mdx),
    packages are reserved names, not the install path — the site must not
    pretend otherwise.
 
+## Relationship to the homepage-direction planning (issue #290)
+
+Issue [#290](https://github.com/sebastian-software/palamedes/issues/290)
+explores ten visual directions and the Core vs. Palamedes+ leading question.
+This structure is deliberately **visual-direction-agnostic**: it fixes the
+information architecture, section order, and copy, and can be skinned with any
+of the explored directions. Two decisions from #290 affect this structure and
+must be resolved before implementation:
+
+1. **Core-led vs. Plus-led homepage.** The current `HomePage.jsx` is Core-led
+   (open-source proof first). If Plus leads instead, the hero and one section
+   swap, but subpages stay valid.
+2. **Palamedes+ page.** If Plus positioning is confirmed, add a `/plus` route
+   (managed AI translation, glossary/protected terms, QA, writeback) — kept
+   out of this pass because the copy must not overstate what exists today.
+
 ## Facts the copy relies on (verify before shipping)
 
 - 20 browser-verified example apps: 5 framework families × 4 locale
   strategies (cookie, route, subdomain, TLD) — see `examples/`.
-- Live demos deployed at `*.examples.palamedes.dev`.
+- Live demos referenced as `*.examples.palamedes.dev` — note: the repo's
+  deploy tooling currently targets differently named `vercel.app` hosts, and
+  `docs/demo-deployments.md` marks the subdomain/tld rows as not yet
+  reachable. The demo-URL story must be reconciled before the site ships
+  (tracked in the docs-audit epic).
 - E2E extract/update benchmark medians: 33.53 ms (small), 42.92 ms (medium);
   19.59× vs Lingui, 14.24× vs i18next-parser on the checked machine-local run
   — see `benchmarks/e2e-workflow/results/latest.md`.
