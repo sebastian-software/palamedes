@@ -42,7 +42,8 @@
     "format:check": "oxfmt --check --ignore-path .gitignore --ignore-path .oxfmtignore .",
     "build:native": "cargo build --workspace",
     "check:rust": "cargo check --workspace",
-    "test:rust": "cargo test --workspace"
+    "test:rust": "cargo test --workspace",
+    "agent:check": "pnpm check:release-set && pnpm format:check && pnpm lint && pnpm build && pnpm test && pnpm check-types && cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
