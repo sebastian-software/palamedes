@@ -359,7 +359,7 @@ export function defineLocaleControls<TLocale extends string>(
       return null
     }
 
-    const hostLocales = config.hosts.locales ?? {}
+    const hostLocales: Partial<Record<TLocale, string>> = config.hosts.locales ?? {}
     for (const locale of config.locales) {
       if (stripPort(hostLocales[locale]) === normalizedHost) {
         return locale
