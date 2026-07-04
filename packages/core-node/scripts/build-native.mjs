@@ -84,7 +84,7 @@ if (!extension) {
 }
 
 const muslNodeAddon = packageJson.name === "@palamedes/core-node-linux-x64-musl"
-const cargoArgs = [muslNodeAddon ? "rustc" : "build", "--package", "palamedes-node"]
+const cargoArgs = ["build", "--package", "palamedes-node"]
 
 if (profile === "release") {
   cargoArgs.push("--release")
@@ -94,25 +94,29 @@ if (target.rustTarget) {
   cargoArgs.push("--target", target.rustTarget)
 }
 
+const cargoEnv = { ...process.env }
+
 if (muslNodeAddon) {
-  // Keep the crt-static override scoped to the final N-API cdylib. Applying it
-  // through RUSTFLAGS also changes dependency cdylib builds such as
-  // oxc_sourcemap, which makes musl-gcc look for a shared libgcc_s that the
-  // Ubuntu musl toolchain does not provide.
-  cargoArgs.push(
-    "--lib",
-    "--",
-    "-C",
-    "target-feature=-crt-static",
-    "-C",
-    "panic=abort",
-    "-C",
-    "link-self-contained=+unwind"
-  )
+  // musl defaults to `+crt-static`, and cargo refuses to produce a `cdylib` for a
+  // statically linked target ("does not support these crate types"). Disabling
+  // crt-static has to reach cargo's crate-type check in the build *plan*, so it
+  // must go through RUSTFLAGS rather than trailing `cargo rustc -- <flags>`, which
+  // only reach the final crate too late for that check.
+  //
+  // The override is scoped to the musl *target* (not the global RUSTFLAGS), so
+  // host build scripts and proc-macros stay untouched. `link-self-contained=+unwind`
+  // supplies the unwinder in-tree for every cdylib built for this target —
+  // including the `oxc_sourcemap` cdylib — so musl-gcc never looks for a shared
+  // `libgcc_s` that the Ubuntu musl toolchain does not ship.
+  cargoEnv.CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS = [
+    "-C target-feature=-crt-static",
+    "-C link-self-contained=+unwind",
+  ].join(" ")
 }
 
 execFileSync("cargo", cargoArgs, {
   cwd: repoRoot,
+  env: cargoEnv,
   stdio: "inherit",
 })
 
