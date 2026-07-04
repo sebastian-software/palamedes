@@ -30,8 +30,8 @@ How each strategy encodes the locale:
 - **subdomain** — the leftmost DNS label is the locale
   (`de.<app>-subdomain.examples.palamedes.dev`).
 - **tld** — the top-level domain is the locale
-  (`<app>.examples.palamedes-i18n.de`); `.com` is the non-authoritative `en`
-  entry point and falls back to `Accept-Language`/default.
+  (`<app>.examples.palamedes-i18n.de`); `.com` maps to `en` via an explicit
+  override.
 
 ### Next.js
 
@@ -127,9 +127,10 @@ Each framework example is reachable under four TLDs:
 All four TLD variants of a given framework point to the same backend. The
 reverse proxy must pass the original `Host` header through unchanged — the app
 reads the TLD to select the locale, so it is authoritative. `.de`, `.es`, and
-`.fr` are authoritative (country code equals language code); `.com` is
-non-authoritative and falls back to `Accept-Language` or the default locale (en).
-A multi-lingual country TLD such as `.ch` would intentionally be non-authoritative.
+`.fr` are authoritative automatically (country code equals language code); the
+generic `.com` is mapped to `en` through an explicit `tld` override. A
+multi-lingual country TLD such as `.ch` would intentionally be left unmapped
+(non-authoritative), falling back to `Accept-Language` or the default locale.
 
 Because locale and switch links are derived from the request host, responses must
 not be cached host-agnostically. Any cache in front of a tld example must include

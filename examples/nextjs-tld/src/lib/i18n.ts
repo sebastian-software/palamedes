@@ -10,13 +10,13 @@ export type Locale = (typeof LOCALES)[number]
  * Headless locale controls for this demo (TLD strategy). The locale comes from
  * the top-level domain (rightmost label): `.de` → de, `.es` → es, `.fr` → fr
  * are automatically authoritative because the country code matches the language
- * code. `.com` is not authoritative and falls back to Accept-Language / default
- * (en). `defaultTld: "com"` is the switch target for the default locale en.
+ * code. `.com` maps to `en` via an explicit `tld` override (its label is not a
+ * locale code); `defaultTld: "com"` also routes the `en` switch back to `.com`.
  */
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
-  hosts: { mode: "tld", defaultTld: "com" },
+  hosts: { mode: "tld", tld: { com: "en" }, defaultTld: "com" },
 })
 
 export const LOCALE_LABELS = locales.labels

@@ -39,8 +39,8 @@ How each strategy encodes the locale:
 - **subdomain** — the leftmost DNS label is the locale
   (`de.<app>-subdomain.examples.palamedes.dev`).
 - **tld** — the top-level domain is the locale
-  (`<app>.examples.palamedes-i18n.de`); `.com` is the non-authoritative `en`
-  entry point and falls back to `Accept-Language`/default.
+  (`<app>.examples.palamedes-i18n.de`); `.com` maps to `en` via an explicit
+  override.
 
 ### Next.js
 
@@ -149,8 +149,8 @@ These examples prove:
 
 - the rightmost DNS label (TLD) as the authoritative locale (`.de` → de), no `/:locale/...` prefix
 - three-level resolution: automatic when country code equals language code, explicit tld map for others, otherwise `Accept-Language` or default
-- `.com` is non-authoritative — falls back to `Accept-Language` or the default locale (en)
-- `resolve({ strategy: "tld", requestHost })` with `hosts: { mode: "tld", defaultTld: "com" }`
+- the generic `.com` mapped to `en` via an explicit `tld` override (authoritative)
+- `resolve({ strategy: "tld", requestHost })` with `hosts: { mode: "tld", tld: { com: "en" }, defaultTld: "com" }`
 - locale switching as a full document reload with the TLD swapped
 - SSR with localized server actions or server functions
 

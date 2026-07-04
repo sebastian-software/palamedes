@@ -14,15 +14,15 @@ export type Locale = (typeof LOCALES)[number]
 /**
  * Headless locale controls for this demo (TLD strategy). The rightmost DNS
  * label (Top-Level-Domain) is authoritative for locale: `.de` → `de`,
- * `.es` → `es`, `.fr` → `fr`. `.com` is not authoritative — the locale
- * falls back to Accept-Language or the default (`en`). `defaultTld: "com"`
+ * `.es` → `es`, `.fr` → `fr`. `.com` maps to `en` via an explicit `tld`
+ * override (its label is not a locale code). `defaultTld: "com"`
  * is the switch target for the English locale, so locale switcher links for
  * `en` point at the `.com` host.
  */
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
-  hosts: { mode: "tld", defaultTld: "com" },
+  hosts: { mode: "tld", tld: { com: "en" }, defaultTld: "com" },
 })
 
 export const LOCALE_LABELS = locales.labels
@@ -74,8 +74,8 @@ export function syncClientI18n(locale: Locale) {
 /**
  * Resolve the authoritative locale from the request `Host` header. The TLD
  * strategy reads the rightmost DNS label (Top-Level-Domain): `.de` → `de`,
- * `.es` → `es`, `.fr` → `fr`. `.com` is not authoritative, so requests on
- * `.com` fall back to the Accept-Language header or the default locale (`en`).
+ * `.es` → `es`, `.fr` → `fr`. `.com` maps to `en` via an explicit `tld`
+ * override, so requests on `.com` resolve authoritatively to English.
  * The banner surfaces an Accept-Language hint when the visitor's preferred
  * locale differs from the one the TLD is currently serving.
  */
