@@ -68,9 +68,9 @@ Subdomain examples follow this rule set:
   via `canonicalUrl`), so it is always a full document load — the live switching
   mechanism below does not apply
 
-This is distinct from the host mapping above. Host mapping is a *validation
-signal on top of* the route strategy, matched against fully configured per-locale
-hosts. The subdomain strategy is a third *authoritative* resolution source
+This is distinct from the host mapping above. Host mapping is a _validation
+signal on top of_ the route strategy, matched against fully configured per-locale
+hosts. The subdomain strategy is a third _authoritative_ resolution source
 alongside cookie and route, and needs no per-locale host map: the same
 `hosts: { mode: "subdomain" }` configuration works unchanged across `lvh.me`
 locally and `*.examples.palamedes.dev` in production, because the locale is read
