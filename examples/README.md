@@ -11,7 +11,7 @@ The matrix is intended to be run locally and validated in CI — that remains th
 canonical verification path. All twenty examples are also publicly accessible as
 a live reference: the cookie, route, and subdomain demos at `*.examples.palamedes.dev`
 (the subdomain demos additionally require per-example wildcard DNS records), and
-the tld demos at `<framework>.palamedes-i18n.{com,de,es,fr}` — see
+the tld demos at `<framework>.examples.palamedes-i18n.{com,de,es,fr}` — see
 [docs/demo-deployments.md](../docs/demo-deployments.md) for hosting details.
 
 ## What This Matrix Proves
@@ -51,11 +51,11 @@ the non-authoritative entry point.
 | SolidStart     | cookie          | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)                 |
 | SolidStart     | route           | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev)                   |
 | SolidStart     | subdomain       | [en.solidstart-subdomain.examples.palamedes.dev](https://en.solidstart-subdomain.examples.palamedes.dev)     |
-| Next.js        | tld             | [nextjs.palamedes-i18n.com](https://nextjs.palamedes-i18n.com)                                               |
-| TanStack Start | tld             | [tanstack.palamedes-i18n.com](https://tanstack.palamedes-i18n.com)                                           |
-| Waku           | tld             | [waku.palamedes-i18n.com](https://waku.palamedes-i18n.com)                                                   |
-| React Router   | tld             | [react-router.palamedes-i18n.com](https://react-router.palamedes-i18n.com)                                   |
-| SolidStart     | tld             | [solidstart.palamedes-i18n.com](https://solidstart.palamedes-i18n.com)                                       |
+| Next.js        | tld             | [nextjs.examples.palamedes-i18n.com](https://nextjs.examples.palamedes-i18n.com)                             |
+| TanStack Start | tld             | [tanstack.examples.palamedes-i18n.com](https://tanstack.examples.palamedes-i18n.com)                         |
+| Waku           | tld             | [waku.examples.palamedes-i18n.com](https://waku.examples.palamedes-i18n.com)                                 |
+| React Router   | tld             | [react-router.examples.palamedes-i18n.com](https://react-router.examples.palamedes-i18n.com)                 |
+| SolidStart     | tld             | [solidstart.examples.palamedes-i18n.com](https://solidstart.examples.palamedes-i18n.com)                     |
 
 ## Locale Strategy Matrix
 

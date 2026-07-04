@@ -6,7 +6,7 @@ matrix spans twenty examples (five frameworks × four locale strategies) that
 are published as a live reference — see the Live Reference Deployment section
 below. The five subdomain demos additionally require the per-example wildcard DNS
 records described under Subdomain Locale Hosting. The five tld demos require the
-`palamedes-i18n.*` domains described under TLD Locale Hosting.
+`examples.palamedes-i18n.*` domains described under TLD Locale Hosting.
 
 ## Current Policy
 
@@ -42,11 +42,11 @@ demos the locale is derived from the top-level domain (`.de`→de, `.es`→es,
 | SolidStart     | cookie          | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)                 |
 | SolidStart     | route           | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev)                   |
 | SolidStart     | subdomain       | [en.solidstart-subdomain.examples.palamedes.dev](https://en.solidstart-subdomain.examples.palamedes.dev)     |
-| Next.js        | tld             | [nextjs.palamedes-i18n.com](https://nextjs.palamedes-i18n.com)                                               |
-| TanStack Start | tld             | [tanstack.palamedes-i18n.com](https://tanstack.palamedes-i18n.com)                                           |
-| Waku           | tld             | [waku.palamedes-i18n.com](https://waku.palamedes-i18n.com)                                                   |
-| React Router   | tld             | [react-router.palamedes-i18n.com](https://react-router.palamedes-i18n.com)                                   |
-| SolidStart     | tld             | [solidstart.palamedes-i18n.com](https://solidstart.palamedes-i18n.com)                                       |
+| Next.js        | tld             | [nextjs.examples.palamedes-i18n.com](https://nextjs.examples.palamedes-i18n.com)                             |
+| TanStack Start | tld             | [tanstack.examples.palamedes-i18n.com](https://tanstack.examples.palamedes-i18n.com)                         |
+| Waku           | tld             | [waku.examples.palamedes-i18n.com](https://waku.examples.palamedes-i18n.com)                                 |
+| React Router   | tld             | [react-router.examples.palamedes-i18n.com](https://react-router.examples.palamedes-i18n.com)                 |
+| SolidStart     | tld             | [solidstart.examples.palamedes-i18n.com](https://solidstart.examples.palamedes-i18n.com)                     |
 
 ## Subdomain Locale Hosting (DNS And Reverse Proxy)
 
@@ -88,11 +88,11 @@ which exercises the subdomain strategy locally via `*.lvh.me` hosts.
 The tld demos derive the locale from the top-level domain of the request host.
 Each framework example is reachable under four TLDs:
 
-- `nextjs.palamedes-i18n.com` / `.de` / `.es` / `.fr`
-- `tanstack.palamedes-i18n.com` / `.de` / `.es` / `.fr`
-- `waku.palamedes-i18n.com` / `.de` / `.es` / `.fr`
-- `react-router.palamedes-i18n.com` / `.de` / `.es` / `.fr`
-- `solidstart.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `nextjs.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `tanstack.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `waku.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `react-router.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `solidstart.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
 
 All four TLD variants of a given framework point to the same backend. The
 reverse proxy must pass the original `Host` header through unchanged — the app

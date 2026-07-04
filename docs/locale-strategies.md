@@ -81,9 +81,9 @@ from the label rather than compared to a fixed host.
 TLD examples make the top-level domain (the rightmost DNS label) authoritative
 for the locale:
 
-- `<app>.palamedes-i18n.de` -> `de`
-- `<app>.palamedes-i18n.fr` -> `fr`
-- `<app>.palamedes-i18n.com` -> fallback (not authoritative)
+- `<app>.examples.palamedes-i18n.de` -> `de`
+- `<app>.examples.palamedes-i18n.fr` -> `fr`
+- `<app>.examples.palamedes-i18n.com` -> fallback (not authoritative)
 
 TLD examples follow this rule set:
 
