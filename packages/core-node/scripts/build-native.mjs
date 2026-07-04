@@ -108,10 +108,23 @@ if (muslNodeAddon) {
   // supplies the unwinder in-tree for every cdylib built for this target —
   // including the `oxc_sourcemap` cdylib — so musl-gcc never looks for a shared
   // `libgcc_s` that the Ubuntu musl toolchain does not ship.
+  //
+  // `panic=abort` is intentionally not forced here. napi-rs (`#[napi]`) wraps
+  // every `extern "C"` entry point in a panic guard, so panics are converted to
+  // JS errors and never unwind across the FFI boundary. The gnu, darwin, and
+  // win32 addons already build with the default unwind strategy for the same
+  // reason; scoping abort to musl only would diverge from them and force the
+  // whole musl dependency graph off the prebuilt unwind std.
+  //
+  // Prepend any inherited target rustflags so an externally provided value
+  // (e.g. CI optimisation overrides) is preserved rather than dropped.
   cargoEnv.CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS = [
+    process.env.CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS ?? "",
     "-C target-feature=-crt-static",
     "-C link-self-contained=+unwind",
-  ].join(" ")
+  ]
+    .filter(Boolean)
+    .join(" ")
 }
 
 execFileSync("cargo", cargoArgs, {
