@@ -1,12 +1,17 @@
-# Run all ten Palamedes example apps side by side in a single container, each on
-# its fixed port from scripts/example-matrix.mjs. Built and run with Podman:
+# Run all fifteen Palamedes example apps side by side in a single container, each
+# on its fixed port from scripts/example-matrix.mjs. Built and run with Podman:
 #
 #   podman build -f Containerfile -t palamedes-examples .
 #   podman run --rm --init \
-#     -p 4010:4010 -p 4011:4011 -p 4020:4020 -p 4021:4021 \
-#     -p 4030:4030 -p 4031:4031 -p 4040:4040 -p 4041:4041 \
-#     -p 4050:4050 -p 4051:4051 \
+#     -p 4010:4010 -p 4011:4011 -p 4012:4012 \
+#     -p 4020:4020 -p 4021:4021 -p 4022:4022 \
+#     -p 4030:4030 -p 4031:4031 -p 4032:4032 \
+#     -p 4040:4040 -p 4041:4041 -p 4042:4042 \
+#     -p 4050:4050 -p 4051:4051 -p 4052:4052 \
 #     palamedes-examples
+#
+# (or let the matrix generate the flags: `podman run --init \
+#   $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples`)
 #
 # A reverse proxy mapping each port to its own domain is intentionally out of
 # scope; the fixed ports exist so that mapping can be added later.

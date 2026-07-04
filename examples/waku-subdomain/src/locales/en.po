@@ -1,0 +1,94 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+msgid "Add to cart"
+msgstr "Add to cart"
+
+msgid "Attendees"
+msgstr "Attendees"
+
+msgid "Availability"
+msgstr "Availability"
+
+msgid "Behind the scenes"
+msgstr "Behind the scenes"
+
+msgid "Berlin, Germany"
+msgstr "Berlin, Germany"
+
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Book your seat at Frontend Stage 2026"
+
+msgid "Conference pass"
+msgstr "Conference pass"
+
+msgid "Currency"
+msgstr "Currency"
+
+msgid "Date"
+msgstr "Date"
+
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
+
+msgid "Locale"
+msgstr "Locale"
+
+msgid "Localized live with Palamedes"
+msgstr "Localized live with Palamedes"
+
+msgid "More tickets"
+msgstr "More tickets"
+
+msgid "Number"
+msgstr "Number"
+
+msgid "Plural"
+msgstr "Plural"
+
+msgid "Refresh server result"
+msgstr "Refresh server result"
+
+msgid "Rendered with Waku"
+msgstr "Rendered with Waku"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "Server action confirmed locale {locale}."
+msgstr "Server action confirmed locale {locale}."
+
+msgid "Switch to the recommended locale"
+msgstr "Switch to the recommended locale"
+
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Three days of talks on the craft of building for the web. Choose your tickets below."
+
+msgid "Total"
+msgstr "Total"
+
+msgid "Venue"
+msgstr "Venue"
+
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."
+
+msgid "each"
+msgstr "each"
+
+msgid "one switch, every format"
+msgstr "one switch, every format"
+
+msgid "server locale"
+msgstr "server locale"
+
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
+
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# seat left} other {# seats left}}"

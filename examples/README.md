@@ -3,13 +3,15 @@
 These examples are the strongest visible proof that Palamedes is more than a
 single-framework integration.
 
-They prove the current Palamedes story across five framework families and two
+They prove the current Palamedes story across five framework families and three
 locale strategies while preserving the same underlying runtime and identity
 model.
 
 The matrix is intended to be run locally and validated in CI — that remains the
-canonical verification path. All ten examples are also publicly accessible as a
-live reference at `*.examples.palamedes.dev`.
+canonical verification path. All fifteen examples are also publicly accessible as
+a live reference at `*.examples.palamedes.dev` (the subdomain demos additionally
+require per-example wildcard DNS records — see
+[docs/demo-deployments.md](../docs/demo-deployments.md)).
 
 ## What This Matrix Proves
 
@@ -23,22 +25,29 @@ evidence behind the claim that Palamedes stays coherent across frameworks.
 
 ## Live Demos
 
-All ten matrix examples are publicly deployed as a live reference. Switch
+All fifteen matrix examples are publicly deployed as a live reference. Switch
 language in any of them and watch copy, plural seat counts, currency, and dates
-change together — the same design across every framework.
+change together — the same design across every framework. For the subdomain demos
+the locale is the leftmost DNS label (`en.`/`de.`/`es.`); the links below use
+`en.` as the entry point.
 
-| Framework      | Locale strategy | Live demo                                                                                        |
-| -------------- | --------------- | ------------------------------------------------------------------------------------------------ |
-| Next.js        | cookie          | [nextjs-cookie.examples.palamedes.dev](https://nextjs-cookie.examples.palamedes.dev)             |
-| Next.js        | route           | [nextjs-route.examples.palamedes.dev](https://nextjs-route.examples.palamedes.dev)               |
-| TanStack Start | cookie          | [tanstack-cookie.examples.palamedes.dev](https://tanstack-cookie.examples.palamedes.dev)         |
-| TanStack Start | route           | [tanstack-route.examples.palamedes.dev](https://tanstack-route.examples.palamedes.dev)           |
-| Waku           | cookie          | [waku-cookie.examples.palamedes.dev](https://waku-cookie.examples.palamedes.dev)                 |
-| Waku           | route           | [waku-route.examples.palamedes.dev](https://waku-route.examples.palamedes.dev)                   |
-| React Router   | cookie          | [react-router-cookie.examples.palamedes.dev](https://react-router-cookie.examples.palamedes.dev) |
-| React Router   | route           | [react-router-route.examples.palamedes.dev](https://react-router-route.examples.palamedes.dev)   |
-| SolidStart     | cookie          | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)     |
-| SolidStart     | route           | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev)       |
+| Framework      | Locale strategy | Live demo                                                                                                    |
+| -------------- | --------------- | ------------------------------------------------------------------------------------------------------------ |
+| Next.js        | cookie          | [nextjs-cookie.examples.palamedes.dev](https://nextjs-cookie.examples.palamedes.dev)                         |
+| Next.js        | route           | [nextjs-route.examples.palamedes.dev](https://nextjs-route.examples.palamedes.dev)                           |
+| Next.js        | subdomain       | [en.nextjs-subdomain.examples.palamedes.dev](https://en.nextjs-subdomain.examples.palamedes.dev)             |
+| TanStack Start | cookie          | [tanstack-cookie.examples.palamedes.dev](https://tanstack-cookie.examples.palamedes.dev)                     |
+| TanStack Start | route           | [tanstack-route.examples.palamedes.dev](https://tanstack-route.examples.palamedes.dev)                       |
+| TanStack Start | subdomain       | [en.tanstack-subdomain.examples.palamedes.dev](https://en.tanstack-subdomain.examples.palamedes.dev)         |
+| Waku           | cookie          | [waku-cookie.examples.palamedes.dev](https://waku-cookie.examples.palamedes.dev)                             |
+| Waku           | route           | [waku-route.examples.palamedes.dev](https://waku-route.examples.palamedes.dev)                               |
+| Waku           | subdomain       | [en.waku-subdomain.examples.palamedes.dev](https://en.waku-subdomain.examples.palamedes.dev)                 |
+| React Router   | cookie          | [react-router-cookie.examples.palamedes.dev](https://react-router-cookie.examples.palamedes.dev)             |
+| React Router   | route           | [react-router-route.examples.palamedes.dev](https://react-router-route.examples.palamedes.dev)               |
+| React Router   | subdomain       | [en.react-router-subdomain.examples.palamedes.dev](https://en.react-router-subdomain.examples.palamedes.dev) |
+| SolidStart     | cookie          | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)                 |
+| SolidStart     | route           | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev)                   |
+| SolidStart     | subdomain       | [en.solidstart-subdomain.examples.palamedes.dev](https://en.solidstart-subdomain.examples.palamedes.dev)     |
 
 ## Locale Strategy Matrix
 
@@ -72,6 +81,22 @@ These examples prove:
 - host/domain mapping as an extension of the route model
 - wrong-locale or wrong-domain detection via a visible info bar
 - redirect/switch CTA generation without automatic redirects
+- SSR with localized server actions or server functions
+
+### Subdomain-Derived Locale
+
+- [examples/nextjs-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-subdomain)
+- [examples/tanstack-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-subdomain)
+- [examples/solidstart-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/solidstart-subdomain)
+- [examples/waku-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/waku-subdomain)
+- [examples/react-router-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/react-router-subdomain)
+
+These examples prove:
+
+- the leftmost DNS label as the authoritative locale (`de.<app>` -> `de`), no `/:locale/...` prefix
+- `resolve({ strategy: "subdomain", requestHost })` with a base-domain-independent `hosts: { mode: "subdomain" }` config
+- `Accept-Language` mismatch detection via the same visible info bar
+- locale switching as a full document load to the sibling host (leftmost label swapped)
 - SSR with localized server actions or server functions
 
 ## Shared Runtime Model
@@ -162,7 +187,7 @@ Together they cover:
 - locale switching
 - localized server action or server function output after interaction
 
-For the decision model behind cookie, route, and domain handling, see:
+For the decision model behind cookie, route, subdomain, and domain handling, see:
 
 - [docs/locale-strategies.md](/Users/sebastian/Workspace/business/palamedes/docs/locale-strategies.md)
 - [docs/framework-example-notes.md](/Users/sebastian/Workspace/business/palamedes/docs/framework-example-notes.md)
@@ -175,11 +200,16 @@ The example scripts use a fixed port layout so the apps can run in parallel:
 
 - `4010` `nextjs-cookie`
 - `4011` `nextjs-route`
+- `4012` `nextjs-subdomain`
 - `4020` `tanstack-cookie`
 - `4021` `tanstack-route`
+- `4022` `tanstack-subdomain`
 - `4030` `waku-cookie`
 - `4031` `waku-route`
+- `4032` `waku-subdomain`
 - `4040` `react-router-cookie`
 - `4041` `react-router-route`
+- `4042` `react-router-subdomain`
 - `4050` `solidstart-cookie`
 - `4051` `solidstart-route`
+- `4052` `solidstart-subdomain`
