@@ -1,0 +1,94 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+msgid "Add to cart"
+msgstr "Ajouter au panier"
+
+msgid "Attendees"
+msgstr "Participants"
+
+msgid "Availability"
+msgstr "Disponibilité"
+
+msgid "Behind the scenes"
+msgstr "Dans les coulisses"
+
+msgid "Berlin, Germany"
+msgstr "Berlin, Allemagne"
+
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Réservez votre place à Frontend Stage 2026"
+
+msgid "Conference pass"
+msgstr "Pass conférence"
+
+msgid "Currency"
+msgstr "Devise"
+
+msgid "Date"
+msgstr "Date"
+
+msgid "Fewer tickets"
+msgstr "Moins de billets"
+
+msgid "Locale"
+msgstr "Langue"
+
+msgid "Localized live with Palamedes"
+msgstr "Localisé en direct avec Palamedes"
+
+msgid "More tickets"
+msgstr "Plus de billets"
+
+msgid "Number"
+msgstr "Nombre"
+
+msgid "Plural"
+msgstr "Pluriel"
+
+msgid "Refresh server result"
+msgstr "Actualiser le résultat du serveur"
+
+msgid "Rendered with TanStack Start"
+msgstr "Rendu avec TanStack Start"
+
+msgid "Server"
+msgstr "Serveur"
+
+msgid "Server function confirmed locale {locale}."
+msgstr "L'action serveur a confirmé la langue {locale}."
+
+msgid "Switch to the recommended locale"
+msgstr "Passer à la langue recommandée"
+
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Trois jours de conférences sur l'art de créer pour le web. Choisissez vos billets ci-dessous."
+
+msgid "Total"
+msgstr "Total"
+
+msgid "Venue"
+msgstr "Lieu"
+
+msgid "Welcome back, {attendeeName}."
+msgstr "Bon retour, {attendeeName}."
+
+msgid "each"
+msgstr "l'unité"
+
+msgid "one switch, every format"
+msgstr "un seul commutateur, tous les formats"
+
+msgid "server locale"
+msgstr "langue du serveur"
+
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# billet} other {# billets}}"
+
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# place restante} other {# places restantes}}"

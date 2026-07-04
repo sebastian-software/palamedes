@@ -1,0 +1,94 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+msgid "Add to cart"
+msgstr "Añadir al carrito"
+
+msgid "Attendees"
+msgstr "Asistentes"
+
+msgid "Availability"
+msgstr "Disponibilidad"
+
+msgid "Behind the scenes"
+msgstr "Entre bastidores"
+
+msgid "Berlin, Germany"
+msgstr "Berlín, Alemania"
+
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Reserva tu plaza en Frontend Stage 2026"
+
+msgid "Conference pass"
+msgstr "Pase de conferencia"
+
+msgid "Currency"
+msgstr "Moneda"
+
+msgid "Date"
+msgstr "Fecha"
+
+msgid "Fewer tickets"
+msgstr "Menos entradas"
+
+msgid "Locale"
+msgstr "Idioma"
+
+msgid "Localized live with Palamedes"
+msgstr "Localizado en vivo con Palamedes"
+
+msgid "More tickets"
+msgstr "Más entradas"
+
+msgid "Number"
+msgstr "Número"
+
+msgid "Plural"
+msgstr "Plural"
+
+msgid "Refresh server result"
+msgstr "Actualizar resultado del servidor"
+
+msgid "Rendered with TanStack Start"
+msgstr "Renderizado con TanStack Start"
+
+msgid "Server"
+msgstr "Servidor"
+
+msgid "Server function confirmed locale {locale}."
+msgstr "La función de servidor confirmó el idioma {locale}."
+
+msgid "Switch to the recommended locale"
+msgstr "Cambiar al idioma recomendado"
+
+msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
+msgstr "Tres días de charlas sobre el oficio de construir para la web. Elige tus entradas abajo."
+
+msgid "Total"
+msgstr "Total"
+
+msgid "Venue"
+msgstr "Lugar"
+
+msgid "Welcome back, {attendeeName}."
+msgstr "Hola de nuevo, {attendeeName}."
+
+msgid "each"
+msgstr "cada una"
+
+msgid "one switch, every format"
+msgstr "un clic, todos los formatos"
+
+msgid "server locale"
+msgstr "idioma del servidor"
+
+msgid "{quantity, plural, one {# ticket} other {# tickets}}"
+msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
+
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"

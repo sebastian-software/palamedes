@@ -131,6 +131,12 @@ function runVitest(example, options) {
           // 127.0.0.1 has none, so the browser test enters through a locale host.
           PALAMEDES_VERIFY_SUBDOMAIN_URL:
             example.strategy === "subdomain" ? `http://en.lvh.me:${example.port}/` : "",
+          // TLD examples derive the locale from the top-level domain. `.com` is the
+          // non-authoritative entry point (falls back to the browser locale); the
+          // browser test maps the four test domains to 127.0.0.1 via Chromium's
+          // --host-resolver-rules, so no real DNS or /etc/hosts is needed.
+          PALAMEDES_VERIFY_TLD_URL:
+            example.strategy === "tld" ? `http://palamedes-i18n.com:${example.port}/` : "",
           PALAMEDES_VERIFY_STRATEGY: example.strategy,
           PALAMEDES_CAPTURE_SCREENSHOTS: options.captureScreenshots ? "1" : "0",
           PALAMEDES_SCREENSHOT_DIR: options.screenshotDir,

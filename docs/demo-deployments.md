@@ -2,24 +2,28 @@
 
 The Palamedes example matrix is verified primarily through local runs and CI.
 Automatic deployments are not part of the default merge or release path. The
-matrix spans fifteen examples (five frameworks × three locale strategies) that
+matrix spans twenty examples (five frameworks × four locale strategies) that
 are published as a live reference — see the Live Reference Deployment section
 below. The five subdomain demos additionally require the per-example wildcard DNS
-records described under Subdomain Locale Hosting.
+records described under Subdomain Locale Hosting. The five tld demos require the
+`palamedes-i18n.*` domains described under TLD Locale Hosting.
 
 ## Current Policy
 
 - the canonical verification path is `pnpm build:examples` plus `pnpm verify:examples`
 - example deployments do not run automatically on `main`
-- the Next.js and SolidStart examples (including their subdomain variants) are excluded from `deploy-examples.yml`; they are accessible via the live reference deployment
-- the `deploy-examples.yml` workflow supports manual deployment of the Vite-based examples (TanStack, Waku, React Router — cookie, route, and subdomain) if an additional hosted URL is needed
+- the Next.js and SolidStart examples (including their subdomain and tld variants) are excluded from `deploy-examples.yml`; they are accessible via the live reference deployment
+- the `deploy-examples.yml` workflow supports manual deployment of the Vite-based examples (TanStack, Waku, React Router — cookie, route, subdomain, and tld) if an additional hosted URL is needed
 
 ## Live Reference Deployment
 
-All fifteen examples are published as a live reference. Switch language in any of
+All twenty examples are published as a live reference. Switch language in any of
 them and watch copy, plural seat counts, currency, and dates change together. For
 the subdomain demos the locale is the leftmost DNS label
-(`en.`/`de.`/`es.`); the links below use `en.` as the entry point.
+(`en.`/`de.`/`es.`); the links below use `en.` as the entry point. For the tld
+demos the locale is derived from the top-level domain (`.de`→de, `.es`→es,
+`.fr`→fr); `.com` is the non-authoritative entry point and falls back to
+`Accept-Language` or the default (en).
 
 | Framework      | Locale strategy | Live demo                                                                                                    |
 | -------------- | --------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -38,6 +42,11 @@ the subdomain demos the locale is the leftmost DNS label
 | SolidStart     | cookie          | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)                 |
 | SolidStart     | route           | [solidstart-route.examples.palamedes.dev](https://solidstart-route.examples.palamedes.dev)                   |
 | SolidStart     | subdomain       | [en.solidstart-subdomain.examples.palamedes.dev](https://en.solidstart-subdomain.examples.palamedes.dev)     |
+| Next.js        | tld             | [nextjs.palamedes-i18n.com](https://nextjs.palamedes-i18n.com)                                               |
+| TanStack Start | tld             | [tanstack.palamedes-i18n.com](https://tanstack.palamedes-i18n.com)                                           |
+| Waku           | tld             | [waku.palamedes-i18n.com](https://waku.palamedes-i18n.com)                                                   |
+| React Router   | tld             | [react-router.palamedes-i18n.com](https://react-router.palamedes-i18n.com)                                   |
+| SolidStart     | tld             | [solidstart.palamedes-i18n.com](https://solidstart.palamedes-i18n.com)                                       |
 
 ## Subdomain Locale Hosting (DNS And Reverse Proxy)
 
@@ -74,6 +83,35 @@ Until these records and proxy routes exist, the five subdomain rows above are no
 yet reachable; the canonical verification path remains `pnpm verify:examples`,
 which exercises the subdomain strategy locally via `*.lvh.me` hosts.
 
+## TLD Locale Hosting (DNS And Reverse Proxy)
+
+The tld demos derive the locale from the top-level domain of the request host.
+Each framework example is reachable under four TLDs:
+
+- `nextjs.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `tanstack.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `waku.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `react-router.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `solidstart.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+
+All four TLD variants of a given framework point to the same backend. The
+reverse proxy must pass the original `Host` header through unchanged — the app
+reads the TLD to select the locale, so it is authoritative. `.de`, `.es`, and
+`.fr` are authoritative (country code equals language code); `.com` is
+non-authoritative and falls back to `Accept-Language` or the default locale (en).
+A multi-lingual country TLD such as `.ch` would intentionally be non-authoritative.
+
+Because locale and switch links are derived from the request host, responses must
+not be cached host-agnostically. Any cache in front of a tld example must include
+the `Host` in its cache key (or the app must send `Vary: Host`); otherwise a
+response for one TLD could be served for another. This is the same constraint the
+per-host routing already implies, but it must hold for caching layers too.
+
+Until these domains are provisioned, the five tld rows in the Live Reference table
+are not yet reachable. The canonical verification path runs locally via
+`pnpm verify:examples`, which exercises the tld strategy using Chromium's
+`--host-resolver-rules` flag to simulate the TLD hosts without real DNS.
+
 ## Optional Manual Deployments
 
 The optional deployment workflow lives at:
@@ -98,12 +136,15 @@ Supported deployment targets:
 - `react-router-cookie`
 - `react-router-route`
 - `react-router-subdomain`
+- `tanstack-tld`
+- `waku-tld`
+- `react-router-tld`
 
 ## Why Next.js Is Not In `deploy-examples.yml`
 
 The Next.js examples are part of the verified matrix, but they are excluded from
 the `deploy-examples.yml` workflow. That workflow targets the Vite-based examples
-(TanStack, Waku, React Router — cookie, route, and subdomain) specifically.
+(TanStack, Waku, React Router — cookie, route, subdomain, and tld) specifically.
 
 For this OSS setup, the guaranteed baseline is:
 

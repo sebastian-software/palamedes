@@ -1,13 +1,13 @@
-# Run all fifteen Palamedes example apps side by side in a single container, each
+# Run all twenty Palamedes example apps side by side in a single container, each
 # on its fixed port from scripts/example-matrix.mjs. Built and run with Podman:
 #
 #   podman build -f Containerfile -t palamedes-examples .
 #   podman run --rm --init \
-#     -p 4010:4010 -p 4011:4011 -p 4012:4012 \
-#     -p 4020:4020 -p 4021:4021 -p 4022:4022 \
-#     -p 4030:4030 -p 4031:4031 -p 4032:4032 \
-#     -p 4040:4040 -p 4041:4041 -p 4042:4042 \
-#     -p 4050:4050 -p 4051:4051 -p 4052:4052 \
+#     -p 4010:4010 -p 4011:4011 -p 4012:4012 -p 4013:4013 \
+#     -p 4020:4020 -p 4021:4021 -p 4022:4022 -p 4023:4023 \
+#     -p 4030:4030 -p 4031:4031 -p 4032:4032 -p 4033:4033 \
+#     -p 4040:4040 -p 4041:4041 -p 4042:4042 -p 4043:4043 \
+#     -p 4050:4050 -p 4051:4051 -p 4052:4052 -p 4053:4053 \
 #     palamedes-examples
 #
 # (or let the matrix generate the flags: `podman run --init \
@@ -72,7 +72,7 @@ USER node
 # Fixed ports — informational only; the authoritative list is
 # scripts/example-matrix.mjs. Publish them without drift via:
 #   podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
-EXPOSE 4010 4011 4020 4021 4030 4031 4040 4041 4050 4051
+EXPOSE 4010 4011 4012 4013 4020 4021 4022 4023 4030 4031 4032 4033 4040 4041 4042 4043 4050 4051 4052 4053
 
 # tini is the init/reaper (no external `--init` needed). `-s` registers it as a
 # subreaper so reaping still works if it ends up not as PID 1 (e.g. when the

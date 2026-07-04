@@ -24,6 +24,12 @@ const subdomained = defineLocaleControls({
   hosts: { mode: "subdomain" },
 })
 
+const tlded = defineLocaleControls({
+  locales: ["en", "de", "es", "fr"] as const,
+  defaultLocale: "en",
+  hosts: { mode: "tld", tld: { at: "de" }, defaultTld: "com" },
+})
+
 describe("locale controls", () => {
   it("resolves cookie locale before accept-language", () => {
     expect(
@@ -246,5 +252,149 @@ describe("subdomain strategy", () => {
     expect(suggestion?.reason).toBe("accept-language")
     expect(suggestion?.recommendedLocale).toBe("es")
     expect(suggestion?.recommendedUrl).toBe("http://es.lvh.me:4012/")
+  })
+})
+
+describe("tld strategy", () => {
+  it("resolves the locale authoritatively when the tld label is a supported locale", () => {
+    expect(
+      tlded.resolve({ strategy: "tld", requestHost: "nextjs.palamedes-i18n.de" })
+    ).toStrictEqual({ locale: "de", source: "tld" })
+  })
+
+  it("resolves the newly added fourth locale from its tld", () => {
+    expect(
+      tlded.resolve({ strategy: "tld", requestHost: "nextjs.palamedes-i18n.fr" })
+    ).toStrictEqual({ locale: "fr", source: "tld" })
+  })
+
+  it("strips the port and lowercases the tld before matching", () => {
+    expect(tlded.resolve({ strategy: "tld", requestHost: "palamedes-i18n.DE:4013" })).toStrictEqual(
+      { locale: "de", source: "tld" }
+    )
+  })
+
+  it("resolves an explicit tld override whose label is not a locale code", () => {
+    // `.at` is Austria, not a language code, but is mapped to German.
+    expect(tlded.resolve({ strategy: "tld", requestHost: "shop.palamedes-i18n.at" })).toStrictEqual(
+      { locale: "de", source: "tld" }
+    )
+  })
+
+  it("beats accept-language: the tld wins over the browser preference", () => {
+    expect(
+      tlded.resolve({
+        strategy: "tld",
+        requestHost: "palamedes-i18n.fr",
+        acceptLanguageHeader: "de",
+      })
+    ).toStrictEqual({ locale: "fr", source: "tld" })
+  })
+
+  it("treats an unmapped tld (.com) as non-authoritative and uses the browser locale", () => {
+    expect(
+      tlded.resolve({
+        strategy: "tld",
+        requestHost: "palamedes-i18n.com",
+        acceptLanguageHeader: "de",
+      })
+    ).toStrictEqual({ locale: "de", source: "accept-language" })
+  })
+
+  it("keeps a multilingual country tld (.ch) non-authoritative and expands the browser region", () => {
+    // Switzerland has four official languages, so `.ch` cannot be authoritative;
+    // the browser's `de-CH` expands to the supported base language `de`.
+    expect(
+      tlded.resolve({
+        strategy: "tld",
+        requestHost: "palamedes-i18n.ch",
+        acceptLanguageHeader: "de-CH,de;q=0.9",
+      })
+    ).toStrictEqual({ locale: "de", source: "accept-language" })
+  })
+
+  it("falls back to the default locale for an unmapped tld without a browser preference", () => {
+    expect(tlded.resolve({ strategy: "tld", requestHost: "palamedes-i18n.com" })).toStrictEqual({
+      locale: "en",
+      source: "default",
+    })
+  })
+
+  it("treats a bare single-label host as having no tld", () => {
+    expect(
+      tlded.resolve({ strategy: "tld", requestHost: "localhost", acceptLanguageHeader: "de" })
+    ).toStrictEqual({ locale: "de", source: "accept-language" })
+  })
+
+  it("falls back to the default locale when no host is given", () => {
+    expect(tlded.resolve({ strategy: "tld" })).toStrictEqual({
+      locale: "en",
+      source: "default",
+    })
+  })
+
+  it("builds switch urls by swapping the tld and keeping the path", () => {
+    expect(
+      tlded.canonicalUrl({
+        locale: "fr",
+        pathname: "/checkout",
+        requestHost: "nextjs.palamedes-i18n.de",
+        search: "?seat=1",
+      })
+    ).toBe("http://nextjs.palamedes-i18n.fr/checkout?seat=1")
+  })
+
+  it("routes the default locale to defaultTld (.com), which has no authoritative tld", () => {
+    expect(
+      tlded.canonicalUrl({
+        locale: "en",
+        pathname: "/",
+        requestHost: "nextjs.palamedes-i18n.de",
+      })
+    ).toBe("http://nextjs.palamedes-i18n.com/")
+  })
+
+  it("preserves the request port in switch urls", () => {
+    expect(
+      tlded.canonicalUrl({
+        locale: "es",
+        pathname: "/",
+        requestHost: "palamedes-i18n.de:4013",
+      })
+    ).toBe("http://palamedes-i18n.es:4013/")
+  })
+
+  it("returns a bare path when no request host is available", () => {
+    expect(tlded.canonicalUrl({ locale: "de", pathname: "/checkout", search: "?seat=1" })).toBe(
+      "/checkout?seat=1"
+    )
+  })
+
+  it("returns a bare path for a single-label host with no tld", () => {
+    expect(
+      tlded.canonicalUrl({ locale: "de", pathname: "/checkout", requestHost: "localhost" })
+    ).toBe("/checkout")
+  })
+
+  it("raises no host banner when the tld matches the rendered locale", () => {
+    expect(
+      tlded.suggest({
+        acceptLanguageHeader: "de",
+        currentLocale: "de",
+        pathname: "/",
+        requestHost: "palamedes-i18n.de:4013",
+      })
+    ).toBeNull()
+  })
+
+  it("surfaces a host banner when the tld and the rendered locale disagree", () => {
+    const suggestion = tlded.suggest({
+      currentLocale: "de",
+      pathname: "/",
+      requestHost: "nextjs.palamedes-i18n.fr",
+    })
+    expect(suggestion?.reason).toBe("host")
+    expect(suggestion?.recommendedLocale).toBe("fr")
+    expect(suggestion?.recommendedUrl).toBe("http://nextjs.palamedes-i18n.fr/")
   })
 })
