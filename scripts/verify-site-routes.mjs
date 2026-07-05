@@ -59,8 +59,7 @@ if (
   !existsSync(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE)
 ) {
   console.warn(
-    "  !! PLAYWRIGHT_CHROMIUM_EXECUTABLE is set but does not exist: " +
-      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+    `  !! PLAYWRIGHT_CHROMIUM_EXECUTABLE is set but does not exist: ${process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}`
   )
 }
 
