@@ -1,18 +1,17 @@
 import { Page } from "~/components/chrome/Page"
+import { pageMeta } from "~/lib/meta"
 import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { REPO } from "~/data/links"
 import { POSTS } from "~/data/posts"
 
 export function meta() {
-  return [
-    { title: "Palamedes blog — notes from building i18n tooling in the open" },
-    {
-      name: "description",
-      content:
-        "Design notes, honest benchmarks, and lessons from the third time around — written by the maintainer, not a content team.",
-    },
-  ]
+  return pageMeta({
+    title: "Palamedes blog — notes from building i18n tooling in the open",
+    description:
+      "Design notes, honest benchmarks, and lessons from the third time around — written by the maintainer, not a content team.",
+    path: "/blog",
+  })
 }
 
 export default function Blog() {

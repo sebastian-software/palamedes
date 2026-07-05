@@ -1,6 +1,6 @@
 # @palamedes/site
 
-The public Palamedes website — React Router 8 (framework mode) with full
+The public Palamedes website, live at <https://palamedes.dev> — React Router 8 (framework mode) with full
 prerendering, Tailwind v4, and the Swiss-spec-grid design system from
 [`docs/site/structure/`](../docs/site/structure/README.md). Private
 workspace, never published to npm.

@@ -5,6 +5,8 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
+**Website: [palamedes.dev](https://palamedes.dev)**
+
 Palamedes is i18n tooling for JavaScript and TypeScript teams that want one
 translation model to survive framework changes.
 
