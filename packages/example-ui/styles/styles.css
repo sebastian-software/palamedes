@@ -1,7 +1,7 @@
 /*
  * @palamedes/example-ui — shared design for the example matrix.
  *
- * One stylesheet, loaded by every framework demo, so all ten apps are
+ * One stylesheet, loaded by every framework demo, so all twenty apps are
  * visually identical. Framework code only owns markup structure and the
  * locale strategy; every color, font, and spacing decision lives here.
  */

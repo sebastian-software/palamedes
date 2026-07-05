@@ -32,7 +32,7 @@ evidence easy to inspect.
 
 ## What Counts As Proof In This Repo
 
-- first-party multi-framework example matrix with cookie and route locale strategies
+- first-party multi-framework example matrix with cookie, route, subdomain, and tld locale strategies
 - a native core with typed bindings
 - source-string-first PO/FCL catalog semantics backed by `ferrocat`
 - structured catalog audits and ICU metadata validation
@@ -94,7 +94,7 @@ For a larger stress run:
 node ./scripts/benchmark-proof.mjs --warmup 1 --runs 3 --large-messages 50000 --large-source-files 50
 ```
 
-For the separate Lingui v6 preview comparison harness:
+For the separate Lingui v6 comparison harness:
 
 ```bash
 pnpm benchmark:lingui-v6

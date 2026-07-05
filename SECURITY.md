@@ -6,13 +6,14 @@ before public disclosure.
 
 ## Supported Versions
 
-Palamedes currently ships pre-1.0 packages in lockstep. Security fixes target
-the latest released version.
+Palamedes ships publishable packages in lockstep. Security fixes target the
+latest released 1.x version line.
 
 | Version    | Supported   |
 | ---------- | ----------- |
-| Latest 0.x | Yes         |
-| Older 0.x  | Best effort |
+| Latest 1.x | Yes         |
+| Older 1.x  | Best effort |
+| 0.x        | No          |
 
 ## Reporting A Vulnerability
 

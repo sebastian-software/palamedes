@@ -91,11 +91,11 @@ How each strategy encodes the locale:
 
 ### Cookie-Derived Locale
 
-- [examples/nextjs-cookie](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-cookie)
-- [examples/tanstack-cookie](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-cookie)
-- [examples/solidstart-cookie](/Users/sebastian/Workspace/business/palamedes/examples/solidstart-cookie)
-- [examples/waku-cookie](/Users/sebastian/Workspace/business/palamedes/examples/waku-cookie)
-- [examples/react-router-cookie](/Users/sebastian/Workspace/business/palamedes/examples/react-router-cookie)
+- [examples/nextjs-cookie](examples/nextjs-cookie)
+- [examples/tanstack-cookie](examples/tanstack-cookie)
+- [examples/solidstart-cookie](examples/solidstart-cookie)
+- [examples/waku-cookie](examples/waku-cookie)
+- [examples/react-router-cookie](examples/react-router-cookie)
 
 These examples prove:
 
@@ -107,11 +107,11 @@ These examples prove:
 
 ### Route-Derived Locale
 
-- [examples/nextjs-route](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-route)
-- [examples/tanstack-route](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-route)
-- [examples/solidstart-route](/Users/sebastian/Workspace/business/palamedes/examples/solidstart-route)
-- [examples/waku-route](/Users/sebastian/Workspace/business/palamedes/examples/waku-route)
-- [examples/react-router-route](/Users/sebastian/Workspace/business/palamedes/examples/react-router-route)
+- [examples/nextjs-route](examples/nextjs-route)
+- [examples/tanstack-route](examples/tanstack-route)
+- [examples/solidstart-route](examples/solidstart-route)
+- [examples/waku-route](examples/waku-route)
+- [examples/react-router-route](examples/react-router-route)
 
 These examples prove:
 
@@ -123,11 +123,11 @@ These examples prove:
 
 ### Subdomain-Derived Locale
 
-- [examples/nextjs-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-subdomain)
-- [examples/tanstack-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-subdomain)
-- [examples/solidstart-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/solidstart-subdomain)
-- [examples/waku-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/waku-subdomain)
-- [examples/react-router-subdomain](/Users/sebastian/Workspace/business/palamedes/examples/react-router-subdomain)
+- [examples/nextjs-subdomain](examples/nextjs-subdomain)
+- [examples/tanstack-subdomain](examples/tanstack-subdomain)
+- [examples/solidstart-subdomain](examples/solidstart-subdomain)
+- [examples/waku-subdomain](examples/waku-subdomain)
+- [examples/react-router-subdomain](examples/react-router-subdomain)
 
 These examples prove:
 
@@ -139,11 +139,11 @@ These examples prove:
 
 ### TLD-Derived Locale
 
-- [examples/nextjs-tld](/Users/sebastian/Workspace/business/palamedes/examples/nextjs-tld)
-- [examples/tanstack-tld](/Users/sebastian/Workspace/business/palamedes/examples/tanstack-tld)
-- [examples/solidstart-tld](/Users/sebastian/Workspace/business/palamedes/examples/solidstart-tld)
-- [examples/waku-tld](/Users/sebastian/Workspace/business/palamedes/examples/waku-tld)
-- [examples/react-router-tld](/Users/sebastian/Workspace/business/palamedes/examples/react-router-tld)
+- [examples/nextjs-tld](examples/nextjs-tld)
+- [examples/tanstack-tld](examples/tanstack-tld)
+- [examples/solidstart-tld](examples/solidstart-tld)
+- [examples/waku-tld](examples/waku-tld)
+- [examples/react-router-tld](examples/react-router-tld)
 
 These examples prove:
 
@@ -229,7 +229,7 @@ pnpm capture:example-screenshots -- --id nextjs-cookie
 
 The verifier runs in two layers:
 
-- fast Node-based smoke checks from [scripts/verify-examples.mjs](/Users/sebastian/Workspace/business/palamedes/scripts/verify-examples.mjs)
+- fast Node-based smoke checks from [scripts/verify-examples.mjs](scripts/verify-examples.mjs)
 - browser interaction checks from `Vitest` using direct `Playwright` automation against the running apps
 
 Together they cover:
@@ -244,10 +244,10 @@ Together they cover:
 
 For the decision model behind cookie, route, subdomain, tld, and domain handling, see:
 
-- [docs/locale-strategies.md](/Users/sebastian/Workspace/business/palamedes/docs/locale-strategies.md)
-- [docs/framework-example-notes.md](/Users/sebastian/Workspace/business/palamedes/docs/framework-example-notes.md)
-- [docs/example-screenshots/README.md](/Users/sebastian/Workspace/business/palamedes/docs/example-screenshots/README.md)
-- [docs/demo-deployments.md](/Users/sebastian/Workspace/business/palamedes/docs/demo-deployments.md)
+- [docs/locale-strategies.md](docs/locale-strategies.md)
+- [docs/framework-example-notes.md](docs/framework-example-notes.md)
+- [docs/example-screenshots/README.md](docs/example-screenshots/README.md)
+- [docs/demo-deployments.md](docs/demo-deployments.md)
 
 ## Default Dev Ports
 

@@ -9,8 +9,8 @@ piece of evidence.
 
 Cross-framework i18n should not be a README claim.
 
-Palamedes keeps ten examples in the repo: five framework families, each with
-cookie and route locale strategies. The browser screenshots are versioned and
+Palamedes keeps twenty examples in the repo: five framework families, each with
+cookie, route, subdomain, and tld locale strategies. The browser screenshots are versioned and
 come from the same verification flow used in CI.
 
 Evidence: `docs/example-screenshots`

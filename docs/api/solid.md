@@ -28,8 +28,8 @@ components:
 
 ## Runtime Components
 
-Runtime components read the active i18n instance through
-`@palamedes/runtime`.
+Runtime components read the active i18n instance through the package's reactive
+runtime wrapper, which bridges `@palamedes/runtime` into Solid updates.
 
 ```tsx
 import { Trans } from "@palamedes/solid"

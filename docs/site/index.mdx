@@ -8,7 +8,8 @@ every time the framework changes.
 
 It gives you one runtime model, one message identity model, and one catalog
 workflow across verified integrations for Next.js, TanStack Start, SolidStart,
-Waku, React Router, Vite, and backend servers.
+Waku, React Router, and Vite. Backend servers use the same runtime model but
+are documented as a guide rather than a verified matrix family.
 
 We are not asking you to trust a slogan. The repo shows the work.
 
@@ -22,7 +23,7 @@ working across different app shapes.
 The repo backs that claim with visible evidence:
 
 - five framework families: Next.js, TanStack Start, SolidStart, Waku, and React Router
-- two locale strategies per framework: cookie and route segment
+- four locale strategies per framework: cookie, route segment, subdomain, and tld
 - versioned browser screenshots generated from the same Playwright verifier used in CI
 - reproducible benchmark commands for transform, extract, catalog update, artifact compile, and end-to-end extract/update workflows
 - opt-in FCL catalog storage for canonical, merge-friendly generated catalogs
@@ -93,7 +94,7 @@ Palamedes makes specific claims, and the repo shows the work behind them.
 Current evidence assets:
 
 - verified example matrix across five framework families
-- two locale strategies per framework
+- four locale strategies per framework
 - browser screenshots generated from the same Playwright-based verifier used in CI
 - benchmark fixtures and documented methodology
 - checked end-to-end workflow reports against Lingui and i18next-parser

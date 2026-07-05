@@ -18,12 +18,12 @@ The repo contains an example matrix across five framework families:
 - Waku
 - React Router
 
-Each family has two locale strategies:
+Each family has four locale strategies:
 
 - cookie-based locale persistence
 - route-segment locale persistence
 
-That gives ten example apps. Each one has browser-visible checks for the parts
+That gives twenty example apps. Each one has browser-visible checks for the parts
 that usually hide i18n bugs:
 
 - server-rendered localized text before hydration

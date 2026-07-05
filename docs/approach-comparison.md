@@ -29,8 +29,8 @@ historical surface and more legacy accommodation. Palamedes is narrower on
 purpose. But they are still close enough that a direct benchmark says
 something real.
 
-That is why this repo publishes a machine-local benchmark against Lingui v6
-Preview and does not pretend that every other i18n tool belongs in the same
+That is why this repo keeps a machine-local benchmark harness against Lingui v6
+and does not pretend that every other i18n tool belongs in the same
 timing chart.
 
 ## Palamedes
@@ -51,7 +51,7 @@ which layer owns which decision.
 That is also why the cross-framework story matters. Palamedes is unusual not
 because it has more than one adapter. It is unusual because the same runtime
 and identity model survive across verified integrations for Next.js, TanStack
-Start, Waku, and React Router.
+Start, SolidStart, Waku, and React Router.
 
 The performance story follows from that discipline more than from "Rust" as a
 branding point.
@@ -65,17 +65,14 @@ catalogs, and practical framework integration are better than ad hoc
 translation sprawl. That is the main reason Palamedes can feel familiar to
 Lingui users while still taking a stricter architectural position underneath.
 
-As of March 19, 2026, Lingui v6 Preview exposes both a Babel macro path and an
-SWC plugin path. That matters for benchmarking because Lingui and Palamedes
-share more than API flavor: both spend real time in compile-time rewrite and
-extract flows. In this repo's current machine-local runs, Palamedes remains
-clearly ahead on both Lingui transform lanes as well as extraction, which
-reinforces the broader architectural point: centralizing the expensive work in
-a tighter native core changes real developer-facing latency.
+Lingui v6 exposes both a Babel macro path and an SWC plugin path. That matters
+for benchmarking because Lingui and Palamedes share more than API flavor: both
+spend real time in compile-time rewrite and extract flows. Keep any competitive
+speed claim tied to checked-in benchmark output; this page should not state a
+current Lingui comparison without a report in `benchmarks/lingui-v6/results/`.
 
-The exact methodology and current machine-local outputs live in the dedicated
-Lingui benchmark page, because the numbers only make sense when read together
-with their scope and validation rules.
+The methodology lives in the dedicated Lingui benchmark page. Current outputs
+belong in the benchmark results directory before they are summarized here.
 
 The practical difference is less "Lingui is old, Palamedes is new" and more
 this: Lingui has broader compatibility pressure, while Palamedes is willing to
@@ -91,13 +88,13 @@ structured message files, then consume them through APIs like `useTranslations`.
 That keeps the mental model straightforward for teams that want message
 catalogs to remain the center of gravity.
 
-At the same time, `next-intl` has clearly moved closer to some of the same
-problems Palamedes and Lingui care about. On November 7, 2025 it introduced
-`useExtracted`, an inline-message authoring API that rewrites source usage
-toward `useTranslations`, keeps catalogs in sync, and leans on framework loader
-infrastructure. On January 28, 2026 it added ahead-of-time ICU message
-compilation through `icu-minify`, moving message parsing out of the runtime and
-into the build.
+At the same time, `next-intl` has moved closer to some of the same problems
+Palamedes and Lingui care about. Its `useExtracted` work introduces an
+inline-message authoring path that rewrites source usage toward
+`useTranslations`, keeps catalogs in sync, and leans on framework loader
+infrastructure. Its ahead-of-time ICU compilation work moves message parsing
+out of the runtime and into the build. Pin exact dates inline only when the
+source links are present next to the claim.
 
 Those additions are important because they show convergence, but not
 equivalence.
