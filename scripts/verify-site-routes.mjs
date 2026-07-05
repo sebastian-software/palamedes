@@ -54,6 +54,16 @@ const server = createServer((req, res) => {
 
 await new Promise((resolve) => server.listen(PORT, resolve))
 
+if (
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE &&
+  !existsSync(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE)
+) {
+  console.warn(
+    "  !! PLAYWRIGHT_CHROMIUM_EXECUTABLE is set but does not exist: " +
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+  )
+}
+
 const chromiumExecutable = [
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
   "/opt/pw-browsers/chromium",
