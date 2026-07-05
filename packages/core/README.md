@@ -1,5 +1,10 @@
 # @palamedes/core
 
+[![npm version](https://img.shields.io/npm/v/%40palamedes%2Fcore?logo=npm)](https://www.npmjs.com/package/@palamedes/core)
+[![CI](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sebastian-software/palamedes/actions/workflows/ci.yml)
+[![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
+
 Palamedes-owned i18n instance creation and macro entry points.
 
 Use this package when you want the app-facing runtime piece of Palamedes: create
@@ -107,3 +112,9 @@ Catalog artifact compilation reports unsupported formatter kinds such as `list`,
 `duration`, `ago`, and `name` as errors because the runtime does not render
 those kinds. Unsupported styles on `number`, `date`, and `time` are warnings:
 the runtime falls back to the default `Intl` formatter for that argument type.
+
+## License
+
+[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
+
+MIT © 2026 Sebastian Software

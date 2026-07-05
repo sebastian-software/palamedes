@@ -24,7 +24,7 @@ const TIMING_MARKER: &str = "__PALAMEDES_TIMINGS__";
 
 #[derive(Debug, Parser)]
 #[command(name = "pmds")]
-#[command(about = "Palamedes CLI for fast message extraction")]
+#[command(about = "Palamedes CLI for extraction, audits, reports, and catalog workflows")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
