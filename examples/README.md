@@ -14,6 +14,10 @@ a live reference: the cookie, route, and subdomain demos at `*.examples.palamede
 the tld demos at `<framework>.examples.palamedes-i18n.{com,de,es,fr}` — see
 [docs/demo-deployments.md](../docs/demo-deployments.md) for hosting details.
 
+This file is the canonical documentation for the full matrix. Individual
+example READMEs are optional and should stay short; add one only when a specific
+example needs local setup notes that do not belong in the shared matrix guide.
+
 ## What This Matrix Proves
 
 - one i18n mental model across Next.js, TanStack Start, SolidStart, Waku, and React Router

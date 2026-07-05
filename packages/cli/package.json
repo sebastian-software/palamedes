@@ -1,7 +1,7 @@
 {
   "name": "@palamedes/cli",
   "version": "1.2.0",
-  "description": "Palamedes CLI for fast message extraction workflows",
+  "description": "Palamedes CLI for extraction, audits, reports, and catalog workflows",
   "keywords": [
     "i18n",
     "internationalization",
