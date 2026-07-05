@@ -1,642 +1,1188 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Palamedes — Design draft A — Spec Grid</title>
-<style>
-/* ============================================================
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Palamedes — Design draft A — Spec Grid</title>
+    <style>
+      /* ============================================================
    DESIGN A — SWISS SPEC GRID
    bg #fbfbf8 · ink #101010 · hairline #d8d8d2 · accent #0038ff
    Zero radius, zero shadows, zero gradients. 8px base scale.
    ============================================================ */
 
-:root {
-  --bg: #fbfbf8;
-  --ink: #101010;
-  --hair: #d8d8d2;
-  --accent: #0038ff;
-  --gray: #8a8a84;
-  --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
-  --sans: "Helvetica Neue", Helvetica, Arial, Inter, sans-serif;
-}
-
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-html { background: var(--bg); }
-
-body {
-  font-family: var(--sans);
-  color: var(--ink);
-  background: var(--bg);
-  font-size: 16px;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-}
-
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-
-.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-
-/* ---------------------------------------------------- frame + hairlines -- */
-
-.frame {
-  max-width: 1120px;
-  margin: 0 auto;
-  border-left: 1px solid var(--hair);
-  border-right: 1px solid var(--hair);
-  min-height: 100vh;
-  background: var(--bg);
-}
-
-.sec { border-top: 1px solid var(--hair); padding: 56px 32px 64px; }
-.sec-head { display: flex; align-items: baseline; gap: 24px; margin-bottom: 32px; flex-wrap: wrap; }
-
-.sec-mark {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--gray);
-  white-space: nowrap;
-}
-
-.eyebrow {
-  font-size: 11px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink);
-  margin-bottom: 24px;
-}
-.eyebrow::before { content: "§ "; color: var(--accent); }
-
-h2 {
-  font-size: clamp(24px, 3.4vw, 34px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  max-width: 22em;
-}
-
-.lede { max-width: 44em; margin-top: 16px; font-size: 16px; }
-
-.micro {
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gray);
-}
-
-/* --------------------------------------------------------------- ribbon -- */
-
-.ribbon {
-  position: fixed;
-  left: 0;
-  bottom: 0;
-  z-index: 100;
-  background: var(--ink);
-  color: var(--bg);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  padding: 6px 12px;
-  border-top: 1px solid var(--ink);
-  border-right: 1px solid var(--ink);
-}
-.ribbon b { color: #9db2ff; font-weight: 400; }
-
-/* ------------------------------------------------------------------ nav -- */
-
-nav.site {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: var(--bg);
-  border-bottom: 1px solid var(--hair);
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 0 32px;
-  min-height: 56px;
-  flex-wrap: wrap;
-}
-
-.wordmark {
-  font-weight: 700;
-  font-size: 17px;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-.wordmark:hover { text-decoration: none; }
-
-.nav-links { display: flex; gap: 20px; flex-wrap: wrap; flex: 1; }
-.nav-links a {
-  color: var(--ink);
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 4px 0;
-  border-bottom: 2px solid transparent;
-}
-.nav-links a:hover { text-decoration: none; border-bottom-color: var(--hair); }
-.nav-links a.active { color: var(--accent); border-bottom-color: var(--accent); }
-.nav-links a.dead { color: var(--gray); cursor: default; }
-.nav-links a.dead:hover { border-bottom-color: transparent; }
-
-.nav-actions { display: flex; gap: 12px; align-items: center; }
-
-/* -------------------------------------------------------------- buttons -- */
-
-.btn {
-  display: inline-block;
-  border: 1px solid var(--ink);
-  color: var(--ink);
-  background: transparent;
-  padding: 12px 22px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-family: var(--sans);
-  cursor: pointer;
-}
-.btn:hover { text-decoration: none; background: var(--ink); color: var(--bg); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: var(--ink); border-color: var(--ink); }
-.btn.small { padding: 8px 14px; font-size: 10px; }
-
-/* ----------------------------------------------------------------- hero -- */
-
-.hero { padding: 72px 32px 64px; }
-.hero-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 48px; align-items: start; }
-
-h1.display {
-  font-size: clamp(44px, 7.6vw, 88px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 0.98;
-  margin: 0 0 28px;
-}
-
-.subline { font-size: 16px; max-width: 38em; color: var(--ink); }
-.subline .mono { font-size: 15px; }
-
-.hero-ctas { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; }
-
-/* -------------------------------------------------- booking-card visual -- */
-
-.locale-stack { display: grid; gap: 1px; background: var(--hair); border: 1px solid var(--hair); }
-
-.bcard { background: var(--bg); padding: 16px 18px; }
-.bcard-loc {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 8px;
-}
-.bcard-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
-.bcard-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
-.bcard-seats { font-size: 12.5px; border: 1px solid var(--hair); padding: 2px 8px; }
-.bcard-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 500; }
-.bcard-date { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--gray); margin-top: 6px; }
-.locale-caption { border: 1px solid var(--hair); border-top: 0; padding: 10px 18px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gray); }
-
-/* ------------------------------------------------------------ proofstrip -- */
-
-.proofstrip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  background: var(--hair);
-  border-top: 1px solid var(--hair);
-}
-.proofstrip a {
-  background: var(--bg);
-  padding: 24px 32px;
-  color: var(--ink);
-  display: block;
-}
-.proofstrip a:hover { text-decoration: none; background: #f2f2ec; }
-.stat-val {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 34px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--accent);
-  display: block;
-}
-.stat-label { display: block; font-size: 12px; margin-top: 6px; max-width: 22em; }
-
-/* --------------------------------------------------------- feature grid -- */
-
-.grid { display: grid; gap: 1px; background: var(--hair); border: 1px solid var(--hair); margin-top: 32px; }
-.grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
-.grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
-.grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
-.cell { background: var(--bg); padding: 24px; }
-.cell h3 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 8px; }
-.cell p { font-size: 13.5px; }
-.cell .cell-num { font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; color: var(--gray); display: block; margin-bottom: 12px; text-transform: uppercase; }
-.cell a.more { display: inline-block; margin-top: 12px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
-
-/* ------------------------------------------------------------ code area -- */
-
-.tabs { display: flex; gap: 0; border: 1px solid var(--hair); border-bottom: 0; width: max-content; max-width: 100%; }
-.tabs button {
-  font-family: var(--sans);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  background: var(--bg);
-  border: 0;
-  border-right: 1px solid var(--hair);
-  padding: 10px 18px;
-  cursor: pointer;
-  color: var(--ink);
-}
-.tabs button:last-child { border-right: 0; }
-.tabs button.active { background: var(--ink); color: var(--bg); }
-.tabs button[disabled] { color: var(--gray); cursor: not-allowed; }
-
-pre.code {
-  background: var(--ink);
-  color: var(--bg);
-  font-family: var(--mono);
-  font-size: 12.5px;
-  line-height: 1.7;
-  padding: 20px 24px;
-  overflow-x: auto;
-  border: 1px solid var(--ink);
-}
-pre.code .cm { color: #8a8a84; }
-pre.code .kw { color: #9db2ff; }
-
-.pane-caption { font-size: 12px; color: var(--gray); padding: 8px 2px; border-bottom: 1px solid var(--hair); }
-
-.result-panel { border: 1px solid var(--hair); border-top: 0; padding: 16px 24px; display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
-.result-panel .micro { color: var(--accent); }
-
-/* ----------------------------------------------------------- spec table -- */
-
-.table-scroll { overflow-x: auto; border: 1px solid var(--hair); margin-top: 32px; }
-table.spec { border-collapse: collapse; width: 100%; min-width: 720px; }
-table.spec th, table.spec td {
-  border: 1px solid var(--hair);
-  padding: 12px 14px;
-  text-align: left;
-  vertical-align: top;
-  font-size: 12.5px;
-  background: var(--bg);
-}
-table.spec th {
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-weight: 600;
-  color: var(--ink);
-}
-table.spec th .mono { color: var(--gray); font-size: 10px; display: block; margin-top: 2px; letter-spacing: 0.08em; text-transform: none; }
-table.spec td .fw-name { font-weight: 700; font-size: 13.5px; white-space: nowrap; }
-table.spec td .fw-slug { font-family: var(--mono); font-size: 10.5px; color: var(--gray); display: block; }
-
-.st { font-size: 13px; margin-right: 6px; }
-.st.live { color: var(--accent); }
-.st.prov { color: var(--gray); }
-.vf { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); }
-.cell-links { display: block; margin-top: 6px; font-family: var(--mono); font-size: 11.5px; }
-.cell-links .sep { color: var(--hair); }
-.prov-label { color: var(--gray); font-family: var(--mono); font-size: 11.5px; }
-
-.legend { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 12px; font-size: 11.5px; color: var(--gray); }
-.legend span b { font-weight: 400; }
-.caption { font-size: 12.5px; color: var(--gray); margin-top: 16px; max-width: 52em; }
-
-/* ------------------------------------------------------- benchmark bars -- */
-
-.bench { border: 1px solid var(--hair); margin-top: 32px; }
-.bench-title {
-  border-bottom: 1px solid var(--hair);
-  padding: 12px 16px;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-.bench-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 170px) 1fr minmax(90px, 110px);
-  gap: 16px;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--hair);
-}
-.bench-row:last-of-type { border-bottom: 0; }
-.bench-tool { font-size: 13px; font-weight: 600; }
-.bench-track { background: #efefe9; border: 1px solid var(--hair); height: 18px; position: relative; }
-.bench-bar { display: block; height: 100%; background: var(--gray); animation: grow 0.9s ease-out; transform-origin: left; }
-.bench-bar.accent { background: var(--accent); }
-.bench-val { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; text-align: right; white-space: nowrap; }
-.bench-note { border-top: 1px solid var(--hair); padding: 10px 16px; font-size: 11.5px; color: var(--gray); }
-.bench-note a { font-family: var(--mono); font-size: 11px; }
-
-@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-
-/* --------------------------------------------------------------- callout -- */
-
-.callout {
-  border: 1px solid var(--hair);
-  border-left: 4px solid var(--accent);
-  padding: 16px 20px;
-  font-size: 13.5px;
-  max-width: 56em;
-  margin-top: 32px;
-  background: var(--bg);
-}
-.callout .micro { display: block; margin-bottom: 6px; color: var(--accent); }
-.callout code, .aside code, p code {
-  font-family: var(--mono);
-  font-size: 12px;
-  background: #efefe9;
-  border: 1px solid var(--hair);
-  padding: 1px 5px;
-}
-
-/* --------------------------------------------------------- statement band -- */
-
-.band {
-  border-top: 1px solid var(--hair);
-  padding: 72px 32px;
-  background: var(--ink);
-  color: var(--bg);
-}
-.band p {
-  font-size: clamp(20px, 3vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  max-width: 32em;
-}
-.band .mark { color: #9db2ff; }
-
-/* -------------------------------------------------------------- stepflow -- */
-
-.steps { border: 1px solid var(--hair); margin-top: 32px; }
-.step { display: grid; grid-template-columns: 64px 1fr; border-bottom: 1px solid var(--hair); }
-.step:last-child { border-bottom: 0; }
-.step-num {
-  border-right: 1px solid var(--hair);
-  font-family: var(--mono);
-  font-size: 15px;
-  color: var(--accent);
-  padding: 20px 0;
-  text-align: center;
-}
-.step-body { padding: 20px 24px; min-width: 0; }
-.step-body h3 { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
-.step-body p { font-size: 13.5px; max-width: 46em; }
-.step-body pre.code { margin-top: 14px; }
-.aside {
-  border: 1px solid var(--hair);
-  border-left: 4px solid var(--gray);
-  padding: 10px 14px;
-  font-size: 12.5px;
-  color: var(--ink);
-  margin-top: 14px;
-  max-width: 46em;
-}
-.aside .micro { display: block; margin-bottom: 4px; }
-
-/* -------------------------------------------------------- framework panel -- */
-
-.fw-panel { border: 1px solid var(--hair); border-bottom: 0; padding: 20px 24px; display: grid; grid-template-columns: 180px 1fr; gap: 24px; }
-.fw-panel:last-of-type { border-bottom: 1px solid var(--hair); }
-.fw-panel h3 { font-size: 16px; font-weight: 700; }
-.fw-panel h3 .mono { display: block; font-size: 10.5px; color: var(--gray); font-weight: 400; margin-top: 2px; }
-.fw-panel p { font-size: 13.5px; max-width: 46em; }
-.fw-demos { margin-top: 10px; font-family: var(--mono); font-size: 11.5px; display: flex; gap: 14px; flex-wrap: wrap; }
-.fw-demos .prov-label { font-size: 11.5px; }
-
-/* -------------------------------------------------------------- CTA band -- */
-
-.ctaband { border-top: 1px solid var(--hair); padding: 64px 32px; text-align: left; }
-.ctaband h2 { margin-bottom: 24px; }
-.ctaband .hero-ctas { margin-top: 0; }
-
-/* ---------------------------------------------------------------- footer -- */
-
-footer.site { border-top: 1px solid var(--hair); }
-.foot-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--hair); }
-.foot-col { background: var(--bg); padding: 32px; }
-.foot-col h4 { font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 14px; color: var(--gray); font-weight: 600; }
-.foot-col a { display: block; color: var(--ink); font-size: 13px; padding: 3px 0; }
-.foot-col a:hover { color: var(--accent); }
-.legal {
-  border-top: 1px solid var(--hair);
-  padding: 20px 32px 40px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--gray);
-}
-
-/* ------------------------------------------------------------- stack pick -- */
-
-.stackpick { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 24px 32px 0; }
-.stackpick .micro { white-space: nowrap; }
-
-/* ------------------------------------------------------------- screenshot -- */
-
-.shot { border: 1px solid var(--hair); margin-top: 32px; max-width: 860px; }
-.shot-chrome { border-bottom: 1px solid var(--hair); padding: 8px 14px; display: flex; gap: 8px; align-items: center; }
-.shot-chrome i { width: 8px; height: 8px; background: var(--hair); display: inline-block; }
-.shot-chrome .mono { font-size: 10.5px; color: var(--gray); }
-.shot-body { padding: 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hair); border: 1px solid var(--hair); margin: 16px; }
-.shot-cap { border-top: 1px solid var(--hair); padding: 10px 16px; font-size: 12px; color: var(--gray); }
-
-/* ------------------------------------------------------------- link lists -- */
-
-.linklist { margin-top: 24px; display: flex; flex-direction: column; gap: 6px; }
-.linklist a { font-size: 13.5px; width: max-content; max-width: 100%; }
-.linklist a::before { content: "→ "; font-family: var(--mono); }
-
-/* --------------------------------------------------------------- utility -- */
-
-[hidden] { display: none !important; }
-.mt-32 { margin-top: 32px; }
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; margin-top: 0; }
-
-/* ------------------------------------------------------------- responsive -- */
-
-@media (max-width: 960px) {
-  .hero-grid, .two-col { grid-template-columns: 1fr; }
-  .proofstrip, .grid.cols-3, .grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
-  .fw-panel { grid-template-columns: 1fr; gap: 8px; }
-}
-
-@media (max-width: 560px) {
-  .hero { padding: 48px 20px; }
-  .sec, .ctaband { padding-left: 20px; padding-right: 20px; }
-  nav.site { padding: 8px 20px; }
-  .band { padding: 48px 20px; }
-  .proofstrip, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
-  .proofstrip a { padding: 20px; }
-  .foot-grid { grid-template-columns: 1fr; }
-  .bench-row { grid-template-columns: 1fr; gap: 6px; }
-  .bench-val { text-align: left; }
-  .shot-body { grid-template-columns: 1fr; }
-  .legal { padding-left: 20px; padding-right: 20px; }
-  .step { grid-template-columns: 44px 1fr; }
-  .step-body { padding: 16px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-}
-</style>
-</head>
-<body>
-
-<div class="ribbon">Design draft A — <b>Spec Grid</b> · not final</div>
-
-<div class="frame">
-
-  <!-- ================================================================ NAV -->
-  <nav class="site">
-    <a class="wordmark" href="#/">Palamedes</a>
-    <div class="nav-links">
-      <a href="#/frameworks" data-nav="/frameworks">Frameworks</a>
-      <a href="#/proof" data-nav="/proof">Proof</a>
-      <a class="dead" href="#/" onclick="return false" title="Not part of this draft">Compare</a>
-      <a class="dead" href="#/" onclick="return false" title="Not part of this draft">Blog</a>
-      <a href="https://github.com/sebastian-software/palamedes/tree/main/docs">Docs</a>
-    </div>
-    <div class="nav-actions">
-      <a class="btn small" href="https://github.com/sebastian-software/palamedes">GitHub ★</a>
-      <a class="btn small primary" href="#/get-started" data-nav="/get-started">Get started</a>
-    </div>
-  </nav>
-
-  <!-- =========================================================== HOME view -->
-  <main id="view-home" data-view>
-
-    <header class="hero">
-      <div class="hero-grid">
-        <div>
-          <p class="eyebrow">Open-source i18n tooling for JavaScript &amp; TypeScript</p>
-          <h1 class="display">One translation model. Every&nbsp;framework.</h1>
-          <p class="subline">Write messages where your UI happens. Keep source-string-first
-            <code>.po</code> catalogs your translators can actually read. Ship the same
-            runtime model across Next.js, TanStack Start, SolidStart, Waku, and
-            React Router — with a Rust core that ran the checked small-corpus extract/update benchmark 19.6× faster than Lingui on the recorded machine-local run.</p>
-          <div class="hero-ctas">
-            <a class="btn primary" href="#/get-started">Get started in 5 minutes</a>
-            <a class="btn" href="https://nextjs-cookie.examples.palamedes.dev">See it live</a>
+      :root {
+        --bg: #fbfbf8;
+        --ink: #101010;
+        --hair: #d8d8d2;
+        --accent: #0038ff;
+        --gray: #8a8a84;
+        --mono:
+          ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+        --sans: "Helvetica Neue", Helvetica, Arial, Inter, sans-serif;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--bg);
+      }
+
+      body {
+        font-family: var(--sans);
+        color: var(--ink);
+        background: var(--bg);
+        font-size: 16px;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .mono {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------------------------------------------------- frame + hairlines -- */
+
+      .frame {
+        max-width: 1120px;
+        margin: 0 auto;
+        border-left: 1px solid var(--hair);
+        border-right: 1px solid var(--hair);
+        min-height: 100vh;
+        background: var(--bg);
+      }
+
+      .sec {
+        border-top: 1px solid var(--hair);
+        padding: 56px 32px 64px;
+      }
+      .sec-head {
+        display: flex;
+        align-items: baseline;
+        gap: 24px;
+        margin-bottom: 32px;
+        flex-wrap: wrap;
+      }
+
+      .sec-mark {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--gray);
+        white-space: nowrap;
+      }
+
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--ink);
+        margin-bottom: 24px;
+      }
+      .eyebrow::before {
+        content: "§ ";
+        color: var(--accent);
+      }
+
+      h2 {
+        font-size: clamp(24px, 3.4vw, 34px);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+        max-width: 22em;
+      }
+
+      .lede {
+        max-width: 44em;
+        margin-top: 16px;
+        font-size: 16px;
+      }
+
+      .micro {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--gray);
+      }
+
+      /* --------------------------------------------------------------- ribbon -- */
+
+      .ribbon {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        z-index: 100;
+        background: var(--ink);
+        color: var(--bg);
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        padding: 6px 12px;
+        border-top: 1px solid var(--ink);
+        border-right: 1px solid var(--ink);
+      }
+      .ribbon b {
+        color: #9db2ff;
+        font-weight: 400;
+      }
+
+      /* ------------------------------------------------------------------ nav -- */
+
+      nav.site {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: var(--bg);
+        border-bottom: 1px solid var(--hair);
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        padding: 0 32px;
+        min-height: 56px;
+        flex-wrap: wrap;
+      }
+
+      .wordmark {
+        font-weight: 700;
+        font-size: 17px;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+      .wordmark:hover {
+        text-decoration: none;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        flex: 1;
+      }
+      .nav-links a {
+        color: var(--ink);
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 4px 0;
+        border-bottom: 2px solid transparent;
+      }
+      .nav-links a:hover {
+        text-decoration: none;
+        border-bottom-color: var(--hair);
+      }
+      .nav-links a.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+      .nav-links a.dead {
+        color: var(--gray);
+        cursor: default;
+      }
+      .nav-links a.dead:hover {
+        border-bottom-color: transparent;
+      }
+
+      .nav-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      /* -------------------------------------------------------------- buttons -- */
+
+      .btn {
+        display: inline-block;
+        border: 1px solid var(--ink);
+        color: var(--ink);
+        background: transparent;
+        padding: 12px 22px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-family: var(--sans);
+        cursor: pointer;
+      }
+      .btn:hover {
+        text-decoration: none;
+        background: var(--ink);
+        color: var(--bg);
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .btn.primary:hover {
+        background: var(--ink);
+        border-color: var(--ink);
+      }
+      .btn.small {
+        padding: 8px 14px;
+        font-size: 10px;
+      }
+
+      /* ----------------------------------------------------------------- hero -- */
+
+      .hero {
+        padding: 72px 32px 64px;
+      }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+        gap: 48px;
+        align-items: start;
+      }
+
+      h1.display {
+        font-size: clamp(44px, 7.6vw, 88px);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 0.98;
+        margin: 0 0 28px;
+      }
+
+      .subline {
+        font-size: 16px;
+        max-width: 38em;
+        color: var(--ink);
+      }
+      .subline .mono {
+        font-size: 15px;
+      }
+
+      .hero-ctas {
+        display: flex;
+        gap: 12px;
+        margin-top: 32px;
+        flex-wrap: wrap;
+      }
+
+      /* -------------------------------------------------- booking-card visual -- */
+
+      .locale-stack {
+        display: grid;
+        gap: 1px;
+        background: var(--hair);
+        border: 1px solid var(--hair);
+      }
+
+      .bcard {
+        background: var(--bg);
+        padding: 16px 18px;
+      }
+      .bcard-loc {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 8px;
+      }
+      .bcard-title {
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .bcard-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+      }
+      .bcard-seats {
+        font-size: 12.5px;
+        border: 1px solid var(--hair);
+        padding: 2px 8px;
+      }
+      .bcard-price {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .bcard-date {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+        color: var(--gray);
+        margin-top: 6px;
+      }
+      .locale-caption {
+        border: 1px solid var(--hair);
+        border-top: 0;
+        padding: 10px 18px;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--gray);
+      }
+
+      /* ------------------------------------------------------------ proofstrip -- */
+
+      .proofstrip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--hair);
+        border-top: 1px solid var(--hair);
+      }
+      .proofstrip a {
+        background: var(--bg);
+        padding: 24px 32px;
+        color: var(--ink);
+        display: block;
+      }
+      .proofstrip a:hover {
+        text-decoration: none;
+        background: #f2f2ec;
+      }
+      .stat-val {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 34px;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        color: var(--accent);
+        display: block;
+      }
+      .stat-label {
+        display: block;
+        font-size: 12px;
+        margin-top: 6px;
+        max-width: 22em;
+      }
+
+      /* --------------------------------------------------------- feature grid -- */
+
+      .grid {
+        display: grid;
+        gap: 1px;
+        background: var(--hair);
+        border: 1px solid var(--hair);
+        margin-top: 32px;
+      }
+      .grid.cols-3 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .grid.cols-4 {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .grid.cols-2 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .cell {
+        background: var(--bg);
+        padding: 24px;
+      }
+      .cell h3 {
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        margin-bottom: 8px;
+      }
+      .cell p {
+        font-size: 13.5px;
+      }
+      .cell .cell-num {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        color: var(--gray);
+        display: block;
+        margin-bottom: 12px;
+        text-transform: uppercase;
+      }
+      .cell a.more {
+        display: inline-block;
+        margin-top: 12px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      /* ------------------------------------------------------------ code area -- */
+
+      .tabs {
+        display: flex;
+        gap: 0;
+        border: 1px solid var(--hair);
+        border-bottom: 0;
+        width: max-content;
+        max-width: 100%;
+      }
+      .tabs button {
+        font-family: var(--sans);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        background: var(--bg);
+        border: 0;
+        border-right: 1px solid var(--hair);
+        padding: 10px 18px;
+        cursor: pointer;
+        color: var(--ink);
+      }
+      .tabs button:last-child {
+        border-right: 0;
+      }
+      .tabs button.active {
+        background: var(--ink);
+        color: var(--bg);
+      }
+      .tabs button[disabled] {
+        color: var(--gray);
+        cursor: not-allowed;
+      }
+
+      pre.code {
+        background: var(--ink);
+        color: var(--bg);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.7;
+        padding: 20px 24px;
+        overflow-x: auto;
+        border: 1px solid var(--ink);
+      }
+      pre.code .cm {
+        color: #8a8a84;
+      }
+      pre.code .kw {
+        color: #9db2ff;
+      }
+
+      .pane-caption {
+        font-size: 12px;
+        color: var(--gray);
+        padding: 8px 2px;
+        border-bottom: 1px solid var(--hair);
+      }
+
+      .result-panel {
+        border: 1px solid var(--hair);
+        border-top: 0;
+        padding: 16px 24px;
+        display: flex;
+        gap: 16px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      .result-panel .micro {
+        color: var(--accent);
+      }
+
+      /* ----------------------------------------------------------- spec table -- */
+
+      .table-scroll {
+        overflow-x: auto;
+        border: 1px solid var(--hair);
+        margin-top: 32px;
+      }
+      table.spec {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 720px;
+      }
+      table.spec th,
+      table.spec td {
+        border: 1px solid var(--hair);
+        padding: 12px 14px;
+        text-align: left;
+        vertical-align: top;
+        font-size: 12.5px;
+        background: var(--bg);
+      }
+      table.spec th {
+        font-size: 10.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      table.spec th .mono {
+        color: var(--gray);
+        font-size: 10px;
+        display: block;
+        margin-top: 2px;
+        letter-spacing: 0.08em;
+        text-transform: none;
+      }
+      table.spec td .fw-name {
+        font-weight: 700;
+        font-size: 13.5px;
+        white-space: nowrap;
+      }
+      table.spec td .fw-slug {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--gray);
+        display: block;
+      }
+
+      .st {
+        font-size: 13px;
+        margin-right: 6px;
+      }
+      .st.live {
+        color: var(--accent);
+      }
+      .st.prov {
+        color: var(--gray);
+      }
+      .vf {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+      .cell-links {
+        display: block;
+        margin-top: 6px;
+        font-family: var(--mono);
+        font-size: 11.5px;
+      }
+      .cell-links .sep {
+        color: var(--hair);
+      }
+      .prov-label {
+        color: var(--gray);
+        font-family: var(--mono);
+        font-size: 11.5px;
+      }
+
+      .legend {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+        font-size: 11.5px;
+        color: var(--gray);
+      }
+      .legend span b {
+        font-weight: 400;
+      }
+      .caption {
+        font-size: 12.5px;
+        color: var(--gray);
+        margin-top: 16px;
+        max-width: 52em;
+      }
+
+      /* ------------------------------------------------------- benchmark bars -- */
+
+      .bench {
+        border: 1px solid var(--hair);
+        margin-top: 32px;
+      }
+      .bench-title {
+        border-bottom: 1px solid var(--hair);
+        padding: 12px 16px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      .bench-row {
+        display: grid;
+        grid-template-columns: minmax(120px, 170px) 1fr minmax(90px, 110px);
+        gap: 16px;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--hair);
+      }
+      .bench-row:last-of-type {
+        border-bottom: 0;
+      }
+      .bench-tool {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .bench-track {
+        background: #efefe9;
+        border: 1px solid var(--hair);
+        height: 18px;
+        position: relative;
+      }
+      .bench-bar {
+        display: block;
+        height: 100%;
+        background: var(--gray);
+        animation: grow 0.9s ease-out;
+        transform-origin: left;
+      }
+      .bench-bar.accent {
+        background: var(--accent);
+      }
+      .bench-val {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 12.5px;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .bench-note {
+        border-top: 1px solid var(--hair);
+        padding: 10px 16px;
+        font-size: 11.5px;
+        color: var(--gray);
+      }
+      .bench-note a {
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      @keyframes grow {
+        from {
+          transform: scaleX(0);
+        }
+        to {
+          transform: scaleX(1);
+        }
+      }
+
+      /* --------------------------------------------------------------- callout -- */
+
+      .callout {
+        border: 1px solid var(--hair);
+        border-left: 4px solid var(--accent);
+        padding: 16px 20px;
+        font-size: 13.5px;
+        max-width: 56em;
+        margin-top: 32px;
+        background: var(--bg);
+      }
+      .callout .micro {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--accent);
+      }
+      .callout code,
+      .aside code,
+      p code {
+        font-family: var(--mono);
+        font-size: 12px;
+        background: #efefe9;
+        border: 1px solid var(--hair);
+        padding: 1px 5px;
+      }
+
+      /* --------------------------------------------------------- statement band -- */
+
+      .band {
+        border-top: 1px solid var(--hair);
+        padding: 72px 32px;
+        background: var(--ink);
+        color: var(--bg);
+      }
+      .band p {
+        font-size: clamp(20px, 3vw, 30px);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+        max-width: 32em;
+      }
+      .band .mark {
+        color: #9db2ff;
+      }
+
+      /* -------------------------------------------------------------- stepflow -- */
+
+      .steps {
+        border: 1px solid var(--hair);
+        margin-top: 32px;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 64px 1fr;
+        border-bottom: 1px solid var(--hair);
+      }
+      .step:last-child {
+        border-bottom: 0;
+      }
+      .step-num {
+        border-right: 1px solid var(--hair);
+        font-family: var(--mono);
+        font-size: 15px;
+        color: var(--accent);
+        padding: 20px 0;
+        text-align: center;
+      }
+      .step-body {
+        padding: 20px 24px;
+        min-width: 0;
+      }
+      .step-body h3 {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        margin-bottom: 6px;
+      }
+      .step-body p {
+        font-size: 13.5px;
+        max-width: 46em;
+      }
+      .step-body pre.code {
+        margin-top: 14px;
+      }
+      .aside {
+        border: 1px solid var(--hair);
+        border-left: 4px solid var(--gray);
+        padding: 10px 14px;
+        font-size: 12.5px;
+        color: var(--ink);
+        margin-top: 14px;
+        max-width: 46em;
+      }
+      .aside .micro {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      /* -------------------------------------------------------- framework panel -- */
+
+      .fw-panel {
+        border: 1px solid var(--hair);
+        border-bottom: 0;
+        padding: 20px 24px;
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 24px;
+      }
+      .fw-panel:last-of-type {
+        border-bottom: 1px solid var(--hair);
+      }
+      .fw-panel h3 {
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .fw-panel h3 .mono {
+        display: block;
+        font-size: 10.5px;
+        color: var(--gray);
+        font-weight: 400;
+        margin-top: 2px;
+      }
+      .fw-panel p {
+        font-size: 13.5px;
+        max-width: 46em;
+      }
+      .fw-demos {
+        margin-top: 10px;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .fw-demos .prov-label {
+        font-size: 11.5px;
+      }
+
+      /* -------------------------------------------------------------- CTA band -- */
+
+      .ctaband {
+        border-top: 1px solid var(--hair);
+        padding: 64px 32px;
+        text-align: left;
+      }
+      .ctaband h2 {
+        margin-bottom: 24px;
+      }
+      .ctaband .hero-ctas {
+        margin-top: 0;
+      }
+
+      /* ---------------------------------------------------------------- footer -- */
+
+      footer.site {
+        border-top: 1px solid var(--hair);
+      }
+      .foot-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--hair);
+      }
+      .foot-col {
+        background: var(--bg);
+        padding: 32px;
+      }
+      .foot-col h4 {
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        margin-bottom: 14px;
+        color: var(--gray);
+        font-weight: 600;
+      }
+      .foot-col a {
+        display: block;
+        color: var(--ink);
+        font-size: 13px;
+        padding: 3px 0;
+      }
+      .foot-col a:hover {
+        color: var(--accent);
+      }
+      .legal {
+        border-top: 1px solid var(--hair);
+        padding: 20px 32px 40px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--gray);
+      }
+
+      /* ------------------------------------------------------------- stack pick -- */
+
+      .stackpick {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 24px 32px 0;
+      }
+      .stackpick .micro {
+        white-space: nowrap;
+      }
+
+      /* ------------------------------------------------------------- screenshot -- */
+
+      .shot {
+        border: 1px solid var(--hair);
+        margin-top: 32px;
+        max-width: 860px;
+      }
+      .shot-chrome {
+        border-bottom: 1px solid var(--hair);
+        padding: 8px 14px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .shot-chrome i {
+        width: 8px;
+        height: 8px;
+        background: var(--hair);
+        display: inline-block;
+      }
+      .shot-chrome .mono {
+        font-size: 10.5px;
+        color: var(--gray);
+      }
+      .shot-body {
+        padding: 24px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        background: var(--hair);
+        border: 1px solid var(--hair);
+        margin: 16px;
+      }
+      .shot-cap {
+        border-top: 1px solid var(--hair);
+        padding: 10px 16px;
+        font-size: 12px;
+        color: var(--gray);
+      }
+
+      /* ------------------------------------------------------------- link lists -- */
+
+      .linklist {
+        margin-top: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .linklist a {
+        font-size: 13.5px;
+        width: max-content;
+        max-width: 100%;
+      }
+      .linklist a::before {
+        content: "→ ";
+        font-family: var(--mono);
+      }
+
+      /* --------------------------------------------------------------- utility -- */
+
+      [hidden] {
+        display: none !important;
+      }
+      .mt-32 {
+        margin-top: 32px;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 48px;
+        align-items: start;
+        margin-top: 0;
+      }
+
+      /* ------------------------------------------------------------- responsive -- */
+
+      @media (max-width: 960px) {
+        .hero-grid,
+        .two-col {
+          grid-template-columns: 1fr;
+        }
+        .proofstrip,
+        .grid.cols-3,
+        .grid.cols-4 {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .fw-panel {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .hero {
+          padding: 48px 20px;
+        }
+        .sec,
+        .ctaband {
+          padding-left: 20px;
+          padding-right: 20px;
+        }
+        nav.site {
+          padding: 8px 20px;
+        }
+        .band {
+          padding: 48px 20px;
+        }
+        .proofstrip,
+        .grid.cols-3,
+        .grid.cols-4 {
+          grid-template-columns: 1fr;
+        }
+        .proofstrip a {
+          padding: 20px;
+        }
+        .foot-grid {
+          grid-template-columns: 1fr;
+        }
+        .bench-row {
+          grid-template-columns: 1fr;
+          gap: 6px;
+        }
+        .bench-val {
+          text-align: left;
+        }
+        .shot-body {
+          grid-template-columns: 1fr;
+        }
+        .legal {
+          padding-left: 20px;
+          padding-right: 20px;
+        }
+        .step {
+          grid-template-columns: 44px 1fr;
+        }
+        .step-body {
+          padding: 16px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ribbon">Design draft A — <b>Spec Grid</b> · not final</div>
+
+    <div class="frame">
+      <!-- ================================================================ NAV -->
+      <nav class="site">
+        <a class="wordmark" href="#/">Palamedes</a>
+        <div class="nav-links">
+          <a href="#/frameworks" data-nav="/frameworks">Frameworks</a>
+          <a href="#/proof" data-nav="/proof">Proof</a>
+          <a class="dead" href="#/" onclick="return false" title="Not part of this draft"
+            >Compare</a
+          >
+          <a class="dead" href="#/" onclick="return false" title="Not part of this draft">Blog</a>
+          <a href="https://github.com/sebastian-software/palamedes/tree/main/docs">Docs</a>
+        </div>
+        <div class="nav-actions">
+          <a class="btn small" href="https://github.com/sebastian-software/palamedes">GitHub ★</a>
+          <a class="btn small primary" href="#/get-started" data-nav="/get-started">Get started</a>
+        </div>
+      </nav>
+
+      <!-- =========================================================== HOME view -->
+      <main id="view-home" data-view>
+        <header class="hero">
+          <div class="hero-grid">
+            <div>
+              <p class="eyebrow">Open-source i18n tooling for JavaScript &amp; TypeScript</p>
+              <h1 class="display">One translation model. Every&nbsp;framework.</h1>
+              <p class="subline">
+                Write messages where your UI happens. Keep source-string-first
+                <code>.po</code> catalogs your translators can actually read. Ship the same runtime
+                model across Next.js, TanStack Start, SolidStart, Waku, and React Router — with a
+                Rust core that ran the checked small-corpus extract/update benchmark 19.6× faster
+                than Lingui on the recorded machine-local run.
+              </p>
+              <div class="hero-ctas">
+                <a class="btn primary" href="#/get-started">Get started in 5 minutes</a>
+                <a class="btn" href="https://nextjs-cookie.examples.palamedes.dev">See it live</a>
+              </div>
+            </div>
+            <div>
+              <div
+                class="locale-stack"
+                role="img"
+                aria-label="The same booking card rendered in English, German, and Spanish"
+              >
+                <div class="bcard">
+                  <div class="bcard-loc">en-US</div>
+                  <div class="bcard-title">Your trip to Lisbon</div>
+                  <div class="bcard-row">
+                    <span class="bcard-seats">3 seats left</span>
+                    <span class="bcard-price">€1,234.00</span>
+                  </div>
+                  <div class="bcard-date">Jul 12, 2026</div>
+                </div>
+                <div class="bcard">
+                  <div class="bcard-loc">de-DE</div>
+                  <div class="bcard-title">Deine Reise nach Lissabon</div>
+                  <div class="bcard-row">
+                    <span class="bcard-seats">3 Plätze frei</span>
+                    <span class="bcard-price">1.234,00&nbsp;€</span>
+                  </div>
+                  <div class="bcard-date">12. Juli 2026</div>
+                </div>
+                <div class="bcard">
+                  <div class="bcard-loc">es-ES</div>
+                  <div class="bcard-title">Tu viaje a Lisboa</div>
+                  <div class="bcard-row">
+                    <span class="bcard-seats">Quedan 3 asientos</span>
+                    <span class="bcard-price">1234,00&nbsp;€</span>
+                  </div>
+                  <div class="bcard-date">12 jul 2026</div>
+                </div>
+              </div>
+              <div class="locale-caption">
+                One component · copy, plurals, currency &amp; dates change together
+              </div>
+            </div>
           </div>
+        </header>
+
+        <div class="proofstrip">
+          <a href="#/frameworks">
+            <span class="stat-val">20</span>
+            <span class="stat-label">browser-verified example apps</span>
+          </a>
+          <a href="#/frameworks">
+            <span class="stat-val">5 × 4</span>
+            <span class="stat-label">frameworks × locale strategies</span>
+          </a>
+          <a href="#/proof">
+            <span class="stat-val">19.6×</span>
+            <span class="stat-label"
+              >faster than Lingui — checked extract/update benchmark, machine-local run</span
+            >
+          </a>
+          <a href="https://github.com/sebastian-software/palamedes/tree/main/adr">
+            <span class="stat-val">16</span>
+            <span class="stat-label">ADRs documenting every tradeoff</span>
+          </a>
         </div>
-        <div>
-          <div class="locale-stack" role="img" aria-label="The same booking card rendered in English, German, and Spanish">
-            <div class="bcard">
-              <div class="bcard-loc">en-US</div>
-              <div class="bcard-title">Your trip to Lisbon</div>
-              <div class="bcard-row">
-                <span class="bcard-seats">3 seats left</span>
-                <span class="bcard-price">€1,234.00</span>
-              </div>
-              <div class="bcard-date">Jul 12, 2026</div>
+
+        <!-- 01 — Model -->
+        <section class="sec" id="model">
+          <div class="sec-head">
+            <span class="sec-mark">01 — Model</span>
+            <h2>Your i18n setup should not splinter when your framework changes.</h2>
+          </div>
+          <p class="lede">
+            Most teams relearn internationalization with every migration: new runtime, new message
+            IDs, new catalog quirks. Palamedes keeps the parts you touch every day stable — and lets
+            the framework be the only thing that changes.
+          </p>
+          <div class="grid cols-3">
+            <div class="cell">
+              <span class="cell-num">01.1 / pen</span>
+              <h3>Write messages in place</h3>
+              <p>
+                Macro-style authoring next to your JSX. No message-ID bookkeeping, no separate
+                dictionary files to keep in sync.
+              </p>
+              <a class="more" href="#/get-started">Get started</a>
             </div>
-            <div class="bcard">
-              <div class="bcard-loc">de-DE</div>
-              <div class="bcard-title">Deine Reise nach Lissabon</div>
-              <div class="bcard-row">
-                <span class="bcard-seats">3 Plätze frei</span>
-                <span class="bcard-price">1.234,00&nbsp;€</span>
-              </div>
-              <div class="bcard-date">12. Juli 2026</div>
+            <div class="cell">
+              <span class="cell-num">01.2 / fingerprint</span>
+              <h3>One identity model</h3>
+              <p>
+                Messages are identified by message + context — stable across refactors, frameworks,
+                and years of catalog history.
+              </p>
+              <a
+                class="more"
+                href="https://github.com/sebastian-software/palamedes/blob/main/adr/003-source-string-first-message-identity.md"
+                >ADR-003</a
+              >
             </div>
-            <div class="bcard">
-              <div class="bcard-loc">es-ES</div>
-              <div class="bcard-title">Tu viaje a Lisboa</div>
-              <div class="bcard-row">
-                <span class="bcard-seats">Quedan 3 asientos</span>
-                <span class="bcard-price">1234,00&nbsp;€</span>
-              </div>
-              <div class="bcard-date">12 jul 2026</div>
+            <div class="cell">
+              <span class="cell-num">01.3 / plug</span>
+              <h3>One runtime call</h3>
+              <p>
+                getI18n() resolves the active instance everywhere: server components, client
+                islands, backend request handlers.
+              </p>
+              <a
+                class="more"
+                href="https://github.com/sebastian-software/palamedes/blob/main/adr/005-universal-geti18n-runtime-model.md"
+                >ADR-005</a
+              >
             </div>
           </div>
-          <div class="locale-caption">One component · copy, plurals, currency &amp; dates change together</div>
-        </div>
-      </div>
-    </header>
+        </section>
 
-    <div class="proofstrip">
-      <a href="#/frameworks">
-        <span class="stat-val">20</span>
-        <span class="stat-label">browser-verified example apps</span>
-      </a>
-      <a href="#/frameworks">
-        <span class="stat-val">5 × 4</span>
-        <span class="stat-label">frameworks × locale strategies</span>
-      </a>
-      <a href="#/proof">
-        <span class="stat-val">19.6×</span>
-        <span class="stat-label">faster than Lingui — checked extract/update benchmark, machine-local run</span>
-      </a>
-      <a href="https://github.com/sebastian-software/palamedes/tree/main/adr">
-        <span class="stat-val">16</span>
-        <span class="stat-label">ADRs documenting every tradeoff</span>
-      </a>
-    </div>
-
-    <!-- 01 — Model -->
-    <section class="sec" id="model">
-      <div class="sec-head">
-        <span class="sec-mark">01 — Model</span>
-        <h2>Your i18n setup should not splinter when your framework changes.</h2>
-      </div>
-      <p class="lede">Most teams relearn internationalization with every migration: new runtime, new message
-        IDs, new catalog quirks. Palamedes keeps the parts you touch every day stable — and lets
-        the framework be the only thing that changes.</p>
-      <div class="grid cols-3">
-        <div class="cell">
-          <span class="cell-num">01.1 / pen</span>
-          <h3>Write messages in place</h3>
-          <p>Macro-style authoring next to your JSX. No message-ID bookkeeping, no separate dictionary files to keep in sync.</p>
-          <a class="more" href="#/get-started">Get started</a>
-        </div>
-        <div class="cell">
-          <span class="cell-num">01.2 / fingerprint</span>
-          <h3>One identity model</h3>
-          <p>Messages are identified by message + context — stable across refactors, frameworks, and years of catalog history.</p>
-          <a class="more" href="https://github.com/sebastian-software/palamedes/blob/main/adr/003-source-string-first-message-identity.md">ADR-003</a>
-        </div>
-        <div class="cell">
-          <span class="cell-num">01.3 / plug</span>
-          <h3>One runtime call</h3>
-          <p>getI18n() resolves the active instance everywhere: server components, client islands, backend request handlers.</p>
-          <a class="more" href="https://github.com/sebastian-software/palamedes/blob/main/adr/005-universal-geti18n-runtime-model.md">ADR-005</a>
-        </div>
-      </div>
-    </section>
-
-    <!-- 02 — Workflow -->
-    <section class="sec" id="code">
-      <div class="sec-head">
-        <span class="sec-mark">02 — Workflow</span>
-        <h2>The whole workflow, honestly small.</h2>
-      </div>
-      <div data-tabs class="mt-32">
-        <div class="tabs" role="tablist">
-          <button data-tab="write" class="active">Write</button>
-          <button data-tab="extract">Extract</button>
-          <button data-tab="translate">Translate</button>
-        </div>
-        <div data-pane="write">
-          <pre class="code">import { t, plural } from "@palamedes/core/macro"
+        <!-- 02 — Workflow -->
+        <section class="sec" id="code">
+          <div class="sec-head">
+            <span class="sec-mark">02 — Workflow</span>
+            <h2>The whole workflow, honestly small.</h2>
+          </div>
+          <div data-tabs class="mt-32">
+            <div class="tabs" role="tablist">
+              <button data-tab="write" class="active">Write</button>
+              <button data-tab="extract">Extract</button>
+              <button data-tab="translate">Translate</button>
+            </div>
+            <div data-pane="write">
+              <pre class="code">
+import { t, plural } from "@palamedes/core/macro"
 import { Trans } from "@palamedes/react"
 
 export function Booking({ seats }: { seats: number }) {
@@ -647,483 +1193,630 @@ export function Booking({ seats }: { seats: number }) {
       &lt;Trans&gt;Free cancellation until &lt;b&gt;24 hours&lt;/b&gt; before departure.&lt;/Trans&gt;
     &lt;/&gt;
   )
-}</pre>
-          <p class="pane-caption">Messages live where the UI happens.</p>
-        </div>
-        <div data-pane="extract" hidden>
-          <pre class="code">$ pmds extract
+}</pre
+              >
+              <p class="pane-caption">Messages live where the UI happens.</p>
+            </div>
+            <div data-pane="extract" hidden>
+              <pre class="code">
+$ pmds extract
 
   en  3 messages  (1 new)
   de  3 messages  (1 missing translation)
 
-  done in 34 ms</pre>
-          <p class="pane-caption">One native command scans, extracts, and updates catalogs.</p>
-        </div>
-        <div data-pane="translate" hidden>
-          <pre class="code"><span class="cm">#: src/Booking.tsx:7</span>
+  done in 34 ms</pre
+              >
+              <p class="pane-caption">One native command scans, extracts, and updates catalogs.</p>
+            </div>
+            <div data-pane="translate" hidden>
+              <pre class="code"><span class="cm">#: src/Booking.tsx:7</span>
 msgid "Your trip to Lisbon"
 msgstr "Deine Reise nach Lissabon"
 
 <span class="cm">#: src/Booking.tsx:8</span>
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"</pre>
-          <p class="pane-caption">Source-string-first .po — readable by translators and every TMS.</p>
-        </div>
-        <div class="result-panel">
-          <span class="micro">Rendered</span>
-          <span style="font-size:13.5px">The same component, in every locale, in every framework.</span>
-        </div>
-      </div>
-    </section>
+              <p class="pane-caption">
+                Source-string-first .po — readable by translators and every TMS.
+              </p>
+            </div>
+            <div class="result-panel">
+              <span class="micro">Rendered</span>
+              <span style="font-size: 13.5px"
+                >The same component, in every locale, in every framework.</span
+              >
+            </div>
+          </div>
+        </section>
 
-    <!-- 03 — Proof -->
-    <section class="sec" id="proof-teaser">
-      <div class="sec-head">
-        <span class="sec-mark">03 — Proof</span>
-        <h2>We don't ask you to trust a slogan. The repo shows the work.</h2>
-      </div>
-      <p class="lede">Every framework/strategy combination is a real app, re-verified in CI through the same
-        Playwright flow — with public demos where the hosting is ready. Every benchmark number
-        links to a checked-in, re-runnable report.</p>
+        <!-- 03 — Proof -->
+        <section class="sec" id="proof-teaser">
+          <div class="sec-head">
+            <span class="sec-mark">03 — Proof</span>
+            <h2>We don't ask you to trust a slogan. The repo shows the work.</h2>
+          </div>
+          <p class="lede">
+            Every framework/strategy combination is a real app, re-verified in CI through the same
+            Playwright flow — with public demos where the hosting is ready. Every benchmark number
+            links to a checked-in, re-runnable report.
+          </p>
 
-      <div class="table-scroll">
-        <table class="spec home-matrix">
-          <!-- populated by buildMatrix() -->
-        </table>
-      </div>
-      <div class="legend">
-        <span><b style="color:var(--accent)">●</b> live — public demo hosted</span>
-        <span><b>◌</b> provisioning — hosting pending, verified source linked</span>
-        <span><b class="mono" style="font-size:10px">✓ VERIFIED</b> — CI browser-verified (Playwright), all 20 cells</span>
-      </div>
+          <div class="table-scroll">
+            <table class="spec home-matrix">
+              <!-- populated by buildMatrix() -->
+            </table>
+          </div>
+          <div class="legend">
+            <span><b style="color: var(--accent)">●</b> live — public demo hosted</span>
+            <span><b>◌</b> provisioning — hosting pending, verified source linked</span>
+            <span
+              ><b class="mono" style="font-size: 10px">✓ VERIFIED</b> — CI browser-verified
+              (Playwright), all 20 cells</span
+            >
+          </div>
 
-      <div class="bench">
-        <div class="bench-title">End-to-end extract + catalog update (small corpus, median)</div>
-        <div class="bench-row">
-          <span class="bench-tool">Palamedes</span>
-          <span class="bench-track"><span class="bench-bar accent" style="width:5.1%"></span></span>
-          <span class="bench-val">33.53 ms</span>
+          <div class="bench">
+            <div class="bench-title">
+              End-to-end extract + catalog update (small corpus, median)
+            </div>
+            <div class="bench-row">
+              <span class="bench-tool">Palamedes</span>
+              <span class="bench-track"
+                ><span class="bench-bar accent" style="width: 5.1%"></span
+              ></span>
+              <span class="bench-val">33.53 ms</span>
+            </div>
+            <div class="bench-row">
+              <span class="bench-tool">i18next-parser</span>
+              <span class="bench-track"><span class="bench-bar" style="width: 72.7%"></span></span>
+              <span class="bench-val">477.58 ms</span>
+            </div>
+            <div class="bench-row">
+              <span class="bench-tool">Lingui</span>
+              <span class="bench-track"><span class="bench-bar" style="width: 100%"></span></span>
+              <span class="bench-val">657.00 ms</span>
+            </div>
+            <div class="bench-note">
+              Linear millisecond scale, no truncation — the Palamedes bar really is that short.
+              Machine-local numbers from the checked-in report; your hardware will differ, the
+              ratios are the signal.
+              <a
+                href="https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md"
+                >Methodology →</a
+              >
+            </div>
+          </div>
+
+          <p class="mt-32">
+            <a class="btn" href="#/proof">All benchmarks &amp; the verification story</a>
+          </p>
+        </section>
+
+        <!-- 04 — Positioning -->
+        <div class="band">
+          <span class="sec-mark" style="color: #9db2ff; display: block; margin-bottom: 24px"
+            >04 — Positioning</span
+          >
+          <p>
+            <span class="mark">Palamedes is narrower than some alternatives on purpose:</span>
+            compile-time authoring, source-string-first catalogs, and a local workflow your repo
+            owns — with a Rust core doing the careful work.
+          </p>
         </div>
-        <div class="bench-row">
-          <span class="bench-tool">i18next-parser</span>
-          <span class="bench-track"><span class="bench-bar" style="width:72.7%"></span></span>
-          <span class="bench-val">477.58 ms</span>
-        </div>
-        <div class="bench-row">
-          <span class="bench-tool">Lingui</span>
-          <span class="bench-track"><span class="bench-bar" style="width:100%"></span></span>
-          <span class="bench-val">657.00 ms</span>
-        </div>
-        <div class="bench-note">
-          Linear millisecond scale, no truncation — the Palamedes bar really is that short.
-          Machine-local numbers from the checked-in report; your hardware will differ, the ratios are the signal.
-          <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md">Methodology →</a>
-        </div>
-      </div>
 
-      <p class="mt-32"><a class="btn" href="#/proof">All benchmarks &amp; the verification story</a></p>
-    </section>
+        <!-- 05 — Maintainer -->
+        <section class="sec" id="maintainer">
+          <div class="sec-head">
+            <span class="sec-mark">05 — Maintainer</span>
+          </div>
+          <div class="two-col">
+            <h2>Built from repeat experience, not a weekend take.</h2>
+            <div>
+              <p style="font-size: 14px; max-width: 44em">
+                Palamedes is maintained by Sebastian Software GmbH. It is the third generation of
+                source-string-first JavaScript i18n tooling from the same author — from
+                gettext-style macro systems in qooxdoo to a full enterprise Lingui migration at
+                Regrello (acquired by Salesforce in 2025). The lessons are written down as 16 ADRs
+                before you depend on the tool.
+              </p>
+              <div class="linklist">
+                <a href="https://github.com/sebastian-software/palamedes/tree/main/adr"
+                  >The decision trail (ADRs)</a
+                >
+                <a href="#/" onclick="return false" title="Blog not part of this draft"
+                  >Why this exists</a
+                >
+              </div>
+            </div>
+          </div>
+        </section>
 
-    <!-- 04 — Positioning -->
-    <div class="band">
-      <span class="sec-mark" style="color:#9db2ff; display:block; margin-bottom:24px">04 — Positioning</span>
-      <p><span class="mark">Palamedes is narrower than some alternatives on purpose:</span>
-        compile-time authoring, source-string-first catalogs, and a local
-        workflow your repo owns — with a Rust core doing the careful work.</p>
-    </div>
+        <div class="ctaband">
+          <h2>Your first working translation is 5 minutes away.</h2>
+          <div class="hero-ctas">
+            <a class="btn primary" href="#/get-started">Get started</a>
+            <a class="btn" href="https://github.com/sebastian-software/palamedes">Star on GitHub</a>
+          </div>
+        </div>
+      </main>
 
-    <!-- 05 — Maintainer -->
-    <section class="sec" id="maintainer">
-      <div class="sec-head">
-        <span class="sec-mark">05 — Maintainer</span>
-      </div>
-      <div class="two-col">
-        <h2>Built from repeat experience, not a weekend take.</h2>
-        <div>
-          <p style="font-size:14px; max-width:44em">Palamedes is maintained by Sebastian Software GmbH. It is the third generation of
-            source-string-first JavaScript i18n tooling from the same author — from gettext-style
-            macro systems in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by
-            Salesforce in 2025). The lessons are written down as 16 ADRs before you depend on the
-            tool.</p>
+      <!-- ===================================================== FRAMEWORKS view -->
+      <main id="view-frameworks" data-view hidden>
+        <header class="hero">
+          <p class="eyebrow">Framework matrix</p>
+          <h1 class="display">Five frameworks. Four locale strategies. One mental&nbsp;model.</h1>
+          <p class="subline">
+            Every cell below is a real application — the same booking UI, the same catalogs, the
+            same runtime calls — browser-verified in CI. Where public hosting is ready, open the
+            demo, switch the language, and watch copy, plurals, currency, and dates change together.
+          </p>
+          <div class="hero-ctas">
+            <a class="btn primary" href="https://nextjs-cookie.examples.palamedes.dev"
+              >Open a live demo</a
+            >
+            <a class="btn" href="https://github.com/sebastian-software/palamedes/tree/main/examples"
+              >Browse the example source</a
+            >
+          </div>
+        </header>
+
+        <!-- 01 — Matrix -->
+        <section class="sec" id="matrix">
+          <div class="sec-head">
+            <span class="sec-mark">01 — Matrix</span>
+            <h2>The 5 × 4 verified matrix.</h2>
+          </div>
+          <div class="table-scroll" style="margin-top: 0">
+            <table class="spec fw-matrix" data-longnames>
+              <!-- populated by buildMatrix() -->
+            </table>
+          </div>
+          <div class="legend">
+            <span><b style="color: var(--accent)">●</b> live — public demo hosted</span>
+            <span><b>◌</b> provisioning — hosting pending, verified source linked</span>
+            <span
+              ><b class="mono" style="font-size: 10px">✓ VERIFIED</b> — CI browser-verified
+              (Playwright), all 20 cells</span
+            >
+          </div>
+          <p class="caption">
+            All 20 apps are verified in CI with the same Playwright-driven browser flow: SSR output,
+            locale switching, localized server actions. Screenshots are versioned in the repo.
+            Cookie and route demos are publicly hosted today; subdomain and TLD hosting is being
+            provisioned — until then those cells link the verified source instead.
+          </p>
+        </section>
+
+        <!-- 02 — Strategies -->
+        <section class="sec" id="strategies">
+          <div class="sec-head">
+            <span class="sec-mark">02 — Strategies</span>
+            <h2>
+              Pick the locale strategy your product needs — not the one your framework dictates.
+            </h2>
+          </div>
+          <div class="grid cols-4">
+            <div class="cell">
+              <span class="cell-num">02.1 / cookie</span>
+              <h3>Cookie</h3>
+              <p>
+                One URL for all locales. Best for apps behind login where SEO is irrelevant and
+                switching should be instant.
+              </p>
+            </div>
+            <div class="cell">
+              <span class="cell-num">02.2 / route</span>
+              <h3>Route segment</h3>
+              <p>
+                /de/checkout-style paths. The SEO-friendly default for public content with indexable
+                localized pages.
+              </p>
+            </div>
+            <div class="cell">
+              <span class="cell-num">02.3 / globe</span>
+              <h3>Subdomain</h3>
+              <p>
+                de.example.com. Clean separation per market, works well with regional CDNs and
+                analytics splits.
+              </p>
+            </div>
+            <div class="cell">
+              <span class="cell-num">02.4 / flag</span>
+              <h3>Top-level domain</h3>
+              <p>
+                example.de vs example.com. Maximum market trust; Palamedes maps each domain to its
+                locale.
+              </p>
+            </div>
+          </div>
           <div class="linklist">
-            <a href="https://github.com/sebastian-software/palamedes/tree/main/adr">The decision trail (ADRs)</a>
-            <a href="#/" onclick="return false" title="Blog not part of this draft">Why this exists</a>
+            <a
+              href="https://github.com/sebastian-software/palamedes/blob/main/docs/locale-strategies.md"
+              >Locale strategies in depth</a
+            >
+          </div>
+        </section>
+
+        <!-- 03 — Per framework -->
+        <section class="sec" id="per-framework">
+          <div class="sec-head">
+            <span class="sec-mark">03 — Per framework</span>
+            <h2>Your stack, specifically.</h2>
+          </div>
+          <div class="mt-32" id="fw-panels">
+            <!-- populated by buildPanels() -->
+          </div>
+        </section>
+
+        <!-- 04 — Backend -->
+        <section class="sec" id="backend">
+          <div class="sec-head">
+            <span class="sec-mark">04 — Backend</span>
+            <h2>And it doesn't stop at the frontend.</h2>
+          </div>
+          <p class="lede">
+            The same getI18n() model runs in Hono and Express with request-local locale resolution —
+            transactional emails, API error messages, and PDF generation speak the user's language
+            from the same catalogs.
+          </p>
+          <p class="mt-32">
+            <a
+              class="btn"
+              href="https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md"
+              >Backend servers guide</a
+            >
+          </p>
+        </section>
+
+        <div class="ctaband">
+          <h2>See your framework speaking three languages — right now.</h2>
+          <div class="hero-ctas">
+            <a class="btn primary" href="https://nextjs-cookie.examples.palamedes.dev"
+              >Open the live matrix</a
+            >
+            <a class="btn" href="#/get-started">Get started</a>
           </div>
         </div>
-      </div>
-    </section>
+      </main>
 
-    <div class="ctaband">
-      <h2>Your first working translation is 5 minutes away.</h2>
-      <div class="hero-ctas">
-        <a class="btn primary" href="#/get-started">Get started</a>
-        <a class="btn" href="https://github.com/sebastian-software/palamedes">Star on GitHub</a>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- ===================================================== FRAMEWORKS view -->
-  <main id="view-frameworks" data-view hidden>
-
-    <header class="hero">
-      <p class="eyebrow">Framework matrix</p>
-      <h1 class="display">Five frameworks. Four locale strategies. One mental&nbsp;model.</h1>
-      <p class="subline">Every cell below is a real application — the same booking UI,
-        the same catalogs, the same runtime calls — browser-verified in CI.
-        Where public hosting is ready, open the demo, switch the language,
-        and watch copy, plurals, currency, and dates change together.</p>
-      <div class="hero-ctas">
-        <a class="btn primary" href="https://nextjs-cookie.examples.palamedes.dev">Open a live demo</a>
-        <a class="btn" href="https://github.com/sebastian-software/palamedes/tree/main/examples">Browse the example source</a>
-      </div>
-    </header>
-
-    <!-- 01 — Matrix -->
-    <section class="sec" id="matrix">
-      <div class="sec-head">
-        <span class="sec-mark">01 — Matrix</span>
-        <h2>The 5 × 4 verified matrix.</h2>
-      </div>
-      <div class="table-scroll" style="margin-top:0">
-        <table class="spec fw-matrix" data-longnames>
-          <!-- populated by buildMatrix() -->
-        </table>
-      </div>
-      <div class="legend">
-        <span><b style="color:var(--accent)">●</b> live — public demo hosted</span>
-        <span><b>◌</b> provisioning — hosting pending, verified source linked</span>
-        <span><b class="mono" style="font-size:10px">✓ VERIFIED</b> — CI browser-verified (Playwright), all 20 cells</span>
-      </div>
-      <p class="caption">All 20 apps are verified in CI with the same Playwright-driven browser flow: SSR output,
-        locale switching, localized server actions. Screenshots are versioned in the repo. Cookie
-        and route demos are publicly hosted today; subdomain and TLD hosting is being provisioned
-        — until then those cells link the verified source instead.</p>
-    </section>
-
-    <!-- 02 — Strategies -->
-    <section class="sec" id="strategies">
-      <div class="sec-head">
-        <span class="sec-mark">02 — Strategies</span>
-        <h2>Pick the locale strategy your product needs — not the one your framework dictates.</h2>
-      </div>
-      <div class="grid cols-4">
-        <div class="cell">
-          <span class="cell-num">02.1 / cookie</span>
-          <h3>Cookie</h3>
-          <p>One URL for all locales. Best for apps behind login where SEO is irrelevant and switching should be instant.</p>
-        </div>
-        <div class="cell">
-          <span class="cell-num">02.2 / route</span>
-          <h3>Route segment</h3>
-          <p>/de/checkout-style paths. The SEO-friendly default for public content with indexable localized pages.</p>
-        </div>
-        <div class="cell">
-          <span class="cell-num">02.3 / globe</span>
-          <h3>Subdomain</h3>
-          <p>de.example.com. Clean separation per market, works well with regional CDNs and analytics splits.</p>
-        </div>
-        <div class="cell">
-          <span class="cell-num">02.4 / flag</span>
-          <h3>Top-level domain</h3>
-          <p>example.de vs example.com. Maximum market trust; Palamedes maps each domain to its locale.</p>
-        </div>
-      </div>
-      <div class="linklist">
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/locale-strategies.md">Locale strategies in depth</a>
-      </div>
-    </section>
-
-    <!-- 03 — Per framework -->
-    <section class="sec" id="per-framework">
-      <div class="sec-head">
-        <span class="sec-mark">03 — Per framework</span>
-        <h2>Your stack, specifically.</h2>
-      </div>
-      <div class="mt-32" id="fw-panels">
-        <!-- populated by buildPanels() -->
-      </div>
-    </section>
-
-    <!-- 04 — Backend -->
-    <section class="sec" id="backend">
-      <div class="sec-head">
-        <span class="sec-mark">04 — Backend</span>
-        <h2>And it doesn't stop at the frontend.</h2>
-      </div>
-      <p class="lede">The same getI18n() model runs in Hono and Express with request-local locale resolution —
-        transactional emails, API error messages, and PDF generation speak the user's language
-        from the same catalogs.</p>
-      <p class="mt-32"><a class="btn" href="https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md">Backend servers guide</a></p>
-    </section>
-
-    <div class="ctaband">
-      <h2>See your framework speaking three languages — right now.</h2>
-      <div class="hero-ctas">
-        <a class="btn primary" href="https://nextjs-cookie.examples.palamedes.dev">Open the live matrix</a>
-        <a class="btn" href="#/get-started">Get started</a>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- ========================================================== PROOF view -->
-  <main id="view-proof" data-view hidden>
-
-    <header class="hero">
-      <p class="eyebrow">Proof</p>
-      <h1 class="display">Claims you can re-run.</h1>
-      <p class="subline">Every number on this page comes from a checked-in,
-        machine-readable report with fixtures and commands in the repo.
-        If a claim can't be re-run, we don't make it.</p>
-      <div class="hero-ctas">
-        <a class="btn primary" href="https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md">Re-run the benchmarks</a>
-        <a class="btn" href="https://github.com/sebastian-software/palamedes/tree/main/benchmarks/e2e-workflow/results">Browse checked-in reports</a>
-      </div>
-    </header>
-
-    <!-- 01 — Benchmarks -->
-    <section class="sec" id="benchmarks">
-      <div class="sec-head">
-        <span class="sec-mark">01 — Benchmarks</span>
-        <h2>The workflow you feel every day: extract &amp; update.</h2>
-      </div>
-      <p class="lede">The end-to-end benchmark measures what a developer actually waits for: scan sources,
-        extract messages, update catalogs, write files. Same generated message inventory, rendered
-        into each tool's idiomatic source shape, semantically validated after every run.</p>
-
-      <div class="bench">
-        <div class="bench-title">Small corpus — 80 files, 640 messages (median of 7 runs)</div>
-        <div class="bench-row">
-          <span class="bench-tool">Palamedes</span>
-          <span class="bench-track"><span class="bench-bar accent" style="width:5.1%"></span></span>
-          <span class="bench-val">33.53 ms</span>
-        </div>
-        <div class="bench-row">
-          <span class="bench-tool">i18next-parser 9.4</span>
-          <span class="bench-track"><span class="bench-bar" style="width:72.7%"></span></span>
-          <span class="bench-val">477.58 ms</span>
-        </div>
-        <div class="bench-row">
-          <span class="bench-tool">Lingui 6.4</span>
-          <span class="bench-track"><span class="bench-bar" style="width:100%"></span></span>
-          <span class="bench-val">657.00 ms</span>
-        </div>
-        <div class="bench-note">
-          Linear millisecond scale, no truncation — the ratios (19.59× vs Lingui, 14.24× vs i18next-parser)
-          are exactly as drawn. Machine-local run from the checked-in report.
-          <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md">Methodology →</a>
-        </div>
-      </div>
-
-      <div class="bench">
-        <div class="bench-title">Medium corpus (median of 7 runs)</div>
-        <div class="bench-row">
-          <span class="bench-tool">Palamedes</span>
-          <span class="bench-track"><span class="bench-bar accent" style="width:6.5%"></span></span>
-          <span class="bench-val">42.92 ms</span>
-        </div>
-        <div class="bench-note">
-          Competitor medians for the medium corpus: see the checked-in report,
-          <a href="https://github.com/sebastian-software/palamedes/blob/main/benchmarks/e2e-workflow/results/latest.md">benchmarks/e2e-workflow/results/latest.md</a>.
-          Same linear scale as above. Machine-local run.
-          <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md">Methodology →</a>
-        </div>
-      </div>
-
-      <div class="callout">
-        <span class="micro">Honest note</span>
-        These are machine-local numbers from the checked-in report, not a marketing average. Your
-        hardware will differ; the ratios are the signal. Commands to reproduce:
-        <code>pnpm benchmark:e2e-workflow</code>.
-      </div>
-    </section>
-
-    <!-- 02 — Verification -->
-    <section class="sec" id="verification">
-      <div class="sec-head">
-        <span class="sec-mark">02 — Verification</span>
-        <h2>20 apps, verified in a real browser, on every change.</h2>
-      </div>
-      <div class="steps">
-        <div class="step">
-          <div class="step-num mono">1</div>
-          <div class="step-body">
-            <h3>Build</h3>
-            <p>All 20 example apps build against the workspace packages — no mocked integrations.</p>
+      <!-- ========================================================== PROOF view -->
+      <main id="view-proof" data-view hidden>
+        <header class="hero">
+          <p class="eyebrow">Proof</p>
+          <h1 class="display">Claims you can re-run.</h1>
+          <p class="subline">
+            Every number on this page comes from a checked-in, machine-readable report with fixtures
+            and commands in the repo. If a claim can't be re-run, we don't make it.
+          </p>
+          <div class="hero-ctas">
+            <a
+              class="btn primary"
+              href="https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md"
+              >Re-run the benchmarks</a
+            >
+            <a
+              class="btn"
+              href="https://github.com/sebastian-software/palamedes/tree/main/benchmarks/e2e-workflow/results"
+              >Browse checked-in reports</a
+            >
           </div>
-        </div>
-        <div class="step">
-          <div class="step-num mono">2</div>
-          <div class="step-body">
-            <h3>Drive</h3>
-            <p>A Playwright flow loads each app, checks SSR output, switches locales, and exercises localized server actions.</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num mono">3</div>
-          <div class="step-body">
-            <h3>Capture</h3>
-            <p>Screenshots are versioned in the repo, so 'works across frameworks' is a diffable artifact, not a slide.</p>
-          </div>
-        </div>
-      </div>
+        </header>
 
-      <div class="shot">
-        <div class="shot-chrome">
-          <i></i><i></i><i></i>
-          <span class="mono">nextjs-cookie.examples.palamedes.dev — en · de · es</span>
-        </div>
-        <div class="shot-body">
-          <div class="bcard">
-            <div class="bcard-loc">en-US</div>
-            <div class="bcard-title">Your trip to Lisbon</div>
-            <div class="bcard-row">
-              <span class="bcard-seats">3 seats left</span>
-              <span class="bcard-price">€1,234.00</span>
+        <!-- 01 — Benchmarks -->
+        <section class="sec" id="benchmarks">
+          <div class="sec-head">
+            <span class="sec-mark">01 — Benchmarks</span>
+            <h2>The workflow you feel every day: extract &amp; update.</h2>
+          </div>
+          <p class="lede">
+            The end-to-end benchmark measures what a developer actually waits for: scan sources,
+            extract messages, update catalogs, write files. Same generated message inventory,
+            rendered into each tool's idiomatic source shape, semantically validated after every
+            run.
+          </p>
+
+          <div class="bench">
+            <div class="bench-title">Small corpus — 80 files, 640 messages (median of 7 runs)</div>
+            <div class="bench-row">
+              <span class="bench-tool">Palamedes</span>
+              <span class="bench-track"
+                ><span class="bench-bar accent" style="width: 5.1%"></span
+              ></span>
+              <span class="bench-val">33.53 ms</span>
             </div>
-            <div class="bcard-date">Jul 12, 2026</div>
-          </div>
-          <div class="bcard">
-            <div class="bcard-loc">de-DE</div>
-            <div class="bcard-title">Deine Reise nach Lissabon</div>
-            <div class="bcard-row">
-              <span class="bcard-seats">3 Plätze frei</span>
-              <span class="bcard-price">1.234,00&nbsp;€</span>
+            <div class="bench-row">
+              <span class="bench-tool">i18next-parser 9.4</span>
+              <span class="bench-track"><span class="bench-bar" style="width: 72.7%"></span></span>
+              <span class="bench-val">477.58 ms</span>
             </div>
-            <div class="bcard-date">12. Juli 2026</div>
-          </div>
-          <div class="bcard">
-            <div class="bcard-loc">es-ES</div>
-            <div class="bcard-title">Tu viaje a Lisboa</div>
-            <div class="bcard-row">
-              <span class="bcard-seats">Quedan 3 asientos</span>
-              <span class="bcard-price">1234,00&nbsp;€</span>
+            <div class="bench-row">
+              <span class="bench-tool">Lingui 6.4</span>
+              <span class="bench-track"><span class="bench-bar" style="width: 100%"></span></span>
+              <span class="bench-val">657.00 ms</span>
             </div>
-            <div class="bcard-date">12 jul 2026</div>
+            <div class="bench-note">
+              Linear millisecond scale, no truncation — the ratios (19.59× vs Lingui, 14.24× vs
+              i18next-parser) are exactly as drawn. Machine-local run from the checked-in report.
+              <a
+                href="https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md"
+                >Methodology →</a
+              >
+            </div>
+          </div>
+
+          <div class="bench">
+            <div class="bench-title">Medium corpus (median of 7 runs)</div>
+            <div class="bench-row">
+              <span class="bench-tool">Palamedes</span>
+              <span class="bench-track"
+                ><span class="bench-bar accent" style="width: 6.5%"></span
+              ></span>
+              <span class="bench-val">42.92 ms</span>
+            </div>
+            <div class="bench-note">
+              Competitor medians for the medium corpus: see the checked-in report,
+              <a
+                href="https://github.com/sebastian-software/palamedes/blob/main/benchmarks/e2e-workflow/results/latest.md"
+                >benchmarks/e2e-workflow/results/latest.md</a
+              >. Same linear scale as above. Machine-local run.
+              <a
+                href="https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md"
+                >Methodology →</a
+              >
+            </div>
+          </div>
+
+          <div class="callout">
+            <span class="micro">Honest note</span>
+            These are machine-local numbers from the checked-in report, not a marketing average.
+            Your hardware will differ; the ratios are the signal. Commands to reproduce:
+            <code>pnpm benchmark:e2e-workflow</code>.
+          </div>
+        </section>
+
+        <!-- 02 — Verification -->
+        <section class="sec" id="verification">
+          <div class="sec-head">
+            <span class="sec-mark">02 — Verification</span>
+            <h2>20 apps, verified in a real browser, on every change.</h2>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num mono">1</div>
+              <div class="step-body">
+                <h3>Build</h3>
+                <p>
+                  All 20 example apps build against the workspace packages — no mocked integrations.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num mono">2</div>
+              <div class="step-body">
+                <h3>Drive</h3>
+                <p>
+                  A Playwright flow loads each app, checks SSR output, switches locales, and
+                  exercises localized server actions.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num mono">3</div>
+              <div class="step-body">
+                <h3>Capture</h3>
+                <p>
+                  Screenshots are versioned in the repo, so 'works across frameworks' is a diffable
+                  artifact, not a slide.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="shot">
+            <div class="shot-chrome">
+              <i></i><i></i><i></i>
+              <span class="mono">nextjs-cookie.examples.palamedes.dev — en · de · es</span>
+            </div>
+            <div class="shot-body">
+              <div class="bcard">
+                <div class="bcard-loc">en-US</div>
+                <div class="bcard-title">Your trip to Lisbon</div>
+                <div class="bcard-row">
+                  <span class="bcard-seats">3 seats left</span>
+                  <span class="bcard-price">€1,234.00</span>
+                </div>
+                <div class="bcard-date">Jul 12, 2026</div>
+              </div>
+              <div class="bcard">
+                <div class="bcard-loc">de-DE</div>
+                <div class="bcard-title">Deine Reise nach Lissabon</div>
+                <div class="bcard-row">
+                  <span class="bcard-seats">3 Plätze frei</span>
+                  <span class="bcard-price">1.234,00&nbsp;€</span>
+                </div>
+                <div class="bcard-date">12. Juli 2026</div>
+              </div>
+              <div class="bcard">
+                <div class="bcard-loc">es-ES</div>
+                <div class="bcard-title">Tu viaje a Lisboa</div>
+                <div class="bcard-row">
+                  <span class="bcard-seats">Quedan 3 asientos</span>
+                  <span class="bcard-price">1234,00&nbsp;€</span>
+                </div>
+                <div class="bcard-date">12 jul 2026</div>
+              </div>
+            </div>
+            <div class="shot-cap">
+              One demo, three locales: copy, plural seat counts, currency, and dates change
+              together.
+              <a
+                href="https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md"
+                >Versioned screenshots →</a
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- 03 — Catalog quality -->
+        <section class="sec" id="catalog-qa">
+          <div class="sec-head">
+            <span class="sec-mark">03 — Catalog quality</span>
+            <h2>Fast would be worthless if the catalogs were wrong.</h2>
+          </div>
+          <p class="lede">
+            Catalog semantics live in one dedicated engine (ferrocat): parsing, merging, structured
+            audits, and ICU authoring diagnostics. The benchmark harness validates every tool run
+            semantically — message inventories are compared, not just timed.
+          </p>
+          <div class="grid cols-3">
+            <div class="cell">
+              <span class="cell-num">03.1 / shield</span>
+              <h3>Structured audits</h3>
+              <p>
+                Machine-readable catalog audits catch missing translations, stale entries, and
+                metadata drift in CI.
+              </p>
+            </div>
+            <div class="cell">
+              <span class="cell-num">03.2 / brackets</span>
+              <h3>ICU diagnostics</h3>
+              <p>
+                Authoring mistakes in plural/select syntax are flagged at extract time, not at
+                runtime in production.
+              </p>
+            </div>
+            <div class="cell">
+              <span class="cell-num">03.3 / merge</span>
+              <h3>Semantic merging</h3>
+              <p>
+                A Git merge driver resolves catalog conflicts by meaning, not by line — no more
+                broken .po files after rebases.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 04 — Decision trail -->
+        <section class="sec" id="adrs">
+          <div class="sec-head">
+            <span class="sec-mark">04 — Decision trail</span>
+            <h2>16 decisions, written down before you depend on them.</h2>
+          </div>
+          <p class="lede">
+            The ADRs cover message identity, the native boundary, adapter architecture — and, just
+            as deliberately, what Palamedes refuses to own. Reading them is the fastest way to know
+            if our tradeoffs match yours.
+          </p>
+          <div class="linklist">
+            <a href="https://github.com/sebastian-software/palamedes/tree/main/adr">ADR index</a>
+            <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md"
+              >Stability &amp; versioning policy</a
+            >
+            <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md"
+              >Palamedes principles</a
+            >
+          </div>
+        </section>
+
+        <div class="ctaband">
+          <h2>Convinced by the receipts? The quickstart takes 5 minutes.</h2>
+          <div class="hero-ctas">
+            <a class="btn primary" href="#/get-started">Get started</a>
+            <a
+              class="btn"
+              href="#/"
+              onclick="return false"
+              title="Compare page not part of this draft"
+              >Compare with your current tool</a
+            >
           </div>
         </div>
-        <div class="shot-cap">One demo, three locales: copy, plural seat counts, currency, and dates change together.
-          <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md">Versioned screenshots →</a></div>
-      </div>
-    </section>
+      </main>
 
-    <!-- 03 — Catalog quality -->
-    <section class="sec" id="catalog-qa">
-      <div class="sec-head">
-        <span class="sec-mark">03 — Catalog quality</span>
-        <h2>Fast would be worthless if the catalogs were wrong.</h2>
-      </div>
-      <p class="lede">Catalog semantics live in one dedicated engine (ferrocat): parsing, merging, structured
-        audits, and ICU authoring diagnostics. The benchmark harness validates every tool run
-        semantically — message inventories are compared, not just timed.</p>
-      <div class="grid cols-3">
-        <div class="cell">
-          <span class="cell-num">03.1 / shield</span>
-          <h3>Structured audits</h3>
-          <p>Machine-readable catalog audits catch missing translations, stale entries, and metadata drift in CI.</p>
-        </div>
-        <div class="cell">
-          <span class="cell-num">03.2 / brackets</span>
-          <h3>ICU diagnostics</h3>
-          <p>Authoring mistakes in plural/select syntax are flagged at extract time, not at runtime in production.</p>
-        </div>
-        <div class="cell">
-          <span class="cell-num">03.3 / merge</span>
-          <h3>Semantic merging</h3>
-          <p>A Git merge driver resolves catalog conflicts by meaning, not by line — no more broken .po files after rebases.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- 04 — Decision trail -->
-    <section class="sec" id="adrs">
-      <div class="sec-head">
-        <span class="sec-mark">04 — Decision trail</span>
-        <h2>16 decisions, written down before you depend on them.</h2>
-      </div>
-      <p class="lede">The ADRs cover message identity, the native boundary, adapter architecture — and, just as
-        deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if
-        our tradeoffs match yours.</p>
-      <div class="linklist">
-        <a href="https://github.com/sebastian-software/palamedes/tree/main/adr">ADR index</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md">Stability &amp; versioning policy</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md">Palamedes principles</a>
-      </div>
-    </section>
-
-    <div class="ctaband">
-      <h2>Convinced by the receipts? The quickstart takes 5 minutes.</h2>
-      <div class="hero-ctas">
-        <a class="btn primary" href="#/get-started">Get started</a>
-        <a class="btn" href="#/" onclick="return false" title="Compare page not part of this draft">Compare with your current tool</a>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- ==================================================== GET STARTED view -->
-  <main id="view-get-started" data-view hidden>
-
-    <header class="hero">
-      <p class="eyebrow">Quickstart</p>
-      <h1 class="display">First working translation in 5&nbsp;minutes.</h1>
-      <p class="subline">One translated component, one extraction run, one .po file,
-        one runtime instance. No message IDs to invent, no dictionary files
-        to maintain.</p>
-      <div class="hero-ctas">
-        <a class="btn primary" href="#install" onclick="document.getElementById('install').scrollIntoView(); return false">Skip to step 1</a>
-        <a class="btn" href="https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md">Full written guide</a>
-      </div>
-    </header>
-
-    <div class="stackpick" style="border-top:1px solid var(--hair)">
-      <span class="micro">Stack</span>
-      <div class="tabs" style="border-bottom:1px solid var(--hair)">
-        <button class="active">Vite + React</button>
-        <button disabled title="Mock: switcher is non-functional in this draft">Vite + Solid</button>
-        <button disabled title="Mock: switcher is non-functional in this draft">Next.js</button>
-      </div>
-      <span class="micro">Draft mock — flow below shows Vite + React</span>
-    </div>
-
-    <section class="sec" id="install" style="border-top:0; padding-top:32px">
-      <div class="callout" style="margin-top:0">
-        <span class="micro">Honest note</span>
-        Heads-up: install the scoped <code>@palamedes/*</code> packages. The top-level
-        <code>palamedes</code> and <code>create-palamedes</code> names are reserved for a future
-        one-command setup and are not the entry point today.
-      </div>
-
-      <div class="steps">
-        <div class="step">
-          <div class="step-num mono">1</div>
-          <div class="step-body">
-            <h3>Install</h3>
-            <p>Core, runtime, host adapter, and the build plugin — plus the CLI as a dev dependency.</p>
-            <pre class="code">pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli @vitejs/plugin-react</pre>
+      <!-- ==================================================== GET STARTED view -->
+      <main id="view-get-started" data-view hidden>
+        <header class="hero">
+          <p class="eyebrow">Quickstart</p>
+          <h1 class="display">First working translation in 5&nbsp;minutes.</h1>
+          <p class="subline">
+            One translated component, one extraction run, one .po file, one runtime instance. No
+            message IDs to invent, no dictionary files to maintain.
+          </p>
+          <div class="hero-ctas">
+            <a
+              class="btn primary"
+              href="#install"
+              onclick="
+                document.getElementById('install').scrollIntoView()
+                return false
+              "
+              >Skip to step 1</a
+            >
+            <a
+              class="btn"
+              href="https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md"
+              >Full written guide</a
+            >
           </div>
+        </header>
+
+        <div class="stackpick" style="border-top: 1px solid var(--hair)">
+          <span class="micro">Stack</span>
+          <div class="tabs" style="border-bottom: 1px solid var(--hair)">
+            <button class="active">Vite + React</button>
+            <button disabled title="Mock: switcher is non-functional in this draft">
+              Vite + Solid
+            </button>
+            <button disabled title="Mock: switcher is non-functional in this draft">Next.js</button>
+          </div>
+          <span class="micro">Draft mock — flow below shows Vite + React</span>
         </div>
-        <div class="step">
-          <div class="step-num mono">2</div>
-          <div class="step-body">
-            <h3>Configure</h3>
-            <p>One YAML file declares your locales and where catalogs live.</p>
-            <pre class="code"><span class="cm"># palamedes.yaml</span>
+
+        <section class="sec" id="install" style="border-top: 0; padding-top: 32px">
+          <div class="callout" style="margin-top: 0">
+            <span class="micro">Honest note</span>
+            Heads-up: install the scoped <code>@palamedes/*</code> packages. The top-level
+            <code>palamedes</code> and <code>create-palamedes</code> names are reserved for a future
+            one-command setup and are not the entry point today.
+          </div>
+
+          <div class="steps">
+            <div class="step">
+              <div class="step-num mono">1</div>
+              <div class="step-body">
+                <h3>Install</h3>
+                <p>
+                  Core, runtime, host adapter, and the build plugin — plus the CLI as a dev
+                  dependency.
+                </p>
+                <pre class="code">
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
+pnpm add -D @palamedes/cli @vitejs/plugin-react</pre
+                >
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num mono">2</div>
+              <div class="step-body">
+                <h3>Configure</h3>
+                <p>One YAML file declares your locales and where catalogs live.</p>
+                <pre class="code"><span class="cm"># palamedes.yaml</span>
 locales: [en, de]
 source-locale: en
 catalogs:
   - path: src/locales/{locale}
     include: [src]</pre>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num mono">3</div>
-          <div class="step-body">
-            <h3>Wire the plugin &amp; runtime</h3>
-            <p>The Vite plugin handles the macro transform; the runtime holds the active i18n instance.</p>
-            <pre class="code"><span class="cm">// vite.config.ts</span>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num mono">3</div>
+              <div class="step-body">
+                <h3>Wire the plugin &amp; runtime</h3>
+                <p>
+                  The Vite plugin handles the macro transform; the runtime holds the active i18n
+                  instance.
+                </p>
+                <pre class="code"><span class="cm">// vite.config.ts</span>
 import { palamedes } from "@palamedes/vite-plugin"
 export default defineConfig({ plugins: [palamedes(), react()] })
 
@@ -1133,37 +1826,43 @@ import { setClientI18n } from "@palamedes/runtime"
 
 export const i18n = createI18n()
 setClientI18n(i18n)</pre>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num mono">4</div>
-          <div class="step-body">
-            <h3>Write &amp; extract</h3>
-            <p>Author the message in your component, then run one command — it creates src/locales/en.po and de.po.</p>
-            <pre class="code"><span class="cm">// src/App.tsx</span>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num mono">4</div>
+              <div class="step-body">
+                <h3>Write &amp; extract</h3>
+                <p>
+                  Author the message in your component, then run one command — it creates
+                  src/locales/en.po and de.po.
+                </p>
+                <pre class="code"><span class="cm">// src/App.tsx</span>
 import { t } from "@palamedes/core/macro"
 export const App = () =&gt; &lt;h1&gt;{t`Welcome to Palamedes`}&lt;/h1&gt;
 
 $ pmds extract</pre>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num mono">5</div>
-          <div class="step-body">
-            <h3>Translate</h3>
-            <p>Open the German catalog and fill in the translated string.</p>
-            <pre class="code"><span class="cm"># src/locales/de.po</span>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num mono">5</div>
+              <div class="step-body">
+                <h3>Translate</h3>
+                <p>Open the German catalog and fill in the translated string.</p>
+                <pre class="code"><span class="cm"># src/locales/de.po</span>
 msgid "Welcome to Palamedes"
 msgstr "Willkommen bei Palamedes"</pre>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num mono">6</div>
-          <div class="step-body">
-            <h3>Load &amp; see it render</h3>
-            <p>Load the catalogs, activate a locale, and run the dev server — the page now renders
-              “Willkommen bei Palamedes”. That is the full local loop: transform, extraction, catalog, runtime.</p>
-            <pre class="code"><span class="cm">// src/main.tsx</span>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num mono">6</div>
+              <div class="step-body">
+                <h3>Load &amp; see it render</h3>
+                <p>
+                  Load the catalogs, activate a locale, and run the dev server — the page now
+                  renders “Willkommen bei Palamedes”. That is the full local loop: transform,
+                  extraction, catalog, runtime.
+                </p>
+                <pre class="code"><span class="cm">// src/main.tsx</span>
 import { i18n } from "./i18n"
 import { messages as enMessages } from "./locales/en.po"
 import { messages as deMessages } from "./locales/de.po"
@@ -1173,278 +1872,396 @@ i18n.load("de", deMessages)
 i18n.activate("de")
 
 $ pnpm dev</pre>
-            <div class="aside">
-              <span class="micro">Aside</span>
-              TypeScript needs an ambient declaration for .po imports — add a src/po.d.ts with
-              <code>declare module "*.po"</code> (see the
-              <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md">troubleshooting guide</a>).
+                <div class="aside">
+                  <span class="micro">Aside</span>
+                  TypeScript needs an ambient declaration for .po imports — add a src/po.d.ts with
+                  <code>declare module "*.po"</code> (see the
+                  <a
+                    href="https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md"
+                    >troubleshooting guide</a
+                  >).
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <!-- 02 — Next -->
-    <section class="sec" id="next">
-      <div class="sec-head">
-        <span class="sec-mark">02 — Next</span>
-        <h2>Where to go from here</h2>
-      </div>
-      <div class="grid cols-3">
-        <div class="cell">
-          <span class="cell-num">02.1 / book</span>
-          <h3>Plurals, dates &amp; currency</h3>
-          <p>ICU MessageFormat with authoring diagnostics that catch mistakes at extract time.</p>
-          <a class="more" href="https://github.com/sebastian-software/palamedes/blob/main/docs/api/core.md">Core API</a>
-        </div>
-        <div class="cell">
-          <span class="cell-num">02.2 / compass</span>
-          <h3>Pick a locale strategy</h3>
-          <p>Cookie, route, subdomain, or TLD — with a live demo for each, in your framework.</p>
-          <a class="more" href="#/frameworks">Frameworks</a>
-        </div>
-        <div class="cell">
-          <span class="cell-num">02.3 / server</span>
-          <h3>Localize your backend</h3>
-          <p>Request-local i18n for Hono and Express from the same catalogs.</p>
-          <a class="more" href="https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md">Backend guide</a>
-        </div>
-        <div class="cell">
-          <span class="cell-num">02.4 / arrows</span>
-          <h3>Migrating from Lingui?</h3>
-          <p>A step-by-step playbook. Source-string-first .po catalogs are often reusable after an extraction pass; explicit-ID setups need cleanup.</p>
-          <a class="more" href="https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md">Migration playbook</a>
-        </div>
-        <div class="cell">
-          <span class="cell-num">02.5 / wrench</span>
-          <h3>Something broke?</h3>
-          <p>The troubleshooting guide covers the common setup failures with exact error messages.</p>
-          <a class="more" href="https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md">Troubleshooting</a>
-        </div>
-        <div class="cell">
-          <span class="cell-num">02.6 / robot</span>
-          <h3>Using an AI assistant?</h3>
-          <p>Point it at llms.txt — the whole API surface in one machine-readable file.</p>
-          <a class="more" href="https://github.com/sebastian-software/palamedes/blob/main/llms.txt">llms.txt</a>
-        </div>
-      </div>
-    </section>
+        <!-- 02 — Next -->
+        <section class="sec" id="next">
+          <div class="sec-head">
+            <span class="sec-mark">02 — Next</span>
+            <h2>Where to go from here</h2>
+          </div>
+          <div class="grid cols-3">
+            <div class="cell">
+              <span class="cell-num">02.1 / book</span>
+              <h3>Plurals, dates &amp; currency</h3>
+              <p>
+                ICU MessageFormat with authoring diagnostics that catch mistakes at extract time.
+              </p>
+              <a
+                class="more"
+                href="https://github.com/sebastian-software/palamedes/blob/main/docs/api/core.md"
+                >Core API</a
+              >
+            </div>
+            <div class="cell">
+              <span class="cell-num">02.2 / compass</span>
+              <h3>Pick a locale strategy</h3>
+              <p>
+                Cookie, route, subdomain, or TLD — with a live demo for each, in your framework.
+              </p>
+              <a class="more" href="#/frameworks">Frameworks</a>
+            </div>
+            <div class="cell">
+              <span class="cell-num">02.3 / server</span>
+              <h3>Localize your backend</h3>
+              <p>Request-local i18n for Hono and Express from the same catalogs.</p>
+              <a
+                class="more"
+                href="https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md"
+                >Backend guide</a
+              >
+            </div>
+            <div class="cell">
+              <span class="cell-num">02.4 / arrows</span>
+              <h3>Migrating from Lingui?</h3>
+              <p>
+                A step-by-step playbook. Source-string-first .po catalogs are often reusable after
+                an extraction pass; explicit-ID setups need cleanup.
+              </p>
+              <a
+                class="more"
+                href="https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md"
+                >Migration playbook</a
+              >
+            </div>
+            <div class="cell">
+              <span class="cell-num">02.5 / wrench</span>
+              <h3>Something broke?</h3>
+              <p>
+                The troubleshooting guide covers the common setup failures with exact error
+                messages.
+              </p>
+              <a
+                class="more"
+                href="https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md"
+                >Troubleshooting</a
+              >
+            </div>
+            <div class="cell">
+              <span class="cell-num">02.6 / robot</span>
+              <h3>Using an AI assistant?</h3>
+              <p>Point it at llms.txt — the whole API surface in one machine-readable file.</p>
+              <a
+                class="more"
+                href="https://github.com/sebastian-software/palamedes/blob/main/llms.txt"
+                >llms.txt</a
+              >
+            </div>
+          </div>
+        </section>
 
-    <div class="ctaband">
-      <h2>Stuck? The maintainer reads every issue.</h2>
-      <div class="hero-ctas">
-        <a class="btn primary" href="https://github.com/sebastian-software/palamedes/issues">Open an issue</a>
-        <a class="btn" href="https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md">Read the docs</a>
-      </div>
+        <div class="ctaband">
+          <h2>Stuck? The maintainer reads every issue.</h2>
+          <div class="hero-ctas">
+            <a class="btn primary" href="https://github.com/sebastian-software/palamedes/issues"
+              >Open an issue</a
+            >
+            <a
+              class="btn"
+              href="https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md"
+              >Read the docs</a
+            >
+          </div>
+        </div>
+      </main>
+
+      <!-- ============================================================== FOOTER -->
+      <footer class="site">
+        <div class="foot-grid">
+          <div class="foot-col">
+            <h4>Product</h4>
+            <a href="#/get-started">Get started</a>
+            <a href="#/frameworks">Framework matrix</a>
+            <a href="#/proof">Benchmarks &amp; proof</a>
+            <a href="#/" onclick="return false" title="Not part of this draft">Comparison</a>
+          </div>
+          <div class="foot-col">
+            <h4>Documentation</h4>
+            <a
+              href="https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md"
+              >5-minute quickstart</a
+            >
+            <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md"
+              >API reference</a
+            >
+            <a
+              href="https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md"
+              >Configuration</a
+            >
+            <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md">CLI</a>
+            <a
+              href="https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md"
+              >Troubleshooting</a
+            >
+          </div>
+          <div class="foot-col">
+            <h4>Project</h4>
+            <a href="https://github.com/sebastian-software/palamedes/tree/main/adr"
+              >Architecture decisions</a
+            >
+            <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md"
+              >Stability &amp; versioning</a
+            >
+            <a href="https://github.com/sebastian-software/palamedes/blob/main/CHANGELOG.md"
+              >Changelog</a
+            >
+            <a href="https://github.com/sebastian-software/palamedes/blob/main/SECURITY.md"
+              >Security</a
+            >
+            <a href="https://github.com/sebastian-software/palamedes/blob/main/LICENSE"
+              >MIT license</a
+            >
+          </div>
+          <div class="foot-col">
+            <h4>Company</h4>
+            <a href="https://oss.sebastian-software.com/">Sebastian Software</a>
+            <a href="https://sebastian-software.de/werner">Sebastian Werner</a>
+            <a href="#/" onclick="return false" title="Blog not part of this draft">Blog</a>
+          </div>
+        </div>
+        <div class="legal">
+          MIT © 2026 Sebastian Software GmbH — built in the open, verified in CI.
+        </div>
+      </footer>
     </div>
+    <!-- /frame -->
 
-  </main>
+    <script>
+      /* ------------------------------------------------------------ hash router -- */
+      ;(function () {
+        var VIEWS = {
+          "/": "view-home",
+          "/frameworks": "view-frameworks",
+          "/proof": "view-proof",
+          "/get-started": "view-get-started",
+        }
+        var current = "/"
 
-  <!-- ============================================================== FOOTER -->
-  <footer class="site">
-    <div class="foot-grid">
-      <div class="foot-col">
-        <h4>Product</h4>
-        <a href="#/get-started">Get started</a>
-        <a href="#/frameworks">Framework matrix</a>
-        <a href="#/proof">Benchmarks &amp; proof</a>
-        <a href="#/" onclick="return false" title="Not part of this draft">Comparison</a>
-      </div>
-      <div class="foot-col">
-        <h4>Documentation</h4>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md">5-minute quickstart</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md">API reference</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md">Configuration</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md">CLI</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md">Troubleshooting</a>
-      </div>
-      <div class="foot-col">
-        <h4>Project</h4>
-        <a href="https://github.com/sebastian-software/palamedes/tree/main/adr">Architecture decisions</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md">Stability &amp; versioning</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/CHANGELOG.md">Changelog</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/SECURITY.md">Security</a>
-        <a href="https://github.com/sebastian-software/palamedes/blob/main/LICENSE">MIT license</a>
-      </div>
-      <div class="foot-col">
-        <h4>Company</h4>
-        <a href="https://oss.sebastian-software.com/">Sebastian Software</a>
-        <a href="https://sebastian-software.de/werner">Sebastian Werner</a>
-        <a href="#/" onclick="return false" title="Blog not part of this draft">Blog</a>
-      </div>
-    </div>
-    <div class="legal">MIT © 2026 Sebastian Software GmbH — built in the open, verified in CI.</div>
-  </footer>
+        function route(first) {
+          var h = location.hash.replace(/^#/, "")
+          if (h === "") h = "/"
+          if (!(h in VIEWS)) {
+            // Unknown hash (e.g. in-page anchors like #install): keep current view.
+            if (!first) return
+            h = "/"
+          }
+          current = h
+          var views = document.querySelectorAll("[data-view]")
+          for (var i = 0; i < views.length; i++) {
+            views[i].hidden = views[i].id !== VIEWS[h]
+          }
+          var links = document.querySelectorAll("[data-nav]")
+          for (var j = 0; j < links.length; j++) {
+            links[j].classList.toggle("active", links[j].getAttribute("data-nav") === h)
+          }
+          if (!first) window.scrollTo(0, 0)
+        }
 
-</div><!-- /frame -->
+        window.addEventListener("hashchange", function () {
+          route(false)
+        })
+        route(true)
+      })()
 
-<script>
-/* ------------------------------------------------------------ hash router -- */
-(function () {
-  var VIEWS = {
-    "/": "view-home",
-    "/frameworks": "view-frameworks",
-    "/proof": "view-proof",
-    "/get-started": "view-get-started"
-  };
-  var current = "/";
-
-  function route(first) {
-    var h = location.hash.replace(/^#/, "");
-    if (h === "") h = "/";
-    if (!(h in VIEWS)) {
-      // Unknown hash (e.g. in-page anchors like #install): keep current view.
-      if (!first) return;
-      h = "/";
-    }
-    current = h;
-    var views = document.querySelectorAll("[data-view]");
-    for (var i = 0; i < views.length; i++) {
-      views[i].hidden = views[i].id !== VIEWS[h];
-    }
-    var links = document.querySelectorAll("[data-nav]");
-    for (var j = 0; j < links.length; j++) {
-      links[j].classList.toggle("active", links[j].getAttribute("data-nav") === h);
-    }
-    if (!first) window.scrollTo(0, 0);
-  }
-
-  window.addEventListener("hashchange", function () { route(false); });
-  route(true);
-})();
-
-/* ----------------------------------------------------- code-showcase tabs -- */
-(function () {
-  var groups = document.querySelectorAll("[data-tabs]");
-  for (var g = 0; g < groups.length; g++) {
-    (function (group) {
-      var btns = group.querySelectorAll("[data-tab]");
-      var panes = group.querySelectorAll("[data-pane]");
-      for (var i = 0; i < btns.length; i++) {
-        (function (btn) {
-          btn.addEventListener("click", function () {
-            for (var k = 0; k < btns.length; k++) {
-              btns[k].classList.toggle("active", btns[k] === btn);
+      /* ----------------------------------------------------- code-showcase tabs -- */
+      ;(function () {
+        var groups = document.querySelectorAll("[data-tabs]")
+        for (var g = 0; g < groups.length; g++) {
+          ;(function (group) {
+            var btns = group.querySelectorAll("[data-tab]")
+            var panes = group.querySelectorAll("[data-pane]")
+            for (var i = 0; i < btns.length; i++) {
+              ;(function (btn) {
+                btn.addEventListener("click", function () {
+                  for (var k = 0; k < btns.length; k++) {
+                    btns[k].classList.toggle("active", btns[k] === btn)
+                  }
+                  for (var p = 0; p < panes.length; p++) {
+                    panes[p].hidden =
+                      panes[p].getAttribute("data-pane") !== btn.getAttribute("data-tab")
+                  }
+                })
+              })(btns[i])
             }
-            for (var p = 0; p < panes.length; p++) {
-              panes[p].hidden = panes[p].getAttribute("data-pane") !== btn.getAttribute("data-tab");
-            }
-          });
-        })(btns[i]);
-      }
-    })(groups[g]);
-  }
-})();
+          })(groups[g])
+        }
+      })()
 
-/* -------------------------------------------- framework matrix (5 × 4) ----
+      /* -------------------------------------------- framework matrix (5 × 4) ----
    Mirrors FRAMEWORK_MATRIX_CELLS in components.jsx: explicit per-cell links
    and status, never a generated URL pattern presented as such. Cookie/route
    are live; subdomain/tld are provisioning (#306) and link source only.   -- */
-(function () {
-  var GH_TREE = "https://github.com/sebastian-software/palamedes/tree/main/";
-  var FRAMEWORKS = [
-    { name: "Next.js", slug: "nextjs" },
-    { name: "TanStack Start", slug: "tanstack" },
-    { name: "SolidStart", slug: "solidstart" },
-    { name: "Waku", slug: "waku" },
-    { name: "React Router", slug: "react-router" }
-  ];
-  var STRATEGIES = [
-    { slug: "cookie", short: "Cookie", long: "Cookie" },
-    { slug: "route", short: "Route", long: "Route segment" },
-    { slug: "subdomain", short: "Subdomain", long: "Subdomain" },
-    { slug: "tld", short: "TLD", long: "Top-level domain" }
-  ];
+      ;(function () {
+        var GH_TREE = "https://github.com/sebastian-software/palamedes/tree/main/"
+        var FRAMEWORKS = [
+          { name: "Next.js", slug: "nextjs" },
+          { name: "TanStack Start", slug: "tanstack" },
+          { name: "SolidStart", slug: "solidstart" },
+          { name: "Waku", slug: "waku" },
+          { name: "React Router", slug: "react-router" },
+        ]
+        var STRATEGIES = [
+          { slug: "cookie", short: "Cookie", long: "Cookie" },
+          { slug: "route", short: "Route", long: "Route segment" },
+          { slug: "subdomain", short: "Subdomain", long: "Subdomain" },
+          { slug: "tld", short: "TLD", long: "Top-level domain" },
+        ]
 
-  function cellHtml(fw, strategy) {
-    var src = GH_TREE + "examples/" + fw.slug + "-" + strategy.slug;
-    var html = "";
-    if (strategy.slug === "cookie") {
-      html += '<span class="st live">●</span><span class="vf">✓ verified</span>';
-      html += '<span class="cell-links"><a href="https://' + fw.slug + '-cookie.examples.palamedes.dev">open</a>';
-      html += ' <span class="sep">|</span> <a href="' + src + '">source</a></span>';
-    } else if (strategy.slug === "route") {
-      html += '<span class="st live">●</span><span class="vf">✓ verified</span>';
-      var locales = ["en", "de", "es"];
-      var links = [];
-      for (var i = 0; i < locales.length; i++) {
-        links.push('<a href="https://' + fw.slug + '-route.examples.palamedes.dev/' + locales[i] + '">' + locales[i] + "</a>");
-      }
-      html += '<span class="cell-links">' + links.join(" ") + ' <span class="sep">|</span> <a href="' + src + '">source</a></span>';
-    } else {
-      html += '<span class="st prov">◌</span><span class="vf">✓ verified</span>';
-      html += '<span class="cell-links"><span class="prov-label">provisioning</span> <span class="sep">|</span> <a href="' + src + '">source</a></span>';
-    }
-    return html;
-  }
+        function cellHtml(fw, strategy) {
+          var src = GH_TREE + "examples/" + fw.slug + "-" + strategy.slug
+          var html = ""
+          if (strategy.slug === "cookie") {
+            html += '<span class="st live">●</span><span class="vf">✓ verified</span>'
+            html +=
+              '<span class="cell-links"><a href="https://' +
+              fw.slug +
+              '-cookie.examples.palamedes.dev">open</a>'
+            html += ' <span class="sep">|</span> <a href="' + src + '">source</a></span>'
+          } else if (strategy.slug === "route") {
+            html += '<span class="st live">●</span><span class="vf">✓ verified</span>'
+            var locales = ["en", "de", "es"]
+            var links = []
+            for (var i = 0; i < locales.length; i++) {
+              links.push(
+                '<a href="https://' +
+                  fw.slug +
+                  "-route.examples.palamedes.dev/" +
+                  locales[i] +
+                  '">' +
+                  locales[i] +
+                  "</a>"
+              )
+            }
+            html +=
+              '<span class="cell-links">' +
+              links.join(" ") +
+              ' <span class="sep">|</span> <a href="' +
+              src +
+              '">source</a></span>'
+          } else {
+            html += '<span class="st prov">◌</span><span class="vf">✓ verified</span>'
+            html +=
+              '<span class="cell-links"><span class="prov-label">provisioning</span> <span class="sep">|</span> <a href="' +
+              src +
+              '">source</a></span>'
+          }
+          return html
+        }
 
-  function buildMatrix(table) {
-    var longNames = table.hasAttribute("data-longnames");
-    var html = "<thead><tr><th>Framework <span class=\"mono\">5 × 4 = 20 apps</span></th>";
-    for (var s = 0; s < STRATEGIES.length; s++) {
-      var st = STRATEGIES[s];
-      html += "<th>" + (longNames ? st.long : st.short) + ' <span class="mono">' + st.slug + "</span></th>";
-    }
-    html += "</tr></thead><tbody>";
-    for (var f = 0; f < FRAMEWORKS.length; f++) {
-      var fw = FRAMEWORKS[f];
-      html += '<tr><td><span class="fw-name">' + fw.name + '</span><span class="fw-slug">' + fw.slug + "</span></td>";
-      for (var c = 0; c < STRATEGIES.length; c++) {
-        html += "<td>" + cellHtml(fw, STRATEGIES[c]) + "</td>";
-      }
-      html += "</tr>";
-    }
-    html += "</tbody>";
-    table.innerHTML = html;
-  }
+        function buildMatrix(table) {
+          var longNames = table.hasAttribute("data-longnames")
+          var html = '<thead><tr><th>Framework <span class="mono">5 × 4 = 20 apps</span></th>'
+          for (var s = 0; s < STRATEGIES.length; s++) {
+            var st = STRATEGIES[s]
+            html +=
+              "<th>" +
+              (longNames ? st.long : st.short) +
+              ' <span class="mono">' +
+              st.slug +
+              "</span></th>"
+          }
+          html += "</tr></thead><tbody>"
+          for (var f = 0; f < FRAMEWORKS.length; f++) {
+            var fw = FRAMEWORKS[f]
+            html +=
+              '<tr><td><span class="fw-name">' +
+              fw.name +
+              '</span><span class="fw-slug">' +
+              fw.slug +
+              "</span></td>"
+            for (var c = 0; c < STRATEGIES.length; c++) {
+              html += "<td>" + cellHtml(fw, STRATEGIES[c]) + "</td>"
+            }
+            html += "</tr>"
+          }
+          html += "</tbody>"
+          table.innerHTML = html
+        }
 
-  var tables = document.querySelectorAll("table.home-matrix, table.fw-matrix");
-  for (var t = 0; t < tables.length; t++) buildMatrix(tables[t]);
+        var tables = document.querySelectorAll("table.home-matrix, table.fw-matrix")
+        for (var t = 0; t < tables.length; t++) buildMatrix(tables[t])
 
-  /* -------------------------------------------- per-framework panels ---- */
-  var PANELS = [
-    {
-      name: "Next.js", slug: "nextjs",
-      body: "App Router with server components and server actions. The @palamedes/next-plugin wires the transform into the Next build; everything else is the shared model."
-    },
-    {
-      name: "TanStack Start", slug: "tanstack",
-      body: "Server functions and file-based routing, integrated through @palamedes/vite-plugin. Locale resolution runs in a server function; the client stays island-light."
-    },
-    {
-      name: "SolidStart", slug: "solidstart",
-      body: "Fine-grained reactivity with @palamedes/solid — the same macro authoring and catalogs as React, no fork of your i18n strategy for a different renderer."
-    },
-    {
-      name: "Waku", slug: "waku",
-      body: "Minimal RSC framework. If the model holds here, it holds in your custom setup too — that's why Waku is in the matrix."
-    },
-    {
-      name: "React Router", slug: "react-router",
-      body: "Framework-mode React Router with loaders and actions. The classic SPA-plus-SSR shape, same catalogs, same runtime."
-    }
-  ];
+        /* -------------------------------------------- per-framework panels ---- */
+        var PANELS = [
+          {
+            name: "Next.js",
+            slug: "nextjs",
+            body: "App Router with server components and server actions. The @palamedes/next-plugin wires the transform into the Next build; everything else is the shared model.",
+          },
+          {
+            name: "TanStack Start",
+            slug: "tanstack",
+            body: "Server functions and file-based routing, integrated through @palamedes/vite-plugin. Locale resolution runs in a server function; the client stays island-light.",
+          },
+          {
+            name: "SolidStart",
+            slug: "solidstart",
+            body: "Fine-grained reactivity with @palamedes/solid — the same macro authoring and catalogs as React, no fork of your i18n strategy for a different renderer.",
+          },
+          {
+            name: "Waku",
+            slug: "waku",
+            body: "Minimal RSC framework. If the model holds here, it holds in your custom setup too — that's why Waku is in the matrix.",
+          },
+          {
+            name: "React Router",
+            slug: "react-router",
+            body: "Framework-mode React Router with loaders and actions. The classic SPA-plus-SSR shape, same catalogs, same runtime.",
+          },
+        ]
 
-  var mount = document.getElementById("fw-panels");
-  if (mount) {
-    var out = "";
-    for (var p = 0; p < PANELS.length; p++) {
-      var pf = PANELS[p];
-      out += '<div class="fw-panel">';
-      out += "<h3>" + pf.name + '<span class="mono">examples/' + pf.slug + '-*</span></h3>';
-      out += "<div><p>" + pf.body + "</p>";
-      out += '<div class="fw-demos">';
-      out += '<span><span class="st live">●</span><a href="https://' + pf.slug + '-cookie.examples.palamedes.dev">cookie</a></span>';
-      out += '<span><span class="st live">●</span><a href="https://' + pf.slug + '-route.examples.palamedes.dev/en">route</a></span>';
-      out += '<span><span class="st prov">◌</span><span class="prov-label">subdomain · </span><a href="' + GH_TREE + "examples/" + pf.slug + '-subdomain">source</a></span>';
-      out += '<span><span class="st prov">◌</span><span class="prov-label">tld · </span><a href="' + GH_TREE + "examples/" + pf.slug + '-tld">source</a></span>';
-      out += '<span><a href="' + GH_TREE + "examples/" + pf.slug + '-route">all source →</a></span>';
-      out += "</div></div></div>";
-    }
-    mount.innerHTML = out;
-  }
-})();
-</script>
-
-</body>
+        var mount = document.getElementById("fw-panels")
+        if (mount) {
+          var out = ""
+          for (var p = 0; p < PANELS.length; p++) {
+            var pf = PANELS[p]
+            out += '<div class="fw-panel">'
+            out += "<h3>" + pf.name + '<span class="mono">examples/' + pf.slug + "-*</span></h3>"
+            out += "<div><p>" + pf.body + "</p>"
+            out += '<div class="fw-demos">'
+            out +=
+              '<span><span class="st live">●</span><a href="https://' +
+              pf.slug +
+              '-cookie.examples.palamedes.dev">cookie</a></span>'
+            out +=
+              '<span><span class="st live">●</span><a href="https://' +
+              pf.slug +
+              '-route.examples.palamedes.dev/en">route</a></span>'
+            out +=
+              '<span><span class="st prov">◌</span><span class="prov-label">subdomain · </span><a href="' +
+              GH_TREE +
+              "examples/" +
+              pf.slug +
+              '-subdomain">source</a></span>'
+            out +=
+              '<span><span class="st prov">◌</span><span class="prov-label">tld · </span><a href="' +
+              GH_TREE +
+              "examples/" +
+              pf.slug +
+              '-tld">source</a></span>'
+            out +=
+              '<span><a href="' +
+              GH_TREE +
+              "examples/" +
+              pf.slug +
+              '-route">all source →</a></span>'
+            out += "</div></div></div>"
+          }
+          mount.innerHTML = out
+        }
+      })()
+    </script>
+  </body>
 </html>
