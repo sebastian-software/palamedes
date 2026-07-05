@@ -61,6 +61,14 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Build site
+        if: ${{ matrix.full }}
+        run: pnpm build:site
+
+      - name: Typecheck site
+        if: ${{ matrix.full }}
+        run: pnpm --filter @palamedes/site typecheck
+
       - name: Smoke-test native binding load
         if: ${{ !matrix.full }}
         run: pnpm --filter @palamedes/core-node exec node -e "const core = require('./dist/index.cjs'); if (typeof core.transformMacrosNative !== 'function') process.exit(1)"

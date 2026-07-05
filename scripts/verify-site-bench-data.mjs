@@ -59,7 +59,7 @@ const medium = parseSection("Medium")
 
 const checks = [
   ["small Palamedes median", small.medians.Palamedes, /medianMs: 33\.53/.test(benchTs) && 33.53],
-  ["small Lingui median", small.medians.Lingui, /medianMs: 657\.0\b/.test(benchTs) && 657],
+  ["small Lingui median", small.medians.Lingui, /medianMs: 657\b/.test(benchTs) && 657],
   [
     "small i18next median",
     small.medians["i18next-parser"],

@@ -37,7 +37,7 @@ export const BENCH_SMALL: BenchCorpus = {
   rows: [
     { tool: "Palamedes", medianMs: 33.53, accent: true },
     { tool: "i18next-parser", medianMs: 477.58 },
-    { tool: "Lingui", medianMs: 657.0 },
+    { tool: "Lingui", medianMs: 657 },
   ],
   ratios: { lingui: "19.59×", i18next: "14.24×" },
 }

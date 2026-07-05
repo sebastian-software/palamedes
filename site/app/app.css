@@ -29,7 +29,7 @@
   --font-mono:
     ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
 
-  --text-display: clamp(44px, 7.6vw, 88px);
+  --text-display: clamp(40px, 6.2vw, 76px);
   --text-h2: clamp(24px, 3.4vw, 34px);
   --text-band: clamp(20px, 3vw, 30px);
   --text-stat: 34px;
@@ -170,14 +170,14 @@
 
 @keyframes scanline {
   from {
-    transform: translateY(0);
+    top: 0;
     opacity: 1;
   }
   85% {
     opacity: 1;
   }
   to {
-    transform: translateY(var(--scan-distance, 400px));
+    top: 100%;
     opacity: 0;
   }
 }
