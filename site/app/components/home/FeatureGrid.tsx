@@ -29,7 +29,8 @@ export function FeatureGrid({ cards, columns = 3, sectionIndex = "01" }: Feature
           <h3 className="mt-5 text-[15px] font-bold">{card.title}</h3>
           <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{card.body}</p>
           {card.href ? (
-            card.href.startsWith("/") ? (
+            /* Static files like /llms.txt are same-origin but not routes. */
+            card.href.startsWith("/") && !card.href.includes(".") ? (
               <Link
                 to={card.href}
                 viewTransition

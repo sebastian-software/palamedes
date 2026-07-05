@@ -25,6 +25,7 @@ const COLUMNS: { title: string; links: FootLink[] }[] = [
       { label: "Configuration", href: repoHref("docs/configuration.md") },
       { label: "CLI", href: repoHref("docs/cli.md") },
       { label: "Troubleshooting", href: repoHref("docs/troubleshooting.md") },
+      { label: "llms.txt", href: "/llms.txt" },
     ],
   },
   {
@@ -57,7 +58,8 @@ export function SiteFooter() {
             <ul className="mt-4 space-y-2">
               {column.links.map((link) => (
                 <li key={link.label}>
-                  {link.href.startsWith("/") ? (
+                  {/* Static files like /llms.txt are same-origin but not routes. */}
+                  {link.href.startsWith("/") && !link.href.includes(".") ? (
                     <Link to={link.href} viewTransition className="text-[13.5px] hover:text-accent">
                       {link.label}
                     </Link>
