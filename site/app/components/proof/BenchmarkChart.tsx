@@ -1,7 +1,7 @@
 import { useRef } from "react"
 
 import { BENCH_META, type BenchCorpus } from "~/data/bench"
-import { repoHref } from "~/data/links"
+import { docsHref } from "~/data/links"
 import { useInView } from "~/hooks/useInView"
 import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion"
 
@@ -76,7 +76,7 @@ export function BenchmarkChart({ corpus }: { corpus: BenchCorpus }) {
       <p className="border-t border-hair px-5 py-3 text-[12px] text-gray-spec">
         Machine-local run ({BENCH_META.platform}, Node {BENCH_META.node}, {BENCH_META.generated}),
         median of {BENCH_META.runs} runs — not a marketing average.{" "}
-        <a href={repoHref("docs/benchmark-e2e-workflow.md")} className="mono-nums text-accent">
+        <a href={docsHref("benchmark-e2e-workflow")} className="mono-nums text-accent">
           Methodology →
         </a>
       </p>

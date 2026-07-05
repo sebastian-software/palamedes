@@ -2,7 +2,7 @@ import nextjsRoute from "~/assets/screenshots/nextjs-route-interactive.png"
 import reactRouterCookie from "~/assets/screenshots/react-router-cookie-interactive.png"
 import solidstartRoute from "~/assets/screenshots/solidstart-route-interactive.png"
 import wakuCookie from "~/assets/screenshots/waku-cookie-interactive.png"
-import { repoHref } from "~/data/links"
+import { docsHref } from "~/data/links"
 
 interface Shot {
   src: string
@@ -52,7 +52,7 @@ export function ScreenshotStrip() {
         ))}
       </div>
       <a
-        href={repoHref("docs/example-screenshots", "tree")}
+        href={docsHref("example-screenshots")}
         className="mono-nums mt-3 inline-block text-[13px] text-accent"
       >
         All 20 versioned screenshots →

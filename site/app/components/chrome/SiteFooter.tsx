@@ -1,6 +1,6 @@
 import { Link } from "react-router"
 
-import { repoHref } from "~/data/links"
+import { apiHref, decisionHref, docsHref, repoHref } from "~/data/links"
 
 interface FootLink {
   label: string
@@ -20,19 +20,19 @@ const COLUMNS: { title: string; links: FootLink[] }[] = [
   {
     title: "Documentation",
     links: [
-      { label: "5-minute quickstart", href: repoHref("docs/first-working-translation.md") },
-      { label: "API reference", href: repoHref("docs/api/README.md") },
-      { label: "Configuration", href: repoHref("docs/configuration.md") },
-      { label: "CLI", href: repoHref("docs/cli.md") },
-      { label: "Troubleshooting", href: repoHref("docs/troubleshooting.md") },
+      { label: "5-minute quickstart", href: docsHref("first-working-translation") },
+      { label: "API reference", href: apiHref() },
+      { label: "Configuration", href: docsHref("configuration") },
+      { label: "CLI", href: docsHref("cli") },
+      { label: "Troubleshooting", href: docsHref("troubleshooting") },
       { label: "llms.txt", href: "/llms.txt" },
     ],
   },
   {
     title: "Project",
     links: [
-      { label: "Architecture decisions", href: repoHref("adr", "tree") },
-      { label: "Stability & versioning", href: repoHref("docs/stability.md") },
+      { label: "Architecture decisions", href: decisionHref() },
+      { label: "Stability & versioning", href: docsHref("stability") },
       { label: "Changelog", href: repoHref("CHANGELOG.md") },
       { label: "Security", href: repoHref("SECURITY.md") },
       { label: "MIT license", href: repoHref("LICENSE") },

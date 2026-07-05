@@ -1,4 +1,4 @@
-import { repoHref } from "./links"
+import { decisionHref, docsHref } from "./links"
 
 /* Feature-cell copy, verbatim from the page specs. */
 
@@ -38,13 +38,13 @@ export const HOME_MODEL_CARDS: FeatureCard[] = [
     icon: "fingerprint",
     title: "One identity model",
     body: "Messages are identified by message + context — stable across refactors, frameworks, and years of catalog history.",
-    href: repoHref("adr/003-source-string-first-message-identity.md"),
+    href: decisionHref("003-source-string-first-message-identity.md"),
   },
   {
     icon: "plug",
     title: "One runtime call",
     body: "getI18n() resolves the active instance everywhere: server components, client islands, backend request handlers.",
-    href: repoHref("adr/005-universal-geti18n-runtime-model.md"),
+    href: decisionHref("005-universal-geti18n-runtime-model.md"),
   },
 ]
 
@@ -76,7 +76,7 @@ export const NEXT_STEP_CARDS: FeatureCard[] = [
     icon: "book",
     title: "Plurals, dates & currency",
     body: "ICU MessageFormat with authoring diagnostics that catch mistakes at extract time.",
-    href: repoHref("docs/api/core.md"),
+    href: docsHref("api/core"),
   },
   {
     icon: "compass",
@@ -88,19 +88,19 @@ export const NEXT_STEP_CARDS: FeatureCard[] = [
     icon: "server",
     title: "Localize your backend",
     body: "Request-local i18n for Hono and Express from the same catalogs.",
-    href: repoHref("docs/backend-servers.md"),
+    href: docsHref("backend-servers"),
   },
   {
     icon: "arrows",
     title: "Migrating from Lingui?",
     body: "A step-by-step playbook. Source-string-first .po catalogs are often reusable after an extraction pass; explicit-ID setups need cleanup.",
-    href: repoHref("docs/migrate-from-lingui.md"),
+    href: docsHref("migrate-from-lingui"),
   },
   {
     icon: "wrench",
     title: "Something broke?",
     body: "The troubleshooting guide covers the common setup failures with exact error messages.",
-    href: repoHref("docs/troubleshooting.md"),
+    href: docsHref("troubleshooting"),
   },
   {
     icon: "robot",
