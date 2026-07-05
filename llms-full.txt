@@ -25,8 +25,9 @@ When helping with Palamedes code:
 5. Avoid numeric placeholder fallback patterns. If an expression cannot be named cleanly, recommend extracting a stable named variable.
 6. Use `getI18n()`/runtime wiring instead of inventing framework-global runtime APIs.
 7. Keep host adapter examples thin. Do not move catalog semantics into framework glue.
-8. Use Node.js `>=22`.
-9. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
+8. Use Node.js `>=22.22`.
+9. Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not execute JavaScript or TypeScript config files (see `/adr/016-native-cli-and-yaml-first-configuration.md`).
+10. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
 
 ## Package map
 
@@ -38,8 +39,8 @@ Recommended app-facing packages:
 - `@palamedes/solid`: Solid translation components and Solid macro entry point
 - `@palamedes/vite-plugin`: Vite integration and `.po` loading
 - `@palamedes/next-plugin`: Next.js integration
-- `@palamedes/cli`: extraction and catalog QA CLI (`pmds extract`, `pmds audit`)
-- `@palamedes/config`: typed `palamedes.config.ts` support
+- `@palamedes/cli`: native CLI (`pmds extract`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog convert`)
+- `@palamedes/config`: config loading for the JS plugin loaders; also reads legacy `palamedes.config.ts`/`.js` as a compatibility path (the native CLI reads only YAML/JSON/TOML)
 
 Advanced/custom-tooling packages:
 
@@ -58,7 +59,7 @@ Install:
 
 ```bash
 pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli @palamedes/config @vitejs/plugin-react vite typescript
+pnpm add -D @palamedes/cli @vitejs/plugin-react vite typescript
 ```
 
 Configure Vite:
@@ -76,20 +77,13 @@ export default defineConfig({
 
 Configure catalogs:
 
-```ts
-// palamedes.config.ts
-import { defineConfig } from "@palamedes/config"
-
-export default defineConfig({
-  locales: ["en", "de"],
-  sourceLocale: "en",
-  catalogs: [
-    {
-      path: "src/locales/{locale}",
-      include: ["src"],
-    },
-  ],
-})
+```yaml
+# palamedes.yaml
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
 ```
 
 Register runtime:
@@ -147,7 +141,7 @@ Install:
 
 ```bash
 pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli @palamedes/config vite-plugin-solid vite typescript
+pnpm add -D @palamedes/cli vite-plugin-solid vite typescript
 ```
 
 Configure Vite:
@@ -163,7 +157,7 @@ export default defineConfig({
 })
 ```
 
-The same `palamedes.config.ts`, runtime model, `.po` loading, and extraction flow apply.
+The same `palamedes.yaml`, runtime model, `.po` loading, and extraction flow apply.
 
 ## Authoring model
 
@@ -214,7 +208,7 @@ App code creates and activates an i18n instance. Transformed macro code can then
 
 ## Catalog model
 
-Palamedes uses source-string-first `.po` catalogs and delegates catalog/ICU semantics to `ferrocat`.
+Palamedes uses source-string-first `.po` catalogs by default and delegates catalog/ICU semantics to `ferrocat`. Teams can opt into FCL when they want canonical, merge-friendly generated catalogs with cleaner machine-owned metadata (see `/docs/catalog-formats.md`).
 
 Important consequences:
 
@@ -223,14 +217,16 @@ Important consequences:
 - generated internal compiled lookup keys are implementation details
 - source control diffs should stay reviewable and gettext-adjacent
 - catalog health checks should use `pmds audit` or the `auditCatalogs(...)` API
+- completeness gates should use `pmds report --fail-if-below <percent>`
 
 ## CLI model
 
-Current core command:
+Core commands:
 
 ```bash
 pnpm exec pmds extract
 pnpm exec pmds audit
+pnpm exec pmds report
 ```
 
 Useful options include:
@@ -241,6 +237,22 @@ pnpm exec pmds extract --watch
 pnpm exec pmds extract --verbose
 pnpm exec pmds audit --json
 pnpm exec pmds audit --fail-on warning
+pnpm exec pmds report --json
+pnpm exec pmds report --fail-if-below 90
+```
+
+Catalog utilities:
+
+```bash
+pnpm exec pmds catalog merge --format=po --conflict-strategy=use-first --output out.po a.po b.po
+pnpm exec pmds catalog convert --to fcl input.po
+```
+
+`catalog merge` takes exactly two input files and also works as a Git merge driver:
+
+```bash
+git config merge.palamedes-catalog.driver \
+  'pmds catalog merge --format=po --conflict-strategy=use-first --output %A %A %B'
 ```
 
 Do not recommend `--workers` today. Palamedes currently defers worker-thread parallelism until end-to-end benchmarks show user-visible benefit. See `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`.
@@ -313,6 +325,9 @@ ADRs:
 - `/adr/011-host-adapters-render-module-source-from-compiled-catalog-artifacts.md`
 - `/adr/012-translation-augmentation-boundary.md`
 - `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`
+- `/adr/014-native-transform-source-maps.md`
+- `/adr/015-runtime-formatter-subset-diagnostics.md`
+- `/adr/016-native-cli-and-yaml-first-configuration.md`
 
 ## Development commands
 

@@ -37,6 +37,13 @@ the site build until the constants (and any prose quoting them) are updated
 consciously. Matrix demo links live in `app/data/matrix.ts` with explicit
 per-cell hosting status (#306).
 
+## AI assistant context (llms.txt)
+
+The repo-root `llms.txt` and `llms-full.txt` are copied into the build by
+`scripts/copy-llms-to-site.mjs` (part of `pnpm build:site`) and serve at
+`https://palamedes.dev/llms.txt` per the llms.txt convention. Edit the
+root files, not the build output.
+
 ## Deployment
 
 Deployed to GitHub Pages by

@@ -106,7 +106,7 @@ export const NEXT_STEP_CARDS: FeatureCard[] = [
     icon: "robot",
     title: "Using an AI assistant?",
     body: "Point it at llms.txt — the whole API surface in one machine-readable file.",
-    href: repoHref("llms.txt"),
+    href: "/llms.txt",
   },
 ]
 
