@@ -11,11 +11,11 @@ They exist to make the direction decision in
 [#290](https://github.com/sebastian-software/palamedes/issues/290) concrete:
 same content, three different personalities.
 
-| Draft | File                                                   | Direction        | Personality                                                                       |
-| ----- | ------------------------------------------------------ | ---------------- | --------------------------------------------------------------------------------- |
-| A     | [`design-a-spec-grid.html`](design-a-spec-grid.html)   | Swiss Spec Grid  | Light, strict, standards-document: hairline grid, one blue accent, spec tables    |
-| B     | [`design-b-terminal.html`](design-b-terminal.html)     | Terminal / Ops   | Dark, monospace, developer-native: terminal hero, status LEDs, CI-log proof view  |
-| C     | [`design-c-editorial.html`](design-c-editorial.html)   | Editorial Calm   | Warm paper, serif long-form essay: pull quotes, author's note, composed pacing    |
+| Draft | File                                                 | Direction       | Personality                                                                      |
+| ----- | ---------------------------------------------------- | --------------- | -------------------------------------------------------------------------------- |
+| A     | [`design-a-spec-grid.html`](design-a-spec-grid.html) | Swiss Spec Grid | Light, strict, standards-document: hairline grid, one blue accent, spec tables   |
+| B     | [`design-b-terminal.html`](design-b-terminal.html)   | Terminal / Ops  | Dark, monospace, developer-native: terminal hero, status LEDs, CI-log proof view |
+| C     | [`design-c-editorial.html`](design-c-editorial.html) | Editorial Calm  | Warm paper, serif long-form essay: pull quotes, author's note, composed pacing   |
 
 Rough mapping to the #290 exploration: A ≈ variant 03 (Swiss specification
 grid), B ≈ variants 02/07 (ops cockpit / CLI-and-repo-first), C ≈ variants
