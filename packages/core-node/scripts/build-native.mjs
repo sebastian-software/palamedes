@@ -104,12 +104,18 @@ if (muslNodeAddon) {
   // only reach the final crate too late for that check.
   //
   // The override is scoped to the musl *target* (not the global RUSTFLAGS), so
-  // host build scripts and proc-macros stay untouched. With crt-static off, the
-  // musl target's default self-contained linking (rust-lld plus the bundled musl
-  // objects and unwinder) links the cdylib on its own — the same path the
-  // static-musl CLI addon already uses — so no external `musl-gcc` linker and no
-  // `link-self-contained` component flag are needed. (The unstable
-  // `link-self-contained=+unwind` form is rejected on stable Rust anyway.)
+  // host build scripts and proc-macros stay untouched.
+  //
+  // IMPORTANT: with crt-static off the cdylib links *dynamically*, so this build
+  // must run in a musl-native toolchain (see the "Build musl core-node addon"
+  // step in .github/workflows/publish.yml, which runs it inside `rust:alpine`).
+  // Cross-linking the dynamic cdylib from a glibc host makes the linker emit a
+  // glibc program interpreter (`ld-linux-x86-64.so.2`), and the resulting
+  // `.node` then fails to load inside a musl runtime with `ERR_DLOPEN_FAILED`.
+  // A musl-native `cc` instead resolves the correct `ld-musl-x86-64.so.1`
+  // loader, so no external `musl-gcc` linker or `link-self-contained` flag is
+  // needed. (The static-musl CLI *binary* keeps `+crt-static` and links fully
+  // statically, which is why it builds fine on the glibc host.)
   //
   // `panic=abort` is intentionally not forced here. napi-rs (`#[napi]`) wraps
   // every `extern "C"` entry point in a panic guard, so panics are converted to
