@@ -16,6 +16,8 @@ const generatedAndBuildIgnores = {
     "**/.vinxi/**",
     "**/coverage/**",
     "**/target/**",
+    "**/.react-router/**",
+    "site/build/**",
     "**/*.d.ts",
     "**/*.tsbuildinfo",
     "docs/example-screenshots/**",

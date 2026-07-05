@@ -2,6 +2,7 @@ packages:
   - "packages/*"
   - "examples/*"
   - "benchmarks/*"
+  - "site"
 
 overrides:
   "eslint-config-setup>eslint-plugin-oxlint": "1.71.0"
