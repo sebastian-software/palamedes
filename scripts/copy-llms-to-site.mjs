@@ -4,7 +4,7 @@
  * convention. The repo root stays the single source of truth.
  */
 
-import { copyFileSync, existsSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -17,6 +17,15 @@ if (!existsSync(clientDir)) {
 }
 
 for (const file of ["llms.txt", "llms-full.txt"]) {
-  copyFileSync(join(repoRoot, file), join(clientDir, file))
+  const source = readFileSync(join(repoRoot, file), "utf8")
+  writeFileSync(join(clientDir, file), rewriteHostedRoutes(source), "utf8")
   console.log(`copy-llms-to-site: ${file} -> site/build/client/${file}`)
+}
+
+function rewriteHostedRoutes(content) {
+  return content
+    .replaceAll(/\/docs\/([^)`\s]+?)\.md/g, "/docs/$1")
+    .replaceAll(/\/docs\/api\/README/g, "/docs/api")
+    .replaceAll(/\/docs\/example-screenshots\/README/g, "/docs/example-screenshots")
+    .replaceAll(/\/adr\/([^)`\s]+?)\.md/g, "/decisions/$1")
 }
