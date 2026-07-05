@@ -1,5 +1,6 @@
 import { ButtonLink } from "~/components/chrome/Button"
 import { Page } from "~/components/chrome/Page"
+import { pageMeta } from "~/lib/meta"
 import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
@@ -7,16 +8,12 @@ import { COMPARE_CRITERIA, COMPARE_FOOTNOTES, COMPARE_TOOLS } from "~/data/compa
 import { repoHref } from "~/data/links"
 
 export function meta() {
-  return [
-    {
-      title: "Palamedes vs Lingui, next-intl, and General Translation — an honest comparison",
-    },
-    {
-      name: "description",
-      content:
-        "How Palamedes compares with Lingui, next-intl, and General Translation — including when you should pick the other tool.",
-    },
-  ]
+  return pageMeta({
+    title: "Palamedes vs Lingui, next-intl, and General Translation — an honest comparison",
+    description:
+      "How Palamedes compares with Lingui, next-intl, and General Translation — including when you should pick the other tool.",
+    path: "/compare",
+  })
 }
 
 function CompareTable() {

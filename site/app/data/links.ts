@@ -1,3 +1,5 @@
+export const SITE_ORIGIN = "https://palamedes.dev"
+
 export const REPO = "https://github.com/sebastian-software/palamedes"
 
 /*

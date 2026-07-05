@@ -2,7 +2,7 @@
   "name": "palamedes",
   "private": true,
   "description": "Rust-powered i18n tooling for JavaScript and TypeScript with a cleaner Lingui-style architecture",
-  "homepage": "https://github.com/sebastian-software/palamedes",
+  "homepage": "https://palamedes.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sebastian-software/palamedes.git"

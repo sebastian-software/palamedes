@@ -1,5 +1,6 @@
 import { ButtonLink } from "~/components/chrome/Button"
 import { Page } from "~/components/chrome/Page"
+import { pageMeta } from "~/lib/meta"
 import { Reveal } from "~/components/chrome/Reveal"
 import { Section } from "~/components/chrome/Section"
 import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix"
@@ -17,14 +18,12 @@ import { HOME_MODEL_CARDS } from "~/data/features"
 import { DEMO_NEXTJS_COOKIE, REPO, repoHref } from "~/data/links"
 
 export function meta() {
-  return [
-    { title: "Palamedes — i18n that survives your next framework migration" },
-    {
-      name: "description",
-      content:
-        "Open-source i18n tooling for JavaScript & TypeScript: one translation model across Next.js, TanStack Start, SolidStart, Waku, and React Router, with a Rust core and source-string-first .po catalogs.",
-    },
-  ]
+  return pageMeta({
+    title: "Palamedes — i18n that survives your next framework migration",
+    description:
+      "Open-source i18n tooling for JavaScript & TypeScript: one translation model across Next.js, TanStack Start, SolidStart, Waku, and React Router, with a Rust core and source-string-first .po catalogs.",
+    path: "/",
+  })
 }
 
 export default function Home() {

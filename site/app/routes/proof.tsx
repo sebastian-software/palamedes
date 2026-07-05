@@ -1,5 +1,6 @@
 import { ButtonLink } from "~/components/chrome/Button"
 import { Page } from "~/components/chrome/Page"
+import { pageMeta } from "~/lib/meta"
 import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
@@ -10,14 +11,12 @@ import { CATALOG_QA_CARDS } from "~/data/features"
 import { repoHref } from "~/data/links"
 
 export function meta() {
-  return [
-    { title: "Palamedes — benchmarks, verification, and the decision trail" },
-    {
-      name: "description",
-      content:
-        "Claims you can re-run: checked-in extract/update benchmarks against Lingui and i18next-parser, 20 browser-verified example apps, and 16 architecture decision records.",
-    },
-  ]
+  return pageMeta({
+    title: "Palamedes — benchmarks, verification, and the decision trail",
+    description:
+      "Claims you can re-run: checked-in extract/update benchmarks against Lingui and i18next-parser, 20 browser-verified example apps, and 16 architecture decision records.",
+    path: "/proof",
+  })
 }
 
 const VERIFICATION_STEPS = [

@@ -1,5 +1,6 @@
 import { ButtonLink } from "~/components/chrome/Button"
 import { Page } from "~/components/chrome/Page"
+import { pageMeta } from "~/lib/meta"
 import { Section } from "~/components/chrome/Section"
 import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix"
 import { FwPanels } from "~/components/frameworks/FwPanels"
@@ -9,14 +10,12 @@ import { STRATEGY_CARDS } from "~/data/features"
 import { DEMO_NEXTJS_COOKIE, repoHref } from "~/data/links"
 
 export function meta() {
-  return [
-    { title: "Palamedes — one i18n model across five framework families" },
-    {
-      name: "description",
-      content:
-        "Five frameworks, four locale strategies, one mental model: the browser-verified Palamedes example matrix across Next.js, TanStack Start, SolidStart, Waku, and React Router.",
-    },
-  ]
+  return pageMeta({
+    title: "Palamedes — one i18n model across five framework families",
+    description:
+      "Five frameworks, four locale strategies, one mental model: the browser-verified Palamedes example matrix across Next.js, TanStack Start, SolidStart, Waku, and React Router.",
+    path: "/frameworks",
+  })
 }
 
 export default function Frameworks() {

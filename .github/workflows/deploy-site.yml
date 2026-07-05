@@ -69,3 +69,58 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Smoke-test the live site
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="https://palamedes.dev"
+
+          fetch() {
+            local path="$1"
+            local attempt
+            for attempt in 1 2 3; do
+              if body=$(curl -sS --max-time 20 -w '\n%{http_code}' "$base$path"); then
+                status="${body##*$'\n'}"
+                content="${body%$'\n'*}"
+                return 0
+              fi
+              echo "attempt $attempt for $path failed; retrying in 20s"
+              sleep 20
+            done
+            echo "could not reach $base$path"
+            return 1
+          }
+
+          check() {
+            local path="$1" expected_status="$2" needle="${3:-}"
+            fetch "$path"
+            if [ "$status" != "$expected_status" ]; then
+              echo "FAIL $path: expected HTTP $expected_status, got $status"
+              exit 1
+            fi
+            if [ -n "$needle" ] && ! grep -qF "$needle" <<<"$content"; then
+              echo "FAIL $path: body does not contain '$needle'"
+              exit 1
+            fi
+            echo "ok $path ($status)"
+          }
+
+          check "/" 200 "One translation model."
+          check "/frameworks" 200 "Five frameworks."
+          check "/proof" 200 "Claims you can re-run."
+          check "/get-started" 200 "First working translation"
+          check "/compare" 200 "Narrower than the alternatives."
+          check "/blog" 200 "Building i18n tooling"
+          check "/llms.txt" 200 "palamedes.yaml"
+          check "/llms-full.txt" 200 "palamedes.yaml"
+          check "/sitemap.xml" 200 "https://palamedes.dev/proof"
+          check "/robots.txt" 200 "Sitemap:"
+          check "/does-not-exist" 404 "<html"
+
+          echo "live site verified at $base"

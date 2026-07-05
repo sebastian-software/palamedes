@@ -1,5 +1,6 @@
 import { ButtonLink } from "~/components/chrome/Button"
 import { Page } from "~/components/chrome/Page"
+import { pageMeta } from "~/lib/meta"
 import { Section } from "~/components/chrome/Section"
 import { PipelineDiagram } from "~/components/get-started/PipelineDiagram"
 import { StackPicker } from "~/components/get-started/StackPicker"
@@ -9,14 +10,12 @@ import { NEXT_STEP_CARDS } from "~/data/features"
 import { repoHref } from "~/data/links"
 
 export function meta() {
-  return [
-    { title: "Get started with Palamedes in 5 minutes" },
-    {
-      name: "description",
-      content:
-        "First working translation in 5 minutes: install the scoped @palamedes packages, configure palamedes.yaml, extract with pmds, translate the .po catalog, and see it render.",
-    },
-  ]
+  return pageMeta({
+    title: "Get started with Palamedes in 5 minutes",
+    description:
+      "First working translation in 5 minutes: install the scoped @palamedes packages, configure palamedes.yaml, extract with pmds, translate the .po catalog, and see it render.",
+    path: "/get-started",
+  })
 }
 
 export default function GetStarted() {
