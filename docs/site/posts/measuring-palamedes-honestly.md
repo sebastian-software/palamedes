@@ -11,6 +11,7 @@ better, and publish the method next to the numbers.
 
 The current benchmark scope is deliberately limited:
 
+- end-to-end extract/update workflow
 - macro transform
 - source extraction
 - catalog update
@@ -19,7 +20,17 @@ The current benchmark scope is deliberately limited:
 Those are the paths where Palamedes should benefit from a native core, a single
 catalog engine, and less duplicated framework-level work.
 
-The command is not hidden behind a private dashboard:
+The strongest checked comparison is the end-to-end extract/update workflow:
+
+```bash
+pnpm benchmark:e2e-workflow
+```
+
+That harness compares Palamedes, Lingui, and i18next-parser on the same
+generated source/catalog update workflow and writes machine-readable results
+under `benchmarks/e2e-workflow/results/`.
+
+The hot-path proof command is not hidden behind a private dashboard either:
 
 ```bash
 pnpm benchmark:proof
@@ -45,7 +56,7 @@ local machine run as a law of nature.
 
 It shows the current measured behavior for the operations Palamedes owns.
 
-The repo also keeps a separate Lingui v6 preview harness:
+The repo also keeps a separate Lingui v6 harness:
 
 ```bash
 pnpm benchmark:lingui-v6
@@ -62,7 +73,8 @@ the method is boring and reproducible.
 Palamedes can say "the native core helps" because the work is inspectable:
 
 - [proof and benchmark methodology](../../proof-and-benchmarks.md)
-- [Lingui v6 preview benchmark notes](../../benchmark-lingui-v6-preview.md)
+- [end-to-end workflow benchmark](../../benchmark-e2e-workflow.md)
+- [Lingui v6 benchmark notes](../../benchmark-lingui-v6-preview.md)
 - [benchmark fixtures](../../../benchmarks/proof-fixtures/src/client-app.tsx)
 - [the script that runs the proof benchmark](../../../scripts/benchmark-proof.mjs)
 

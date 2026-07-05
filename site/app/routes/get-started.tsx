@@ -3,12 +3,10 @@ import { Page } from "~/components/chrome/Page"
 import { Section } from "~/components/chrome/Section"
 import { PipelineDiagram } from "~/components/get-started/PipelineDiagram"
 import { StackPicker } from "~/components/get-started/StackPicker"
-import { StepFlow } from "~/components/get-started/StepFlow"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { NEXT_STEP_CARDS } from "~/data/features"
 import { repoHref } from "~/data/links"
-import { QUICKSTART_STEPS } from "~/data/steps"
 
 export function meta() {
   return [
@@ -42,8 +40,7 @@ export default function GetStarted() {
       </section>
 
       <Section num="01 — Steps" title="The full local loop." id="install">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <StackPicker />
+        <div className="mb-6 flex justify-end">
           <PipelineDiagram />
         </div>
         <div className="mb-8 max-w-[56em] border-l-4 border-accent pl-4">
@@ -54,7 +51,7 @@ export default function GetStarted() {
             one-command setup and are not the entry point today.
           </p>
         </div>
-        <StepFlow steps={QUICKSTART_STEPS} />
+        <StackPicker />
       </Section>
 
       <Section num="02 — Next" title="Where to go from here">

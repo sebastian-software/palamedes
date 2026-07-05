@@ -1,6 +1,6 @@
-# Lingui v6 Preview Benchmark
+# Lingui v6 Benchmark
 
-This workspace package contains the synthetic head-to-head benchmark harness for Palamedes vs. Lingui `6.0.0-next.1`.
+This workspace package contains the synthetic head-to-head benchmark harness for Palamedes vs. Lingui v6.
 
 It measures Lingui's macro rewrite through separate Babel and SWC lanes, plus extract and compile-from-catalog.
 

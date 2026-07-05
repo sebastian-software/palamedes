@@ -1,35 +1,28 @@
 import { Tabs } from "@base-ui-components/react/tabs"
+import { StepFlow } from "~/components/get-started/StepFlow"
+import { QUICKSTART_STEPS, STACKS } from "~/data/steps"
 
-/*
- * Visual stack picker. React is the fully worked path today (mirrors
- * docs/first-working-translation.md); Solid and Next.js link out instead of
- * duplicating a half-maintained flow.
- */
 export function StackPicker() {
   return (
     <Tabs.Root defaultValue="react">
       <Tabs.List className="inline-flex border border-hair">
-        <Tabs.Tab
-          value="react"
-          className="micro border-r border-hair px-5 py-2.5 text-[11px] tracking-label data-[selected]:bg-ink data-[selected]:text-paper"
-        >
-          Vite + React
-        </Tabs.Tab>
-        <Tabs.Tab
-          value="solid"
-          disabled
-          className="micro border-r border-hair px-5 py-2.5 text-[11px] tracking-label text-gray-spec"
-        >
-          Vite + Solid
-        </Tabs.Tab>
-        <Tabs.Tab
-          value="next"
-          disabled
-          className="micro px-5 py-2.5 text-[11px] tracking-label text-gray-spec"
-        >
-          Next.js
-        </Tabs.Tab>
+        {STACKS.map((stack, index) => (
+          <Tabs.Tab
+            key={stack.id}
+            value={stack.id}
+            className={`micro px-5 py-2.5 text-[11px] tracking-label transition-colors hover:text-accent data-[selected]:bg-ink data-[selected]:text-paper ${
+              index < STACKS.length - 1 ? "border-r border-hair" : ""
+            }`}
+          >
+            {stack.label}
+          </Tabs.Tab>
+        ))}
       </Tabs.List>
+      {STACKS.map((stack) => (
+        <Tabs.Panel key={stack.id} value={stack.id} className="mt-8">
+          <StepFlow steps={QUICKSTART_STEPS[stack.id]} />
+        </Tabs.Panel>
+      ))}
     </Tabs.Root>
   )
 }

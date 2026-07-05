@@ -7,7 +7,7 @@ catalogs after source changes:
 - Lingui: `lingui extract`
 - i18next-parser: `i18next`
 
-It is separate from the Lingui v6 preview hot-path benchmark. This harness
+It is separate from the Lingui v6 hot-path benchmark. This harness
 includes source scanning, extraction, catalog update, and catalog writes in one
 timed command.
 

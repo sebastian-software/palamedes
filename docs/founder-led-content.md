@@ -54,7 +54,9 @@ positioning claims:
 Drafts included in this round:
 
 - [A calmer path for JavaScript i18n](./site/posts/a-calmer-path-for-javascript-i18n.md)
+- [What we delegated to Ferrocat and why](./site/posts/what-we-delegated-to-ferrocat-and-why.md)
 - [Measuring Palamedes honestly](./site/posts/measuring-palamedes-honestly.md)
+- [From Lingui to Palamedes without changing how authoring feels](./site/posts/from-lingui-to-palamedes.md)
 - [How we browser-verify i18n across five frameworks](./site/posts/browser-verifying-i18n-across-five-frameworks.md)
 - [The third time I built JavaScript i18n tooling](./site/posts/the-third-time-i-built-javascript-i18n-tooling.md)
 - [Round 1 micro-content](./site/posts/micro-content-round-1.md)

@@ -18,9 +18,9 @@ verification flow, **not** a hydration glitch or a discarded server render:
 - **Interactive**: the same page in **German**, captured after the verifier
   clicks the locale switch and runs the localized server interaction. For the
   cookie strategy the choice is persisted and the server re-renders in German
-  (a real server round-trip); for the route strategy it is a client navigation
-  to the localized path. In both cases the switch is asserted to apply without
-  hydration errors and without throwing away the server render.
+  (a real server round-trip); for route, subdomain, and tld strategies it is a
+  navigation to the localized path or host. In every case the switch is asserted
+  to apply without hydration errors and without throwing away the server render.
 
 ## Next.js
 
@@ -36,6 +36,18 @@ verification flow, **not** a hydration glitch or a discarded server render:
 | --- | --- |
 | ![Next.js route – initial](./nextjs-route-initial.png) | ![Next.js route – interactive](./nextjs-route-interactive.png) |
 
+### Subdomain strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![Next.js subdomain – initial](./nextjs-subdomain-initial.png) | ![Next.js subdomain – interactive](./nextjs-subdomain-interactive.png) |
+
+### TLD strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![Next.js tld – initial](./nextjs-tld-initial.png) | ![Next.js tld – interactive](./nextjs-tld-interactive.png) |
+
 ## TanStack Start
 
 ### Cookie strategy
@@ -49,6 +61,18 @@ verification flow, **not** a hydration glitch or a discarded server render:
 | Initial | Interactive |
 | --- | --- |
 | ![TanStack route – initial](./tanstack-route-initial.png) | ![TanStack route – interactive](./tanstack-route-interactive.png) |
+
+### Subdomain strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![TanStack subdomain – initial](./tanstack-subdomain-initial.png) | ![TanStack subdomain – interactive](./tanstack-subdomain-interactive.png) |
+
+### TLD strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![TanStack tld – initial](./tanstack-tld-initial.png) | ![TanStack tld – interactive](./tanstack-tld-interactive.png) |
 
 ## SolidStart
 
@@ -64,6 +88,18 @@ verification flow, **not** a hydration glitch or a discarded server render:
 | --- | --- |
 | ![SolidStart route – initial](./solidstart-route-initial.png) | ![SolidStart route – interactive](./solidstart-route-interactive.png) |
 
+### Subdomain strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![SolidStart subdomain – initial](./solidstart-subdomain-initial.png) | ![SolidStart subdomain – interactive](./solidstart-subdomain-interactive.png) |
+
+### TLD strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![SolidStart tld – initial](./solidstart-tld-initial.png) | ![SolidStart tld – interactive](./solidstart-tld-interactive.png) |
+
 ## Waku
 
 ### Cookie strategy
@@ -78,6 +114,18 @@ verification flow, **not** a hydration glitch or a discarded server render:
 | --- | --- |
 | ![Waku route – initial](./waku-route-initial.png) | ![Waku route – interactive](./waku-route-interactive.png) |
 
+### Subdomain strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![Waku subdomain – initial](./waku-subdomain-initial.png) | ![Waku subdomain – interactive](./waku-subdomain-interactive.png) |
+
+### TLD strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![Waku tld – initial](./waku-tld-initial.png) | ![Waku tld – interactive](./waku-tld-interactive.png) |
+
 ## React Router
 
 ### Cookie strategy
@@ -91,3 +139,15 @@ verification flow, **not** a hydration glitch or a discarded server render:
 | Initial | Interactive |
 | --- | --- |
 | ![React Router route – initial](./react-router-route-initial.png) | ![React Router route – interactive](./react-router-route-interactive.png) |
+
+### Subdomain strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![React Router subdomain – initial](./react-router-subdomain-initial.png) | ![React Router subdomain – interactive](./react-router-subdomain-interactive.png) |
+
+### TLD strategy
+
+| Initial | Interactive |
+| --- | --- |
+| ![React Router tld – initial](./react-router-tld-initial.png) | ![React Router tld – interactive](./react-router-tld-interactive.png) |

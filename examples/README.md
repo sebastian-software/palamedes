@@ -8,11 +8,9 @@ locale strategies while preserving the same underlying runtime and identity
 model.
 
 The matrix is intended to be run locally and validated in CI — that remains the
-canonical verification path. All twenty examples are also publicly accessible as
-a live reference: the cookie, route, and subdomain demos at `*.examples.palamedes.dev`
-(the subdomain demos additionally require per-example wildcard DNS records), and
-the tld demos at `<framework>.examples.palamedes-i18n.{com,de,es,fr}` — see
-[docs/demo-deployments.md](../docs/demo-deployments.md) for hosting details.
+canonical verification path. Public demo URLs are documented as the live
+reference surface, but reachability depends on the hosting and DNS rows in
+[docs/demo-deployments.md](../docs/demo-deployments.md).
 
 This file is the canonical documentation for the full matrix. Individual
 example READMEs are optional and should stay short; add one only when a specific
@@ -28,12 +26,13 @@ example needs local setup notes that do not belong in the shared matrix guide.
 That is the real point of the matrix. It is not a pile of demos. It is the
 evidence behind the claim that Palamedes stays coherent across frameworks.
 
-## Live Demos
+## Live Reference URLs
 
-All twenty matrix examples are publicly deployed as a live reference — the same
-design across every framework. Switch language in any of them and watch copy,
-plural seat counts, currency, and dates change together. The demos are grouped by
-framework below, with every locale-specific URL linked directly.
+The URLs below are the intended public reference shape for the same design
+across every framework. Switch language in a reachable demo and watch copy,
+plural seat counts, currency, and dates change together. See
+[docs/demo-deployments.md](../docs/demo-deployments.md) for current hosting
+status before treating a row as publicly reachable.
 
 How each strategy encodes the locale:
 

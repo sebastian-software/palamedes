@@ -2,25 +2,26 @@
 
 The Palamedes example matrix is verified primarily through local runs and CI.
 Automatic deployments are not part of the default merge or release path. The
-matrix spans twenty examples (five frameworks × four locale strategies) that
-are published as a live reference — see the Live Reference Deployment section
-below. The five subdomain demos additionally require the per-example wildcard DNS
-records described under Subdomain Locale Hosting. The five tld demos require the
-`examples.palamedes-i18n.*` domains described under TLD Locale Hosting.
+matrix spans twenty examples (five frameworks × four locale strategies). Public
+demo URLs are documented as the live reference surface, but reachability depends
+on the hosting and DNS notes in this document. The five subdomain demos require
+the per-example wildcard DNS records described under Subdomain Locale Hosting.
+The five tld demos require the `examples.palamedes-i18n.*` domains described
+under TLD Locale Hosting.
 
 ## Current Policy
 
 - the canonical verification path is `pnpm build:examples` plus `pnpm verify:examples`
 - example deployments do not run automatically on `main`
-- the Next.js and SolidStart examples (including their subdomain and tld variants) are excluded from `deploy-examples.yml`; they are accessible via the live reference deployment
+- the Next.js and SolidStart examples (including their subdomain and tld variants) are excluded from `deploy-examples.yml`
 - the `deploy-examples.yml` workflow supports manual deployment of the Vite-based examples (TanStack, Waku, React Router — cookie, route, subdomain, and tld) if an additional hosted URL is needed
 
-## Live Reference Deployment
+## Live Reference URLs
 
-All twenty examples are published as a live reference — five frameworks, each
-in four locale strategies. Switch language in any of them and watch copy, plural
-seat counts, currency, and dates change together. The demos are grouped by
-framework below, with every locale-specific URL linked directly.
+These URLs describe the intended public reference shape — five frameworks, each
+in four locale strategies. Switch language in a reachable demo and watch copy,
+plural seat counts, currency, and dates change together. The demos are grouped
+by framework below, with every locale-specific URL linked directly.
 
 How each strategy encodes the locale:
 
@@ -153,7 +154,7 @@ It is `workflow_dispatch` only and intentionally excludes the Next.js examples.
 If used, it runs:
 
 1. target selection
-2. full example verification with `pnpm verify:examples`
+2. selected example verification with the filtered `pnpm verify:examples` command
 3. manual per-example deployment for the selected non-Next example
 
 Supported deployment targets:
@@ -183,6 +184,5 @@ For this OSS setup, the guaranteed baseline is:
 - the examples run locally
 - SSR, locale routing, cookie handling, and localized server actions are covered in browser tests
 
-Both `nextjs-cookie` and `nextjs-route` are nonetheless publicly accessible — see
-the Live Reference Deployment section above. The hosting mechanism for the Next.js
-examples is separate from `deploy-examples.yml` and is not further documented here.
+The hosting mechanism for the Next.js examples is separate from
+`deploy-examples.yml` and is not further documented here.

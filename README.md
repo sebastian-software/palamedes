@@ -28,10 +28,10 @@ The current proof:
 - Sixteen ADRs explain the runtime model, message identity, native boundary,
   adapter architecture, and the work deliberately kept out of scope.
 - Benchmark commands, fixtures, and machine-readable reports are checked in so
-  the numbers can be rerun locally. The end-to-end extract/update workflow
-  benchmark currently measures Palamedes at `33.53 ms` on the small profile and
-  `42.92 ms` on the medium profile on the checked machine-local run; the
-  Lingui and i18next-parser comparison numbers are documented in
+  the numbers can be rerun locally. The checked end-to-end extract/update
+  workflow report measures Palamedes at `33.53 ms` on the small profile and
+  `42.92 ms` on the medium profile; the Lingui and i18next-parser comparison
+  numbers and recorded tool versions are documented in
   [End-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md).
 
 **Try it live.** The live reference covers cookie, route, subdomain, and tld demos across the framework matrix. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
@@ -264,7 +264,7 @@ The same foundation also matters for future translation workflows:
 - [Pseudo-localization and fallback locale config](https://github.com/sebastian-software/palamedes/blob/main/docs/pseudo-localization.md)
 - [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
 - [Live demo deployments](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
-- [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
+- [Benchmarking against Lingui v6](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
 - [End-to-end workflow benchmark against Lingui and i18next-parser](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
 - [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)

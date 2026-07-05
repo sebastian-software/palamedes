@@ -1,22 +1,22 @@
-# Benchmarking Against Lingui v6 Preview
+# Benchmarking Against Lingui v6
 
 This repo includes a separate head-to-head benchmark harness for Palamedes vs.
-Lingui `6.0.0-next.1`.
+Lingui v6.
 
 It is intentionally separate from the smaller Palamedes-only benchmark:
 
 - the Lingui comparison has its own isolated workspace package
-- Lingui preview versions are pinned exactly
+- Lingui versions are pinned exactly
 - the measurement scope is narrow and explicitly normalized
 
 ## Versions
 
-As of March 18, 2026, the benchmark workspace pins:
+The benchmark workspace currently pins:
 
-- `@lingui/cli@6.0.0-next.1`
-- `@lingui/babel-plugin-lingui-macro@6.0.0-next.1`
-- `@lingui/swc-plugin@6.0.0-next.1`
-- `@lingui/format-po@6.0.0-next.1`
+- `@lingui/cli@6.4.0`
+- `@lingui/babel-plugin-lingui-macro@6.4.0`
+- `@lingui/swc-plugin@6.4.0`
+- `@lingui/format-po@6.4.0`
 
 Those pins live in [`benchmarks/lingui-v6/package.json`](https://github.com/sebastian-software/palamedes/blob/main/benchmarks/lingui-v6/package.json).
 
@@ -98,9 +98,10 @@ There are also smoke checks against checked-in repo sources:
 
 - transform parity for Palamedes, Lingui Babel, and Lingui SWC on the checked-in benchmark fixtures
 - extract sanity on the same example source files
-- compile sanity on `packages/cli/src/commands/fixtures/ferrocat-first-test`
+- compile sanity on the checked-in `examples/nextjs-cookie` catalog
 
-The compile smoke uses that clean fixture on purpose. The checked example catalogs are useful product examples, but they are not the stable compile baseline for this harness.
+The compile smoke uses a checked example catalog so the path stays tied to
+shipped repository fixtures rather than removed CLI internals.
 
 ## Shared Syntax Boundary
 
@@ -125,7 +126,7 @@ Excluded on purpose:
 
 One noteworthy boundary discovered during implementation:
 
-- JSX `<Select>` with custom option props is not currently normalized the same way by Palamedes and Lingui v6 preview
+- JSX `<Select>` with custom option props is not currently normalized the same way by Palamedes and Lingui v6
 - Lingui extracts `_draft` as `draft`, while Palamedes currently treats it like an exact `=draft` branch
 - that shape is therefore excluded from the fair comparison corpus for now
 

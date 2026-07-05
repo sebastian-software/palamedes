@@ -2,7 +2,7 @@
   "name": "@palamedes/benchmark-lingui-v6",
   "private": true,
   "type": "module",
-  "description": "Synthetic hot-path benchmark harness for Palamedes vs Lingui v6 preview",
+  "description": "Synthetic hot-path benchmark harness for Palamedes vs Lingui v6",
   "engines": {
     "node": ">=22.19.0"
   },
