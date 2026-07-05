@@ -8,22 +8,38 @@ package names.
 - `createI18n()`
 - `formatMessagePattern(pattern, values, locale?)`
 - `parseMessagePattern(pattern)`
+- `parseAcceptLanguage(header)` from `@palamedes/core/locale`
+- `buildLocaleSwitchItems(options)` from `@palamedes/core/locale`
+- `defineLocaleControls(config)` from `@palamedes/core/locale`
 - `MessageDescriptor`
 - `CatalogMessages`
 - `PalamedesI18n`
+- `CreateI18nOptions`
+- `MissingMessageInfo`
+- `MessageFormatErrorInfo`
 - `MessageNode`
 - `MessageChoiceNode`
+- `MessageFormattedArgumentNode`
 - `MessageTagNode`
 - `MessageVariableNode`
 
 ## `createI18n()`
 
-Creates an in-memory i18n instance.
+Creates an in-memory i18n instance. Optional telemetry hooks receive missing
+message and runtime formatting failures without changing the source-message
+fallback behavior.
 
 ```ts
 import { createI18n } from "@palamedes/core"
 
-const i18n = createI18n()
+const i18n = createI18n({
+  onMissing(info) {
+    reportMetric("palamedes.missing", info)
+  },
+  onError(info) {
+    captureException(info.error)
+  },
+})
 i18n.load("de", {
   "Hello {name}": "Hallo {name}",
 })
@@ -66,6 +82,19 @@ interface MessageDescriptor {
 
 Palamedes source authoring is source-string-first. Use `context` when the same
 source message needs different translations in different UI contexts.
+
+## Locale Controls
+
+`@palamedes/core/locale` exposes headless locale helpers used by the example
+matrix and reusable in apps:
+
+- `parseAcceptLanguage(header)`: parses and quality-sorts `Accept-Language`
+  tags, including base-language fallbacks.
+- `buildLocaleSwitchItems(options)`: builds UI-agnostic switch items with
+  labels, active state, locale, and test ids.
+- `defineLocaleControls(config)`: binds locale resolution, deliberate-choice
+  cookies, canonical URLs, and suggestion decisions for cookie, route,
+  subdomain, and tld strategies.
 
 ## Macro Entry Point
 

@@ -40,6 +40,10 @@ catalogs:
 | `pseudo-locale`         | No       | `string`                               | Locale code used for pseudo-localized UI testing.                                   |
 | `source-reference-root` | No       | `git \| config \| lingui \| path`      | Root used for catalog source references. Defaults to nearest Git root, then config. |
 
+The native CLI and JS config loader also accept snake_case aliases for
+hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
+and `source_reference_root`.
+
 ## Catalogs
 
 ```yaml
@@ -62,6 +66,9 @@ PO storage, FCL storage, and the current framework `.po` import loaders.
 `include` and `exclude` are resolved relative to the config file directory.
 When an include entry is a directory-like path, extraction scans JavaScript and
 TypeScript files below it.
+
+When `exclude` is empty, the native CLI implicitly excludes
+`**/node_modules/**`.
 
 ## Source References
 

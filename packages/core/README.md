@@ -54,6 +54,29 @@ For authoring imports, use:
 import { t } from "@palamedes/core/macro"
 ```
 
+The macro entry exports `t`, `msg`, `defineMessage`, `plural`, `select`, and
+`selectOrdinal`.
+
+## Locale Controls
+
+Use `@palamedes/core/locale` for framework-agnostic locale resolution and
+switch UI data:
+
+```ts
+import { defineLocaleControls } from "@palamedes/core/locale"
+
+const localeControls = defineLocaleControls({
+  locales: ["en", "de"],
+  defaultLocale: "en",
+})
+
+const locale = localeControls.preferredLocale(request.headers.get("accept-language"))
+```
+
+The subpath also exports `parseAcceptLanguage()`, `buildLocaleSwitchItems()`,
+and their related types. React and Solid re-export the switch-item helper for
+component packages.
+
 ## Runtime Formatting
 
 Palamedes supports the common ICU argument types that product UIs usually need

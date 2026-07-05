@@ -57,6 +57,18 @@ console.log(result.code)
 - `JS_MACROS`
 - `JSX_MACROS`
 
+The root package also re-exports catalog-loader helpers from
+`@palamedes/transform/catalog-loader`:
+
+- `createCatalogLoaderResult`
+- `renderCatalogModule`
+- `createCompileErrorMessage`
+- `createDiagnosticMessage`
+- `createMissingErrorMessage`
+- `CatalogLoaderOptions`
+- `CatalogLoaderResult`
+- `MissingCatalogMessage`
+
 ## Supported Macro Shapes
 
 - tagged templates such as `t\`...\``and`msg\`...\``

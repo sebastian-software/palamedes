@@ -12,6 +12,9 @@ storage/import boundary.
 - `withPalamedes(baseConfig?, options?)`
 - default export `withPalamedes`
 - `WithPalamedesOptions`
+- internal loader subpaths used by plugin wiring:
+  `@palamedes/next-plugin/palamedes-loader` and
+  `@palamedes/next-plugin/palamedes-po-loader`
 
 ## Options
 

@@ -98,6 +98,7 @@ For a fuller walkthrough, including Hono and Express examples, see:
 
 - `getI18n()`
 - `setClientI18n(i18n)`
+- `subscribeClientI18n(listener)`
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
 - `createServerI18nScope()` from `@palamedes/runtime/server` for Node runtimes
@@ -108,6 +109,10 @@ For a fuller walkthrough, including Hono and Express examples, see:
 The `@palamedes/runtime/server` implementation imports Node `async_hooks`. In
 non-Node bundles, the subpath resolves to a small fallback module that throws an
 actionable Node-only error when called.
+
+`subscribeClientI18n(listener)` is intended for framework bindings such as the
+Solid reactivity bridge. It fires when `setClientI18n()` is called and returns
+an unsubscribe function.
 
 ## Related Packages
 
