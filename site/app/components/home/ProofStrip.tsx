@@ -1,7 +1,7 @@
 import { useRef } from "react"
 import { Link } from "react-router"
 
-import { repoHref } from "~/data/links"
+import { decisionHref } from "~/data/links"
 import { useCountUp } from "~/hooks/useCountUp"
 import { useInView } from "~/hooks/useInView"
 
@@ -19,7 +19,7 @@ const STATS: Stat[] = [
     label: "faster than Lingui — checked extract/update benchmark, machine-local run",
     href: "/proof",
   },
-  { value: "16", label: "ADRs documenting every tradeoff", href: repoHref("adr", "tree") },
+  { value: "16", label: "ADRs documenting every tradeoff", href: decisionHref() },
 ]
 
 function StatCell({ stat, active }: { stat: Stat; active: boolean }) {

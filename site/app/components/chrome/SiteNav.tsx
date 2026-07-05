@@ -1,6 +1,6 @@
 import { Link, NavLink } from "react-router"
 
-import { repoHref, REPO } from "~/data/links"
+import { REPO } from "~/data/links"
 import { ButtonLink } from "./Button"
 
 const NAV_ITEMS = [
@@ -32,12 +32,13 @@ export function SiteNav() {
               {item.label}
             </NavLink>
           ))}
-          <a
-            href={repoHref("docs", "tree")}
+          <Link
+            to="/docs"
+            viewTransition
             className="micro tracking-nav py-1 text-ink transition-colors hover:text-accent"
           >
             Docs
-          </a>
+          </Link>
         </div>
         <div className="ml-auto flex items-center gap-3">
           <a href={REPO} className="micro tracking-nav text-gray-spec hover:text-accent">
