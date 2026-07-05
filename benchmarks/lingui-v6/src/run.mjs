@@ -286,7 +286,7 @@ async function main() {
 
     const report = {
       schemaVersion: 2,
-      benchmark: "palamedes-vs-lingui-v6-preview",
+      benchmark: "palamedes-vs-lingui-v6",
       generatedAt: environment.generatedAt,
       machineLocal: true,
       seed: args.seed,
@@ -952,7 +952,7 @@ async function writeOutputs(report) {
 
 function renderMarkdown(report) {
   const lines = [
-    "# Palamedes vs. Lingui v6 Preview Benchmark",
+    "# Palamedes vs. Lingui v6 Benchmark",
     "",
     `Generated: ${report.generatedAt}`,
     `Node: ${report.environment.nodeVersion}`,
@@ -1050,7 +1050,7 @@ function renderMarkdown(report) {
 }
 
 function printConsoleSummary(report, outputPaths) {
-  console.log("# Palamedes vs. Lingui v6 Preview")
+  console.log("# Palamedes vs. Lingui v6")
   console.log(`Generated: ${report.generatedAt}`)
   console.log(`Results: ${outputPaths.primaryJson}`)
 
