@@ -34,6 +34,7 @@ Audits catalogs for missing translations and ICU authoring issues.
 ```bash
 pmds audit
 pmds audit --locale de fr
+pmds audit --locale de,fr
 pmds audit --json
 pmds audit --fail-on warning
 ```
@@ -43,9 +44,31 @@ Options:
 | Option                 | Description                                     |
 | ---------------------- | ----------------------------------------------- |
 | `-c, --config <path>`  | Use a specific config file.                     |
-| `--locale <locale...>` | Audit only selected target locales.             |
+| `--locale <locale...>` | Audit only selected target locales. Space-separated and comma-separated values are accepted. |
 | `--json`               | Print the machine-readable audit result.        |
 | `--fail-on <level>`    | Fail on `error` or `warning`. Default: `error`. |
+
+## `pmds report`
+
+Reports per-locale translation completeness from configured catalogs. Source
+locale entries count as translated; target locales are compared against the
+source catalog messages that are not obsolete.
+
+```bash
+pmds report
+pmds report --locale de fr
+pmds report --locale de,fr --json
+pmds report --fail-if-below 95
+```
+
+Options:
+
+| Option                       | Description                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------------- |
+| `-c, --config <path>`        | Use a specific config file.                                                           |
+| `--locale <locale...>`       | Report only selected target locales. Space-separated and comma-separated values work. |
+| `--json`                     | Print the machine-readable completeness report.                                       |
+| `--fail-if-below <percent>`  | Fail when any reported locale is below this translated percentage.                    |
 
 ## `pmds catalog merge`
 
@@ -58,15 +81,17 @@ pmds catalog merge %A %B --base %O --output %A --format po --conflict-strategy u
 pmds catalog merge ours.fcl theirs.fcl --output merged.fcl --format fcl
 ```
 
+`pmds catalog merge` requires exactly two input catalogs in precedence order.
+
 Options:
 
 | Option                           | Description                                                      |
 | -------------------------------- | ---------------------------------------------------------------- |
 | `--output <path>`                | Required output path.                                            |
-| `-c, --config <path>`            | Use a specific config file when inferring `sourceLocale`.        |
+| `-c, --config <path>`            | Use a specific config file when inferring `source-locale`.       |
 | `--format <format>`              | `po` or `fcl`. Inferred from paths when omitted.                 |
 | `--base <path>`                  | Optional ancestor catalog path supplied by Git merge drivers.    |
-| `--conflict-strategy <strategy>` | `use-first`, `use-last`, or `error`.                             |
+| `--conflict-strategy <strategy>` | `use-first`, `use-last`, or `error`. Default: `use-first`.       |
 | `--source-locale <locale>`       | Source locale for catalog semantics. Defaults to config or `en`. |
 | `--locale <locale>`              | Locale of the merged catalog.                                    |
 
@@ -77,6 +102,7 @@ fails before writing output when a PO source contains raw `fuzzy` flags.
 
 ```bash
 pmds catalog convert src/locales/de.po --to fcl --output src/locales/de.fcl
+pmds catalog convert src/locales/de.po --to fcl --locale de
 pmds catalog convert --config palamedes.yaml --to fcl
 ```
 
@@ -92,6 +118,17 @@ catalogs:
 
 See [Catalog formats](./catalog-formats.md) for when to keep PO storage and
 when to opt into FCL.
+
+Options:
+
+| Option                     | Description                                                                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| `<input>`                  | Optional input catalog for single-file conversion.                                               |
+| `-c, --config <path>`      | Convert configured PO catalogs. Cannot be combined with `--output`.                             |
+| `--to <format>`            | Target format. Currently `fcl`.                                                                 |
+| `--output <path>`          | Output path for single-file conversion. Defaults to the input path with a `.fcl` extension.      |
+| `--source-locale <locale>` | Source locale for single-file conversion. Default: `en`.                                        |
+| `--locale <locale>`        | Locale for single-file conversion.                                                              |
 
 ## `pmds version`
 

@@ -27,7 +27,8 @@ Wait if you need:
 
 - [ ] Replace Lingui framework integration with `@palamedes/vite-plugin` or `@palamedes/next-plugin`
 - [ ] Add `@palamedes/runtime` and register the active i18n instance
-- [ ] Add `palamedes.config.ts`
+- [ ] Add `palamedes.yaml`
+- [ ] Rewrite Lingui macro imports to Palamedes macro imports
 - [ ] Switch extraction to `pnpm exec pmds extract`
 - [ ] Remove explicit authoring `id` usage
 - [ ] Verify `.po` loading and runtime translations
@@ -46,14 +47,16 @@ Wait if you need:
 
 ## What Usually Stays The Same
 
-Most authoring patterns remain familiar:
+Most authoring patterns remain familiar, but the import sources must change.
+The Palamedes transform recognizes Palamedes macro packages; Lingui macro
+imports are left untouched.
 
 ```ts
-import { t, msg, defineMessage, plural, select, selectOrdinal } from "@lingui/core/macro"
+import { t, msg, defineMessage, plural, select, selectOrdinal } from "@palamedes/core/macro"
 ```
 
 ```tsx
-import { Trans, Plural, Select, SelectOrdinal } from "@lingui/react/macro"
+import { Trans, Plural, Select, SelectOrdinal } from "@palamedes/react/macro"
 ```
 
 That continuity is the point. The migration is primarily a tooling, catalog,
@@ -144,9 +147,10 @@ Make the active i18n instance available through `@palamedes/runtime`.
 Client-side:
 
 ```ts
-import { i18n } from "@lingui/core"
+import { createI18n } from "@palamedes/core"
 import { setClientI18n } from "@palamedes/runtime"
 
+const i18n = createI18n()
 setClientI18n(i18n)
 ```
 
