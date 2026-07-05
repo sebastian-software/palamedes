@@ -198,6 +198,46 @@ msgstr ""
 }
 
 #[test]
+fn compile_catalog_artifact_accepts_self_closing_component_placeholders() {
+    let fixture = create_fixture_dir("catalog-artifact-self-closing");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+
+    let message = "Line one<0/>Line two";
+    write_test_catalog(&locale_dir, "en", &[(message, "")]);
+    write_test_catalog(&locale_dir, "de", &[(message, message)]);
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "self-closing component placeholder should compile without diagnostics: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        result
+            .messages
+            .get(&compiled_key(message, None))
+            .map(String::as_str),
+        Some(message)
+    );
+}
+
+#[test]
 fn compile_catalog_artifact_pseudolocalizes_with_ferrocat_runtime_syntax_policy() {
     let fixture = create_fixture_dir("catalog-artifact-pseudo-ferrocat");
     let locale_dir = fixture.join("src/locales");

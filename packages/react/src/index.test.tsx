@@ -29,6 +29,18 @@ describe("@palamedes/react", () => {
     expect(html).toBe("Bereitgestellt von <strong>Palamedes</strong>")
   })
 
+  it("renders a self-closing placeholder as a void component", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <Trans id="imprint" message="Line one<0/>Line two" components={{ 0: <br /> }} />
+    )
+
+    expect(html).toBe("Line one<br/>Line two")
+  })
+
   it("renders plural output through the active runtime instance", () => {
     const i18n = createI18n()
     setClientI18n(i18n)
