@@ -96,6 +96,18 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!poVisible) {
       fail("code showcase: Translate tab did not reveal .po pane")
     }
+    // Get-started stack picker switches the six-step flow per stack.
+    await page.goto(`http://localhost:${PORT}/get-started`)
+    await page.getByRole("tab", { name: "Vite + Solid" }).click()
+    const solidVisible = await page.getByText("vite-plugin-solid").first().isVisible()
+    if (!solidVisible) {
+      fail("get-started: Solid tab did not reveal Solid setup")
+    }
+    await page.getByRole("tab", { name: "Next.js" }).click()
+    const nextVisible = await page.getByText("@palamedes/next-plugin").first().isVisible()
+    if (!nextVisible) {
+      fail("get-started: Next.js tab did not reveal Next setup")
+    }
     // Client-side nav via the top navigation. With viewTransition the URL
     // updates before the render commits, so wait for the target heading.
     await page.getByRole("link", { name: "Proof", exact: true }).click()

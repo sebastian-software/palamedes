@@ -47,28 +47,9 @@ const EXAMPLE_FIXTURE_FILES = [
 ]
 const EXAMPLE_COMPILE_TARGETS = [
   {
-    name: "ferrocat-first-test",
-    rootDir: path.join(
-      repoRoot,
-      "packages",
-      "cli",
-      "src",
-      "commands",
-      "fixtures",
-      "ferrocat-first-test"
-    ),
-    resourcePath: path.join(
-      repoRoot,
-      "packages",
-      "cli",
-      "src",
-      "commands",
-      "fixtures",
-      "ferrocat-first-test",
-      "src",
-      "locales",
-      "de.po"
-    ),
+    name: "nextjs-cookie",
+    rootDir: path.join(repoRoot, "examples", "nextjs-cookie"),
+    resourcePath: path.join(repoRoot, "examples", "nextjs-cookie", "src", "locales", "de.po"),
     locales: ["en", "de"],
   },
 ]
