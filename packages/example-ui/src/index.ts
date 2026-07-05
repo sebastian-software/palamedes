@@ -2,7 +2,7 @@
  * Shared demo content for the Palamedes example matrix.
  *
  * Every framework demo renders the same fictional booking — "Frontend Stage
- * 2026" — so the ten apps are byte-for-byte the same story. Translatable
+ * 2026" — so the twenty apps are byte-for-byte the same story. Translatable
  * strings live in each app's `.po` catalogs (that is what Palamedes extracts);
  * the locale-independent facts below live here, once.
  */

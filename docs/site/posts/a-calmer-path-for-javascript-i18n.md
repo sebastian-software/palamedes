@@ -41,7 +41,7 @@ The proof is visible in the repo:
 
 - the [example matrix](../../../examples/README.md) covers Next.js, TanStack
   Start, SolidStart, Waku, and React Router
-- each framework family has cookie and route locale strategies
+- each framework family has cookie, route, subdomain, and tld locale strategies
 - [browser screenshots](../../example-screenshots/README.md) are generated
   from the same Playwright verification flow used in CI
 - [ADRs](../../../adr/001-project-scope-and-positioning.md) explain the runtime

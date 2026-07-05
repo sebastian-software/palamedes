@@ -1,6 +1,7 @@
 # Palamedes Architecture Decisions
 
-This directory contains the current canonical architecture decisions for Palamedes.
+This file indexes the current canonical architecture decisions for Palamedes.
+The ADRs themselves live in [`adr/`](./adr/).
 
 The ADR set is intentionally small and present-tense:
 
@@ -33,6 +34,14 @@ Finally read the host integration decisions:
 9. [ADR-009: Typed N-API Boundary with Workflow-First Native Operations](./adr/009-typed-napi-boundary-with-workflow-first-native-operations.md)
 10. [ADR-010: Generated TypeScript Types Derived from the Native Binding Surface](./adr/010-generated-typescript-types-derived-from-the-native-binding-surface.md)
 11. [ADR-011: Host Adapters Render Module Source from Compiled Catalog Artifacts](./adr/011-host-adapters-render-module-source-from-compiled-catalog-artifacts.md)
+
+Then read the product boundary, CLI, and diagnostics decisions:
+
+12. [ADR-012: Translation Augmentation Boundary](./adr/012-translation-augmentation-boundary.md)
+13. [ADR-013: Defer CLI Worker Parallelism Until Benchmarked Need](./adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md)
+14. [ADR-014: Native Transform Source Maps](./adr/014-native-transform-source-maps.md)
+15. [ADR-015: Runtime Formatter Subset Diagnostics](./adr/015-runtime-formatter-subset-diagnostics.md)
+16. [ADR-016: Native CLI And YAML-First Configuration](./adr/016-native-cli-and-yaml-first-configuration.md)
 
 ## ADR Policy
 

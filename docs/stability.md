@@ -8,6 +8,11 @@ minor releases.
 
 All publishable Palamedes packages ship in lockstep.
 
+Published packages declare Node.js `>=22.0.0` unless a package has a specific
+runtime reason to require a higher patch level. The repository development and
+CI floor is stricter: contributors should use Node.js `>=22.22`, matching the
+root `package.json`, README badge, and contribution guide.
+
 From 1.0 onward:
 
 - major releases may include breaking changes to Stable surfaces

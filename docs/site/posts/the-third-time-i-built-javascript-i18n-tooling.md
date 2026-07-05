@@ -56,7 +56,7 @@ trying to protect.
 The current proof is visible:
 
 - five framework families in the example matrix
-- cookie and route locale strategies
+- cookie, route, subdomain, and tld locale strategies
 - versioned browser screenshots
 - reproducible benchmark commands
 - comparison docs that treat Lingui and next-intl as real alternatives

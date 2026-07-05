@@ -147,7 +147,7 @@ are not yet reachable. The canonical verification path runs locally via
 
 The optional deployment workflow lives at:
 
-- [deploy-examples.yml](/Users/sebastian/Workspace/business/palamedes/.github/workflows/deploy-examples.yml)
+- [deploy-examples.yml](.github/workflows/deploy-examples.yml)
 
 It is `workflow_dispatch` only and intentionally excludes the Next.js examples.
 If used, it runs:

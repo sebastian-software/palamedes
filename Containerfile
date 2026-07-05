@@ -40,7 +40,7 @@ COPY . .
 
 RUN pnpm install --frozen-lockfile
 # `pnpm build` builds the workspace packages and compiles the native addon via
-# cargo; `pnpm build:examples` builds all ten example apps.
+# cargo; `pnpm build:examples` builds all twenty example apps.
 RUN pnpm build
 RUN pnpm build:examples
 # Drop build-only artifacts before they reach the runtime image: the compiled
@@ -66,7 +66,7 @@ COPY --from=build --chown=node:node /app /app
 # Global pnpm at the version pinned in package.json (packageManager) so the
 # unprivileged `node` user can run the example start scripts.
 RUN npm install -g "pnpm@$(node -p 'require("./package.json").packageManager.split("@")[1].split("+")[0]')"
-# Run the ten public servers as a non-root user (least privilege).
+# Run the twenty public servers as a non-root user (least privilege).
 USER node
 
 # Fixed ports — informational only; the authoritative list is

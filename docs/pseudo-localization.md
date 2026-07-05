@@ -24,7 +24,9 @@ catalogs:
 ## `pseudo-locale`
 
 Set `pseudo-locale` to the locale code you use for pseudo-localized UI testing.
-The value must also appear in `locales`.
+If the value also appears in `locales`, plugin integrations compile it as the
+pseudo-localized testing locale. Values outside `locales` are ignored by the
+current validators.
 
 Palamedes treats the pseudo-locale as a development aid, not as a real
 translation target. The Vite and Next.js plugin integrations pass the value
