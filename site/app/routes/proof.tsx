@@ -8,7 +8,9 @@ import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
 import { BENCH_MEDIUM, BENCH_SMALL } from "~/data/bench"
 import { CATALOG_QA_CARDS } from "~/data/features"
-import { repoHref } from "~/data/links"
+import { decisionHref, docsHref, repoHref } from "~/data/links"
+
+export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
@@ -54,9 +56,7 @@ export default function Proof() {
           and commands in the repo. If a claim can't be re-run, we don't make it.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href={repoHref("docs/benchmark-e2e-workflow.md")}>
-            Re-run the benchmarks
-          </ButtonLink>
+          <ButtonLink href={docsHref("benchmark-e2e-workflow")}>Re-run the benchmarks</ButtonLink>
           <ButtonLink variant="outline" href={repoHref("benchmarks/e2e-workflow/results", "tree")}>
             Browse checked-in reports
           </ButtonLink>
@@ -112,19 +112,13 @@ export default function Proof() {
         lede="The ADRs cover message identity, the native boundary, adapter architecture — and, just as deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if our tradeoffs match yours."
       >
         <div className="space-y-2">
-          <a href={repoHref("adr", "tree")} className="mono-nums block text-[13px] text-accent">
+          <a href={decisionHref()} className="mono-nums block text-[13px] text-accent">
             ADR index →
           </a>
-          <a
-            href={repoHref("docs/stability.md")}
-            className="mono-nums block text-[13px] text-accent"
-          >
+          <a href={docsHref("stability")} className="mono-nums block text-[13px] text-accent">
             Stability &amp; versioning policy →
           </a>
-          <a
-            href={repoHref("docs/principles.md")}
-            className="mono-nums block text-[13px] text-accent"
-          >
+          <a href={docsHref("principles")} className="mono-nums block text-[13px] text-accent">
             Palamedes principles →
           </a>
         </div>

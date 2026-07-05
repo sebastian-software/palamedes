@@ -7,7 +7,9 @@ import { StackPicker } from "~/components/get-started/StackPicker"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { NEXT_STEP_CARDS } from "~/data/features"
-import { repoHref } from "~/data/links"
+import { apiHref, docsHref } from "~/data/links"
+
+export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
@@ -32,7 +34,7 @@ export default function GetStarted() {
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href="#install">Skip to step 1</ButtonLink>
-          <ButtonLink variant="outline" href={repoHref("docs/first-working-translation.md")}>
+          <ButtonLink variant="outline" href={docsHref("first-working-translation")}>
             Full written guide
           </ButtonLink>
         </div>
@@ -63,7 +65,7 @@ export default function GetStarted() {
           label: "Open an issue",
           href: "https://github.com/sebastian-software/palamedes/issues",
         }}
-        secondary={{ label: "Read the docs", href: repoHref("docs/api/README.md") }}
+        secondary={{ label: "Read the docs", href: apiHref() }}
       />
     </Page>
   )

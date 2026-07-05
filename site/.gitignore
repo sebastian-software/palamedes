@@ -1,2 +1,7 @@
 /.react-router/
 /build/
+/app/routes/api-reference/
+/app/routes/blog/*.md
+/app/routes/decisions/
+/app/routes/docs/
+/public/docs/

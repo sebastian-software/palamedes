@@ -7,7 +7,9 @@ import { FwPanels } from "~/components/frameworks/FwPanels"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { STRATEGY_CARDS } from "~/data/features"
-import { DEMO_NEXTJS_COOKIE, repoHref } from "~/data/links"
+import { DEMO_NEXTJS_COOKIE, docsHref, repoHref } from "~/data/links"
+
+export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
@@ -55,7 +57,7 @@ export default function Frameworks() {
       >
         <FeatureGrid cards={STRATEGY_CARDS} columns={4} sectionIndex="02" />
         <a
-          href={repoHref("docs/locale-strategies.md")}
+          href={docsHref("locale-strategies")}
           className="mono-nums mt-6 inline-block text-[13px] text-accent"
         >
           Locale strategies in depth →
@@ -71,7 +73,7 @@ export default function Frameworks() {
         title="And it doesn't stop at the frontend."
         lede="The same getI18n() model runs in Hono and Express with request-local locale resolution — transactional emails, API error messages, and PDF generation speak the user's language from the same catalogs."
       >
-        <ButtonLink variant="outline" href={repoHref("docs/backend-servers.md")}>
+        <ButtonLink variant="outline" href={docsHref("backend-servers")}>
           Backend servers guide
         </ButtonLink>
       </Section>
