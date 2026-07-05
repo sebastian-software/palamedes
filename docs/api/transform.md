@@ -14,9 +14,22 @@ plugins.
 - `TransformOptions`
 - `TransformResult`
 - `SourceMap`
+- `createCatalogLoaderResult(artifact, options)`
+- `renderCatalogModule(artifact, options)`
+- `createCompileErrorMessage(diagnostic)`
+- `createDiagnosticMessage(diagnostic)`
+- `createMissingErrorMessage(message)`
+- `CatalogLoaderOptions`
+- `CatalogLoaderResult`
+- `MissingCatalogMessage`
 
 `findMacroImports()` expects a parsed AST program, not a source string. Use
 `mightContainPalamedesMacros(source)` as the cheap string pre-check before
 parsing.
+
+The `@palamedes/transform/catalog-loader` subpath exports the catalog-loader
+helpers used by the first-party Vite and Next plugins. They are useful when a
+custom bundler needs to render compiled catalog artifacts into JavaScript
+modules with the same diagnostics and missing-catalog messages.
 
 Most apps should use a framework plugin instead of this package directly.

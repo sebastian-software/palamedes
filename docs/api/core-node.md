@@ -28,6 +28,10 @@ formatter kinds such as `list`, `duration`, `ago`, and `name` are errors.
 Unsupported styles on supported `number`, `date`, and `time` formatters are
 warnings because the runtime falls back to default `Intl` formatting.
 
+`compileCatalogModule(config, resourcePath, options)` renders the compiled
+catalog artifact as a JavaScript module for a selected locale. The first-party
+Vite and Next plugins use it for `.po` imports.
+
 ## Stability
 
 This package is useful for integration tests and custom tooling, but it is a

@@ -29,6 +29,8 @@ catalogs:
 - `loadPalamedesConfig(options?)`
 - `CONFIG_FILENAMES`
 - `expandFallbackLocales(locales, fallbackLocales?)`
+- `resolveCatalogPath(config, catalogPath, locale)`
+- `resolveConfigPattern(config, pattern)`
 
 ## Configuration Notes
 
@@ -44,6 +46,9 @@ catalogs:
   relative to the config directory, or pass a custom path.
 - `catalogs[].format` defaults to `"po"`. Set it to `"fcl"` to use Ferrocat
   Catalog Lines for canonical, merge-friendly generated catalog storage.
+- `loadPalamedesConfig()` returns `sourceReferenceRoot` in addition to
+  `configPath` and `rootDir`; pass `skipValidation` only when inspecting a
+  partially-authored config file.
 
 See [Catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 for the PO/FCL storage boundary.

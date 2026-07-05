@@ -9,6 +9,15 @@
 - `Select`
 - `SelectOrdinal`
 - `buildLocaleSwitchItems(options)`
+- `TransProps`
+- `PluralProps`
+- `SelectProps`
+- `SelectOrdinalProps`
+- `BuildLocaleSwitchItemsOptions`
+- `LocaleSwitchItem`
+
+The locale-switch helper and related types are re-exported from
+`@palamedes/core/locale`.
 
 The client subpath `@palamedes/solid/client` exports:
 

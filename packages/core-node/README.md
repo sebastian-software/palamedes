@@ -114,6 +114,11 @@ framework plugins.
 The wrapper exposes lowercase public format values (`"po"` and `"fcl"`) while
 mapping to the native Ferrocat-backed API internally.
 
+`compileCatalogModule(config, resourcePath, options)` is the direct module
+rendering API used by the first-party `.po` loaders. Pass the artifact config,
+the resource path, and options such as `locale`, `pseudoLocale`,
+`failOnMissing`, and `failOnCompileError`.
+
 ## Related Packages
 
 - [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)

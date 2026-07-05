@@ -11,9 +11,18 @@ points, and headless locale-switch helpers.
 - `SelectOrdinal`
 - `buildLocaleSwitchItems(options)`
 - `Fragment`
+- `TransProps`
+- `PluralProps`
+- `SelectProps`
+- `SelectOrdinalProps`
+- `BuildLocaleSwitchItemsOptions`
+- `LocaleSwitchItem`
 
 `Fragment` is re-exported from React for generated/runtime component rendering
 paths that need the same import surface as other React helpers.
+
+The locale-switch helper and related types are re-exported from
+`@palamedes/core/locale`.
 
 The client subpath `@palamedes/react/client` exports:
 

@@ -11,10 +11,12 @@
 - `expandFallbackLocales(locales, fallbackLocales?)`
 - `resolveCatalogPath(config, catalogPath, locale)`
 - `resolveConfigPattern(config, pattern)`
+- `LoadPalamedesConfigOptions`
 - `PalamedesConfig`
 - `LoadedPalamedesConfig`
 - `PalamedesCatalogConfig`
 - `PalamedesFallbackLocales`
+- `PalamedesSourceReferenceRoot`
 
 ## Config Files
 
@@ -59,8 +61,13 @@ export default defineConfig({
 ## `loadPalamedesConfig(options?)`
 
 Searches from `cwd` for a supported config file unless `configPath` is passed.
-The returned object includes `configPath` and `rootDir`.
+The returned object includes `configPath`, `rootDir`, and
+`sourceReferenceRoot`.
 
 ```ts
 const config = await loadPalamedesConfig({ cwd: process.cwd() })
 ```
+
+Options include `cwd`, `configPath`, and `skipValidation`. Use
+`skipValidation` only for tooling that needs to inspect partially-authored
+config files.
