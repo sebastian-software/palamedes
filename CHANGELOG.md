@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.1.2...palamedes-v1.2.0) (2026-07-05)
+
+
+### Features
+
+* **site:** build the Palamedes website — Swiss spec grid with CLI-first hero ([4a98e23](https://github.com/sebastian-software/palamedes/commit/4a98e2387f97b6964322c662b7d29e35d4a39879))
+* **site:** deploy the website to GitHub Pages ([11f028d](https://github.com/sebastian-software/palamedes/commit/11f028de6f5d57413c8c772b4d40b672707339e3))
+* **site:** scaffold @palamedes/site workspace with prerendered React Router app ([b2d9528](https://github.com/sebastian-software/palamedes/commit/b2d95283b0168b2700f758a687999d24748fef59))
+* **site:** serve corrected llms.txt context files from the site root ([a5f0dd2](https://github.com/sebastian-software/palamedes/commit/a5f0dd2301629b753f6ee6da69d60b6893f0c99c)), closes [#309](https://github.com/sebastian-software/palamedes/issues/309)
+
+
+### Bug Fixes
+
+* render and compile-validate self-closing component placeholders ([#330](https://github.com/sebastian-software/palamedes/issues/330)) ([4441284](https://github.com/sebastian-software/palamedes/commit/4441284d8013fdbba835bf0806b5c413e2bcbee3)), closes [#328](https://github.com/sebastian-software/palamedes/issues/328)
+
 ## [1.1.2](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.1.1...palamedes-v1.1.2) (2026-07-05)
 
 
