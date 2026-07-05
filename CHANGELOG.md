@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.1.1...palamedes-v1.1.2) (2026-07-05)
+
+
+### Bug Fixes
+
+* **release:** build musl core-node cdylib with a musl-native toolchain ([#325](https://github.com/sebastian-software/palamedes/issues/325)) ([e1c9e64](https://github.com/sebastian-software/palamedes/commit/e1c9e6473f02bf5d10e9c887a78a5f0006755228))
+
 ## [1.1.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.1.0...palamedes-v1.1.1) (2026-07-04)
 
 
