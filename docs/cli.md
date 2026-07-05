@@ -41,12 +41,12 @@ pmds audit --fail-on warning
 
 Options:
 
-| Option                 | Description                                     |
-| ---------------------- | ----------------------------------------------- |
-| `-c, --config <path>`  | Use a specific config file.                     |
+| Option                 | Description                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| `-c, --config <path>`  | Use a specific config file.                                                                  |
 | `--locale <locale...>` | Audit only selected target locales. Space-separated and comma-separated values are accepted. |
-| `--json`               | Print the machine-readable audit result.        |
-| `--fail-on <level>`    | Fail on `error` or `warning`. Default: `error`. |
+| `--json`               | Print the machine-readable audit result.                                                     |
+| `--fail-on <level>`    | Fail on `error` or `warning`. Default: `error`.                                              |
 
 ## `pmds report`
 
@@ -63,12 +63,12 @@ pmds report --fail-if-below 95
 
 Options:
 
-| Option                       | Description                                                                           |
-| ---------------------------- | ------------------------------------------------------------------------------------- |
-| `-c, --config <path>`        | Use a specific config file.                                                           |
-| `--locale <locale...>`       | Report only selected target locales. Space-separated and comma-separated values work. |
-| `--json`                     | Print the machine-readable completeness report.                                       |
-| `--fail-if-below <percent>`  | Fail when any reported locale is below this translated percentage.                    |
+| Option                      | Description                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------- |
+| `-c, --config <path>`       | Use a specific config file.                                                           |
+| `--locale <locale...>`      | Report only selected target locales. Space-separated and comma-separated values work. |
+| `--json`                    | Print the machine-readable completeness report.                                       |
+| `--fail-if-below <percent>` | Fail when any reported locale is below this translated percentage.                    |
 
 ## `pmds catalog merge`
 
@@ -121,14 +121,14 @@ when to opt into FCL.
 
 Options:
 
-| Option                     | Description                                                                                     |
-| -------------------------- | ----------------------------------------------------------------------------------------------- |
-| `<input>`                  | Optional input catalog for single-file conversion.                                               |
-| `-c, --config <path>`      | Convert configured PO catalogs. Cannot be combined with `--output`.                             |
-| `--to <format>`            | Target format. Currently `fcl`.                                                                 |
-| `--output <path>`          | Output path for single-file conversion. Defaults to the input path with a `.fcl` extension.      |
-| `--source-locale <locale>` | Source locale for single-file conversion. Default: `en`.                                        |
-| `--locale <locale>`        | Locale for single-file conversion.                                                              |
+| Option                     | Description                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `<input>`                  | Optional input catalog for single-file conversion.                                          |
+| `-c, --config <path>`      | Convert configured PO catalogs. Cannot be combined with `--output`.                         |
+| `--to <format>`            | Target format. Currently `fcl`.                                                             |
+| `--output <path>`          | Output path for single-file conversion. Defaults to the input path with a `.fcl` extension. |
+| `--source-locale <locale>` | Source locale for single-file conversion. Default: `en`.                                    |
+| `--locale <locale>`        | Locale for single-file conversion.                                                          |
 
 ## `pmds version`
 
