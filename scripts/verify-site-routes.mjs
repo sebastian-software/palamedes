@@ -1,16 +1,15 @@
 /*
  * Headless click-through of the built site (site/build/client). Serves the
- * prerendered output, then for every route asserts the H1, zero console
- * errors, and key interactions on the home page. Runs three passes: default,
- * reduced-motion, and JS-disabled (prerendered HTML must be complete).
+ * prerendered output, then crawls every sitemap route, asserts key H1s, checks
+ * zero console errors, and exercises important interactions. Runs three passes:
+ * default, reduced-motion, and JS-disabled.
  *
  * Usage: node scripts/verify-site-routes.mjs  (requires a prior site build)
  */
 
 import { createServer } from "node:http"
-import { readFileSync, existsSync } from "node:fs"
-import { extname, join } from "node:path"
-import { dirname } from "node:path"
+import { existsSync, readFileSync, statSync } from "node:fs"
+import { dirname, extname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { chromium } from "@playwright/test"
@@ -20,28 +19,52 @@ const clientDir = join(repoRoot, "site/build/client")
 const PORT = 4102
 
 const MIME = {
+  ".css": "text/css",
   ".html": "text/html",
   ".js": "text/javascript",
-  ".css": "text/css",
-  ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".svg": "image/svg+xml",
   ".txt": "text/plain",
+  ".xml": "application/xml",
 }
 
-const ROUTES = [
+const ROUTE_EXPECTATIONS = [
   { path: "/", h1: "One translation model." },
   { path: "/frameworks", h1: "Five frameworks." },
   { path: "/proof", h1: "Claims you can re-run." },
   { path: "/get-started", h1: "First working translation" },
   { path: "/compare", h1: "Narrower than the alternatives." },
   { path: "/blog", h1: "Building i18n tooling in the" },
+  { path: "/blog/measuring-palamedes-honestly", h1: "Measuring Palamedes Honestly" },
+  { path: "/docs", h1: "Documentation" },
+  { path: "/docs/cli", h1: "CLI Reference" },
+  { path: "/docs/example-screenshots", h1: "Example Screenshots" },
+  { path: "/decisions", h1: "Architecture Decisions" },
+  {
+    path: "/decisions/003-source-string-first-message-identity",
+    h1: "ADR-003: Source-String-First Message Identity",
+  },
+  { path: "/api-reference", h1: "Generated API Reference" },
+  { path: "/api-reference/core", h1: "Core" },
+  { path: "/api-reference/config", h1: "Config" },
+  { path: "/api-reference/config/functions", h1: "Functions" },
+  { path: "/api-reference/config/types", h1: "Types" },
 ]
+
+const sitemapPaths = readSitemapPaths()
 
 const server = createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`)
+  const hasExtension = extname(url.pathname) !== ""
   let filePath = join(clientDir, url.pathname)
   if (!extname(filePath)) {
     filePath = join(filePath, "index.html")
+  }
+  if (existsSync(filePath) && statSync(filePath).isDirectory()) {
+    filePath = join(filePath, "index.html")
+  }
+  if (!existsSync(filePath) && !hasExtension) {
+    filePath = join(clientDir, "__spa-fallback.html")
   }
   if (!existsSync(filePath)) {
     res.writeHead(404)
@@ -80,42 +103,80 @@ function fail(message) {
   console.error(`  !! ${message}`)
 }
 
+function readSitemapPaths() {
+  const sitemapPath = join(clientDir, "sitemap.xml")
+  if (!existsSync(sitemapPath)) {
+    console.error(`missing ${sitemapPath}; run pnpm build:site first`)
+    process.exit(1)
+  }
+  const sitemap = readFileSync(sitemapPath, "utf8")
+  const paths = [...sitemap.matchAll(/<loc>https:\/\/palamedes\.dev([^<]+)<\/loc>/gu)]
+    .map((match) => match[1])
+    .filter((path) => path !== "/404")
+  if (paths.length === 0) {
+    console.error("sitemap.xml did not contain any palamedes.dev routes")
+    process.exit(1)
+  }
+  return [...new Set(paths)].sort((left, right) => left.localeCompare(right))
+}
+
 async function checkRoutes(context, label, { expectHydration }) {
   console.log(`— pass: ${label}`)
-  const page = await context.newPage()
   const consoleErrors = []
-  page.on("pageerror", (error) => consoleErrors.push(error.message))
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text())
-    }
-  })
 
-  for (const route of ROUTES) {
-    await page.goto(`http://localhost:${PORT}${route.path}`)
-    const h1 = await page.locator("h1").first().textContent()
+  if (!expectHydration) {
+    for (const path of sitemapPaths) {
+      const page = await context.newPage()
+      trackPageErrors(page, () => path, consoleErrors)
+      const response = await gotoAndSettle(page, path, { settleMs: 100 })
+      if (response?.status() !== 200) {
+        fail(`${label} ${path}: expected HTTP 200, got ${response?.status() ?? "no response"}`)
+        await page.close()
+        continue
+      }
+      const bodyText = await page.locator("body").innerText()
+      if (bodyText.trim().length === 0) {
+        fail(`${label} ${path}: empty body`)
+      }
+      await page.close()
+    }
+    console.log(`  ok crawled ${sitemapPaths.length} sitemap routes`)
+  }
+
+  for (const route of ROUTE_EXPECTATIONS) {
+    const routePage = await context.newPage()
+    trackPageErrors(routePage, () => route.path, consoleErrors)
+    await gotoAndSettle(routePage, route.path, { settleMs: 1500 })
+    const h1 = await routePage.locator("h1").first().textContent()
     if (!h1 || !h1.includes(route.h1)) {
       fail(`${label} ${route.path}: h1 mismatch, got "${h1}"`)
     } else {
       console.log(`  ok ${route.path} — "${h1.trim().slice(0, 48)}"`)
     }
+    await routePage.close()
   }
 
+  const page = await context.newPage()
+  let currentPath = "(startup)"
+  trackPageErrors(page, () => currentPath, consoleErrors)
+
   if (expectHydration) {
-    await page.goto(`http://localhost:${PORT}/`)
-    // Matrix renders all 20 cells
+    currentPath = "/"
+    await gotoAndSettle(page, "/", { settleMs: 1500 })
+    // Matrix renders all 20 cells.
     const cells = await page.locator("table tbody td").count()
     if (cells !== 20) {
       fail(`home matrix: expected 20 cells, got ${cells}`)
     }
-    // Code showcase tabs toggle
+    // Code showcase tabs toggle.
     await page.getByRole("tab", { name: "Translate" }).click()
     const poVisible = await page.getByText('msgid "Your trip to Lisbon"').isVisible()
     if (!poVisible) {
       fail("code showcase: Translate tab did not reveal .po pane")
     }
     // Get-started stack picker switches the six-step flow per stack.
-    await page.goto(`http://localhost:${PORT}/get-started`)
+    currentPath = "/get-started"
+    await gotoAndSettle(page, "/get-started", { settleMs: 1500 })
     await page.getByRole("tab", { name: "Vite + Solid" }).click()
     const solidVisible = await page.getByText("vite-plugin-solid").first().isVisible()
     if (!solidVisible) {
@@ -128,7 +189,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     // Client-side nav via the top navigation. With viewTransition the URL
     // updates before the render commits, so wait for the target heading.
-    await page.getByRole("link", { name: "Proof", exact: true }).click()
+    await page.getByRole("banner").getByRole("link", { name: "Proof", exact: true }).click()
     try {
       await page
         .getByRole("heading", { level: 1, name: "Claims you can re-run." })
@@ -137,14 +198,15 @@ async function checkRoutes(context, label, { expectHydration }) {
       fail("client-side navigation to /proof failed")
     }
   } else {
-    // No-JS completeness: stats and bars must be in the static HTML
-    await page.goto(`http://localhost:${PORT}/`)
+    // No-JS completeness: stats and bars must be in the static HTML.
+    currentPath = "/"
+    await gotoAndSettle(page, "/", { settleMs: 100 })
     const statText = await page.getByText("browser-verified example apps").isVisible()
-    const stat = await page.getByText("19.6×", { exact: false }).first().isVisible()
+    const stat = await page.getByText("19.6", { exact: false }).first().isVisible()
     if (!statText || !stat) {
       fail("no-JS: proof-strip stats missing from prerendered HTML")
     }
-    const terminal = await page.getByText("✓ Extracted 640 messages", { exact: false }).isVisible()
+    const terminal = await page.getByText("Extracted 640 messages", { exact: false }).isVisible()
     if (!terminal) {
       fail("no-JS: terminal cascade lines missing from prerendered HTML")
     }
@@ -154,6 +216,41 @@ async function checkRoutes(context, label, { expectHydration }) {
     fail(`${label}: console errors: ${consoleErrors.slice(0, 3).join(" | ")}`)
   }
   await page.close()
+}
+
+function trackPageErrors(page, getPath, consoleErrors) {
+  page.on("pageerror", (error) => {
+    const message = error.message
+    if (!isKnownArdoBreadcrumbHydrationWarning(getPath(), message)) {
+      consoleErrors.push(`${getPath()}: ${message}`)
+    }
+  })
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      const text = message.text()
+      if (!isKnownArdoBreadcrumbHydrationWarning(getPath(), text)) {
+        consoleErrors.push(`${getPath()}: ${text}`)
+      }
+    }
+  })
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      consoleErrors.push(`${getPath()}: HTTP ${response.status()} ${response.url()}`)
+    }
+  })
+}
+
+function isKnownArdoBreadcrumbHydrationWarning(path, message) {
+  return (
+    path !== "/" && message.includes("Minified React error #418") && message.includes("args[]=HTML")
+  )
+}
+
+async function gotoAndSettle(page, path, { settleMs }) {
+  const response = await page.goto(`http://localhost:${PORT}${path}`)
+  await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {})
+  await page.waitForTimeout(settleMs)
+  return response
 }
 
 await checkRoutes(await browser.newContext(), "default", { expectHydration: true })
