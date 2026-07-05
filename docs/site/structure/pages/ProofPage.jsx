@@ -18,11 +18,11 @@ export function ProofPage() {
           If a claim can't be re-run, we don't make it."
         primary={{
           label: "Re-run the benchmarks",
-          href: "…/docs/benchmark-e2e-workflow.md",
+          href: repoHref("docs/benchmark-e2e-workflow.md"),
         }}
         secondary={{
           label: "Browse checked-in reports",
-          href: "…/benchmarks/e2e-workflow/results/",
+          href: repoHref("benchmarks/e2e-workflow/results"),
         }}
       />
 
@@ -41,7 +41,7 @@ export function ProofPage() {
             { tool: "i18next-parser 9.4", median: "477.58 ms" },
             { tool: "Lingui 6.4", median: "657.00 ms" },
           ]}
-          methodologyHref="…/docs/benchmark-e2e-workflow.md"
+          methodologyHref={repoHref("docs/benchmark-e2e-workflow.md")}
         />
         <BenchmarkChart
           title="Medium corpus (median of 7 runs)"
@@ -49,7 +49,7 @@ export function ProofPage() {
             { tool: "Palamedes", median: "42.92 ms" },
             /* fill from benchmarks/e2e-workflow/results/latest.md */
           ]}
-          methodologyHref="…/docs/benchmark-e2e-workflow.md"
+          methodologyHref={repoHref("docs/benchmark-e2e-workflow.md")}
         />
         <Callout tone="honest">
           These are machine-local numbers from the checked-in report, not a marketing average. Your
@@ -78,10 +78,10 @@ export function ProofPage() {
           ]}
         />
         <Screenshot
-          src="…/docs/site/assets/palamedes-localized-matrix.png"
+          src={repoHref("docs/site/assets/palamedes-localized-matrix.png")}
           alt="The same booking UI rendered in English, German, and Spanish"
           caption="One demo, three locales: copy, plural seat counts, currency, and dates change together."
-          href="…/docs/example-screenshots/README.md"
+          href={repoHref("docs/example-screenshots/README.md")}
         />
       </Section>
 
@@ -125,9 +125,9 @@ export function ProofPage() {
         </p>
         <LinkList
           links={[
-            { label: "ADR index", href: "…/adr/" },
-            { label: "Stability & versioning policy", href: "…/docs/stability.md" },
-            { label: "Palamedes principles", href: "…/docs/principles.md" },
+            { label: "ADR index", href: repoHref("adr") },
+            { label: "Stability & versioning policy", href: repoHref("docs/stability.md") },
+            { label: "Palamedes principles", href: repoHref("docs/principles.md") },
           ]}
         />
       </Section>

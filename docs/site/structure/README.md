@@ -13,10 +13,19 @@ links they carry.
 - Components like `<Hero>`, `<ProofStrip>`, `<CodeShowcase>` are layout
   primitives. Their intended anatomy and props are defined once in
   [`components.jsx`](components.jsx).
-- All visible copy is real, final-draft copy — not lorem ipsum. Copy edits
-  happen here first, then flow into the implementation.
-- `href` values use site-relative routes (`/proof`, `/frameworks`) for internal
-  pages and full URLs for repo/docs/demo links.
+- All visible copy is real, **review-ready draft copy** — not lorem ipsum.
+  Copy edits happen here first, then flow into the implementation. The copy
+  freezes only after the Core-led vs. Plus-led decision in
+  [#290](https://github.com/sebastian-software/palamedes/issues/290) is made;
+  until then implementers must treat it as draft, not locked.
+- **Link contract.** `href` values come in exactly three forms:
+  1. site-relative routes for internal pages (`/proof`, `/frameworks`),
+  2. `repoHref("docs/...")` for anything living in the repository — a
+     placeholder function defined in [`components.jsx`](components.jsx) that
+     resolves a repo path to its canonical public URL (GitHub `blob/main`
+     today, docs-site route later, one place to change),
+  3. literal full URLs for genuinely external targets (demos, npm, company).
+     No other placeholder syntax is allowed in page specs.
 - Comments (`{/* ... */}`) carry layout intent (grid columns, emphasis,
   responsive behavior) that markup alone cannot express.
 
@@ -60,21 +69,26 @@ of the explored directions. Two decisions from #290 affect this structure and
 must be resolved before implementation:
 
 1. **Core-led vs. Plus-led homepage.** The current `HomePage.jsx` is Core-led
-   (open-source proof first). If Plus leads instead, the hero and one section
-   swap, but subpages stay valid.
-2. **Palamedes+ page.** If Plus positioning is confirmed, add a `/plus` route
-   (managed AI translation, glossary/protected terms, QA, writeback) — kept
-   out of this pass because the copy must not overstate what exists today.
+   (open-source proof first) — per maintainer review this is the safer public
+   default today. If Plus leads instead, the hero and one section swap, but
+   subpages stay valid.
+2. **Palamedes+ page.** Plus is expected to enter later as a bridge/route or
+   waitlist CTA (e.g. a `/plus` route: managed AI translation,
+   glossary/protected terms, QA, writeback) rather than being folded into the
+   OSS homepage claims — kept out of this pass because the copy must not
+   overstate what exists today.
 
 ## Facts the copy relies on (verify before shipping)
 
 - 20 browser-verified example apps: 5 framework families × 4 locale
   strategies (cookie, route, subdomain, TLD) — see `examples/`.
-- Live demos referenced as `*.examples.palamedes.dev` — note: the repo's
-  deploy tooling currently targets differently named `vercel.app` hosts, and
-  `docs/demo-deployments.md` marks the subdomain/tld rows as not yet
-  reachable. The demo-URL story must be reconciled before the site ships
-  (tracked in the docs-audit epic).
+- Demo links are **explicit per matrix cell with a hosting status**
+  (`FRAMEWORK_MATRIX_CELLS` in `components.jsx`), mirroring the per-strategy
+  URL shapes in `examples/README.md`: cookie (one host), route (locale path),
+  subdomain (locale host label), tld (`palamedes-i18n.{com,de,es,fr}`).
+  Subdomain/tld cells carry status `provisioning` and render no demo link
+  until the hosting story is reconciled (#306). Never derive demo URLs from
+  a single naming pattern.
 - E2E extract/update benchmark medians: 33.53 ms (small), 42.92 ms (medium);
   19.59× vs Lingui, 14.24× vs i18next-parser on the checked machine-local run
   — see `benchmarks/e2e-workflow/results/latest.md`.

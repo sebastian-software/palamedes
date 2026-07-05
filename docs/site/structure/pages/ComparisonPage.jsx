@@ -72,14 +72,14 @@ export function ComparisonPage() {
           ]}
         />
         <Callout tone="honest">
-          Pick Lingui if you need its ecosystem breadth or plugins Palamedes doesn't have yet. If
-          you're starting fresh — or mid-migration anyway — the playbook shows how existing .po
-          catalogs usually carry over unchanged.
+          Pick Lingui if you need its ecosystem breadth or plugins Palamedes doesn't have yet.
+          Migrating anyway? Existing source-string-first .po catalogs are often reusable after an
+          extraction pass; explicit-ID-heavy projects need cleanup — the playbook covers both paths.
         </Callout>
         <LinkList
           links={[
-            { label: "Detailed comparison", href: "…/docs/comparison-with-lingui.md" },
-            { label: "Migration playbook", href: "…/docs/migrate-from-lingui.md" },
+            { label: "Detailed comparison", href: repoHref("docs/comparison-with-lingui.md") },
+            { label: "Migration playbook", href: repoHref("docs/migrate-from-lingui.md") },
           ]}
         />
       </Section>

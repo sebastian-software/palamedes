@@ -12,6 +12,25 @@
  * - dark and light theme; code blocks always dark
  */
 
+/* ---------------------------------------------------------- link contract -- */
+
+/**
+ * Placeholder API for links into the repository. Page specs MUST use this
+ * instead of hand-written `…/` placeholders so implementers know exactly
+ * what to resolve:
+ *
+ * - repoHref("docs/troubleshooting.md") → the canonical public URL for that
+ *   repo path — today `https://github.com/sebastian-software/palamedes/blob/main/<path>`
+ *   (or `/tree/main/<path>` for directories); later the docs-site route once
+ *   docs are published on the site itself.
+ * - Site-internal routes stay literal ("/proof", "/get-started").
+ * - Fully external URLs stay literal ("https://...").
+ *
+ * The implementation is one function; swapping GitHub URLs for docs-site
+ * routes later is a single-place change.
+ */
+export function repoHref(path) {}
+
 /* ---------------------------------------------------------------- chrome -- */
 
 /**
@@ -54,18 +73,18 @@ export function SiteFooter() {
         <a href="/compare">Comparison</a>
       </FooterColumn>
       <FooterColumn title="Documentation">
-        <a href="…/docs/first-working-translation.md">5-minute quickstart</a>
-        <a href="…/docs/api/README.md">API reference</a>
-        <a href="…/docs/configuration.md">Configuration</a>
-        <a href="…/docs/cli.md">CLI</a>
-        <a href="…/docs/troubleshooting.md">Troubleshooting</a>
+        <a href={repoHref("docs/first-working-translation.md")}>5-minute quickstart</a>
+        <a href={repoHref("docs/api/README.md")}>API reference</a>
+        <a href={repoHref("docs/configuration.md")}>Configuration</a>
+        <a href={repoHref("docs/cli.md")}>CLI</a>
+        <a href={repoHref("docs/troubleshooting.md")}>Troubleshooting</a>
       </FooterColumn>
       <FooterColumn title="Project">
-        <a href="…/adr/">Architecture decisions</a>
-        <a href="…/docs/stability.md">Stability & versioning</a>
-        <a href="…/CHANGELOG.md">Changelog</a>
-        <a href="…/SECURITY.md">Security</a>
-        <a href="…/LICENSE">MIT license</a>
+        <a href={repoHref("adr")}>Architecture decisions</a>
+        <a href={repoHref("docs/stability.md")}>Stability & versioning</a>
+        <a href={repoHref("CHANGELOG.md")}>Changelog</a>
+        <a href={repoHref("SECURITY.md")}>Security</a>
+        <a href={repoHref("LICENSE")}>MIT license</a>
       </FooterColumn>
       <FooterColumn title="Company">
         <a href="https://oss.sebastian-software.com/">Sebastian Software</a>
@@ -124,20 +143,86 @@ export function FeatureGrid(props) {}
 /**
  * The 5×4 framework/strategy matrix as an interactive table.
  * Rows: framework families. Columns: locale strategies.
- * Each cell links to the live demo; verified cells carry a check badge.
+ *
+ * Cells carry EXPLICIT links and a per-cell status — never a generated URL
+ * pattern. The real URL shapes differ per strategy (cookie: one host; route:
+ * locale path segment; subdomain: locale host label; tld: per-locale
+ * `palamedes-i18n.{com,de,es,fr}` domains), and not every cell has public
+ * hosting yet. Every cell shows its CI-verified badge; only cells with
+ * status "live" render demo links. Source of truth for cell data:
+ * examples/README.md + docs/demo-deployments.md (reconciliation tracked
+ * in #306).
  *
  * props:
  * - frameworks: Array<{ name, slug }>
  * - strategies: Array<{ name, slug }>
- * - demoUrl: (frameworkSlug, strategySlug) => url
+ * - cells: Array<{
+ *     framework, strategy,
+ *     verified: true,                      // all 20 are CI browser-verified
+ *     status: "live" | "provisioning",     // public hosting state
+ *     demoLinks?: Array<{ label, href }>,  // explicit, only when live
+ *     sourceHref,                          // example source in the repo
+ *   }>
  */
 export function FrameworkMatrix(props) {}
 
 /**
- * Numbered horizontal step flow (vertical on mobile), 3–4 steps max.
- * Step: number, title, one-liner, optional small code block.
+ * Shared cell data for <FrameworkMatrix>, used by HomePage and
+ * FrameworksPage. Mirrors the per-strategy URL shapes documented in
+ * examples/README.md ("Live Demos"). Per docs/demo-deployments.md the
+ * subdomain and tld rows are not publicly reachable yet (DNS/domains
+ * pending), so they carry status "provisioning" with no demo links until
+ * #306 lands. Cookie demos have a single URL (locale via cookie); route
+ * demos link per-locale paths.
+ */
+export const FRAMEWORK_MATRIX_CELLS = [
+  "nextjs",
+  "tanstack",
+  "solidstart",
+  "waku",
+  "react-router",
+].flatMap((framework) => [
+  {
+    framework,
+    strategy: "cookie",
+    verified: true,
+    status: "live",
+    demoLinks: [{ label: "open", href: `https://${framework}-cookie.examples.palamedes.dev` }],
+    sourceHref: repoHref(`examples/${framework}-cookie`),
+  },
+  {
+    framework,
+    strategy: "route",
+    verified: true,
+    status: "live",
+    demoLinks: ["en", "de", "es"].map((locale) => ({
+      label: locale,
+      href: `https://${framework}-route.examples.palamedes.dev/${locale}`,
+    })),
+    sourceHref: repoHref(`examples/${framework}-route`),
+  },
+  {
+    framework,
+    strategy: "subdomain",
+    verified: true,
+    status: "provisioning", // en.<framework>-subdomain.examples.palamedes.dev once DNS lands (#306)
+    sourceHref: repoHref(`examples/${framework}-subdomain`),
+  },
+  {
+    framework,
+    strategy: "tld",
+    verified: true,
+    status: "provisioning", // <framework>.examples.palamedes-i18n.{com,de,es,fr} once domains land (#306)
+    sourceHref: repoHref(`examples/${framework}-tld`),
+  },
+])
+
+/**
+ * Numbered step flow (horizontal up to 4 steps, vertical beyond and on
+ * mobile), 3–6 steps max. Step: number, title, one-liner, optional small
+ * code block, optional aside for caveats.
  *
- * props: steps: Array<{ title, body, code? }>
+ * props: steps: Array<{ title, body, code?, aside? }>
  */
 export function StepFlow(props) {}
 
