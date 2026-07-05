@@ -1,0 +1,38 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "ignoreDeprecations": "6.0",
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "rootDir": "..",
+    "types": ["node"],
+    "paths": {
+      "@palamedes/cli": ["packages/cli/src/index.ts"],
+      "@palamedes/config": ["packages/config/src/index.ts"],
+      "@palamedes/core": ["packages/core/src/index.ts"],
+      "@palamedes/core/locale": ["packages/core/src/locale.ts"],
+      "@palamedes/core/macro": ["packages/core/src/macro.ts"],
+      "@palamedes/core-node": ["packages/core-node/src/index.ts"],
+      "@palamedes/extractor": ["packages/extractor/src/index.ts"],
+      "@palamedes/next-plugin": ["packages/next-plugin/src/index.ts"],
+      "@palamedes/react": ["packages/react/src/index.tsx"],
+      "@palamedes/react/client": ["packages/react/src/client.tsx"],
+      "@palamedes/react/macro": ["packages/react/src/macro.ts"],
+      "@palamedes/runtime": ["packages/runtime/src/index.ts"],
+      "@palamedes/runtime/server": ["packages/runtime/src/server.ts"],
+      "@palamedes/solid": ["packages/solid/src/index.tsx"],
+      "@palamedes/solid/client": ["packages/solid/src/client.ts"],
+      "@palamedes/solid/macro": ["packages/solid/src/macro.ts"],
+      "@palamedes/solid/runtime": ["packages/solid/src/runtime.ts"],
+      "@palamedes/transform": ["packages/transform/src/index.ts"],
+      "@palamedes/transform/catalog-loader": ["packages/transform/src/catalogLoader.ts"],
+      "@palamedes/vite-plugin": ["packages/vite-plugin/src/index.ts"]
+    }
+  },
+  "include": ["../packages/*/src/**/*"],
+  "exclude": ["../packages/**/*.test.ts", "../packages/**/*.test.tsx"]
+}

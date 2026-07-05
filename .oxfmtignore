@@ -12,6 +12,7 @@ coverage/
 docs/example-screenshots/
 benchmarks/*/results/
 packages/core-node/src/generated/
+site/app/routes.ts
 CHANGELOG.md
 pnpm-lock.yaml
 Cargo.lock

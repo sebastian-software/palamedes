@@ -5,7 +5,9 @@ import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
 import { COMPARE_CRITERIA, COMPARE_FOOTNOTES, COMPARE_TOOLS } from "~/data/compare"
-import { repoHref } from "~/data/links"
+import { docsHref } from "~/data/links"
+
+export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
@@ -108,13 +110,13 @@ export default function Compare() {
         </div>
         <div className="mt-6 space-y-2">
           <a
-            href={repoHref("docs/comparison-with-lingui.md")}
+            href={docsHref("comparison-with-lingui")}
             className="mono-nums block text-[13px] text-accent"
           >
             Detailed comparison →
           </a>
           <a
-            href={repoHref("docs/migrate-from-lingui.md")}
+            href={docsHref("migrate-from-lingui")}
             className="mono-nums block text-[13px] text-accent"
           >
             Migration playbook →

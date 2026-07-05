@@ -5,6 +5,8 @@ import { CtaBand } from "~/components/home/CtaBand"
 import { REPO } from "~/data/links"
 import { POSTS } from "~/data/posts"
 
+export const handle = { layout: "bare" }
+
 export function meta() {
   return pageMeta({
     title: "Palamedes blog — notes from building i18n tooling in the open",

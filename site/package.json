@@ -3,14 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "react-router dev --port 4100",
-    "build": "node ../scripts/verify-site-bench-data.mjs && react-router build && node ../scripts/copy-llms-to-site.mjs",
+    "prebuild": "node ./scripts/prebuild-content.mjs",
+    "dev": "node ./scripts/prebuild-content.mjs && react-router dev --port 4100",
+    "build": "node ../scripts/verify-site-bench-data.mjs && node ./scripts/prebuild-content.mjs && react-router build && node ../scripts/copy-llms-to-site.mjs",
     "preview": "sirv build/client --single --port 4101",
-    "typecheck": "react-router typegen && tsc"
+    "typecheck": "node ./scripts/prebuild-content.mjs && react-router typegen && tsc"
   },
   "dependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
     "@react-router/node": "8.0.1",
+    "ardo": "3.6.1",
     "lucide-react": "^0.545.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

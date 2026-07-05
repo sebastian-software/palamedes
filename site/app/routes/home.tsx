@@ -15,7 +15,9 @@ import { TerminalCascade } from "~/components/home/TerminalCascade"
 import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
 import { BENCH_SMALL } from "~/data/bench"
 import { HOME_MODEL_CARDS } from "~/data/features"
-import { DEMO_NEXTJS_COOKIE, REPO, repoHref } from "~/data/links"
+import { decisionHref, DEMO_NEXTJS_COOKIE, REPO } from "~/data/links"
+
+export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
@@ -105,7 +107,7 @@ export default function Home() {
             tool.
           </p>
           <div className="space-y-2">
-            <a href={repoHref("adr", "tree")} className="mono-nums block text-[13px] text-accent">
+            <a href={decisionHref()} className="mono-nums block text-[13px] text-accent">
               The decision trail (ADRs) →
             </a>
             <a href="/blog" className="mono-nums block text-[13px] text-accent">
