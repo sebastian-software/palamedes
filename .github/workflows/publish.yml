@@ -16,6 +16,11 @@ on:
         required: false
         type: boolean
         default: false
+      dry_run:
+        description: "Build and smoke-test the native packages without publishing anything"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -36,7 +41,7 @@ jobs:
         id: release
         shell: bash
         env:
-          FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_publish && 'true' || 'false' }}
+          FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && (inputs.force_publish || inputs.dry_run) && 'true' || 'false' }}
         run: |
           set -euo pipefail
 
@@ -174,7 +179,27 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build native package
+        if: matrix.package_name != '@palamedes/core-node-linux-x64-musl'
         run: pnpm --filter "${{ matrix.package_name }}" build
+
+      # The core-node musl addon is a `cdylib`, so it cannot use musl's default
+      # `+crt-static` (cargo refuses a statically linked cdylib) and must link
+      # dynamically. Cross-linking that dynamic cdylib from the glibc host makes
+      # the linker emit a glibc program interpreter (`ld-linux-x86-64.so.2`),
+      # which then fails to load inside a musl runtime. Building it in a
+      # musl-native environment instead makes the toolchain resolve the correct
+      # `ld-musl-x86-64.so.1` loader. (The static-musl CLI binary has no such
+      # problem, so it keeps building on the host above.)
+      - name: Build musl core-node addon (native musl toolchain)
+        if: matrix.package_name == '@palamedes/core-node-linux-x64-musl'
+        run: >
+          docker run --rm
+          -v "$PWD:/workspace"
+          -w /workspace/packages/core-node-linux-x64-musl
+          -e PALAMEDES_RUST_PROFILE=release
+          rust:alpine
+          sh -c "apk add --no-cache nodejs build-base &&
+          node ../core-node/scripts/build-native.mjs"
 
       - name: Smoke-test native Node package
         if: startsWith(matrix.package_name, '@palamedes/core-node-') && matrix.rust_target == ''
@@ -215,13 +240,14 @@ jobs:
           if (!out.includes('pmds (Palamedes)')) process.exit(1)"
 
       - name: Publish native package
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
         run: node ./scripts/publish-package-if-needed.mjs "${{ matrix.package_name }}"
 
   publish-js:
     needs:
       - determine-release
       - publish-native
-    if: needs.determine-release.outputs.should_publish == 'true'
+    if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
