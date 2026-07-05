@@ -95,6 +95,17 @@ msgstr "Willkommen bei Palamedes"
 
 ## 8. Load `.po` messages
 
+TypeScript needs an ambient declaration for `.po` imports. Add it once:
+
+```ts
+// src/po.d.ts
+declare module "*.po" {
+  import type { CatalogMessages } from "@palamedes/core"
+
+  export const messages: CatalogMessages
+}
+```
+
 ```tsx
 // src/main.tsx
 import React from "react"

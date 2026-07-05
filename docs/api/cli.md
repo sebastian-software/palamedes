@@ -2,22 +2,22 @@
 
 `@palamedes/cli` publishes the `pmds` command.
 
+It is a native Rust binary distributed through npm. The package has no
+programmatic JavaScript API, `main`, or `exports` surface.
+
 ## Commands
 
 - `pmds extract`
 - `pmds audit`
+- `pmds report`
 - `pmds catalog merge`
+- `pmds catalog convert`
 - `pmds version`
 
 See the [CLI reference](../cli.md) for flags and examples.
 
 ## Programmatic Exports
 
-The package also exports:
-
-- `extract(options)`
-- `audit(options)`
-- `mergeCatalog(inputPaths, options)`
-
-These are mostly useful for tests and local automation. The CLI is the public
-user-facing workflow.
+None. Use `pmds` for extraction, audits, completeness reports, catalog merge
+workflows, and catalog conversion. For custom JavaScript tooling, use
+`@palamedes/core-node` directly.

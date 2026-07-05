@@ -61,16 +61,21 @@ and explicit while still running on Node.js.
 import { AsyncLocalStorage } from "node:async_hooks"
 import { Hono } from "hono"
 import { createI18n } from "@palamedes/core"
+import { defineLocaleControls } from "@palamedes/core/locale"
 import { setServerI18nGetter } from "@palamedes/runtime"
-import { getPreferredLocale } from "@palamedes/example-locale-shared"
+import { t } from "@palamedes/core/macro"
 
 const app = new Hono()
 const i18nStorage = new AsyncLocalStorage<ReturnType<typeof createI18n>>()
+const localeControls = defineLocaleControls({
+  locales: ["en", "de"],
+  defaultLocale: "en",
+})
 
 setServerI18nGetter(() => i18nStorage.getStore())
 
 app.use(async (c, next) => {
-  const locale = getPreferredLocale(c.req.header("accept-language"))
+  const locale = localeControls.preferredLocale(c.req.header("accept-language"))
   const i18n = createI18n()
 
   i18n.activate(locale)
@@ -79,7 +84,7 @@ app.use(async (c, next) => {
 })
 
 app.get("/", (c) => {
-  return c.text(renderLocalizedMessage())
+  return c.text(t`Welcome to Palamedes`)
 })
 ```
 
@@ -96,22 +101,28 @@ This same pattern also works when the locale comes from:
 import { AsyncLocalStorage } from "node:async_hooks"
 import express from "express"
 import { createI18n } from "@palamedes/core"
+import { defineLocaleControls } from "@palamedes/core/locale"
 import { setServerI18nGetter } from "@palamedes/runtime"
+import { t } from "@palamedes/core/macro"
 
 const app = express()
 const i18nStorage = new AsyncLocalStorage<ReturnType<typeof createI18n>>()
+const localeControls = defineLocaleControls({
+  locales: ["en", "de"],
+  defaultLocale: "en",
+})
 
 setServerI18nGetter(() => i18nStorage.getStore())
 
 app.use((req, res, next) => {
   const i18n = createI18n()
 
-  i18n.activate(resolveLocaleFromRequest(req))
+  i18n.activate(localeControls.preferredLocale(req.header("accept-language")))
   i18nStorage.run(i18n, next)
 })
 
 app.get("/", (req, res) => {
-  res.send(renderLocalizedMessage())
+  res.send(t`Welcome to Palamedes`)
 })
 ```
 

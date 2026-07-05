@@ -92,7 +92,7 @@ console.log(po.headers.Language)
 - `getNativeInfo()`
 - `parsePo(source)`
 - `updateCatalogFile(request)`
-- `parseCatalog(source, locale, sourceLocale)`
+- `parseCatalog(request)`
 - `auditCatalogs(config, options?)`
 - `deriveMessageMetadata(message, context?)`
 - `normalizeMessageMetadata(input)`
@@ -101,6 +101,7 @@ console.log(po.headers.Language)
 - `combineCatalogFiles(request)`
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
+- `compileCatalogModule(config, resourcePath, options)`
 - `extractMessagesNative(source, filename)`
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`

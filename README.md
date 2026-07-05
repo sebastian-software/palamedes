@@ -18,7 +18,7 @@ We are not asking you to trust a slogan. The repo shows the work.
 
 The current proof:
 
-- Five framework families, each with cookie and route locale strategies, are
+- Five framework families, each with cookie, route, subdomain, and tld locale strategies, are
   browser-verified through the same Playwright-based flow used in CI.
 - The image above is one demo in three locales: switch language and the copy,
   plural seat counts, currency, and dates all change together. Every framework
@@ -34,7 +34,7 @@ The current proof:
   Lingui and i18next-parser comparison numbers are documented in
   [End-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md).
 
-**Try it live.** The full framework matrix is deployed at `*.examples.palamedes.dev`. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together — the same design across every framework. Full list in [examples/README](examples/README.md).
+**Try it live.** The live reference covers cookie, route, subdomain, and tld demos across the framework matrix. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,
@@ -199,6 +199,15 @@ import { setClientI18n } from "@palamedes/runtime"
 
 const i18n = createI18n()
 setClientI18n(i18n)
+```
+
+```ts
+// src/po.d.ts
+declare module "*.po" {
+  import type { CatalogMessages } from "@palamedes/core"
+
+  export const messages: CatalogMessages
+}
 ```
 
 ```bash

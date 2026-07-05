@@ -9,14 +9,15 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `parsePo(source)`
 - `parseCatalog(request)`
 - `updateCatalogFile(request)`
-- `auditCatalogs(request, options?)`
+- `auditCatalogs(config, options?)`
 - `deriveMessageMetadata(message, context?)`
 - `normalizeMessageMetadata(input)`
 - `validateMessageMetadata(input)`
 - `combineCatalogs(request)`
 - `combineCatalogFiles(request)`
-- `compileCatalogArtifact(request)`
-- `compileCatalogArtifactSelected(request)`
+- `compileCatalogArtifact(config, resourcePath)`
+- `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
+- `compileCatalogModule(config, resourcePath, options)`
 - `extractMessagesNative(source, filename)`
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
