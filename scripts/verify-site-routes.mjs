@@ -54,7 +54,16 @@ const server = createServer((req, res) => {
 
 await new Promise((resolve) => server.listen(PORT, resolve))
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" })
+const chromiumExecutable = [
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+  "/opt/pw-browsers/chromium",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+].find((path) => path && existsSync(path))
+
+const browser = await chromium.launch(
+  chromiumExecutable ? { executablePath: chromiumExecutable } : undefined
+)
 let failures = 0
 
 function fail(message) {

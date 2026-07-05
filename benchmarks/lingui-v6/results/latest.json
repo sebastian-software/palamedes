@@ -1,0 +1,448 @@
+{
+  "schemaVersion": 2,
+  "benchmark": "palamedes-vs-lingui-v6",
+  "generatedAt": "2026-07-05T20:27:53.982Z",
+  "machineLocal": true,
+  "seed": 20260318,
+  "warmup": 1,
+  "runs": 3,
+  "validateOnly": false,
+  "environment": {
+    "nodeVersion": "v24.18.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "generatedAt": "2026-07-05T20:27:53.982Z"
+  },
+  "versions": {
+    "benchmarkPackage": "@palamedes/benchmark-lingui-v6",
+    "palamedes": {
+      "engine": "1.1.2",
+      "ferrocat": "2.1.1",
+      "core": "1.1.2"
+    },
+    "tooling": {
+      "babelCore": "8.0.1",
+      "swcCore": "1.15.43"
+    },
+    "lingui": {
+      "cli": "6.4.0",
+      "babelMacroPlugin": "6.4.0",
+      "swcPlugin": "6.4.0",
+      "formatPo": "6.4.0"
+    }
+  },
+  "trackDefinitions": [
+    {
+      "track": "macro-transform-babel",
+      "label": "Macro Transform (Babel)",
+      "palamedesPath": "single native macro transform path",
+      "comparatorPath": "Lingui Babel macro plugin",
+      "note": "Palamedes has a single native macro transform path, so the same measured baseline is intentionally reported against both Lingui transform lanes."
+    },
+    {
+      "track": "macro-transform-swc",
+      "label": "Macro Transform (SWC)",
+      "palamedesPath": "single native macro transform path",
+      "comparatorPath": "Lingui SWC plugin",
+      "note": "Palamedes has a single native macro transform path, so the same measured baseline is intentionally reported against both Lingui transform lanes."
+    },
+    {
+      "track": "extract",
+      "label": "Extract",
+      "palamedesPath": "native source extraction",
+      "comparatorPath": "Lingui Babel extractor"
+    },
+    {
+      "track": "compile-from-catalog",
+      "label": "Compile from Catalog",
+      "palamedesPath": "catalog artifact assembly",
+      "comparatorPath": "PO parse plus compiled catalog payload"
+    }
+  ],
+  "smokeChecks": {
+    "exampleFileCount": 5,
+    "transform": {
+      "palamedesFiles": 5,
+      "linguiBabelFiles": 5,
+      "linguiSwcFiles": 5
+    },
+    "extract": {
+      "palamedesMessages": 7,
+      "linguiMessages": 7
+    },
+    "compile": [
+      {
+        "name": "nextjs-cookie",
+        "palamedesMessages": 28,
+        "palamedesDiagnostics": 0,
+        "linguiMessages": 28,
+        "linguiErrors": 0
+      }
+    ]
+  },
+  "profiles": [
+    {
+      "profile": "small",
+      "corpus": {
+        "fileCount": 100,
+        "messageCount": 1000,
+        "sourceBytes": 140216,
+        "localeBytes": {
+          "en": 181295,
+          "de": 181295
+        }
+      },
+      "validation": {
+        "transform": {
+          "palamedesFiles": 100,
+          "linguiBabelFiles": 100,
+          "linguiSwcFiles": 100
+        },
+        "extract": {
+          "expectedMessages": 1000,
+          "palamedesMessages": 1000,
+          "linguiMessages": 1000
+        },
+        "compile": {
+          "expectedMessages": 1000,
+          "palamedesMessages": 1000,
+          "linguiMessages": 1000
+        }
+      },
+      "tracks": {
+        "macroTransformBabel": {
+          "palamedes": {
+            "medianMs": 36.645083,
+            "samplesMs": [
+              36.471791,
+              36.645083,
+              36.766416
+            ],
+            "lastOutcome": {
+              "fileCount": 100,
+              "outputBytes": 177066
+            }
+          },
+          "lingui": {
+            "medianMs": 103.722417,
+            "samplesMs": [
+              93.282458,
+              103.722417,
+              107.371875
+            ],
+            "lastOutcome": {
+              "fileCount": 100,
+              "outputBytes": 165466
+            }
+          }
+        },
+        "macroTransformSwc": {
+          "palamedes": {
+            "medianMs": 36.645083,
+            "samplesMs": [
+              36.471791,
+              36.645083,
+              36.766416
+            ],
+            "lastOutcome": {
+              "fileCount": 100,
+              "outputBytes": 177066
+            }
+          },
+          "lingui": {
+            "medianMs": 50.895542,
+            "samplesMs": [
+              50.568084,
+              50.895542,
+              51.328292
+            ],
+            "lastOutcome": {
+              "fileCount": 100,
+              "outputBytes": 177016
+            }
+          }
+        },
+        "extract": {
+          "palamedes": {
+            "medianMs": 22.854834,
+            "samplesMs": [
+              22.760584,
+              22.854834,
+              23.277834
+            ],
+            "lastOutcome": {
+              "fileCount": 100,
+              "messageCount": 1000
+            }
+          },
+          "lingui": {
+            "medianMs": 113.144292,
+            "samplesMs": [
+              111.42325,
+              113.144292,
+              132.542042
+            ],
+            "lastOutcome": {
+              "fileCount": 100,
+              "messageCount": 1000
+            }
+          }
+        },
+        "compileFromCatalog": {
+          "palamedes": {
+            "medianMs": 36.185375,
+            "samplesMs": [
+              36.101417,
+              36.185375,
+              36.943667
+            ],
+            "lastOutcome": {
+              "messageCount": 1000,
+              "diagnosticCount": 0,
+              "outputBytes": 74642
+            }
+          },
+          "lingui": {
+            "medianMs": 5.8415,
+            "samplesMs": [
+              5.444334,
+              5.8415,
+              10.659125
+            ],
+            "lastOutcome": {
+              "messageCount": 1000,
+              "errorCount": 0,
+              "outputBytes": 81105
+            }
+          }
+        }
+      },
+      "comparisons": [
+        {
+          "profile": "small",
+          "track": "macro-transform-babel",
+          "fasterTool": "palamedes",
+          "speedupFactor": 2.8304593279267505,
+          "palamedesMedianMs": 36.645083,
+          "linguiMedianMs": 103.722417
+        },
+        {
+          "profile": "small",
+          "track": "macro-transform-swc",
+          "fasterTool": "palamedes",
+          "speedupFactor": 1.3888777929633833,
+          "palamedesMedianMs": 36.645083,
+          "linguiMedianMs": 50.895542
+        },
+        {
+          "profile": "small",
+          "track": "extract",
+          "fasterTool": "palamedes",
+          "speedupFactor": 4.9505628437292515,
+          "palamedesMedianMs": 22.854834,
+          "linguiMedianMs": 113.144292
+        },
+        {
+          "profile": "small",
+          "track": "compile-from-catalog",
+          "fasterTool": "lingui",
+          "speedupFactor": 6.19453479414534,
+          "palamedesMedianMs": 36.185375,
+          "linguiMedianMs": 5.8415
+        }
+      ]
+    }
+  ],
+  "results": [
+    {
+      "tool": "palamedes",
+      "version": "1.1.2",
+      "engineVersion": "1.1.2",
+      "track": "macro-transform-babel",
+      "profile": "small",
+      "fileCount": 100,
+      "messageCount": 1000,
+      "sourceBytes": 140216,
+      "warmup": 1,
+      "runs": 3,
+      "medianMs": 36.645083,
+      "rawSamplesMs": [
+        36.471791,
+        36.645083,
+        36.766416
+      ],
+      "outputBytes": 177066,
+      "note": "Palamedes has a single native macro transform path, so the same measured baseline is intentionally reported against both Lingui transform lanes."
+    },
+    {
+      "tool": "lingui",
+      "version": "6.4.0",
+      "engineVersion": "8.0.1",
+      "track": "macro-transform-babel",
+      "profile": "small",
+      "fileCount": 100,
+      "messageCount": 1000,
+      "sourceBytes": 140216,
+      "warmup": 1,
+      "runs": 3,
+      "medianMs": 103.722417,
+      "rawSamplesMs": [
+        93.282458,
+        103.722417,
+        107.371875
+      ],
+      "outputBytes": 165466
+    },
+    {
+      "tool": "palamedes",
+      "version": "1.1.2",
+      "engineVersion": "1.1.2",
+      "track": "macro-transform-swc",
+      "profile": "small",
+      "fileCount": 100,
+      "messageCount": 1000,
+      "sourceBytes": 140216,
+      "warmup": 1,
+      "runs": 3,
+      "medianMs": 36.645083,
+      "rawSamplesMs": [
+        36.471791,
+        36.645083,
+        36.766416
+      ],
+      "outputBytes": 177066,
+      "note": "Palamedes has a single native macro transform path, so the same measured baseline is intentionally reported against both Lingui transform lanes."
+    },
+    {
+      "tool": "lingui",
+      "version": "6.4.0",
+      "engineVersion": "1.15.43",
+      "track": "macro-transform-swc",
+      "profile": "small",
+      "fileCount": 100,
+      "messageCount": 1000,
+      "sourceBytes": 140216,
+      "warmup": 1,
+      "runs": 3,
+      "medianMs": 50.895542,
+      "rawSamplesMs": [
+        50.568084,
+        50.895542,
+        51.328292
+      ],
+      "outputBytes": 177016
+    },
+    {
+      "tool": "palamedes",
+      "version": "1.1.2",
+      "engineVersion": "1.1.2",
+      "track": "extract",
+      "profile": "small",
+      "fileCount": 100,
+      "messageCount": 1000,
+      "sourceBytes": 140216,
+      "warmup": 1,
+      "runs": 3,
+      "medianMs": 22.854834,
+      "rawSamplesMs": [
+        22.760584,
+        22.854834,
+        23.277834
+      ]
+    },
+    {
+      "tool": "lingui",
+      "version": "6.4.0",
+      "engineVersion": "8.0.1",
+      "track": "extract",
+      "profile": "small",
+      "fileCount": 100,
+      "messageCount": 1000,
+      "sourceBytes": 140216,
+      "warmup": 1,
+      "runs": 3,
+      "medianMs": 113.144292,
+      "rawSamplesMs": [
+        111.42325,
+        113.144292,
+        132.542042
+      ]
+    },
+    {
+      "tool": "palamedes",
+      "version": "1.1.2",
+      "engineVersion": "1.1.2",
+      "track": "compile-from-catalog",
+      "profile": "small",
+      "fileCount": 100,
+      "messageCount": 1000,
+      "sourceBytes": 140216,
+      "catalogBytes": 181295,
+      "warmup": 1,
+      "runs": 3,
+      "medianMs": 36.185375,
+      "rawSamplesMs": [
+        36.101417,
+        36.185375,
+        36.943667
+      ],
+      "outputBytes": 74642,
+      "locale": "de"
+    },
+    {
+      "tool": "lingui",
+      "version": "6.4.0",
+      "engineVersion": "6.4.0",
+      "track": "compile-from-catalog",
+      "profile": "small",
+      "fileCount": 100,
+      "messageCount": 1000,
+      "sourceBytes": 140216,
+      "catalogBytes": 181295,
+      "warmup": 1,
+      "runs": 3,
+      "medianMs": 5.8415,
+      "rawSamplesMs": [
+        5.444334,
+        5.8415,
+        10.659125
+      ],
+      "outputBytes": 81105,
+      "locale": "de"
+    }
+  ],
+  "comparisons": [
+    {
+      "profile": "small",
+      "track": "macro-transform-babel",
+      "fasterTool": "palamedes",
+      "speedupFactor": 2.8304593279267505,
+      "palamedesMedianMs": 36.645083,
+      "linguiMedianMs": 103.722417
+    },
+    {
+      "profile": "small",
+      "track": "macro-transform-swc",
+      "fasterTool": "palamedes",
+      "speedupFactor": 1.3888777929633833,
+      "palamedesMedianMs": 36.645083,
+      "linguiMedianMs": 50.895542
+    },
+    {
+      "profile": "small",
+      "track": "extract",
+      "fasterTool": "palamedes",
+      "speedupFactor": 4.9505628437292515,
+      "palamedesMedianMs": 22.854834,
+      "linguiMedianMs": 113.144292
+    },
+    {
+      "profile": "small",
+      "track": "compile-from-catalog",
+      "fasterTool": "lingui",
+      "speedupFactor": 6.19453479414534,
+      "palamedesMedianMs": 36.185375,
+      "linguiMedianMs": 5.8415
+    }
+  ]
+}
