@@ -20,7 +20,7 @@ export function GetStartedPage() {
         primary={{ label: "Skip to step 1", href: "#install" }}
         secondary={{
           label: "Full written guide",
-          href: "…/docs/first-working-translation.md",
+          href: repoHref("docs/first-working-translation.md"),
         }}
       />
 
@@ -65,17 +65,44 @@ export default defineConfig({ plugins: [palamedes(), react()] })
 // src/i18n.ts
 import { createI18n } from "@palamedes/core"
 import { setClientI18n } from "@palamedes/runtime"
-setClientI18n(createI18n())`,
+
+export const i18n = createI18n()
+setClientI18n(i18n)`,
           },
           {
-            title: "Write, extract, translate",
-            body: "Author the message in your component, run one command, fill in the German string.",
+            title: "Write & extract",
+            body: "Author the message in your component, then run one command — it creates src/locales/en.po and de.po.",
             code: `
 // src/App.tsx
 import { t } from "@palamedes/core/macro"
 export const App = () => <h1>{t\`Welcome to Palamedes\`}</h1>
 
 $ pmds extract`,
+          },
+          {
+            title: "Translate",
+            body: "Open the German catalog and fill in the translated string.",
+            code: `
+# src/locales/de.po
+msgid "Welcome to Palamedes"
+msgstr "Willkommen bei Palamedes"`,
+          },
+          {
+            title: "Load & see it render",
+            body: "Load the catalogs, activate a locale, and run the dev server — the page now renders “Willkommen bei Palamedes”. That is the full local loop: transform, extraction, catalog, runtime.",
+            aside:
+              'TypeScript needs an ambient declaration for .po imports — add a src/po.d.ts with `declare module "*.po"` (see the troubleshooting guide).',
+            code: `
+// src/main.tsx
+import { i18n } from "./i18n"
+import { messages as enMessages } from "./locales/en.po"
+import { messages as deMessages } from "./locales/de.po"
+
+i18n.load("en", enMessages)
+i18n.load("de", deMessages)
+i18n.activate("de")
+
+$ pnpm dev`,
           },
         ]}
       />
@@ -90,7 +117,7 @@ $ pmds extract`,
               icon: "book",
               title: "Plurals, dates & currency",
               body: "ICU MessageFormat with authoring diagnostics that catch mistakes at extract time.",
-              href: "…/docs/api/core.md",
+              href: repoHref("docs/api/core.md"),
             },
             {
               icon: "compass",
@@ -102,25 +129,25 @@ $ pmds extract`,
               icon: "server",
               title: "Localize your backend",
               body: "Request-local i18n for Hono and Express from the same catalogs.",
-              href: "…/docs/backend-servers.md",
+              href: repoHref("docs/backend-servers.md"),
             },
             {
               icon: "arrows",
               title: "Migrating from Lingui?",
-              body: "A step-by-step playbook — most teams keep their .po files as-is.",
-              href: "…/docs/migrate-from-lingui.md",
+              body: "A step-by-step playbook. Source-string-first .po catalogs are often reusable after an extraction pass; explicit-ID setups need cleanup.",
+              href: repoHref("docs/migrate-from-lingui.md"),
             },
             {
               icon: "wrench",
               title: "Something broke?",
               body: "The troubleshooting guide covers the common setup failures with exact error messages.",
-              href: "…/docs/troubleshooting.md",
+              href: repoHref("docs/troubleshooting.md"),
             },
             {
               icon: "robot",
               title: "Using an AI assistant?",
               body: "Point it at llms.txt — the whole API surface in one machine-readable file.",
-              href: "…/llms.txt",
+              href: repoHref("llms.txt"),
             },
           ]}
         />
@@ -132,7 +159,7 @@ $ pmds extract`,
           label: "Open an issue",
           href: "https://github.com/sebastian-software/palamedes/issues",
         }}
-        secondary={{ label: "Read the docs", href: "…/docs/api/README.md" }}
+        secondary={{ label: "Read the docs", href: repoHref("docs/api/README.md") }}
       />
 
       <SiteFooter />

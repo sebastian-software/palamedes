@@ -12,10 +12,10 @@ export function FrameworksPage() {
       <Hero
         eyebrow="Framework matrix"
         headline="Five frameworks. Four locale strategies. One mental model."
-        subline="Every cell below is a real, deployed application — the same
-          booking UI, the same catalogs, the same runtime calls. Switch the
-          language in any demo and watch copy, plurals, currency, and dates
-          change together."
+        subline="Every cell below is a real application — the same booking UI,
+          the same catalogs, the same runtime calls — browser-verified in CI.
+          Where public hosting is ready, open the demo, switch the language,
+          and watch copy, plurals, currency, and dates change together."
         primary={{
           label: "Open a live demo",
           href: "https://nextjs-cookie.examples.palamedes.dev",
@@ -26,7 +26,10 @@ export function FrameworksPage() {
         }}
       />
 
-      {/* The interactive 5×4 grid is the centerpiece of this page. */}
+      {/* The interactive 5×4 grid is the centerpiece of this page.
+          Cell data is explicit (per-strategy URL shapes + hosting status),
+          shared with HomePage via FRAMEWORK_MATRIX_CELLS — see
+          components.jsx. No generated URL patterns. */}
       <Section id="matrix">
         <FrameworkMatrix
           frameworks={[
@@ -42,11 +45,13 @@ export function FrameworksPage() {
             { name: "Subdomain", slug: "subdomain" },
             { name: "Top-level domain", slug: "tld" },
           ]}
-          demoUrl={(f, s) => `https://${f}-${s}.examples.palamedes.dev`}
+          cells={FRAMEWORK_MATRIX_CELLS}
         />
         <p className="caption">
           All 20 apps are verified in CI with the same Playwright-driven browser flow: SSR output,
-          locale switching, localized server actions. Screenshots are versioned in the repo.
+          locale switching, localized server actions. Screenshots are versioned in the repo. Cookie
+          and route demos are publicly hosted today; subdomain and TLD hosting is being provisioned
+          — until then those cells link the verified source instead.
         </p>
       </Section>
 
@@ -82,7 +87,7 @@ export function FrameworksPage() {
           links={[
             {
               label: "Locale strategies in depth",
-              href: "…/docs/locale-strategies.md",
+              href: repoHref("docs/locale-strategies.md"),
             },
           ]}
         />
@@ -100,7 +105,7 @@ export function FrameworksPage() {
             @palamedes/next-plugin wires the transform into the Next build;
             everything else is the shared model."
           demoLinks={["cookie", "route", "subdomain", "tld"]}
-          sourceHref="…/examples/nextjs-route"
+          sourceHref={repoHref("examples/nextjs-route")}
         />
         <FrameworkPanel
           name="TanStack Start"
@@ -108,7 +113,7 @@ export function FrameworksPage() {
             @palamedes/vite-plugin. Locale resolution runs in a server
             function; the client stays island-light."
           demoLinks={["cookie", "route", "subdomain", "tld"]}
-          sourceHref="…/examples/tanstack-route"
+          sourceHref={repoHref("examples/tanstack-route")}
         />
         <FrameworkPanel
           name="SolidStart"
@@ -116,21 +121,21 @@ export function FrameworksPage() {
             macro authoring and catalogs as React, no fork of your i18n
             strategy for a different renderer."
           demoLinks={["cookie", "route", "subdomain", "tld"]}
-          sourceHref="…/examples/solidstart-route"
+          sourceHref={repoHref("examples/solidstart-route")}
         />
         <FrameworkPanel
           name="Waku"
           body="Minimal RSC framework. If the model holds here, it holds in
             your custom setup too — that's why Waku is in the matrix."
           demoLinks={["cookie", "route", "subdomain", "tld"]}
-          sourceHref="…/examples/waku-route"
+          sourceHref={repoHref("examples/waku-route")}
         />
         <FrameworkPanel
           name="React Router"
           body="Framework-mode React Router with loaders and actions. The
             classic SPA-plus-SSR shape, same catalogs, same runtime."
           demoLinks={["cookie", "route", "subdomain", "tld"]}
-          sourceHref="…/examples/react-router-route"
+          sourceHref={repoHref("examples/react-router-route")}
         />
       </Section>
 
@@ -142,7 +147,7 @@ export function FrameworksPage() {
           transactional emails, API error messages, and PDF generation speak the user's language
           from the same catalogs.
         </p>
-        <Button variant="secondary" href="…/docs/backend-servers.md">
+        <Button variant="secondary" href={repoHref("docs/backend-servers.md")}>
           Backend servers guide
         </Button>
       </Section>

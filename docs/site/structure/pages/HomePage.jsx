@@ -15,15 +15,18 @@ export function HomePage() {
         subline="Write messages where your UI happens. Keep source-string-first
           .po catalogs your translators can actually read. Ship the same
           runtime model across Next.js, TanStack Start, SolidStart, Waku, and
-          React Router — powered by a Rust core that finishes extraction
-          before other tools finish starting."
+          React Router — with a Rust core that ran the checked small-corpus
+          extract/update benchmark 19.6× faster than Lingui on the recorded
+          machine-local run."
         primary={{ label: "Get started in 5 minutes", href: "/get-started" }}
         secondary={{
           label: "See it live",
           href: "https://nextjs-cookie.examples.palamedes.dev",
         }}
         visual={
-          <LocaleMatrixAnimation fallbackSrc="…/docs/site/assets/palamedes-localized-matrix.png" />
+          <LocaleMatrixAnimation
+            fallbackSrc={repoHref("docs/site/assets/palamedes-localized-matrix.png")}
+          />
         }
       />
 
@@ -41,13 +44,13 @@ export function HomePage() {
           },
           {
             value: "19.6×",
-            label: "faster extract/update than Lingui",
+            label: "faster than Lingui — checked extract/update benchmark, machine-local run",
             href: "/proof",
           },
           {
             value: "16",
             label: "ADRs documenting every tradeoff",
-            href: "…/adr/",
+            href: repoHref("adr"),
           },
         ]}
       />
@@ -73,13 +76,13 @@ export function HomePage() {
               icon: "fingerprint",
               title: "One identity model",
               body: "Messages are identified by message + context — stable across refactors, frameworks, and years of catalog history.",
-              href: "…/adr/003-source-string-first-message-identity.md",
+              href: repoHref("adr/003-source-string-first-message-identity.md"),
             },
             {
               icon: "plug",
               title: "One runtime call",
               body: "getI18n() resolves the active instance everywhere: server components, client islands, backend request handlers.",
-              href: "…/adr/005-universal-geti18n-runtime-model.md",
+              href: repoHref("adr/005-universal-geti18n-runtime-model.md"),
             },
           ]}
         />
@@ -145,10 +148,12 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
       <Section id="proof">
         <h2>We don't ask you to trust a slogan. The repo shows the work.</h2>
         <p>
-          Every framework/strategy combination is a real app, deployed live and re-verified in CI
-          through the same Playwright flow. Every benchmark number links to a checked-in,
-          re-runnable report.
+          Every framework/strategy combination is a real app, re-verified in CI through the same
+          Playwright flow — with public demos where the hosting is ready. Every benchmark number
+          links to a checked-in, re-runnable report.
         </p>
+        {/* Explicit per-cell links + status shared with /frameworks — see
+            FRAMEWORK_MATRIX_CELLS in components.jsx. No generated URLs. */}
         <FrameworkMatrix
           frameworks={[
             { name: "Next.js", slug: "nextjs" },
@@ -163,7 +168,7 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
             { name: "Subdomain", slug: "subdomain" },
             { name: "TLD", slug: "tld" },
           ]}
-          demoUrl={(f, s) => `https://${f}-${s}.examples.palamedes.dev`}
+          cells={FRAMEWORK_MATRIX_CELLS}
         />
         <BenchmarkChart
           title="End-to-end extract + catalog update (small corpus, median)"
@@ -172,7 +177,7 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
             { tool: "i18next-parser", median: "477.58 ms" },
             { tool: "Lingui", median: "657.00 ms" },
           ]}
-          methodologyHref="…/docs/benchmark-e2e-workflow.md"
+          methodologyHref={repoHref("docs/benchmark-e2e-workflow.md")}
         />
         <Button variant="secondary" href="/proof">
           All benchmarks & the verification story
@@ -198,7 +203,7 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
         </p>
         <LinkList
           links={[
-            { label: "The decision trail (ADRs)", href: "…/adr/" },
+            { label: "The decision trail (ADRs)", href: repoHref("adr") },
             { label: "Why this exists", href: "/blog" },
           ]}
         />
