@@ -18,6 +18,10 @@ examples/**/.vercel/
 *.js.map
 *.d.ts.map
 
+# Site build output
+site/build/
+site/.react-router/
+
 # Next.js
 .next/
 

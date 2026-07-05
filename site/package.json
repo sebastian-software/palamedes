@@ -1,0 +1,31 @@
+{
+  "name": "@palamedes/site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "react-router dev --port 4100",
+    "build": "node ../scripts/verify-site-bench-data.mjs && react-router build",
+    "preview": "sirv build/client --single --port 4101",
+    "typecheck": "react-router typegen && tsc"
+  },
+  "dependencies": {
+    "@base-ui-components/react": "1.0.0-rc.0",
+    "@react-router/node": "8.0.1",
+    "lucide-react": "^0.545.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router": "8.0.1",
+    "isbot": "^5"
+  },
+  "devDependencies": {
+    "@react-router/dev": "8.0.1",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^22.20.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "sirv-cli": "^3.0.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0"
+  }
+}

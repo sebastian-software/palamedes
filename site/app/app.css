@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/*
+ * Palamedes site design system — "Swiss Spec Grid" (Draft A).
+ *
+ * Hard rules, enforced by convention:
+ *   - ZERO border-radius, ZERO box-shadow, ZERO gradients.
+ *   - One accent (blue). Terminal green/amber appear ONLY inside CLI output.
+ *   - Numbers are always mono + tabular.
+ *   - Hairlines separate; they never decorate.
+ */
+
+@theme {
+  --color-*: initial;
+  --color-paper: #fbfbf8;
+  --color-ink: #101010;
+  --color-hair: #d8d8d2;
+  --color-accent: #0038ff;
+  --color-gray-spec: #8a8a84;
+  --color-accent-soft: #9db2ff;
+  --color-hover-fill: #f2f2ec;
+  --color-track: #efefe9;
+  --color-term-ok: #3fb950;
+  --color-term-warn: #d29922;
+  --color-white: #ffffff;
+  --color-transparent: transparent;
+
+  --font-sans: "Helvetica Neue", Helvetica, Arial, Inter, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-display: clamp(44px, 7.6vw, 88px);
+  --text-h2: clamp(24px, 3.4vw, 34px);
+  --text-band: clamp(20px, 3vw, 30px);
+  --text-stat: 34px;
+
+  --tracking-micro: 0.14em;
+  --tracking-eyebrow: 0.22em;
+  --tracking-nav: 0.12em;
+  --tracking-label: 0.16em;
+  --tracking-th: 0.18em;
+
+  --radius-*: initial;
+  --shadow-*: initial;
+
+  --breakpoint-grid: 60rem; /* 960px — matrix/two-col collapse */
+  --breakpoint-tight: 35rem; /* 560px — single column */
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-paper);
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--color-track);
+    padding: 0.1em 0.35em;
+  }
+
+  pre code {
+    background: transparent;
+    padding: 0;
+    font-size: inherit;
+  }
+}
+
+/* ------------------------------------------------------------- utilities -- */
+
+/* Mono uppercase micro-label — the system's most reused text style. */
+@utility micro {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-micro);
+}
+
+/* Numbers that must not jiggle. */
+@utility mono-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Grid whose 1px gaps read as hairlines; cells must set bg-paper (or bg-ink). */
+@utility hairline-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--color-hair);
+  border: 1px solid var(--color-hair);
+}
+
+/* Eyebrow with the accent section glyph. */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--color-gray-spec);
+
+  &::before {
+    content: "§ ";
+    color: var(--color-accent);
+  }
+}
+
+/* The centered page frame with full-height side rules. */
+@utility frame {
+  max-width: 1120px;
+  margin-inline: auto;
+  border-inline: 1px solid var(--color-hair);
+}
+
+/* Oversized ghosted glyph for per-page style breaks. */
+@utility ghost-glyph {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--color-hair);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------- motion -- */
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes scanline {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    transform: translateY(var(--scan-distance, 400px));
+    opacity: 0;
+  }
+}
+
+/* Route crossfade via the View Transitions API (react-router viewTransition). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
