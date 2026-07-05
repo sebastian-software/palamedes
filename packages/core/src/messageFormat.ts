@@ -237,7 +237,22 @@ function parseTextUntilBrace(state: ParserState): MessageTextNode {
 
 function parseTag(state: ParserState): MessageTagNode {
   expectChar(state, "<")
-  const name = readUntil(state, [">"]).trim()
+  const name = readUntil(state, ["/", ">"]).trim()
+
+  // Self-closing placeholder `<name/>` (e.g. `<br/>`): the emitter produces this
+  // compact form for component placeholders with no children. Consume `/>` and
+  // yield a tag node with an empty child list.
+  if (state.input[state.index] === "/") {
+    state.index += 1
+    expectChar(state, ">")
+
+    return {
+      type: "tag",
+      name,
+      children: [],
+    }
+  }
+
   expectChar(state, ">")
   const children = parseNodes(state, name)
 
@@ -250,7 +265,7 @@ function parseTag(state: ParserState): MessageTagNode {
 
 function isTagStart(state: ParserState): boolean {
   const slice = state.input.slice(state.index)
-  return /^<([A-Za-z0-9_]+)>/.test(slice)
+  return /^<([A-Za-z0-9_]+)\/?>/.test(slice)
 }
 
 function readUntil(state: ParserState, delimiters: string[]): string {
