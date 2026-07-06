@@ -2,7 +2,7 @@
 title: next-intl
 category: frontend-framework
 analyzed: 2026-07-06
-analyzed_versions: "next-intl@4.13.1 (Jul 6, 2026 npm registry); use-intl@ (same monorepo release train, weekly downloads checked separately)"
+analyzed_versions: "next-intl@4.13.1 (Jul 6, 2026 npm registry); use-intl@4.13.1 (same monorepo release train, verified via registry.npmjs.org; weekly downloads checked separately)"
 homepage: https://next-intl.dev
 repository: https://github.com/amannn/next-intl
 ---
