@@ -81,6 +81,19 @@ How each strategy encodes the locale:
 | subdomain | [en](https://en.react-router-subdomain.examples.palamedes.dev) · [de](https://de.react-router-subdomain.examples.palamedes.dev) · [es](https://es.react-router-subdomain.examples.palamedes.dev)                               |
 | tld       | [en](https://react-router.examples.palamedes-i18n.com) · [de](https://react-router.examples.palamedes-i18n.de) · [es](https://react-router.examples.palamedes-i18n.es) · [fr](https://react-router.examples.palamedes-i18n.fr) |
 
+### Remix v3
+
+Remix v3 examples are local/CI proof surfaces while Remix's beta hosting and UI
+adapter story settles. They are pinned to the tested Remix beta and verified by
+`pnpm verify:examples:smoke -- --framework remix`.
+
+| Strategy  | Local entry point                           |
+| --------- | ------------------------------------------- |
+| cookie    | [examples/remix-cookie](remix-cookie)       |
+| route     | [examples/remix-route](remix-route)         |
+| subdomain | [examples/remix-subdomain](remix-subdomain) |
+| tld       | [examples/remix-tld](remix-tld)             |
+
 ### SolidStart
 
 | Strategy  | Live demos                                                                                                                                                                                                             |
@@ -99,6 +112,7 @@ How each strategy encodes the locale:
 - [examples/solidstart-cookie](examples/solidstart-cookie)
 - [examples/waku-cookie](examples/waku-cookie)
 - [examples/react-router-cookie](examples/react-router-cookie)
+- [examples/remix-cookie](examples/remix-cookie)
 
 These examples prove:
 
@@ -115,6 +129,7 @@ These examples prove:
 - [examples/solidstart-route](examples/solidstart-route)
 - [examples/waku-route](examples/waku-route)
 - [examples/react-router-route](examples/react-router-route)
+- [examples/remix-route](examples/remix-route)
 
 These examples prove:
 
@@ -131,6 +146,7 @@ These examples prove:
 - [examples/solidstart-subdomain](examples/solidstart-subdomain)
 - [examples/waku-subdomain](examples/waku-subdomain)
 - [examples/react-router-subdomain](examples/react-router-subdomain)
+- [examples/remix-subdomain](examples/remix-subdomain)
 
 These examples prove:
 
@@ -147,6 +163,7 @@ These examples prove:
 - [examples/solidstart-tld](examples/solidstart-tld)
 - [examples/waku-tld](examples/waku-tld)
 - [examples/react-router-tld](examples/react-router-tld)
+- [examples/remix-tld](examples/remix-tld)
 
 These examples prove:
 
@@ -166,11 +183,12 @@ All matrix examples use the same public Palamedes stack:
 - `@palamedes/runtime`
 - `@palamedes/vite-plugin` or `@palamedes/next-plugin`
 
-Remix v3 support is being added through a separate beta example while Remix's
-component model settles:
-
-- [examples/remix-cookie](remix-cookie) - Node `--import` loader integration
-  with request-local server i18n and JS macros
+Remix v3 support is server-first while Remix's component model and asset
+pipeline settle. The Remix examples intentionally do not visually match the
+React/Solid/etc. matrix yet because the shared `@palamedes/example-ui` package is
+React-based and Remix's UI adapter is not implemented. They prove the same
+server-side locale strategies, checked-in `.po` catalogs, and request-local i18n
+through Remix's default Node loader path.
 
 The matrix does not only prove core/runtime behavior. It also proves small
 public frontend primitives from the UI packages themselves:
