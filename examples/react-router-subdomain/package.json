@@ -14,23 +14,23 @@
     "@palamedes/example-ui": "workspace:^",
     "@palamedes/react": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "@react-router/node": "8.0.1",
-    "@react-router/serve": "8.0.1",
+    "@react-router/node": "8.1.0",
+    "@react-router/serve": "8.1.0",
     "isbot": "^5.1.44",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router": "8.0.1"
+    "react-router": "8.1.0"
   },
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
     "@palamedes/vite-plugin": "workspace:^",
-    "@react-router/dev": "8.0.1",
+    "@react-router/dev": "8.1.0",
     "@types/node": "^22.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "react-server-dom-webpack": "^19.2.7",
     "typescript": "^6.0.3",
-    "vite": "^8.1.0"
+    "vite": "^8.1.3"
   }
 }
