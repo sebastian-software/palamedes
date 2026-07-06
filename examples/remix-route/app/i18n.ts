@@ -7,7 +7,6 @@ import { messages as esMessages } from "./locales/es.po"
 
 export const LOCALES = ["en", "de", "es"] as const
 export const DEFAULT_LOCALE = "en"
-export const LOCALE_COOKIE = "locale"
 
 export type Locale = (typeof LOCALES)[number]
 export type ResolvedLocale = {
@@ -18,13 +17,6 @@ export type ResolvedLocale = {
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
-  hosts: {
-    locales: {
-      en: "en.lvh.me",
-      de: "de.lvh.me",
-      es: "es.lvh.me",
-    },
-  },
 })
 
 export const LOCALE_LABELS = locales.labels
@@ -62,10 +54,8 @@ export function getRootRedirectLocale(request: Request): Locale {
 export function getRouteBanner(request: Request, locale: Locale): string | null {
   const suggestion = locales.suggest({
     acceptLanguageHeader: request.headers.get("accept-language"),
-    cookieHeader: request.headers.get("cookie"),
     currentLocale: locale,
     pathname: `/${locale}`,
-    requestHost: request.headers.get("host"),
   })
 
   return suggestion

@@ -101,6 +101,7 @@ export function createRemixI18nServer<
 >(options: RemixI18nServerOptions<TLocale, T>): RemixI18nServer<TLocale, T> {
   const scope = createServerI18nScope<T>()
   const catalogCache = new Map<TLocale, CatalogMessages>()
+  const scopedContexts = new WeakMap<T, RemixI18nContextValue<TLocale, T>>()
   const createI18nInstance = options.createI18n ?? (() => createI18n() as unknown as T)
   const cookieName = options.cookieName ?? "locale"
   const cookieMaxAge = options.cookieMaxAge ?? 60 * 60 * 24 * 365
@@ -122,11 +123,13 @@ export function createRemixI18nServer<
     i18n.load(resolved.locale, getMessages(resolved.locale))
     i18n.activate(resolved.locale)
 
-    return {
+    const context = {
       i18n,
       locale: resolved.locale,
       source: resolved.source,
     }
+    scopedContexts.set(i18n, context)
+    return context
   }
 
   async function run<Result>(
@@ -154,7 +157,10 @@ export function createRemixI18nServer<
     run,
 
     middleware() {
-      return (async (context, next) =>
+      const middleware: ReturnType<RemixI18nServer<TLocale, T>["middleware"]> = async (
+        context,
+        next
+      ) =>
         await run(
           {
             headers: context.headers,
@@ -165,9 +171,8 @@ export function createRemixI18nServer<
             context.set(remixI18nContext, palamedes, { property: "palamedes" })
             return await next()
           }
-        )) as RemixI18nServer<TLocale, T>["middleware"] extends () => infer TMiddleware
-        ? TMiddleware
-        : never
+        )
+      return middleware
     },
 
     get(context) {
@@ -176,9 +181,7 @@ export function createRemixI18nServer<
       }
 
       const i18n = scope.get()
-      return i18n
-        ? ({ i18n, locale: i18n.locale as TLocale, source: "default" } as const)
-        : undefined
+      return i18n ? scopedContexts.get(i18n) : undefined
     },
 
     serializeLocaleCookie(locale) {
