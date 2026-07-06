@@ -37,16 +37,16 @@ export function ProofPage() {
         <BenchmarkChart
           title="Small corpus — 80 files, 640 messages (median of 7 runs)"
           rows={[
-            { tool: "Palamedes", median: "33.53 ms" },
-            { tool: "i18next-parser 9.4", median: "477.58 ms" },
-            { tool: "Lingui 6.4", median: "657.00 ms" },
+            { tool: "Palamedes", median: "33.58 ms" },
+            { tool: "i18next-parser 9.4", median: "526.45 ms" },
+            { tool: "Lingui 6.4", median: "705.12 ms" },
           ]}
           methodologyHref={repoHref("docs/benchmark-e2e-workflow.md")}
         />
         <BenchmarkChart
           title="Medium corpus (median of 7 runs)"
           rows={[
-            { tool: "Palamedes", median: "42.92 ms" },
+            { tool: "Palamedes", median: "47.77 ms" },
             /* fill from benchmarks/e2e-workflow/results/latest.md */
           ]}
           methodologyHref={repoHref("docs/benchmark-e2e-workflow.md")}

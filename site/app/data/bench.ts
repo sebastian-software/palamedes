@@ -23,7 +23,7 @@ export interface BenchCorpus {
 }
 
 export const BENCH_META = {
-  generated: "2026-07-03",
+  generated: "2026-07-06",
   node: "v24.18.0",
   platform: "darwin/arm64",
   runs: 7,
@@ -35,11 +35,11 @@ export const BENCH_SMALL: BenchCorpus = {
   title: "Small corpus — 80 files, 640 messages (median of 7 runs)",
   corpus: "80 files, 640 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 33.53, accent: true },
-    { tool: "i18next-parser", medianMs: 477.58 },
-    { tool: "Lingui", medianMs: 657 },
+    { tool: "Palamedes", medianMs: 33.58, accent: true },
+    { tool: "i18next-parser", medianMs: 526.45 },
+    { tool: "Lingui", medianMs: 705.12 },
   ],
-  ratios: { lingui: "19.59×", i18next: "14.24×" },
+  ratios: { lingui: "21.00×", i18next: "15.68×" },
 }
 
 export const BENCH_MEDIUM: BenchCorpus = {
@@ -47,9 +47,9 @@ export const BENCH_MEDIUM: BenchCorpus = {
   title: "Medium corpus — 240 files, 1920 messages (median of 7 runs)",
   corpus: "240 files, 1920 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 42.92, accent: true },
-    { tool: "i18next-parser", medianMs: 534.15 },
-    { tool: "Lingui", medianMs: 728.56 },
+    { tool: "Palamedes", medianMs: 47.77, accent: true },
+    { tool: "i18next-parser", medianMs: 587.52 },
+    { tool: "Lingui", medianMs: 812.83 },
   ],
-  ratios: { lingui: "16.98×", i18next: "12.45×" },
+  ratios: { lingui: "17.02×", i18next: "12.30×" },
 }

@@ -84,12 +84,12 @@ catalog shapes and timings.
 
 Latest checked full run:
 
-- timestamp: `2026-07-03T19:16:02.889Z`
+- timestamp: `2026-07-06T09:09:36.849Z`
 - Node: `v24.18.0`
 - platform: `darwin/arm64`
 - warmup: `3`
 - measured runs: `7`
-- Palamedes CLI: `0.11.4`
+- Palamedes CLI: `1.2.0`
 - Lingui CLI: `6.4.0`
 - i18next-parser CLI: `9.4.0`
 
@@ -106,11 +106,11 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `33.53 ms` |
-| Lingui         | `657.00 ms` |
-| i18next-parser | `477.58 ms` |
+| Palamedes      |  `33.58 ms` |
+| Lingui         | `705.12 ms` |
+| i18next-parser | `526.45 ms` |
 
-On this run, Palamedes measured `19.59x` faster than Lingui and `14.24x`
+On this run, Palamedes measured `21.00x` faster than Lingui and `15.68x`
 faster than i18next-parser.
 
 ### Medium
@@ -126,11 +126,11 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `42.92 ms` |
-| Lingui         | `728.56 ms` |
-| i18next-parser | `534.15 ms` |
+| Palamedes      |  `47.77 ms` |
+| Lingui         | `812.83 ms` |
+| i18next-parser | `587.52 ms` |
 
-On this run, Palamedes measured `16.98x` faster than Lingui and `12.45x`
+On this run, Palamedes measured `17.02x` faster than Lingui and `12.30x`
 faster than i18next-parser.
 
 ## Reading The Numbers

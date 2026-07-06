@@ -48,6 +48,31 @@ function fail(message) {
   process.exit(1)
 }
 
+function parseBenchSection(name) {
+  const section = benchTs.split(new RegExp(`export const BENCH_${name}: BenchCorpus =`, "m"))[1]
+  if (!section) {
+    fail(`could not find BENCH_${name} in ${benchTsPath}`)
+  }
+  const body = section.split(/^}/m)[0]
+  const medians = {}
+  for (const match of body.matchAll(
+    /\{ tool: "(Palamedes|Lingui|i18next-parser)", medianMs: ([\d.]+)/g
+  )) {
+    medians[match[1]] = Number(match[2])
+  }
+  const ratioMatch = body.match(/ratios: \{ lingui: "([\d.]+)×", i18next: "([\d.]+)×" \}/)
+  if (Object.keys(medians).length !== 3 || !ratioMatch) {
+    fail(`could not parse medians/ratios from BENCH_${name} in ${benchTsPath}`)
+  }
+  return {
+    medians,
+    speedups: {
+      Lingui: ratioMatch[1],
+      "i18next-parser": ratioMatch[2],
+    },
+  }
+}
+
 function expect(label, condition) {
   if (!condition) {
     fail(`mismatch: ${label}`)
@@ -56,21 +81,19 @@ function expect(label, condition) {
 
 const small = parseSection("Small")
 const medium = parseSection("Medium")
+const benchSmall = parseBenchSection("SMALL")
+const benchMedium = parseBenchSection("MEDIUM")
 
 const checks = [
-  ["small Palamedes median", small.medians.Palamedes, /medianMs: 33\.53/.test(benchTs) && 33.53],
-  ["small Lingui median", small.medians.Lingui, /medianMs: 657\b/.test(benchTs) && 657],
-  [
-    "small i18next median",
-    small.medians["i18next-parser"],
-    /medianMs: 477\.58/.test(benchTs) && 477.58,
-  ],
-  ["medium Palamedes median", medium.medians.Palamedes, /medianMs: 42\.92/.test(benchTs) && 42.92],
-  ["medium Lingui median", medium.medians.Lingui, /medianMs: 728\.56/.test(benchTs) && 728.56],
+  ["small Palamedes median", small.medians.Palamedes, benchSmall.medians.Palamedes],
+  ["small Lingui median", small.medians.Lingui, benchSmall.medians.Lingui],
+  ["small i18next median", small.medians["i18next-parser"], benchSmall.medians["i18next-parser"]],
+  ["medium Palamedes median", medium.medians.Palamedes, benchMedium.medians.Palamedes],
+  ["medium Lingui median", medium.medians.Lingui, benchMedium.medians.Lingui],
   [
     "medium i18next median",
     medium.medians["i18next-parser"],
-    /medianMs: 534\.15/.test(benchTs) && 534.15,
+    benchMedium.medians["i18next-parser"],
   ],
 ]
 
@@ -80,19 +103,19 @@ for (const [label, reported, hardcoded] of checks) {
 
 expect(
   `small speedup vs Lingui (${small.speedups.Lingui}x)`,
-  benchTs.includes(`"${small.speedups.Lingui}×"`)
+  small.speedups.Lingui === benchSmall.speedups.Lingui
 )
 expect(
   `small speedup vs i18next (${small.speedups["i18next-parser"]}x)`,
-  benchTs.includes(`"${small.speedups["i18next-parser"]}×"`)
+  small.speedups["i18next-parser"] === benchSmall.speedups["i18next-parser"]
 )
 expect(
   `medium speedup vs Lingui (${medium.speedups.Lingui}x)`,
-  benchTs.includes(`"${medium.speedups.Lingui}×"`)
+  medium.speedups.Lingui === benchMedium.speedups.Lingui
 )
 expect(
   `medium speedup vs i18next (${medium.speedups["i18next-parser"]}x)`,
-  benchTs.includes(`"${medium.speedups["i18next-parser"]}×"`)
+  medium.speedups["i18next-parser"] === benchMedium.speedups["i18next-parser"]
 )
 
 console.log("verify-site-bench-data: bench.ts matches latest.md")
