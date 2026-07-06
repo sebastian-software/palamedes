@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url"
 import type { registerHooks } from "node:module"
 
-import { transformPalamedesMacros } from "@palamedes/transform"
+import { transformPalamedesMacros, type SourceMap } from "@palamedes/transform"
 
 export type PalamedesRemixRegisterOptions = {
   /**
@@ -12,7 +12,7 @@ export type PalamedesRemixRegisterOptions = {
 
   /**
    * Files excluded from macro transformation.
-   * @default /node_modules/
+   * @default /[/\\]node_modules[/\\]/
    */
   exclude?: RegExp
 
@@ -29,7 +29,9 @@ export type LoadHook = NonNullable<RegisterHooksOptions["load"]>
 export type LoadResult = ReturnType<LoadHook>
 
 const DEFAULT_INCLUDE = /\.(tsx?|jsx?|mjs|cjs)$/
-const DEFAULT_EXCLUDE = /node_modules/
+const DEFAULT_EXCLUDE = /[/\\]node_modules[/\\]/
+const INLINE_SOURCE_MAP_COMMENT =
+  /(?:\r?\n)?\/\/# sourceMappingURL=data:application\/json[^,\r\n]*;base64,[^\r\n]+(?:\r?\n)?$/u
 
 export function createPalamedesRemixLoadHook(
   options: PalamedesRemixRegisterOptions = {}
@@ -55,7 +57,7 @@ export function createPalamedesRemixLoadHook(
 
     return {
       ...loaded,
-      source: result.code,
+      source: appendInlineSourceMap(stripInlineSourceMap(result.code), result.map),
     }
   }
 }
@@ -79,4 +81,17 @@ function stringifySource(source: NonNullable<LoadResult["source"]>): string {
   }
 
   return Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString("utf8")
+}
+
+function stripInlineSourceMap(code: string): string {
+  return code.replace(INLINE_SOURCE_MAP_COMMENT, "")
+}
+
+function appendInlineSourceMap(code: string, map: SourceMap | null): string {
+  if (!map) {
+    return code
+  }
+
+  const encoded = Buffer.from(JSON.stringify(map), "utf8").toString("base64")
+  return `${code}\n//# sourceMappingURL=data:application/json;base64,${encoded}`
 }

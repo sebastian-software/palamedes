@@ -9,6 +9,9 @@ Remix's TSX loader first, then Palamedes:
 node --import remix/node-tsx --import @palamedes/remix/register server.ts
 ```
 
+Register `remix/node-tsx` first. If the order is reversed, Remix's loader
+short-circuits TS/TSX loading before the Palamedes hook can transform macros.
+
 ## Exports
 
 - `createPalamedesRemixLoadHook(options?)`
@@ -79,6 +82,10 @@ The first Remix v3 support path covers:
 - request-local i18n activation for Fetch `Request` handlers
 - cookie and `Accept-Language` locale negotiation
 - catalog loading before each translated server render
+
+The register hook covers server-executed modules only. Browser-delivered Remix
+v3 modules are compiled through Remix's asset pipeline, which does not expose a
+Palamedes macro transform hook yet.
 
 Rich JSX message macros remain experimental for Remix v3 because Remix's
 default loader lowers JSX before the Palamedes register hook sees the module.
