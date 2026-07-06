@@ -1,0 +1,5 @@
+locales: [en, de, es]
+source-locale: en
+catalogs:
+  - path: app/locales/{locale}
+    include: [app]

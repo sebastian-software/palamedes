@@ -4,7 +4,7 @@ import os from "node:os"
 
 import { afterEach, describe, expect, it } from "vitest"
 
-import { loadPalamedesConfig } from "./index"
+import { loadPalamedesConfig, loadPalamedesConfigSync } from "./index"
 
 const tempDirs: string[] = []
 
@@ -75,6 +75,32 @@ describe("loadPalamedesConfig", () => {
     })
   })
 
+  it("loads a palamedes.yaml file synchronously with the same normalization", async () => {
+    const fixtureDir = await createTempDir()
+
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        locales: [en, de]
+        source-locale: en
+        source-reference-root: config
+        catalogs:
+          - path: src/locales/{locale}
+            include: [src]
+      `
+    )
+
+    const config = loadPalamedesConfigSync({ cwd: fixtureDir })
+
+    expect(config.rootDir).toBe(fixtureDir)
+    expect(config.sourceLocale).toBe("en")
+    expect(config.sourceReferenceRoot).toBe(fixtureDir)
+    expect(config.catalogs[0]).toStrictEqual({
+      path: "src/locales/{locale}",
+      include: ["src"],
+    })
+  })
+
   it("rejects the removed ndjson catalog format with an FCL migration hint", async () => {
     const fixtureDir = await createTempDir()
 
@@ -141,6 +167,38 @@ describe("loadPalamedesConfig", () => {
     expect(config.configPath).toBe(path.join(fixtureDir, "palamedes.json"))
     expect(config.sourceLocale).toBe("en")
     expect(config.sourceReferenceRoot).toBe(fixtureDir)
+  })
+
+  it("loads an explicitly provided config path synchronously", async () => {
+    const fixtureDir = await createTempDir()
+    const configPath = path.join(fixtureDir, "custom.config.ts")
+
+    await writeFile(
+      configPath,
+      `
+        export default {
+          locales: ["en"],
+          sourceLocale: "en",
+          pseudoLocale: "pseudo",
+          catalogs: [
+            {
+              path: "messages/{locale}",
+              include: ["src"],
+              exclude: ["src/ignore"],
+            },
+          ],
+        }
+      `
+    )
+
+    const config = loadPalamedesConfigSync({
+      cwd: fixtureDir,
+      configPath: "./custom.config.ts",
+    })
+
+    expect(config.configPath).toBe(configPath)
+    expect(config.pseudoLocale).toBe("pseudo")
+    expect(config.catalogs[0]?.exclude).toStrictEqual(["src/ignore"])
   })
 
   it("loads an explicitly provided config path", async () => {
