@@ -11,20 +11,20 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 
 ## Fact sheet
 
-| Fact                | Value                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------- |
-| Company / ownership | Crowdin OÜ, Tallinn (Estonia); bootstrapped; founded 2009                                         |
-| License / model     | Proprietary SaaS; free tier for OSS/academic projects                                             |
-| Pricing model       | "Hosted words" = source words × target languages; $0 / $59 / $179 / $450 / custom per month       |
-| Adoption            | 708 G2 reviews; customers incl. Strava, GitHub, GitLab; user claims 500K–3M+ (unreconciled)       |
-| TMS vs. AI-first    | TMS with deep AI layer (AI pre-translation, Copilot agent, AI QA, AI Debug)                       |
-| Source of truth     | Hosted project DB; git/files are sync targets                                                     |
-| Delivery            | File sync (CLI/GitHub) + optional OTA CDN                                                         |
-| ICU MessageFormat   | Not explicitly verified in this analysis                                                          |
-| .po / gettext       | Yes — first-class among 50–100+ formats                                                           |
-| Dev tooling         | Java CLI, REST API v2, GitHub Action, MCP server v2 (Claude Code/Desktop, Cursor)                 |
-| Self-hosting        | No                                                                                                |
-| Notable             | AI context harvesting (website crawler, source-code CLI); built-in translation-vendor marketplace |
+| Fact                | Value                                                                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Company / ownership | Crowdin OÜ, Tallinn (Estonia); bootstrapped; founded 2009                                                                                    |
+| License / model     | Proprietary SaaS; free tier for OSS/academic projects                                                                                        |
+| Pricing model       | "Hosted words" = source words × target languages; $0 / $59 / $179 / $450 / custom per month                                                  |
+| Adoption            | 708 G2 reviews; customers incl. Strava, GitHub, GitLab; user claims 500K–3M+ (unreconciled)                                                  |
+| TMS vs. AI-first    | TMS with deep AI layer (AI pre-translation, Copilot agent, AI QA, AI Debug)                                                                  |
+| Source of truth     | Hosted project DB; git/files are sync targets                                                                                                |
+| Delivery            | File sync (CLI/GitHub) + optional OTA CDN                                                                                                    |
+| ICU MessageFormat   | Yes — native: plural/select/selectordinal, CLDR-correct plural splitting and real-time syntax validation in the editor (verified 2026-07-06) |
+| .po / gettext       | Yes — first-class among 50–100+ formats                                                                                                      |
+| Dev tooling         | Java CLI, REST API v2, GitHub Action, MCP server v2 (Claude Code/Desktop, Cursor)                                                            |
+| Self-hosting        | No                                                                                                                                           |
+| Notable             | AI context harvesting (website crawler, source-code CLI); built-in translation-vendor marketplace                                            |
 
 ## Snapshot
 
@@ -72,6 +72,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Docs page states **"50 Supported Formats"**; homepage separately claims **"100+ file formats"**; a third-party review site states **"40+ file formats"** — three inconsistent figures, not reconciled, treat as vendor/secondary marketing claims rather than a single verified count.
 - Confirmed named formats (via search-indexed docs content, not a fully rendered live table): Android XML, macOS/iOS `.strings` and `.stringsdict`, JSON (plain, Chrome JSON, Go JSON, **i18next JSON** explicitly named, FBT JSON, RES JSON), **XLIFF and XLIFF 2.0**, Java `.properties` (plus Play Properties, Java Properties XML), **RESX/RESW** (.NET), **YAML**, INI (plus Joomla INI), JS/FJS, **PO (gettext)**, Qt `.ts`, TOML, CoffeeScript, XAML, subtitle formats (SRT, VTT, VTT2, SBV), SVG, DTD, CSV, RC, WXL, Haml, XLSX, PLIST, PHP arrays, **ARB** (Flutter/Dart), VDF.
 - .po/gettext is explicitly supported and listed as a first-class format alongside JSON/XLIFF.
+- ICU MessageFormat (verified 2026-07-06): natively supported — number/date/time/select/plural/selectordinal arguments; the editor splits ICU plurals into CLDR-correct per-language plural forms ("Copy Source" yields the right category count per target language) and validates ICU syntax in real time (project → QA → ICU Syntax); ICU values work inside standard JSON/YAML files, no special file type needed. An optional community marketplace app ("ICU Message Format Helper") adds a tabbed live preview on top of the native support.
 - Generic "nested vs. flat JSON" distinction is not explicitly documented in available sources — likely handled by one of the specific JSON format variants, but not verified.
 - Auto-conversion on import (confirmed via direct docs fetch): DOC→DOCX, PPT→PPTX, RTF→DOCX, PDF→DOCX; non-text "asset" formats also accepted: `.psd`, `.ai`, `.png`, `.jpeg`.
 
@@ -167,3 +168,6 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - https://tracxn.com/d/companies/crowdin/__zUQRSsPMq2Bm7z6avMCext5orGAXO9eeq2NP-0tJQ0s — accessed 2026-07-06
 - https://getlatka.com/companies/crowdin.com — accessed 2026-07-06 (revenue figure, single source, not corroborated)
 - https://community.crowdin.com/t/github-integration-wont-sync/16433 — noted via search, not fetched in depth
+- https://support.crowdin.com/icu-message-syntax/ — accessed 2026-07-06 (ICU verification)
+- https://crowdin.com/blog/icu-guide — accessed 2026-07-06 (ICU verification)
+- https://store.crowdin.com/icu-helper — accessed 2026-07-06 (optional ICU preview app)

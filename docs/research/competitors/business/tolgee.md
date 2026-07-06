@@ -11,20 +11,20 @@ repository: https://github.com/tolgee/tolgee-platform
 
 ## Fact sheet
 
-| Fact                | Value                                                                                                 |
-| ------------------- | ----------------------------------------------------------------------------------------------------- |
-| Company / ownership | Tolgee s.r.o., Brno (Czechia); ~€500K seed + Czech public grants                                      |
-| License / model     | Open-core: Apache-2.0 platform + proprietary `ee/` (Tolgee EE License); MIT SDKs                      |
-| Pricing model       | Cloud €0 / €49 / €179 / €499 / custom per month (keys + seats + MT credits); self-host free ≤10 seats |
-| Adoption            | 4.0k GitHub stars; ~123k npm downloads/week (@tolgee/core); Capterra 4.6/5 (95 reviews)               |
-| TMS vs. AI-first    | TMS with AI translator (GPT-based, automatically context-fed)                                         |
-| Source of truth     | Platform key/translation DB; files are import/export targets                                          |
-| Delivery            | SDK/CDN + file export                                                                                 |
-| ICU MessageFormat   | Yes — native platform-wide, plural-aware editor UI                                                    |
-| .po / gettext       | Yes — one among many formats                                                                          |
-| Dev tooling         | CLI (extraction, push/pull), REST API, MCP server listed                                              |
-| Self-hosting        | Yes (Docker; core features free)                                                                      |
-| Notable             | ALT+click in-context editing with automatic screenshot capture feeding AI context                     |
+| Fact                | Value                                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Company / ownership | Tolgee s.r.o., Brno (Czechia); ~€500K seed + Czech public grants                                                                                                                           |
+| License / model     | Open-core: Apache-2.0 platform + proprietary `ee/` (Tolgee EE License); MIT SDKs                                                                                                           |
+| Pricing model       | Cloud €0 / €49 / €179 / €499 / custom per month (keys + seats + MT credits); self-host free ≤10 seats                                                                                      |
+| Adoption            | 4.0k GitHub stars; ~123k npm downloads/week (@tolgee/core); Capterra 4.6/5 (95 reviews)                                                                                                    |
+| TMS vs. AI-first    | TMS with AI translator (GPT-based, automatically context-fed)                                                                                                                              |
+| Source of truth     | Platform key/translation DB; files are import/export targets                                                                                                                               |
+| Delivery            | SDK/CDN + file export                                                                                                                                                                      |
+| ICU MessageFormat   | Yes — native platform-wide, plural-aware editor UI                                                                                                                                         |
+| .po / gettext       | Yes — one among many formats                                                                                                                                                               |
+| Dev tooling         | CLI (extraction, push/pull), REST API, official MCP server built into the platform (MCP Registry; Claude Code/Desktop, Cursor; single "Developer" role — early-stage; verified 2026-07-06) |
+| Self-hosting        | Yes (Docker; core features free)                                                                                                                                                           |
+| Notable             | ALT+click in-context editing with automatic screenshot capture feeding AI context                                                                                                          |
 
 ## Snapshot
 
@@ -82,7 +82,7 @@ repository: https://github.com/tolgee/tolgee-platform
 - AI Playground (test/tune prompts) is gated to the Business tier and above.
 - Machine translation credit model: roughly 1 credit per translated character for standard MT providers (DeepL, Google Translate, AWS Translate supported), or a token-based AI cost (~0.08 credit per input token / 0.3 credit per output token) for LLM-based translation.
 - Per a third-party comparison (locize), Tolgee restricts to "5 LLM providers" and gates AI playground/prompt testing to enterprise-level tiers, with "no styleguide-aware AI" — not independently re-verified beyond that source.
-- MCP Server integration is listed as a repo feature (for AI coding assistants to interact with Tolgee projects) — feature maturity/date not independently verified.
+- MCP server (verified 2026-07-06): official and real — an MCP endpoint built into the platform itself (`https://app.tolgee.io/mcp/developer` on Cloud, also available on self-hosted instances), registered in the MCP Registry as `io.github.tolgee/tolgee`; documented clients: Claude Desktop, Claude Code, Cursor, Windsurf, ChatGPT (remote HTTP + `X-API-Key` PAK/PAT auth, no OAuth). Early-stage scope: currently exposes a single "Developer" role (keys, translations, languages, tags, namespaces, branches, batch operations); translator/PM roles are "planned for future releases". Originated as a one-week-appetite feature pitch (tolgee-platform#3449). Not to be confused with the unaffiliated community repo `ytarfa/tolgee-mcp`.
 
 ## Pricing
 
@@ -147,3 +147,5 @@ repository: https://github.com/tolgee/tolgee-platform
 - https://www.locize.com/compare/locize-vs-tolgee — accessed 2026-07-06 (competitor-authored comparison; directional, not neutral)
 - Web search results on Tolgee ICU message format / pluralization (docs.tolgee.io/platform/translation_process/icu_message_format, tolgee_universal_icu_placeholders, js-sdk/formatting) — accessed 2026-07-06
 - Web search results on Tolgee company/funding (Crunchbase, Tracxn organization pages) — accessed 2026-07-06
+- https://docs.tolgee.io/platform/integrations/mcp_server/about — accessed 2026-07-06 (MCP verification)
+- https://github.com/tolgee/tolgee-platform/issues/3449 — accessed 2026-07-06 (MCP feature pitch)

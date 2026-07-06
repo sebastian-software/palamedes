@@ -11,20 +11,20 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 
 ## Fact sheet
 
-| Fact                | Value                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------- |
-| Company / ownership | inweso GmbH (Switzerland); run by the i18next maintainers; no VC                                          |
-| License / model     | Proprietary SaaS; revenue explicitly funds i18next OSS development                                        |
-| Pricing model       | Fixed tiers $0–$199/mo (words, languages, CDN downloads) + usage-based plan; AI/MT metered per token/char |
-| Adoption            | ~86k npm downloads/week (backend SDK); Capterra 4.4/5 (22 reviews) — small footprint                      |
-| TMS vs. AI-first    | TMS (i18next-native) with optional AI/MT auto-translation                                                 |
-| Source of truth     | Hosted namespace/key DB with versioning                                                                   |
-| Delivery            | Runtime CDN (OTA) — translations fetched at runtime, no rebuild                                           |
-| ICU MessageFormat   | Yes — native format (for react-intl/next-intl/Lingui clients)                                             |
-| .po / gettext       | Yes — via converter/CLI export (keys/values only; file structure not preserved)                           |
-| Dev tooling         | locize-cli, REST API, GitHub Action, MCP server (2026)                                                    |
-| Self-hosting        | No (enterprise-only per vendor comparison)                                                                |
-| Notable             | `saveMissing` runtime key harvesting instead of static extraction; in-context editor via URL param        |
+| Fact                | Value                                                                                                                                                                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Company / ownership | inweso GmbH (Switzerland); run by the i18next maintainers; no VC                                                                                                                                                                       |
+| License / model     | Proprietary SaaS; revenue explicitly funds i18next OSS development                                                                                                                                                                     |
+| Pricing model       | Fixed tiers $0–$199/mo (words, languages, CDN downloads) + usage-based plan; AI/MT metered per token/char                                                                                                                              |
+| Adoption            | ~86k npm downloads/week (backend SDK); Capterra 4.4/5 (22 reviews) — small footprint                                                                                                                                                   |
+| TMS vs. AI-first    | TMS (i18next-native) with optional AI/MT auto-translation                                                                                                                                                                              |
+| Source of truth     | Hosted namespace/key DB with versioning                                                                                                                                                                                                |
+| Delivery            | Runtime CDN (OTA) — translations fetched at runtime, no rebuild                                                                                                                                                                        |
+| ICU MessageFormat   | Yes — native format (for react-intl/next-intl/Lingui clients)                                                                                                                                                                          |
+| .po / gettext       | Yes — via converter/CLI export (keys/values only; file structure not preserved)                                                                                                                                                        |
+| Dev tooling         | locize-cli, REST API, GitHub Action, MCP server (2026)                                                                                                                                                                                 |
+| Self-hosting        | No — platform self-hosting/on-premise is not documented in docs/FAQ/pricing (the "enterprise-only" claim exists only on locize's own comparison page); translation files can be self-hosted/bundled on all plans (verified 2026-07-06) |
+| Notable             | `saveMissing` runtime key harvesting instead of static extraction; in-context editor via URL param                                                                                                                                     |
 
 ## Snapshot
 
@@ -74,6 +74,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - Export/off-boarding fidelity caveats (from locize docs): "locize generally only handles the translation content, i.e. keys and values, and never saves your imported file with the original file structure" — round-tripping preserves keys/values, not structural metadata/comments; "no sort of i18n format conversion while importing or exporting". Full metadata (tags, context, quality flags, review states) is only documented on the `/pull/` API endpoint, not the standard download path. ToS commits to 10 days' notice and "help" retrieving data on termination, but no guaranteed format/procedure. Official GitHub Action: `locize/download@v2`. Documented `locize-cli` bugs around export fidelity exist (invalid yaml-rails output #27, PO plural-form issues #30, sync not updating keys #64).
 - Onboarding: official "Migrating from X to locize" guides exist for Transifex, Phrase, Lokalise, Localazy, Tolgee; i18next migration is a 2-step swap (`i18next-locize-backend` + `locize migrate`). No official "migrate away from locize" guide exists — export is via CLI download only.
 - Figma plugin for design-side string sync.
+- Self-hosting (verified 2026-07-06): no platform self-hosting/on-premise offering is documented anywhere in locize's docs, FAQ index, or pricing page; the sole claim of a "self-hosted option only for enterprise" appears on locize's own Tolgee comparison page, unelaborated. What is supported on all plans (per docs FAQ): hosting/bundling the exported translation files yourself instead of using the locize CDN ("You can host or bundle the translations yourself if you prefer. Both approaches are fully supported.") — often conflated with platform self-hosting.
 
 ## AI features
 
@@ -180,3 +181,4 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - https://www.locize.com/docs/guides/migrating-from/ (accessed 2026-07-06)
 - https://www.locize.com/terms/ (accessed 2026-07-06)
 - api.npmjs.org weekly download counts for locize packages (accessed 2026-07-06)
+- https://www.locize.com/docs/general-questions/do-i-have-to-use-the-locize-cdn-or-can-i-host-bundle-the-translations-directly — accessed 2026-07-06 (self-hosting verification)
