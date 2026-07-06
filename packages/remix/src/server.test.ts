@@ -123,6 +123,11 @@ describe("createRemixI18nServer", () => {
       ({ i18n, locale }) => {
         expect(locale).toBe("de")
         expect(getI18n()).toBe(i18n)
+        expect(remixI18n.get()).toStrictEqual({
+          i18n,
+          locale: "de",
+          source: "accept-language",
+        })
         expect(i18n._("greeting")).toBe("de:Hallo")
       }
     )
@@ -137,6 +142,29 @@ describe("createRemixI18nServer", () => {
     )
 
     expect(loadMessages).toHaveBeenCalledTimes(1)
+  })
+
+  it("returns the scoped context source without a router context", async () => {
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: (locale) => ({ greeting: `hello:${locale}` }),
+    })
+
+    await remixI18n.run(
+      new Request("https://example.test/", {
+        headers: { cookie: "locale=es", "accept-language": "de" },
+      }),
+      ({ i18n }) => {
+        expect(remixI18n.get()).toStrictEqual({
+          i18n,
+          locale: "es",
+          source: "cookie",
+        })
+      }
+    )
+
+    expect(remixI18n.get()).toBeUndefined()
   })
 
   it("wraps Remix router handlers with middleware request scope", async () => {
