@@ -18,6 +18,13 @@ export const PROFILE_DEFINITIONS = {
     newCount: 192,
     removedCount: 144,
   },
+  realistic: {
+    fileCount: 400,
+    messagesPerFile: 25,
+    changedCount: 750,
+    newCount: 1000,
+    removedCount: 750,
+  },
   large: {
     fileCount: 720,
     messagesPerFile: 8,

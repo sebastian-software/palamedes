@@ -106,11 +106,11 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `33.58 ms` |
-| Lingui         | `705.12 ms` |
-| i18next-parser | `526.45 ms` |
+| Palamedes      |  `33.41 ms` |
+| Lingui         | `738.18 ms` |
+| i18next-parser | `531.39 ms` |
 
-On this run, Palamedes measured `21.00x` faster than Lingui and `15.68x`
+On this run, Palamedes measured `22.10x` faster than Lingui and `15.91x`
 faster than i18next-parser.
 
 ### Medium
@@ -126,11 +126,31 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `47.77 ms` |
-| Lingui         | `812.83 ms` |
-| i18next-parser | `587.52 ms` |
+| Palamedes      |  `46.27 ms` |
+| Lingui         | `800.75 ms` |
+| i18next-parser | `583.00 ms` |
 
-On this run, Palamedes measured `17.02x` faster than Lingui and `12.30x`
+On this run, Palamedes measured `17.31x` faster than Lingui and `12.60x`
+faster than i18next-parser.
+
+### Realistic
+
+Corpus:
+
+- `400` files
+- `10,000` current messages
+- `9,750` baseline messages
+- `750` changed, `1,000` new, `750` removed
+
+Median results:
+
+| Tool           |       Median |
+| -------------- | -----------: |
+| Palamedes      |   `83.75 ms` |
+| Lingui         | `1060.24 ms` |
+| i18next-parser |  `787.15 ms` |
+
+On this run, Palamedes measured `12.66x` faster than Lingui and `9.40x`
 faster than i18next-parser.
 
 ## Reading The Numbers

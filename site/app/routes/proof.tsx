@@ -6,7 +6,7 @@ import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
-import { BENCH_MEDIUM, BENCH_SMALL } from "~/data/bench"
+import { BENCH_REALISTIC } from "~/data/bench"
 import { CATALOG_QA_CARDS } from "~/data/features"
 import { decisionHref, docsHref, repoHref } from "~/data/links"
 
@@ -69,8 +69,7 @@ export default function Proof() {
         lede="The end-to-end benchmark measures what a developer actually waits for: scan sources, extract messages, update catalogs, write files. Same generated message inventory, rendered into each tool's idiomatic source shape, semantically validated after every run."
       >
         <div className="space-y-8">
-          <BenchmarkChart corpus={BENCH_SMALL} />
-          <BenchmarkChart corpus={BENCH_MEDIUM} />
+          <BenchmarkChart corpus={BENCH_REALISTIC} />
           <div className="max-w-[56em] border-l-4 border-accent pl-4">
             <p className="micro text-[10px] text-gray-spec">Honest note</p>
             <p className="mt-1 text-[13.5px]">

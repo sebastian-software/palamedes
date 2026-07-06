@@ -19,7 +19,7 @@ export function LocaleBookingCards() {
 
   return (
     <figure ref={ref}>
-      <div className="hairline-grid grid-cols-1">
+      <div className="hairline-grid grid-cols-3 max-tight:grid-cols-1">
         {LOCALE_CARDS.map((card, index) => {
           const active = !cycling || index === activeIndex
           return (

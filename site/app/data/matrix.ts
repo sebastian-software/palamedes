@@ -4,9 +4,9 @@ import { repoHref } from "./links"
  * Typed port of FRAMEWORK_MATRIX_CELLS from docs/site/structure/components.jsx.
  * Cells carry EXPLICIT links and a per-cell hosting status — never a generated
  * URL pattern. URL shapes mirror examples/README.md: cookie (one host), route
- * (locale path), subdomain (locale host label, pending DNS), tld
- * (palamedes-i18n.{com,de,es,fr}, pending domains). Subdomain/tld hosting
- * reconciliation is tracked in issue #306.
+ * (locale path), subdomain (locale host label, live under the per-example
+ * wildcards), tld (palamedes-i18n.{com,de,es,fr} — domains still pending, so
+ * these stay provisioning). Remaining tld hosting is tracked in issue #306.
  */
 
 export type MatrixStatus = "live" | "provisioning"
@@ -69,7 +69,11 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
     framework,
     strategy: "subdomain",
     verified: true as const,
-    status: "provisioning" as const,
+    status: "live" as const,
+    demoLinks: ["en", "de", "es"].map((locale) => ({
+      label: locale,
+      href: `https://${locale}.${framework}-subdomain.examples.palamedes.dev`,
+    })),
     sourceHref: repoHref(`examples/${framework}-subdomain`, "tree"),
   },
   {

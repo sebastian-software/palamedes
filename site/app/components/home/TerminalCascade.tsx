@@ -16,7 +16,7 @@ const LINE_INTERVAL_MS = 220
 
 /*
  * The V7 "CLI and repo ownership" hero visual inside the Swiss system:
- * three overlapping ink panels replaying pmds extract → audit → report.
+ * three equal-width ink panels replaying pmds extract → audit → report.
  * Prerender/no-JS/reduced-motion state: all lines visible, no cursor.
  */
 export function TerminalCascade() {
@@ -62,8 +62,7 @@ export function TerminalCascade() {
         return (
           <div
             key={panel.id}
-            className={`border border-hair bg-ink ${panelIndex > 0 ? "-mt-3 ml-6 max-tight:ml-3" : ""}`}
-            style={{ position: "relative", zIndex: panelIndex }}
+            className={`border border-hair bg-ink ${panelIndex > 0 ? "mt-4" : ""}`}
           >
             <div className="flex items-center gap-2 border-b border-paper/15 px-4 py-2">
               <span className="block size-2 border border-paper/40" />
@@ -92,8 +91,12 @@ export function TerminalCascade() {
                   </div>
                 )
               })}
-              {isLast && visibleLines >= totalLines ? (
-                <div className="mt-2 space-y-1" aria-hidden>
+              {isLast ? (
+                <div
+                  className="mt-2 space-y-1 transition-opacity duration-300"
+                  style={{ opacity: visibleLines >= totalLines ? 1 : 0 }}
+                  aria-hidden
+                >
                   {REPORT_BARS.map((bar) => (
                     <div key={bar.locale} className="flex items-center gap-2">
                       <span className="w-6 text-[11px] text-gray-spec">{bar.locale}</span>

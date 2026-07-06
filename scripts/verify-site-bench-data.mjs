@@ -158,8 +158,10 @@ function expect(label, condition) {
 
 const small = parseSection("Small")
 const medium = parseSection("Medium")
+const realistic = parseSection("Realistic")
 const benchSmall = parseBenchSection("SMALL")
 const benchMedium = parseBenchSection("MEDIUM")
+const benchRealistic = parseBenchSection("REALISTIC")
 
 const checks = [
   ["small Palamedes median", small.medians.Palamedes, benchSmall.medians.Palamedes],
@@ -171,6 +173,13 @@ const checks = [
     "medium i18next median",
     medium.medians["i18next-parser"],
     benchMedium.medians["i18next-parser"],
+  ],
+  ["realistic Palamedes median", realistic.medians.Palamedes, benchRealistic.medians.Palamedes],
+  ["realistic Lingui median", realistic.medians.Lingui, benchRealistic.medians.Lingui],
+  [
+    "realistic i18next median",
+    realistic.medians["i18next-parser"],
+    benchRealistic.medians["i18next-parser"],
   ],
 ]
 
@@ -193,6 +202,14 @@ expect(
 expect(
   `medium speedup vs i18next (${medium.speedups["i18next-parser"]}x)`,
   medium.speedups["i18next-parser"] === benchMedium.speedups["i18next-parser"]
+)
+expect(
+  `realistic speedup vs Lingui (${realistic.speedups.Lingui}x)`,
+  realistic.speedups.Lingui === benchRealistic.speedups.Lingui
+)
+expect(
+  `realistic speedup vs i18next (${realistic.speedups["i18next-parser"]}x)`,
+  realistic.speedups["i18next-parser"] === benchRealistic.speedups["i18next-parser"]
 )
 
 console.log("verify-site-bench-data: bench.ts matches latest.md")

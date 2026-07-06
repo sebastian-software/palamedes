@@ -12,8 +12,9 @@ import { ProofStrip } from "~/components/home/ProofStrip"
 import { QuickInstall } from "~/components/home/QuickInstall"
 import { StatementBand } from "~/components/home/StatementBand"
 import { TerminalCascade } from "~/components/home/TerminalCascade"
+import { WorkflowFlow } from "~/components/home/WorkflowFlow"
 import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
-import { BENCH_SMALL } from "~/data/bench"
+import { BENCH_REALISTIC } from "~/data/bench"
 import { HOME_MODEL_CARDS } from "~/data/features"
 import { decisionHref, DEMO_NEXTJS_COOKIE, REPO } from "~/data/links"
 
@@ -34,6 +35,13 @@ export default function Home() {
       {/* ------------------------------------------------------------ hero */}
       <section className="grid grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-12 px-8 pt-16 pb-16 max-grid:grid-cols-1 max-tight:px-5">
         <div>
+          <img
+            src="/logo.svg"
+            alt="Palamedes"
+            width={104}
+            height={104}
+            className="mb-8 size-26 max-tight:size-20"
+          />
           <p className="eyebrow">Open-source i18n tooling for JavaScript &amp; TypeScript</p>
           <h1 className="display-serif mt-6 text-display leading-[1.12] uppercase">
             <span className="block">One translation model.</span>
@@ -42,8 +50,8 @@ export default function Home() {
           <p className="mt-6 max-w-[38em] text-[16px]">
             Write messages where your UI happens. Keep source-string-first <code>.po</code> catalogs
             your translators can actually read. Ship the same runtime model across Next.js, TanStack
-            Start, SolidStart, Waku, and React Router — with a Rust core that ran the checked
-            small-corpus extract/update benchmark 21.0× faster than Lingui on the recorded
+            Start, SolidStart, Waku, and React Router — with a Rust core that ran a checked
+            10,000-message extract/update benchmark 12.66× faster than Lingui on the recorded
             machine-local run.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
@@ -72,7 +80,10 @@ export default function Home() {
 
       {/* -------------------------------------------------- 02 — workflow */}
       <Section num="02 — Workflow" title="The whole workflow, honestly small.">
-        <CodeShowcase />
+        <div className="space-y-8">
+          <WorkflowFlow />
+          <CodeShowcase />
+        </div>
       </Section>
 
       {/* ----------------------------------------------------- 03 — proof */}
@@ -83,7 +94,7 @@ export default function Home() {
       >
         <div className="space-y-10">
           <FrameworkMatrix />
-          <BenchmarkChart corpus={BENCH_SMALL} />
+          <BenchmarkChart corpus={BENCH_REALISTIC} />
           <ButtonLink variant="outline" href="/proof">
             All benchmarks &amp; the verification story
           </ButtonLink>
@@ -91,10 +102,10 @@ export default function Home() {
       </Section>
 
       {/* ------------------------------------------------ 04 — positioning */}
-      <StatementBand num="04 — Positioning" diagram>
-        Palamedes is narrower than some alternatives on purpose: compile-time authoring,
-        source-string-first catalogs, and a local workflow your repo owns — with a Rust core doing
-        the careful work.
+      <StatementBand num="04 — Scope" diagram>
+        Palamedes deliberately owns less. It keeps the part of i18n you touch every day — your
+        messages, your catalog, the runtime lookup — and hands everything framework-specific back to
+        your framework.
       </StatementBand>
 
       {/* ------------------------------------------------ 05 — maintainer */}
