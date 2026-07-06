@@ -17,7 +17,7 @@ export function CtaBand({
   return (
     <section className="grid grid-cols-[1fr_auto] items-center gap-10 border-t border-hair px-8 py-14 max-tight:grid-cols-1 max-tight:px-5">
       <div>
-        <h2 className="display-serif max-w-[24em] text-h2 leading-[1.25]">{headline}</h2>
+        <h2 className="display-serif max-w-[24em] text-h2 leading-[1.25] uppercase">{headline}</h2>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href={primary.href}>{primary.label}</ButtonLink>
           {secondary ? (

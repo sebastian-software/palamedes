@@ -35,7 +35,7 @@ export default function Home() {
       <section className="grid grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-12 px-8 pt-16 pb-16 max-grid:grid-cols-1 max-tight:px-5">
         <div>
           <p className="eyebrow">Open-source i18n tooling for JavaScript &amp; TypeScript</p>
-          <h1 className="display-serif mt-6 text-display leading-[1.12]">
+          <h1 className="display-serif mt-6 text-display leading-[1.12] uppercase">
             <span className="block">One translation model.</span>
             <span className="block">Every framework.</span>
           </h1>
