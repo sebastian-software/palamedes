@@ -29,6 +29,11 @@
       "types": "./dist/register.d.ts",
       "import": "./dist/register.mjs",
       "require": "./dist/register.cjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.mjs",
+      "require": "./dist/server.cjs"
     }
   },
   "main": "./dist/index.cjs",
