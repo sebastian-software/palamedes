@@ -10,6 +10,7 @@ repository: https://github.com/tolgee/tolgee-platform
 # Tolgee
 
 ## Snapshot
+
 - Maintainer / company / funding: Tolgee s.r.o., Brno, Czech Republic. Founded by Jan Cizmar (CEO, project started ~2019 as a master's thesis); co-founders Marketa (COO) and Stepan (advisor). Core team ~9 people plus external/OSS contributors. Funding: ~€500K seed round from Flying Founders; additional non-dilutive support via CzechInvest Technology Incubation and CzechInvest Internationalization (EU National Recovery Plan) programs. No large VC round disclosed.
 - License / business model: dual-licensed. Core platform (majority of code) is Apache License 2.0. Enterprise-only code lives in `ee/` and `webapp/src/ee` directories under the proprietary "Tolgee EE License V1" — non-commercial use only unless a paid license key is purchased; official Docker images/binaries bundle the EE code (inactive without a key). JS SDKs (`@tolgee/core`, `@tolgee/react`, etc.) are MIT licensed. Business model: open-core SaaS (Tolgee Cloud) + paid self-hosted licenses for enterprise features.
 - Current stable version + release date: platform v3.209.1, released 2026-07-01 (bug-fix release for XLSX/CSV import validation); repo shows 977 releases total. `@tolgee/core` and `@tolgee/react` both at v7.1.1 on npm.
@@ -17,12 +18,14 @@ repository: https://github.com/tolgee/tolgee-platform
 - Founded / age: project started late 2019, company operating since ~2020-2021; roughly 5-6 years old as of 2026.
 
 ## Positioning & target audience
+
 - Markets itself explicitly as "an open-source alternative to Crowdin, Phrase, or Lokalise" — positioned as a hybrid: open-source + hosted TMS, not a pure runtime library.
 - Targets developer teams that want in-app/in-context translation editing without excessive file round-tripping, plus non-developer stakeholders (translators, PMs, clients) who need a no-code way to edit strings directly on the running application.
 - Competes against both commercial TMS incumbents (Crowdin, Lokalise, Phrase) and i18next-ecosystem tooling (locize, built by i18next's own creators) — Tolgee explicitly differentiates from locize by owning a full custom SDK stack rather than being an i18next-native backend.
 - Pitched heavily at React/Next.js/Vue/Angular/Svelte web teams plus mobile (Android/iOS/Flutter) and games (Unreal Engine); JS/web is the primary wedge, with framework-agnostic REST API and CLI for everything else.
 
 ## Core concepts & architecture
+
 - Key-based translation model: strings are stored/managed as keys with associated translations per language, plus optional per-key metadata (description, tags, screenshots, comments).
 - SDK <-> platform coupling: proprietary Tolgee SDKs (`@tolgee/core`, `@tolgee/react`, plus Vue/Angular/Svelte wrappers) are the primary client; an i18next integration exists as a bridge/plugin rather than i18next being a first-class citizen. This is a tighter platform-to-SDK coupling than i18next-native tools like locize.
 - In-context editing mechanism: ALT+click (configurable) on any rendered string in a running app (dev or production, given the SDK is wired in) opens an in-context edit dialog; the SDK intercepts the click, resolves the DOM node back to its translation key, and lets the user edit/save the translation live via the platform API — no page rebuild needed for the editing session itself.
@@ -32,6 +35,7 @@ repository: https://github.com/tolgee/tolgee-platform
 - Notable weakness flagged by a competitor (locize) comparison: Tolgee's editor "treats translations as raw text" without deep framework-specific plural/nesting awareness compared to locize's i18next-native editor — not independently verified beyond that comparative source.
 
 ## Framework & platform support
+
 - Web: React, Next.js, Angular, Vue, Svelte, vanilla JS; i18next plugin/bridge for teams already on i18next.
 - No dedicated TanStack Start, SolidStart, Waku, or React Router SDK found in official docs/integrations list as of 2026-07-06 (Palamedes explicitly supports these) — Tolgee's meta-framework coverage is narrower, centered on React/Next.js/Angular/Vue/Svelte.
 - Mobile: native Android SDK, native iOS SDK, Flutter (.arb).
@@ -40,12 +44,14 @@ repository: https://github.com/tolgee/tolgee-platform
 - Design tooling: Figma plugin (pull design-stage strings into the workflow); Slack integration for notifications.
 
 ## Catalog formats & interop
+
 - Generic interchange formats: structured JSON, XLIFF, GNU Gettext .po (also PHP/C variants), .properties, YAML (structured), CSV, XLSX.
 - Framework-specific formats: Tolgee Native JSON (ICU-based, native to JS SDKs), Apple .strings/.stringsdict, Apple String Catalog (.xcstrings, Xcode 15+), Apple XLIFF (platform notes Apple's own XLIFF import is strict/brittle), Android resource XML (plurals/arrays supported), Compose Multiplatform XML, Flutter .arb, Rails YAML, i18next JSON, .NET RESX.
 - Most of this broad format matrix was added starting platform v3.49.0 per docs; ICU message format is preserved across most generic formats on import/export.
 - .po/Gettext is supported as one format among many (PHP and C/C++ variants specifically called out) but is not treated as the sole source of truth the way Palamedes treats source-string-first .po catalogs — Tolgee's source of truth is the platform's own key/translation database, with file formats as import/export targets.
 
 ## Workflow & tooling
+
 - CLI: project setup, string extraction from source code, push/pull sync between repo and platform.
 - Self-hosting: Docker is the documented easiest path. Minimum spec 2 CPU / 4GB RAM; recommended 4 CPU / 16GB RAM / 20GB disk. Free self-hosted tier includes core localization features, machine translation via your own API keys, and up to 10 seats; SSO and granular permissions require a paid license.
 - Self-hosted operators are responsible for their own database management, backups, and security patching (no managed infrastructure) — flagged by a competitor comparison (locize) as a real operational cost ("choosing Tolgee often means choosing a new job: Infrastructure Management" — locize's framing, not independently verified as neutral).
@@ -53,6 +59,7 @@ repository: https://github.com/tolgee/tolgee-platform
 - Branching (git-like translation branches) and granular permissions are gated to paid tiers (Business tier and above per pricing page).
 
 ## AI features
+
 - Tolgee AI Translator: built on GPT-family models (ChatGPT per docs); pulls context automatically from screenshots, "Tolgee Context" (auto-extracted UI context), key descriptions, project descriptions, language notes, and translation memory results — positioned as reducing the need for developers/designers to manually write context per key.
 - Automatic screenshot capture (Canvas API-based, described above) directly feeds the AI translator's context pipeline.
 - AI Playground (test/tune prompts) is gated to the Business tier and above.
@@ -61,7 +68,9 @@ repository: https://github.com/tolgee/tolgee-platform
 - MCP Server integration is listed as a repo feature (for AI coding assistants to interact with Tolgee projects) — feature maturity/date not independently verified.
 
 ## Pricing
+
 (as published on tolgee.io/pricing, accessed 2026-07-06; annual billing assumed where "per month" tiers are shown, 2 months free on annual per site)
+
 - Free (Cloud): €0/month — up to 500 keys, 3 seats, 10,000 MT credits, unlimited projects, standard localization features, integrations, no credit card required.
 - Team: €49/month (billed annually) — 2,000 keys, 4 seats, AI translator with brand context, glossaries.
 - Business: €179/month (billed annually) — 5,000 keys, 8 seats, adds AI playground, tasks, branching, granular permissions.
@@ -71,6 +80,7 @@ repository: https://github.com/tolgee/tolgee-platform
 - Self-hosted: free community tier (core features, MT via own API keys, up to 10 seats) or paid monthly/annual license for enterprise features (SSO, granular permissions, higher seat counts) — exact self-hosted license price not published; "contact sales."
 
 ## Strengths
+
 - Automatic in-app screenshot capture tied directly to the in-context ALT+click editor — a smoother context-gathering mechanic than manual-only screenshot upload (e.g., Crowdin).
 - Broad catalog-format interop across mobile (Apple, Android, Flutter), backend (.NET RESX, Rails YAML), and web (JSON, i18next, XLIFF, PO) from a single platform.
 - Native ICU MessageFormat support platform-wide, including a plural-aware editor UI and nested plural/select handling.
@@ -79,7 +89,9 @@ repository: https://github.com/tolgee/tolgee-platform
 - Real, EU-grant-backed early-stage funding plus a Czech public-incubation track record suggests some financial runway beyond bootstrapping alone.
 
 ## Weaknesses & criticism
+
 (sourced from Capterra reviews and a locize competitor-comparison page; themes, not independently re-verified line by line)
+
 - Chrome/browser extension for in-context editing described by multiple Capterra reviewers as hard to configure without digging through documentation.
 - Documentation gaps noted by reviewers — requests for more examples and clearer guidance on specific features.
 - Limited third-party integrations: no native Jira, GitLab, or Zapier connectors called out as missing by reviewers (Slack and Figma are supported).
@@ -90,6 +102,7 @@ repository: https://github.com/tolgee/tolgee-platform
 - Official Docker images/binaries always bundle the proprietary EE code (dormant without a license key) — teams wanting a strictly Apache-2.0-only build must strip `ee/` directories and self-build, which is friction relative to a purely permissive-licensed competitor.
 
 ## What they do differently
+
 - Automatic screenshot capture wired directly into the ALT+click in-context editor (Canvas API grabs and highlights the live UI element being translated) — turns "context for translators" from a manual chore into a one-click action, and feeds the same screenshot into the AI translator's context pipeline.
 - Full custom SDK stack (not an i18next wrapper) — Tolgee owns the runtime format (ICU-based "Tolgee Native JSON") and framework bindings end-to-end, trading i18next-ecosystem compatibility for tighter platform/SDK integration and features like live in-context editing.
 - Open-core self-hosting with a genuinely usable free tier (core features + up to 10 seats), governed by a bespoke "Tolgee EE License V1" that gates only the `ee/` enterprise-feature directories — a middle ground between fully proprietary SaaS (Crowdin/Lokalise) and fully permissive OSS.
@@ -98,6 +111,7 @@ repository: https://github.com/tolgee/tolgee-platform
 - No meta-framework coverage for TanStack Start, SolidStart, Waku, or React Router — its web-framework bet is concentrated on React/Next.js/Angular/Vue/Svelte, narrower than Palamedes' explicit multi-meta-framework runtime model.
 
 ## Sources
+
 - https://tolgee.io — accessed 2026-07-06
 - https://tolgee.io/pricing — accessed 2026-07-06
 - https://tolgee.io/about — accessed 2026-07-06

@@ -10,6 +10,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 # locize
 
 ## Snapshot
+
 - Maintainer / company / funding: run by **inweso GmbH**, a Swiss LLC (CHE-412.131.272) registered 24 Oct 2012, HQ Altnau, Switzerland. Publicly named principals: Jan Mühlemann (chair, claims "creator of i18next") and Adriano Raiano / "adrai" (managing director, most visible i18next/locize maintainer). A third registry shareholder exists but is unverified (paywalled record). Company states it has no VC funding; positions locize revenue as what funds continued i18next OSS development.
 - License / business model: proprietary SaaS, usage-based pricing (see Pricing) plus a fixed-tier ladder; 14-day trial, no card required.
 - Product state as of analysis date: mature, actively shipping — 10-year anniversary post (May 2026) and new AI/MCP features shipped in 2026.
@@ -17,12 +18,14 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - Founded / age: i18next library created 2011; locize platform launched 2016 ("a small backend for i18next that did one thing: ship translations to running apps without a redeploy"); ~10 years old as of 2026.
 
 ## Positioning & target audience
+
 - Tagline-level positioning: "One platform to localize your whole product" / "Ship translations without redeploying your app."
 - Sells itself explicitly on i18next lineage: "The creators of i18next are also the founders of Locize" — marketed as "the deepest integration in the industry."
 - Targets teams already on i18next (or willing to adopt it) who want a hosted TMS layered on top, plus adjacent React/Vue/Angular/Next.js ecosystems.
 - Also markets to non-JS backends (iOS, Android, PHP, Python, Java, .NET) via REST API/CLI, and to design teams via a Figma plugin.
 
 ## Core concepts & architecture
+
 - Namespace/key model: standard i18next namespace + key structure; per-plan limits on namespace count (see Pricing).
 - Versioning: a project has a `latest` default version plus arbitrary custom versions (e.g. staging/production), created via "overwrite" or selective "copy" of another version. Enterprise-tier plans get more version/branch/tenant headroom.
 - CDN delivery at runtime: two CDN tiers.
@@ -34,17 +37,19 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - Production guidance explicitly warns against shipping API keys client-side and against leaving `saveMissing`/`add`/`update` enabled in production.
 
 ## Developer workflow & tooling
+
 - **CLI**: `locize-cli` — import/export/sync translations, plus a `save-missing` command (CI/build-time equivalent of runtime missing-key capture).
 - **API**: REST API for CRUD on translation content; used by first-party SDKs and any custom backend integration.
 - **In-context editor**: activated via a URL query parameter (e.g. `?incontext=true`) — not a browser extension. Two modes:
   1. An injected overlay/popup rendered directly on the live page (draggable, persists position, detects SPA route changes).
   2. An iframe embed of the target site inside the locize.app dashboard (URL configured per project).
-  Communication between host page and editor UI uses the browser `postMessage` API; the exact wire schema is not publicly documented. Key matching relies on invisible metadata in text nodes, `data-i18n` attributes, or raw text lookup.
+     Communication between host page and editor UI uses the browser `postMessage` API; the exact wire schema is not publicly documented. Key matching relies on invisible metadata in text nodes, `data-i18n` attributes, or raw text lookup.
 - **Save-missing-keys flow**: with i18next's `saveMissing: true`, an unknown key triggered by `t(key)` at runtime POSTs to `/missing/{projectId}/{version}/{language}/{namespace}` (requires `apiKey` + `referenceLng`). By default only `localhost` may send missing keys; other hosts require explicit whitelisting via `allowedAddOrUpdateHosts`. Missing keys land as **draft/unpublished** content and only reach the CDN once the version is published (auto-publish or manual).
 - **CI**: `locize-cli` is designed for CI pipelines (import/export/sync commands); no dedicated GitHub Action product found, but CLI-based CI integration is documented.
 - **MCP server**: a Locize MCP server exists for agent workflows (Claude, Cursor, VS Code) — announced 2026 ("One command from hardcoded strings to a localized app," Jun 2026).
 
 ## Supported file formats & interop
+
 - Native/current integrations: i18next (primary), React, Vue, Angular, Next.js, Node.js, iOS, Android, PHP, Python, Java, .NET.
 - Framework-native examples/support: react-intl/FormatJS, next-intl, vue-i18n, ngx-translate, Transloco (Angular), Astro, Nuxt, Remix, React Router, Gatsby.
 - Deprecated/legacy integrations: js-lingui, standalone FormatJS, Polyglot.
@@ -54,6 +59,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - Figma plugin for design-side string sync.
 
 ## AI features
+
 - Feature name: "Automatic Translation" (not branded "autopilot").
 - MT/AI providers: OpenAI, Google Gemini (Pro/Flash), Mistral AI, Lara (Translated), Google Translate, DeepL, MyMemory, plus locize's own "Locize AI" and "Locize MT" services. Bring-your-own-API-key supported for third-party providers.
 - Mechanics: only new/missing keys are auto-translated by default (not retroactive translation of existing content); can be triggered via `saveMissing`, the API, or the MCP server. Project glossary/style guide is injected into prompts. "Quality Estimation" provides per-translation confidence scores with optional human-review routing.
@@ -62,6 +68,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - Not verified: original launch date of the AI features; whether "Locize AI"/"Locize MT" are proprietary models or a white-labeled pass-through.
 
 ## Pricing
+
 (All figures USD; no EUR pricing found. Source: locize.com/pricing, fetched 2026-07-06.)
 
 **Fixed monthly tiers:**
@@ -76,6 +83,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 | Enterprise | $199 | 200,000 | 150 | 300 | Unlimited | 15M (+500K Pro CDN, 5K private) |
 
 **Overage pricing (pay for what exceeds plan quota):**
+
 - Standard CDN: $5.00 per 1M downloads
 - Pro CDN: $5.00 per 100K downloads
 - Private downloads: $5.00 per 10K downloads
@@ -84,6 +92,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - Tenants: $10.00 per 5 tenants
 
 **Add-ons:**
+
 - SAML SSO: $20/mo
 - Standard backup: $8/mo
 - Pro backup: $25/mo
@@ -93,6 +102,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 **Separate usage-based plan:** $5/mo base fee (includes 1M standard CDN downloads free/month), unlimited languages/users/namespaces, metered by words stored, modifications, and downloads. Exact per-unit rates for this alternate plan varied by source and were not independently confirmed on the live pricing page at fetch time — treat as directionally correct, not verified.
 
 ## Strengths
+
 - Runtime CDN delivery means translation updates ship without an app redeploy — genuinely different mechanism from build-time catalog compilation.
 - Deepest available integration with i18next specifically (same team builds both), including automatic missing-key capture during development.
 - In-context editing without requiring a browser extension (URL-param + postMessage overlay/iframe).
@@ -101,7 +111,9 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - No VC funding — company frames this as insulating product decisions from investor pressure.
 
 ## Weaknesses & criticism
+
 (Source: Capterra review snippets, G2 alternatives page, vendor comparison pages — locize.com/compare/locize-vs-crowdin/, locize.com/compare/locize-vs-lokalise/)
+
 - Platform described in some reviews as "very slow"; Capterra reviewers report "performance issues with large projects", "slow search / no deduplication", "poor backup functionality; limited automation".
 - UI dated/clunky is the most recurring theme across otherwise-positive Capterra reviews ("UI design feels outdated and clunky", "UI quality doesn't match product quality", "application needs redesign"); Ease of Use is the weakest Capterra sub-score (3.9/5). locize itself shipped a full UI rebuild ("all-new locize.com"), implicitly acknowledging this.
 - Described as "costly" by some users; pricing model called "confusing" in reviews — locize's own docs include a page titled "Why is the pricing so complicated?". One documented independent migration-away story (Medium, Irfan Khan) cites subscription cost as the driver for replacing locize with a custom i18next + GitHub Actions + GPT-4 pipeline.
@@ -112,6 +124,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - Tight i18next coupling cuts both ways: best-in-class for i18next users, but a lock-in vector — switching i18n runtime libraries later means re-plumbing the TMS integration too.
 
 ## What they do differently
+
 - **Runtime CDN delivery vs. build-time catalogs**: translations are fetched from a CDN at runtime (with versioning/publish steps) rather than compiled into the app at build time — this is the core architectural difference from source-string-first, build-time `.po`-catalog approaches. It enables "ship a copy fix without redeploying," at the cost of a runtime network dependency and a publish/versioning workflow layered on top of the translation data itself.
 - **OSS-funding-by-SaaS model**: locize explicitly positions its commercial revenue as the funding mechanism for i18next's continued open-source development, and states it has taken no VC funding — a direct commercial/OSS coupling that is unusual and creates a structural conflict of interest (the SaaS vendor also controls the "neutral" OSS library's roadmap and defaults).
 - **In-context editing via URL param + postMessage**, not a browser extension — lower friction to enable per-environment, but requires the app to load an editor script/allow the overlay.
@@ -120,6 +133,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 - **Very small, low-visibility company** (Swiss GmbH, small team, minimal GitHub star counts on SDKs, near-zero Reddit/HN presence) relative to funded competitors like Lokalise, Crowdin, Phrase — adoption signals are weak/hard to verify independently.
 
 ## Sources
+
 - https://www.locize.com (accessed 2026-07-06)
 - https://www.locize.com/pricing (accessed 2026-07-06)
 - https://www.locize.com/i18next (accessed 2026-07-06)
