@@ -18,7 +18,7 @@ export type ResolvedLocale = {
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
-  cookies: { locale: LOCALE_COOKIE },
+  hosts: { mode: "tld", tld: { com: "en" }, defaultTld: "com" },
 })
 
 export const LOCALE_LABELS = locales.labels
@@ -40,15 +40,32 @@ export function loadMessages(locale: Locale): CatalogMessages {
 
 export const remixI18n = createRemixI18nServer({
   locales,
-  strategy: "cookie",
+  strategy: "tld",
   loadMessages,
-  cookieName: LOCALE_COOKIE,
 })
 
 export function resolveLocaleFromRequest(request: Request): ResolvedLocale {
   return remixI18n.resolveLocale(request)
 }
 
-export function serializeLocaleCookie(locale: Locale): string {
-  return remixI18n.serializeLocaleCookie(locale)
+export function getTldBanner(request: Request, locale: Locale): string | null {
+  const suggestion = locales.suggest({
+    acceptLanguageHeader: request.headers.get("accept-language"),
+    cookieHeader: request.headers.get("cookie"),
+    currentLocale: locale,
+    pathname: "/",
+    requestHost: request.headers.get("host"),
+  })
+
+  return suggestion
+    ? `${suggestion.description} Switch to the recommended locale: ${suggestion.recommendedLocale}.`
+    : null
+}
+
+export function getTldSwitchLinks(request: Request) {
+  const host = request.headers.get("host") ?? "remix.example.com:4063"
+  return LOCALES.map((locale) => ({
+    href: locales.canonicalUrl({ locale, pathname: "/", requestHost: host }),
+    locale,
+  }))
 }

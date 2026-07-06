@@ -563,6 +563,90 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  examples/remix-route:
+    dependencies:
+      '@palamedes/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@palamedes/remix':
+        specifier: workspace:^
+        version: link:../../packages/remix
+      '@palamedes/runtime':
+        specifier: workspace:^
+        version: link:../../packages/runtime
+      remix:
+        specifier: 3.0.0-beta.5
+        version: 3.0.0-beta.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)(playwright@1.61.1)
+    devDependencies:
+      '@palamedes/cli':
+        specifier: workspace:^
+        version: link:../../packages/cli
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../../packages/config
+      '@types/node':
+        specifier: ^22.20.0
+        version: 22.20.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  examples/remix-subdomain:
+    dependencies:
+      '@palamedes/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@palamedes/remix':
+        specifier: workspace:^
+        version: link:../../packages/remix
+      '@palamedes/runtime':
+        specifier: workspace:^
+        version: link:../../packages/runtime
+      remix:
+        specifier: 3.0.0-beta.5
+        version: 3.0.0-beta.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)(playwright@1.61.1)
+    devDependencies:
+      '@palamedes/cli':
+        specifier: workspace:^
+        version: link:../../packages/cli
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../../packages/config
+      '@types/node':
+        specifier: ^22.20.0
+        version: 22.20.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  examples/remix-tld:
+    dependencies:
+      '@palamedes/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@palamedes/remix':
+        specifier: workspace:^
+        version: link:../../packages/remix
+      '@palamedes/runtime':
+        specifier: workspace:^
+        version: link:../../packages/runtime
+      remix:
+        specifier: 3.0.0-beta.5
+        version: 3.0.0-beta.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)(playwright@1.61.1)
+    devDependencies:
+      '@palamedes/cli':
+        specifier: workspace:^
+        version: link:../../packages/cli
+      '@palamedes/config':
+        specifier: workspace:^
+        version: link:../../packages/config
+      '@types/node':
+        specifier: ^22.20.0
+        version: 22.20.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   examples/solidstart-cookie:
     dependencies:
       '@palamedes/core':
@@ -1390,6 +1474,9 @@ importers:
       '@palamedes/config':
         specifier: workspace:^
         version: link:../config
+      '@palamedes/core':
+        specifier: workspace:^
+        version: link:../core
       '@palamedes/core-node':
         specifier: workspace:^
         version: link:../core-node
@@ -1399,13 +1486,13 @@ importers:
       '@palamedes/transform':
         specifier: workspace:^
         version: link:../transform
-      remix:
-        specifier: ^3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)(playwright@1.61.1)
     devDependencies:
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.0
+      remix:
+        specifier: 3.0.0-beta.5
+        version: 3.0.0-beta.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)(playwright@1.61.1)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

@@ -1,0 +1,24 @@
+{
+  "name": "@palamedes/example-remix-subdomain",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "PORT=4062 node --watch --import remix/node-tsx --import @palamedes/remix/register server.ts",
+    "extract": "pmds extract",
+    "start": "PORT=4062 node --import remix/node-tsx --import @palamedes/remix/register server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@palamedes/core": "workspace:^",
+    "@palamedes/remix": "workspace:^",
+    "@palamedes/runtime": "workspace:^",
+    "remix": "3.0.0-beta.5"
+  },
+  "devDependencies": {
+    "@palamedes/cli": "workspace:^",
+    "@palamedes/config": "workspace:^",
+    "@types/node": "^22.20.0",
+    "typescript": "^6.0.3"
+  }
+}

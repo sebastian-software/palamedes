@@ -2,10 +2,10 @@ import { createController } from "remix/router"
 
 import {
   getLocaleLabel,
+  getTldBanner,
+  getTldSwitchLinks,
   normalizeLocale,
   remixI18n,
-  resolveLocaleFromRequest,
-  serializeLocaleCookie,
 } from "../i18n.ts"
 import { renderHomePage } from "../page.ts"
 import { routes } from "../routes.ts"
@@ -18,9 +18,11 @@ export default createController(routes, {
         ({ locale }) =>
           new Response(
             renderHomePage({
+              banner: getTldBanner(context.request, locale),
               locale,
               localeLabel: getLocaleLabel(normalizeLocale(locale)),
-              strategyLabel: "cookie",
+              strategyLabel: "tld",
+              switchLinks: getTldSwitchLinks(context.request),
             }),
             {
               headers: {
@@ -30,20 +32,6 @@ export default createController(routes, {
             }
           )
       )
-    },
-
-    async setLocale(context) {
-      const resolved = resolveLocaleFromRequest(context.request)
-      const formData = await context.request.formData()
-      const locale = normalizeLocale(formData.get("locale") ?? resolved.locale)
-
-      return new Response(null, {
-        status: 303,
-        headers: {
-          location: "/",
-          "set-cookie": serializeLocaleCookie(locale),
-        },
-      })
     },
   },
 })

@@ -7,7 +7,7 @@ It uses:
 
 - `node --import remix/node-tsx`
 - `node --import @palamedes/remix/register`
-- `createRemixI18nRequestScope()` from `@palamedes/remix/server`
+- `createRemixI18nServer()` from `@palamedes/remix/server`
 - Palamedes JS macros in server-rendered Remix code
 - cookie locale negotiation with `defineLocaleControls()`
 - per-request catalog loading before translated code renders
