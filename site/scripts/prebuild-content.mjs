@@ -116,23 +116,25 @@ async function collectNestedDocs(entries, sourceDir, routePrefix, orderBase) {
 async function collectPosts() {
   const sourceDir = "docs/site/posts"
   const files = (await readMarkdownFiles(sourceDir)).filter((fileName) => fileName !== "README.md")
-  const dates = new Map([
-    ["the-third-time-i-built-javascript-i18n-tooling.md", "2026-07-05"],
-    ["a-calmer-path-for-javascript-i18n.md", "2026-07-05"],
-    ["measuring-palamedes-honestly.md", "2026-07-05"],
-    ["browser-verifying-i18n-across-five-frameworks.md", "2026-07-05"],
-    ["micro-content-round-1.md", "2026-07-05"],
-    ["what-we-delegated-to-ferrocat-and-why.md", "2026-07-05"],
-    ["from-lingui-to-palamedes.md", "2026-07-05"],
-  ])
+  const posts = []
 
-  return files.map((fileName, index) => ({
-    source: `${sourceDir}/${fileName}`,
-    route: `/blog/${stripMarkdownExtension(fileName)}`,
-    out: join(routesRoot, "blog", fileName),
-    order: (index + 1) * 10,
-    date: dates.get(fileName),
-  }))
+  for (const [index, fileName] of files.entries()) {
+    const source = `${sourceDir}/${fileName}`
+    const parsed = stripExistingFrontmatter(await readRepoFile(source))
+    const date = extractFrontmatterMeta(parsed.data, "date")
+    if (!date) {
+      throw new Error(`Blog post ${source} is missing required date frontmatter`)
+    }
+    posts.push({
+      source,
+      route: `/blog/${stripMarkdownExtension(fileName)}`,
+      out: join(routesRoot, "blog", fileName),
+      order: (index + 1) * 10,
+      date,
+    })
+  }
+
+  return posts
 }
 
 async function collectAdrs() {
@@ -169,9 +171,13 @@ async function writeDocsIndex(docs) {
     "",
     "Canonical source files still live under `docs/`; this site renders them as searchable ARDO routes.",
     "",
-    ...guides.map((doc) => `- [${doc.title ?? titleFromPath(doc.source)}](${doc.route})`),
-    "",
   ]
+  for (const doc of guides) {
+    const parsed = stripExistingFrontmatter(await readRepoFile(doc.source))
+    const title = extractTitle(parsed.content) ?? titleFromPath(doc.source)
+    lines.push(`- [${title}](${doc.route})`)
+  }
+  lines.push("")
   await writeGeneratedFile(join(routesRoot, "docs/index.md"), lines.join("\n"))
 }
 
@@ -494,6 +500,11 @@ function extractTitle(content) {
 function extractAdrMeta(content, label) {
   const match = new RegExp(`^\\*\\*${label}:\\*\\*\\s+(.+)$`, "mu").exec(content)
   return match?.[1]?.trim()
+}
+
+function extractFrontmatterMeta(data, label) {
+  const match = new RegExp(`^${label}:\\s+(.+)$`, "mu").exec(data)
+  return match?.[1]?.trim().replace(/^["']|["']$/gu, "")
 }
 
 function firstParagraph(content) {

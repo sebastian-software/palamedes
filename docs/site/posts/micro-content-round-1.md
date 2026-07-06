@@ -1,3 +1,7 @@
+---
+date: "2026-07-05"
+---
+
 # Round 1 Micro-Content
 
 Status: draft

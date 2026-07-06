@@ -1,3 +1,7 @@
+---
+date: "2026-07-05"
+---
+
 # From Lingui to Palamedes without changing how authoring feels
 
 The easiest Palamedes migration story is not "throw away how your team writes

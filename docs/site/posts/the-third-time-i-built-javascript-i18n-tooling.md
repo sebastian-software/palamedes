@@ -1,3 +1,7 @@
+---
+date: "2026-07-05"
+---
+
 # The Third Time I Built JavaScript i18n Tooling
 
 Status: draft

@@ -1,3 +1,7 @@
+---
+date: "2026-07-05"
+---
+
 # What we delegated to Ferrocat and why
 
 Palamedes started with a simple product goal: make JavaScript i18n feel smaller

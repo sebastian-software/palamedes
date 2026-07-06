@@ -1,3 +1,7 @@
+---
+date: "2026-07-05"
+---
+
 # Measuring Palamedes Honestly
 
 Status: draft
