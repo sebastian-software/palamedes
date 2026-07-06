@@ -48,12 +48,89 @@ function fail(message) {
   process.exit(1)
 }
 
+function extractAssignedObjectBody(source, label) {
+  const assignmentIndex = source.indexOf(label)
+  if (assignmentIndex === -1) {
+    return null
+  }
+
+  const openIndex = source.indexOf("{", assignmentIndex + label.length)
+  if (openIndex === -1) {
+    return null
+  }
+
+  let depth = 0
+  let quote = null
+  let inLineComment = false
+  let inBlockComment = false
+  let escaped = false
+
+  for (let index = openIndex; index < source.length; index += 1) {
+    const char = source[index]
+    const next = source[index + 1]
+
+    if (inLineComment) {
+      if (char === "\n") inLineComment = false
+      continue
+    }
+
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false
+        index += 1
+      }
+      continue
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false
+      } else if (char === "\\") {
+        escaped = true
+      } else if (char === quote) {
+        quote = null
+      }
+      continue
+    }
+
+    if (char === "/" && next === "/") {
+      inLineComment = true
+      index += 1
+      continue
+    }
+
+    if (char === "/" && next === "*") {
+      inBlockComment = true
+      index += 1
+      continue
+    }
+
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char
+      continue
+    }
+
+    if (char === "{") {
+      depth += 1
+      continue
+    }
+
+    if (char === "}") {
+      depth -= 1
+      if (depth === 0) {
+        return source.slice(openIndex + 1, index)
+      }
+    }
+  }
+
+  return null
+}
+
 function parseBenchSection(name) {
-  const section = benchTs.split(new RegExp(`export const BENCH_${name}: BenchCorpus =`, "m"))[1]
-  if (!section) {
+  const body = extractAssignedObjectBody(benchTs, `export const BENCH_${name}: BenchCorpus =`)
+  if (!body) {
     fail(`could not find BENCH_${name} in ${benchTsPath}`)
   }
-  const body = section.split(/^}/m)[0]
   const medians = {}
   for (const match of body.matchAll(
     /\{ tool: "(Palamedes|Lingui|i18next-parser)", medianMs: ([\d.]+)/g
