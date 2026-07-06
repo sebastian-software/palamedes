@@ -5,6 +5,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "dev": "node --watch --import remix/node-tsx --import @palamedes/remix/register server.ts",
+    "extract": "pmds extract",
     "start": "node --import remix/node-tsx --import @palamedes/remix/register server.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -15,6 +16,8 @@
     "remix": "3.0.0-beta.5"
   },
   "devDependencies": {
+    "@palamedes/cli": "workspace:^",
+    "@palamedes/config": "workspace:^",
     "@types/node": "^22.20.0",
     "typescript": "^6.0.3"
   }

@@ -1,6 +1,9 @@
 import { createI18n, type CatalogMessages, type PalamedesI18n } from "@palamedes/core"
 import { defineLocaleControls, type LocaleSource } from "@palamedes/core/locale"
 import { createRemixI18nRequestScope } from "@palamedes/remix/server"
+import { messages as deMessages } from "./locales/de.po"
+import { messages as enMessages } from "./locales/en.po"
+import { messages as esMessages } from "./locales/es.po"
 
 export const LOCALES = ["en", "de", "es"] as const
 export const DEFAULT_LOCALE = "en"
@@ -21,25 +24,10 @@ export const locales = defineLocaleControls<Locale>({
 export const LOCALE_LABELS = locales.labels
 export const normalizeLocale = locales.normalizeLocale
 
-// This beta example keeps tiny hand-written catalogs inline because Remix v3's
-// default loader path has no Palamedes PO plugin yet. The ids below are the
-// extractor-generated ids for the macro source strings in `page.ts`.
 const CATALOGS: Record<Locale, CatalogMessages> = {
-  en: {
-    DdKW8STgr4g: "Remix v3 is rendering {locale} with Palamedes",
-    "890YAQgZRSQ": "{seatCount, plural, one {# seat left} other {# seats left}}",
-    kiEEONvgPYU: "This response was translated inside a request-scoped Remix handler.",
-  },
-  de: {
-    DdKW8STgr4g: "Remix v3 rendert {locale} mit Palamedes",
-    "890YAQgZRSQ": "{seatCount, plural, one {# Platz frei} other {# Plätze frei}}",
-    kiEEONvgPYU: "Diese Antwort wurde in einem request-lokalen Remix-Handler übersetzt.",
-  },
-  es: {
-    DdKW8STgr4g: "Remix v3 renderiza {locale} con Palamedes",
-    "890YAQgZRSQ": "{seatCount, plural, one {# asiento disponible} other {# asientos disponibles}}",
-    kiEEONvgPYU: "Esta respuesta se tradujo dentro de un handler de Remix por request.",
-  },
+  en: enMessages,
+  de: deMessages,
+  es: esMessages,
 }
 
 export function getLocaleLabel(locale: Locale): string {

@@ -1,7 +1,7 @@
 import path from "node:path"
+import { accessSync, constants, readFileSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { access } from "node:fs/promises"
-import { constants } from "node:fs"
 import createJiti from "jiti"
 import { parse as parseToml } from "smol-toml"
 import { parse as parseYaml } from "yaml"
@@ -79,6 +79,20 @@ export async function loadPalamedesConfig(
   return normalizeConfig(config as PalamedesConfig, configPath)
 }
 
+export function loadPalamedesConfigSync(
+  options: LoadPalamedesConfigOptions = {}
+): LoadedPalamedesConfig {
+  const cwd = path.resolve(options.cwd ?? process.cwd())
+  const configPath = resolveConfigPathSync(cwd, options.configPath)
+  const config = loadConfigFileSync(configPath)
+
+  if (!options.skipValidation) {
+    validateConfig(config, configPath)
+  }
+
+  return normalizeConfigSync(config as PalamedesConfig, configPath)
+}
+
 async function loadConfigFile(configPath: string): Promise<unknown> {
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
     return normalizeDataConfig(parseYaml(await readFile(configPath, "utf8")) as PalamedesDataConfig)
@@ -92,6 +106,25 @@ async function loadConfigFile(configPath: string): Promise<unknown> {
 
   if (configPath.endsWith(".toml")) {
     return normalizeDataConfig(parseToml(await readFile(configPath, "utf8")) as PalamedesDataConfig)
+  }
+
+  const jiti = createJiti(import.meta.url, {
+    interopDefault: true,
+  })
+  return unwrapModule(jiti(configPath) as unknown)
+}
+
+function loadConfigFileSync(configPath: string): unknown {
+  if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
+    return normalizeDataConfig(parseYaml(readFileSync(configPath, "utf8")) as PalamedesDataConfig)
+  }
+
+  if (configPath.endsWith(".json")) {
+    return normalizeDataConfig(JSON.parse(readFileSync(configPath, "utf8")) as PalamedesDataConfig)
+  }
+
+  if (configPath.endsWith(".toml")) {
+    return normalizeDataConfig(parseToml(readFileSync(configPath, "utf8")) as PalamedesDataConfig)
   }
 
   const jiti = createJiti(import.meta.url, {
@@ -201,6 +234,35 @@ async function resolveConfigPath(cwd: string, explicitPath?: string): Promise<st
   )
 }
 
+function resolveConfigPathSync(cwd: string, explicitPath?: string): string {
+  if (explicitPath) {
+    const resolved = path.resolve(cwd, explicitPath)
+    assertFileExistsSync(resolved)
+    return resolved
+  }
+
+  let current = cwd
+
+  while (true) {
+    for (const name of CONFIG_FILENAMES) {
+      const candidate = path.join(current, name)
+      if (fileExistsSync(candidate)) {
+        return candidate
+      }
+    }
+
+    const parent = path.dirname(current)
+    if (parent === current) {
+      break
+    }
+    current = parent
+  }
+
+  throw new Error(
+    `Could not find a Palamedes config. Expected one of ${CONFIG_FILENAMES.join(", ")}.`
+  )
+}
+
 function unwrapModule(loaded: unknown): unknown {
   if (
     loaded &&
@@ -236,6 +298,25 @@ async function normalizeConfig(
   }
 }
 
+function normalizeConfigSync(config: PalamedesConfig, configPath: string): LoadedPalamedesConfig {
+  const rootDir = path.dirname(configPath)
+  return {
+    configPath,
+    rootDir,
+    locales: [...config.locales],
+    sourceLocale: config.sourceLocale,
+    ...(config.fallbackLocales !== undefined ? { fallbackLocales: config.fallbackLocales } : {}),
+    ...(config.pseudoLocale !== undefined ? { pseudoLocale: config.pseudoLocale } : {}),
+    sourceReferenceRoot: resolveSourceReferenceRootSync(config.sourceReferenceRoot, rootDir),
+    catalogs: config.catalogs.map((catalog) => ({
+      path: catalog.path,
+      ...(catalog.format !== undefined ? { format: catalog.format } : {}),
+      include: [...catalog.include],
+      ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
+    })),
+  }
+}
+
 async function resolveSourceReferenceRoot(
   value: PalamedesSourceReferenceRoot | undefined,
   rootDir: string
@@ -251,11 +332,42 @@ async function resolveSourceReferenceRoot(
   return path.resolve(rootDir, value)
 }
 
+function resolveSourceReferenceRootSync(
+  value: PalamedesSourceReferenceRoot | undefined,
+  rootDir: string
+): string {
+  if (value === undefined || value === "git") {
+    return findGitRootSync(rootDir) ?? rootDir
+  }
+
+  if (value === "lingui" || value === "config") {
+    return rootDir
+  }
+
+  return path.resolve(rootDir, value)
+}
+
 async function findGitRoot(startDir: string): Promise<string | undefined> {
   let current = path.resolve(startDir)
 
   while (true) {
     if (await fileExists(path.join(current, ".git"))) {
+      return current
+    }
+
+    const parent = path.dirname(current)
+    if (parent === current) {
+      return undefined
+    }
+    current = parent
+  }
+}
+
+function findGitRootSync(startDir: string): string | undefined {
+  let current = path.resolve(startDir)
+
+  while (true) {
+    if (fileExistsSync(path.join(current, ".git"))) {
       return current
     }
 
@@ -402,6 +514,23 @@ async function assertFileExists(filePath: string): Promise<void> {
 async function fileExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath, constants.F_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function assertFileExistsSync(filePath: string): void {
+  try {
+    accessSync(filePath, constants.R_OK)
+  } catch {
+    throw new Error(`Palamedes config not found at ${filePath}`)
+  }
+}
+
+function fileExistsSync(filePath: string): boolean {
+  try {
+    accessSync(filePath, constants.R_OK)
     return true
   } catch {
     return false

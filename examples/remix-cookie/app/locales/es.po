@@ -1,0 +1,20 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: examples/remix-cookie/app/page.ts#renderHomePage
+msgid "Remix v3 is rendering {locale} with Palamedes"
+msgstr "Remix v3 renderiza {locale} con Palamedes"
+
+#: examples/remix-cookie/app/page.ts#renderHomePage
+msgid "This response was translated inside a request-scoped Remix handler."
+msgstr "Esta respuesta se tradujo dentro de un handler de Remix por request."
+
+#: examples/remix-cookie/app/page.ts#renderHomePage
+msgid "{seatCount, plural, one {# seat left} other {# seats left}}"
+msgstr ""
+"{seatCount, plural, one {# asiento disponible} other {# asientos disponibles}}"

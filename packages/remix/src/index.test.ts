@@ -1,6 +1,22 @@
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import type * as CoreNode from "@palamedes/core-node"
 
 import { createPalamedesRemixLoadHook } from "./index"
+
+const mocks = vi.hoisted(() => ({
+  compileCatalogModule: vi.fn(),
+  loadPalamedesConfigSync: vi.fn(),
+}))
+
+vi.mock("@palamedes/config", () => ({
+  loadPalamedesConfigSync: mocks.loadPalamedesConfigSync,
+}))
+
+vi.mock("@palamedes/core-node", async (importOriginal) => ({
+  ...(await importOriginal<typeof CoreNode>()),
+  compileCatalogModule: mocks.compileCatalogModule,
+}))
 
 const loadContext = {
   conditions: ["node", "import"],
@@ -9,6 +25,22 @@ const loadContext = {
 }
 
 describe("createPalamedesRemixLoadHook", () => {
+  beforeEach(() => {
+    mocks.loadPalamedesConfigSync.mockReturnValue({
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      pseudoLocale: undefined,
+      fallbackLocales: undefined,
+      catalogs: [{ path: "app/locales/{locale}", include: ["app"] }],
+    })
+    mocks.compileCatalogModule.mockReturnValue({
+      code: 'export const messages={"greeting":"Hallo"};export default { messages };',
+      warnings: [],
+      watchFiles: ["/repo/app/locales/en.po"],
+    })
+  })
+
   it("transforms Palamedes JS macros after the Remix loader returns source", () => {
     const load = createPalamedesRemixLoadHook()
     const oldMap = Buffer.from(JSON.stringify({ version: 3, mappings: "" }), "utf8").toString(
@@ -33,6 +65,41 @@ describe("createPalamedesRemixLoadHook", () => {
     expect(String(loaded.source)).toMatch(
       /\/\/# sourceMappingURL=data:application\/json;base64,[A-Za-z0-9+/=]+$/u
     )
+  })
+
+  it("compiles PO catalog imports without delegating to the default loader", () => {
+    const load = createPalamedesRemixLoadHook()
+    const nextLoad = vi.fn()
+
+    const loaded = load(new URL("file:///repo/app/locales/de.po").href, loadContext, nextLoad)
+
+    expect(nextLoad).not.toHaveBeenCalled()
+    expect(loaded).toStrictEqual({
+      format: "module",
+      shortCircuit: true,
+      source: 'export const messages={"greeting":"Hallo"};export default { messages };',
+    })
+    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
+      configPath: undefined,
+      cwd: "/repo/app/locales",
+    })
+    expect(mocks.compileCatalogModule).toHaveBeenCalledWith(
+      expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
+      "/repo/app/locales/de.po",
+      expect.objectContaining({ locale: "de" })
+    )
+  })
+
+  it("skips CommonJS files by default because runtime injection is ESM", () => {
+    const source = 'import { t } from "@palamedes/core/macro"; export const label = t`Hello`'
+    const load = createPalamedesRemixLoadHook()
+
+    const loaded = load(new URL("file:///repo/app/legacy.cjs").href, loadContext, () => ({
+      format: "commonjs",
+      source,
+    }))
+
+    expect(loaded.source).toBe(source)
   })
 
   it("delegates unchanged source when a module has no Palamedes macros", () => {
