@@ -688,6 +688,34 @@ mod tests {
     }
 
     #[test]
+    fn projects_plural_messages_with_numeric_hyphenated_text() {
+        let path = temp_file("plural-text");
+        let message =
+            "{count, plural, one {# queue detail 00042-now} other {# queue details 00042-now}}";
+
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            messages: vec![CatalogUpdateMessage {
+                message: message.to_owned(),
+                context: None,
+                placeholders: BTreeMap::new(),
+                extracted_comments: vec![],
+                origins: vec![],
+            }],
+        })
+        .expect("update");
+
+        let po = parse_po(&std::fs::read_to_string(&path).expect("read output")).expect("parse po");
+        assert_eq!(po.items.len(), 1);
+        assert_eq!(po.items[0].msgid, message);
+    }
+
+    #[test]
     fn forwards_extracted_placeholders_to_ferrocat_update() {
         let path = temp_file("placeholders");
 

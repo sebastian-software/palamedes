@@ -9,6 +9,7 @@
   "scripts": {
     "benchmark": "node ./src/run.mjs",
     "benchmark:quick": "node ./src/run.mjs --warmup 1 --runs 3 --profile small",
+    "test": "node --test ./src/run.test.mjs",
     "validate": "node ./src/run.mjs --validate-only --profile small"
   },
   "dependencies": {
