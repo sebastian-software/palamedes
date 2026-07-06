@@ -32,9 +32,7 @@ export function Section({ num, title, eyebrow, lede, id, dark, children }: Secti
         ) : null}
         {eyebrow ? <p className="eyebrow mt-6">{eyebrow}</p> : null}
         {title ? (
-          <h2 className="mt-4 max-w-[22em] text-h2 leading-[1.15] font-bold tracking-[-0.02em]">
-            {title}
-          </h2>
+          <h2 className="display-serif mt-4 max-w-[24em] text-h2 leading-[1.25]">{title}</h2>
         ) : null}
         {lede ? <p className={`mt-4 max-w-[44em] ${dark ? "" : "text-ink"}`}>{lede}</p> : null}
       </Reveal>

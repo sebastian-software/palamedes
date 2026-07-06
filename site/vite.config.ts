@@ -33,7 +33,7 @@ export default defineConfig({
       },
       metadata: {
         ogType: "website",
-        twitterCard: "summary",
+        twitterCard: "summary_large_image",
       },
     }),
   ],

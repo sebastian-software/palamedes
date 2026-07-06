@@ -15,18 +15,19 @@ export function CtaBand({
   secondary?: Cta
 }) {
   return (
-    <section className="border-t border-hair px-8 py-14 max-tight:px-5">
-      <h2 className="max-w-[22em] text-h2 leading-[1.15] font-bold tracking-[-0.02em]">
-        {headline}
-      </h2>
-      <div className="mt-8 flex flex-wrap gap-3">
-        <ButtonLink href={primary.href}>{primary.label}</ButtonLink>
-        {secondary ? (
-          <ButtonLink variant="outline" href={secondary.href}>
-            {secondary.label}
-          </ButtonLink>
-        ) : null}
+    <section className="grid grid-cols-[1fr_auto] items-center gap-10 border-t border-hair px-8 py-14 max-tight:grid-cols-1 max-tight:px-5">
+      <div>
+        <h2 className="display-serif max-w-[24em] text-h2 leading-[1.25]">{headline}</h2>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <ButtonLink href={primary.href}>{primary.label}</ButtonLink>
+          {secondary ? (
+            <ButtonLink variant="outline" href={secondary.href}>
+              {secondary.label}
+            </ButtonLink>
+          ) : null}
+        </div>
       </div>
+      <img src="/logo.svg" alt="" aria-hidden className="w-32 max-tight:hidden" />
     </section>
   )
 }

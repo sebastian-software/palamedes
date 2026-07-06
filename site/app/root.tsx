@@ -15,6 +15,18 @@ import { SiteFooter } from "~/components/chrome/SiteFooter"
 
 import "./app.css"
 
+export function links() {
+  return [
+    {
+      rel: "preload",
+      href: "/fonts/CinzelHellenic-Regular.woff2",
+      as: "font",
+      type: "font/woff2",
+      crossOrigin: "anonymous" as const,
+    },
+  ]
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return <ArdoRootLayout>{children}</ArdoRootLayout>
 }
@@ -42,7 +54,7 @@ export default function App() {
       }}
       lastUpdated={{ enabled: true, text: "Last updated" }}
       headerProps={{
-        logo: "/favicon.svg",
+        logo: "/logo.svg",
         searchPlaceholder: "Search Palamedes docs...",
         /* Light-only site by design ("Swiss Spec Grid" is a paper spec sheet);
          * re-enable once both token systems ship a dark set. */
