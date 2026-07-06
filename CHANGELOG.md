@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.2.0...palamedes-v1.3.0) (2026-07-06)
+
+
+### Features
+
+* **site:** adopt ARDO generated routes ([d31343a](https://github.com/sebastian-software/palamedes/commit/d31343af7a2b650ad58081a39b1eea72d7174e2b))
+* **site:** live smoke-test after Pages deploys and canonical palamedes.dev metadata ([43210df](https://github.com/sebastian-software/palamedes/commit/43210df0b4445a03d782671db14571b7cd1b813a))
+* **site:** marry the Swiss spec grid with the Palamedes Greek identity ([6577f00](https://github.com/sebastian-software/palamedes/commit/6577f00a5409005023f8dd3f6565d226f1bc568c))
+* **site:** route docs links internally ([ee0a074](https://github.com/sebastian-software/palamedes/commit/ee0a074e16f6a6ee25eea13e1dfe3a568ae89c6d))
+
+
+### Bug Fixes
+
+* **site:** address ARDO review comments ([8b73468](https://github.com/sebastian-software/palamedes/commit/8b7346845ae88dadf6b3e28b844193facd8eecda))
+* **site:** address ARDO-coupling review notes on the wordmark and meander ([b248f03](https://github.com/sebastian-software/palamedes/commit/b248f0387913e1cede4dd5f4c4b993266f51bc89))
+* **site:** anchor lede removal by offsets and skip headings inside blocks ([d97704c](https://github.com/sebastian-software/palamedes/commit/d97704c2f773048fac10fd02ed4335146aab7cbc))
+* **site:** reconcile ARDO chrome with the Swiss-spec-grid design ([948a606](https://github.com/sebastian-software/palamedes/commit/948a606dbb82f9fbddc84962f47fc9693606f453))
+* **site:** set hero and CTA headlines in capitals to surface the Hellenic glyphs ([53c66c1](https://github.com/sebastian-software/palamedes/commit/53c66c1b05a0eec7b146c8380388b1354f1591b2))
+
 ## [1.2.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.1.2...palamedes-v1.2.0) (2026-07-05)
 
 
