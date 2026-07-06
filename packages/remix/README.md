@@ -21,6 +21,30 @@ This first integration supports JavaScript macros such as `t`, `msg`, `plural`,
 Rich JSX message macros are still experimental for Remix v3 because Remix's
 loader lowers JSX to `remix/ui/jsx-runtime` calls before this hook runs.
 
+## Server Runtime Scope
+
+Use `@palamedes/remix/server` to bind translated server code to the active
+request:
+
+```ts
+import { createI18n } from "@palamedes/core"
+import { createRemixI18nRequestScope } from "@palamedes/remix/server"
+
+export const remixI18n = createRemixI18nRequestScope((request) => {
+  const i18n = createI18n()
+  i18n.activate(request.headers.get("accept-language")?.startsWith("de") ? "de" : "en")
+  return i18n
+})
+
+export default createController(routes, {
+  actions: {
+    home(context) {
+      return remixI18n.run(context.request, () => context.render(<HomePage />))
+    },
+  },
+})
+```
+
 ## License
 
 [![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
