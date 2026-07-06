@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 1 238 238">
-  <rect x="1" y="1" width="238" height="238" fill="#faf9f4"/>
-
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Palamedes">
   <style>
     .navy { fill:#0E2A4D; } .gold { fill:#BC8A45; }
     .stem { fill:none; stroke:#BC8A45; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
-    .ring { fill:none; stroke:#BC8A45; stroke-width:10; }
+    .ring { fill:none; stroke:#BC8A45; stroke-width:6; }
   </style>
   <circle class="ring" cx="120" cy="120" r="112"/>
   <g transform="translate(120,120) scale(0.9558) translate(-120,-120)">

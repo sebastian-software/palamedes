@@ -14,11 +14,10 @@ export function StatementBand({
   children: ReactNode
 }) {
   return (
-    <section className="border-t border-hair bg-ink px-8 py-16 text-paper max-tight:px-5">
+    <section className="border-t border-hair bg-ink px-8 pt-0 pb-16 text-paper max-tight:px-5">
+      <div className="meander -mx-8 mb-14 max-tight:-mx-5" aria-hidden />
       <p className="micro tracking-th text-accent-soft">{num}</p>
-      <p className="mt-6 max-w-[30em] text-band leading-[1.3] font-bold tracking-[-0.02em]">
-        {children}
-      </p>
+      <p className="display-serif mt-6 max-w-[32em] text-band leading-[1.4]">{children}</p>
       {diagram ? <ScopeDiagram /> : null}
     </section>
   )

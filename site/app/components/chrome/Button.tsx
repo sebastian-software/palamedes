@@ -5,7 +5,7 @@ type Variant = "primary" | "outline" | "small"
 
 const styles: Record<Variant, string> = {
   primary:
-    "inline-block bg-accent px-6 py-3 font-mono text-[11px] font-medium tracking-label text-white uppercase hover:bg-ink",
+    "inline-block bg-ink px-6 py-3 font-mono text-[11px] font-medium tracking-label text-paper uppercase hover:bg-accent",
   outline:
     "inline-block border border-ink px-6 py-3 font-mono text-[11px] font-medium tracking-label text-ink uppercase hover:bg-ink hover:text-paper",
   small:

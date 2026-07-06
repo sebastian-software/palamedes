@@ -74,9 +74,14 @@ export function SiteFooter() {
           </div>
         ))}
       </div>
-      <p className="mono-nums px-8 py-5 text-[11px] text-gray-spec max-tight:px-5">
-        MIT © 2026 Sebastian Software GmbH — built in the open, verified in CI.
-      </p>
+      <div className="flex items-center justify-between gap-6 px-8 py-5 max-tight:px-5">
+        <p className="mono-nums text-[11px] text-gray-spec">
+          MIT © 2026 Sebastian Software GmbH — built in the open, verified in CI.
+        </p>
+        <span className="display-serif text-[13px] tracking-[0.24em] text-gray-spec uppercase max-tight:hidden">
+          Palamedes
+        </span>
+      </div>
     </footer>
   )
 }

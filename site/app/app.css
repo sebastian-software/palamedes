@@ -10,25 +10,48 @@
 @import "tailwindcss";
 
 /*
- * Palamedes site design system — "Swiss Spec Grid" (Draft A).
+ * Cinzel Hellenic — the brand's inscription face (Trajan-style capitals with
+ * small-cap lowercase). Single weight by design; never used for body copy.
+ */
+@font-face {
+  font-family: "Cinzel Hellenic";
+  src: url("/fonts/CinzelHellenic-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Palamedes site design system — "Hellenic Spec Grid" (Draft B).
+ *
+ * Swiss clarity, Greek descent: the grid, hairlines and mono spec labels stay
+ * strictly Swiss; the brand voice (navy ink, gold accent, Cinzel Hellenic
+ * display caps, one meander rule) carries the Palamedes origin story.
  *
  * Hard rules, enforced by convention:
  *   - ZERO border-radius, ZERO box-shadow, ZERO gradients.
- *   - One accent (blue). Terminal green/amber appear ONLY inside CLI output.
+ *   - One accent family (gold/bronze). Terminal green/amber appear ONLY
+ *     inside CLI output.
+ *   - `--color-accent` (bronze) is the only gold for text — it holds 4.5:1 on
+ *     paper. `--color-gold` (brand gold) is for rules, ornament and large
+ *     glyphs; `--color-accent-soft` (light gold) is for text on navy.
+ *   - Cinzel Hellenic is display-only: headlines and the wordmark. Body stays
+ *     Helvetica, spec labels stay mono.
  *   - Numbers are always mono + tabular.
- *   - Hairlines separate; they never decorate.
+ *   - Hairlines separate; the meander is the single sanctioned decoration.
  */
 
 @theme {
   --color-*: initial;
-  --color-paper: #fbfbf8;
-  --color-ink: #101010;
-  --color-hair: #d8d8d2;
-  --color-accent: #0038ff;
-  --color-gray-spec: #8a8a84;
-  --color-accent-soft: #9db2ff;
-  --color-hover-fill: #f2f2ec;
-  --color-track: #efefe9;
+  --color-paper: #faf9f4;
+  --color-ink: #0e2a4d;
+  --color-hair: #ddd6c6;
+  --color-accent: #8e6628;
+  --color-gold: #bc8a45;
+  --color-gray-spec: #7d7869;
+  --color-accent-soft: #d9ba7c;
+  --color-hover-fill: #f3efe3;
+  --color-track: #f1ede0;
   --color-term-ok: #3fb950;
   --color-term-warn: #d29922;
   --color-white: #ffffff;
@@ -37,10 +60,11 @@
   --font-sans: "Helvetica Neue", Helvetica, Arial, Inter, sans-serif;
   --font-mono:
     ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-display: "Cinzel Hellenic", "Times New Roman", serif;
 
-  --text-display: clamp(40px, 6.2vw, 76px);
-  --text-h2: clamp(24px, 3.4vw, 34px);
-  --text-band: clamp(20px, 3vw, 30px);
+  --text-display: clamp(30px, 4vw, 52px);
+  --text-h2: clamp(22px, 3.2vw, 31px);
+  --text-band: clamp(19px, 2.8vw, 28px);
   --text-stat: 34px;
 
   --tracking-micro: 0.14em;
@@ -71,8 +95,8 @@
   }
 
   ::selection {
-    background: var(--color-accent);
-    color: var(--color-paper);
+    background: var(--color-gold);
+    color: var(--color-ink);
   }
 
   /*
@@ -116,28 +140,28 @@
  * `:root` defaults are unlayered too, and source order decides the winner.
  */
 :root {
-  /* Brand + accent collapse onto the single Palamedes blue. */
+  /* Brand + accent collapse onto the single Palamedes bronze. */
   --ardo-color-brand: var(--color-accent);
-  --ardo-color-brandLight: #3a5eff;
-  --ardo-color-brandDark: #002bc4;
-  --ardo-color-brandSubtle: #eef1fe;
+  --ardo-color-brandLight: var(--color-gold);
+  --ardo-color-brandDark: #6f4f1e;
+  --ardo-color-brandSubtle: #f4ecda;
   /* Flat fill — the design system bans gradients. */
   --ardo-color-brandGradient: var(--color-accent);
   --ardo-color-accent: var(--color-accent);
   --ardo-color-accentLight: var(--color-accent-soft);
-  --ardo-color-accentDark: #002bc4;
-  --ardo-color-accentSubtle: #eef1fe;
+  --ardo-color-accentDark: #6f4f1e;
+  --ardo-color-accentSubtle: #f4ecda;
 
   --ardo-color-bg: var(--color-paper);
-  --ardo-color-bgSoft: #f6f6f1;
+  --ardo-color-bgSoft: #f5f2e8;
   --ardo-color-bgMute: var(--color-track);
-  --ardo-color-bgAlt: #e9e9e2;
+  --ardo-color-bgAlt: #eae5d4;
   --ardo-color-text: var(--color-ink);
-  --ardo-color-textLight: #55554f;
-  --ardo-color-textLighter: #6f6f68;
+  --ardo-color-textLight: #3f5471;
+  --ardo-color-textLighter: #5d6c81;
   --ardo-color-border: var(--color-hair);
-  --ardo-color-borderLight: #e5e5df;
-  --ardo-color-divider: #e5e5df;
+  --ardo-color-borderLight: #e8e2d3;
+  --ardo-color-divider: #e8e2d3;
   --ardo-color-sidebarBg: var(--color-paper);
   --ardo-color-sidebarBorder: var(--color-hair);
   --ardo-color-codeBg: var(--color-track);
@@ -157,6 +181,22 @@
   --ardo-font-familyHeading: var(--font-sans);
   --ardo-font-mono: var(--font-mono);
   --ardo-font-lineHeight: 1.65;
+}
+
+/*
+ * The header wordmark. ARDO renders the site title as a plain <span> inside
+ * the logo home link; like the mobile-panel nav below, it is scoped through
+ * semantics (the only header link to "/"), never through hashed classes.
+ * Cinzel Hellenic set wide, as on an inscription.
+ */
+header a[href="/"] > span {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 18px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+  translate: 0 2px; /* optical baseline against the ring icon */
 }
 
 /*
@@ -243,9 +283,32 @@
 
 /* The centered page frame with full-height side rules. */
 @utility frame {
-  max-width: 1120px;
+  max-width: 1320px;
   margin-inline: auto;
   border-inline: 1px solid var(--color-hair);
+}
+
+/*
+ * Display type — Cinzel Hellenic capitals. The face carries its own optical
+ * weight; it is never bolded and never tracked negative. Lowercase input
+ * renders as small caps, so sentences keep their reading rhythm.
+ */
+@utility display-serif {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.015em;
+}
+
+/*
+ * The meander — the one sanctioned ornament. A single Greek-key course drawn
+ * at hairline weight in brand gold; reads as a patterned rule on paper and
+ * on navy alike. Apply to an empty, aria-hidden element.
+ */
+@utility meander {
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'%3E%3Cpath d='M0 17h16V1H5v10h6V6H8' fill='none' stroke='%23bc8a45' stroke-width='1.6'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: auto 100%;
 }
 
 /* Oversized ghosted glyph for per-page style breaks. */
