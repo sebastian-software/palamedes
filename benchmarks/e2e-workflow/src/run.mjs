@@ -2,8 +2,10 @@ import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promi
 import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
+import { fileURLToPath } from "node:url"
 
 import { DEFAULT_SEED, PROFILE_DEFINITIONS, createWorkflowCorpus } from "./corpus.mjs"
+import { parsePoMsgids } from "./po.mjs"
 
 const __dirname = import.meta.dirname
 const benchmarkRoot = path.resolve(__dirname, "..")
@@ -341,34 +343,6 @@ async function readActiveMessages(tool, rootDir, locale) {
   return parsePoMsgids(source).sort()
 }
 
-function parsePoMsgids(source) {
-  const messages = []
-  let obsolete = false
-
-  for (const line of source.split(/\r?\n/)) {
-    if (line.startsWith("#~")) {
-      obsolete = true
-      continue
-    }
-    if (line.trim() === "") {
-      obsolete = false
-      continue
-    }
-    if (line.startsWith("msgid ") && !obsolete) {
-      const value = unquotePo(line.slice("msgid ".length))
-      if (value !== "") {
-        messages.push(value)
-      }
-    }
-  }
-
-  return messages
-}
-
-function unquotePo(value) {
-  return JSON.parse(value)
-}
-
 function assertMessageSet(label, expectedInput, actualInput) {
   const expected = [...expectedInput].sort()
   const actual = [...actualInput].sort()
@@ -623,7 +597,9 @@ async function readCommandVersion(command, args) {
   return result.stdout
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+}

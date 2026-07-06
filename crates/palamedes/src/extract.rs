@@ -1577,6 +1577,35 @@ mod tests {
     }
 
     #[test]
+    fn extracts_plural_messages_with_numeric_hyphenated_text() {
+        let messages = extract_messages(
+            r##"
+              import { plural, t } from "@palamedes/core/macro"
+
+              export function Demo(count) {
+                const a = plural(count, { one: "# queue detail 003", other: "# queue details 003" })
+                const b = plural(count, { one: "# queue detail 00042-now", other: "# queue details 00042-now" })
+                return [t({ message: "x" }), a, b]
+              }
+            "##,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "{count, plural, one {# queue detail 003} other {# queue details 003}}",
+                "{count, plural, one {# queue detail 00042-now} other {# queue details 00042-now}}",
+                "x",
+            ]
+        );
+    }
+
+    #[test]
     fn extracts_defaulted_jsx_choice_values() {
         let messages = extract_messages(
             r##"
