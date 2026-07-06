@@ -7,6 +7,7 @@ expected to use directly.
 - [`@palamedes/runtime`](./runtime.md)
 - [`@palamedes/react`](./react.md)
 - [`@palamedes/solid`](./solid.md)
+- [`@palamedes/remix`](./remix.md)
 - [`@palamedes/config`](./config.md)
 - [`@palamedes/cli`](./cli.md)
 - [`@palamedes/vite-plugin`](./vite-plugin.md)

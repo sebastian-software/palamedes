@@ -166,6 +166,12 @@ All matrix examples use the same public Palamedes stack:
 - `@palamedes/runtime`
 - `@palamedes/vite-plugin` or `@palamedes/next-plugin`
 
+Remix v3 support is being added through a separate beta example while Remix's
+component model settles:
+
+- [examples/remix-cookie](remix-cookie) - Node `--import` loader integration
+  with request-local server i18n and JS macros
+
 The matrix does not only prove core/runtime behavior. It also proves small
 public frontend primitives from the UI packages themselves:
 
