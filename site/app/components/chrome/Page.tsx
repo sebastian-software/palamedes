@@ -1,17 +1,10 @@
 import type { ReactNode } from "react"
 
-import { SiteFooter } from "./SiteFooter"
-import { SiteNav } from "./SiteNav"
-
-/* Standard page shell: sticky nav, the hairline-framed column, footer. */
+/*
+ * Marketing page shell: just the hairline-framed column. Header and footer
+ * come from the ARDO chrome in root.tsx — rendering them here again is what
+ * caused the duplicated site header after the ARDO migration.
+ */
 export function Page({ children }: { children: ReactNode }) {
-  return (
-    <>
-      <SiteNav />
-      <main className="frame min-h-screen">{children}</main>
-      <div className="frame border-t-0">
-        <SiteFooter />
-      </div>
-    </>
-  )
+  return <div className="frame min-h-screen">{children}</div>
 }

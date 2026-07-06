@@ -29,11 +29,33 @@ from the package sources. Those generated route files and copied doc assets are
 ignored; rerun the prebuild script instead of editing them.
 
 Headless verification of the built output (three passes: default,
-reduced-motion, JS disabled):
+reduced-motion, JS disabled), from the repo root:
 
 ```bash
 node scripts/verify-site-routes.mjs
 ```
+
+## Theming & chrome (ARDO)
+
+ARDO owns the site chrome: `ArdoRoot` in `app/root.tsx` renders the header and
+footer on **every** route (marketing pages included — `layout: "bare"` only
+drops the sidebar). Marketing pages therefore must not render their own nav or
+footer; the shared `SiteFooter` is passed into ARDO's `footer` slot instead.
+
+The Palamedes look is applied through two sanctioned mechanisms only:
+
+1. **Token bridge** — `app/app.css` maps ARDO's public `--ardo-*` custom
+   properties (its complete theming contract) onto the Swiss-spec-grid tokens
+   (paper/ink/hairline/accent, radius 0, no shadows). Never target ARDO's
+   hashed class names; they change between releases.
+2. **Cascade layers** — ARDO's stylesheet ships an unlayered
+   `* { margin: 0; padding: 0 }` reset that would override Tailwind's layered
+   utilities. `app.css` therefore imports `ardo/ui/styles.css` into the `ardo`
+   layer between `base` and `components` (do not re-import it in `root.tsx`).
+
+The site is deliberately light-only (`themeToggle: false`): the design system
+has no dark token set yet. To add dark mode later, define a `.dark` mapping for
+both the Palamedes tokens and the `--ardo-*` bridge, then re-enable the toggle.
 
 ## Data honesty guards
 

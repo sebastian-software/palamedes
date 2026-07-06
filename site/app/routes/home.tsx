@@ -66,7 +66,7 @@ export default function Home() {
         title="Your i18n setup should not splinter when your framework changes."
         lede="Most teams relearn internationalization with every migration: new runtime, new message IDs, new catalog quirks. Palamedes keeps the parts you touch every day stable — and lets the framework be the only thing that changes."
       >
-        <FeatureGrid cards={HOME_MODEL_CARDS} sectionIndex="01" />
+        <FeatureGrid cards={HOME_MODEL_CARDS} />
       </Section>
 
       {/* -------------------------------------------------- 02 — workflow */}

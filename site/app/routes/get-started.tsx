@@ -56,7 +56,7 @@ export default function GetStarted() {
       </Section>
 
       <Section num="02 — Next" title="Where to go from here">
-        <FeatureGrid cards={NEXT_STEP_CARDS} sectionIndex="02" />
+        <FeatureGrid cards={NEXT_STEP_CARDS} />
       </Section>
 
       <CtaBand

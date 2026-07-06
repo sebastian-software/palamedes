@@ -51,6 +51,7 @@ for (const post of posts) {
 await writeApiReferenceIndex()
 await generateTypedocReference()
 await normalizeTypedocModuleLinks()
+await dedupeTypedocLedes()
 await ensureDirectoryIndexes(join(routesRoot, "api-reference"))
 
 console.log(
@@ -227,10 +228,12 @@ async function writeRouteFromSource(entry) {
   const raw = await readRepoFile(entry.source)
   const parsed = stripExistingFrontmatter(raw)
   const title = extractTitle(parsed.content) ?? titleFromPath(entry.source)
-  const description = firstParagraph(parsed.content)
+  const lede = extractLede(parsed.content)
+  const description = lede?.text
   const status = extractAdrMeta(parsed.content, "Status")
   const date = entry.date ?? extractAdrMeta(parsed.content, "Date")
-  const content = transformLinks(parsed.content, entry.source)
+  const body = lede ? removeLedeBlock(parsed.content, lede.block) : parsed.content
+  const content = transformLinks(body, entry.source)
   const frontmatter = {
     title,
     description,
@@ -323,6 +326,31 @@ async function normalizeTypedocModuleLinks() {
       index.replaceAll(`/api-reference/${pkg.slug}/other`, `/api-reference/${pkg.slug}/modules`),
       "utf8"
     )
+  }
+}
+
+/*
+ * The TypeDoc generator repeats the frontmatter `description` as the first
+ * body paragraph. ARDO's ContentHeader already renders the description as the
+ * visible lede, so drop the duplicated paragraph (same rule as extractLede /
+ * removeLedeBlock for hand-written pages).
+ */
+async function dedupeTypedocLedes() {
+  const apiRoot = join(routesRoot, "api-reference")
+  if (!existsSync(apiRoot)) return
+  const entries = await readdir(apiRoot, { recursive: true, withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue
+    const filePath = join(entry.parentPath, entry.name)
+    const raw = await readFile(filePath, "utf8")
+    const parsed = stripExistingFrontmatter(raw)
+    const description = /^description:\s*["']?(.*?)["']?\s*$/mu.exec(parsed.data)?.[1]
+    if (!description) continue
+    const normalize = (text) => text.replaceAll(/\s+/gu, " ").replace(/\.$/u, "").trim()
+    const lede = extractLede(parsed.content)
+    if (!lede || normalize(lede.text) !== normalize(description)) continue
+    const body = removeLedeBlock(parsed.content, lede.block)
+    await writeFile(filePath, `---\n${parsed.data}\n---\n${body.trimStart()}`, "utf8")
   }
 }
 
@@ -507,19 +535,34 @@ function extractFrontmatterMeta(data, label) {
   return match?.[1]?.trim().replace(/^["']|["']$/gu, "")
 }
 
-function firstParagraph(content) {
-  const withoutTitle = content.replace(/^#\s+.+$/mu, "")
-  for (const block of withoutTitle.split(/\n{2,}/u)) {
+/*
+ * Finds the lede: the first real prose paragraph. Returns both the cleaned
+ * text (for frontmatter `description`) and the raw block so the caller can
+ * remove it from the body — ARDO's ContentHeader already renders the
+ * description as the visible lede, so leaving the paragraph in the body
+ * would print it twice on every page.
+ */
+function extractLede(content) {
+  for (const block of content.split(/\n{2,}/u)) {
     const paragraph = block.trim()
     if (paragraph === "" || paragraph.startsWith("#") || paragraph.startsWith("```")) continue
     if (paragraph.startsWith("|") || paragraph.startsWith("- ") || paragraph.startsWith("* "))
       continue
-    return paragraph
-      .replaceAll(/\[([^\]]+)\]\([^)]+\)/gu, "$1")
-      .replaceAll(/[`*_>#]/gu, "")
-      .replaceAll(/\s+/gu, " ")
-      .slice(0, 180)
+    if (/^\*\*(Status|Date):\*\*/u.test(paragraph)) continue
+    return {
+      block,
+      text: paragraph
+        .replaceAll(/\[([^\]]+)\]\([^)]+\)/gu, "$1")
+        .replaceAll(/[`*_>#]/gu, "")
+        .replaceAll(/\s+/gu, " "),
+    }
   }
+}
+
+function removeLedeBlock(content, block) {
+  const index = content.indexOf(block)
+  if (index === -1) return content
+  return content.slice(0, index) + content.slice(index + block.length)
 }
 
 function toFrontmatter(data) {
