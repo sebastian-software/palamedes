@@ -17,6 +17,7 @@
     { "path": "packages/runtime" },
     { "path": "packages/extractor" },
     { "path": "packages/transform" },
+    { "path": "packages/remix" },
     { "path": "packages/vite-plugin" },
     { "path": "packages/next-plugin" },
     { "path": "packages/cli" }
