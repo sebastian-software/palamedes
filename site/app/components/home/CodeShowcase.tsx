@@ -80,8 +80,14 @@ function toneFor(line: string): string {
 
 export function CodeShowcase() {
   return (
-    <div className="border border-hair">
-      <Tabs.Root defaultValue="write">
+    /*
+     * Two tracks side by side on desktop — the authored code (left) and the
+     * same component rendered in every locale (right) — so the wide viewport
+     * carries both instead of stranding the preview in empty space. Below the
+     * grid breakpoint they stack, code first.
+     */
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,23rem)] border border-hair max-grid:grid-cols-1">
+      <Tabs.Root defaultValue="write" className="min-w-0">
         <Tabs.List className="flex border-b border-hair">
           {TABS.map((tab) => (
             <Tabs.Tab
@@ -102,20 +108,16 @@ export function CodeShowcase() {
                 </div>
               ))}
             </pre>
-            <p className="border-t border-hair px-5 py-3 text-[12.5px] text-gray-spec">
-              {tab.caption}
-            </p>
+            <p className="px-5 py-3 text-[12.5px] text-gray-spec">{tab.caption}</p>
           </Tabs.Panel>
         ))}
       </Tabs.Root>
-      <div className="border-t border-hair px-5 py-5">
+      <div className="border-l border-hair bg-hover-fill/40 px-5 py-5 max-grid:border-t max-grid:border-l-0">
         <p className="micro text-[10px] tracking-label text-gray-spec">Rendered</p>
         <p className="mt-1 mb-4 text-[13.5px]">
           The same component, in every locale, in every framework.
         </p>
-        <div className="max-w-[26em]">
-          <LocaleBookingCards />
-        </div>
+        <LocaleBookingCards />
       </div>
     </div>
   )

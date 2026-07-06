@@ -202,6 +202,92 @@ header a[href="/"] span {
 }
 
 /*
+ * Sidebar-rail context icons. ARDO infers a rail icon from keywords in each
+ * context's id/label; "docs", "decisions" and "blog" all fall through to the
+ * same book glyph, so three of the four rail slots looked identical. ARDO
+ * exposes no per-context icon prop, so we swap the two collisions here —
+ * keyed on the stable public href (never a hashed class). The inherited
+ * <svg> is hidden and a mask-image redraws a distinct Lucide glyph in
+ * `currentColor`, so it still inherits the rail's hover/active states.
+ */
+nav[aria-label="Documentation sections"] a[href="/decisions"] > svg,
+nav[aria-label="Documentation sections"] a[href="/blog"] > svg {
+  display: none;
+}
+
+nav[aria-label="Documentation sections"] a[href="/decisions"]::after,
+nav[aria-label="Documentation sections"] a[href="/blog"]::after {
+  content: "";
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+/* git-branch — the ADR decision trail. */
+nav[aria-label="Documentation sections"] a[href="/decisions"]::after {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='6' y1='3' x2='6' y2='15'/%3E%3Ccircle cx='18' cy='6' r='3'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cpath d='M18 9a9 9 0 0 1-9 9'/%3E%3C/svg%3E");
+  -webkit-mask-image: var(--glyph);
+  mask-image: var(--glyph);
+}
+
+/* rss — the chronological blog feed. */
+nav[aria-label="Documentation sections"] a[href="/blog"]::after {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11a9 9 0 0 1 9 9'/%3E%3Cpath d='M4 4a16 16 0 0 1 16 16'/%3E%3Ccircle cx='5' cy='19' r='1'/%3E%3C/svg%3E");
+  -webkit-mask-image: var(--glyph);
+  mask-image: var(--glyph);
+}
+
+/*
+ * Sidebar navigation, flattened. ARDO indents each nesting level by shifting
+ * the whole row (margin on the child list), which stair-steps the active
+ * highlight and leaves it floating mid-column. We keep every row full-bleed
+ * to the panel edges and express hierarchy through text padding only, so the
+ * active/hover tint reads as a full-width bar. Scoped to the semantic
+ * `Main navigation` landmark and plain tag/structure selectors — no hashed
+ * ARDO class. The panel insets are 1.125rem (left) / 1rem (right); if ARDO
+ * retunes them these rows simply revert to the default inset.
+ */
+nav[aria-label="Main navigation"] {
+  margin-left: -1.125rem;
+  margin-right: -1rem;
+}
+
+nav[aria-label="Main navigation"] a {
+  flex: 1 1 auto; /* fill the flex row so the tint reaches the far edge */
+  padding-left: 1.125rem;
+  padding-right: 1rem;
+  border-left: 0;
+  border-radius: 0;
+}
+
+/* Hierarchy via text inset, not a shifted row. */
+nav[aria-label="Main navigation"] ul ul {
+  margin-left: 0;
+}
+
+nav[aria-label="Main navigation"] ul ul a {
+  padding-left: 2rem;
+}
+
+/*
+ * Breathing room before the site footer on doc routes. ARDO's scroll column
+ * places our footer frame flush against the last content block. The gap is
+ * gated on the doc layout actually having a sidebar (`:has(Main navigation)`)
+ * — the bare marketing shell shares the same layout classes but has no
+ * sidebar, so the home page keeps its continuous frame rails. If ARDO renames
+ * the layout containers the gap simply stops applying.
+ */
+._8autjm1:has(nav[aria-label="Main navigation"]) ._8autjm2 > .frame {
+  margin-top: clamp(2rem, 4vw, 3.25rem);
+}
+
+/*
  * Header nav links in the Palamedes voice — injected through ArdoNavLink's
  * public `className` prop (it replaces ARDO's base class, `.active` is
  * appended by the component).

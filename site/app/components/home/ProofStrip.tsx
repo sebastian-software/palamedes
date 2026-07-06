@@ -52,7 +52,7 @@ export function ProofStrip() {
   const inView = useInView(ref)
 
   return (
-    <div ref={ref} className="hairline-grid grid-cols-4 border-x-0 max-grid:grid-cols-2">
+    <div ref={ref} className="hairline-grid grid-cols-4 border-x-0 border-b-0 max-grid:grid-cols-2">
       {STATS.map((stat) => (
         <StatCell key={stat.label} stat={stat} active={inView} />
       ))}
