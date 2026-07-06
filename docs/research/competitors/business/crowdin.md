@@ -9,6 +9,23 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 
 # Crowdin
 
+## Fact sheet
+
+| Fact                | Value                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| Company / ownership | Crowdin OÜ, Tallinn (Estonia); bootstrapped; founded 2009                                         |
+| License / model     | Proprietary SaaS; free tier for OSS/academic projects                                             |
+| Pricing model       | "Hosted words" = source words × target languages; $0 / $59 / $179 / $450 / custom per month       |
+| Adoption            | 708 G2 reviews; customers incl. Strava, GitHub, GitLab; user claims 500K–3M+ (unreconciled)       |
+| TMS vs. AI-first    | TMS with deep AI layer (AI pre-translation, Copilot agent, AI QA, AI Debug)                       |
+| Source of truth     | Hosted project DB; git/files are sync targets                                                     |
+| Delivery            | File sync (CLI/GitHub) + optional OTA CDN                                                         |
+| ICU MessageFormat   | Not explicitly verified in this analysis                                                          |
+| .po / gettext       | Yes — first-class among 50–100+ formats                                                           |
+| Dev tooling         | Java CLI, REST API v2, GitHub Action, MCP server v2 (Claude Code/Desktop, Cursor)                 |
+| Self-hosting        | No                                                                                                |
+| Notable             | AI context harvesting (website crawler, source-code CLI); built-in translation-vendor marketplace |
+
 ## Snapshot
 
 - Maintainer / company / funding: Crowdin (legal entity: Crowdin OÜ), headquartered in Tallinn, Estonia. Reported as bootstrapped, no VC funding found in public records (Crunchbase/PitchBook-derived secondary sources) — not fully verified against a primary filing.

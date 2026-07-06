@@ -22,19 +22,24 @@ differently** — not marketing material. Keep entries raw and sourced.
 Two structurally separate groups, because they compete with different parts of
 Palamedes:
 
-- **[frameworks/](frameworks/)** — pure technology: libraries, frameworks, and
-  compile-time tooling. These compete with the open-source core of Palamedes.
-- **[business/](business/)** — vendors shipping a software solution (TMS /
-  localization platforms, hosted or self-hosted). These are relevant later for
-  a commercial "Palamedes Plus" offering. Weblate sits here despite being
-  GPLv3/libre because it is a TMS product, not a runtime library; Tolgee and
-  General Translation are hybrids (vendor platform + own SDKs) and are filed
-  by their vendor/platform nature.
+- **[frameworks/](frameworks/README.md)** — pure technology: libraries,
+  frameworks, and compile-time tooling. These compete with the open-source
+  core of Palamedes.
+- **[business/](business/README.md)** — vendors shipping a software solution
+  (TMS / localization platforms, hosted or self-hosted). These are relevant
+  later for a commercial "Palamedes Plus" offering. Weblate sits here despite
+  being GPLv3/libre because it is a TMS product, not a runtime library; Tolgee
+  and General Translation are hybrids (vendor platform + own SDKs) and are
+  filed by their vendor/platform nature.
 
-One file per product, shared section layout (Snapshot, Positioning,
-Architecture, Formats, Workflow, AI, Pricing, Strengths, Weaknesses,
-**What they do differently**, Sources). The "What they do differently" section
-is the payload; everything else is supporting evidence.
+Each group has its own README with a **side-by-side comparison table** of the
+hard facts (license, pricing model, adoption, ICU/.po support, source of
+truth, AI orientation, …). Each dossier starts with the same facts as a
+per-product **fact sheet** table, followed by the shared section layout
+(Snapshot, Positioning, Architecture, Formats, Workflow, AI, Pricing,
+Strengths, Weaknesses, **What they do differently**, Sources). The "What they
+do differently" section is the payload; everything else is supporting
+evidence.
 
 ## Analyzed products
 

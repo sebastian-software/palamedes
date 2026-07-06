@@ -9,6 +9,23 @@ repository: https://github.com/generaltranslation/gt
 
 # General Translation
 
+## Fact sheet
+
+| Fact                | Value                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| Company / ownership | General Translation, Inc. (San Francisco); ~$2.4–2.7M seed (2024); ~2 years old                  |
+| License / model     | SDKs FSL-1.1-ALv2 (source-available, not OSI open source); platform closed SaaS                  |
+| Pricing model       | $0 platform fee + usage-based translation rates (unit not published); Enterprise custom          |
+| Adoption            | ~50k npm downloads/week (gt-react + gt-next); 964 stars; customers Cursor, Cognition, ClickHouse |
+| TMS vs. AI-first    | AI-first — AI translation is the product; hosted review UI layered on top                        |
+| Source of truth     | JSX source + proprietary hosted storage/CDN                                                      |
+| Delivery            | Build-time pre-generated + CDN (prod); live AI translation in dev only                           |
+| ICU MessageFormat   | Not verified (not documented)                                                                    |
+| .po / gettext       | No — no standard catalog format found                                                            |
+| Dev tooling         | gtx-cli (incl. git-like `stage`), GitHub integration, Locadex AI migration agent                 |
+| Self-hosting        | Escape hatch only (`loadTranslations`, own CDN)                                                  |
+| Notable             | `<T>` wraps whole JSX blocks as translation units; Locadex opens i18n-migration PRs              |
+
 ## Snapshot
 
 - Maintainer / company / funding: General Translation, Inc. (San Francisco). Founder/CEO: Archie McKenzie (Princeton CS '24; ex-TA for Brian Kernighan). Team described in third-party coverage as "ex-Sentry, Meta, Goldman Sachs" engineers; exact headcount not verified. Seed round of $2.74M (Crunchbase/Fundz.net) or $2.39M (SignalBase) closed 2024-11-14 — sources disagree on exact amount, treat as ~$2.4-2.7M seed, not fully verified. No confirmed Y Combinator affiliation found (searched explicitly; no YC company-page match).

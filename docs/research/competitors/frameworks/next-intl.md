@@ -9,6 +9,23 @@ repository: https://github.com/amannn/next-intl
 
 # next-intl
 
+## Fact sheet
+
+| Fact              | Value                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| License           | MIT                                                                                                    |
+| Analyzed version  | next-intl 4.13.1 (2026-06-30)                                                                          |
+| Company / funding | Single maintainer (Jan Amann); GitHub Sponsors (8 sponsors, incl. Crowdin, i18nexus)                   |
+| Pricing           | Free OSS                                                                                               |
+| Adoption          | ~4.0M npm downloads/week; 4.3k GitHub stars                                                            |
+| Framework support | Next.js only (`use-intl` as framework-agnostic core for plain React/React Native)                      |
+| Message identity  | Key-based JSON (stable) + experimental source-string authoring compiled to hash keys (`useExtracted`)  |
+| ICU MessageFormat | Yes — native                                                                                           |
+| .po / gettext     | Only in the experimental extraction workflow; `msgid` holds a generated hash, not the source string    |
+| Extraction        | Experimental build-time loader (Turbopack/Webpack); erased at build time into key lookups              |
+| AI                | None built in; extraction API explicitly designed for AI-agent-authored code                           |
+| Notable           | Locale routing (middleware, domain routing, localized pathnames) is core to the product, not a bolt-on |
+
 ## Snapshot
 
 - Maintainer / company / funding: Single primary maintainer, Jan Amann (@amannn), independent OSS developer. Funded via GitHub Sponsors — 8 active monthly sponsors as of 2026-07-06 (goal: 15), tiers $10–$500/month; sponsors include Crowdin and i18nexus (both localization vendors), plus ~30 past sponsors. No corporate backing or foundation; not part of Vercel despite deep Next.js integration.

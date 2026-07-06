@@ -9,6 +9,23 @@ repository: n/a (proprietary; OSS tooling under github.com/transifex)
 
 # Transifex
 
+## Fact sheet
+
+| Fact                | Value                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| Company / ownership | Transifex Ltd. (founded 2007, OSS origin, proprietary since 2013); owned by XTM International (2025) |
+| License / model     | Proprietary SaaS; CLI is open source                                                                 |
+| Pricing model       | Hosted-word tiers $160–$2,465/mo + separate "AI words" SKU; restricted free OSS plan                 |
+| Adoption            | Claims 500+ customers; documented OSS exodus to Weblate (Fedora ecosystem, 2025)                     |
+| TMS vs. AI-first    | TMS + Transifex AI (LLM MT, TQI quality index, "Xera" agentic branding)                              |
+| Source of truth     | Hosted resources (strings server-side)                                                               |
+| Delivery            | Native/CDS: runtime OTA via Content Delivery Server; classic file sync as fallback                   |
+| ICU MessageFormat   | Yes — Native SDKs are ICU-based; JSON with ICU plurals supported                                     |
+| .po / gettext       | Yes                                                                                                  |
+| Dev tooling         | tx CLI (Go, OSS), REST API, webhooks, GitHub sync                                                    |
+| Self-hosting        | No                                                                                                   |
+| Notable             | Fileless "Native" architecture — no translation catalogs in the repo at all                          |
+
 ## Snapshot
 
 - Maintainer / company / funding: Transifex Ltd. Founded by Dimitris Glezos (2007), commercial SaaS launched 2009. Raised ~$2.5M (2014) + $4M Series A (2015, led by Toba Capital) — total disclosed funding ~$6.7M; a venture-debt round followed in May 2022. Acquired by PARC Partners (2022), then acquired by XTM International in January 2025 (still owned by XTM as of analysis date). No longer independent.

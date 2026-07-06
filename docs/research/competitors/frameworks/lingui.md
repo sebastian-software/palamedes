@@ -9,6 +9,23 @@ repository: https://github.com/lingui/js-lingui
 
 # Lingui
 
+## Fact sheet
+
+| Fact              | Value                                                                                                                |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------- |
+| License           | MIT                                                                                                                  |
+| Analyzed version  | @lingui/core 6.5.0 (2026-07-06)                                                                                      |
+| Company / funding | Community project; Open Collective donations (low four figures)                                                      |
+| Pricing           | Free OSS; no commercial offering                                                                                     |
+| Adoption          | ~1.29M npm downloads/week (@lingui/core); 5.8k GitHub stars                                                          |
+| Framework support | React (incl. RSC), React Native, Vue 3, SolidJS, vanilla JS; community: Astro, Svelte                                |
+| Message identity  | Source-string-derived auto-IDs or explicit custom IDs (developer's choice)                                           |
+| ICU MessageFormat | Yes — native                                                                                                         |
+| .po / gettext     | Yes — first-class catalog format                                                                                     |
+| Extraction        | Static compile-time (macros, Babel/SWC), extract → compile pipeline                                                  |
+| AI                | No built-in MT/AI; ships "Agent Skills" + llms.txt for AI coding agents                                              |
+| Notable           | Closest architectural relative to Palamedes; v6 (2026-04) was a hard ESM-only break with changed message-ID encoding |
+
 ## Snapshot
 
 - Maintainer / company / funding: Community project, fiscal host Open Source Collective. Admins: Tomáš Ehrlich (original creator, 2017), Sergio Moreno, plus "Sergey" and "Olena". Not owned by a single company. Sponsors on Open Collective: Translation.io ($2,400), Crowdin ($1,300), Sector Labs ($1,000), plus ~6 small individual backers (largest $135). Total OC balance not disclosed on the page.

@@ -9,6 +9,23 @@ repository: https://github.com/i18next/i18next
 
 # i18next
 
+## Fact sheet
+
+| Fact              | Value                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| License           | MIT                                                                                   |
+| Analyzed version  | i18next 26.3.4 (2026-06-30); react-i18next 17.0.8                                     |
+| Company / funding | Core team (adrai, jamuhl); funded by their own SaaS locize; no VC                     |
+| Pricing           | Free OSS (locize is the paid companion TMS)                                           |
+| Adoption          | ~18.2M npm downloads/week (core) + 12.8M (react-i18next); 8.6k / 10.0k GitHub stars   |
+| Framework support | Framework-agnostic core; React, Angular, Vue, jQuery, Node, Deno; non-JS ports        |
+| Message identity  | Key-based (arbitrary IDs) — explicitly not source-string-first                        |
+| ICU MessageFormat | Opt-in plugin (`i18next-icu`) that replaces the native `{{var}}` format               |
+| .po / gettext     | No — core is JSON; third-party converters only                                        |
+| Extraction        | i18next-parser (legacy, JS) / i18next-cli (new, Rust/SWC)                             |
+| AI                | None in OSS core (AI lives in locize)                                                 |
+| Notable           | Runtime plugin architecture; SaaS-funds-OSS model incl. the v25.8 console-ad backlash |
+
 ## Snapshot
 
 - Maintainer / company / funding: i18next core team (maintainers include adrai/Adriano Raiano and jamuhl); funded by locize, a commercial "localization as a service" platform built by the same team. No VC funding; locize revenue (including free-tier users) explicitly funds i18next/react-i18next/i18next-cli development.

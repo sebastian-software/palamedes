@@ -9,6 +9,23 @@ repository: https://github.com/WeblateOrg/weblate
 
 # Weblate
 
+## Fact sheet
+
+| Fact                | Value                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| Company / ownership | Weblate s.r.o. (Czechia); Michal Čihař; self-funded, no VC                                       |
+| License / model     | GPLv3 open source; revenue from hosting + support contracts                                      |
+| Pricing model       | Self-host free; Hosted €47–€616/mo by string count; gratis for libre projects (160k-tier limits) |
+| Adoption            | 5,972 GitHub stars; claims 2,500+ projects (openSUSE, LibreOffice, Fedora)                       |
+| TMS vs. AI-first    | TMS; MT/LLM only as suggestion backends (DeepL, OpenAI, Claude, Mistral, Ollama, …)              |
+| Source of truth     | The git repo — translation files parsed in place, edits committed back                           |
+| Delivery            | Real commits/PRs to the repo ("lazy commits"); no OTA                                            |
+| ICU MessageFormat   | Format-dependent; not explicitly recorded (50+ formats incl. Fluent)                             |
+| .po / gettext       | Yes — foundational/flagship format, bilingual semantics preserved                                |
+| Dev tooling         | wlc CLI, REST API, add-ons, webhooks, PR-based push                                              |
+| Self-hosting        | Yes — the primary model                                                                          |
+| Notable             | Closest architectural relative to Palamedes' git-native .po workflow among TMS                   |
+
 ## Snapshot
 
 - Maintainer / company / funding: Weblate s.r.o. (registered in Cvikov, Czechia; Business ID 21668027). Founder and development lead: Michal Čihař. Core team also includes a community manager and a design/UX lead (3 named team members on the about page). Self-funded via Hosted Weblate subscriptions and support contracts, not VC-backed.
