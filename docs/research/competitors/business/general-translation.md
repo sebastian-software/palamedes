@@ -11,20 +11,20 @@ repository: https://github.com/generaltranslation/gt
 
 ## Fact sheet
 
-| Fact                | Value                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------ |
-| Company / ownership | General Translation, Inc. (San Francisco); ~$2.4–2.7M seed (2024); ~2 years old                  |
-| License / model     | SDKs FSL-1.1-ALv2 (source-available, not OSI open source); platform closed SaaS                  |
-| Pricing model       | $0 platform fee + usage-based translation rates (unit not published); Enterprise custom          |
-| Adoption            | ~50k npm downloads/week (gt-react + gt-next); 964 stars; customers Cursor, Cognition, ClickHouse |
-| TMS vs. AI-first    | AI-first — AI translation is the product; hosted review UI layered on top                        |
-| Source of truth     | JSX source + proprietary hosted storage/CDN                                                      |
-| Delivery            | Build-time pre-generated + CDN (prod); live AI translation in dev only                           |
-| ICU MessageFormat   | Not verified (not documented)                                                                    |
-| .po / gettext       | No — no standard catalog format found                                                            |
-| Dev tooling         | gtx-cli (incl. git-like `stage`), GitHub integration, Locadex AI migration agent                 |
-| Self-hosting        | Escape hatch only (`loadTranslations`, own CDN)                                                  |
-| Notable             | `<T>` wraps whole JSX blocks as translation units; Locadex opens i18n-migration PRs              |
+| Fact                | Value                                                                                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Company / ownership | General Translation, Inc. (San Francisco); ~$2.4–2.7M seed (2024); ~2 years old                                                                                             |
+| License / model     | SDKs FSL-1.1-ALv2 (source-available, not OSI open source); platform closed SaaS                                                                                             |
+| Pricing model       | $0 platform fee + usage-based translation rates (unit not published); Enterprise custom                                                                                     |
+| Adoption            | ~50k npm downloads/week (gt-react + gt-next); 964 stars; customers Cursor, Cognition, ClickHouse                                                                            |
+| TMS vs. AI-first    | AI-first — AI translation is the product; hosted review UI layered on top                                                                                                   |
+| Source of truth     | JSX source + proprietary hosted storage/CDN                                                                                                                                 |
+| Delivery            | Build-time pre-generated + CDN (prod); live AI translation in dev only                                                                                                      |
+| ICU MessageFormat   | Not for JSX content — own components (`<Plural>`, `<Branch>`, `<Var>`, …); ICU only in the low-level `formatMessage` core utility, built on Format.js (verified 2026-07-06) |
+| .po / gettext       | No — no standard catalog format found                                                                                                                                       |
+| Dev tooling         | gtx-cli (incl. git-like `stage`), GitHub integration, Locadex AI migration agent                                                                                            |
+| Self-hosting        | Escape hatch only (`loadTranslations`, own CDN)                                                                                                                             |
+| Notable             | `<T>` wraps whole JSX blocks as translation units; Locadex opens i18n-migration PRs                                                                                         |
 
 ## Snapshot
 
@@ -48,8 +48,8 @@ repository: https://github.com/generaltranslation/gt
 - For non-JSX strings (attributes like `aria-label`, `alt`, `placeholder`), a `useGT()` hook provides a callable translation function, e.g. `gt('Enter your email')` — a secondary, string-based API alongside the component-based one.
 - Build pipeline: a compiler (`@generaltranslation/compiler`) statically parses `<T>` usage at build/CLI time to extract translatable content; translations are generated via CLI (`npx gt@latest` / `gtx-cli translate`) and bundled/published ahead of deploy — translation generation is a build-time step wired into `npm run build` (e.g. `"build": "npm run translate && <build command>"`).
 - Dev-mode behavior differs from production: in development, `<T>` calls a live API backed by a small AI model to produce temporary, non-persisted translations for instant preview; in production, no live API/model calls happen (avoids leaking API keys) — pre-generated translations are loaded instead, either from General Translation's CDN or a custom `loadTranslations` source.
-- Message identity/hashing scheme is not documented in any fetched page — not verified how content-level hashing or diffing (equivalent to msgid stability) is implemented internally.
-- ICU message format support not explicitly documented in fetched pages — not verified.
+- Message identity (verified 2026-07-06 from source code): content-hash-based — SHA-256, truncated to 16 hex chars, over a sanitized/stably-stringified JSON form of the JSX or string source incl. branch/plural structure (`packages/core/src/id/hashSource.ts`); optional `id`/`context` props are mixed into the hash as metadata (disambiguation) rather than replacing content-based identity; hash stability across SDK versions is an explicit design goal (pinned-hash tests: "if these change, every existing project would retranslate on upgrade"); the same hashing is re-implemented in the Next.js SWC compiler plugin for build-time extraction.
+- ICU MessageFormat (verified 2026-07-06): not used for `<T>`/JSX content — plurals, conditionals, and variables use GT's own React components (`<Plural>` with CLDR categories, `<Branch>`, `<Var>`, `<Num>`, `<Currency>`, `<DateTime>`); ICU syntax is supported only by the lower-level `formatMessage` core utility (built on Format.js `intl-messageformat`); internally content is tagged with `dataFormat: 'ICU' | 'JSX'`.
 - Type safety: no TypeScript-specific type-safety guarantees (e.g., compile-time key checking) were found documented in the fetched pages — not verified as a distinguishing feature the way it might be for pure-dictionary-based libraries.
 - Ecosystem packages: `gt-react` (React runtime), `gt-next` (Next.js runtime, wraps gt-react + adds SSR/middleware/routing), `gt-i18n` (shared/pure-JS core), `generaltranslation` (core API client), `@generaltranslation/compiler` (static JSX extraction), `@generaltranslation/react-core`, `@generaltranslation/format`, `@generaltranslation/supported-locales`.
 
@@ -137,3 +137,8 @@ repository: https://github.com/generaltranslation/gt
 - https://councils.forbes.com/profile/Archie-McKenzie-CEO-General-Translation-Inc/ (founder background, via search) — accessed 2026-07-06
 - https://spdx.org/licenses/FSL-1.1-ALv2.html and https://fsl.software/ (license terms, via search) — accessed 2026-07-06
 - General web searches for independent commentary/criticism ("General Translation" / gt-next reviews, Reddit, Hacker News) — no substantive independent commentary found as of 2026-07-06
+- https://generaltranslation.com/en-US/docs/react/api/components/plural — accessed 2026-07-06 (ICU/components verification)
+- https://generaltranslation.com/en-US/docs/react/guides/variables — accessed 2026-07-06 (ICU/components verification)
+- https://generaltranslation.com/en-US/docs/react/api/components/t — accessed 2026-07-06 (id/hash props verification)
+- https://generaltranslation.com/en-US/docs/core/functions/formatting/format-message — accessed 2026-07-06 (ICU in formatMessage)
+- https://github.com/generaltranslation/gt/blob/main/packages/core/src/id/hashSource.ts — accessed 2026-07-06 (hashing verification)

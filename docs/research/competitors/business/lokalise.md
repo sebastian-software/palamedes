@@ -11,20 +11,20 @@ repository: n/a (proprietary; OSS tooling under github.com/lokalise)
 
 ## Fact sheet
 
-| Fact                | Value                                                                                                    |
-| ------------------- | -------------------------------------------------------------------------------------------------------- |
-| Company / ownership | Lokalise Inc. (Riga, 2017); ~$56M funding; now Adobe-owned via Semrush (2024/2026)                       |
-| License / model     | Proprietary SaaS; two product lines (Expert = software, Vantage = content)                               |
-| Pricing model       | Since 11/2025: processed words/year; $144 / $375–499 / $999 / custom per month; 2 of 4 tiers sales-gated |
-| Adoption            | Claims ~1M users / 3,000+ companies (unverified)                                                         |
-| TMS vs. AI-first    | TMS with two-tier AI (Standard vs. RAG-based Pro AI) + AI LQA (DQF-MQM scoring)                          |
-| Source of truth     | Hosted keys (server-side projects/branches)                                                              |
-| Delivery            | File sync + OTA (GB-metered) with mobile SDKs                                                            |
-| ICU MessageFormat   | Partial — ICU plural export option for .po recorded; full support not verified                           |
-| .po / gettext       | Yes — incl. msgctxt, fuzzy flags, plurals                                                                |
-| Dev tooling         | lokalise2 CLI (Go), API v2 (strict rate limits reported), Figma/XD/Sketch plugins                        |
-| Self-hosting        | No                                                                                                       |
-| Notable             | Design-tool workflow as differentiator; atypical 90-day cancellation notice period                       |
+| Fact                | Value                                                                                                                                                                             |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Company / ownership | Lokalise Inc. (Riga, 2017); ~$56M funding; now Adobe-owned via Semrush (2024/2026)                                                                                                |
+| License / model     | Proprietary SaaS; two product lines (Expert = software, Vantage = content)                                                                                                        |
+| Pricing model       | Since 11/2025: processed words/year; $144 / $375–499 / $999 / custom per month; 2 of 4 tiers sales-gated                                                                          |
+| Adoption            | Claims ~1M users / 3,000+ companies (unverified)                                                                                                                                  |
+| TMS vs. AI-first    | TMS with two-tier AI (Standard vs. RAG-based Pro AI) + AI LQA (DQF-MQM scoring)                                                                                                   |
+| Source of truth     | Hosted keys (server-side projects/branches)                                                                                                                                       |
+| Delivery            | File sync + OTA (GB-metered) with mobile SDKs                                                                                                                                     |
+| ICU MessageFormat   | Partial — ICU plurals detected on import ("Detect ICU plurals") and converted to Lokalise's own CLDR plural editor; export can re-emit ICU; documented gaps (verified 2026-07-06) |
+| .po / gettext       | Yes — incl. msgctxt, fuzzy flags, plurals                                                                                                                                         |
+| Dev tooling         | lokalise2 CLI (Go), API v2 (strict rate limits reported), Figma/XD/Sketch plugins                                                                                                 |
+| Self-hosting        | No                                                                                                                                                                                |
+| Notable             | Design-tool workflow as differentiator; atypical 90-day cancellation notice period                                                                                                |
 
 ## Snapshot
 
@@ -64,6 +64,7 @@ repository: n/a (proprietary; OSS tooling under github.com/lokalise)
 - Vendor claims 30–50+ file formats depending on source page (homepage says "30+", other pages/reviews say "50+" — inconsistent, treat exact count as unverified).
 - Confirmed formats include: Gettext (.po, .pot) — parses `msgid`/`msgid_plural`/`msgstr`/`msgctxt`/comments/fuzzy flags; plural forms supported on import; on export, ICU plural format can be selected to preserve original .po plural structure. Obsolete (`#~`) entries are not imported.
 - Structured/flat/nested JSON, Qt Linguist (.ts), XLIFF (.xlf/.xliff), Application Resource Bundle (.arb), Android XML strings, iOS .strings/.stringsdict.
+- ICU MessageFormat (verified 2026-07-06): supported via detection/conversion, not raw ICU editing — an explicit "Detect ICU plurals" upload option converts ICU plural expressions into Lokalise's native CLDR plural-category model (editing happens in Lokalise's per-form plural UI, not in ICU syntax); export can re-emit ICU (`--plural-format icu`, one of printf/ios/icu/net/symfony/i18n/raw). Documented gaps: detection "may not function as expected" for plurals embedded in larger strings (Lokalise's own blog), and named ICU placeholders do not map automatically to positional universal placeholders (numeric placeholders recommended).
 - Some formats are gated by product line: e.g. JSON upload documented as available only in "Expert" (software) projects, not in "Vantage" (document/marketing) projects — format availability is split across the two product experiences rather than uniformly available.
 
 ## AI features
@@ -134,3 +135,8 @@ repository: n/a (proprietary; OSS tooling under github.com/lokalise)
 - https://slator.com/lokalise-raises-usd-50m-in-series-b/ and https://en.wikipedia.org/wiki/Lokalise — accessed 2026-07-06 (via search snippet, funding/founding history)
 - Search results referencing Semrush's acquisition of Lokalise (2024) and Adobe's acquisition of Semrush (2026) — accessed 2026-07-06
 - https://docs.lokalise.com/en/articles/14078087-lokalise-vantage-frequently-asked-questions (Vantage vs Expert distinction) — accessed 2026-07-06 (via search snippet)
+- https://docs.lokalise.com/en/articles/1400492-uploading-translation-files — accessed 2026-07-06 (ICU verification)
+- https://docs.lokalise.com/en/articles/1400503-plurals — accessed 2026-07-06 (ICU verification)
+- https://docs.lokalise.com/en/articles/1400511-lokalise-universal-placeholders — accessed 2026-07-06 (ICU verification)
+- https://lokalise.com/blog/complete-guide-to-icu-message-format/ — accessed 2026-07-06 (ICU verification, incl. documented limitations)
+- https://developers.lokalise.com/reference/api-plurals-and-placeholders — accessed 2026-07-06 (ICU verification)

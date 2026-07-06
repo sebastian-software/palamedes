@@ -11,20 +11,20 @@ repository: n/a (proprietary)
 
 ## Fact sheet
 
-| Fact                | Value                                                                                                          |
-| ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Company / ownership | Phrase a.s. (PhraseApp + Memsource merger 2021); PE-owned (The Carlyle Group)                                  |
-| License / model     | Proprietary SaaS suite (Strings, TMS, Studio, Language AI, Orchestrator)                                       |
-| Pricing model       | Platform pricing: per-product seats + managed words + processed words/yr + MTUs/yr; $27–$1,245+/mo             |
-| Adoption            | 4,500+ customers (2023 claim); ~400 employees; Forrester Wave Leader Q3 2025                                   |
-| TMS vs. AI-first    | Enterprise TMS with heavy AI layer (Language AI: 30+ engines, QPS quality scoring)                             |
-| Source of truth     | Hosted key/segment DB; files are import/export targets                                                         |
-| Delivery            | File sync (CLI/git) + OTA                                                                                      |
-| ICU MessageFormat   | Not explicitly verified in this analysis                                                                       |
-| .po / gettext       | Yes — one among 50+ formats                                                                                    |
-| Dev tooling         | phrase-cli (OSS), 8 REST API surfaces, git-host integrations, webhooks                                         |
-| Self-hosting        | No                                                                                                             |
-| Notable             | QPS: distilled AI model approximating MQM-2.0 human quality scores, gating review routing and MT training data |
+| Fact                | Value                                                                                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Company / ownership | Phrase a.s. (PhraseApp + Memsource merger 2021); PE-owned (The Carlyle Group)                                                                                         |
+| License / model     | Proprietary SaaS suite (Strings, TMS, Studio, Language AI, Orchestrator)                                                                                              |
+| Pricing model       | Platform pricing: per-product seats + managed words + processed words/yr + MTUs/yr; $27–$1,245+/mo                                                                    |
+| Adoption            | 4,500+ customers (2023 claim); ~400 employees; Forrester Wave Leader Q3 2025                                                                                          |
+| TMS vs. AI-first    | Enterprise TMS with heavy AI layer (Language AI: 30+ engines, QPS quality scoring)                                                                                    |
+| Source of truth     | Hosted key/segment DB; files are import/export targets                                                                                                                |
+| Delivery            | File sync (CLI/git) + OTA                                                                                                                                             |
+| ICU MessageFormat   | Yes — native in Phrase Strings (opt-in per project): syntax highlighting, validation, plural/select preview; TMS parses ICU via per-file toggle (verified 2026-07-06) |
+| .po / gettext       | Yes — one among 50+ formats                                                                                                                                           |
+| Dev tooling         | phrase-cli (OSS), 8 REST API surfaces, git-host integrations, webhooks                                                                                                |
+| Self-hosting        | No                                                                                                                                                                    |
+| Notable             | QPS: distilled AI model approximating MQM-2.0 human quality scores, gating review routing and MT training data                                                        |
 
 ## Snapshot
 
@@ -65,6 +65,7 @@ repository: n/a (proprietary)
 
 - 50+ file formats claimed by Phrase marketing.
 - Confirmed formats: JSON (including i18next and i18n-node-2 JSON dialects), YAML, XML, Android XML strings, Apple .strings and .xcstrings, Flutter ARB, CSV, gettext .po/.pot, XLIFF (versions 1.2, 2.0, 2.1, 2.2).
+- ICU MessageFormat (verified 2026-07-06): natively supported. Phrase Strings: opt-in per project ("Enable ICU Message format" in Advanced project settings) with syntax highlighting of message parts, validation while translating, and a preview that renders plural/select variants with real-world attribute values. Phrase TMS: "Parse ICU messages" toggle per file/template for XLIFF 1.2/2.0, SDL XLIFF, JSON, XML, multilingual XML, PO, YAML, Android Strings, iOS Strings. Limitations: ICU parsing is all-or-nothing per file (not per-string); ICU messages cannot be split or joined.
 - .po/gettext is supported as one format among many, not treated as the canonical/only source-of-truth format — Phrase's own hosted key/segment database is the system of record, with file formats as import/export targets (same architecture pattern as other hosted TMS competitors, e.g. Crowdin).
 
 ## AI features
@@ -137,3 +138,5 @@ repository: n/a (proprietary)
 - https://support.phrase.com/hc/en-us/articles/5709672289180-Phrase-QPS-Overview — accessed 2026-07-06 (via search)
 - https://www.g2.com/products/phrase-localization-platform/reviews — attempted 2026-07-06, blocked (HTTP 403); themes sourced via search-result summaries of G2 content instead
 - General web search results on Phrase company history, employee count, customer base, and file-format support — accessed 2026-07-06
+- https://support.phrase.com/hc/en-us/articles/5822319545116-ICU-Message-Format-Strings — accessed 2026-07-06 (ICU verification)
+- https://support.phrase.com/hc/en-us/articles/7765077293852-ICU-Message-Format-TMS — accessed 2026-07-06 (ICU verification)

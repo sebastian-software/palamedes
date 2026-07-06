@@ -11,20 +11,20 @@ repository: https://github.com/WeblateOrg/weblate
 
 ## Fact sheet
 
-| Fact                | Value                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------ |
-| Company / ownership | Weblate s.r.o. (Czechia); Michal Čihař; self-funded, no VC                                       |
-| License / model     | GPLv3 open source; revenue from hosting + support contracts                                      |
-| Pricing model       | Self-host free; Hosted €47–€616/mo by string count; gratis for libre projects (160k-tier limits) |
-| Adoption            | 5,972 GitHub stars; claims 2,500+ projects (openSUSE, LibreOffice, Fedora)                       |
-| TMS vs. AI-first    | TMS; MT/LLM only as suggestion backends (DeepL, OpenAI, Claude, Mistral, Ollama, …)              |
-| Source of truth     | The git repo — translation files parsed in place, edits committed back                           |
-| Delivery            | Real commits/PRs to the repo ("lazy commits"); no OTA                                            |
-| ICU MessageFormat   | Format-dependent; not explicitly recorded (50+ formats incl. Fluent)                             |
-| .po / gettext       | Yes — foundational/flagship format, bilingual semantics preserved                                |
-| Dev tooling         | wlc CLI, REST API, add-ons, webhooks, PR-based push                                              |
-| Self-hosting        | Yes — the primary model                                                                          |
-| Notable             | Closest architectural relative to Palamedes' git-native .po workflow among TMS                   |
+| Fact                | Value                                                                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Company / ownership | Weblate s.r.o. (Czechia); Michal Čihař; self-funded, no VC                                                                                                       |
+| License / model     | GPLv3 open source; revenue from hosting + support contracts                                                                                                      |
+| Pricing model       | Self-host free; Hosted €47–€616/mo by string count; gratis for libre projects (160k-tier limits)                                                                 |
+| Adoption            | 5,972 GitHub stars; claims 2,500+ projects (openSUSE, LibreOffice, Fedora)                                                                                       |
+| TMS vs. AI-first    | TMS; MT/LLM only as suggestion backends (DeepL, OpenAI, Claude, Mistral, Ollama, …)                                                                              |
+| Source of truth     | The git repo — translation files parsed in place, edits committed back                                                                                           |
+| Delivery            | Real commits/PRs to the repo ("lazy commits"); no OTA                                                                                                            |
+| ICU MessageFormat   | Partial — no dedicated file format; `icu-message-format` check flag validates syntax/placeholders, auto-enabled for ARB and Format.JS JSON (verified 2026-07-06) |
+| .po / gettext       | Yes — foundational/flagship format, bilingual semantics preserved                                                                                                |
+| Dev tooling         | wlc CLI, REST API, add-ons, webhooks, PR-based push                                                                                                              |
+| Self-hosting        | Yes — the primary model                                                                                                                                          |
+| Notable             | Closest architectural relative to Palamedes' git-native .po workflow among TMS                                                                                   |
 
 ## Snapshot
 
@@ -65,6 +65,7 @@ repository: https://github.com/WeblateOrg/weblate
 - 50+ formats total (widest format coverage among open-source TMS per independent comparison, vs. 8-15 for competitors like Tolgee/Pontoon).
 - gettext PO/POT is a foundational/flagship bilingual format (Weblate's origins are gettext-centric), alongside XLIFF (1.1, 1.2, 2.0).
 - Also: JSON variants (incl. WebExtension JSON), YAML, CSV, Android XML resources, Apple iOS/macOS strings, Qt Linguist .ts, .NET RESX/RESW, Fluent, ARB, Markdown, AsciiDoc, HTML, subtitle formats, and more (MDX support added in the 2026.7 release).
+- ICU MessageFormat (verified 2026-07-06): no dedicated ICU file format — ICU is handled as a quality-check layer: the `icu-message-format` flag enables the checks `icu_message_format` (syntax/placeholder mismatches) and `icu_message_format_syntax` (source-string syntax), auto-enabled for ARB and Format.JS JSON files, manually addable for other formats; tunable via `icu-flags:*`, handles "pure ICU" and ICU with simple XML tags. Present since at least Weblate 4.11 (2022).
 - Distinguishes bilingual formats (source+translation in one file, e.g. PO, XLIFF) from monolingual formats (string IDs + separate per-language files); feature support (pluralization, context, flags) varies by format.
 - Official guidance: choose the established format native to your tech stack rather than switching for Weblate's sake — favors interoperability over a proprietary format.
 
@@ -135,3 +136,4 @@ repository: https://github.com/WeblateOrg/weblate
 - https://river.me/how-to-use-weblate/ (accessed 2026-07-06)
 - https://intlpull.com/blog/open-source-tms-comparison-2026 (accessed 2026-07-06)
 - https://hosted.weblate.org/projects/weblate/ (accessed 2026-07-06)
+- https://docs.weblate.org/en/latest/user/checks.html — accessed 2026-07-06 (ICU checks verification)
