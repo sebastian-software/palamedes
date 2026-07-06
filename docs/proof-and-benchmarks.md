@@ -242,11 +242,17 @@ Environment:
 
 Median results from that run:
 
-| Profile   |  Palamedes |       Lingui | i18next-parser |
-| --------- | ---------: | -----------: | -------------: |
-| Small     | `33.41 ms` |  `738.18 ms` |    `531.39 ms` |
-| Medium    | `46.27 ms` |  `800.75 ms` |    `583.00 ms` |
-| Realistic | `83.75 ms` | `1060.24 ms` |    `787.15 ms` |
+| Profile   |   Palamedes |       Lingui | i18next-parser |
+| --------- | ----------: | -----------: | -------------: |
+| Small     |  `31.64 ms` |  `674.05 ms` |    `499.18 ms` |
+| Medium    |  `43.37 ms` |  `745.33 ms` |    `546.32 ms` |
+| Realistic | `173.50 ms` | `2254.38 ms` |   `1561.82 ms` |
+
+The `realistic` profile is modeled on a production web app's Lingui include
+roots: `~1,500` files across `~400,000` lines, only about half of which carry
+any i18n marker. Most of the source is ordinary, non-i18n code — the extractor
+still has to scan every line, which is the extract-time cost a real project
+pays. (Figures are rounded so they read as a shape, not false precision.)
 
 The harness validates that all three tools write the same active source-message
 set before publishing timings. It renders the same logical message inventory

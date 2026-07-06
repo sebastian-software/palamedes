@@ -1,6 +1,6 @@
 # End-to-End Extract and Catalog Update Benchmark
 
-Generated: 2026-07-06T18:05:29.525Z
+Generated: 2026-07-06T21:31:33.279Z
 Node: v24.18.0
 Platform: darwin/arm64
 Seed: 20260703
@@ -29,14 +29,14 @@ Machine-local: yes
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 33.41 ms | 32.61 ms, 32.99 ms, 33.39 ms, 33.41 ms, 34.69 ms, 34.81 ms, 39.01 ms |
-| Lingui | 738.18 ms | 725.37 ms, 727.51 ms, 734.01 ms, 738.18 ms, 743.53 ms, 748.11 ms, 774.96 ms |
-| i18next-parser | 531.39 ms | 509.65 ms, 512.65 ms, 524.16 ms, 531.39 ms, 533.00 ms, 533.17 ms, 534.88 ms |
+| Palamedes | 31.64 ms | 30.96 ms, 31.26 ms, 31.58 ms, 31.64 ms, 32.43 ms, 32.54 ms, 32.64 ms |
+| Lingui | 674.05 ms | 669.80 ms, 670.57 ms, 670.89 ms, 674.05 ms, 677.15 ms, 687.44 ms, 696.00 ms |
+| i18next-parser | 499.18 ms | 483.35 ms, 486.62 ms, 491.23 ms, 499.18 ms, 501.80 ms, 504.69 ms, 511.24 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 22.10x |
-| Palamedes vs i18next-parser | Palamedes | 15.91x |
+| Palamedes vs Lingui | Palamedes | 21.31x |
+| Palamedes vs i18next-parser | Palamedes | 15.78x |
 
 ## Medium
 
@@ -46,31 +46,31 @@ Machine-local: yes
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 46.27 ms | 42.96 ms, 45.01 ms, 45.77 ms, 46.27 ms, 46.46 ms, 46.75 ms, 48.28 ms |
-| Lingui | 800.75 ms | 786.81 ms, 791.56 ms, 793.40 ms, 800.75 ms, 804.89 ms, 814.36 ms, 847.85 ms |
-| i18next-parser | 583.00 ms | 567.70 ms, 568.53 ms, 576.00 ms, 583.00 ms, 583.25 ms, 585.27 ms, 617.98 ms |
+| Palamedes | 43.37 ms | 41.62 ms, 42.89 ms, 43.16 ms, 43.37 ms, 43.82 ms, 43.86 ms, 45.83 ms |
+| Lingui | 745.33 ms | 737.34 ms, 739.18 ms, 743.75 ms, 745.33 ms, 749.24 ms, 758.24 ms, 761.59 ms |
+| i18next-parser | 546.32 ms | 542.48 ms, 545.49 ms, 545.76 ms, 546.32 ms, 547.37 ms, 549.62 ms, 557.00 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 17.31x |
+| Palamedes vs Lingui | Palamedes | 17.19x |
 | Palamedes vs i18next-parser | Palamedes | 12.60x |
 
 ## Realistic
 
-- Corpus: 400 files, 10000 current messages, 9750 baseline messages
-- Inventory mix: 750 changed, 1000 new, 750 removed
-- Semantic validation: 10000 active messages per locale and tool
+- Corpus: 1500 files, 6000 current messages, 5850 baseline messages
+- Inventory mix: 450 changed, 600 new, 450 removed
+- Semantic validation: 6000 active messages per locale and tool
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 83.75 ms | 80.42 ms, 82.79 ms, 83.69 ms, 83.75 ms, 84.20 ms, 84.99 ms, 90.31 ms |
-| Lingui | 1060.24 ms | 1040.99 ms, 1051.32 ms, 1058.28 ms, 1060.24 ms, 1071.15 ms, 1096.20 ms, 1109.83 ms |
-| i18next-parser | 787.15 ms | 779.01 ms, 783.77 ms, 786.50 ms, 787.15 ms, 792.85 ms, 801.31 ms, 812.54 ms |
+| Palamedes | 173.50 ms | 171.48 ms, 173.37 ms, 173.40 ms, 173.50 ms, 174.38 ms, 175.14 ms, 175.79 ms |
+| Lingui | 2254.38 ms | 2151.10 ms, 2189.77 ms, 2212.12 ms, 2254.38 ms, 2293.86 ms, 2317.98 ms, 2364.67 ms |
+| i18next-parser | 1561.82 ms | 1504.38 ms, 1508.71 ms, 1551.71 ms, 1561.82 ms, 1565.77 ms, 1589.36 ms, 1591.71 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 12.66x |
-| Palamedes vs i18next-parser | Palamedes | 9.40x |
+| Palamedes vs Lingui | Palamedes | 12.99x |
+| Palamedes vs i18next-parser | Palamedes | 9.00x |
 
 ## Notes
 

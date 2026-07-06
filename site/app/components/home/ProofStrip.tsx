@@ -15,8 +15,8 @@ const STATS: Stat[] = [
   { value: "20", label: "browser-verified example apps", href: "/frameworks" },
   { value: "5 × 4", label: "frameworks × locale strategies", href: "/frameworks" },
   {
-    value: "12.66×",
-    label: "faster than Lingui — 10k-message extract/update benchmark, machine-local run",
+    value: "12.99×",
+    label: "faster than Lingui — realistic 1,500-file extract/update benchmark, machine-local run",
     href: "/proof",
   },
   { value: "16", label: "ADRs documenting every tradeoff", href: decisionHref() },
