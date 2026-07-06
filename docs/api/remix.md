@@ -32,7 +32,7 @@ interface PalamedesRemixRegisterOptions {
 Defaults:
 
 - `include`: `/\.(tsx?|jsx?|mjs|cjs)$/`
-- `exclude`: `/node_modules/`
+- `exclude`: `/[/\\]node_modules[/\\]/`
 - `runtimeModule`: `"@palamedes/runtime"`
 
 ## Server Request Scope
@@ -86,6 +86,16 @@ The first Remix v3 support path covers:
 The register hook covers server-executed modules only. Browser-delivered Remix
 v3 modules are compiled through Remix's asset pipeline, which does not expose a
 Palamedes macro transform hook yet.
+
+## Runtime Cost
+
+Remix v3 runs its loader hooks in development and production alike; there is no
+build step. The Palamedes hook joins that pipeline: modules without macro
+imports are skipped after a substring scan, macro-containing modules are patched
+once at module load time by the native OXC-based transform, and requests execute
+plain runtime calls with no per-request transform work. The cost moves from
+build time to process start and recurs per cold start — the same tradeoff Remix
+makes for its own TypeScript and JSX lowering via `oxc-transform`.
 
 Rich JSX message macros remain experimental for Remix v3 because Remix's
 default loader lowers JSX before the Palamedes register hook sees the module.
