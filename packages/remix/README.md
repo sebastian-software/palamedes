@@ -29,6 +29,29 @@ transform hook for Palamedes macros.
 Rich JSX message macros are still experimental for Remix v3 because Remix's
 loader lowers JSX to `remix/ui/jsx-runtime` calls before this hook runs.
 
+## Runtime Cost
+
+Remix v3 intentionally has no build step: `remix/node-tsx` reads and lowers
+every `.ts`, `.tsx`, and `.jsx` module through `oxc-transform` when the process
+starts, in development and production alike. The Palamedes hook joins that
+existing pipeline instead of adding a new one, and Palamedes' native macro
+transform is built on the same OXC infrastructure Remix itself uses.
+
+In practice:
+
+- Modules without Palamedes macro imports are skipped after a fast substring
+  scan of source that is already in memory.
+- Modules with macros run through the native transform once, at module load
+  time. Macro call sites are patched in place; files are not re-printed.
+- After startup there is no per-request transform work. Requests execute plain
+  runtime calls against compiled catalogs — the same code shape the build-time
+  integrations (`@palamedes/vite-plugin`, `@palamedes/next-plugin`) produce.
+
+The transform cost moves from build time to process start, stays proportional
+to the number of macro-containing modules, and recurs per cold start. That is
+the same tradeoff Remix makes for its own TypeScript and JSX lowering, so
+steady-state request performance matches the build-time integrations.
+
 ## Server Runtime Scope
 
 Use `@palamedes/remix/server` to bind translated server code to the active
