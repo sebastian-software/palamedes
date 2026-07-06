@@ -16,7 +16,7 @@ export function HomePage() {
           .po catalogs your translators can actually read. Ship the same
           runtime model across Next.js, TanStack Start, SolidStart, Waku, and
           React Router — with a Rust core that ran the checked small-corpus
-          extract/update benchmark 19.6× faster than Lingui on the recorded
+          extract/update benchmark 21.0× faster than Lingui on the recorded
           machine-local run."
         primary={{ label: "Get started in 5 minutes", href: "/get-started" }}
         secondary={{
@@ -43,7 +43,7 @@ export function HomePage() {
             href: "/frameworks",
           },
           {
-            value: "19.6×",
+            value: "21.0×",
             label: "faster than Lingui — checked extract/update benchmark, machine-local run",
             href: "/proof",
           },
@@ -173,9 +173,9 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
         <BenchmarkChart
           title="End-to-end extract + catalog update (small corpus, median)"
           rows={[
-            { tool: "Palamedes", median: "33.53 ms" },
-            { tool: "i18next-parser", median: "477.58 ms" },
-            { tool: "Lingui", median: "657.00 ms" },
+            { tool: "Palamedes", median: "33.58 ms" },
+            { tool: "i18next-parser", median: "526.45 ms" },
+            { tool: "Lingui", median: "705.12 ms" },
           ]}
           methodologyHref={repoHref("docs/benchmark-e2e-workflow.md")}
         />

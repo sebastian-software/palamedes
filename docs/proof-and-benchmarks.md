@@ -226,7 +226,7 @@ portable performance claim.
 
 ## End-To-End Workflow Baseline
 
-Checked local sample, captured on July 3, 2026 with:
+Checked local sample, captured on July 6, 2026 with:
 
 ```bash
 pnpm benchmark:e2e-workflow
@@ -236,7 +236,7 @@ Environment:
 
 - Node `v24.18.0`
 - macOS `darwin/arm64`
-- Palamedes CLI `0.11.4`
+- Palamedes CLI `1.2.0`
 - Lingui CLI `6.4.0`
 - i18next-parser CLI `9.4.0`
 
@@ -244,8 +244,8 @@ Median results from that run:
 
 | Profile |  Palamedes |      Lingui | i18next-parser |
 | ------- | ---------: | ----------: | -------------: |
-| Small   | `33.53 ms` | `657.00 ms` |    `477.58 ms` |
-| Medium  | `42.92 ms` | `728.56 ms` |    `534.15 ms` |
+| Small   | `33.58 ms` | `705.12 ms` |    `526.45 ms` |
+| Medium  | `47.77 ms` | `812.83 ms` |    `587.52 ms` |
 
 The harness validates that all three tools write the same active source-message
 set before publishing timings. It renders the same logical message inventory

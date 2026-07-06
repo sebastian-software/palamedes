@@ -42,7 +42,7 @@ export default function Home() {
             Write messages where your UI happens. Keep source-string-first <code>.po</code> catalogs
             your translators can actually read. Ship the same runtime model across Next.js, TanStack
             Start, SolidStart, Waku, and React Router — with a Rust core that ran the checked
-            small-corpus extract/update benchmark 19.6× faster than Lingui on the recorded
+            small-corpus extract/update benchmark 21.0× faster than Lingui on the recorded
             machine-local run.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">

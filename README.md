@@ -31,8 +31,8 @@ The current proof:
   adapter architecture, and the work deliberately kept out of scope.
 - Benchmark commands, fixtures, and machine-readable reports are checked in so
   the numbers can be rerun locally. The checked end-to-end extract/update
-  workflow report measures Palamedes at `33.53 ms` on the small profile and
-  `42.92 ms` on the medium profile; the Lingui and i18next-parser comparison
+  workflow report measures Palamedes at `33.58 ms` on the small profile and
+  `47.77 ms` on the medium profile; the Lingui and i18next-parser comparison
   numbers and recorded tool versions are documented in
   [End-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md).
 
