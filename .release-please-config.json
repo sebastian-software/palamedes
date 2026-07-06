@@ -192,6 +192,11 @@
         },
         {
           "type": "json",
+          "path": "packages/remix/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "packages/runtime/package.json",
           "jsonpath": "$.version"
         },

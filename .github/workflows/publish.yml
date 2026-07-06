@@ -281,6 +281,7 @@ jobs:
           --filter @palamedes/transform
           --filter @palamedes/extractor
           --filter @palamedes/react
+          --filter @palamedes/remix
           --filter @palamedes/solid
           --filter @palamedes/cli
           --filter @palamedes/vite-plugin
@@ -298,6 +299,7 @@ jobs:
           node ./scripts/publish-package-if-needed.mjs @palamedes/transform
           node ./scripts/publish-package-if-needed.mjs @palamedes/extractor
           node ./scripts/publish-package-if-needed.mjs @palamedes/react
+          node ./scripts/publish-package-if-needed.mjs @palamedes/remix
           node ./scripts/publish-package-if-needed.mjs @palamedes/solid
           node ./scripts/publish-package-if-needed.mjs @palamedes/cli
           node ./scripts/publish-package-if-needed.mjs @palamedes/vite-plugin
