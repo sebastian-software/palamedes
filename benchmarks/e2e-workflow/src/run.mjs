@@ -119,7 +119,7 @@ function parseArgs(argv) {
 function readProfiles(argv) {
   const index = argv.indexOf("--profile")
   if (index === -1) {
-    return ["small", "medium"]
+    return ["small", "medium", "realistic"]
   }
 
   const value = argv[index + 1]

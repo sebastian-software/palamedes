@@ -207,7 +207,7 @@ header a[href="/"] span {
  * appended by the component).
  */
 .pmds-nav-link {
-  padding: 0.5rem 0.15rem;
+  padding: 0.5rem 0.7rem;
   border-bottom: 2px solid transparent;
   font-family: var(--font-mono);
   font-size: 11px;

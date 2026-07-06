@@ -15,7 +15,7 @@ export interface BenchRow {
 }
 
 export interface BenchCorpus {
-  id: "small" | "medium"
+  id: "small" | "medium" | "realistic"
   title: string
   corpus: string
   rows: BenchRow[]
@@ -35,11 +35,11 @@ export const BENCH_SMALL: BenchCorpus = {
   title: "Small corpus — 80 files, 640 messages (median of 7 runs)",
   corpus: "80 files, 640 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 33.58, accent: true },
-    { tool: "i18next-parser", medianMs: 526.45 },
-    { tool: "Lingui", medianMs: 705.12 },
+    { tool: "Palamedes", medianMs: 33.41, accent: true },
+    { tool: "i18next-parser", medianMs: 531.39 },
+    { tool: "Lingui", medianMs: 738.18 },
   ],
-  ratios: { lingui: "21.00×", i18next: "15.68×" },
+  ratios: { lingui: "22.10×", i18next: "15.91×" },
 }
 
 export const BENCH_MEDIUM: BenchCorpus = {
@@ -47,9 +47,21 @@ export const BENCH_MEDIUM: BenchCorpus = {
   title: "Medium corpus — 240 files, 1920 messages (median of 7 runs)",
   corpus: "240 files, 1920 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 47.77, accent: true },
-    { tool: "i18next-parser", medianMs: 587.52 },
-    { tool: "Lingui", medianMs: 812.83 },
+    { tool: "Palamedes", medianMs: 46.27, accent: true },
+    { tool: "i18next-parser", medianMs: 583 },
+    { tool: "Lingui", medianMs: 800.75 },
   ],
-  ratios: { lingui: "17.02×", i18next: "12.30×" },
+  ratios: { lingui: "17.31×", i18next: "12.60×" },
+}
+
+export const BENCH_REALISTIC: BenchCorpus = {
+  id: "realistic",
+  title: "Realistic corpus — 400 files, 10,000 messages (median of 7 runs)",
+  corpus: "400 files, 10,000 messages",
+  rows: [
+    { tool: "Palamedes", medianMs: 83.75, accent: true },
+    { tool: "i18next-parser", medianMs: 787.15 },
+    { tool: "Lingui", medianMs: 1060.24 },
+  ],
+  ratios: { lingui: "12.66×", i18next: "9.40×" },
 }

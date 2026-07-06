@@ -82,12 +82,12 @@ export function CodeShowcase() {
   return (
     <div className="border border-hair">
       <Tabs.Root defaultValue="write">
-        <Tabs.List className="flex border-b border-hair">
+        <Tabs.List className="flex border-b border-hair bg-track">
           {TABS.map((tab) => (
             <Tabs.Tab
               key={tab.id}
               value={tab.id}
-              className="micro border-r border-hair px-5 py-3 text-[11px] tracking-label text-gray-spec transition-colors hover:text-accent data-[selected]:bg-ink data-[selected]:text-paper"
+              className="micro relative border-t-2 border-t-transparent border-r border-hair px-5 py-3 text-[11px] tracking-label text-gray-spec transition-colors hover:text-accent aria-selected:border-t-accent aria-selected:bg-ink aria-selected:text-paper"
             >
               {tab.label}
             </Tabs.Tab>
@@ -113,9 +113,7 @@ export function CodeShowcase() {
         <p className="mt-1 mb-4 text-[13.5px]">
           The same component, in every locale, in every framework.
         </p>
-        <div className="max-w-[26em]">
-          <LocaleBookingCards />
-        </div>
+        <LocaleBookingCards />
       </div>
     </div>
   )

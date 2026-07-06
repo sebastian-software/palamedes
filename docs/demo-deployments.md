@@ -110,9 +110,10 @@ must send `Vary: Host`); otherwise a response rendered for one locale host could
 served for another. This is the same constraint the per-host routing already
 implies, but it must hold for caching layers too.
 
-Until these records and proxy routes exist, the five subdomain rows above are not
-yet reachable; the canonical verification path remains `pnpm verify:examples`,
-which exercises the subdomain strategy locally via `*.lvh.me` hosts.
+These records and proxy routes are now in place, so the five subdomain rows above
+are publicly reachable (each locale host returns 200 and renders its locale). The
+canonical verification path remains `pnpm verify:examples`, which exercises the
+subdomain strategy locally via `*.lvh.me` hosts.
 
 ## TLD Locale Hosting (DNS And Reverse Proxy)
 

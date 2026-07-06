@@ -236,16 +236,17 @@ Environment:
 
 - Node `v24.18.0`
 - macOS `darwin/arm64`
-- Palamedes CLI `1.2.0`
+- Palamedes CLI `1.3.0`
 - Lingui CLI `6.4.0`
 - i18next-parser CLI `9.4.0`
 
 Median results from that run:
 
-| Profile |  Palamedes |      Lingui | i18next-parser |
-| ------- | ---------: | ----------: | -------------: |
-| Small   | `33.58 ms` | `705.12 ms` |    `526.45 ms` |
-| Medium  | `47.77 ms` | `812.83 ms` |    `587.52 ms` |
+| Profile   |  Palamedes |       Lingui | i18next-parser |
+| --------- | ---------: | -----------: | -------------: |
+| Small     | `33.41 ms` |  `738.18 ms` |    `531.39 ms` |
+| Medium    | `46.27 ms` |  `800.75 ms` |    `583.00 ms` |
+| Realistic | `83.75 ms` | `1060.24 ms` |    `787.15 ms` |
 
 The harness validates that all three tools write the same active source-message
 set before publishing timings. It renders the same logical message inventory
