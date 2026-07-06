@@ -18,12 +18,23 @@ export const PROFILE_DEFINITIONS = {
     newCount: 192,
     removedCount: 144,
   },
+  /*
+   * Models a real web app's extract-time parse volume (measured from the Lingui
+   * include roots of a production app): most source is NOT i18n. Only ~46% of
+   * files carry any i18n marker, and only ~3% of lines are i18n — the extractor
+   * still has to scan every line of the rest. Message shape is plain + ~15%
+   * {name} variables (no plurals yet — see issue #355 / PR #358).
+   */
   realistic: {
-    fileCount: 400,
-    messagesPerFile: 25,
-    changedCount: 750,
-    newCount: 1000,
-    removedCount: 750,
+    layout: "realistic",
+    messages: 6000,
+    markedFiles: 750,
+    unmarkedFiles: 750,
+    markedFileLines: 374,
+    unmarkedFileLines: 160,
+    changedCount: 450,
+    newCount: 600,
+    removedCount: 450,
   },
   large: {
     fileCount: 720,
@@ -46,7 +57,7 @@ export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAUL
     throw new Error(`Unknown workflow benchmark profile: ${profileName}`)
   }
 
-  const messageCount = profile.fileCount * profile.messagesPerFile
+  const messageCount = profile.messages ?? profile.fileCount * profile.messagesPerFile
   const generated = createMessageInventory({ messageCount, profile, seed })
   const profileRoot = path.join(rootDir, profileName)
   const toolRoots = {
@@ -67,12 +78,15 @@ export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAUL
     writeI18nextWorkspace(toolRoots.i18next, generated, profile),
   ])
 
+  const fileCount =
+    profile.layout === "realistic" ? profile.markedFiles + profile.unmarkedFiles : profile.fileCount
+
   return {
     profileName,
     seed,
     roots: toolRoots,
-    fileCount: profile.fileCount,
-    messagesPerFile: profile.messagesPerFile,
+    fileCount,
+    messagesPerFile: profile.messagesPerFile ?? Math.round(messageCount / fileCount),
     sourceMessageCount: generated.sourceMessages.length,
     baselineMessageCount: generated.baselineMessages.length,
     currentMessages: generated.sourceMessages.map((message) => message.current),
@@ -187,6 +201,11 @@ async function writeI18nextWorkspace(rootDir, inventory, profile) {
 }
 
 async function writeToolSourceFiles(rootDir, sourceMessages, profile, renderer) {
+  if (profile.layout === "realistic") {
+    await writeRealisticSourceFiles(rootDir, sourceMessages, profile, renderer)
+    return
+  }
+
   const files = Array.from({ length: profile.fileCount }, (_, fileIndex) => [])
 
   for (let index = 0; index < sourceMessages.length; index += 1) {
@@ -205,7 +224,87 @@ async function writeToolSourceFiles(rootDir, sourceMessages, profile, renderer) 
   }
 }
 
-function renderPalamedesSource(fileIndex, messages, extension) {
+/*
+ * Realistic web layout: messages are spread thinly across `markedFiles`, and
+ * `unmarkedFiles` carry no i18n at all — but the extractor still has to scan
+ * every line. Both kinds are padded with non-i18n filler to the measured line
+ * budgets so the timed workload reflects real parse volume, not a dense
+ * all-messages fixture.
+ */
+async function writeRealisticSourceFiles(rootDir, sourceMessages, profile, renderer) {
+  const marked = Array.from({ length: profile.markedFiles }, () => [])
+  for (let index = 0; index < sourceMessages.length; index += 1) {
+    marked[index % profile.markedFiles].push(sourceMessages[index])
+  }
+
+  const generatedDir = path.join(rootDir, "src", "generated")
+  const writes = []
+  let fileIndex = 0
+
+  /* Marked files stay .ts: message calls extract reliably next to filler,
+   * whereas .tsx + filler + <Trans> hits a JSX parse edge in the extractor. */
+  for (let i = 0; i < profile.markedFiles; i += 1) {
+    const filename = path.join(generatedDir, `fixture-${String(fileIndex).padStart(4, "0")}.ts`)
+    writes.push(
+      writeFile(filename, renderer(fileIndex, marked[i], "ts", profile.markedFileLines), "utf8")
+    )
+    fileIndex += 1
+  }
+
+  for (let j = 0; j < profile.unmarkedFiles; j += 1) {
+    const extension = fileIndex % 3 === 0 ? "tsx" : "ts"
+    const filename = path.join(
+      generatedDir,
+      `fixture-${String(fileIndex).padStart(4, "0")}.${extension}`
+    )
+    writes.push(
+      writeFile(filename, renderFillerModule(fileIndex, profile.unmarkedFileLines), "utf8")
+    )
+    fileIndex += 1
+  }
+
+  await Promise.all(writes)
+}
+
+const FILLER_UNIT_LINES = 13
+
+/* Deterministic non-i18n source: imports, interfaces and helpers with no
+ * translation markers. Emits whole units only (never cuts a declaration in
+ * half — that would be a syntax error the extractor bails on), then pads with
+ * comment lines to hit `lineCount` exactly so file size stays realistic. */
+function fillerLines(fileIndex, lineCount) {
+  const lines = ['import { useMemo } from "react"', ""]
+  let unit = 0
+  while (lines.length + FILLER_UNIT_LINES <= lineCount) {
+    const n = unit + 1
+    lines.push(
+      `interface Record${fileIndex}_${unit} {`,
+      "  id: number",
+      "  slug: string",
+      "  weight: number",
+      "}",
+      "",
+      `export function compute${fileIndex}_${unit}(input: number): Record${fileIndex}_${unit} {`,
+      `  const id = (input * ${n} + ${fileIndex}) % 9973`,
+      `  const slug = "node-" + id.toString(36) + "-${unit}"`,
+      `  const weight = Math.round((id / ${n}) * 100) / 100`,
+      "  return { id, slug, weight }",
+      "}",
+      ""
+    )
+    unit += 1
+  }
+  while (lines.length < lineCount) {
+    lines.push(`// filler line ${lines.length}`)
+  }
+  return lines
+}
+
+function renderFillerModule(fileIndex, lineCount) {
+  return `${fillerLines(fileIndex, lineCount).join("\n")}\n`
+}
+
+function renderPalamedesSource(fileIndex, messages, extension, targetLines) {
   const imports = ['import { defineMessage, t } from "@palamedes/core/macro"']
   if (extension === "tsx") {
     imports.push('import { Trans } from "@palamedes/react/macro"')
@@ -216,10 +315,12 @@ function renderPalamedesSource(fileIndex, messages, extension) {
     imports,
     messages,
     extension,
+    fileIndex,
+    targetLines,
   })
 }
 
-function renderLinguiSource(fileIndex, messages, extension) {
+function renderLinguiSource(fileIndex, messages, extension, targetLines) {
   const imports = ['import { defineMessage, t } from "@lingui/core/macro"']
   if (extension === "tsx") {
     imports.push('import { Trans } from "@lingui/react/macro"')
@@ -230,62 +331,81 @@ function renderLinguiSource(fileIndex, messages, extension) {
     imports,
     messages,
     extension,
+    fileIndex,
+    targetLines,
   })
 }
 
-function renderMacroSource({ functionName, imports, messages, extension }) {
-  const lines = [...imports, "", `export function ${functionName}() {`, "  const values = ["]
+/* Variable messages ({name}) are authored with defineMessage — t({ message })
+ * would drop the interpolation. Plain messages keep the t/defineMessage mix. */
+function authorMacroMessage(message, index) {
+  if (message.includes("{name}") || index % 3 !== 0) {
+    return `    defineMessage({ message: ${JSON.stringify(message)} }).message,`
+  }
+  return `    t({ message: ${JSON.stringify(message)} }),`
+}
+
+function renderMacroSource({ functionName, imports, messages, extension, fileIndex, targetLines }) {
+  const body = [`export function ${functionName}() {`, "  const values = ["]
 
   for (let index = 0; index < messages.length; index += 1) {
-    const message = messages[index].current
-    if (index % 3 === 0) {
-      lines.push(`    t({ message: ${JSON.stringify(message)} }),`)
-    } else {
-      lines.push(`    defineMessage({ message: ${JSON.stringify(message)} }).message,`)
-    }
+    body.push(authorMacroMessage(messages[index].current, index))
   }
 
-  lines.push("  ]")
+  body.push("  ]")
 
   if (extension === "tsx") {
-    lines.push(
+    /* Trans wraps a plain message — {name} in JSX text would be read as an
+     * expression, not message content. */
+    const trans = messages.find((entry) => !entry.current.includes("{name}")) ?? messages[0]
+    body.push(
       "  return (",
       "    <section>",
-      `      <Trans>${escapeJsxText(messages[0].current)}</Trans>`,
+      `      <Trans>${escapeJsxText(trans.current)}</Trans>`,
       "      <span>{values.length}</span>",
       "    </section>",
       "  )"
     )
   } else {
-    lines.push('  return values.join("\\n")')
+    body.push('  return values.join("\\n")')
   }
 
-  lines.push("}", "")
-  return lines.join("\n")
+  body.push("}", "")
+  return withFiller(imports, body, fileIndex, targetLines)
 }
 
-function renderI18nextSource(fileIndex, messages, extension) {
-  const lines = [
-    'import i18next from "i18next"',
-    "",
+function renderI18nextSource(fileIndex, messages, extension, targetLines) {
+  const imports = ['import i18next from "i18next"']
+  const body = [
     `export function i18nextFixture${String(fileIndex).padStart(4, "0")}() {`,
     "  const values = [",
   ]
 
   for (const entry of messages) {
-    lines.push(`    i18next.t(${JSON.stringify(entry.current)}),`)
+    body.push(`    i18next.t(${JSON.stringify(entry.current)}),`)
   }
 
-  lines.push("  ]")
+  body.push("  ]")
 
   if (extension === "tsx") {
-    lines.push('  return <section>{values.join("\\\\n")}</section>')
+    body.push('  return <section>{values.join("\\\\n")}</section>')
   } else {
-    lines.push('  return values.join("\\n")')
+    body.push('  return values.join("\\n")')
   }
 
-  lines.push("}", "")
-  return lines.join("\n")
+  body.push("}", "")
+  return withFiller(imports, body, fileIndex, targetLines)
+}
+
+/* Assemble a source file. In the realistic layout (targetLines set) the message
+ * function is padded with non-i18n filler so the file reaches the line budget;
+ * otherwise the dense small/medium fixture shape is kept. */
+function withFiller(imports, body, fileIndex, targetLines) {
+  if (!targetLines) {
+    return [...imports, "", ...body].join("\n")
+  }
+  const fillerCount = Math.max(0, targetLines - imports.length - 1 - body.length)
+  return [...imports, "", ...fillerLines(fileIndex, fillerCount), ...body].join("\n")
 }
 
 async function writePoCatalogs(rootDir, messages, generator) {
@@ -346,11 +466,21 @@ function translate(locale, message) {
   return locale === "en" ? message : `[de] ${message}`
 }
 
+/* ~15% of messages carry a simple {name} variable, the rest are plain (plurals
+ * are deferred — see issue #355 / PR #358). Keyed off index % 100 so the split
+ * is exact and stable across the current/previous variants of a message. */
+function isVariableMessage(index) {
+  return index % 100 < 15
+}
+
 function makeMessage(seed, index, variant) {
   const area = pick(AREAS, seed, index, 1)
   const action = pick(ACTIONS, seed, index, 2)
   const surface = pick(SURFACES, seed, index, 3)
   const token = `${String(index).padStart(5, "0")}-${variant === "previous" ? "old" : "now"}`
+  if (isVariableMessage(index)) {
+    return `${capitalize(action)} ${area} ${surface} for {name} ${token}`
+  }
   return `${capitalize(action)} ${area} ${surface} item ${token}`
 }
 

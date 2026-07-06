@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "benchmark": "palamedes-e2e-extract-update-workflow",
-  "generatedAt": "2026-07-06T18:05:29.525Z",
+  "generatedAt": "2026-07-06T21:31:33.279Z",
   "machineLocal": true,
   "seed": 20260703,
   "warmup": 3,
@@ -11,7 +11,7 @@
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
     "arch": "arm64",
-    "generatedAt": "2026-07-06T18:05:29.525Z"
+    "generatedAt": "2026-07-06T21:31:33.279Z"
   },
   "versions": {
     "benchmarkPackage": "@palamedes/benchmark-e2e-workflow",
@@ -42,7 +42,7 @@
         "changedCount": 48,
         "newCount": 64,
         "removedCount": 48,
-        "sourceBytes": 22960
+        "sourceBytes": 23590
       },
       "validation": {
         "expectedActiveMessages": 640,
@@ -78,26 +78,26 @@
           "changedCount": 48,
           "newCount": 64,
           "removedCount": 48,
-          "sourceBytes": 22960,
+          "sourceBytes": 23590,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 33.406833,
+          "medianMs": 31.6355,
           "rawSamplesMs": [
-            32.609792,
-            32.987958,
-            33.38825,
-            33.406833,
-            34.685042,
-            34.806417,
-            39.011041
+            30.960208,
+            31.255167,
+            31.579583,
+            31.6355,
+            32.427209,
+            32.542334,
+            32.64075
           ],
           "stdoutBytes": 178,
           "stderrBytes": 0,
           "palamedesTiming": {
-            "totalMs": 27,
+            "totalMs": 25,
             "globMs": 0,
             "extractMs": 3,
-            "writeMs": 23,
+            "writeMs": 21,
             "totalMessages": 640,
             "totalFiles": 80
           }
@@ -112,18 +112,18 @@
           "changedCount": 48,
           "newCount": 64,
           "removedCount": 48,
-          "sourceBytes": 22960,
+          "sourceBytes": 23590,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 738.179333,
+          "medianMs": 674.050833,
           "rawSamplesMs": [
-            725.374458,
-            727.513333,
-            734.014084,
-            738.179333,
-            743.532083,
-            748.106459,
-            774.963583
+            669.800167,
+            670.56575,
+            670.887625,
+            674.050833,
+            677.150959,
+            687.43675,
+            696.003833
           ],
           "stdoutBytes": 755,
           "stderrBytes": 18
@@ -138,18 +138,18 @@
           "changedCount": 48,
           "newCount": 64,
           "removedCount": 48,
-          "sourceBytes": 22960,
+          "sourceBytes": 23590,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 531.385875,
+          "medianMs": 499.179375,
           "rawSamplesMs": [
-            509.646458,
-            512.649541,
-            524.157792,
-            531.385875,
-            533.002542,
-            533.166208,
-            534.876959
+            483.354208,
+            486.618667,
+            491.234375,
+            499.179375,
+            501.802834,
+            504.692917,
+            511.235667
           ],
           "stdoutBytes": 11883,
           "stderrBytes": 0
@@ -166,7 +166,7 @@
         "changedCount": 144,
         "newCount": 192,
         "removedCount": 144,
-        "sourceBytes": 68881
+        "sourceBytes": 70681
       },
       "validation": {
         "expectedActiveMessages": 1920,
@@ -202,26 +202,26 @@
           "changedCount": 144,
           "newCount": 192,
           "removedCount": 144,
-          "sourceBytes": 68881,
+          "sourceBytes": 70681,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 46.266458,
+          "medianMs": 43.36875,
           "rawSamplesMs": [
-            42.961583,
-            45.010791,
-            45.765375,
-            46.266458,
-            46.463,
-            46.749792,
-            48.281084
+            41.623459,
+            42.891958,
+            43.158625,
+            43.36875,
+            43.823,
+            43.857042,
+            45.825292
           ],
-          "stdoutBytes": 183,
+          "stdoutBytes": 182,
           "stderrBytes": 0,
           "palamedesTiming": {
-            "totalMs": 40,
+            "totalMs": 37,
             "globMs": 1,
             "extractMs": 9,
-            "writeMs": 28,
+            "writeMs": 26,
             "totalMessages": 1920,
             "totalFiles": 240
           }
@@ -236,18 +236,18 @@
           "changedCount": 144,
           "newCount": 192,
           "removedCount": 144,
-          "sourceBytes": 68881,
+          "sourceBytes": 70681,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 800.749625,
+          "medianMs": 745.330417,
           "rawSamplesMs": [
-            786.811375,
-            791.563834,
-            793.403833,
-            800.749625,
-            804.889333,
-            814.356584,
-            847.850666
+            737.340167,
+            739.180125,
+            743.746333,
+            745.330417,
+            749.243625,
+            758.244166,
+            761.585625
           ],
           "stdoutBytes": 755,
           "stderrBytes": 18
@@ -262,18 +262,18 @@
           "changedCount": 144,
           "newCount": 192,
           "removedCount": 144,
-          "sourceBytes": 68881,
+          "sourceBytes": 70681,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 582.999875,
+          "medianMs": 546.322875,
           "rawSamplesMs": [
-            567.697625,
-            568.527167,
-            576.003959,
-            582.999875,
-            583.251416,
-            585.267625,
-            617.984541
+            542.484833,
+            545.487125,
+            545.761208,
+            546.322875,
+            547.371542,
+            549.617125,
+            556.995625
           ],
           "stdoutBytes": 35059,
           "stderrBytes": 0
@@ -283,34 +283,34 @@
     {
       "profile": "realistic",
       "corpus": {
-        "fileCount": 400,
-        "messagesPerFile": 25,
-        "sourceMessageCount": 10000,
-        "baselineMessageCount": 9750,
-        "changedCount": 750,
-        "newCount": 1000,
-        "removedCount": 750,
-        "sourceBytes": 358740
+        "fileCount": 1500,
+        "messagesPerFile": 4,
+        "sourceMessageCount": 6000,
+        "baselineMessageCount": 5850,
+        "changedCount": 450,
+        "newCount": 600,
+        "removedCount": 450,
+        "sourceBytes": 220653
       },
       "validation": {
-        "expectedActiveMessages": 10000,
+        "expectedActiveMessages": 6000,
         "tools": {
           "palamedes": {
             "activeMessagesByLocale": {
-              "en": 10000,
-              "de": 10000
+              "en": 6000,
+              "de": 6000
             }
           },
           "lingui": {
             "activeMessagesByLocale": {
-              "en": 10000,
-              "de": 10000
+              "en": 6000,
+              "de": 6000
             }
           },
           "i18next": {
             "activeMessagesByLocale": {
-              "en": 10000,
-              "de": 10000
+              "en": 6000,
+              "de": 6000
             }
           }
         }
@@ -320,86 +320,86 @@
           "tool": "palamedes",
           "version": "pmds (Palamedes) v1.3.0",
           "profile": "realistic",
-          "fileCount": 400,
-          "sourceMessageCount": 10000,
-          "baselineMessageCount": 9750,
-          "changedCount": 750,
-          "newCount": 1000,
-          "removedCount": 750,
-          "sourceBytes": 358740,
+          "fileCount": 1500,
+          "sourceMessageCount": 6000,
+          "baselineMessageCount": 5850,
+          "changedCount": 450,
+          "newCount": 600,
+          "removedCount": 450,
+          "sourceBytes": 220653,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 83.753833,
+          "medianMs": 173.498334,
           "rawSamplesMs": [
-            80.418125,
-            82.786833,
-            83.686625,
-            83.753833,
-            84.204,
-            84.99,
-            90.306208
+            171.482291,
+            173.36975,
+            173.400833,
+            173.498334,
+            174.378333,
+            175.140125,
+            175.794125
           ],
-          "stdoutBytes": 185,
+          "stdoutBytes": 188,
           "stderrBytes": 0,
           "palamedesTiming": {
-            "totalMs": 77,
-            "globMs": 2,
-            "extractMs": 24,
-            "writeMs": 48,
-            "totalMessages": 10000,
-            "totalFiles": 400
+            "totalMs": 167,
+            "globMs": 7,
+            "extractMs": 122,
+            "writeMs": 37,
+            "totalMessages": 6000,
+            "totalFiles": 1500
           }
         },
         {
           "tool": "lingui",
           "version": "6.4.0",
           "profile": "realistic",
-          "fileCount": 400,
-          "sourceMessageCount": 10000,
-          "baselineMessageCount": 9750,
-          "changedCount": 750,
-          "newCount": 1000,
-          "removedCount": 750,
-          "sourceBytes": 358740,
+          "fileCount": 1500,
+          "sourceMessageCount": 6000,
+          "baselineMessageCount": 5850,
+          "changedCount": 450,
+          "newCount": 600,
+          "removedCount": 450,
+          "sourceBytes": 220653,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 1060.236458,
+          "medianMs": 2254.377375,
           "rawSamplesMs": [
-            1040.99375,
-            1051.32075,
-            1058.282625,
-            1060.236458,
-            1071.148167,
-            1096.196791,
-            1109.829625
+            2151.096042,
+            2189.767709,
+            2212.124041,
+            2254.377375,
+            2293.858708,
+            2317.975958,
+            2364.6685
           ],
           "stdoutBytes": 755,
-          "stderrBytes": 18
+          "stderrBytes": 15
         },
         {
           "tool": "i18next",
           "version": "9.4.0",
           "profile": "realistic",
-          "fileCount": 400,
-          "sourceMessageCount": 10000,
-          "baselineMessageCount": 9750,
-          "changedCount": 750,
-          "newCount": 1000,
-          "removedCount": 750,
-          "sourceBytes": 358740,
+          "fileCount": 1500,
+          "sourceMessageCount": 6000,
+          "baselineMessageCount": 5850,
+          "changedCount": 450,
+          "newCount": 600,
+          "removedCount": 450,
+          "sourceBytes": 220653,
           "warmup": 3,
           "runs": 7,
-          "medianMs": 787.146625,
+          "medianMs": 1561.820584,
           "rawSamplesMs": [
-            779.014458,
-            783.769625,
-            786.497375,
-            787.146625,
-            792.85375,
-            801.310625,
-            812.540208
+            1504.384667,
+            1508.710833,
+            1551.711459,
+            1561.820584,
+            1565.774833,
+            1589.356708,
+            1591.7075
           ],
-          "stdoutBytes": 59359,
+          "stdoutBytes": 221176,
           "stderrBytes": 0
         }
       ]
@@ -416,26 +416,26 @@
       "changedCount": 48,
       "newCount": 64,
       "removedCount": 48,
-      "sourceBytes": 22960,
+      "sourceBytes": 23590,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 33.406833,
+      "medianMs": 31.6355,
       "rawSamplesMs": [
-        32.609792,
-        32.987958,
-        33.38825,
-        33.406833,
-        34.685042,
-        34.806417,
-        39.011041
+        30.960208,
+        31.255167,
+        31.579583,
+        31.6355,
+        32.427209,
+        32.542334,
+        32.64075
       ],
       "stdoutBytes": 178,
       "stderrBytes": 0,
       "palamedesTiming": {
-        "totalMs": 27,
+        "totalMs": 25,
         "globMs": 0,
         "extractMs": 3,
-        "writeMs": 23,
+        "writeMs": 21,
         "totalMessages": 640,
         "totalFiles": 80
       }
@@ -450,18 +450,18 @@
       "changedCount": 48,
       "newCount": 64,
       "removedCount": 48,
-      "sourceBytes": 22960,
+      "sourceBytes": 23590,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 738.179333,
+      "medianMs": 674.050833,
       "rawSamplesMs": [
-        725.374458,
-        727.513333,
-        734.014084,
-        738.179333,
-        743.532083,
-        748.106459,
-        774.963583
+        669.800167,
+        670.56575,
+        670.887625,
+        674.050833,
+        677.150959,
+        687.43675,
+        696.003833
       ],
       "stdoutBytes": 755,
       "stderrBytes": 18
@@ -476,18 +476,18 @@
       "changedCount": 48,
       "newCount": 64,
       "removedCount": 48,
-      "sourceBytes": 22960,
+      "sourceBytes": 23590,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 531.385875,
+      "medianMs": 499.179375,
       "rawSamplesMs": [
-        509.646458,
-        512.649541,
-        524.157792,
-        531.385875,
-        533.002542,
-        533.166208,
-        534.876959
+        483.354208,
+        486.618667,
+        491.234375,
+        499.179375,
+        501.802834,
+        504.692917,
+        511.235667
       ],
       "stdoutBytes": 11883,
       "stderrBytes": 0
@@ -502,26 +502,26 @@
       "changedCount": 144,
       "newCount": 192,
       "removedCount": 144,
-      "sourceBytes": 68881,
+      "sourceBytes": 70681,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 46.266458,
+      "medianMs": 43.36875,
       "rawSamplesMs": [
-        42.961583,
-        45.010791,
-        45.765375,
-        46.266458,
-        46.463,
-        46.749792,
-        48.281084
+        41.623459,
+        42.891958,
+        43.158625,
+        43.36875,
+        43.823,
+        43.857042,
+        45.825292
       ],
-      "stdoutBytes": 183,
+      "stdoutBytes": 182,
       "stderrBytes": 0,
       "palamedesTiming": {
-        "totalMs": 40,
+        "totalMs": 37,
         "globMs": 1,
         "extractMs": 9,
-        "writeMs": 28,
+        "writeMs": 26,
         "totalMessages": 1920,
         "totalFiles": 240
       }
@@ -536,18 +536,18 @@
       "changedCount": 144,
       "newCount": 192,
       "removedCount": 144,
-      "sourceBytes": 68881,
+      "sourceBytes": 70681,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 800.749625,
+      "medianMs": 745.330417,
       "rawSamplesMs": [
-        786.811375,
-        791.563834,
-        793.403833,
-        800.749625,
-        804.889333,
-        814.356584,
-        847.850666
+        737.340167,
+        739.180125,
+        743.746333,
+        745.330417,
+        749.243625,
+        758.244166,
+        761.585625
       ],
       "stdoutBytes": 755,
       "stderrBytes": 18
@@ -562,18 +562,18 @@
       "changedCount": 144,
       "newCount": 192,
       "removedCount": 144,
-      "sourceBytes": 68881,
+      "sourceBytes": 70681,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 582.999875,
+      "medianMs": 546.322875,
       "rawSamplesMs": [
-        567.697625,
-        568.527167,
-        576.003959,
-        582.999875,
-        583.251416,
-        585.267625,
-        617.984541
+        542.484833,
+        545.487125,
+        545.761208,
+        546.322875,
+        547.371542,
+        549.617125,
+        556.995625
       ],
       "stdoutBytes": 35059,
       "stderrBytes": 0
@@ -582,86 +582,86 @@
       "tool": "palamedes",
       "version": "pmds (Palamedes) v1.3.0",
       "profile": "realistic",
-      "fileCount": 400,
-      "sourceMessageCount": 10000,
-      "baselineMessageCount": 9750,
-      "changedCount": 750,
-      "newCount": 1000,
-      "removedCount": 750,
-      "sourceBytes": 358740,
+      "fileCount": 1500,
+      "sourceMessageCount": 6000,
+      "baselineMessageCount": 5850,
+      "changedCount": 450,
+      "newCount": 600,
+      "removedCount": 450,
+      "sourceBytes": 220653,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 83.753833,
+      "medianMs": 173.498334,
       "rawSamplesMs": [
-        80.418125,
-        82.786833,
-        83.686625,
-        83.753833,
-        84.204,
-        84.99,
-        90.306208
+        171.482291,
+        173.36975,
+        173.400833,
+        173.498334,
+        174.378333,
+        175.140125,
+        175.794125
       ],
-      "stdoutBytes": 185,
+      "stdoutBytes": 188,
       "stderrBytes": 0,
       "palamedesTiming": {
-        "totalMs": 77,
-        "globMs": 2,
-        "extractMs": 24,
-        "writeMs": 48,
-        "totalMessages": 10000,
-        "totalFiles": 400
+        "totalMs": 167,
+        "globMs": 7,
+        "extractMs": 122,
+        "writeMs": 37,
+        "totalMessages": 6000,
+        "totalFiles": 1500
       }
     },
     {
       "tool": "lingui",
       "version": "6.4.0",
       "profile": "realistic",
-      "fileCount": 400,
-      "sourceMessageCount": 10000,
-      "baselineMessageCount": 9750,
-      "changedCount": 750,
-      "newCount": 1000,
-      "removedCount": 750,
-      "sourceBytes": 358740,
+      "fileCount": 1500,
+      "sourceMessageCount": 6000,
+      "baselineMessageCount": 5850,
+      "changedCount": 450,
+      "newCount": 600,
+      "removedCount": 450,
+      "sourceBytes": 220653,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 1060.236458,
+      "medianMs": 2254.377375,
       "rawSamplesMs": [
-        1040.99375,
-        1051.32075,
-        1058.282625,
-        1060.236458,
-        1071.148167,
-        1096.196791,
-        1109.829625
+        2151.096042,
+        2189.767709,
+        2212.124041,
+        2254.377375,
+        2293.858708,
+        2317.975958,
+        2364.6685
       ],
       "stdoutBytes": 755,
-      "stderrBytes": 18
+      "stderrBytes": 15
     },
     {
       "tool": "i18next",
       "version": "9.4.0",
       "profile": "realistic",
-      "fileCount": 400,
-      "sourceMessageCount": 10000,
-      "baselineMessageCount": 9750,
-      "changedCount": 750,
-      "newCount": 1000,
-      "removedCount": 750,
-      "sourceBytes": 358740,
+      "fileCount": 1500,
+      "sourceMessageCount": 6000,
+      "baselineMessageCount": 5850,
+      "changedCount": 450,
+      "newCount": 600,
+      "removedCount": 450,
+      "sourceBytes": 220653,
       "warmup": 3,
       "runs": 7,
-      "medianMs": 787.146625,
+      "medianMs": 1561.820584,
       "rawSamplesMs": [
-        779.014458,
-        783.769625,
-        786.497375,
-        787.146625,
-        792.85375,
-        801.310625,
-        812.540208
+        1504.384667,
+        1508.710833,
+        1551.711459,
+        1561.820584,
+        1565.774833,
+        1589.356708,
+        1591.7075
       ],
-      "stdoutBytes": 59359,
+      "stdoutBytes": 221176,
       "stderrBytes": 0
     }
   ],
@@ -671,54 +671,54 @@
       "baselineTool": "palamedes",
       "comparedTool": "lingui",
       "fasterTool": "palamedes",
-      "palamedesMedianMs": 33.406833,
-      "comparedMedianMs": 738.179333,
-      "speedupFactor": 22.096657082100542
+      "palamedesMedianMs": 31.6355,
+      "comparedMedianMs": 674.050833,
+      "speedupFactor": 21.306786142150433
     },
     {
       "profile": "small",
       "baselineTool": "palamedes",
       "comparedTool": "i18next",
       "fasterTool": "palamedes",
-      "palamedesMedianMs": 33.406833,
-      "comparedMedianMs": 531.385875,
-      "speedupFactor": 15.906502570896201
+      "palamedesMedianMs": 31.6355,
+      "comparedMedianMs": 499.179375,
+      "speedupFactor": 15.779089156169492
     },
     {
       "profile": "medium",
       "baselineTool": "palamedes",
       "comparedTool": "lingui",
       "fasterTool": "palamedes",
-      "palamedesMedianMs": 46.266458,
-      "comparedMedianMs": 800.749625,
-      "speedupFactor": 17.30734660950272
+      "palamedesMedianMs": 43.36875,
+      "comparedMedianMs": 745.330417,
+      "speedupFactor": 17.185886542729502
     },
     {
       "profile": "medium",
       "baselineTool": "palamedes",
       "comparedTool": "i18next",
       "fasterTool": "palamedes",
-      "palamedesMedianMs": 46.266458,
-      "comparedMedianMs": 582.999875,
-      "speedupFactor": 12.60091868281769
+      "palamedesMedianMs": 43.36875,
+      "comparedMedianMs": 546.322875,
+      "speedupFactor": 12.597155209684392
     },
     {
       "profile": "realistic",
       "baselineTool": "palamedes",
       "comparedTool": "lingui",
       "fasterTool": "palamedes",
-      "palamedesMedianMs": 83.753833,
-      "comparedMedianMs": 1060.236458,
-      "speedupFactor": 12.658960432294485
+      "palamedesMedianMs": 173.498334,
+      "comparedMedianMs": 2254.377375,
+      "speedupFactor": 12.993654307942807
     },
     {
       "profile": "realistic",
       "baselineTool": "palamedes",
       "comparedTool": "i18next",
       "fasterTool": "palamedes",
-      "palamedesMedianMs": 83.753833,
-      "comparedMedianMs": 787.146625,
-      "speedupFactor": 9.398335536476283
+      "palamedesMedianMs": 173.498334,
+      "comparedMedianMs": 1561.820584,
+      "speedupFactor": 9.001934185719616
     }
   ]
 }

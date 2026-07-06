@@ -5,23 +5,29 @@ import { docsHref } from "~/data/links"
 import { useInView } from "~/hooks/useInView"
 import { usePrefersReducedMotion } from "~/hooks/usePrefersReducedMotion"
 
-const TICK_STEP_MS = 100
+/* Tick step that keeps the axis to ~8-10 gridlines whatever the range. */
+function chooseStep(dataMax: number): number {
+  if (dataMax <= 1000) return 100
+  if (dataMax <= 3000) return 250
+  if (dataMax <= 6000) return 500
+  return 1000
+}
 
 /*
  * Round a data maximum up to a clean axis maximum (a whole multiple of the
  * tick step) that always leaves visible headroom, so the longest bar never
  * ends hard on the frame.
  */
-function niceAxisMaxMs(dataMax: number, stepMs = TICK_STEP_MS): number {
+function niceAxisMaxMs(dataMax: number, stepMs: number): number {
   const rounded = Math.ceil(dataMax / stepMs) * stepMs
   return rounded - dataMax < stepMs / 2 ? rounded + stepMs : rounded
 }
 
 /*
  * Custom spec-sheet bar chart: linear ms scale (no silent truncation),
- * hairline ticks every 100ms, one accent bar for Palamedes. The axis maximum
- * rounds up to a clean number with headroom (see niceAxisMaxMs). Bars grow on
- * first view; prerender/no-JS/reduced-motion shows full-width bars.
+ * hairline ticks at an adaptive step, one accent bar for Palamedes. The axis
+ * maximum rounds up to a clean number with headroom. Bars grow on first view;
+ * prerender/no-JS/reduced-motion shows full-width bars.
  */
 export function BenchmarkChart({ corpus }: { corpus: BenchCorpus }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -29,9 +35,10 @@ export function BenchmarkChart({ corpus }: { corpus: BenchCorpus }) {
   const reducedMotion = usePrefersReducedMotion()
   const animate = !reducedMotion && inView
   const dataMax = Math.max(...corpus.rows.map((row) => row.medianMs))
-  const maxMs = niceAxisMaxMs(dataMax)
+  const step = chooseStep(dataMax)
+  const maxMs = niceAxisMaxMs(dataMax, step)
   const tickValues: number[] = []
-  for (let value = TICK_STEP_MS; value < maxMs; value += TICK_STEP_MS) {
+  for (let value = step; value < maxMs; value += step) {
     tickValues.push(value)
   }
 

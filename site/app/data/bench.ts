@@ -19,6 +19,11 @@ export interface BenchCorpus {
   title: string
   corpus: string
   rows: BenchRow[]
+  /*
+   * Speedup ratios. Not rendered in the chart (the bars carry the story), but
+   * asserted against the checked-in report by scripts/verify-site-bench-data.mjs
+   * so the numbers quoted in prose (hero, ProofStrip) can't silently drift.
+   */
   ratios: { lingui: string; i18next: string }
 }
 
@@ -30,16 +35,23 @@ export const BENCH_META = {
   reportPath: "benchmarks/e2e-workflow/results/latest.md",
 }
 
+/*
+ * Only BENCH_REALISTIC is charted on the site (home + proof). BENCH_SMALL and
+ * BENCH_MEDIUM are kept as the checked-in reference for the smaller corpora:
+ * they back the tables in the benchmark docs and are validated against the
+ * report by scripts/verify-site-bench-data.mjs. Keep all three in sync with
+ * benchmarks/e2e-workflow/results/latest.md (the drift guard enforces it).
+ */
 export const BENCH_SMALL: BenchCorpus = {
   id: "small",
   title: "Small corpus — 80 files, 640 messages (median of 7 runs)",
   corpus: "80 files, 640 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 33.41, accent: true },
-    { tool: "i18next-parser", medianMs: 531.39 },
-    { tool: "Lingui", medianMs: 738.18 },
+    { tool: "Palamedes", medianMs: 31.64, accent: true },
+    { tool: "i18next-parser", medianMs: 499.18 },
+    { tool: "Lingui", medianMs: 674.05 },
   ],
-  ratios: { lingui: "22.10×", i18next: "15.91×" },
+  ratios: { lingui: "21.31×", i18next: "15.78×" },
 }
 
 export const BENCH_MEDIUM: BenchCorpus = {
@@ -47,21 +59,21 @@ export const BENCH_MEDIUM: BenchCorpus = {
   title: "Medium corpus — 240 files, 1920 messages (median of 7 runs)",
   corpus: "240 files, 1920 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 46.27, accent: true },
-    { tool: "i18next-parser", medianMs: 583 },
-    { tool: "Lingui", medianMs: 800.75 },
+    { tool: "Palamedes", medianMs: 43.37, accent: true },
+    { tool: "i18next-parser", medianMs: 546.32 },
+    { tool: "Lingui", medianMs: 745.33 },
   ],
-  ratios: { lingui: "17.31×", i18next: "12.60×" },
+  ratios: { lingui: "17.19×", i18next: "12.60×" },
 }
 
 export const BENCH_REALISTIC: BenchCorpus = {
   id: "realistic",
-  title: "Realistic corpus — 400 files, 10,000 messages (median of 7 runs)",
-  corpus: "400 files, 10,000 messages",
+  title: "Realistic corpus — 1,500 files across ~400k lines, 6,000 messages (median of 7 runs)",
+  corpus: "1,500 files (750 with i18n), ~400k lines, 6,000 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 83.75, accent: true },
-    { tool: "i18next-parser", medianMs: 787.15 },
-    { tool: "Lingui", medianMs: 1060.24 },
+    { tool: "Palamedes", medianMs: 173.5, accent: true },
+    { tool: "i18next-parser", medianMs: 1561.82 },
+    { tool: "Lingui", medianMs: 2254.38 },
   ],
-  ratios: { lingui: "12.66×", i18next: "9.40×" },
+  ratios: { lingui: "12.99×", i18next: "9.00×" },
 }

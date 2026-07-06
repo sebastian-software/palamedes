@@ -106,11 +106,11 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `33.41 ms` |
-| Lingui         | `738.18 ms` |
-| i18next-parser | `531.39 ms` |
+| Palamedes      |  `31.64 ms` |
+| Lingui         | `674.05 ms` |
+| i18next-parser | `499.18 ms` |
 
-On this run, Palamedes measured `22.10x` faster than Lingui and `15.91x`
+On this run, Palamedes measured `21.31x` faster than Lingui and `15.78x`
 faster than i18next-parser.
 
 ### Medium
@@ -126,31 +126,34 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `46.27 ms` |
-| Lingui         | `800.75 ms` |
-| i18next-parser | `583.00 ms` |
+| Palamedes      |  `43.37 ms` |
+| Lingui         | `745.33 ms` |
+| i18next-parser | `546.32 ms` |
 
-On this run, Palamedes measured `17.31x` faster than Lingui and `12.60x`
+On this run, Palamedes measured `17.19x` faster than Lingui and `12.60x`
 faster than i18next-parser.
 
 ### Realistic
 
-Corpus:
+Corpus (modeled on a production web app's Lingui include roots — most source is
+not i18n, but the extractor still has to scan all of it; figures rounded so they
+read as a shape, not false precision):
 
-- `400` files
-- `10,000` current messages
-- `9,750` baseline messages
-- `750` changed, `1,000` new, `750` removed
+- `1,500` files (`750` with i18n markers, `750` without)
+- `~400,000` source lines (~3% carry i18n syntax)
+- `6,000` current messages (~15% with a `{name}` variable)
+- `5,850` baseline messages
+- `450` changed, `600` new, `450` removed
 
 Median results:
 
 | Tool           |       Median |
 | -------------- | -----------: |
-| Palamedes      |   `83.75 ms` |
-| Lingui         | `1060.24 ms` |
-| i18next-parser |  `787.15 ms` |
+| Palamedes      |  `173.50 ms` |
+| Lingui         | `2254.38 ms` |
+| i18next-parser | `1561.82 ms` |
 
-On this run, Palamedes measured `12.66x` faster than Lingui and `9.40x`
+On this run, Palamedes measured `12.99x` faster than Lingui and `9.00x`
 faster than i18next-parser.
 
 ## Reading The Numbers
