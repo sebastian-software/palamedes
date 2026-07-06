@@ -60,6 +60,7 @@
   },
   "dependencies": {
     "@palamedes/config": "workspace:^",
+    "@palamedes/core": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/transform": "workspace:^"
@@ -74,6 +75,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
+    "remix": "3.0.0-beta.5",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.9"

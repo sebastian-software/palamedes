@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { defineLocaleControls } from "@palamedes/core/locale"
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime"
+import { createRouter } from "remix/router"
 
-import { createRemixI18nRequestScope } from "./server"
+import { createRemixI18nRequestScope, createRemixI18nServer } from "./server"
 
 function createTestI18n(locale: string): I18nInstance {
   return {
@@ -63,5 +65,99 @@ describe("createRemixI18nRequestScope", () => {
         }
       ),
     ])
+  })
+
+  it("keeps request scope active while a returned response body is streamed", async () => {
+    const remixI18n = createRemixI18nRequestScope(() => createTestI18n("de"))
+    const encoder = new TextEncoder()
+    let sent = false
+
+    const response = await remixI18n.run(
+      new Request("https://example.test/"),
+      () =>
+        new Response(
+          new ReadableStream({
+            pull(controller) {
+              if (sent) {
+                controller.close()
+                return
+              }
+
+              sent = true
+              controller.enqueue(encoder.encode(String(getI18n()._("streamed.title"))))
+            },
+          })
+        )
+    )
+
+    expect(remixI18n.get()).toBeUndefined()
+    expect(await response.text()).toBe("de:streamed.title")
+  })
+})
+
+describe("createRemixI18nServer", () => {
+  afterEach(() => {
+    resetI18nRuntime()
+  })
+
+  const locales = defineLocaleControls({
+    locales: ["en", "de", "es"],
+    defaultLocale: "en",
+    cookies: { locale: "locale" },
+  })
+
+  it("resolves request locale and caches catalog messages by locale", async () => {
+    const loadMessages = vi.fn((locale: "en" | "de" | "es") => ({
+      greeting: `${locale}:Hallo`,
+    }))
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages,
+    })
+
+    await remixI18n.run(
+      new Request("https://example.test/", {
+        headers: { "accept-language": "de" },
+      }),
+      ({ i18n, locale }) => {
+        expect(locale).toBe("de")
+        expect(getI18n()).toBe(i18n)
+        expect(i18n._("greeting")).toBe("de:Hallo")
+      }
+    )
+
+    await remixI18n.run(
+      new Request("https://example.test/", {
+        headers: { "accept-language": "de" },
+      }),
+      ({ i18n }) => {
+        expect(i18n._("greeting")).toBe("de:Hallo")
+      }
+    )
+
+    expect(loadMessages).toHaveBeenCalledTimes(1)
+  })
+
+  it("wraps Remix router handlers with middleware request scope", async () => {
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: (locale) => ({ greeting: `hello:${locale}` }),
+    })
+    const router = createRouter({ middleware: [remixI18n.middleware()] })
+
+    router.get("/", (context) => {
+      const palamedes = remixI18n.get(context)
+      return new Response(`${palamedes?.locale}:${getI18n()._("greeting")}`)
+    })
+
+    const response = await router.fetch(
+      new Request("https://example.test/", {
+        headers: { cookie: "locale=es", "accept-language": "de" },
+      })
+    )
+
+    expect(await response.text()).toBe("es:hello:es")
   })
 })

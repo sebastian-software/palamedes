@@ -18,7 +18,13 @@ export type ResolvedLocale = {
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
-  cookies: { locale: LOCALE_COOKIE },
+  hosts: {
+    locales: {
+      en: "en.lvh.me",
+      de: "de.lvh.me",
+      es: "es.lvh.me",
+    },
+  },
 })
 
 export const LOCALE_LABELS = locales.labels
@@ -40,15 +46,33 @@ export function loadMessages(locale: Locale): CatalogMessages {
 
 export const remixI18n = createRemixI18nServer({
   locales,
-  strategy: "cookie",
+  strategy: "route",
   loadMessages,
-  cookieName: LOCALE_COOKIE,
+  routeParam: "locale",
 })
 
 export function resolveLocaleFromRequest(request: Request): ResolvedLocale {
   return remixI18n.resolveLocale(request)
 }
 
-export function serializeLocaleCookie(locale: Locale): string {
-  return remixI18n.serializeLocaleCookie(locale)
+export function getRootRedirectLocale(request: Request): Locale {
+  return locales.preferredLocale(request.headers.get("accept-language"))
+}
+
+export function getRouteBanner(request: Request, locale: Locale): string | null {
+  const suggestion = locales.suggest({
+    acceptLanguageHeader: request.headers.get("accept-language"),
+    cookieHeader: request.headers.get("cookie"),
+    currentLocale: locale,
+    pathname: `/${locale}`,
+    requestHost: request.headers.get("host"),
+  })
+
+  return suggestion
+    ? `${suggestion.description} Switch to the recommended locale: ${suggestion.recommendedLocale}.`
+    : null
+}
+
+export function getRouteSwitchLinks() {
+  return LOCALES.map((locale) => ({ href: `/${locale}`, locale }))
 }
