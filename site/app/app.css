@@ -185,11 +185,13 @@
 
 /*
  * The header wordmark. ARDO renders the site title as a plain <span> inside
- * the logo home link; like the mobile-panel nav below, it is scoped through
- * semantics (the only header link to "/"), never through hashed classes.
+ * the logo home link and exposes no className hook for it; like the
+ * mobile-panel nav below, it is scoped through semantics (the only header
+ * link to "/" — a descendant combinator, so an extra ARDO wrapper element
+ * cannot silently break the match), never through hashed classes.
  * Cinzel Hellenic set wide, as on an inscription.
  */
-header a[href="/"] > span {
+header a[href="/"] span {
   font-family: var(--font-display);
   font-weight: 400;
   font-size: 18px;
@@ -303,6 +305,9 @@ header a[href="/"] > span {
  * The meander — the one sanctioned ornament. A single Greek-key course drawn
  * at hairline weight in brand gold; reads as a patterned rule on paper and
  * on navy alike. Apply to an empty, aria-hidden element.
+ *
+ * Data URLs cannot reference custom properties: the stroke is a frozen copy
+ * of --color-gold (#bc8a45) and must be updated by hand if that token moves.
  */
 @utility meander {
   height: 12px;
