@@ -6,12 +6,12 @@
 
 export function FrameworksPage() {
   return (
-    <Page title="Palamedes — one i18n model across five framework families">
+    <Page title="Palamedes — one i18n model across six framework families">
       <SiteNav />
 
       <Hero
         eyebrow="Framework matrix"
-        headline="Five frameworks. Four locale strategies. One mental model."
+        headline="Six frameworks. Four locale strategies. One mental model."
         subline="Every cell below is a real application — the same booking UI,
           the same catalogs, the same runtime calls — browser-verified in CI.
           Where public hosting is ready, open the demo, switch the language,
@@ -26,7 +26,7 @@ export function FrameworksPage() {
         }}
       />
 
-      {/* The interactive 5×4 grid is the centerpiece of this page.
+      {/* The interactive 6×4 grid is the centerpiece of this page.
           Cell data is explicit (per-strategy URL shapes + hosting status),
           shared with HomePage via FRAMEWORK_MATRIX_CELLS — see
           components.jsx. No generated URL patterns. */}
@@ -38,6 +38,7 @@ export function FrameworksPage() {
             { name: "SolidStart", slug: "solidstart" },
             { name: "Waku", slug: "waku" },
             { name: "React Router", slug: "react-router" },
+            { name: "Remix v3", slug: "remix" },
           ]}
           strategies={[
             { name: "Cookie", slug: "cookie" },
@@ -48,10 +49,10 @@ export function FrameworksPage() {
           cells={FRAMEWORK_MATRIX_CELLS}
         />
         <p className="caption">
-          All 20 apps are verified in CI with the same Playwright-driven browser flow: SSR output,
-          locale switching, localized server actions. Screenshots are versioned in the repo. Cookie
-          and route demos are publicly hosted today; subdomain and TLD hosting is being provisioned
-          — until then those cells link the verified source instead.
+          All 24 apps are verified in CI: SSR output, locale switching, localized server actions or
+          server handlers. Screenshots are versioned in the repo. Cookie and route demos are
+          publicly hosted for the established adapters today; subdomain, TLD, and Remix v3 public
+          hosting are being provisioned — until then those cells link the verified source instead.
         </p>
       </Section>
 

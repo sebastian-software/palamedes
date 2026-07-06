@@ -16,7 +16,7 @@ export function meta() {
   return pageMeta({
     title: "Palamedes — benchmarks, verification, and the decision trail",
     description:
-      "Claims you can re-run: checked-in extract/update benchmarks against Lingui and i18next-parser, 20 browser-verified example apps, and 16 architecture decision records.",
+      "Claims you can re-run: checked-in extract/update benchmarks against Lingui and i18next-parser, 24 browser-verified example apps, and 16 architecture decision records.",
     path: "/proof",
   })
 }
@@ -24,7 +24,7 @@ export function meta() {
 const VERIFICATION_STEPS = [
   {
     title: "Build",
-    body: "All 20 example apps build against the workspace packages — no mocked integrations.",
+    body: "All 24 example apps build against the workspace packages — no mocked integrations.",
   },
   {
     title: "Drive",
@@ -83,7 +83,7 @@ export default function Proof() {
 
       <Section
         num="02 — Verification"
-        title="20 apps, verified in a real browser, on every change."
+        title="24 apps, verified in a real browser, on every change."
       >
         <div className="hairline-grid mb-10 grid-cols-3 max-tight:grid-cols-1">
           {VERIFICATION_STEPS.map((step, index) => (

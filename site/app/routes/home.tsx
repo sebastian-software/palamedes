@@ -24,7 +24,7 @@ export function meta() {
   return pageMeta({
     title: "Palamedes — i18n that survives your next framework migration",
     description:
-      "Open-source i18n tooling for JavaScript & TypeScript: one translation model across Next.js, TanStack Start, SolidStart, Waku, and React Router, with a Rust core and source-string-first .po catalogs.",
+      "Open-source i18n tooling for JavaScript & TypeScript: one translation model across Next.js, TanStack Start, SolidStart, Waku, React Router, and Remix v3, with a Rust core and source-string-first .po catalogs.",
     path: "/",
   })
 }
@@ -50,9 +50,9 @@ export default function Home() {
           <p className="mt-6 max-w-[38em] text-[16px]">
             Write messages where your UI happens. Keep source-string-first <code>.po</code> catalogs
             your translators can actually read. Ship the same runtime model across Next.js, TanStack
-            Start, SolidStart, Waku, and React Router — with a Rust core that ran a checked
-            extract/update benchmark across a real-app-shaped 1,500-file corpus 12.99× faster than
-            Lingui on the recorded machine-local run.
+            Start, SolidStart, Waku, React Router, and Remix v3 — with a Rust core that ran a
+            checked extract/update benchmark across a real-app-shaped 1,500-file corpus 12.99×
+            faster than Lingui on the recorded machine-local run.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <ButtonLink href="/get-started">Get started in 5 minutes</ButtonLink>

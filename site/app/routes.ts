@@ -46,6 +46,7 @@ export default [
   route("docs/api/extractor", "routes/docs/api/extractor/index.md"),
   route("docs/api/next-plugin", "routes/docs/api/next-plugin/index.md"),
   route("docs/api/react", "routes/docs/api/react/index.md"),
+  route("docs/api/remix", "routes/docs/api/remix/index.md"),
   route("docs/api/runtime", "routes/docs/api/runtime/index.md"),
   route("docs/api/solid", "routes/docs/api/solid/index.md"),
   route("docs/api/transform", "routes/docs/api/transform/index.md"),

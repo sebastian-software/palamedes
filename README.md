@@ -72,14 +72,14 @@ easier to review, and easier to carry from one framework to the next.
 ## Current Status
 
 - Recommended for new projects and teams that want cleaner i18n foundations
-- Verified today across Next.js, TanStack Start, SolidStart, Waku, and React Router on Node.js `>=22.22`
+- Verified today across Next.js, TanStack Start, SolidStart, Waku, React Router, and server-first Remix v3 on Node.js `>=22.22`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 - 1.0 stability tiers and public API expectations are documented in [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
 
 ## What Exists Today
 
-- A browser-verified example matrix across five framework families
+- A browser-verified example matrix across six framework families
 - Versioned screenshots generated from the same Playwright-based verifier used in CI
 - Reproducible benchmark commands for transform, extract, catalog update, compile steps, and end-to-end extract/update workflows
 - Structured catalog audit and metadata validation APIs backed by `ferrocat`

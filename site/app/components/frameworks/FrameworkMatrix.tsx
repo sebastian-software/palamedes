@@ -30,7 +30,7 @@ function CellContent({ cell }: { cell: MatrixCell }) {
 }
 
 /*
- * The 5×4 proof matrix. Cells are explicit data with per-cell hosting
+ * The 6×4 proof matrix. Cells are explicit data with per-cell hosting
  * status (never a generated URL pattern); subdomain/tld hosting is tracked
  * in issue #306. `scan` enables the /frameworks style break: a one-shot
  * accent scanline sweeping the table on first view.
@@ -89,7 +89,7 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
       </div>
       <p className="mono-nums mt-3 text-[11px] text-gray-spec">
         <span className="text-accent">●</span> live demo · ◌ provisioning (#306) · ✓ CI
-        browser-verified — all 20 apps run the same Playwright flow
+        browser-verified — all 24 apps run the same verification flow
       </p>
     </div>
   )

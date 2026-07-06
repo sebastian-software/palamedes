@@ -13,9 +13,9 @@ export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
-    title: "Palamedes — one i18n model across five framework families",
+    title: "Palamedes — one i18n model across six framework families",
     description:
-      "Five frameworks, four locale strategies, one mental model: the browser-verified Palamedes example matrix across Next.js, TanStack Start, SolidStart, Waku, and React Router.",
+      "Six frameworks, four locale strategies, one mental model: the browser-verified Palamedes example matrix across Next.js, TanStack Start, SolidStart, Waku, React Router, and Remix v3.",
     path: "/frameworks",
   })
 }
@@ -26,7 +26,7 @@ export default function Frameworks() {
       <section className="px-8 pt-16 pb-14 max-tight:px-5">
         <p className="eyebrow">Framework matrix</p>
         <h1 className="mt-6 max-w-[14em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          Five frameworks. Four locale strategies. One mental model.
+          Six frameworks. Four locale strategies. One mental model.
         </h1>
         <p className="mt-6 max-w-[38em]">
           Every cell below is a real application — the same booking UI, the same catalogs, the same
@@ -41,13 +41,14 @@ export default function Frameworks() {
         </div>
       </section>
 
-      <Section num="01 — Matrix" title="The 5 × 4 verified matrix.">
+      <Section num="01 — Matrix" title="The 6 × 4 verified matrix.">
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
-          All 20 apps are verified in CI with the same Playwright-driven browser flow: SSR output,
-          locale switching, localized server actions. Screenshots are versioned in the repo. Cookie
-          and route demos are publicly hosted today; subdomain and TLD hosting is being provisioned
-          — until then those cells link the verified source instead.
+          All 24 apps are verified in CI: SSR output, locale switching, localized server actions or
+          server handlers. Screenshots cover the established UI-adapter matrix and are versioned in
+          the repo. Cookie and route demos are publicly hosted for the established adapters today;
+          subdomain, TLD, and Remix v3 public hosting are being provisioned — until then those cells
+          link the verified source instead.
         </p>
       </Section>
 

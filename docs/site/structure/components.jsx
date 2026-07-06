@@ -141,7 +141,7 @@ export function CodeShowcase(props) {}
 export function FeatureGrid(props) {}
 
 /**
- * The 5×4 framework/strategy matrix as an interactive table.
+ * The 6×4 framework/strategy matrix as an interactive table.
  * Rows: framework families. Columns: locale strategies.
  *
  * Cells carry EXPLICIT links and a per-cell status — never a generated URL
@@ -158,7 +158,7 @@ export function FeatureGrid(props) {}
  * - strategies: Array<{ name, slug }>
  * - cells: Array<{
  *     framework, strategy,
- *     verified: true,                      // all 20 are CI browser-verified
+ *     verified: true,                      // all 24 are CI verified
  *     status: "live" | "provisioning",     // public hosting state
  *     demoLinks?: Array<{ label, href }>,  // explicit, only when live
  *     sourceHref,                          // example source in the repo

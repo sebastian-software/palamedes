@@ -11,7 +11,7 @@ checkable in the repo or to a public source.
 - [What we delegated to Ferrocat and why](./what-we-delegated-to-ferrocat-and-why.md)
 - [Measuring Palamedes honestly](./measuring-palamedes-honestly.md)
 - [From Lingui to Palamedes without changing how authoring feels](./from-lingui-to-palamedes.md)
-- [How we browser-verify i18n across five frameworks](./browser-verifying-i18n-across-five-frameworks.md)
+- [How we browser-verify i18n across six frameworks](./browser-verifying-i18n-across-five-frameworks.md)
 - [The third time I built JavaScript i18n tooling](./the-third-time-i-built-javascript-i18n-tooling.md)
 - [Round 1 micro-content](./micro-content-round-1.md)
 

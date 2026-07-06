@@ -2,7 +2,7 @@
 date: "2026-07-05"
 ---
 
-# How We Browser-Verify i18n Across Five Frameworks
+# How We Browser-Verify i18n Across Six Frameworks
 
 Status: draft
 
@@ -14,21 +14,22 @@ interaction, and server actions all have to agree.
 
 Palamedes treats that as a verification problem.
 
-The repo contains an example matrix across five framework families:
+The repo contains an example matrix across six framework families:
 
 - Next.js
 - TanStack Start
 - SolidStart
 - Waku
 - React Router
+- Remix v3
 
 Each family has four locale strategies:
 
 - cookie-based locale persistence
 - route-segment locale persistence
 
-That gives twenty example apps. Each one has browser-visible checks for the parts
-that usually hide i18n bugs:
+That gives 24 example apps. Each one has visible checks for the parts that
+usually hide i18n bugs:
 
 - server-rendered localized text before hydration
 - client-side locale switching
@@ -55,9 +56,9 @@ For Palamedes, the thesis is:
 The matrix is where that thesis has to survive contact with frameworks.
 
 Next.js and React Router do not fail in the same places. TanStack Start,
-SolidStart, and Waku each have their own server/client boundaries. Route-based
-locale state and cookie-based locale state put pressure on different parts of
-the adapter layer.
+SolidStart, Waku, and Remix v3 each have their own server/client boundaries.
+Route-based locale state and cookie-based locale state put pressure on different
+parts of the adapter layer.
 
 That is why this kind of verification is stronger than a single starter app.
 
