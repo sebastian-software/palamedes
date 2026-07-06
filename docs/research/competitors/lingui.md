@@ -10,6 +10,7 @@ repository: https://github.com/lingui/js-lingui
 # Lingui
 
 ## Snapshot
+
 - Maintainer / company / funding: Community project, fiscal host Open Source Collective. Admins: Tomáš Ehrlich (original creator, 2017), Sergio Moreno, plus "Sergey" and "Olena". Not owned by a single company. Sponsors on Open Collective: Translation.io ($2,400), Crowdin ($1,300), Sector Labs ($1,000), plus ~6 small individual backers (largest $135). Total OC balance not disclosed on the page.
 - License: MIT
 - Current stable version + release date: 6.5.0, published 2026-07-06 (same day as this analysis — brand new). v6.0.0 shipped 2026-04-22.
@@ -22,12 +23,14 @@ repository: https://github.com/lingui/js-lingui
 - First release / age: repo created 2017-01-17 (~9.5 years old as of 2026); originally "LinguiJS."
 
 ## Positioning & target audience
+
 - Self-described: "a readable, automated, and optimized (2 kb) internationalization for JavaScript." Marketing tagline: "Internationalization Framework for Global Products."
 - Targets JS/TS developers across React, React Native, Vue, SolidJS, vanilla JS, Node — not React-only, unlike react-intl/react-i18next framing.
 - Pitches itself on bundle size, ICU MessageFormat correctness, and inline/co-located message authorship (vs. manual key-JSON management).
 - Explicit doc pages comparing itself to i18next and react-intl (competitive positioning baked into docs).
 
 ## Core concepts & architecture
+
 - Message identity: supports both explicit custom IDs (`t({id: "custom.id", message: "..."})`) and auto-generated IDs derived from the source string — "unopinionated," developer's choice. In v6, auto-generated IDs switched to URL-safe Base64 (RFC 4648), a breaking change requiring catalog key rewrites for existing PO/JSON/CSV catalogs.
 - Message format: ICU MessageFormat under the hood ("battle-tested and powerful"); `Plural` and `Select` components/macros produce syntactically valid ICU output.
 - Extraction/compilation pipeline: static-analysis extractor (Babel-based by default; SWC plugin available) scans source for macro calls (`t`, `Trans`, `Plural`) and non-macro runtime calls (`i18n.t()`, `i18n._()` — extracted but macros are the recommended path). Only statically-defined messages extract; dynamic/variable message content is not extracted. Compilation step turns catalogs into optimized JS modules per locale.
@@ -40,6 +43,7 @@ repository: https://github.com/lingui/js-lingui
 - CLI performance: v6 added worker-thread multithreading across `extract`, `compile`, `extract-template`, `extract-experimental` (configurable via `--workers`, default = CPU cores − 1, capped at 8).
 
 ## Framework & platform support
+
 - Officially documented: React (incl. Server Components), React Native, Vue 3 (with Reactivity Transform support via `createVueExtractor()`, v6), SolidJS (native integration added in v6.4.0, 2026-06-16), vanilla JS/Node.
 - Community-maintained: Astro, Svelte adapters (not first-party).
 - Build tooling: Vite plugin (Vite 6.3+ through Vite 8 supported in v6), Webpack, Babel, SWC plugin, and experimental Rolldown support (added 6.5.0, via pluggable bundler interface in the experimental extractor).
@@ -47,11 +51,13 @@ repository: https://github.com/lingui/js-lingui
 - Astro integration requested since 2023 (issue #1640, 14 reactions) — still not first-party as of v6.5.0.
 
 ## Catalog formats & interop
+
 - Native formats: PO (gettext), JSON, CSV, plus a pluggable formatter API (`formatter()` from packages like `@lingui/format-po`) for custom formats. YAML config format was removed in v6 (JS/TS/JSON only now).
 - TMS integrations documented: Crowdin (dedicated docs page, CLI-based `sync:sources`/`sync:translations`, OTA content delivery, GitHub/GitLab/Bitbucket auto-sync) and Translation.io (a financial sponsor).
 - v6 message-ID format change (Base64 URL-safe encoding) requires manual catalog key migration for existing JSON/CSV/PO-Gettext catalogs when upgrading from v5.
 
 ## Workflow & tooling
+
 - Standard cycle: Define → Extract → Translate → Compile → Deploy.
 - CLI: `lingui extract`, `lingui compile`, `extract-template`, experimental `extract-experimental` (dependency-tree-crawling mode for multi-page apps, builds page-specific catalogs instead of scanning everything).
 - v6.5.0 added configurable pseudo-localization options (`--pseudolocalize` type feature, added as "pseudolocalize options").
@@ -60,18 +66,21 @@ repository: https://github.com/lingui/js-lingui
 - PO catalog diff noise was a recurring complaint — v6 addressed part of this via configurable JSX placeholder names (`jsxPlaceholderAttribute`, `jsxPlaceholderDefaults`) and `ph()` named placeholders, explicitly to "reduce catalog diff noise." Open issue #2405 ("Reduce PO catalog comments changes for cleaner source control," 4 reactions) shows this is still only partially solved.
 
 ## AI features
+
 - `llms.txt` and `llms-full.txt` published at lingui.dev, following the emerging llms.txt convention for LLM-context-optimized docs.
 - Separate `lingui/skills` GitHub repo: "Agent Skills" — packaged procedural knowledge for AI coding assistants (Claude Code-style skills) covering Lingui best practices/patterns, positioned as reducing hallucinated API usage.
 - No built-in AI/MT translation engine in Lingui core itself; AI-assisted translation happens via context-rich message descriptions consumed by external tools, or via TMS partners (Crowdin/Translation.io) that have their own AI/MT features.
 - GitHub discussion open on "Automatic LLM Translations" (#2342) — not yet a shipped first-party feature as of v6.5.0.
 
 ## Pricing
+
 - Lingui itself: fully free/OSS (MIT), no paid tier, no enterprise plan, no commercial hosted offering from the Lingui project itself.
 - Revenue model is donation-based via Open Collective (small sponsor/backer amounts, see Snapshot) — no evidence of a sustainable full-time-maintainer funding model.
 - Paid costs only arise from third-party TMS integrations (Crowdin, Translation.io) that users may optionally pair with Lingui; those have their own separate commercial pricing not set by Lingui.
 - Not to be confused with "Lingo.dev" (different product, has its own commercial pricing) — search results show these are frequently conflated.
 
 ## Strengths
+
 - Long track record (9+ years, since 2017), predates most modern React i18n tooling.
 - Small claimed runtime footprint and lean v6 dependency tree (35 MB installed vs 62 MB pre-v6).
 - Genuine multi-framework support (React, Vue, SolidJS, React Native) rather than React-only.
@@ -80,6 +89,7 @@ repository: https://github.com/lingui/js-lingui
 - CLI worker-thread parallelism and experimental Rolldown/dependency-tree-crawling extraction show ongoing investment in build performance at scale.
 
 ## Weaknesses & criticism
+
 - Funding is thin and informal: total disclosed OC sponsorship is low four figures from three sponsors plus a handful of small individual backers — no evidence of paid full-time maintenance capacity, unlike VC-backed alternatives.
 - v6 is a disruptive breaking-change release: ESM-only (drops CommonJS), Node ≥22.19 requirement, removed YAML config, removed deprecated Intl wrappers, changed auto-generated message ID encoding (requires manual catalog rewrites) — real migration cost for existing v5 users just weeks/months after v6 shipped (v6.0.0 on 2026-04-22, this analysis on 2026-07-06).
 - `@lingui/macro` package explicitly marked "no longer maintained" in v6 migration guide, yet still pulls ~312k weekly downloads — signals a nontrivial population of apps on old patterns that must migrate to `@lingui/react/macro` / `@lingui/core/macro`.
@@ -90,15 +100,18 @@ repository: https://github.com/lingui/js-lingui
 - Extraction is strictly static-analysis based: any dynamically constructed message/key is silently not extracted, a common trip-up flagged in docs itself as a limitation developers must work around.
 
 ## What they do differently
+
 - Framework-agnostic core with genuinely separate framework bindings (React, Vue, SolidJS, React Native) rather than a React-first library with ports bolted on — broader multi-framework ambition than react-intl/react-i18next.
-- Macro-based, compile-time extraction from source code (tagged templates/JSX components) rather than a runtime-key convention — messages are co-located with UI code and the source string usually *is* the default value, closer to gettext-style workflows than to i18next's flat-JSON-key convention.
+- Macro-based, compile-time extraction from source code (tagged templates/JSX components) rather than a runtime-key convention — messages are co-located with UI code and the source string usually _is_ the default value, closer to gettext-style workflows than to i18next's flat-JSON-key convention.
 - Native PO/gettext catalog support as a first-class format (not bolted on), explicitly courting teams whose translators already use gettext-based CAT tools.
 - Took on an unusually disruptive breaking-change major version in 2026 (ESM-only, dropped CJS, changed ID encoding, removed YAML config) purely for "modernization" — a deliberate bet that the ecosystem (bundlers, Node runtime `require(esm)` support) has matured enough to justify forcing all users through a hard migration, rather than maintaining a slow-deprecation path.
 - CLI-level architectural investment (worker-thread parallel extraction, pluggable bundler interface for experimental Rolldown-based extraction, dependency-tree-crawling catalog splitting) — treats the build/tooling pipeline itself as a performance-engineering target, not just the runtime.
 - Ships "Agent Skills" as a first-party artifact (separate `lingui/skills` repo) specifically to make AI coding agents use the library correctly — an explicit bet on AI-assisted development as a primary consumption path going forward, ahead of shipping any actual AI/MT translation feature in the core product itself.
 
 ## Sources
+
 (all accessed 2026-07-06)
+
 - https://lingui.dev — homepage
 - https://registry.npmjs.org/@lingui/core/latest — version/license
 - https://registry.npmjs.org/@lingui/core (full version/time history)

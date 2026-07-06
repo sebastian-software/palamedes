@@ -10,6 +10,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 # Crowdin
 
 ## Snapshot
+
 - Maintainer / company / funding: Crowdin (legal entity: Crowdin OÜ), headquartered in Tallinn, Estonia. Reported as bootstrapped, no VC funding found in public records (Crunchbase/PitchBook-derived secondary sources) — not fully verified against a primary filing.
 - License / business model: proprietary closed-source SaaS TMS; freemium — free for open-source/academic/non-commercial use, paid tiers for commercial use, priced on "hosted words" volume + seats/private projects.
 - Product state as of analysis date: mature TMS with AI pre-translation, AI QA, an "AI project orchestrator" (Crowdin Copilot), and an actively maintained MCP (Model Context Protocol) server (v2, with v1 deprecated) supporting Claude Desktop, Claude Code, Cursor, VS Code, Windsurf as clients.
@@ -17,6 +18,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Founded / age: 2009 (some secondary sources say 2008), by Ukrainian programmer Serhiy Dmytryshyn, originally a hobby project — ~17 years old as of 2026. Employee count estimated ~120-130 (range 25-250 across secondary sources, inconsistent). Reported revenue ~$13.2M (single third-party source, getlatka.com — not corroborated).
 
 ## Positioning & target audience
+
 - Markets itself as an "AI-powered localization platform," not a developer-first i18n library — a business TMS competing with Lokalise, Phrase, Transifex, Smartling.
 - Two product lines: **Crowdin** (self-serve, for teams of 2-100) and **Crowdin Enterprise** (large orgs, custom pricing, annual billing only, SSO/custom roles/audit logs).
 - Primary users are localization managers, translators/proofreaders, and PMs as much as engineers — the web UI is the primary interface, not a CLI-first workflow.
@@ -24,6 +26,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Serves both commercial enterprises and open-source/academic projects (free tier/license for the latter).
 
 ## Core concepts & architecture
+
 - "Hosted words" is the core pricing/consumption unit: (words needing translation) × (number of target languages) — a 1,000-word file translated into 5 languages consumes 5,000 hosted words.
 - Storage-based API model: files (source, screenshots, glossaries, TMs) are uploaded to a "Storage" endpoint first, receive a storage ID, then get attached to a project — a two-step indirection not present in simpler file-sync tools.
 - Long-running operations (report generation, project builds, downloads) are async with polling, reflecting a server-hosted-state architecture rather than a stateless file transform.
@@ -33,6 +36,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Configurable multi-step workflows (translate → proofread → approve) with role-based permissions and vendor/task assignment — a heavier process model than a source-string-first .po workflow.
 
 ## Developer workflow & tooling
+
 - **CLI** (Java-based, requires Java 17+, cross-platform): commands include `init` (interactive config generation), `upload`, `download`, `status`, `pre-translate`, plus subcommand families for `branch`, `string`, `bundle`, `glossary`, `tm`, `context`, `task`, `project`, `label`, `distribution`. Config lives in `crowdin.yml`; CLI flags override file config; supports multithreaded uploads.
 - **REST API v2**: separate file-based and string-based reference docs, plus a distinct Enterprise API reference. Official client libraries: JavaScript, PHP, Java, Python, Ruby, .NET, Go. No rate-limit figures found in fetched docs — not verified.
 - **GitHub/GitLab/Bitbucket/Azure DevOps sync**: two options — a no-code native GitHub integration configured in the Crowdin UI, or the official GitHub Action for scriptable CI/CD use. Sync model: translated/approved content is merged into an auto-generated `l10n` (or `l10n_<branch>`) service branch, which becomes a PR; source-file changes sync independently/continuously from the translation-download schedule. A community forum thread ("GitHub integration won't sync") suggests sync reliability is a recurring support topic — not independently confirmed in depth.
@@ -47,6 +51,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Mobile SDKs (iOS, Android, Flutter) for pulling published translations at runtime.
 
 ## Supported file formats
+
 - Docs page states **"50 Supported Formats"**; homepage separately claims **"100+ file formats"**; a third-party review site states **"40+ file formats"** — three inconsistent figures, not reconciled, treat as vendor/secondary marketing claims rather than a single verified count.
 - Confirmed named formats (via search-indexed docs content, not a fully rendered live table): Android XML, macOS/iOS `.strings` and `.stringsdict`, JSON (plain, Chrome JSON, Go JSON, **i18next JSON** explicitly named, FBT JSON, RES JSON), **XLIFF and XLIFF 2.0**, Java `.properties` (plus Play Properties, Java Properties XML), **RESX/RESW** (.NET), **YAML**, INI (plus Joomla INI), JS/FJS, **PO (gettext)**, Qt `.ts`, TOML, CoffeeScript, XAML, subtitle formats (SRT, VTT, VTT2, SBV), SVG, DTD, CSV, RC, WXL, Haml, XLSX, PLIST, PHP arrays, **ARB** (Flutter/Dart), VDF.
 - .po/gettext is explicitly supported and listed as a first-class format alongside JSON/XLIFF.
@@ -54,6 +59,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Auto-conversion on import (confirmed via direct docs fetch): DOC→DOCX, PPT→PPTX, RTF→DOCX, PDF→DOCX; non-text "asset" formats also accepted: `.psd`, `.ai`, `.png`, `.jpeg`.
 
 ## AI features
+
 - **Models/providers**: page states "10+ providers / dozens of AI translation models" plus support for "custom AI modules" — no specific provider (OpenAI/Anthropic/Google) is named on the AI-translation feature page. Exact model roster not verified.
 - **AI pre-translation**: generates draft translations intended to match project style/terminology; supports cross-language references and API-key-based data protection.
 - **AI Pipeline**: breaks large translation jobs into smaller steps with automatic inter-step checking, aimed at reducing AI error propagation.
@@ -71,16 +77,17 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - **AI pricing**: no AI-specific price or credit system disclosed on the AI-translation page. The pricing page lists AI translation under "Managed Services" (alongside machine translation and professional translation services) without a stated price. Whether AI usage draws from hosted-word allowance or a separate quota — not verified.
 
 ## Pricing
+
 (figures cross-referenced from crowdin.com/pricing — table is JS-rendered and did not fully capture via direct fetch — corroborated by third-party aggregators costbench.com and G2's pricing summary; treat as third-party-corroborated, not a first-party screenshot)
 
-| Plan | Price/month | Hosted words | Private projects | Notes |
-|---|---|---|---|---|
-| Free | $0 | 60,000 | 1 | Unlimited translators on public projects; separate free Open Source and Academic licenses (unlimited projects/strings/members) |
-| Pro | $59 | 60,000 | 2 | Entry paid tier, "small teams starting with localization" |
-| Team | $179 | 100,000 | Unlimited | "Growing product teams"; used for the 14-day free trial |
-| Team+ | $450 | 500,000 | Unlimited | "Large organizations managing multiple products" |
-| Business | Custom (contact sales) | Custom | Custom | 30-day trial includes "all Business plan features" |
-| Crowdin Enterprise | Custom (contact sales), annual billing only | Custom | Custom | Separate product line; adds SSO, custom roles, advanced workflows, audit logs (per third-party review) |
+| Plan               | Price/month                                 | Hosted words | Private projects | Notes                                                                                                                          |
+| ------------------ | ------------------------------------------- | ------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Free               | $0                                          | 60,000       | 1                | Unlimited translators on public projects; separate free Open Source and Academic licenses (unlimited projects/strings/members) |
+| Pro                | $59                                         | 60,000       | 2                | Entry paid tier, "small teams starting with localization"                                                                      |
+| Team               | $179                                        | 100,000      | Unlimited        | "Growing product teams"; used for the 14-day free trial                                                                        |
+| Team+              | $450                                        | 500,000      | Unlimited        | "Large organizations managing multiple products"                                                                               |
+| Business           | Custom (contact sales)                      | Custom       | Custom           | 30-day trial includes "all Business plan features"                                                                             |
+| Crowdin Enterprise | Custom (contact sales), annual billing only | Custom       | Custom           | Separate product line; adds SSO, custom roles, advanced workflows, audit logs (per third-party review)                         |
 
 - Annual billing: "2 months FREE" (~16.7% discount vs. monthly).
 - Unlimited translators/proofreaders on all paid plans.
@@ -88,6 +95,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Managed Services add-on (MT, AI content generation, professional translation) priced on request, no published rate.
 
 ## Strengths
+
 - Broad file-format coverage spanning modern JS/web formats (JSON variants, YAML, PO) and legacy enterprise formats (RESX, Java properties, Qt .ts) in one platform.
 - Genuinely mature MCP server (v2) with explicit support for Claude Code/Claude Desktop/Cursor/VS Code/Windsurf — ahead of most TMS competitors in agentic-tooling integration as of mid-2026.
 - Long track record (since 2009) and large third-party integration marketplace.
@@ -96,7 +104,9 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Unlimited translators/proofreaders even on paid self-serve tiers, useful for community/vendor-heavy projects.
 
 ## Weaknesses & criticism
+
 (sourced from Capterra direct reviews, G2 review summaries via search, and a third-party deep-review site; Reddit/HN discussion specifically about Crowdin could not be located via search — any such claim should be treated as unsourced)
+
 - Pricing: Capterra reviewer quote — "The pricing for organizations is pretty high, it can be unreasonably expensive for small companies." G2 review summaries similarly flag affordability concerns for small businesses, indie developers, and freelancers, calling paid tiers "steep for limited or infrequent use." (Capterra: capterra.com/p/163509/Crowdin/reviews/; G2 summary via search)
 - UI/UX: Capterra quote — "I don't find the user interface very intuitive. I often have to read an article or google something to find it." G2 summaries describe the UI as "overwhelming for newcomers" and "less intuitive for non-technical users and external collaborators."
 - AI skepticism from users: one Capterra reviewer explicitly called out "AI translations (that never work)" and described features like "Context pages" as unnecessary for their use case.
@@ -108,6 +118,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - As a proprietary hosted SaaS, no self-hosted/on-prem option — a recurring concern for data-residency-sensitive organizations (general TMS-category pattern, not a Crowdin-specific quote).
 
 ## What they do differently
+
 - Actively maintained MCP server (v2) with first-class support for Claude Code and Claude Desktop as clients — Crowdin is notably ahead of typical TMS competitors in agentic/AI-tool integration as of mid-2026, not just AI-translation-as-a-feature but AI-agent-as-a-client-of-the-TMS.
 - "Hosted words" pricing unit multiplies source words by target-language count — a volume metric that scales cost with fan-out to more languages, differing from simple per-string or flat-seat pricing models.
 - Server-hosted, storage-then-attach API architecture (upload to Storage, get an ID, attach to project) — the authoritative translation state lives in Crowdin's hosted project, with git/source files as a sync target rather than the source of truth, the inverse of a source-string-first, file-based .po workflow.
@@ -118,6 +129,7 @@ repository: n/a (proprietary; OSS tooling under github.com/crowdin)
 - Two distinct product lines (self-serve Crowdin vs. Crowdin Enterprise, annual-billing-only) rather than a single scaling tier ladder — the Enterprise line gates SSO, custom roles, and audit logs entirely off the self-serve path.
 
 ## Sources
+
 - https://crowdin.com — accessed 2026-07-06
 - https://crowdin.com/features/ai-translation — accessed 2026-07-06
 - https://crowdin.com/pricing — accessed 2026-07-06
