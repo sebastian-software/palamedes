@@ -103,7 +103,7 @@ export default function Proof() {
         title="Fast would be worthless if the catalogs were wrong."
         lede="Catalog semantics live in one dedicated engine (ferrocat): parsing, merging, structured audits, and ICU authoring diagnostics. The benchmark harness validates every tool run semantically — message inventories are compared, not just timed."
       >
-        <FeatureGrid cards={CATALOG_QA_CARDS} sectionIndex="03" />
+        <FeatureGrid cards={CATALOG_QA_CARDS} />
       </Section>
 
       <Section

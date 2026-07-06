@@ -55,7 +55,7 @@ export default function Frameworks() {
         num="02 — Strategies"
         title="Pick the locale strategy your product needs — not the one your framework dictates."
       >
-        <FeatureGrid cards={STRATEGY_CARDS} columns={4} sectionIndex="02" />
+        <FeatureGrid cards={STRATEGY_CARDS} columns={4} />
         <a
           href={docsHref("locale-strategies")}
           className="mono-nums mt-6 inline-block text-[13px] text-accent"
