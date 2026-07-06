@@ -59,7 +59,7 @@ trying to protect.
 
 The current proof is visible:
 
-- five framework families in the example matrix
+- six framework families in the example matrix
 - cookie, route, subdomain, and tld locale strategies
 - versioned browser screenshots
 - reproducible benchmark commands

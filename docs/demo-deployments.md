@@ -2,26 +2,30 @@
 
 The Palamedes example matrix is verified primarily through local runs and CI.
 Automatic deployments are not part of the default merge or release path. The
-matrix spans twenty examples (five frameworks × four locale strategies). Public
-demo URLs are documented as the live reference surface, but reachability depends
-on the hosting and DNS notes in this document. The five subdomain demos require
-the per-example wildcard DNS records described under Subdomain Locale Hosting.
-The five tld demos require the `examples.palamedes-i18n.*` domains described
-under TLD Locale Hosting.
+matrix spans 24 examples (six frameworks × four locale strategies). Public demo
+URLs are documented as the live reference surface where hosting exists, but
+reachability depends on the hosting and DNS notes in this document. The five
+currently hosted subdomain demos require the per-example wildcard DNS records
+described under Subdomain Locale Hosting. The five currently hosted tld demos
+require the `examples.palamedes-i18n.*` domains described under TLD Locale
+Hosting. Remix v3 is verified locally and in CI, but is not yet a public demo
+deployment target.
 
 ## Current Policy
 
 - the canonical verification path is `pnpm build:examples` plus `pnpm verify:examples`
 - example deployments do not run automatically on `main`
-- the Next.js and SolidStart examples (including their subdomain and tld variants) are excluded from `deploy-examples.yml`
+- the Next.js, SolidStart, and Remix examples (including their subdomain and tld variants) are excluded from `deploy-examples.yml`
 - the `deploy-examples.yml` workflow supports manual deployment of the Vite-based examples (TanStack, Waku, React Router — cookie, route, subdomain, and tld) if an additional hosted URL is needed
 
 ## Live Reference URLs
 
-These URLs describe the intended public reference shape — five frameworks, each
-in four locale strategies. Switch language in a reachable demo and watch copy,
-plural seat counts, currency, and dates change together. The demos are grouped
-by framework below, with every locale-specific URL linked directly.
+These URLs describe the intended public reference shape — six frameworks, each in
+four locale strategies. Switch language in a reachable demo and watch copy,
+plural seat counts, currency, and dates change together. The demos are grouped by
+framework below, with every locale-specific URL linked directly where public
+hosting exists. Remix v3 rows link to source because that beta integration is
+currently a local/CI proof surface.
 
 How each strategy encodes the locale:
 
@@ -79,14 +83,27 @@ How each strategy encodes the locale:
 | subdomain | [en](https://en.solidstart-subdomain.examples.palamedes.dev) · [de](https://de.solidstart-subdomain.examples.palamedes.dev) · [es](https://es.solidstart-subdomain.examples.palamedes.dev)                             |
 | tld       | [en](https://solidstart.examples.palamedes-i18n.com) · [de](https://solidstart.examples.palamedes-i18n.de) · [es](https://solidstart.examples.palamedes-i18n.es) · [fr](https://solidstart.examples.palamedes-i18n.fr) |
 
+### Remix v3
+
+Remix v3 examples are verified through the default Remix Node loader path in CI.
+They are not public demo deployments yet while the Remix v3 beta hosting and UI
+adapter story settles.
+
+| Strategy  | Reference source                                        |
+| --------- | ------------------------------------------------------- |
+| cookie    | [examples/remix-cookie](../examples/remix-cookie)       |
+| route     | [examples/remix-route](../examples/remix-route)         |
+| subdomain | [examples/remix-subdomain](../examples/remix-subdomain) |
+| tld       | [examples/remix-tld](../examples/remix-tld)             |
+
 ## Subdomain Locale Hosting (DNS And Reverse Proxy)
 
 The subdomain demos encode the locale in the leftmost DNS label
 (`de.nextjs-subdomain.examples.palamedes.dev` renders German). That label sits one
 level below the existing `*.examples.palamedes.dev` wildcard, which only covers a
 single label: it resolves `nextjs-subdomain.examples.palamedes.dev` but not
-`de.nextjs-subdomain.examples.palamedes.dev`. Each subdomain example therefore
-needs its own wildcard record:
+`de.nextjs-subdomain.examples.palamedes.dev`. Each public subdomain example
+therefore needs its own wildcard record:
 
 - `*.nextjs-subdomain.examples.palamedes.dev`
 - `*.tanstack-subdomain.examples.palamedes.dev`
@@ -113,7 +130,9 @@ implies, but it must hold for caching layers too.
 These records and proxy routes are now in place, so the five subdomain rows above
 are publicly reachable (each locale host returns 200 and renders its locale). The
 canonical verification path remains `pnpm verify:examples`, which exercises the
-subdomain strategy locally via `*.lvh.me` hosts.
+subdomain strategy locally via `*.lvh.me` hosts. Remix subdomain support is
+verified the same way, but it is not included in the public DNS/proxy deployment
+plan yet.
 
 ## TLD Locale Hosting (DNS And Reverse Proxy)
 
@@ -140,10 +159,12 @@ the `Host` in its cache key (or the app must send `Vary: Host`); otherwise a
 response for one TLD could be served for another. This is the same constraint the
 per-host routing already implies, but it must hold for caching layers too.
 
-Until these domains are provisioned, the five tld rows in the Live Reference table
-are not yet reachable. The canonical verification path runs locally via
+Until these domains are provisioned, the five public tld rows in the Live
+Reference table are not yet reachable. The canonical verification path runs locally via
 `pnpm verify:examples`, which exercises the tld strategy using Chromium's
-`--host-resolver-rules` flag to simulate the TLD hosts without real DNS.
+`--host-resolver-rules` flag to simulate the TLD hosts without real DNS. Remix TLD
+support is covered by the same local/CI verification path, not by public TLD
+deployment yet.
 
 ## Optional Manual Deployments
 
@@ -173,11 +194,12 @@ Supported deployment targets:
 - `waku-tld`
 - `react-router-tld`
 
-## Why Next.js Is Not In `deploy-examples.yml`
+## Why Next.js, SolidStart, And Remix Are Not In `deploy-examples.yml`
 
-The Next.js examples are part of the verified matrix, but they are excluded from
-the `deploy-examples.yml` workflow. That workflow targets the Vite-based examples
-(TanStack, Waku, React Router — cookie, route, subdomain, and tld) specifically.
+The Next.js, SolidStart, and Remix examples are part of the verified matrix, but
+they are excluded from the `deploy-examples.yml` workflow. That workflow targets
+the Vite-based examples (TanStack, Waku, React Router — cookie, route, subdomain,
+and tld) specifically.
 
 For this OSS setup, the guaranteed baseline is:
 
@@ -185,5 +207,6 @@ For this OSS setup, the guaranteed baseline is:
 - the examples run locally
 - SSR, locale routing, cookie handling, and localized server actions are covered in browser tests
 
-The hosting mechanism for the Next.js examples is separate from
-`deploy-examples.yml` and is not further documented here.
+The hosting mechanism for the Next.js and SolidStart examples is separate from
+`deploy-examples.yml` and is not further documented here. Remix v3 remains a
+server-first beta proof surface until a public hosting target is chosen.

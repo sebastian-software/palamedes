@@ -1,6 +1,6 @@
 # Running all examples together in one container
 
-This document describes how to run all twenty Palamedes example apps together in
+This document describes how to run all 24 Palamedes example apps together in
 **one** Podman container – each on its own fixed port. It builds on the
 `Containerfile` in the repo root and the supervisor
 `scripts/container/start-all.mjs`.
@@ -12,7 +12,7 @@ This document describes how to run all twenty Palamedes example apps together in
 ## Prerequisites
 
 - [Podman](https://podman.io/) installed
-- Enough resources for ten concurrent SSR Node servers (several GB of RAM
+- Enough resources for two dozen concurrent SSR Node servers (several GB of RAM
   recommended)
 
 A Rust or Node setup on the host is **not** required: the container's build stage
@@ -42,7 +42,7 @@ The build is multi-stage:
 
 1. **Build stage** (glibc/Debian): `pnpm install`, `pnpm build` (builds the
    packages including the native addon via `cargo` in release profile) and
-   `pnpm build:examples` (builds all twenty apps). The `cargo` compilation makes the
+   `pnpm build:examples` (builds all 24 apps). The `cargo` compilation makes the
    first build noticeably longer.
 2. **Runtime stage** (slimmer Debian slim): takes over the finished workspace and
    starts the supervisor. Dev dependencies stay installed because TanStack's
@@ -57,7 +57,7 @@ from the ports the servers actually bind:
 podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
 ```
 
-Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4051:4051`.
+Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4063:4063`.
 
 - **Init/reaping:** the image ships `tini` as its entrypoint, so reparented child
   processes are reaped cleanly with no extra flag (also works later via
@@ -70,22 +70,28 @@ Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4051:4051`.
 The supervisor starts all apps from `scripts/example-matrix.mjs`, prefixes their
 output with the example id (`[nextjs-cookie] …`), and intentionally exits the
 container with an error code as soon as a server dies unexpectedly (fail-fast).
-`podman stop` terminates all twenty servers via forwarded `SIGTERM`.
+`podman stop` terminates all 24 servers via forwarded `SIGTERM`.
 
 ## Port overview
 
-| Port | Example               | Strategy |
-| ---- | --------------------- | -------- |
-| 4010 | `nextjs-cookie`       | cookie   |
-| 4011 | `nextjs-route`        | route    |
-| 4020 | `tanstack-cookie`     | cookie   |
-| 4021 | `tanstack-route`      | route    |
-| 4030 | `waku-cookie`         | cookie   |
-| 4031 | `waku-route`          | route    |
-| 4040 | `react-router-cookie` | cookie   |
-| 4041 | `react-router-route`  | route    |
-| 4050 | `solidstart-cookie`   | cookie   |
-| 4051 | `solidstart-route`    | route    |
+| Port | Example                | Strategy  |
+| ---- | ---------------------- | --------- |
+| 4010 | `nextjs-cookie`        | cookie    |
+| 4011 | `nextjs-route`         | route     |
+| 4020 | `tanstack-cookie`      | cookie    |
+| 4021 | `tanstack-route`       | route     |
+| 4030 | `waku-cookie`          | cookie    |
+| 4031 | `waku-route`           | route     |
+| 4040 | `react-router-cookie`  | cookie    |
+| 4041 | `react-router-route`   | route     |
+| 4050 | `solidstart-cookie`    | cookie    |
+| 4051 | `solidstart-route`     | route     |
+| 4052 | `solidstart-subdomain` | subdomain |
+| 4053 | `solidstart-tld`       | tld       |
+| 4060 | `remix-cookie`         | cookie    |
+| 4061 | `remix-route`          | route     |
+| 4062 | `remix-subdomain`      | subdomain |
+| 4063 | `remix-tld`            | tld       |
 
 `scripts/example-matrix.mjs` is the single source of truth for the ports. The
 supervisor binds according to it automatically, and the `print-podman-ports.mjs`

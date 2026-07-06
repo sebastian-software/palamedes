@@ -80,7 +80,7 @@ must be resolved before implementation:
 
 ## Facts the copy relies on (verify before shipping)
 
-- 20 browser-verified example apps: 5 framework families × 4 locale
+- 24 browser-verified example apps: 6 framework families × 4 locale
   strategies (cookie, route, subdomain, TLD) — see `examples/`.
 - Demo links are **explicit per matrix cell with a hosting status**
   (`FRAMEWORK_MATRIX_CELLS` in `components.jsx`), mirroring the per-strategy
@@ -89,8 +89,8 @@ must be resolved before implementation:
   Subdomain/tld cells carry status `provisioning` and render no demo link
   until the hosting story is reconciled (#306). Never derive demo URLs from
   a single naming pattern.
-- E2E extract/update benchmark medians: 33.58 ms (small), 47.77 ms (medium);
-  21.00× vs Lingui, 15.68× vs i18next-parser on the checked machine-local run
+- E2E extract/update benchmark: 12.99× vs Lingui and 9.00× vs i18next-parser
+  on the checked 1,500-file machine-local run
   — see `benchmarks/e2e-workflow/results/latest.md`.
 - 16 ADRs in `adr/`.
 - CLI binary is `pmds`; recommended install is the scoped `@palamedes/*`

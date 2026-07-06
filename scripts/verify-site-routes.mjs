@@ -30,7 +30,7 @@ const MIME = {
 
 const ROUTE_EXPECTATIONS = [
   { path: "/", h1: "One translation model." },
-  { path: "/frameworks", h1: "Five frameworks." },
+  { path: "/frameworks", h1: "Six frameworks." },
   { path: "/proof", h1: "Claims you can re-run." },
   { path: "/get-started", h1: "First working translation" },
   { path: "/compare", h1: "Narrower than the alternatives." },
@@ -164,10 +164,10 @@ async function checkRoutes(context, label, { expectHydration }) {
   if (expectHydration) {
     currentPath = "/"
     await gotoAndSettle(page, "/", { settleMs: 1500 })
-    // Matrix renders all 20 cells.
+    // Matrix renders all 24 cells.
     const cells = await page.locator("table tbody td").count()
-    if (cells !== 20) {
-      fail(`home matrix: expected 20 cells, got ${cells}`)
+    if (cells !== 24) {
+      fail(`home matrix: expected 24 cells, got ${cells}`)
     }
     // Code showcase tabs toggle.
     await page.getByRole("tab", { name: "Translate" }).click()
@@ -202,8 +202,8 @@ async function checkRoutes(context, label, { expectHydration }) {
     // No-JS completeness: stats and bars must be in the static HTML.
     currentPath = "/"
     await gotoAndSettle(page, "/", { settleMs: 100 })
-    const statText = await page.getByText("browser-verified example apps").isVisible()
-    const stat = await page.getByText("19.6", { exact: false }).first().isVisible()
+    const statText = await page.getByText("verified example apps").isVisible()
+    const stat = await page.getByText("12.99", { exact: false }).first().isVisible()
     if (!statText || !stat) {
       fail("no-JS: proof-strip stats missing from prerendered HTML")
     }

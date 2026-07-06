@@ -22,5 +22,5 @@ also binds `PORT=4041`.
 - `app/po.d.ts` declares `.po` imports for TypeScript.
 - `app/lib/i18n.ts` wires the runtime and route locale controls.
 
-The canonical overview for all twenty examples is
+The canonical overview for all 24 examples is
 [`examples/README.md`](../README.md).

@@ -60,12 +60,12 @@ export function ProofPage() {
 
       {/* ----------------------------------------------------- verification */}
       <Section id="verification">
-        <h2>20 apps, verified in a real browser, on every change.</h2>
+        <h2>24 apps, verified in a real browser, on every change.</h2>
         <StepFlow
           steps={[
             {
               title: "Build",
-              body: "All 20 example apps build against the workspace packages — no mocked integrations.",
+              body: "All 24 example apps build against the workspace packages — no mocked integrations.",
             },
             {
               title: "Drive",

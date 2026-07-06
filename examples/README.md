@@ -3,7 +3,7 @@
 These examples are the strongest visible proof that Palamedes is more than a
 single-framework integration.
 
-They prove the current Palamedes story across five framework families and four
+They prove the current Palamedes story across six framework families and four
 locale strategies while preserving the same underlying runtime and identity
 model.
 
@@ -201,12 +201,15 @@ Those helpers stay headless on purpose. The examples still own routing, form
 submission, and locale policy, but they no longer need to reimplement the same
 frontend substrate in each app.
 
-Every example also renders the same booking ("Frontend Stage 2026") so the twenty
-apps are visually identical regardless of framework. The whole visual layer is
-one shared stylesheet plus one shared content source, proving that only the
-markup and locale strategy differ across frameworks, not the design:
+Every non-Remix example also renders the same booking ("Frontend Stage 2026") so
+the twenty established UI-adapter apps are visually identical regardless of
+framework. The whole visual layer is one shared stylesheet plus one shared
+content source, proving that only the markup and locale strategy differ across
+frameworks, not the design. Remix v3 currently proves the same server-side
+locale strategies with a simpler server-first UI while the Remix UI adapter is
+tracked separately:
 
-- [packages/example-ui](../packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by all twenty apps
+- [packages/example-ui](../packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by the twenty established UI-adapter apps
 
 The booking surfaces every common i18n need in a real context: translated
 copy, plural seat counts, a personalized greeting variable, and locale-aware
@@ -300,3 +303,7 @@ The example scripts use a fixed port layout so the apps can run in parallel:
 - `4051` `solidstart-route`
 - `4052` `solidstart-subdomain`
 - `4053` `solidstart-tld`
+- `4060` `remix-cookie`
+- `4061` `remix-route`
+- `4062` `remix-subdomain`
+- `4063` `remix-tld`

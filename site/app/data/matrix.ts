@@ -36,6 +36,7 @@ export const FRAMEWORKS: MatrixAxis[] = [
   { name: "SolidStart", slug: "solidstart" },
   { name: "Waku", slug: "waku" },
   { name: "React Router", slug: "react-router" },
+  { name: "Remix v3", slug: "remix" },
 ]
 
 export const STRATEGIES: MatrixAxis[] = [
@@ -45,24 +46,30 @@ export const STRATEGIES: MatrixAxis[] = [
   { name: "TLD", slug: "tld" },
 ]
 
+const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "solidstart", "waku", "react-router"])
+
 export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework }) => [
   {
     framework,
     strategy: "cookie",
     verified: true as const,
-    status: "live" as const,
-    demoLinks: [{ label: "open", href: `https://${framework}-cookie.examples.palamedes.dev` }],
+    status: HOSTED_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
+    demoLinks: HOSTED_FRAMEWORKS.has(framework)
+      ? [{ label: "open", href: `https://${framework}-cookie.examples.palamedes.dev` }]
+      : undefined,
     sourceHref: repoHref(`examples/${framework}-cookie`, "tree"),
   },
   {
     framework,
     strategy: "route",
     verified: true as const,
-    status: "live" as const,
-    demoLinks: ["en", "de", "es"].map((locale) => ({
-      label: locale,
-      href: `https://${framework}-route.examples.palamedes.dev/${locale}`,
-    })),
+    status: HOSTED_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
+    demoLinks: HOSTED_FRAMEWORKS.has(framework)
+      ? ["en", "de", "es"].map((locale) => ({
+          label: locale,
+          href: `https://${framework}-route.examples.palamedes.dev/${locale}`,
+        }))
+      : undefined,
     sourceHref: repoHref(`examples/${framework}-route`, "tree"),
   },
   {

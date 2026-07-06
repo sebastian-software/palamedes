@@ -23,7 +23,8 @@ const SHOTS: Shot[] = [
 
 /*
  * Filmstrip of real, versioned Playwright captures — the "diffable artifact"
- * the copy talks about. Four of the twenty; the link leads to the full set.
+ * the copy talks about. Four of the established UI-adapter set; the link leads
+ * to the full screenshot set.
  */
 export function ScreenshotStrip() {
   return (
@@ -55,7 +56,7 @@ export function ScreenshotStrip() {
         href={docsHref("example-screenshots")}
         className="mono-nums mt-3 inline-block text-[13px] text-accent"
       >
-        All 20 versioned screenshots →
+        All versioned screenshots →
       </a>
     </div>
   )

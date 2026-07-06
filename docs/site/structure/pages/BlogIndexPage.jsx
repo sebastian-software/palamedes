@@ -48,9 +48,9 @@ export function BlogIndexPage() {
           />
           <PostCard
             post={{
-              title: "Browser-verifying i18n across five frameworks",
+              title: "Browser-verifying i18n across six frameworks",
               excerpt:
-                "How 20 example apps get driven by the same Playwright flow in CI — and why versioned screenshots beat compatibility tables.",
+                "How 24 example apps get driven by the same verification flow in CI — and why versioned screenshots beat compatibility tables.",
               href: repoHref("docs/site/posts/browser-verifying-i18n-across-five-frameworks.md"),
               readMinutes: 6,
             }}

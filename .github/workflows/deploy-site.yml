@@ -118,7 +118,7 @@ jobs:
           }
 
           check "/" 200 "One translation model."
-          check "/frameworks" 200 "Five frameworks."
+          check "/frameworks" 200 "Six frameworks."
           check "/proof" 200 "Claims you can re-run."
           check "/get-started" 200 "First working translation"
           check "/compare" 200 "Narrower than the alternatives."

@@ -12,8 +12,8 @@ interface Stat {
 }
 
 const STATS: Stat[] = [
-  { value: "20", label: "browser-verified example apps", href: "/frameworks" },
-  { value: "5 × 4", label: "frameworks × locale strategies", href: "/frameworks" },
+  { value: "24", label: "verified example apps", href: "/frameworks" },
+  { value: "6 × 4", label: "frameworks × locale strategies", href: "/frameworks" },
   {
     value: "12.99×",
     label: "faster than Lingui — realistic 1,500-file extract/update benchmark, machine-local run",
