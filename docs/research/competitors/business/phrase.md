@@ -9,6 +9,23 @@ repository: n/a (proprietary)
 
 # Phrase
 
+## Fact sheet
+
+| Fact                | Value                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Company / ownership | Phrase a.s. (PhraseApp + Memsource merger 2021); PE-owned (The Carlyle Group)                                  |
+| License / model     | Proprietary SaaS suite (Strings, TMS, Studio, Language AI, Orchestrator)                                       |
+| Pricing model       | Platform pricing: per-product seats + managed words + processed words/yr + MTUs/yr; $27–$1,245+/mo             |
+| Adoption            | 4,500+ customers (2023 claim); ~400 employees; Forrester Wave Leader Q3 2025                                   |
+| TMS vs. AI-first    | Enterprise TMS with heavy AI layer (Language AI: 30+ engines, QPS quality scoring)                             |
+| Source of truth     | Hosted key/segment DB; files are import/export targets                                                         |
+| Delivery            | File sync (CLI/git) + OTA                                                                                      |
+| ICU MessageFormat   | Not explicitly verified in this analysis                                                                       |
+| .po / gettext       | Yes — one among 50+ formats                                                                                    |
+| Dev tooling         | phrase-cli (OSS), 8 REST API surfaces, git-host integrations, webhooks                                         |
+| Self-hosting        | No                                                                                                             |
+| Notable             | QPS: distilled AI model approximating MQM-2.0 human quality scores, gating review routing and MT training data |
+
 ## Snapshot
 
 - Maintainer / company / funding: Phrase (Phrase a.s.), formed from the 2021 acquisition of Phrase (formerly PhraseApp, Hamburg-based) by Memsource, majority-owned by The Carlyle Group (Carlyle Europe Technology Partners IV invested in Memsource in July 2020). Company operates under the "Phrase" brand since a September 2022 rebrand unifying Memsource + PhraseApp into one platform. No independent public funding rounds beyond the Carlyle-backed acquisition; treat as PE-backed, not VC-funded in the startup sense.

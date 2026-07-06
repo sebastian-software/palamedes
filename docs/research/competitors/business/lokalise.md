@@ -9,6 +9,23 @@ repository: n/a (proprietary; OSS tooling under github.com/lokalise)
 
 # Lokalise
 
+## Fact sheet
+
+| Fact                | Value                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------- |
+| Company / ownership | Lokalise Inc. (Riga, 2017); ~$56M funding; now Adobe-owned via Semrush (2024/2026)                       |
+| License / model     | Proprietary SaaS; two product lines (Expert = software, Vantage = content)                               |
+| Pricing model       | Since 11/2025: processed words/year; $144 / $375–499 / $999 / custom per month; 2 of 4 tiers sales-gated |
+| Adoption            | Claims ~1M users / 3,000+ companies (unverified)                                                         |
+| TMS vs. AI-first    | TMS with two-tier AI (Standard vs. RAG-based Pro AI) + AI LQA (DQF-MQM scoring)                          |
+| Source of truth     | Hosted keys (server-side projects/branches)                                                              |
+| Delivery            | File sync + OTA (GB-metered) with mobile SDKs                                                            |
+| ICU MessageFormat   | Partial — ICU plural export option for .po recorded; full support not verified                           |
+| .po / gettext       | Yes — incl. msgctxt, fuzzy flags, plurals                                                                |
+| Dev tooling         | lokalise2 CLI (Go), API v2 (strict rate limits reported), Figma/XD/Sketch plugins                        |
+| Self-hosting        | No                                                                                                       |
+| Notable             | Design-tool workflow as differentiator; atypical 90-day cancellation notice period                       |
+
 ## Snapshot
 
 - Maintainer / company / funding: Lokalise Inc., founded 2017 in Riga, Latvia by Nick Ustinov and Petr Antropov. Raised $6M Series A (Sept 2020, led by Mike Chalfen/Capital300) and $50M Series B (Dec 2021, led by CRV, with Creandum, Dawn Capital). Total disclosed funding ~$56M. Acquired by Semrush in 2024. Semrush itself was acquired by Adobe (deal completed ~April 2026) — Lokalise is therefore now, transitively, an Adobe-owned company.

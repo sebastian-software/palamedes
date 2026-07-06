@@ -9,6 +9,23 @@ repository: https://github.com/tolgee/tolgee-platform
 
 # Tolgee
 
+## Fact sheet
+
+| Fact                | Value                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------------------------- |
+| Company / ownership | Tolgee s.r.o., Brno (Czechia); ~€500K seed + Czech public grants                                      |
+| License / model     | Open-core: Apache-2.0 platform + proprietary `ee/` (Tolgee EE License); MIT SDKs                      |
+| Pricing model       | Cloud €0 / €49 / €179 / €499 / custom per month (keys + seats + MT credits); self-host free ≤10 seats |
+| Adoption            | 4.0k GitHub stars; ~123k npm downloads/week (@tolgee/core); Capterra 4.6/5 (95 reviews)               |
+| TMS vs. AI-first    | TMS with AI translator (GPT-based, automatically context-fed)                                         |
+| Source of truth     | Platform key/translation DB; files are import/export targets                                          |
+| Delivery            | SDK/CDN + file export                                                                                 |
+| ICU MessageFormat   | Yes — native platform-wide, plural-aware editor UI                                                    |
+| .po / gettext       | Yes — one among many formats                                                                          |
+| Dev tooling         | CLI (extraction, push/pull), REST API, MCP server listed                                              |
+| Self-hosting        | Yes (Docker; core features free)                                                                      |
+| Notable             | ALT+click in-context editing with automatic screenshot capture feeding AI context                     |
+
 ## Snapshot
 
 - Maintainer / company / funding: Tolgee s.r.o., Brno, Czech Republic. Founded by Jan Cizmar (CEO, project started ~2019 as a master's thesis); co-founders Marketa (COO) and Stepan (advisor). Core team ~9 people plus external/OSS contributors. Funding: ~€500K seed round from Flying Founders; additional non-dilutive support via CzechInvest Technology Incubation and CzechInvest Internationalization (EU National Recovery Plan) programs. No large VC round disclosed.

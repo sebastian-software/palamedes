@@ -9,6 +9,23 @@ repository: https://github.com/intlify/vue-i18n
 
 # Vue I18n (Intlify)
 
+## Fact sheet
+
+| Fact              | Value                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| License           | MIT                                                                                         |
+| Analyzed version  | vue-i18n 11.4.6 (2026-06-18)                                                                |
+| Company / funding | kazupon (Vue core team member), part-time; GitHub Sponsors / backers                        |
+| Pricing           | Free OSS                                                                                    |
+| Adoption          | ~3.24M npm downloads/week; 2.7k GitHub stars (+7.2k on archived Vue-2 repo)                 |
+| Framework support | Vue 2/3 + Nuxt (via separately maintained @nuxtjs/i18n) only                                |
+| Message identity  | Key-based                                                                                   |
+| ICU MessageFormat | Opt-in via bundler plugin; own non-ICU DSL is the default                                   |
+| .po / gettext     | No — JSON/JSON5/YAML/JS resources                                                           |
+| Extraction        | No first-party CLI; IDE-plugin-driven (i18n Ally)                                           |
+| AI                | None                                                                                        |
+| Notable           | SFC `<i18n>` blocks; AOT-vs-JIT compile toggle (CSP); official `petite-vue-i18n` lite build |
+
 ## Snapshot
 
 - Maintainer / company / funding: Created and led by kazuya kawaguchi ("kazupon"), a Vue.js core team member; project now lives under the "Intlify" org/project umbrella (a collection of Vue-focused i18n tooling: vue-i18n, petite-vue-i18n, unplugin-vue-i18n, eslint-plugin-vue-i18n, vue-i18n-routing, etc.). No corporate employer backing found — funded via GitHub Sponsors (github.com/sponsors/kazupon) and an OpenCollective/BACKERS.md tiered-sponsor list (Platinum/Gold/Silver/Bronze). Not verified whether sponsorship income is large enough to fund full-time work; kazupon has stated he works on it "partially part-time" alongside a day job.

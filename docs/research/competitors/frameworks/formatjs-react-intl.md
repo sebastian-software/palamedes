@@ -9,6 +9,23 @@ repository: https://github.com/formatjs/formatjs
 
 # FormatJS / react-intl
 
+## Fact sheet
+
+| Fact              | Value                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| License           | BSD-3-Clause                                                                                      |
+| Analyzed version  | react-intl 10.1.14 (2026-06-26)                                                                   |
+| Company / funding | Community (ex-Yahoo); effectively one primary maintainer; no disclosed funding                    |
+| Pricing           | Free OSS                                                                                          |
+| Adoption          | ~3.1M npm downloads/week; 14.7k GitHub stars                                                      |
+| Framework support | React (Client Components only — no native RSC), Vue (vue-intl); framework-agnostic @formatjs/intl |
+| Message identity  | Content-hash IDs auto-generated from `defaultMessage`                                             |
+| ICU MessageFormat | Yes — native (the ICU standard-bearer in JS)                                                      |
+| .po / gettext     | No — custom JSON + TMS-specific formatter adapters                                                |
+| Extraction        | Static `formatjs extract` → `compile` (optional AST precompilation)                               |
+| AI                | None                                                                                              |
+| Notable           | Ships standalone `Intl.*` polyfill packages; missing RSC support is the sharpest structural gap   |
+
 ## Snapshot
 
 - Maintainer / company / funding: Community-maintained monorepo (`formatjs/formatjs`). Originated as `yahoo/react-intl` at Yahoo (~2014), later spun out under the independent FormatJS org. Primary current maintainer visible in changelogs/commits: longlho (Long Ho), with other contributors (e.g. redonkulus). No corporate backing or disclosed funding/sponsorship model found; not verified whether it has OpenCollective/GitHub Sponsors income at meaningful scale.

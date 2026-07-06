@@ -9,6 +9,23 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 
 # locize
 
+## Fact sheet
+
+| Fact                | Value                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| Company / ownership | inweso GmbH (Switzerland); run by the i18next maintainers; no VC                                          |
+| License / model     | Proprietary SaaS; revenue explicitly funds i18next OSS development                                        |
+| Pricing model       | Fixed tiers $0–$199/mo (words, languages, CDN downloads) + usage-based plan; AI/MT metered per token/char |
+| Adoption            | ~86k npm downloads/week (backend SDK); Capterra 4.4/5 (22 reviews) — small footprint                      |
+| TMS vs. AI-first    | TMS (i18next-native) with optional AI/MT auto-translation                                                 |
+| Source of truth     | Hosted namespace/key DB with versioning                                                                   |
+| Delivery            | Runtime CDN (OTA) — translations fetched at runtime, no rebuild                                           |
+| ICU MessageFormat   | Yes — native format (for react-intl/next-intl/Lingui clients)                                             |
+| .po / gettext       | Yes — via converter/CLI export (keys/values only; file structure not preserved)                           |
+| Dev tooling         | locize-cli, REST API, GitHub Action, MCP server (2026)                                                    |
+| Self-hosting        | No (enterprise-only per vendor comparison)                                                                |
+| Notable             | `saveMissing` runtime key harvesting instead of static extraction; in-context editor via URL param        |
+
 ## Snapshot
 
 - Maintainer / company / funding: run by **inweso GmbH**, a Swiss LLC (CHE-412.131.272) registered 24 Oct 2012, HQ Altnau, Switzerland. Publicly named principals: Jan Mühlemann (chair, claims "creator of i18next") and Adriano Raiano / "adrai" (managing director, most visible i18next/locize maintainer). A third registry shareholder exists but is unverified (paywalled record). Company states it has no VC funding; positions locize revenue as what funds continued i18next OSS development.

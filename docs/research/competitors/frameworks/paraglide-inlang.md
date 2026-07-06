@@ -9,6 +9,23 @@ repository: https://github.com/opral/paraglide-js
 
 # Paraglide JS / inlang
 
+## Fact sheet
+
+| Fact              | Value                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| License           | MIT (entire product line)                                                                                    |
+| Analyzed version  | @inlang/paraglide-js 2.20.2 (2026-06-25)                                                                     |
+| Company / funding | Opral GmbH (Berlin, ~7 people); no known funding                                                             |
+| Pricing           | Free OSS; no visible monetization                                                                            |
+| Adoption          | ~358k npm downloads/week; 538 GitHub stars (inlang monorepo 2.0k)                                            |
+| Framework support | React, Next.js, SvelteKit, TanStack Start/Router, React Router, Astro, Vue, Solid, vanilla — one Vite plugin |
+| Message identity  | Key-based; messages compile to per-message ESM functions (`m.key()`)                                         |
+| ICU MessageFormat | Via plugin (ICU MessageFormat 1)                                                                             |
+| .po / gettext     | No plugin found                                                                                              |
+| Extraction        | Compile-time codegen from `.inlang` project; IDE extraction via Sherlock (VS Code)                           |
+| AI                | MT in ecosystem (Fink editor); `.inlang` format explicitly positioned for AI agents                          |
+| Notable           | Zero-runtime, tree-shakable messages; reload-on-locale-switch as deliberate design choice                    |
+
 ## Snapshot
 
 - Maintainer / company / funding: Opral (GmbH), founded August 2022, Berlin. ~7 employees. No funding rounds found (per Tracxn aggregator profile — not confirmed via a primary source such as a press release; treat as moderately confident, not verified). Founder listed as Samuel Stroschein (per aggregator sites theorg.com / f4.fund — not confirmed via a primary Opral source).
