@@ -232,7 +232,7 @@ async function writeRouteFromSource(entry) {
   const description = lede?.text
   const status = extractAdrMeta(parsed.content, "Status")
   const date = entry.date ?? extractAdrMeta(parsed.content, "Date")
-  const body = lede ? removeLedeBlock(parsed.content, lede.block) : parsed.content
+  const body = lede ? removeLedeBlock(parsed.content, lede) : parsed.content
   const content = transformLinks(body, entry.source)
   const frontmatter = {
     title,
@@ -349,7 +349,7 @@ async function dedupeTypedocLedes() {
     const normalize = (text) => text.replaceAll(/\s+/gu, " ").replace(/\.$/u, "").trim()
     const lede = extractLede(parsed.content)
     if (!lede || normalize(lede.text) !== normalize(description)) continue
-    const body = removeLedeBlock(parsed.content, lede.block)
+    const body = removeLedeBlock(parsed.content, lede)
     await writeFile(filePath, `---\n${parsed.data}\n---\n${body.trimStart()}`, "utf8")
   }
 }
@@ -536,21 +536,43 @@ function extractFrontmatterMeta(data, label) {
 }
 
 /*
- * Finds the lede: the first real prose paragraph. Returns both the cleaned
- * text (for frontmatter `description`) and the raw block so the caller can
- * remove it from the body — ARDO's ContentHeader already renders the
- * description as the visible lede, so leaving the paragraph in the body
- * would print it twice on every page.
+ * Finds the lede: the first real prose paragraph. Returns the cleaned text
+ * (for frontmatter `description`) plus the exact [start, end) offsets of the
+ * paragraph so the caller can remove it from the body — ARDO's ContentHeader
+ * already renders the description as the visible lede, so leaving the
+ * paragraph in the body would print it twice on every page.
+ *
+ * Heading lines are skipped *inside* a block (not by discarding the whole
+ * block), so `# Title\nLede` with a single newline still yields the lede.
  */
 function extractLede(content) {
+  let cursor = 0
   for (const block of content.split(/\n{2,}/u)) {
-    const paragraph = block.trim()
+    const blockStart = content.indexOf(block, cursor)
+    cursor = blockStart + block.length
+
+    let inner = block
+    let innerOffset = 0
+    for (;;) {
+      const lineBreak = inner.indexOf("\n")
+      const firstLine = (lineBreak === -1 ? inner : inner.slice(0, lineBreak)).trim()
+      if (firstLine !== "" && !/^#{1,6}\s/u.test(firstLine)) break
+      if (lineBreak === -1) {
+        inner = ""
+        break
+      }
+      innerOffset += lineBreak + 1
+      inner = inner.slice(lineBreak + 1)
+    }
+
+    const paragraph = inner.trim()
     if (paragraph === "" || paragraph.startsWith("#") || paragraph.startsWith("```")) continue
     if (paragraph.startsWith("|") || paragraph.startsWith("- ") || paragraph.startsWith("* "))
       continue
     if (/^\*\*(Status|Date):\*\*/u.test(paragraph)) continue
     return {
-      block,
+      start: blockStart + innerOffset,
+      end: blockStart + block.length,
       text: paragraph
         .replaceAll(/\[([^\]]+)\]\([^)]+\)/gu, "$1")
         .replaceAll(/[`*_>#]/gu, "")
@@ -559,10 +581,10 @@ function extractLede(content) {
   }
 }
 
-function removeLedeBlock(content, block) {
-  const index = content.indexOf(block)
-  if (index === -1) return content
-  return content.slice(0, index) + content.slice(index + block.length)
+/* Removes exactly the paragraph found by extractLede, anchored by offsets —
+ * a lede repeated verbatim later in the document is never touched. */
+function removeLedeBlock(content, lede) {
+  return content.slice(0, lede.start) + content.slice(lede.end)
 }
 
 function toFrontmatter(data) {
