@@ -122,17 +122,29 @@ It should not be the primary Remix v3 story.
 
 ## Open Work
 
-JSX-rich macros are the main unresolved part. The quick proof transforms after
-Remix's `node-tsx` has compiled JSX to `remix/ui/jsx-runtime` calls. That is
-fine for `t`, `msg`, `plural`, `select`, and `defineMessage`, but it is probably
-too late for `<Trans>`-style source JSX unless the native transform can support
-the lowered call shape.
+JSX-rich macros and browser-delivered modules are the main unresolved parts. The
+quick proof transforms after Remix's `node-tsx` has compiled JSX to
+`remix/ui/jsx-runtime` calls. That is fine for `t`, `msg`, `plural`, `select`,
+and `defineMessage`, but it is probably too late for `<Trans>`-style source JSX
+unless the native transform can support the lowered call shape.
+
+Reading `@remix-run/node-tsx@0.1.1` makes option 1 more concrete:
+`node-tsx` reads `.ts`, `.tsx`, and `.jsx` files itself and returns
+`shortCircuit: true`; it does not call `nextLoad()` for app files. Running
+Palamedes before Remix would therefore mean replacing that app-file pipeline:
+macro transform first, then the same OXC TS/JSX lowering behavior with
+tsconfig-aware options.
+
+Separately, browser-delivered modules go through Remix's asset compiler, not the
+Node `--import` hook chain. The register hook is therefore a server-executed
+module integration until Remix exposes a script transform hook for client
+assets.
 
 Likely follow-up choices:
 
 1. Run Palamedes before Remix's JSX transform, then hand the transformed source
-   to the same OXC TSX transform behavior. This may require owning more of the
-   loader pipeline.
+   to the same OXC TSX transform behavior. This requires owning the app-file
+   loader pipeline instead of composing with `node-tsx`.
 2. Teach the native transformer to recognize Remix-lowered JSX runtime calls for
    rich messages. This is more adapter-specific.
 3. Start Remix v3 support with JS macros plus server locale wiring, then add

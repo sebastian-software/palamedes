@@ -190,6 +190,25 @@ export const EXAMPLE_MATRIX = [
     ],
   },
   {
+    id: "remix-cookie",
+    framework: "remix",
+    strategy: "cookie",
+    port: 4060,
+    deployable: false,
+    vercelProject: "",
+    publicHost: "",
+    cwd: path.join(ROOT, "examples/remix-cookie"),
+    build: ["build"],
+    start: ["start"],
+    smokeChecks: [
+      {
+        headers: { "accept-language": "de" },
+        path: "/",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
+  },
+  {
     id: "solidstart-route",
     framework: "solidstart",
     strategy: "route",

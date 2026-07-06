@@ -21,6 +21,9 @@ export const locales = defineLocaleControls<Locale>({
 export const LOCALE_LABELS = locales.labels
 export const normalizeLocale = locales.normalizeLocale
 
+// This beta example keeps tiny hand-written catalogs inline because Remix v3's
+// default loader path has no Palamedes PO plugin yet. The ids below are the
+// extractor-generated ids for the macro source strings in `page.ts`.
 const CATALOGS: Record<Locale, CatalogMessages> = {
   en: {
     DdKW8STgr4g: "Remix v3 is rendering {locale} with Palamedes",
