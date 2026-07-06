@@ -62,7 +62,7 @@
     ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   --font-display: "Cinzel Hellenic", "Times New Roman", serif;
 
-  --text-display: clamp(30px, 4vw, 52px);
+  --text-display: clamp(28px, 3.8vw, 49px);
   --text-h2: clamp(22px, 3.2vw, 31px);
   --text-band: clamp(19px, 2.8vw, 28px);
   --text-stat: 34px;
@@ -294,6 +294,11 @@ header a[href="/"] span {
  * Display type — Cinzel Hellenic capitals. The face carries its own optical
  * weight; it is never bolded and never tracked negative. Lowercase input
  * renders as small caps, so sentences keep their reading rhythm.
+ *
+ * The Hellenic letterforms (the barless Λ, and friends) live in the CAPITAL
+ * glyphs only — small caps are conventional. Where the brand voice should be
+ * unmistakable (hero, CTA, wordmarks), combine with `uppercase`; ss01 exists
+ * in the font but holds swash alternates too ornate for this system.
  */
 @utility display-serif {
   font-family: var(--font-display);
