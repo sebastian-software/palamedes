@@ -19,7 +19,7 @@ Palamedes is open-source i18n tooling built around one translation model that
 survives framework changes: macro-style authoring next to the code,
 source-string-first `.po`/FCL catalogs, a `getI18n()` runtime everywhere, and a
 Rust core for extraction/audit/compile speed. The site (palamedes.dev) must
-convert skeptical developers by *showing* proof — browser-verified example
+convert skeptical developers by _showing_ proof — browser-verified example
 matrices, checked-in benchmarks, sixteen ADRs — rather than telling slogans.
 Success: a visitor trusts the engineering within one scroll and reaches the
 5-minute quickstart.
