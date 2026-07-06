@@ -123,11 +123,12 @@ function readSitemapPaths() {
 async function checkRoutes(context, label, { expectHydration }) {
   console.log(`— pass: ${label}`)
   const consoleErrors = []
+  const knownHydrationWarnings = []
 
   if (!expectHydration) {
     for (const path of sitemapPaths) {
       const page = await context.newPage()
-      trackPageErrors(page, () => path, consoleErrors)
+      trackPageErrors(page, () => path, consoleErrors, knownHydrationWarnings)
       const response = await gotoAndSettle(page, path, { settleMs: 100 })
       if (response?.status() !== 200) {
         fail(`${label} ${path}: expected HTTP 200, got ${response?.status() ?? "no response"}`)
@@ -145,7 +146,7 @@ async function checkRoutes(context, label, { expectHydration }) {
 
   for (const route of ROUTE_EXPECTATIONS) {
     const routePage = await context.newPage()
-    trackPageErrors(routePage, () => route.path, consoleErrors)
+    trackPageErrors(routePage, () => route.path, consoleErrors, knownHydrationWarnings)
     await gotoAndSettle(routePage, route.path, { settleMs: 1500 })
     const h1 = await routePage.locator("h1").first().textContent()
     if (!h1 || !h1.includes(route.h1)) {
@@ -158,7 +159,7 @@ async function checkRoutes(context, label, { expectHydration }) {
 
   const page = await context.newPage()
   let currentPath = "(startup)"
-  trackPageErrors(page, () => currentPath, consoleErrors)
+  trackPageErrors(page, () => currentPath, consoleErrors, knownHydrationWarnings)
 
   if (expectHydration) {
     currentPath = "/"
@@ -215,21 +216,34 @@ async function checkRoutes(context, label, { expectHydration }) {
   if (consoleErrors.length > 0) {
     fail(`${label}: console errors: ${consoleErrors.slice(0, 3).join(" | ")}`)
   }
+  if (knownHydrationWarnings.length > 0) {
+    console.warn(
+      `  known ARDO breadcrumb hydration warnings filtered: ${knownHydrationWarnings
+        .slice(0, 5)
+        .join(" | ")}`
+    )
+  }
   await page.close()
 }
 
-function trackPageErrors(page, getPath, consoleErrors) {
+function trackPageErrors(page, getPath, consoleErrors, knownHydrationWarnings) {
   page.on("pageerror", (error) => {
     const message = error.message
-    if (!isKnownArdoBreadcrumbHydrationWarning(getPath(), message)) {
-      consoleErrors.push(`${getPath()}: ${message}`)
+    const path = getPath()
+    if (isKnownArdoBreadcrumbHydrationWarning(path, message)) {
+      knownHydrationWarnings.push(path)
+    } else {
+      consoleErrors.push(`${path}: ${message}`)
     }
   })
   page.on("console", (message) => {
     if (message.type() === "error") {
       const text = message.text()
-      if (!isKnownArdoBreadcrumbHydrationWarning(getPath(), text)) {
-        consoleErrors.push(`${getPath()}: ${text}`)
+      const path = getPath()
+      if (isKnownArdoBreadcrumbHydrationWarning(path, text)) {
+        knownHydrationWarnings.push(path)
+      } else {
+        consoleErrors.push(`${path}: ${text}`)
       }
     }
   })
@@ -242,7 +256,21 @@ function trackPageErrors(page, getPath, consoleErrors) {
 
 function isKnownArdoBreadcrumbHydrationWarning(path, message) {
   return (
-    path !== "/" && message.includes("Minified React error #418") && message.includes("args[]=HTML")
+    isArdoGeneratedContentRoute(path) &&
+    message.includes("Minified React error #418") &&
+    message.includes("args[]=HTML")
+  )
+}
+
+function isArdoGeneratedContentRoute(path) {
+  return (
+    path === "/docs" ||
+    path.startsWith("/docs/") ||
+    path === "/decisions" ||
+    path.startsWith("/decisions/") ||
+    path === "/api-reference" ||
+    path.startsWith("/api-reference/") ||
+    path.startsWith("/blog/")
   )
 }
 

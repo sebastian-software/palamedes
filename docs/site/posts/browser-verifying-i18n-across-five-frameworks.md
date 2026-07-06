@@ -1,3 +1,7 @@
+---
+date: "2026-07-05"
+---
+
 # How We Browser-Verify i18n Across Five Frameworks
 
 Status: draft
