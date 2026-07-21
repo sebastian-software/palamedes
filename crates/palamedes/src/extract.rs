@@ -25,7 +25,14 @@ const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
     "@palamedes/react/macro",
     "@palamedes/solid/macro",
 ];
-type ChoiceOptions = Vec<(String, String)>;
+#[derive(Debug, Clone)]
+struct ChoiceOption {
+    key: String,
+    value: String,
+    placeholders: BTreeMap<String, String>,
+}
+
+type ChoiceOptions = Vec<ChoiceOption>;
 const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
 
 #[derive(Debug, Clone)]
@@ -538,9 +545,8 @@ fn extract_choice_options_from_object(
     object: &ObjectExpression<'_>,
     source: &str,
     used_value_names: &mut HashMap<String, String>,
-) -> PalamedesResult<(ChoiceOptions, BTreeMap<String, String>)> {
+) -> PalamedesResult<ChoiceOptions> {
     let mut options = Vec::new();
-    let mut placeholders = BTreeMap::new();
 
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -549,27 +555,65 @@ fn extract_choice_options_from_object(
         let Some(key) = property.key.static_name() else {
             continue;
         };
-        let (value, option_placeholders) = match property.value.without_parentheses() {
-            Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
-            Expression::TemplateLiteral(template) => template_to_message_with_state(
+        let Some(value) =
+            choice_option_value_from_expression(&property.value, source, used_value_names)?
+        else {
+            continue;
+        };
+
+        let key = choice_option_key(key.into_owned());
+        options.push(ChoiceOption { key, ..value });
+    }
+
+    Ok(options)
+}
+
+fn choice_option_value_from_expression(
+    expr: &Expression<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<Option<ChoiceOption>> {
+    match expr.without_parentheses() {
+        Expression::StringLiteral(literal) => Ok(Some(ChoiceOption {
+            key: String::new(),
+            value: literal.value.to_string(),
+            placeholders: BTreeMap::new(),
+        })),
+        Expression::TemplateLiteral(template) => {
+            let (value, placeholders) = template_to_message_with_state(
                 template,
                 source,
                 "choice option template expression",
                 used_value_names,
-            )?,
-            _ => continue,
-        };
-
-        let key = key.into_owned();
-        if let Some(exact) = key.strip_prefix('_') {
-            options.push((format!("={exact}"), value));
-        } else {
-            options.push((key, value));
+            )?;
+            Ok(Some(ChoiceOption {
+                key: String::new(),
+                value,
+                placeholders,
+            }))
         }
-        placeholders.extend(option_placeholders);
+        _ => Ok(None),
+    }
+}
+
+fn choice_option_key(key: String) -> String {
+    if let Some(exact) = key.strip_prefix('_') {
+        format!("={exact}")
+    } else {
+        key
+    }
+}
+
+fn merge_choice_placeholders(options: &ChoiceOptions) -> Option<BTreeMap<String, String>> {
+    let mut placeholders = BTreeMap::new();
+
+    for option in options {
+        for (name, expression) in &option.placeholders {
+            placeholders.insert(name.clone(), expression.clone());
+        }
     }
 
-    Ok((options, placeholders))
+    (!placeholders.is_empty()).then_some(placeholders)
 }
 
 fn extract_from_jsx_element(
@@ -619,7 +663,7 @@ fn extract_from_jsx_element(
             return Ok(None);
         };
         let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
-        let (options, placeholders) = extract_choice_options_from_jsx(
+        let options = extract_choice_options_from_jsx(
             &element.opening_element,
             source,
             &mut used_value_names,
@@ -647,7 +691,7 @@ fn extract_from_jsx_element(
             message,
             comment: attrs.get("comment").cloned(),
             context,
-            placeholders: (!placeholders.is_empty()).then_some(placeholders),
+            placeholders: merge_choice_placeholders(&options),
             origin,
             scope,
         }));
@@ -743,8 +787,7 @@ fn extract_from_choice_call(
         .and_then(|expression| expression_source(expression, source))
         .unwrap_or_else(|| value_name.clone());
     let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
-    let (options, placeholders) =
-        extract_choice_options_from_object(object, source, &mut used_value_names)?;
+    let options = extract_choice_options_from_object(object, source, &mut used_value_names)?;
     if options.is_empty() {
         return Ok(None);
     }
@@ -762,7 +805,7 @@ fn extract_from_choice_call(
         message,
         comment: None,
         context: None,
-        placeholders: (!placeholders.is_empty()).then_some(placeholders),
+        placeholders: merge_choice_placeholders(&options),
         origin,
         scope,
     }))
@@ -1129,9 +1172,8 @@ fn extract_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
     used_value_names: &mut HashMap<String, String>,
-) -> PalamedesResult<(ChoiceOptions, BTreeMap<String, String>)> {
+) -> PalamedesResult<ChoiceOptions> {
     let mut options = Vec::new();
-    let mut placeholders = BTreeMap::new();
 
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
@@ -1144,37 +1186,67 @@ fn extract_choice_options_from_jsx(
         ) {
             continue;
         }
-        let Some(attr_value) = attr.value.as_ref() else {
+        let Some(value) = attr
+            .value
+            .as_ref()
+            .map(|value| jsx_choice_attribute_value(value, source, used_value_names))
+            .transpose()?
+            .flatten()
+        else {
             continue;
         };
-        let (value, option_placeholders) = match attr_value {
-            JSXAttributeValue::StringLiteral(literal) => {
-                (decode_jsx_entities(literal.value.as_str()), BTreeMap::new())
-            }
-            JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::StringLiteral(literal) => {
-                    (literal.value.to_string(), BTreeMap::new())
-                }
-                JSXExpression::TemplateLiteral(template) => template_to_message_with_state(
-                    template,
-                    source,
-                    "choice option template expression",
-                    used_value_names,
-                )?,
-                _ => continue,
-            },
-            _ => continue,
-        };
 
-        if let Some(exact) = key.strip_prefix('_') {
-            options.push((format!("={exact}"), value));
-        } else {
-            options.push((key, value));
-        }
-        placeholders.extend(option_placeholders);
+        let key = choice_option_key(key);
+        options.push(ChoiceOption { key, ..value });
     }
 
-    Ok((options, placeholders))
+    Ok(options)
+}
+
+fn jsx_choice_attribute_value(
+    value: &JSXAttributeValue<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<Option<ChoiceOption>> {
+    match value {
+        JSXAttributeValue::StringLiteral(literal) => Ok(Some(ChoiceOption {
+            key: String::new(),
+            value: decode_jsx_entities(literal.value.as_str()),
+            placeholders: BTreeMap::new(),
+        })),
+        JSXAttributeValue::ExpressionContainer(container) => {
+            jsx_choice_expression_value(&container.expression, source, used_value_names)
+        }
+        _ => Ok(None),
+    }
+}
+
+fn jsx_choice_expression_value(
+    expr: &JSXExpression<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<Option<ChoiceOption>> {
+    match expr {
+        JSXExpression::StringLiteral(literal) => Ok(Some(ChoiceOption {
+            key: String::new(),
+            value: literal.value.to_string(),
+            placeholders: BTreeMap::new(),
+        })),
+        JSXExpression::TemplateLiteral(template) => {
+            let (value, placeholders) = template_to_message_with_state(
+                template,
+                source,
+                "choice option template expression",
+                used_value_names,
+            )?;
+            Ok(Some(ChoiceOption {
+                key: String::new(),
+                value,
+                placeholders,
+            }))
+        }
+        _ => Ok(None),
+    }
 }
 
 fn build_icu_message(
@@ -1185,7 +1257,7 @@ fn build_icu_message(
 ) -> String {
     let option_parts = options
         .iter()
-        .map(|(key, value)| format!("{key} {{{value}}}"))
+        .map(|option| format!("{} {{{}}}", option.key, option.value))
         .collect::<Vec<_>>()
         .join(" ");
     let offset_part = offset
