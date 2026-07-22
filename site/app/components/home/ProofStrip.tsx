@@ -15,7 +15,7 @@ const STATS: Stat[] = [
   { value: "24", label: "verified example apps", href: "/frameworks" },
   { value: "6 × 4", label: "frameworks × locale strategies", href: "/frameworks" },
   {
-    value: "12.99×",
+    value: "12.45×",
     label: "faster than Lingui — realistic 1,500-file extract/update benchmark, machine-local run",
     href: "/proof",
   },

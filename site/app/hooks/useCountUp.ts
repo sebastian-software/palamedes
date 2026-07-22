@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion"
 
 /*
- * Animates the leading number of a stat string ("12.99×" → 0.00×…12.99×,
+ * Animates the leading number of a stat string ("12.45×" → 0.00×…12.45×,
  * "6 × 4" animates only the first number). Returns the final string during
  * prerender, under reduced motion, and while inactive — the baked HTML always
  * shows the true value.

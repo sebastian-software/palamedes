@@ -30,9 +30,9 @@ export function ProofPage() {
       <Section id="benchmarks">
         <h2>The workflow you feel every day: extract & update.</h2>
         <p>
-          The end-to-end benchmark measures what a developer actually waits for: scan sources,
-          extract messages, update catalogs, write files. Same generated message inventory, rendered
-          into each tool's idiomatic source shape, semantically validated after every run.
+          The end-to-end benchmark measures source scanning, extraction, and output writes. The
+          catalog-aware tools also update existing catalogs; FormatJS writes its standard extraction
+          artifact. Every run uses the same logical inventory and is validated semantically.
         </p>
         <BenchmarkChart
           title="Small corpus — 80 files, 640 messages (median of 7 runs)"

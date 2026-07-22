@@ -16,6 +16,14 @@ const benchTsPath = join(repoRoot, "site/app/data/bench.ts")
 
 const report = readFileSync(reportPath, "utf8")
 const benchTs = readFileSync(benchTsPath, "utf8")
+const tools = ["Palamedes", "Lingui", "FormatJS", "i18next-parser", "i18next-cli"]
+const comparedTools = tools.filter((tool) => tool !== "Palamedes")
+const ratioFields = {
+  Lingui: "lingui",
+  FormatJS: "formatjs",
+  "i18next-parser": "i18nextParser",
+  "i18next-cli": "i18nextCli",
+}
 
 function parseSection(name) {
   const section = report.split(new RegExp(`^## ${name}$`, "m"))[1]
@@ -24,16 +32,21 @@ function parseSection(name) {
   }
   const body = section.split(/^## /m)[0]
   const medians = {}
-  for (const match of body.matchAll(/^\| (Palamedes|Lingui|i18next-parser) \| ([\d.]+) ms \|/gm)) {
+  for (const match of body.matchAll(
+    /^\|\s+(Palamedes|Lingui|FormatJS|i18next-parser|i18next-cli)\s+\|\s+([\d.]+) ms\s+\|/gm
+  )) {
     medians[match[1]] = Number(match[2])
   }
   const speedups = {}
   for (const match of body.matchAll(
-    /^\| Palamedes vs (Lingui|i18next-parser) \| Palamedes \| ([\d.]+)x \|/gm
+    /^\|\s+Palamedes vs (Lingui|FormatJS|i18next-parser|i18next-cli)\s+\|\s+Palamedes\s+\|\s+([\d.]+)x\s+\|/gm
   )) {
     speedups[match[1]] = match[2]
   }
-  if (Object.keys(medians).length !== 3 || Object.keys(speedups).length !== 2) {
+  if (
+    Object.keys(medians).length !== tools.length ||
+    Object.keys(speedups).length !== comparedTools.length
+  ) {
     fail(`could not parse medians/speedups from section "${name}" of ${reportPath}`)
   }
   return { medians, speedups }
@@ -133,21 +146,22 @@ function parseBenchSection(name) {
   }
   const medians = {}
   for (const match of body.matchAll(
-    /\{ tool: "(Palamedes|Lingui|i18next-parser)", medianMs: ([\d.]+)/g
+    /\{ tool: "(Palamedes|Lingui|FormatJS|i18next-parser|i18next-cli)", medianMs: ([\d.]+)/g
   )) {
     medians[match[1]] = Number(match[2])
   }
-  const ratioMatch = body.match(/ratios: \{ lingui: "([\d.]+)×", i18next: "([\d.]+)×" \}/)
-  if (Object.keys(medians).length !== 3 || !ratioMatch) {
+  const speedups = {}
+  for (const [tool, field] of Object.entries(ratioFields)) {
+    const match = body.match(new RegExp(`${field}: "([\\d.]+)×"`))
+    if (match) speedups[tool] = match[1]
+  }
+  if (
+    Object.keys(medians).length !== tools.length ||
+    Object.keys(speedups).length !== comparedTools.length
+  ) {
     fail(`could not parse medians/ratios from BENCH_${name} in ${benchTsPath}`)
   }
-  return {
-    medians,
-    speedups: {
-      Lingui: ratioMatch[1],
-      "i18next-parser": ratioMatch[2],
-    },
-  }
+  return { medians, speedups }
 }
 
 function expect(label, condition) {
@@ -163,53 +177,32 @@ const benchSmall = parseBenchSection("SMALL")
 const benchMedium = parseBenchSection("MEDIUM")
 const benchRealistic = parseBenchSection("REALISTIC")
 
-const checks = [
-  ["small Palamedes median", small.medians.Palamedes, benchSmall.medians.Palamedes],
-  ["small Lingui median", small.medians.Lingui, benchSmall.medians.Lingui],
-  ["small i18next median", small.medians["i18next-parser"], benchSmall.medians["i18next-parser"]],
-  ["medium Palamedes median", medium.medians.Palamedes, benchMedium.medians.Palamedes],
-  ["medium Lingui median", medium.medians.Lingui, benchMedium.medians.Lingui],
-  [
-    "medium i18next median",
-    medium.medians["i18next-parser"],
-    benchMedium.medians["i18next-parser"],
-  ],
-  ["realistic Palamedes median", realistic.medians.Palamedes, benchRealistic.medians.Palamedes],
-  ["realistic Lingui median", realistic.medians.Lingui, benchRealistic.medians.Lingui],
-  [
-    "realistic i18next median",
-    realistic.medians["i18next-parser"],
-    benchRealistic.medians["i18next-parser"],
-  ],
-]
+const checks = []
+for (const [profile, reported, hardcoded] of [
+  ["small", small, benchSmall],
+  ["medium", medium, benchMedium],
+  ["realistic", realistic, benchRealistic],
+]) {
+  for (const tool of tools) {
+    checks.push([`${profile} ${tool} median`, reported.medians[tool], hardcoded.medians[tool]])
+  }
+}
 
 for (const [label, reported, hardcoded] of checks) {
   expect(`${label}: report says ${reported}, bench.ts says ${hardcoded}`, reported === hardcoded)
 }
 
-expect(
-  `small speedup vs Lingui (${small.speedups.Lingui}x)`,
-  small.speedups.Lingui === benchSmall.speedups.Lingui
-)
-expect(
-  `small speedup vs i18next (${small.speedups["i18next-parser"]}x)`,
-  small.speedups["i18next-parser"] === benchSmall.speedups["i18next-parser"]
-)
-expect(
-  `medium speedup vs Lingui (${medium.speedups.Lingui}x)`,
-  medium.speedups.Lingui === benchMedium.speedups.Lingui
-)
-expect(
-  `medium speedup vs i18next (${medium.speedups["i18next-parser"]}x)`,
-  medium.speedups["i18next-parser"] === benchMedium.speedups["i18next-parser"]
-)
-expect(
-  `realistic speedup vs Lingui (${realistic.speedups.Lingui}x)`,
-  realistic.speedups.Lingui === benchRealistic.speedups.Lingui
-)
-expect(
-  `realistic speedup vs i18next (${realistic.speedups["i18next-parser"]}x)`,
-  realistic.speedups["i18next-parser"] === benchRealistic.speedups["i18next-parser"]
-)
+for (const [profile, reported, hardcoded] of [
+  ["small", small, benchSmall],
+  ["medium", medium, benchMedium],
+  ["realistic", realistic, benchRealistic],
+]) {
+  for (const tool of comparedTools) {
+    expect(
+      `${profile} speedup vs ${tool} (${reported.speedups[tool]}x)`,
+      reported.speedups[tool] === hardcoded.speedups[tool]
+    )
+  }
+}
 
 console.log("verify-site-bench-data: bench.ts matches latest.md")

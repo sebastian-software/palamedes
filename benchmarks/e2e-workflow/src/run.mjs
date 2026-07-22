@@ -16,8 +16,12 @@ const PALAMEDES_TIMING_MARKER = "__PALAMEDES_TIMINGS__"
 const TOOL_LABELS = {
   palamedes: "Palamedes",
   lingui: "Lingui",
-  i18next: "i18next-parser",
+  formatjs: "FormatJS",
+  i18nextParser: "i18next-parser",
+  i18nextCli: "i18next-cli",
 }
+
+const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "i18nextParser", "i18nextCli"]
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
@@ -46,7 +50,7 @@ async function main() {
       const profileResults = []
 
       if (!args.validateOnly) {
-        for (const tool of ["palamedes", "lingui", "i18next"]) {
+        for (const tool of TOOL_ORDER) {
           const measurement = await benchmarkTool({
             tool,
             corpus,
@@ -71,7 +75,7 @@ async function main() {
     }
 
     const report = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       benchmark: "palamedes-e2e-extract-update-workflow",
       generatedAt: environment.generatedAt,
       machineLocal: true,
@@ -89,6 +93,12 @@ async function main() {
           "catalog files are reset to the same baseline state before every warmup and measured run",
         semanticCheck:
           "active catalog messages are normalized after each tool run and compared with the generated current inventory",
+        toolScopes: {
+          formatjs:
+            "source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; FormatJS does not update locale translation catalogs",
+          otherTools:
+            "source scan, extraction, merge/update of existing en/de catalogs, and catalog writes",
+        },
       },
       profiles,
       results,
@@ -152,7 +162,9 @@ async function resolveToolPaths(args) {
   const paths = {
     palamedes: args.pmdsBin ?? path.join(repoRoot, "target", "release", `pmds${binarySuffix}`),
     lingui: path.join(benchmarkRoot, "node_modules", ".bin", `lingui${commandSuffix}`),
-    i18next: path.join(benchmarkRoot, "node_modules", ".bin", `i18next${commandSuffix}`),
+    formatjs: path.join(benchmarkRoot, "node_modules", ".bin", `formatjs${commandSuffix}`),
+    i18nextParser: path.join(benchmarkRoot, "node_modules", ".bin", `i18next${commandSuffix}`),
+    i18nextCli: path.join(benchmarkRoot, "node_modules", ".bin", `i18next-cli${commandSuffix}`),
   }
 
   for (const [tool, filename] of Object.entries(paths)) {
@@ -173,12 +185,15 @@ async function assertExecutable(tool, filename) {
 }
 
 async function readVersions(toolPaths) {
-  const [linguiCli, i18nextParser, benchmarkPackage, palamedesVersion] = await Promise.all([
-    readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "cli", "package.json")),
-    readJson(path.join(benchmarkRoot, "node_modules", "i18next-parser", "package.json")),
-    readJson(path.join(benchmarkRoot, "package.json")),
-    readCommandVersion(toolPaths.palamedes, ["version"]),
-  ])
+  const [formatjsCli, linguiCli, i18nextParser, i18nextCli, benchmarkPackage, palamedesVersion] =
+    await Promise.all([
+      readJson(path.join(benchmarkRoot, "node_modules", "@formatjs", "cli", "package.json")),
+      readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "cli", "package.json")),
+      readJson(path.join(benchmarkRoot, "node_modules", "i18next-parser", "package.json")),
+      readJson(path.join(benchmarkRoot, "node_modules", "i18next-cli", "package.json")),
+      readJson(path.join(benchmarkRoot, "package.json")),
+      readCommandVersion(toolPaths.palamedes, ["version"]),
+    ])
 
   return {
     benchmarkPackage: benchmarkPackage.name,
@@ -188,31 +203,35 @@ async function readVersions(toolPaths) {
     lingui: {
       cli: linguiCli.version,
     },
+    formatjs: {
+      cli: formatjsCli.version,
+    },
     i18nextParser: {
       cli: i18nextParser.version,
+    },
+    i18nextCli: {
+      cli: i18nextCli.version,
     },
   }
 }
 
 async function validateCorpus(corpus, toolPaths) {
   const tools = {}
-  const locales = ["en", "de"]
-
-  for (const tool of ["palamedes", "lingui", "i18next"]) {
+  for (const tool of TOOL_ORDER) {
     await resetCatalogs(corpus.roots[tool])
     await runTool(tool, corpus.roots[tool], toolPaths)
-    const activeMessagesByLocale = {}
-    for (const locale of locales) {
-      const activeMessages = await readActiveMessages(tool, corpus.roots[tool], locale)
+    const activeMessagesByTarget = {}
+    for (const target of validationTargets(tool)) {
+      const activeMessages = await readActiveMessages(tool, corpus.roots[tool], target)
       assertMessageSet(
-        `${corpus.profileName}/${tool}/${locale}`,
+        `${corpus.profileName}/${tool}/${target}`,
         corpus.currentMessages,
         activeMessages
       )
-      activeMessagesByLocale[locale] = activeMessages.length
+      activeMessagesByTarget[target] = activeMessages.length
     }
     tools[tool] = {
-      activeMessagesByLocale,
+      activeMessagesByTarget,
     }
   }
 
@@ -279,8 +298,31 @@ async function runTool(tool, cwd, toolPaths) {
     case "lingui": {
       return runCommand(toolPaths.lingui, ["extract", "--config", "lingui.config.mjs"], { cwd })
     }
-    case "i18next": {
-      return runCommand(toolPaths.i18next, ["--config", "i18next-parser.config.cjs"], { cwd })
+    case "formatjs": {
+      return runCommand(
+        toolPaths.formatjs,
+        [
+          "extract",
+          "src/generated/**/*.{ts,tsx}",
+          "--out-file",
+          "src/locales/extracted.json",
+          "--id-interpolation-pattern",
+          "[sha512:contenthash:base64:6]",
+        ],
+        { cwd }
+      )
+    }
+    case "i18nextParser": {
+      return runCommand(toolPaths.i18nextParser, ["--config", "i18next-parser.config.cjs"], {
+        cwd,
+      })
+    }
+    case "i18nextCli": {
+      return runCommand(
+        toolPaths.i18nextCli,
+        ["extract", "--config", "i18next.config.mjs", "--sync-all", "--trust-derived", "--quiet"],
+        { cwd }
+      )
     }
     default: {
       throw new Error(`Unknown tool: ${tool}`)
@@ -334,13 +376,24 @@ function parsePalamedesTiming(stdout) {
 }
 
 async function readActiveMessages(tool, rootDir, locale) {
-  if (tool === "i18next") {
+  if (tool === "formatjs") {
+    const catalog = await readJson(path.join(rootDir, "src", "locales", "extracted.json"))
+    return Object.values(catalog)
+      .map((descriptor) => descriptor.defaultMessage)
+      .sort()
+  }
+
+  if (tool === "i18nextParser" || tool === "i18nextCli") {
     const catalog = await readJson(path.join(rootDir, "src", "locales", locale, "translation.json"))
     return Object.keys(catalog).sort()
   }
 
   const source = await readFile(path.join(rootDir, "src", "locales", `${locale}.po`), "utf8")
   return parsePoMsgids(source).sort()
+}
+
+function validationTargets(tool) {
+  return tool === "formatjs" ? ["source"] : ["en", "de"]
 }
 
 function assertMessageSet(label, expectedInput, actualInput) {
@@ -390,7 +443,9 @@ function toResultEntry({ tool, corpus, measurement, versions, args }) {
 function toolVersion(tool, versions) {
   if (tool === "palamedes") return versions.palamedes.cli
   if (tool === "lingui") return versions.lingui.cli
-  return versions.i18nextParser.cli
+  if (tool === "formatjs") return versions.formatjs.cli
+  if (tool === "i18nextParser") return versions.i18nextParser.cli
+  return versions.i18nextCli.cli
 }
 
 function medianPalamedesTiming(timings) {
@@ -473,7 +528,7 @@ async function writeOutputs(report) {
 
 function renderMarkdown(report) {
   const lines = [
-    "# End-to-End Extract and Catalog Update Benchmark",
+    "# End-to-End Extraction Workflow Benchmark",
     "",
     `Generated: ${report.generatedAt}`,
     `Node: ${report.environment.nodeVersion}`,
@@ -487,7 +542,9 @@ function renderMarkdown(report) {
     "",
     `- Palamedes CLI: ${report.versions.palamedes.cli}`,
     `- Lingui CLI: ${report.versions.lingui.cli}`,
+    `- FormatJS CLI: ${report.versions.formatjs.cli}`,
     `- i18next-parser CLI: ${report.versions.i18nextParser.cli}`,
+    `- i18next-cli: ${report.versions.i18nextCli.cli}`,
     "",
     "## Methodology",
     "",
@@ -495,6 +552,8 @@ function renderMarkdown(report) {
     `- Corpus: ${report.methodology.corpus}`,
     `- Reset: ${report.methodology.reset}`,
     `- Semantic check: ${report.methodology.semanticCheck}`,
+    `- FormatJS scope: ${report.methodology.toolScopes.formatjs}`,
+    `- Other tool scope: ${report.methodology.toolScopes.otherTools}`,
   ]
 
   for (const profile of report.profiles) {
@@ -508,7 +567,7 @@ function renderMarkdown(report) {
       `- Inventory mix: ${profile.corpus.changedCount} changed, ${profile.corpus.newCount} new, ${profile.corpus.removedCount} removed`
     )
     lines.push(
-      `- Semantic validation: ${profile.validation.expectedActiveMessages} active messages per locale and tool`
+      `- Semantic validation: ${profile.validation.expectedActiveMessages} active messages per catalog target and tool`
     )
 
     if (profile.results.length === 0) {
@@ -545,7 +604,10 @@ function renderMarkdown(report) {
   lines.push("")
   lines.push("- These are machine-local CLI workflow timings, not universal cross-machine claims.")
   lines.push(
-    "- The i18next-parser corpus uses natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes."
+    "- The i18next-parser and i18next-cli corpora use natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes."
+  )
+  lines.push(
+    "- FormatJS writes one extracted-message JSON artifact and does not update locale translation catalogs; its result is reported with that narrower scope instead of being presented as a catalog-merge equivalent."
   )
   lines.push(
     "- The harness reports source-message equivalence after each run instead of assuming every parser extracts the same result."
@@ -563,7 +625,7 @@ function renderMarkdown(report) {
 }
 
 function printConsoleSummary(report, outputPaths) {
-  console.log("# End-to-End Extract and Catalog Update Benchmark")
+  console.log("# End-to-End Extraction Workflow Benchmark")
   console.log(`Generated: ${report.generatedAt}`)
   console.log(`Results: ${outputPaths.primaryJson}`)
 
