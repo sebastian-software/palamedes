@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.4.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.3.0...palamedes-v1.4.0) (2026-07-22)
+
+
+### Features
+
+* add Remix locale catalog flow ([cb111bd](https://github.com/sebastian-software/palamedes/commit/cb111bdd20167151fe86b1de721d9a9de9450c9a))
+* add Remix request i18n scope ([aa71708](https://github.com/sebastian-software/palamedes/commit/aa71708a16641795c7fc8f5208a804337b344d80))
+* add Remix v3 register hook ([d52e876](https://github.com/sebastian-software/palamedes/commit/d52e876abacd5a6a83ca4fbcf7ce0f75efb12a17))
+* **benchmarks:** model realistic extract-time parse volume ([5ec2430](https://github.com/sebastian-software/palamedes/commit/5ec24305c20bfc9ae45d22e59b56b09ec2fae52d))
+* **cli:** add explicit namespaced plugin commands ([#368](https://github.com/sebastian-software/palamedes/issues/368)) ([c2bb14e](https://github.com/sebastian-software/palamedes/commit/c2bb14e04c08d7119b95a885c5a4add1504ebf45)), closes [#365](https://github.com/sebastian-software/palamedes/issues/365)
+* **remix:** add server API and locale strategy examples ([ed1426e](https://github.com/sebastian-software/palamedes/commit/ed1426e873b446ce20769568adb74d411d2144a0))
+* **remix:** load PO catalogs through node hooks ([56d1cc0](https://github.com/sebastian-software/palamedes/commit/56d1cc08b3b85e80bb368ea0fca09404c26c2a1f))
+* **site:** polish homepage and add realistic 10k-message benchmark ([cc47a75](https://github.com/sebastian-software/palamedes/commit/cc47a7551aec64b46858c318799814b579bccfb9))
+
+
+### Bug Fixes
+
+* address Remix review feedback ([18ec453](https://github.com/sebastian-software/palamedes/commit/18ec453b81861980a6cdf3840033bddac6c1db83))
+* **benchmarks:** read multiline PO msgids ([a207ed2](https://github.com/sebastian-software/palamedes/commit/a207ed2d3dfef9af49a995f6e09a570f6b6ec641))
+* extract interpolated plural branches ([#366](https://github.com/sebastian-software/palamedes/issues/366)) ([306fe64](https://github.com/sebastian-software/palamedes/commit/306fe648b67d11fd344c7164770d895edae4857c)), closes [#363](https://github.com/sebastian-software/palamedes/issues/363)
+* **remix:** address server parity review comments ([4ab7db3](https://github.com/sebastian-software/palamedes/commit/4ab7db3ae63d21836249726e59cf525412f66f4d))
+* satisfy Remix example lint ([8ea7741](https://github.com/sebastian-software/palamedes/commit/8ea77410b3346c8b77c5fcb5f8c48a1ddefeb6e3))
+
 ## [1.3.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.2.0...palamedes-v1.3.0) (2026-07-06)
 
 
