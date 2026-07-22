@@ -377,6 +377,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                         macro_name,
                         self.origin(it.span.start as usize),
                         self.current_scope(),
+                        self.source,
                     ),
                     _ => extract_from_descriptor_call(
                         it,
@@ -533,8 +534,13 @@ fn extract_object_properties(object: &ObjectExpression<'_>) -> BTreeMap<String, 
     properties
 }
 
-fn extract_choice_options_from_object(object: &ObjectExpression<'_>) -> ChoiceOptions {
+fn extract_choice_options_from_object(
+    object: &ObjectExpression<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<(ChoiceOptions, BTreeMap<String, String>)> {
     let mut options = Vec::new();
+    let mut placeholders = BTreeMap::new();
 
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -543,8 +549,15 @@ fn extract_choice_options_from_object(object: &ObjectExpression<'_>) -> ChoiceOp
         let Some(key) = property.key.static_name() else {
             continue;
         };
-        let Some(value) = string_value(&property.value) else {
-            continue;
+        let (value, option_placeholders) = match property.value.without_parentheses() {
+            Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
+            Expression::TemplateLiteral(template) => template_to_message_with_state(
+                template,
+                source,
+                "choice option template expression",
+                used_value_names,
+            )?,
+            _ => continue,
         };
 
         let key = key.into_owned();
@@ -553,9 +566,10 @@ fn extract_choice_options_from_object(object: &ObjectExpression<'_>) -> ChoiceOp
         } else {
             options.push((key, value));
         }
+        placeholders.extend(option_placeholders);
     }
 
-    options
+    Ok((options, placeholders))
 }
 
 fn extract_from_jsx_element(
@@ -599,10 +613,17 @@ fn extract_from_jsx_element(
         if attrs.contains_key("id") {
             return Err(PalamedesError::ExplicitMessageIdsUnsupported);
         }
-        let Some(value_name) = extract_jsx_value_name(&element.opening_element)? else {
+        let Some((value_name, value_expression)) =
+            extract_jsx_choice_value(&element.opening_element, source)?
+        else {
             return Ok(None);
         };
-        let options = extract_choice_options_from_jsx(&element.opening_element);
+        let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
+        let (options, placeholders) = extract_choice_options_from_jsx(
+            &element.opening_element,
+            source,
+            &mut used_value_names,
+        )?;
         if options.is_empty() {
             return Ok(None);
         }
@@ -626,7 +647,7 @@ fn extract_from_jsx_element(
             message,
             comment: attrs.get("comment").cloned(),
             context,
-            placeholders: None,
+            placeholders: (!placeholders.is_empty()).then_some(placeholders),
             origin,
             scope,
         }));
@@ -703,6 +724,7 @@ fn extract_from_choice_call(
     macro_name: &str,
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
+    source: &str,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(value_arg) = call.arguments.first() else {
         return Ok(None);
@@ -714,12 +736,18 @@ fn extract_from_choice_call(
         return Ok(None);
     };
 
-    let options = extract_choice_options_from_object(object);
+    let value_name = argument_expression_name(value_arg)
+        .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
+    let value_expression = value_arg
+        .as_expression()
+        .and_then(|expression| expression_source(expression, source))
+        .unwrap_or_else(|| value_name.clone());
+    let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
+    let (options, placeholders) =
+        extract_choice_options_from_object(object, source, &mut used_value_names)?;
     if options.is_empty() {
         return Ok(None);
     }
-    let value_name = argument_expression_name(value_arg)
-        .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
 
     let format = match macro_name {
         "plural" => "plural",
@@ -734,7 +762,7 @@ fn extract_from_choice_call(
         message,
         comment: None,
         context: None,
-        placeholders: None,
+        placeholders: (!placeholders.is_empty()).then_some(placeholders),
         origin,
         scope,
     }))
@@ -854,6 +882,21 @@ fn template_to_message(
     template: &TemplateLiteral<'_>,
     source: &str,
 ) -> PalamedesResult<(String, BTreeMap<String, String>)> {
+    let mut used_value_names = HashMap::new();
+    template_to_message_with_state(
+        template,
+        source,
+        "template expression",
+        &mut used_value_names,
+    )
+}
+
+fn template_to_message_with_state(
+    template: &TemplateLiteral<'_>,
+    source: &str,
+    syntax: &'static str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<(String, BTreeMap<String, String>)> {
     let mut message = String::new();
     let mut placeholders = BTreeMap::new();
 
@@ -865,12 +908,13 @@ fn template_to_message(
         }
 
         if let Some(expr) = template.expressions.get(index) {
-            let Some(placeholder) = expression_name(expr) else {
-                return Err(PalamedesError::UnnamedPlaceholder {
-                    syntax: "template expression",
-                });
+            let Some(preferred_name) = expression_name(expr) else {
+                return Err(PalamedesError::UnnamedPlaceholder { syntax });
             };
-            let expression = expression_source(expr, source).unwrap_or_else(|| placeholder.clone());
+            let expression =
+                expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
+            let placeholder =
+                make_unique_placeholder_name(preferred_name, &expression, used_value_names);
             message.push('{');
             message.push_str(&placeholder);
             message.push('}');
@@ -879,6 +923,33 @@ fn template_to_message(
     }
 
     Ok((message, placeholders))
+}
+
+fn make_unique_placeholder_name(
+    preferred_name: String,
+    expression: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> String {
+    if let Some(existing_expression) = used_value_names.get(&preferred_name) {
+        if existing_expression == expression {
+            return preferred_name;
+        }
+    } else {
+        used_value_names.insert(preferred_name.clone(), expression.to_string());
+        return preferred_name;
+    }
+
+    let mut suffix = 1usize;
+    loop {
+        let candidate = format!("{preferred_name}_{suffix}");
+        match used_value_names.get(&candidate) {
+            Some(existing_expression) if existing_expression != expression => suffix += 1,
+            _ => {
+                used_value_names.insert(candidate.clone(), expression.to_string());
+                return candidate;
+            }
+        }
+    }
 }
 
 fn expression_source(expr: &Expression<'_>, source: &str) -> Option<String> {
@@ -929,9 +1000,10 @@ fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
     }
 }
 
-fn extract_jsx_value_name(
+fn extract_jsx_choice_value(
     opening_element: &JSXOpeningElement<'_>,
-) -> PalamedesResult<Option<String>> {
+    source: &str,
+) -> PalamedesResult<Option<(String, String)>> {
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
             continue;
@@ -943,10 +1015,17 @@ fn extract_jsx_value_name(
             continue;
         };
 
-        return Ok(Some(
-            jsx_expression_name(&container.expression)
-                .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string()),
-        ));
+        let name = jsx_expression_name(&container.expression)
+            .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
+        let span = container.expression.span();
+        let expression = source
+            .get(span.start as usize..span.end as usize)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(name.as_str())
+            .to_string();
+
+        return Ok(Some((name, expression)));
     }
 
     Ok(None)
@@ -1046,8 +1125,13 @@ fn extract_jsx_children_as_message_with_state(
     Ok(join_jsx_message_parts(&parts))
 }
 
-fn extract_choice_options_from_jsx(opening_element: &JSXOpeningElement<'_>) -> ChoiceOptions {
+fn extract_choice_options_from_jsx(
+    opening_element: &JSXOpeningElement<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<(ChoiceOptions, BTreeMap<String, String>)> {
     let mut options = Vec::new();
+    let mut placeholders = BTreeMap::new();
 
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
@@ -1060,8 +1144,26 @@ fn extract_choice_options_from_jsx(opening_element: &JSXOpeningElement<'_>) -> C
         ) {
             continue;
         }
-        let Some(value) = attr.value.as_ref().and_then(jsx_attribute_string_value) else {
+        let Some(attr_value) = attr.value.as_ref() else {
             continue;
+        };
+        let (value, option_placeholders) = match attr_value {
+            JSXAttributeValue::StringLiteral(literal) => {
+                (decode_jsx_entities(literal.value.as_str()), BTreeMap::new())
+            }
+            JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::StringLiteral(literal) => {
+                    (literal.value.to_string(), BTreeMap::new())
+                }
+                JSXExpression::TemplateLiteral(template) => template_to_message_with_state(
+                    template,
+                    source,
+                    "choice option template expression",
+                    used_value_names,
+                )?,
+                _ => continue,
+            },
+            _ => continue,
         };
 
         if let Some(exact) = key.strip_prefix('_') {
@@ -1069,9 +1171,10 @@ fn extract_choice_options_from_jsx(opening_element: &JSXOpeningElement<'_>) -> C
         } else {
             options.push((key, value));
         }
+        placeholders.extend(option_placeholders);
     }
 
-    options
+    Ok((options, placeholders))
 }
 
 fn build_icu_message(
@@ -1414,6 +1517,7 @@ impl From<AggregatedCatalogEntry> for CatalogUpdateMessage {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1602,6 +1706,61 @@ mod tests {
                 "{count, plural, one {# queue detail 00042-now} other {# queue details 00042-now}}",
                 "x",
             ]
+        );
+    }
+
+    #[test]
+    fn extracts_plural_choice_branch_interpolations() {
+        let messages = extract_messages(
+            r##"
+              import { plural } from "@palamedes/core/macro"
+              const message = plural(count, {
+                one: `# item will be archived because ${planLabel} allows a maximum of ${max}`,
+                other: `# items will be archived because ${planLabel} allows a maximum of ${max}`,
+              })
+            "##,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages[0].message,
+            "{count, plural, one {# item will be archived because {planLabel} allows a maximum of {max}} other {# items will be archived because {planLabel} allows a maximum of {max}}}"
+        );
+        assert_eq!(
+            messages[0].placeholders,
+            Some(BTreeMap::from([
+                ("max".to_string(), "max".to_string()),
+                ("planLabel".to_string(), "planLabel".to_string()),
+            ]))
+        );
+    }
+
+    #[test]
+    fn extracts_plural_jsx_branch_interpolations() {
+        let messages = extract_messages(
+            r##"
+              import { Plural } from "@palamedes/react/macro"
+              const message = <Plural
+                value={count}
+                one={`# item will be archived because ${planLabel} allows a maximum of ${max}`}
+                other={`# items will be archived because ${planLabel} allows a maximum of ${max}`}
+              />
+            "##,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(
+            messages[0].message,
+            "{count, plural, one {# item will be archived because {planLabel} allows a maximum of {max}} other {# items will be archived because {planLabel} allows a maximum of {max}}}"
+        );
+        assert_eq!(
+            messages[0].placeholders,
+            Some(BTreeMap::from([
+                ("max".to_string(), "max".to_string()),
+                ("planLabel".to_string(), "planLabel".to_string()),
+            ]))
         );
     }
 

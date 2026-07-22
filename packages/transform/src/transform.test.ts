@@ -476,6 +476,28 @@ const literal = plural(21, { one: "# month", other: "# months" });
     expect(result.code).toContain("{ value: 21 }")
   })
 
+  it("transforms interpolated plural branches and forwards their values", () => {
+    const code = `
+import { plural } from "@palamedes/core/macro";
+import { Plural } from "@palamedes/react/macro";
+const call = plural(count, {
+  one: \`# item will be archived because \${planLabel} allows a maximum of \${max}\`,
+  other: \`# items will be archived because \${planLabel} allows a maximum of \${max}\`,
+});
+const jsx = <Plural
+  value={count}
+  one={\`# item will be archived because \${planLabel} allows a maximum of \${max}\`}
+  other={\`# items will be archived because \${planLabel} allows a maximum of \${max}\`}
+/>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+    const expected =
+      "{count, plural, one {# item will be archived because {planLabel} allows a maximum of {max}} other {# items will be archived because {planLabel} allows a maximum of {max}}}"
+
+    expect(result.code.split(`message: "${expected}"`)).toHaveLength(3)
+    expect(result.code.split("{ count, planLabel, max }")).toHaveLength(3)
+  })
+
   it("accepts defaulted JSX choice values", () => {
     const code = `
 import { Plural } from "@palamedes/react/macro";

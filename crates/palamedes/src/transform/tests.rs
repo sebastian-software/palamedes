@@ -109,6 +109,26 @@ fn transforms_plural_choice_macros() {
 }
 
 #[test]
+fn transforms_plural_choice_branch_interpolations() {
+    let result = transform_macros(
+        r##"import { plural } from "@palamedes/core/macro";
+const msg = plural(count, {
+  one: `# item will be archived because ${planLabel} allows a maximum of ${max}`,
+  other: `# items will be archived because ${planLabel} allows a maximum of ${max}`,
+});
+"##,
+        "test.ts",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains(
+        "message: \"{count, plural, one {# item will be archived because {planLabel} allows a maximum of {max}} other {# items will be archived because {planLabel} allows a maximum of {max}}}\""
+    ));
+    assert!(result.code.contains("{ count, planLabel, max }"));
+}
+
+#[test]
 fn transforms_plural_choice_with_signal_accessor() {
     let result = transform_macros(
         "import { plural } from \"@palamedes/core/macro\";\nconst msg = plural(count(), { one: \"# item\", other: \"# items\" });\n",
@@ -323,6 +343,27 @@ fn transforms_plural_jsx_macro() {
         .code
         .contains("message: \"{count, plural, one {# item} other {# items}}\""));
     assert!(result.code.contains("{ count }"));
+}
+
+#[test]
+fn transforms_plural_jsx_branch_interpolations() {
+    let result = transform_macros(
+        r##"import { Plural } from "@palamedes/react/macro";
+const el = <Plural
+  value={count}
+  one={`# item will be archived because ${planLabel} allows a maximum of ${max}`}
+  other={`# items will be archived because ${planLabel} allows a maximum of ${max}`}
+/>;
+"##,
+        "test.tsx",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result.code.contains(
+        "message: \"{count, plural, one {# item will be archived because {planLabel} allows a maximum of {max}} other {# items will be archived because {planLabel} allows a maximum of {max}}}\""
+    ));
+    assert!(result.code.contains("{ count, planLabel, max }"));
 }
 
 #[test]
