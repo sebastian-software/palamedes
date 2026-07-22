@@ -1,9 +1,8 @@
 # `@palamedes/cli`
 
-`@palamedes/cli` publishes the `pmds` command.
-
-It is a native Rust binary distributed through npm. The package has no
-programmatic JavaScript API, `main`, or `exports` surface.
+`@palamedes/cli` publishes the `pmds` command. A small Node.js wrapper delegates
+built-in commands to the native Rust sidecar and hosts explicitly configured
+third-party command plugins.
 
 ## Commands
 
@@ -18,6 +17,9 @@ See the [CLI reference](../cli.md) for flags and examples.
 
 ## Programmatic Exports
 
-None. Use `pmds` for extraction, audits, completeness reports, catalog merge
-workflows, and catalog conversion. For custom JavaScript tooling, use
-`@palamedes/core-node` directly.
+- `@palamedes/cli/plugin`: `definePlugin()` and
+  `PALAMEDES_PLUGIN_API_VERSION`, plus TypeScript types for the versioned command
+  host.
+
+See [CLI plugin API](./cli-plugin.md). For lower-level custom JavaScript tooling,
+use `@palamedes/core-node` directly.

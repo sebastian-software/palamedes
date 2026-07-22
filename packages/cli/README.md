@@ -5,11 +5,12 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The native Palamedes command-line interface for keeping local catalogs healthy.
+The Palamedes command-line interface for keeping local catalogs healthy and
+hosting explicitly configured workflow commands.
 
-This is the npm distribution package behind the Rust `pmds` binary. Use it when
-you want extraction, catalog updates, and catalog QA in local development or CI
-without wiring the lower-level APIs yourself.
+The npm package keeps a small Node.js dispatcher in front of the Rust `pmds`
+sidecar. Built-in commands go directly to Rust; namespaced plugin commands use a
+versioned JavaScript host API.
 
 ## When To Use This Package
 
@@ -20,6 +21,7 @@ Use `@palamedes/cli` when you want:
 - watch mode during development
 - a clean way to update `.po` catalogs in CI, with opt-in `.fcl` storage
 - a semantic catalog merge command for Git merge drivers
+- explicit third-party workflow commands without wrapping or forking `pmds`
 
 If you are building your own extraction workflow inside your i18n config or custom tooling, look at [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor) instead.
 
@@ -72,6 +74,51 @@ and catalog-write timings.
 
 See [Catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 for when to keep PO storage and when to opt into FCL.
+
+### CLI Plugins
+
+Plugins are loaded only when they are explicitly declared and a non-built-in
+namespace is invoked:
+
+```yaml
+plugins:
+  - ["@acme/palamedes-workflows", { policy: strict }]
+```
+
+```bash
+pnpm exec pmds acme sync
+pnpm exec pmds acme sync --json
+pnpm exec pmds acme sync --config ./palamedes.yaml
+```
+
+A minimal plugin exports `@palamedes/cli/plugin` API version 1:
+
+```js
+import { definePlugin } from "@palamedes/cli/plugin"
+
+export default definePlugin({
+  name: "acme",
+  apiVersion: 1,
+  commands: {
+    inspect: {
+      run({ host, options }) {
+        return {
+          text: `Found ${host.catalogs().length} catalog definitions`,
+          data: { catalogs: host.catalogs(), options },
+        }
+      },
+    },
+  },
+})
+```
+
+The host exposes resolved config, catalog discovery, structured diagnostics,
+cooperative cancellation, and guarded built-in command execution. It does not
+expose native internals or sandbox plugin code. A configured plugin has the same
+local permissions as a build script, so review and pin plugin dependencies.
+
+See the [CLI plugin API](https://github.com/sebastian-software/palamedes/blob/main/docs/api/cli-plugin.md)
+for output envelopes, exit codes, collision rules, and author types.
 
 ### Completeness Report
 

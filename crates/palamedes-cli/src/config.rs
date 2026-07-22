@@ -339,6 +339,30 @@ include = ["src"]
         assert_eq!(config.source_reference_root, app);
     }
 
+    #[test]
+    fn ignores_explicit_plugin_declarations_for_native_commands() {
+        let app = temp_dir("plugin-config");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+plugins:
+  - "@acme/palamedes-workflows"
+  - ["./local-plugin.mjs", { mode: strict }]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("load native config with plugins");
+
+        assert_eq!(config.locales, ["en", "de"]);
+        assert_eq!(config.catalogs.len(), 1);
+    }
+
     fn temp_dir(name: &str) -> std::path::PathBuf {
         let id = SystemTime::now()
             .duration_since(UNIX_EPOCH)

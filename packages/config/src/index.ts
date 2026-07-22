@@ -27,6 +27,8 @@ export type PalamedesCatalogConfig = {
   exclude?: string[]
 }
 
+export type PalamedesPluginDeclaration = string | readonly [specifier: string, options: unknown]
+
 export type PalamedesConfig = {
   locales: string[]
   sourceLocale: string
@@ -34,6 +36,7 @@ export type PalamedesConfig = {
   pseudoLocale?: string
   sourceReferenceRoot?: PalamedesSourceReferenceRoot
   catalogs: PalamedesCatalogConfig[]
+  plugins?: PalamedesPluginDeclaration[]
 }
 
 type PalamedesDataConfig = {
@@ -47,6 +50,7 @@ type PalamedesDataConfig = {
   "source-reference-root"?: unknown
   source_reference_root?: unknown
   catalogs?: unknown
+  plugins?: unknown
 }
 
 export type LoadedPalamedesConfig = {
@@ -153,6 +157,9 @@ function normalizeDataConfig(config: PalamedesDataConfig): PalamedesConfig {
       ? { sourceReferenceRoot: sourceReferenceRoot as PalamedesSourceReferenceRoot }
       : {}),
     catalogs: config.catalogs as PalamedesCatalogConfig[],
+    ...(config.plugins !== undefined
+      ? { plugins: config.plugins as PalamedesPluginDeclaration[] }
+      : {}),
   }
 }
 
@@ -295,6 +302,7 @@ async function normalizeConfig(
       include: [...catalog.include],
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
+    ...(config.plugins ? { plugins: clonePluginDeclarations(config.plugins) } : {}),
   }
 }
 
@@ -314,7 +322,14 @@ function normalizeConfigSync(config: PalamedesConfig, configPath: string): Loade
       include: [...catalog.include],
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
+    ...(config.plugins ? { plugins: clonePluginDeclarations(config.plugins) } : {}),
   }
+}
+
+function clonePluginDeclarations(
+  plugins: readonly PalamedesPluginDeclaration[]
+): PalamedesPluginDeclaration[] {
+  return plugins.map((plugin) => (typeof plugin === "string" ? plugin : [plugin[0], plugin[1]]))
 }
 
 async function resolveSourceReferenceRoot(
@@ -427,9 +442,37 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
   }
 
   validateFallbackLocales(record.fallbackLocales, configPath)
+  validatePlugins(record.plugins, configPath)
 
   for (const [index, catalog] of record.catalogs.entries()) {
     validateCatalog(catalog, configPath, index)
+  }
+}
+
+function validatePlugins(value: unknown, configPath: string): void {
+  if (value === undefined) {
+    return
+  }
+
+  if (!Array.isArray(value)) {
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "plugins" must be an array.`)
+  }
+
+  for (const [index, declaration] of value.entries()) {
+    if (typeof declaration === "string" && declaration.trim().length > 0) {
+      continue
+    }
+    if (
+      Array.isArray(declaration) &&
+      declaration.length === 2 &&
+      typeof declaration[0] === "string" &&
+      declaration[0].trim().length > 0
+    ) {
+      continue
+    }
+    throw new TypeError(
+      `Invalid Palamedes config in ${configPath}: "plugins[${index}]" must be a non-empty package specifier or [specifier, options].`
+    )
   }
 }
 

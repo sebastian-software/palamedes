@@ -39,6 +39,7 @@ catalogs:
 | `fallback-locales`      | No       | `string[] \| Record<string, string[]>` | Shared or per-locale fallback chain.                                                |
 | `pseudo-locale`         | No       | `string`                               | Locale code used for pseudo-localized UI testing.                                   |
 | `source-reference-root` | No       | `git \| config \| lingui \| path`      | Root used for catalog source references. Defaults to nearest Git root, then config. |
+| `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                |
 
 The native CLI and JS config loader also accept snake_case aliases for
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
@@ -116,6 +117,26 @@ catalogs:
 
 Plugin integrations pass `pseudo-locale` through to catalog compilation and skip
 `failOnMissing` failures for that locale.
+
+## CLI Plugins
+
+CLI plugins are opt-in and register namespaced commands. A declaration is either
+a package specifier or a `[specifier, options]` pair:
+
+```yaml
+plugins:
+  - "@acme/palamedes-workflows"
+  - ["./local-workflows.mjs", { policy: strict }]
+```
+
+The npm CLI resolves each specifier relative to this config file. Built-in
+commands do not load plugin code. Configuring a plugin grants it the same local
+permissions as another project build script; the plugin host is not a sandbox.
+Plugin-command dispatch uses `@palamedes/config`, so legacy
+`palamedes.config.ts/js/mjs/cjs` files remain available there even though native
+built-in commands intentionally accept only data config files.
+
+See [CLI plugins](./api/cli-plugin.md) for the command and author API.
 
 ## Other Data Formats
 

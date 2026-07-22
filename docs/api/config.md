@@ -17,6 +17,7 @@
 - `PalamedesCatalogConfig`
 - `PalamedesFallbackLocales`
 - `PalamedesSourceReferenceRoot`
+- `PalamedesPluginDeclaration`
 
 ## Config Files
 
@@ -45,6 +46,7 @@ export default defineConfig({
   locales: ["en", "de"],
   sourceLocale: "en",
   catalogs: [{ path: "src/locales/{locale}", include: ["src"] }],
+  plugins: [["@acme/palamedes-workflows", { policy: "strict" }]],
 })
 ```
 
@@ -71,3 +73,7 @@ const config = await loadPalamedesConfig({ cwd: process.cwd() })
 Options include `cwd`, `configPath`, and `skipValidation`. Use
 `skipValidation` only for tooling that needs to inspect partially-authored
 config files.
+
+`plugins` is returned in declaration order. Each entry is a package specifier
+or `[specifier, options]`; the CLI plugin host resolves it relative to
+`configPath`.
