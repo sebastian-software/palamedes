@@ -158,6 +158,31 @@ describe("extractMessages", () => {
       expect(messages[0].message).toBe("{count, plural, one {# item} other {# items}}")
       expect(messages[1].message).toBe("{gender, select, male {He} female {She} other {They}}")
     })
+
+    it("extracts interpolated plural branches with placeholder metadata", () => {
+      const code = `
+        import { plural } from "@palamedes/core/macro"
+        import { Plural } from "@palamedes/react/macro"
+        const call = plural(count, {
+          one: \`# item will be archived because \${planLabel} allows a maximum of \${max}\`,
+          other: \`# items will be archived because \${planLabel} allows a maximum of \${max}\`,
+        })
+        const jsx = <Plural
+          value={count}
+          one={\`# item will be archived because \${planLabel} allows a maximum of \${max}\`}
+          other={\`# items will be archived because \${planLabel} allows a maximum of \${max}\`}
+        />
+      `
+      const messages = extract(code)
+      const expected =
+        "{count, plural, one {# item will be archived because {planLabel} allows a maximum of {max}} other {# items will be archived because {planLabel} allows a maximum of {max}}}"
+
+      expect(messages.map((message) => message.message)).toStrictEqual([expected, expected])
+      expect(messages.map((message) => message.placeholders)).toStrictEqual([
+        { max: "max", planLabel: "planLabel" },
+        { max: "max", planLabel: "planLabel" },
+      ])
+    })
   })
 
   describe("runtime calls", () => {

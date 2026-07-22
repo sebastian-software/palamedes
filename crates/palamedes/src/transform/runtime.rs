@@ -9,10 +9,10 @@ use oxc_span::GetSpan;
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::messages::{
-    build_icu_message, choice_expression_binding, escape_string, expression_source,
-    extract_choice_options, extract_choice_options_from_jsx, extract_jsx_children_parts,
-    extract_jsx_value_binding, extract_object_properties, first_argument_object, jsx_attributes,
-    template_to_message, ValueBinding,
+    append_unique_bindings, build_icu_message, choice_expression_binding, escape_string,
+    expression_source, extract_choice_options, extract_choice_options_from_jsx,
+    extract_jsx_children_parts, extract_jsx_value_binding, extract_object_properties,
+    first_argument_object, jsx_attributes, template_to_message, ValueBinding,
 };
 use super::NativeTransformOptions;
 
@@ -257,9 +257,9 @@ pub(super) fn transform_choice_call(
     let mut used_value_names = std::collections::HashMap::new();
     let value_binding = choice_expression_binding(value_expr, source, &mut used_value_names);
     let value_name = value_binding.name.clone();
-    let choice_options = extract_choice_options(choice_object);
+    let extracted_options = extract_choice_options(choice_object, source, &mut used_value_names)?;
 
-    if choice_options.is_empty() {
+    if extracted_options.options.is_empty() {
         return Ok(None);
     }
 
@@ -268,14 +268,15 @@ pub(super) fn transform_choice_call(
     } else {
         macro_name
     };
-    let message = build_icu_message(format, &value_name, &choice_options, None);
+    let message = build_icu_message(format, &value_name, &extracted_options.options, None);
     let lookup_key = compiled_key(&message, None);
-    let values = [value_binding];
+    let mut values = vec![value_binding];
+    append_unique_bindings(&mut values, extracted_options.values);
     Ok(Some((
         build_runtime_call(
             &lookup_key,
             Some(&message),
-            Some(&values),
+            Some(values.as_slice()),
             None,
             None,
             options,
@@ -339,13 +340,17 @@ pub(super) fn transform_choice_jsx_element(
     }
     let context = attrs.get("context").cloned();
     let comment = attrs.get("comment").cloned();
-    let Some(value_binding) = extract_jsx_value_binding(&element.opening_element, source)? else {
+    let mut used_value_names = std::collections::HashMap::new();
+    let Some(value_binding) =
+        extract_jsx_value_binding(&element.opening_element, source, &mut used_value_names)?
+    else {
         return Ok(None);
     };
     let value_name = value_binding.name.clone();
-    let choice_options = extract_choice_options_from_jsx(&element.opening_element);
+    let extracted_options =
+        extract_choice_options_from_jsx(&element.opening_element, source, &mut used_value_names)?;
 
-    if choice_options.is_empty() {
+    if extracted_options.options.is_empty() {
         return Ok(None);
     }
 
@@ -358,16 +363,17 @@ pub(super) fn transform_choice_jsx_element(
     let message = build_icu_message(
         format,
         &value_name,
-        &choice_options,
+        &extracted_options.options,
         attrs.get("offset").map(String::as_str),
     );
     let lookup_key = compiled_key(&message, context.as_deref());
-    let values = [value_binding];
+    let mut values = vec![value_binding];
+    append_unique_bindings(&mut values, extracted_options.values);
     Ok(Some((
         build_runtime_call(
             &lookup_key,
             Some(&message),
-            Some(&values),
+            Some(values.as_slice()),
             context.as_deref(),
             comment.as_deref(),
             options,

@@ -18,6 +18,11 @@ pub(super) struct ValueBinding {
     pub name: String,
 }
 
+pub(super) struct ExtractedChoiceOptions {
+    pub options: Vec<(String, String)>,
+    pub values: Vec<ValueBinding>,
+}
+
 const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
 
 pub(super) fn identifier_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
@@ -56,8 +61,13 @@ pub(super) fn extract_object_properties(object: &ObjectExpression<'_>) -> HashMa
     properties
 }
 
-pub(super) fn extract_choice_options(object: &ObjectExpression<'_>) -> Vec<(String, String)> {
+pub(super) fn extract_choice_options(
+    object: &ObjectExpression<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<ExtractedChoiceOptions> {
     let mut options = Vec::new();
+    let mut values = Vec::new();
 
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -66,8 +76,15 @@ pub(super) fn extract_choice_options(object: &ObjectExpression<'_>) -> Vec<(Stri
         let Some(key) = property.key.static_name() else {
             continue;
         };
-        let Some(value) = string_value(&property.value) else {
-            continue;
+        let (value, option_values) = match property.value.without_parentheses() {
+            Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
+            Expression::TemplateLiteral(template) => template_to_message_with_state(
+                template,
+                source,
+                "choice option template expression",
+                used_value_names,
+            )?,
+            _ => continue,
         };
 
         let normalized_key = if let Some(exact) = key.strip_prefix('_') {
@@ -76,9 +93,10 @@ pub(super) fn extract_choice_options(object: &ObjectExpression<'_>) -> Vec<(Stri
             key.into_owned()
         };
         options.push((normalized_key, value));
+        append_unique_bindings(&mut values, option_values);
     }
 
-    options
+    Ok(ExtractedChoiceOptions { options, values })
 }
 
 pub(super) fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
@@ -123,6 +141,7 @@ pub(super) fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> HashMap
 pub(super) fn extract_jsx_value_binding(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
+    used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<Option<ValueBinding>> {
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
@@ -135,11 +154,10 @@ pub(super) fn extract_jsx_value_binding(
             continue;
         };
 
-        let mut used_value_names = HashMap::<String, String>::new();
         return Ok(Some(choice_jsx_value_binding(
             &container.expression,
             source,
-            &mut used_value_names,
+            used_value_names,
         )));
     }
 
@@ -190,8 +208,11 @@ fn call_expression_name(call: &CallExpression<'_>) -> Option<String> {
 
 pub(super) fn extract_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
-) -> Vec<(String, String)> {
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<ExtractedChoiceOptions> {
     let mut options = Vec::new();
+    let mut values = Vec::new();
 
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
@@ -204,8 +225,24 @@ pub(super) fn extract_choice_options_from_jsx(
         ) {
             continue;
         }
-        let Some(value) = attr.value.as_ref().and_then(jsx_attribute_string_value) else {
+        let Some(attr_value) = attr.value.as_ref() else {
             continue;
+        };
+        let (value, option_values) = match attr_value {
+            JSXAttributeValue::StringLiteral(literal) => {
+                (decode_jsx_entities(literal.value.as_str()), Vec::new())
+            }
+            JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
+                JSXExpression::TemplateLiteral(template) => template_to_message_with_state(
+                    template,
+                    source,
+                    "choice option template expression",
+                    used_value_names,
+                )?,
+                _ => continue,
+            },
+            _ => continue,
         };
 
         if let Some(exact) = key.strip_prefix('_') {
@@ -213,9 +250,10 @@ pub(super) fn extract_choice_options_from_jsx(
         } else {
             options.push((key, value));
         }
+        append_unique_bindings(&mut values, option_values);
     }
 
-    options
+    Ok(ExtractedChoiceOptions { options, values })
 }
 
 pub(super) fn opening_element_to_component(
@@ -384,7 +422,10 @@ fn push_unique_binding(bindings: &mut Vec<ValueBinding>, binding: ValueBinding) 
     bindings.push(binding);
 }
 
-fn append_unique_bindings(bindings: &mut Vec<ValueBinding>, incoming: Vec<ValueBinding>) {
+pub(super) fn append_unique_bindings(
+    bindings: &mut Vec<ValueBinding>,
+    incoming: Vec<ValueBinding>,
+) {
     for binding in incoming {
         push_unique_binding(bindings, binding);
     }
@@ -515,26 +556,13 @@ pub(super) fn template_to_message(
     template: &TemplateLiteral<'_>,
     source: &str,
 ) -> PalamedesResult<(String, Option<Vec<ValueBinding>>)> {
-    let mut message = String::new();
-    let mut values = Vec::new();
     let mut used_value_names = HashMap::<String, String>::new();
-
-    for (index, quasi) in template.quasis.iter().enumerate() {
-        if let Some(value) = quasi.value.cooked {
-            message.push_str(value.as_str());
-        } else {
-            message.push_str(quasi.value.raw.as_str());
-        }
-
-        if let Some(expr) = template.expressions.get(index) {
-            let binding =
-                expression_binding(expr, source, "template expression", &mut used_value_names)?;
-            message.push('{');
-            message.push_str(&binding.name);
-            message.push('}');
-            values.push(binding);
-        }
-    }
+    let (message, values) = template_to_message_with_state(
+        template,
+        source,
+        "template expression",
+        &mut used_value_names,
+    )?;
 
     Ok((
         message,
@@ -544,6 +572,34 @@ pub(super) fn template_to_message(
             Some(values)
         },
     ))
+}
+
+fn template_to_message_with_state(
+    template: &TemplateLiteral<'_>,
+    source: &str,
+    syntax: &'static str,
+    used_value_names: &mut HashMap<String, String>,
+) -> PalamedesResult<(String, Vec<ValueBinding>)> {
+    let mut message = String::new();
+    let mut values = Vec::new();
+
+    for (index, quasi) in template.quasis.iter().enumerate() {
+        if let Some(value) = quasi.value.cooked {
+            message.push_str(value.as_str());
+        } else {
+            message.push_str(quasi.value.raw.as_str());
+        }
+
+        if let Some(expr) = template.expressions.get(index) {
+            let binding = expression_binding(expr, source, syntax, used_value_names)?;
+            message.push('{');
+            message.push_str(&binding.name);
+            message.push('}');
+            push_unique_binding(&mut values, binding);
+        }
+    }
+
+    Ok((message, values))
 }
 
 pub(super) fn build_icu_message(
