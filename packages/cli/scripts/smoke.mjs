@@ -30,9 +30,36 @@ const output = execFileSync(command, args, {
   cwd: packageDir,
   encoding: "utf8",
 })
+const nativeBin = path.join(
+  packageDir,
+  "bin",
+  process.platform === "win32" ? "pmds-native.exe" : "pmds-native"
+)
+const nativeOutput = execFileSync(nativeBin, ["version"], {
+  cwd: packageDir,
+  encoding: "utf8",
+})
 
 if (!output.includes("pmds (Palamedes)")) {
   throw new Error(`Unexpected pmds version output: ${output}`)
+}
+if (output !== nativeOutput) {
+  throw new Error("The npm wrapper changed built-in version output.")
+}
+
+const fixtureConfig = path.join(packageDir, "fixtures", "plugin-project", "palamedes.config.mjs")
+const pluginArgs = ["example", "inspect", "--config", fixtureConfig, "--json", "smoke"]
+const pluginOutput = execFileSync(
+  command,
+  process.platform === "win32" ? [publicBin, ...pluginArgs] : pluginArgs,
+  {
+    cwd: packageDir,
+    encoding: "utf8",
+  }
+)
+const pluginResult = JSON.parse(pluginOutput)
+if (!pluginResult.ok || pluginResult.result?.args?.[0] !== "smoke") {
+  throw new Error(`Unexpected pmds plugin output: ${pluginOutput}`)
 }
 
 function resolvePlatformPackage() {

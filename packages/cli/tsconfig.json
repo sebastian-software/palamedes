@@ -5,5 +5,5 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/index.ts"]
+  "include": ["src/index.ts", "plugin-api.d.ts"]
 }

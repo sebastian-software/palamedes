@@ -1,17 +1,20 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs"
 import { createRequire } from "node:module"
 import path from "node:path"
 
 const packageDir = path.resolve(import.meta.dirname, "..")
 const binDir = path.join(packageDir, "bin")
 const require = createRequire(import.meta.url)
-const binaryName = process.platform === "win32" ? "pmds.exe" : "pmds"
-const targetPath = path.join(binDir, binaryName)
+const sourceBinaryName = process.platform === "win32" ? "pmds.exe" : "pmds"
+const targetBinaryName = process.platform === "win32" ? "pmds-native.exe" : "pmds-native"
+const targetPath = path.join(binDir, targetBinaryName)
 const packageName = resolvePlatformPackage()
+
+rmSync(targetPath, { force: true })
 
 try {
   const nativePackageDir = resolvePackageDir(packageName)
-  const sourcePath = path.join(nativePackageDir, "bin", binaryName)
+  const sourcePath = path.join(nativePackageDir, "bin", sourceBinaryName)
   if (!existsSync(sourcePath)) {
     console.warn(
       `Palamedes CLI optional package ${packageName} is installed but has no binary yet.`

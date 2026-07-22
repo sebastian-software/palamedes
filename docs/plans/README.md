@@ -5,7 +5,7 @@
 Rules:
 
 - keep only documents that are still under active discussion or implementation
-- move durable architectural decisions into ADRs under [adr/](adr)
+- move durable architectural decisions into [Architecture Decision Records](../adr)
 - once a plan is implemented or abandoned, delete it instead of keeping it as stale reference material
 
 Current state:

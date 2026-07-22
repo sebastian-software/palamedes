@@ -1,7 +1,26 @@
 # CLI Reference
 
 The `@palamedes/cli` package publishes `pmds`.
-It is a native Rust binary; npm is only a distribution mechanism.
+Built-in commands execute in the native Rust sidecar. The npm wrapper also hosts
+explicitly configured third-party command plugins.
+
+## Plugin Commands
+
+Plugins register a namespace plus commands. They are invoked as:
+
+```bash
+pmds <plugin> <command> [...args]
+pmds <plugin> <command> --json [...args]
+pmds <plugin> <command> --config ./palamedes.yaml [...args]
+```
+
+`--json`, `--config`, and `-c` are reserved host options after the command; put
+`--` before them to pass them through as plugin arguments. Unknown namespaces
+fall back to the native CLI's normal unknown-command diagnostic.
+
+Plugin loading is explicit and applies only to non-built-in namespaces. See the
+[configuration field](./configuration.md#cli-plugins) and
+[`@palamedes/cli/plugin` API](./api/cli-plugin.md).
 
 ## `pmds extract`
 

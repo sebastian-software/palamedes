@@ -59,6 +59,9 @@ describe("loadPalamedesConfig", () => {
             format: fcl
             include: [src]
             exclude: [src/generated]
+        plugins:
+          - "@acme/palamedes-workflows"
+          - ["./local-plugin.mjs", { mode: strict }]
       `
     )
 
@@ -73,6 +76,10 @@ describe("loadPalamedesConfig", () => {
       include: ["src"],
       exclude: ["src/generated"],
     })
+    expect(config.plugins).toStrictEqual([
+      "@acme/palamedes-workflows",
+      ["./local-plugin.mjs", { mode: "strict" }],
+    ])
   })
 
   it("loads a palamedes.yaml file synchronously with the same normalization", async () => {
@@ -305,6 +312,25 @@ describe("loadPalamedesConfig", () => {
 
     await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
       /"sourceLocale" must be included in "locales"/
+    )
+  })
+
+  it("rejects malformed plugin declarations", async () => {
+    const fixtureDir = await createTempDir()
+    await writeFile(
+      path.join(fixtureDir, "palamedes.config.mjs"),
+      `
+        export default {
+          locales: ["en"],
+          sourceLocale: "en",
+          catalogs: [{ path: "locales/{locale}", include: ["src"] }],
+          plugins: [["@acme/plugin"]],
+        }
+      `
+    )
+
+    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+      /"plugins\[0\]" must be a non-empty package specifier or \[specifier, options\]/
     )
   })
 })

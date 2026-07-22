@@ -31,6 +31,7 @@ catalogs:
 - `expandFallbackLocales(locales, fallbackLocales?)`
 - `resolveCatalogPath(config, catalogPath, locale)`
 - `resolveConfigPattern(config, pattern)`
+- `PalamedesPluginDeclaration` (TypeScript)
 
 ## Configuration Notes
 
@@ -46,6 +47,9 @@ catalogs:
   relative to the config directory, or pass a custom path.
 - `catalogs[].format` defaults to `"po"`. Set it to `"fcl"` to use Ferrocat
   Catalog Lines for canonical, merge-friendly generated catalog storage.
+- `plugins` explicitly lists CLI plugin package specifiers or
+  `[specifier, options]` pairs. Packages are never auto-discovered, and built-in
+  CLI commands do not load them.
 - `loadPalamedesConfig()` returns `sourceReferenceRoot` in addition to
   `configPath` and `rootDir`; pass `skipValidation` only when inspecting a
   partially-authored config file.

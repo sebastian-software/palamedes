@@ -11,6 +11,7 @@ target/
 packages/core-node/palamedes-node.node
 packages/core-node-*/palamedes-node.node
 packages/cli-*/bin/
+packages/cli/bin/pmds-native*
 .vercel/
 examples/**/.vercel/
 
