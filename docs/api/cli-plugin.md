@@ -58,7 +58,9 @@ an ordinary command argument.
 - `host.catalogs()` returns format, source patterns, and absolute per-locale
   catalog paths without exposing native implementation details.
 - `host.runBuiltIn(args)` accepts only documented built-in namespaces and
-  returns `{exitCode}`.
+  returns `{exitCode}`. During a JSON plugin invocation, native stdout and stderr
+  are captured as optional `stdout` and `stderr` fields so the CLI still emits
+  exactly one JSON envelope.
 - `host.reportDiagnostic()` records `info`, `warning`, or `error` diagnostics.
 - `signal` is aborted on `SIGINT`/`SIGTERM`; commands should stop cooperatively.
 

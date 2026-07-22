@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import path from "node:path"
 import test from "node:test"
 
+import { spawnNative } from "./native.mjs"
 import { tryRunPluginCommand } from "./plugin-host.mjs"
 import { runCli } from "./run.mjs"
 
@@ -42,6 +43,18 @@ test("plugin resolution accepts CommonJS package exports", async () => {
 
   assert.deepEqual(result, { handled: true, exitCode: 0 })
   assert.equal(io.stdoutText(), "pong\n")
+})
+
+test("plugin resolution accepts import-only ESM package exports", async () => {
+  const io = captureIo()
+  const result = await tryRunPluginCommand(["import-only", "ping"], {
+    io,
+    loadConfig: async () => loadedConfig(["palamedes-import-only-plugin-fixture"]),
+    installSignalHandlers: false,
+  })
+
+  assert.deepEqual(result, { handled: true, exitCode: 0 })
+  assert.equal(io.stdoutText(), "esm pong\n")
 })
 
 test("built-in commands bypass plugin config and preserve native exit codes", async () => {
@@ -193,7 +206,45 @@ test("host API can run a built-in command without exposing native internals", as
   assert.equal(result.exitCode, 4)
   assert.deepEqual(builtInInvocation.args, ["report", "--json"])
   assert.equal(builtInInvocation.options.nativeExecutable, "/fixture/pmds-native")
+  assert.equal(builtInInvocation.options.captureOutput, true)
   assert.deepEqual(JSON.parse(io.stdoutText()).result, { exitCode: 4 })
+})
+
+test("nested built-in output is captured inside the plugin JSON envelope", async () => {
+  const io = captureIo()
+  const result = await runWithPlugin(
+    {
+      name: "workflow",
+      apiVersion: 1,
+      commands: {
+        report: {
+          async run({ host }) {
+            return { data: await host.runBuiltIn(["report", "--json"]) }
+          },
+        },
+      },
+    },
+    ["workflow", "report", "--json"],
+    {
+      io,
+      async runNative(_args, options) {
+        assert.equal(options.captureOutput, true)
+        return {
+          exitCode: 0,
+          stdout: '{"complete":true}\n',
+          stderr: "native warning\n",
+        }
+      },
+    }
+  )
+
+  assert.equal(result.exitCode, 0)
+  assert.equal(io.stdoutText().trim().split("\n").length, 1)
+  assert.deepEqual(JSON.parse(io.stdoutText()).result, {
+    exitCode: 0,
+    stdout: '{"complete":true}\n',
+    stderr: "native warning\n",
+  })
 })
 
 test("missing and incompatible plugins fail clearly", async (t) => {
@@ -271,6 +322,18 @@ test("cancellation uses shell-compatible exit code 130", async () => {
 
   assert.equal(result.exitCode, 130)
   assert.equal(JSON.parse(io.stdoutText()).diagnostics[0].code, "PLUGIN_CANCELLED")
+})
+
+test("a pre-aborted native invocation never starts work", async () => {
+  const abortController = new AbortController()
+  abortController.abort({ signal: "SIGINT", exitCode: 130 })
+
+  const result = await spawnNative(["-e", "process.exit(99)"], {
+    nativeExecutable: process.execPath,
+    signal: abortController.signal,
+  })
+
+  assert.equal(result, 130)
 })
 
 test("unknown namespaces remain native CLI concerns", async () => {

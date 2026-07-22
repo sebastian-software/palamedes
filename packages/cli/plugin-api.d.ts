@@ -22,6 +22,8 @@ export type PalamedesPluginCatalog = {
 
 export type PalamedesBuiltInResult = {
   exitCode: number
+  stdout?: string
+  stderr?: string
 }
 
 export type PalamedesPluginHost = {

@@ -47,7 +47,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@palamedes/config": "workspace:^"
+    "@palamedes/config": "workspace:^",
+    "import-meta-resolve": "^4.2.0"
   },
   "optionalDependencies": {
     "@palamedes/cli-darwin-arm64": "workspace:^",

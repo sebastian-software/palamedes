@@ -1,6 +1,7 @@
-import { createRequire } from "node:module"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+
+import { resolve as resolveImport } from "import-meta-resolve"
 
 import { PALAMEDES_PLUGIN_API_VERSION } from "../plugin-api.mjs"
 import { spawnNative } from "./native.mjs"
@@ -91,6 +92,7 @@ export async function tryRunPluginCommand(argv, options = {}) {
     runNative,
     nativeExecutable,
     cwd: options.cwd ?? process.cwd(),
+    json: invocation.json,
   })
 
   try {
@@ -210,7 +212,15 @@ function parseInvocation(argv) {
   }
 }
 
-function createHost({ config, diagnostics, abortController, runNative, nativeExecutable, cwd }) {
+function createHost({
+  config,
+  diagnostics,
+  abortController,
+  runNative,
+  nativeExecutable,
+  cwd,
+  json,
+}) {
   return Object.freeze({
     apiVersion: PALAMEDES_PLUGIN_API_VERSION,
     config,
@@ -232,12 +242,20 @@ function createHost({ config, diagnostics, abortController, runNative, nativeExe
           `runBuiltIn requires a built-in command (${[...BUILT_IN_NAMESPACES].join(", ")}).`
         )
       }
-      const exitCode = await runNative(args, {
+      const nativeResult = await runNative(args, {
         cwd,
         signal: abortController.signal,
         nativeExecutable,
+        captureOutput: json,
       })
-      return { exitCode }
+      if (typeof nativeResult === "number") {
+        return { exitCode: nativeResult }
+      }
+      return {
+        exitCode: nativeResult.exitCode,
+        ...(nativeResult.stdout !== undefined ? { stdout: nativeResult.stdout } : {}),
+        ...(nativeResult.stderr !== undefined ? { stderr: nativeResult.stderr } : {}),
+      }
     },
     reportDiagnostic(diagnostic) {
       diagnostics.push(normalizeDiagnostic(diagnostic))
@@ -284,9 +302,8 @@ function validatePlugin(plugin, specifier) {
 }
 
 async function importPluginFromConfig(specifier, configPath) {
-  const require = createRequire(configPath)
-  const resolved = require.resolve(specifier)
-  return import(pathToFileURL(resolved).href)
+  const resolved = resolveImport(specifier, pathToFileURL(configPath).href)
+  return import(resolved)
 }
 
 function normalizeDeclaration(declaration) {
