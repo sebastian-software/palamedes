@@ -89,8 +89,9 @@ must be resolved before implementation:
   Subdomain/tld cells carry status `provisioning` and render no demo link
   until the hosting story is reconciled (#306). Never derive demo URLs from
   a single naming pattern.
-- E2E extract/update benchmark: 12.99× vs Lingui and 9.00× vs i18next-parser
-  on the checked 1,500-file machine-local run
+- E2E extraction workflow benchmark: 12.45× vs Lingui, 2.64× vs FormatJS,
+  9.12× vs i18next-parser, and 36.76× vs i18next-cli on the checked 1,500-file
+  machine-local run
   — see `benchmarks/e2e-workflow/results/latest.md`.
 - 16 ADRs in `adr/`.
 - CLI binary is `pmds`; recommended install is the scoped `@palamedes/*`

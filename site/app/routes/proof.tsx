@@ -16,7 +16,7 @@ export function meta() {
   return pageMeta({
     title: "Palamedes — benchmarks, verification, and the decision trail",
     description:
-      "Claims you can re-run: checked-in extract/update benchmarks against Lingui and i18next-parser, 24 browser-verified example apps, and 16 architecture decision records.",
+      "Claims you can re-run: checked-in extraction benchmarks against Lingui, FormatJS, i18next-parser, and i18next-cli, 24 browser-verified example apps, and 16 architecture decision records.",
     path: "/proof",
   })
 }
@@ -66,7 +66,7 @@ export default function Proof() {
       <Section
         num="01 — Benchmarks"
         title="The workflow you feel every day: extract & update."
-        lede="The end-to-end benchmark measures what a developer actually waits for: scan sources, extract messages, update catalogs, write files. Same generated message inventory, rendered into each tool's idiomatic source shape, semantically validated after every run."
+        lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; FormatJS writes its standard extraction artifact. Every run uses the same logical inventory and is validated semantically."
       >
         <div className="space-y-8">
           <BenchmarkChart corpus={BENCH_REALISTIC} />

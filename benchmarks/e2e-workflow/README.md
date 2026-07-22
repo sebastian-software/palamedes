@@ -5,11 +5,16 @@ would run to update catalogs:
 
 - Palamedes: `pmds extract`
 - Lingui: `lingui extract`
+- FormatJS: `formatjs extract`
 - i18next-parser: `i18next`
+- i18next-cli: `i18next-cli extract`
 
 The harness generates the same logical source inventory for each tool, renders
 it into each tool's idiomatic source shape, resets catalogs before every timed
-run, then measures scan, extract, update, and write together.
+run, then measures scan, extract, and output writes together. Palamedes,
+Lingui, i18next-parser, and i18next-cli update `en` and `de` catalogs. FormatJS
+writes its standard aggregated extracted-message JSON artifact instead; the
+generated report records that narrower scope explicitly.
 
 The timed median does not include runtime catalog/artifact compilation, linting,
 type-checking, bundling, or the post-run semantic validation. The validation is

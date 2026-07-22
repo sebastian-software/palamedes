@@ -17,7 +17,7 @@ export function HomePage() {
           runtime model across Next.js, TanStack Start, SolidStart, Waku,
           React Router, and Remix v3 — with a Rust core that ran a checked
           extract/update benchmark across a real-app-shaped 1,500-file corpus
-          12.99× faster than Lingui on the recorded machine-local run."
+          12.45× faster than Lingui on the recorded machine-local run."
         primary={{ label: "Get started in 5 minutes", href: "/get-started" }}
         secondary={{
           label: "See it live",
@@ -43,7 +43,7 @@ export function HomePage() {
             href: "/frameworks",
           },
           {
-            value: "12.99×",
+            value: "12.45×",
             label:
               "faster than Lingui — realistic 1,500-file extract/update benchmark, machine-local run",
             href: "/proof",

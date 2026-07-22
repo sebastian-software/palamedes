@@ -2,7 +2,7 @@
   "name": "@palamedes/benchmark-e2e-workflow",
   "private": true,
   "type": "module",
-  "description": "End-to-end extract and catalog update benchmark for Palamedes, Lingui, and i18next-parser",
+  "description": "End-to-end extraction workflow benchmark for Palamedes, Lingui, FormatJS, i18next-parser, and i18next-cli",
   "engines": {
     "node": ">=22.22.0"
   },
@@ -13,9 +13,11 @@
     "validate": "node ./src/run.mjs --validate-only --profile small"
   },
   "dependencies": {
+    "@formatjs/cli": "6.16.14",
     "@lingui/cli": "6.4.0",
     "@lingui/conf": "6.4.0",
     "@lingui/format-po": "6.4.0",
+    "i18next-cli": "1.66.2",
     "i18next-parser": "9.4.0"
   }
 }

@@ -1,4 +1,5 @@
 import { cp, mkdir, writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
 import path from "node:path"
 
 export const DEFAULT_SEED = 20_260_703
@@ -63,7 +64,9 @@ export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAUL
   const toolRoots = {
     palamedes: path.join(profileRoot, "palamedes"),
     lingui: path.join(profileRoot, "lingui"),
-    i18next: path.join(profileRoot, "i18next"),
+    formatjs: path.join(profileRoot, "formatjs"),
+    i18nextParser: path.join(profileRoot, "i18next-parser"),
+    i18nextCli: path.join(profileRoot, "i18next-cli"),
   }
 
   await Promise.all(
@@ -75,7 +78,9 @@ export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAUL
   await Promise.all([
     writePalamedesWorkspace(toolRoots.palamedes, generated, profile),
     writeLinguiWorkspace(toolRoots.lingui, generated, profile),
-    writeI18nextWorkspace(toolRoots.i18next, generated, profile),
+    writeFormatJsWorkspace(toolRoots.formatjs, generated, profile),
+    writeI18nextParserWorkspace(toolRoots.i18nextParser, generated, profile),
+    writeI18nextCliWorkspace(toolRoots.i18nextCli, generated, profile),
   ])
 
   const fileCount =
@@ -175,7 +180,12 @@ async function writeLinguiWorkspace(rootDir, inventory, profile) {
   await writePoCatalogs(rootDir, inventory.baselineMessages, "lingui-e2e-workflow")
 }
 
-async function writeI18nextWorkspace(rootDir, inventory, profile) {
+async function writeFormatJsWorkspace(rootDir, inventory, profile) {
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderFormatJsSource)
+  await writeFormatJsCatalog(rootDir, inventory.baselineMessages)
+}
+
+async function writeI18nextParserWorkspace(rootDir, inventory, profile) {
   await writeFile(
     path.join(rootDir, "i18next-parser.config.cjs"),
     [
@@ -191,6 +201,31 @@ async function writeI18nextWorkspace(rootDir, inventory, profile) {
       "  contextSeparator: false,",
       "  sort: true,",
       '  lexers: { ts: ["JavascriptLexer"], tsx: ["JsxLexer"] },',
+      "}",
+      "",
+    ].join("\n"),
+    "utf8"
+  )
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderI18nextSource)
+  await writeJsonCatalogs(rootDir, inventory.baselineMessages)
+}
+
+async function writeI18nextCliWorkspace(rootDir, inventory, profile) {
+  await writeFile(
+    path.join(rootDir, "i18next.config.mjs"),
+    [
+      "export default {",
+      '  locales: ["en", "de"],',
+      "  extract: {",
+      '    input: ["src/generated/**/*.{ts,tsx}"],',
+      '    output: "src/locales/{{language}}/{{namespace}}.json",',
+      '    primaryLanguage: "en",',
+      '    defaultNS: "translation",',
+      "    keySeparator: false,",
+      "    nsSeparator: false,",
+      "    sort: true,",
+      "    removeUnusedKeys: true,",
+      "  },",
       "}",
       "",
     ].join("\n"),
@@ -374,6 +409,40 @@ function renderMacroSource({ functionName, imports, messages, extension, fileInd
   return withFiller(imports, body, fileIndex, targetLines)
 }
 
+function renderFormatJsSource(fileIndex, messages, extension, targetLines) {
+  const imports = ['import { defineMessages } from "react-intl"']
+  if (extension === "tsx") {
+    imports[0] = 'import { defineMessages, FormattedMessage } from "react-intl"'
+  }
+
+  const body = [
+    `export const formatJsMessages${String(fileIndex).padStart(4, "0")} = defineMessages({`,
+  ]
+  for (let index = 0; index < messages.length; index += 1) {
+    body.push(
+      `  message${String(index).padStart(4, "0")}: { defaultMessage: ${JSON.stringify(messages[index].current)} },`
+    )
+  }
+  body.push("})", "")
+
+  if (extension === "tsx") {
+    const formatted = messages[0]
+    body.push(
+      `export function FormatJsFixture${String(fileIndex).padStart(4, "0")}() {`,
+      "  return (",
+      "    <section>",
+      `      <FormattedMessage defaultMessage=${JSON.stringify(formatted.current)} />`,
+      `      <span>{Object.keys(formatJsMessages${String(fileIndex).padStart(4, "0")}).length}</span>`,
+      "    </section>",
+      "  )",
+      "}",
+      ""
+    )
+  }
+
+  return withFiller(imports, body, fileIndex, targetLines)
+}
+
 function renderI18nextSource(fileIndex, messages, extension, targetLines) {
   const imports = ['import i18next from "i18next"']
   const body = [
@@ -415,6 +484,17 @@ async function writePoCatalogs(rootDir, messages, generator) {
     writeFile(path.join(localeRoot, "en.po"), renderPo("en", messages, generator), "utf8"),
     writeFile(path.join(localeRoot, "de.po"), renderPo("de", messages, generator), "utf8"),
   ])
+  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
+}
+
+async function writeFormatJsCatalog(rootDir, messages) {
+  const localeRoot = path.join(rootDir, "src", "locales")
+  await mkdir(localeRoot, { recursive: true })
+  await writeFile(
+    path.join(localeRoot, "extracted.json"),
+    `${JSON.stringify(toFormatJsCatalog(messages), null, 2)}\n`,
+    "utf8"
+  )
   await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
 }
 
@@ -460,6 +540,22 @@ function renderPo(locale, messages, generator) {
 
 function toJsonCatalog(messages, locale) {
   return Object.fromEntries(messages.map((message) => [message, translate(locale, message)]))
+}
+
+export function toFormatJsCatalog(messages) {
+  const catalog = {}
+  for (const message of messages) {
+    const id = formatJsId(message)
+    if (catalog[id] && catalog[id].defaultMessage !== message) {
+      throw new Error(`FormatJS content-hash collision for ${JSON.stringify(message)} at ${id}`)
+    }
+    catalog[id] = { defaultMessage: message }
+  }
+  return catalog
+}
+
+export function formatJsId(message) {
+  return createHash("sha512").update(message).digest("base64").slice(0, 6)
 }
 
 function translate(locale, message) {

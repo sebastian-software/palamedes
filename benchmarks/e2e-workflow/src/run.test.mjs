@@ -1,7 +1,16 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { formatJsId, toFormatJsCatalog } from "./corpus.mjs"
 import { parsePoMsgids } from "./po.mjs"
+
+test("FormatJS baseline catalog uses the CLI content-hash ID convention", () => {
+  assert.equal(formatJsId("Hello world"), "t/eDuu")
+  assert.deepEqual(toFormatJsCatalog(["Hello world", "Hello {name}"]), {
+    "t/eDuu": { defaultMessage: "Hello world" },
+    QM7ITA: { defaultMessage: "Hello {name}" },
+  })
+})
 
 test("parsePoMsgids reads multiline ICU msgids", () => {
   const source = [
