@@ -1138,7 +1138,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "ferrocat",
  "ferrocat-icu",
@@ -1156,7 +1156,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-cli"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "clap",
  "config",
@@ -1171,7 +1171,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-node"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "napi",
  "napi-build",

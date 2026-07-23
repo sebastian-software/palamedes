@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.4.0...palamedes-v1.5.0) (2026-07-23)
+
+
+### Features
+
+* remove deferred messages and enforce eager macro scope ([e4ae4ef](https://github.com/sebastian-software/palamedes/commit/e4ae4ef9d05a02d903a5c5b90930ceb1a63d38c1))
+
+
+### Bug Fixes
+
+* support interpolated descriptor templates ([cb3e893](https://github.com/sebastian-software/palamedes/commit/cb3e893212cb338d7753d4132461a013d5f41ef0))
+* validate interpolated descriptor values ([9bb6eb0](https://github.com/sebastian-software/palamedes/commit/9bb6eb05d0eea17f86b0779211e7331272b6af23))
+
 ## [1.4.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.3.0...palamedes-v1.4.0) (2026-07-22)
 
 
