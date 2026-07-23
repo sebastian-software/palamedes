@@ -109,6 +109,11 @@ Supported macro names:
 - `select`
 - `selectOrdinal`
 
+All four macros resolve translations eagerly. They must therefore be used
+inside a function, method, or callback, after the application has activated
+the relevant i18n scope. Palamedes rejects these macros at module scope during
+transformation and extraction.
+
 ## Runtime Formatting
 
 `formatMessagePattern()` and `createI18n()._()` support the formatter subset

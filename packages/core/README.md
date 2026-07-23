@@ -60,6 +60,9 @@ import { t } from "@palamedes/core/macro"
 ```
 
 The macro entry exports `t`, `plural`, `select`, and `selectOrdinal`.
+These eager macros must be used inside a function, method, or callback so they
+run after the relevant i18n instance has been activated. The transformer and
+extractor reject module-scope usage.
 
 ## Locale Controls
 

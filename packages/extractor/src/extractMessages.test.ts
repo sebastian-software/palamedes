@@ -1,10 +1,70 @@
 import { extractMessages, extractor, type ExtractedMessageInfo } from "./index"
 
 function extract(code: string) {
-  return extractMessages(code, "test.tsx")
+  return extractMessages(scopeMacroTestSource(code), "test.tsx")
+}
+
+function scopeMacroTestSource(code: string): string {
+  if (!/@palamedes\/(?:core|react|solid)\/macro/.test(code)) {
+    return code
+  }
+
+  const imports = [...code.matchAll(/^[ \t]*import[^\n]*$/gm)]
+  const lastImport = imports.at(-1)
+  if (!lastImport || lastImport.index === undefined) {
+    return code
+  }
+
+  const insertion = lastImport.index + lastImport[0].length
+  return `${code.slice(0, insertion)}; function __palamedesTestScope() {${code.slice(insertion)}\n}`
 }
 
 describe("extractMessages", () => {
+  describe("translation scope", () => {
+    it.each([
+      [
+        'import { t as translate } from "@palamedes/core/macro"\nconst value = translate`Hello`',
+        "t",
+      ],
+      [
+        'import { plural } from "@palamedes/core/macro"\nconst value = plural(count, { one: "# item", other: "# items" })',
+        "plural",
+      ],
+      [
+        'import { Select } from "@palamedes/react/macro"\nconst value = <Select value={kind} other="Other" />',
+        "Select",
+      ],
+    ])("rejects top-level %s usage", (code, macroName) => {
+      expect(() => extractMessages(code, "test.tsx")).toThrow(
+        new RegExp(`Translation macro \`${macroName}\` must be used inside a function`)
+      )
+    })
+
+    it("allows eager macros inside functions, methods, and callbacks", () => {
+      const code = `
+        import { t, plural } from "@palamedes/core/macro"
+        import { Select } from "@palamedes/react/macro"
+        function label() { return t\`Hello\` }
+        const countLabel = () => plural(count, { one: "# item", other: "# items" })
+        const formatter = { label() { return t\`Method\` } }
+        class Formatter { label() { return t\`Class method\` } }
+        items.map((item) => t\`Item \${item.name}\`)
+        function View() { return <Select value={kind} other="Other" /> }
+      `
+
+      expect(() => extractMessages(code, "test.tsx")).not.toThrow()
+    })
+
+    it("keeps Trans safe at module scope", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const value = <Trans>Hello</Trans>
+      `
+
+      expect(extractMessages(code, "test.tsx")).toHaveLength(1)
+    })
+  })
+
   describe("JSX Trans", () => {
     it("extracts simple Trans", () => {
       const code = `
@@ -281,7 +341,9 @@ const descriptor = t({ message })
     it("extracts directly from source without a caller-provided AST", async () => {
       const code = `
         import { t } from "@palamedes/core/macro"
-        const message = t\`Hello \${name}\`
+        function message() {
+          return t\`Hello \${name}\`
+        }
       `
       const messages: ExtractedMessageInfo[] = []
 
@@ -318,7 +380,9 @@ const descriptor = t({ message })
     it("does not hide fatal native extraction errors", async () => {
       const code = `
         import { t } from "@palamedes/core/macro"
-        const message = t({ id: "greeting", message: "Hello" })
+        function test() {
+          return t({ id: "greeting", message: "Hello" })
+        }
       `
 
       await expect(extractor.extract("test.ts", code, () => {})).rejects.toThrow(

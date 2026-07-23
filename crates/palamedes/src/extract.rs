@@ -11,6 +11,7 @@ use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
 };
+use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, BindingPattern, CallExpression, Declaration, Expression, ImportDeclaration,
@@ -1331,6 +1332,13 @@ pub fn extract_messages(
         });
     }
 
+    validate_translation_macro_scopes(&parsed.program, filename, source, |local_name| {
+        collector
+            .imported_macros
+            .get(local_name)
+            .map(|macro_info| macro_info.imported_name.clone())
+    })?;
+
     let mut extractor =
         ExtractionVisitor::new(filename, source, &line_locator, &collector.imported_macros);
     extractor.visit_program(&parsed.program);
@@ -1379,7 +1387,8 @@ pub fn extract_catalog_messages_from_files(
             Err(
                 error @ (PalamedesError::ExplicitMessageIdsUnsupported
                 | PalamedesError::NestedMessageMacro { .. }
-                | PalamedesError::UnsupportedMacroSyntax { .. }),
+                | PalamedesError::UnsupportedMacroSyntax { .. }
+                | PalamedesError::TranslationMacroOutsideFunction { .. }),
             ) => {
                 return Err(error);
             }
@@ -1566,10 +1575,122 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::{
-        extract_catalog_messages_from_files, extract_messages, ExtractCatalogMessagesRequest,
+        extract_catalog_messages_from_files, extract_messages as extract_messages_raw,
+        ExtractCatalogMessagesRequest, ExtractedMessageRecord,
     };
+    use crate::error::PalamedesResult;
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    fn extract_messages(
+        source: &str,
+        filename: &str,
+    ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
+        extract_messages_raw(&scope_macro_test_source(source), filename)
+    }
+
+    fn scope_macro_test_source(source: &str) -> String {
+        if ![
+            "@palamedes/core/macro",
+            "@palamedes/react/macro",
+            "@palamedes/solid/macro",
+        ]
+        .iter()
+        .any(|macro_module| source.contains(macro_module))
+        {
+            return source.to_string();
+        }
+
+        let mut last_import_end = None;
+        let mut offset = 0;
+
+        for line in source.split_inclusive('\n') {
+            let line_without_newline = line.strip_suffix('\n').unwrap_or(line);
+            if line_without_newline.trim_start().starts_with("import ") {
+                last_import_end = Some(offset + line_without_newline.len());
+            }
+            offset += line.len();
+        }
+
+        let Some(import_end) = last_import_end else {
+            return source.to_string();
+        };
+
+        let mut scoped = String::with_capacity(source.len() + 48);
+        scoped.push_str(&source[..import_end]);
+        scoped.push_str("; function __palamedes_test_scope() {");
+        scoped.push_str(&source[import_end..]);
+        scoped.push_str("\n}");
+        scoped
+    }
+
+    #[test]
+    fn rejects_eager_translation_macros_outside_functions() {
+        let cases = [
+            (
+                r#"import { t as translate } from "@palamedes/core/macro";
+const message = translate`Hello`;
+"#,
+                "test.ts",
+                "t",
+            ),
+            (
+                r##"import { plural } from "@palamedes/core/macro";
+const message = plural(count, { one: "# item", other: "# items" });
+"##,
+                "test.ts",
+                "plural",
+            ),
+            (
+                r#"import { Select as Choice } from "@palamedes/react/macro";
+const message = <Choice value={gender} other="They" />;
+"#,
+                "test.tsx",
+                "Select",
+            ),
+        ];
+
+        for (source, filename, macro_name) in cases {
+            let error = extract_messages_raw(source, filename)
+                .expect_err("top-level eager translation macros must fail");
+            let message = error.to_string();
+            assert!(message.contains(&format!(
+                "Translation macro `{macro_name}` must be used inside a function"
+            )));
+            assert!(message.contains(filename));
+        }
+    }
+
+    #[test]
+    fn extracts_translation_macros_in_deferred_scopes_and_trans_at_module_scope() {
+        let source = r##"import { plural, t } from "@palamedes/core/macro";
+import { Plural, Trans } from "@palamedes/react/macro";
+
+const safe = <Trans>Rendered later</Trans>;
+function declaration() { return t`Function`; }
+const arrow = () => t`Arrow`;
+const object = { method() { return t`Method`; } };
+class Formatter { method() { return t`Class method`; } }
+items.map(() => t`Callback`);
+function Component() {
+  return <Plural value={count} one="# item" other="# items" />;
+}
+function choices() {
+  return plural(count, { one: "# item", other: "# items" });
+}
+"##;
+
+        let messages = extract_messages_raw(source, "test.tsx")
+            .expect("function-scoped macros and top-level Trans should extract");
+        let source_messages = messages
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(source_messages.contains(&"Rendered later"));
+        assert!(source_messages.contains(&"Class method"));
+        assert!(source_messages.contains(&"{count, plural, one {# item} other {# items}}"));
+    }
 
     #[test]
     fn extracts_tagged_templates() {
@@ -2152,8 +2273,11 @@ const message = t({ message })
             &first,
             r#"
               import { t } from "@palamedes/core/macro"
-              const a = t({ message: "Hello {name}", comment: "Greeting" })
-              const b = t`Computed ${user.name}`
+              function firstMessages() {
+                const a = t({ message: "Hello {name}", comment: "Greeting" })
+                const b = t`Computed ${user.name}`
+                return [a, b]
+              }
             "#,
         )
         .expect("first source");
@@ -2161,7 +2285,9 @@ const message = t({ message })
             &second,
             r#"
               import { t } from "@palamedes/core/macro"
-              const a = t({ message: "Hello {name}", comment: "Greeting" })
+              function secondMessages() {
+                return t({ message: "Hello {name}", comment: "Greeting" })
+              }
             "#,
         )
         .expect("second source");
@@ -2216,7 +2342,9 @@ const message = t({ message })
             &shared,
             r#"
               import { t } from "@palamedes/core/macro"
-              export const label = t`Shared action`
+              export function label() {
+                return t`Shared action`
+              }
             "#,
         )
         .expect("shared source");
@@ -2266,7 +2394,7 @@ const message = t({ message })
                 return <Trans>Wrapped checkout</Trans>
               })
 
-              export const topLevelLabel = t`Top level label`
+              export const deferredLabel = () => t`Deferred label`
             "#,
         )
         .expect("source");
@@ -2304,14 +2432,14 @@ const message = t({ message })
         assert_eq!(wrapped.origins[0].file, "src/App.tsx");
         assert_eq!(wrapped.origins[0].scope.as_deref(), Some("WrappedButton"));
 
-        let top_level = result
+        let deferred = result
             .messages
             .iter()
-            .find(|message| message.message == "Top level label")
-            .expect("top-level message");
-        assert_eq!(top_level.origins.len(), 1);
-        assert_eq!(top_level.origins[0].file, "src/App.tsx");
-        assert_eq!(top_level.origins[0].scope, None);
+            .find(|message| message.message == "Deferred label")
+            .expect("deferred message");
+        assert_eq!(deferred.origins.len(), 1);
+        assert_eq!(deferred.origins[0].file, "src/App.tsx");
+        assert_eq!(deferred.origins[0].scope.as_deref(), Some("deferredLabel"));
 
         fs::remove_dir_all(root).expect("cleanup");
     }
@@ -2327,9 +2455,9 @@ const message = t({ message })
             &first,
             concat!(
                 "import { t } from \"@palamedes/core/macro\"\n",
-                "export const early = t`Shared origin`\n",
+                "export const early = () => t`Shared origin`\n",
                 "\n",
-                "export const later = t`Shared origin`\n",
+                "export const later = () => t`Shared origin`\n",
             ),
         )
         .expect("first source");
@@ -2337,7 +2465,7 @@ const message = t({ message })
             &second,
             concat!(
                 "import { t } from \"@palamedes/core/macro\"\n",
-                "export const duplicate = t`Shared origin`\n",
+                "export const duplicate = () => t`Shared origin`\n",
             ),
         )
         .expect("second source");
@@ -2398,7 +2526,9 @@ const message = t({ message })
             &source,
             r#"
               import { t } from "@palamedes/core/macro"
-              const message = t({ id: "greeting", message: "Hello" })
+              function message() {
+                return t({ id: "greeting", message: "Hello" })
+              }
             "#,
         )
         .expect("source");
@@ -2414,6 +2544,32 @@ const message = t({ message })
     }
 
     #[test]
+    fn batch_keeps_top_level_translation_macros_fatal() {
+        let root = temp_root("batch-top-level-translation");
+        fs::create_dir_all(&root).expect("root dir");
+        let source = root.join("bad.ts");
+        fs::write(
+            &source,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              const message = t`Hello`
+            "#,
+        )
+        .expect("source");
+
+        let error = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![source.to_string_lossy().into_owned()],
+        })
+        .expect_err("top-level translation macros should fail");
+
+        assert!(error
+            .to_string()
+            .contains("Translation macro `t` must be used inside a function"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
     fn batch_keeps_nested_jsx_message_macros_fatal() {
         let root = temp_root("batch-nested-message-macro");
         fs::create_dir_all(&root).expect("root dir");
@@ -2422,7 +2578,9 @@ const message = t({ message })
             &source,
             r##"
               import { Plural, Trans } from "@palamedes/react/macro"
-              const message = <Trans><Plural value={count} one="# item" other="# items" /> total</Trans>
+              function Message() {
+                return <Trans><Plural value={count} one="# item" other="# items" /> total</Trans>
+              }
             "##,
         )
         .expect("source");
@@ -2446,7 +2604,9 @@ const message = t({ message })
             &source,
             r#"
               import { t } from "@palamedes/core/macro"
-              const message = t({ message })
+              function message() {
+                return t({ message })
+              }
             "#,
         )
         .expect("source");

@@ -1,5 +1,122 @@
-use super::{transform_macros, NativeTransformOptions};
+use super::{
+    transform_macros as transform_macros_raw, NativeTransformOptions, NativeTransformResult,
+};
+use crate::error::PalamedesResult;
 use ferrocat::compiled_key;
+
+fn transform_macros(
+    source: &str,
+    filename: &str,
+    options: Option<NativeTransformOptions>,
+) -> PalamedesResult<NativeTransformResult> {
+    let scoped_source = scope_macro_test_source(source);
+    let mut result = transform_macros_raw(&scoped_source, filename, options)?;
+
+    if let Some(map) = result.map.as_mut() {
+        map.sources_content = Some(vec![Some(source.to_string())]);
+    }
+
+    Ok(result)
+}
+
+fn scope_macro_test_source(source: &str) -> String {
+    if ![
+        "@palamedes/core/macro",
+        "@palamedes/react/macro",
+        "@palamedes/solid/macro",
+    ]
+    .iter()
+    .any(|macro_module| source.contains(macro_module))
+    {
+        return source.to_string();
+    }
+
+    let mut last_import_end = None;
+    let mut offset = 0;
+
+    for line in source.split_inclusive('\n') {
+        let line_without_newline = line.strip_suffix('\n').unwrap_or(line);
+        if line_without_newline.trim_start().starts_with("import ") {
+            last_import_end = Some(offset + line_without_newline.len());
+        }
+        offset += line.len();
+    }
+
+    let Some(import_end) = last_import_end else {
+        return source.to_string();
+    };
+
+    let mut scoped = String::with_capacity(source.len() + 48);
+    scoped.push_str(&source[..import_end]);
+    scoped.push_str("; function __palamedes_test_scope() {");
+    scoped.push_str(&source[import_end..]);
+    scoped.push_str("\n}");
+    scoped
+}
+
+#[test]
+fn rejects_eager_translation_macros_outside_functions() {
+    let cases = [
+        (
+            r#"import { t as translate } from "@palamedes/core/macro";
+const message = translate`Hello`;
+"#,
+            "test.ts",
+            "t",
+        ),
+        (
+            r##"import { plural } from "@palamedes/core/macro";
+const message = plural(count, { one: "# item", other: "# items" });
+"##,
+            "test.ts",
+            "plural",
+        ),
+        (
+            r#"import { Select as Choice } from "@palamedes/react/macro";
+const message = <Choice value={gender} other="They" />;
+"#,
+            "test.tsx",
+            "Select",
+        ),
+    ];
+
+    for (source, filename, macro_name) in cases {
+        let error = transform_macros_raw(source, filename, None)
+            .expect_err("top-level eager translation macros must fail");
+        let message = error.to_string();
+        assert!(message.contains(&format!(
+            "Translation macro `{macro_name}` must be used inside a function"
+        )));
+        assert!(message.contains(filename));
+    }
+}
+
+#[test]
+fn accepts_translation_macros_in_deferred_scopes_and_trans_at_module_scope() {
+    let source = r##"import { plural, t } from "@palamedes/core/macro";
+import { Plural, Trans } from "@palamedes/react/macro";
+
+const safe = <Trans>Rendered later</Trans>;
+function declaration() { return t`Function`; }
+const arrow = () => t`Arrow`;
+const object = { method() { return t`Method`; } };
+class Formatter { method() { return t`Class method`; } }
+items.map(() => t`Callback`);
+function Component() {
+  return <Plural value={count} one="# item" other="# items" />;
+}
+function choices() {
+  return plural(count, { one: "# item", other: "# items" });
+}
+"##;
+
+    let result = transform_macros_raw(source, "test.tsx", None)
+        .expect("function-scoped macros and top-level Trans should succeed");
+
+    assert!(result.has_changed);
+    assert!(result.code.contains("Rendered later"));
+    assert!(result.code.contains("Class method"));
+}
 
 #[test]
 fn transforms_tagged_templates() {

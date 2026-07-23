@@ -60,7 +60,9 @@ msgstr "Oeffnen"
 
   it("maps native transform results into JavaScript strings and source maps", () => {
     const source = `import { t } from "@palamedes/core/macro";
-const msg = t\`Hello \${name}\`;
+function message(name) {
+  return t\`Hello \${name}\`;
+}
 `
     const result = transformMacrosNative(source, "sample.ts")
 

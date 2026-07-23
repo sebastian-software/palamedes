@@ -91,7 +91,8 @@ describe("createPalamedesRemixLoadHook", () => {
   })
 
   it("skips CommonJS files by default because runtime injection is ESM", () => {
-    const source = 'import { t } from "@palamedes/core/macro"; export const label = t`Hello`'
+    const source =
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }'
     const load = createPalamedesRemixLoadHook()
 
     const loaded = load(new URL("file:///repo/app/legacy.cjs").href, loadContext, () => ({
@@ -116,7 +117,8 @@ describe("createPalamedesRemixLoadHook", () => {
   })
 
   it("skips non-file urls and node_modules", () => {
-    const source = 'import { t } from "@palamedes/core/macro"; export const label = t`Hello`'
+    const source =
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }'
     const load = createPalamedesRemixLoadHook()
 
     const virtual = load("data:text/javascript,export{}", loadContext, () => ({
@@ -137,7 +139,8 @@ describe("createPalamedesRemixLoadHook", () => {
   })
 
   it("does not exclude paths that only contain node_modules as a substring", () => {
-    const source = 'import { t } from "@palamedes/core/macro"; export const label = t`Hello`'
+    const source =
+      'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }'
     const load = createPalamedesRemixLoadHook()
 
     const loaded = load(

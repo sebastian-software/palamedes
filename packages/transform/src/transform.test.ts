@@ -1,4 +1,33 @@
-import { transformPalamedesMacros } from "./transform"
+import { transformPalamedesMacros as transformPalamedesMacrosRaw } from "./transform"
+import type { TransformOptions, TransformResult } from "./types"
+
+function transformPalamedesMacros(
+  code: string,
+  filename: string,
+  options: TransformOptions = {}
+): TransformResult {
+  const scopedCode = scopeMacroTestSource(code)
+  const result = transformPalamedesMacrosRaw(scopedCode, filename, options)
+  if (result.map?.sourcesContent) {
+    result.map.sourcesContent = [code]
+  }
+  return result
+}
+
+function scopeMacroTestSource(code: string): string {
+  if (!/@palamedes\/(?:core|react|solid)\/macro/.test(code)) {
+    return code
+  }
+
+  const imports = [...code.matchAll(/^[ \t]*import[^\n]*$/gm)]
+  const lastImport = imports.at(-1)
+  if (!lastImport || lastImport.index === undefined) {
+    return code
+  }
+
+  const insertion = lastImport.index + lastImport[0].length
+  return `${code.slice(0, insertion)}; function __palamedesTestScope() {${code.slice(insertion)}\n}`
+}
 
 type SourceMapLike = {
   file?: string
@@ -9,6 +38,40 @@ type SourceMapLike = {
 }
 
 describe("transformPalamedesMacros", () => {
+  it.each([
+    [
+      'import { t as translate } from "@palamedes/core/macro";\nconst value = translate`Hello`;',
+      "t",
+    ],
+    [
+      'import { plural } from "@palamedes/core/macro";\nconst value = plural(count, { one: "# item", other: "# items" });',
+      "plural",
+    ],
+    [
+      'import { Select } from "@palamedes/react/macro";\nconst value = <Select value={kind} other="Other" />;',
+      "Select",
+    ],
+  ])("rejects top-level %s usage", (code, macroName) => {
+    expect(() => transformPalamedesMacrosRaw(code, "test.tsx")).toThrow(
+      new RegExp(`Translation macro \`${macroName}\` must be used inside a function`)
+    )
+  })
+
+  it("allows eager macros inside functions, methods, and callbacks", () => {
+    const code = `
+import { t, plural } from "@palamedes/core/macro";
+import { Select } from "@palamedes/react/macro";
+function label() { return t\`Hello\`; }
+const countLabel = () => plural(count, { one: "# item", other: "# items" });
+const formatter = { label() { return t\`Method\`; } };
+class Formatter { label() { return t\`Class method\`; } }
+items.map((item) => t\`Item \${item.name}\`);
+function View() { return <Select value={kind} other="Other" />; }
+`
+
+    expect(() => transformPalamedesMacrosRaw(code, "test.tsx")).not.toThrow()
+  })
+
   it("returns unchanged code without Palamedes macro imports", () => {
     const code = `const x = 1;`
     const result = transformPalamedesMacros(code, "test.ts")

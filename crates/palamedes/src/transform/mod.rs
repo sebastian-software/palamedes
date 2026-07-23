@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use string_wizard::{Hires, MagicString, SourceMapOptions};
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::translation_scope::validate_translation_macro_scopes;
 
 use self::imports::ImportCollector;
 use self::visitor::{source_location, Replacement, TransformVisitor};
@@ -143,6 +144,13 @@ pub fn transform_macros(
     if collector.macro_imports.is_empty() {
         return Ok(unchanged_result(source));
     }
+
+    validate_translation_macro_scopes(&parsed.program, filename, source, |local_name| {
+        collector
+            .macro_imports
+            .get(local_name)
+            .map(|macro_info| macro_info.imported_name.clone())
+    })?;
 
     let mut visitor = TransformVisitor::new(filename, source, &collector.macro_imports, &options);
     visitor.visit_program(&parsed.program);
