@@ -12,12 +12,12 @@
   "dependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
     "@react-router/node": "8.2.0",
-    "ardo": "3.6.1",
-    "lucide-react": "^0.545.0",
+    "ardo": "3.8.1",
+    "lucide-react": "^0.577.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "8.2.0",
-    "isbot": "^5"
+    "isbot": "^5.2.1"
   },
   "devDependencies": {
     "@react-router/dev": "8.2.0",
