@@ -87,6 +87,15 @@ const descriptor = ${macroName}({
     }
   )
 
+  it("rejects missing ICU values in interpolated descriptor templates", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+const descriptor = t({ message: \`Hello \${name}, you have {count}\` });
+`
+
+    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/Missing value\(s\): count/)
+  })
+
   it("rejects interpolated defineMessage descriptor templates with a source location", () => {
     const code = `import { defineMessage } from "@palamedes/core/macro";
 const descriptor = defineMessage({ message: \`Descriptor \${name}\` });

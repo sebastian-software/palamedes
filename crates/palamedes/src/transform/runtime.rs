@@ -7,13 +7,16 @@ use oxc_ast::ast::{
 };
 use oxc_span::GetSpan;
 
+use crate::descriptor::{
+    descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
+};
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::messages::{
     append_unique_bindings, build_icu_message, choice_expression_binding, escape_string,
     expression_source, extract_choice_options, extract_choice_options_from_jsx,
     extract_jsx_children_parts, extract_jsx_value_binding, first_argument_object, jsx_attributes,
-    string_value, template_to_message, ValueBinding,
+    template_to_message, ValueBinding,
 };
 use super::NativeTransformOptions;
 
@@ -67,11 +70,11 @@ fn transform_descriptor_object(
     location: &str,
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
-    if object_property_value(object, "id").is_some() {
+    if descriptor_property_value(object, "id").is_some() {
         return Err(PalamedesError::ExplicitMessageIdsUnsupported);
     }
 
-    let Some(message_expression) = object_property_value(object, "message") else {
+    let Some(message_expression) = descriptor_property_value(object, "message") else {
         return Err(unsupported_macro_syntax(
             macro_name,
             location,
@@ -143,39 +146,6 @@ enum DescriptorValues {
     Raw(String),
 }
 
-fn object_property_value<'a>(
-    object: &'a ObjectExpression<'a>,
-    property_name: &str,
-) -> Option<&'a Expression<'a>> {
-    object.properties.iter().rev().find_map(|property| {
-        let ObjectPropertyKind::ObjectProperty(property) = property else {
-            return None;
-        };
-        (property.key.static_name().as_deref() == Some(property_name)).then_some(&property.value)
-    })
-}
-
-fn descriptor_static_property(
-    object: &ObjectExpression<'_>,
-    property_name: &str,
-    macro_name: &str,
-    location: &str,
-) -> PalamedesResult<Option<String>> {
-    let Some(value) = object_property_value(object, property_name) else {
-        return Ok(None);
-    };
-    let Some(value) = string_value(value) else {
-        return Err(unsupported_macro_syntax(
-            macro_name,
-            location,
-            format!(
-                "the descriptor `{property_name}` must be a string literal or expression-free template literal"
-            ),
-        ));
-    };
-    Ok(Some(value))
-}
-
 fn descriptor_values_argument(
     call: &CallExpression<'_>,
     source: &str,
@@ -185,7 +155,11 @@ fn descriptor_values_argument(
     location: &str,
 ) -> PalamedesResult<Option<String>> {
     let Some(argument) = call.arguments.get(1) else {
-        return Ok((!implicit_values.is_empty()).then(|| render_values_object(&implicit_values)));
+        if implicit_values.is_empty() {
+            return Ok(None);
+        }
+        validate_message_values(message, &implicit_values)?;
+        return Ok(Some(render_values_object(&implicit_values)));
     };
 
     match extract_descriptor_values(argument, source) {
@@ -234,18 +208,6 @@ fn merge_descriptor_values(
         implicit_values.push(binding);
     }
     Ok(implicit_values)
-}
-
-fn unsupported_macro_syntax(
-    macro_name: &str,
-    location: &str,
-    detail: impl Into<String>,
-) -> PalamedesError {
-    PalamedesError::UnsupportedMacroSyntax {
-        macro_name: macro_name.to_string(),
-        location: location.to_string(),
-        detail: detail.into(),
-    }
 }
 
 fn extract_descriptor_values(argument: &Argument<'_>, source: &str) -> DescriptorValues {

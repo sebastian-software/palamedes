@@ -22,6 +22,7 @@ mod catalog_artifact;
 mod catalog_audit;
 mod catalog_combine;
 mod catalog_update;
+mod descriptor;
 mod diagnostic;
 mod error;
 mod extract;
