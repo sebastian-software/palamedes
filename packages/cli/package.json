@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/cli",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Palamedes CLI for extraction, audits, reports, catalog workflows, and explicit command plugins",
   "keywords": [
     "i18n",
