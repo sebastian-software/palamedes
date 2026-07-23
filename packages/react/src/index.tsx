@@ -67,19 +67,19 @@ export function Trans({
 export function Plural({ value, ...choices }: PluralProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
   const message = buildChoiceMessage("value", "plural", choices)
-  return <>{i18n._(message, { value }, { message })}</>
+  return <>{formatMessagePattern(message, { value }, i18n.locale)}</>
 }
 
 export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
   const message = buildChoiceMessage("value", "selectordinal", choices)
-  return <>{i18n._(message, { value }, { message })}</>
+  return <>{formatMessagePattern(message, { value }, i18n.locale)}</>
 }
 
 export function Select({ value, ...choices }: SelectProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
   const message = buildChoiceMessage("value", "select", choices)
-  return <>{i18n._(message, { value }, { message })}</>
+  return <>{formatMessagePattern(message, { value }, i18n.locale)}</>
 }
 
 function buildChoiceMessage(

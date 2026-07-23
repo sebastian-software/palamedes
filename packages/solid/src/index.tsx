@@ -81,7 +81,7 @@ export function Plural({ value, ...choices }: PluralProps): JSX.Element {
   return (() => {
     const i18n = useReactiveI18n()
     const message = buildChoiceMessage("value", "plural", choices)
-    return i18n._(message, { value }, { message })
+    return formatMessagePattern(message, { value }, i18n.locale)
   }) as unknown as JSX.Element
 }
 
@@ -89,7 +89,7 @@ export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): JSX.El
   return (() => {
     const i18n = useReactiveI18n()
     const message = buildChoiceMessage("value", "selectordinal", choices)
-    return i18n._(message, { value }, { message })
+    return formatMessagePattern(message, { value }, i18n.locale)
   }) as unknown as JSX.Element
 }
 
@@ -97,7 +97,7 @@ export function Select({ value, ...choices }: SelectProps): JSX.Element {
   return (() => {
     const i18n = useReactiveI18n()
     const message = buildChoiceMessage("value", "select", choices)
-    return i18n._(message, { value }, { message })
+    return formatMessagePattern(message, { value }, i18n.locale)
   }) as unknown as JSX.Element
 }
 

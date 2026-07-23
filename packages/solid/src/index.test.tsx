@@ -1,12 +1,12 @@
 /* @jsxImportSource solid-js */
 import { createRenderEffect, createRoot, createSignal } from "solid-js"
 import { renderToString } from "solid-js/web/dist/server.js"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createI18n } from "@palamedes/core"
 import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
 
-import { Plural, Trans, buildLocaleSwitchItems } from "./index"
+import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
 import { createClientLocaleEffect } from "./client"
 
 describe("@palamedes/solid", () => {
@@ -72,6 +72,22 @@ describe("@palamedes/solid", () => {
     const html = renderToString(() => <Plural value={2} one="# item" other="# items" />)
 
     expect(html).toBe("2 items")
+  })
+
+  it("formats direct choice components without reporting missing catalog entries", () => {
+    const onMissing = vi.fn()
+    const i18n = createI18n({ onMissing })
+    i18n.activate("en")
+    setServerI18nGetter(() => i18n)
+
+    const plural = renderToString(() => <Plural value={2} one="# item" other="# items" />)
+    const select = renderToString(() => <Select value="female" female="She" other="They" />)
+    const ordinal = renderToString(() => (
+      <SelectOrdinal value={2} one="#st" two="#nd" other="#th" />
+    ))
+
+    expect([plural, select, ordinal]).toStrictEqual(["2 items", "She", "2nd"])
+    expect(onMissing).not.toHaveBeenCalled()
   })
 
   it("builds locale switch items headlessly", () => {
