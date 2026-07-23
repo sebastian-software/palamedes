@@ -171,6 +171,12 @@ export default [
   generatedAndBuildIgnores,
   ...config,
   {
+    rules: {
+      "unicorn/no-for-each": "off",
+      "unicorn/prefer-switch": "off",
+    },
+  },
+  {
     files: ["**/*.js", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx"],
     languageOptions: {
       parserOptions: {
