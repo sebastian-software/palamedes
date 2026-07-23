@@ -89,8 +89,8 @@ different param name. Cookie serialization is available through
 
 The Remix v3 support path covers:
 
-- JS macros in server-loaded modules: `t`, `msg`, `plural`, `select`,
-  `selectOrdinal`, and `defineMessage`
+- JS macros in server-loaded modules: `t`, `plural`, `select`, and
+  `selectOrdinal`
 - request-local i18n activation for Fetch `Request` handlers
 - cookie, route, subdomain, TLD, and `Accept-Language` locale negotiation
 - `.po` catalog imports through `@palamedes/remix/register`

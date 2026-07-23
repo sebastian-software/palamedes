@@ -52,7 +52,7 @@ The Palamedes transform recognizes Palamedes macro packages; Lingui macro
 imports are left untouched.
 
 ```ts
-import { t, msg, defineMessage, plural, select, selectOrdinal } from "@palamedes/core/macro"
+import { t, plural, select, selectOrdinal } from "@palamedes/core/macro"
 ```
 
 ```tsx
@@ -85,7 +85,7 @@ const locale = getI18n().locale
 
 ### 2. Explicit IDs
 
-Before:
+Before (Lingui):
 
 ```ts
 t({ id: "checkout.cta", message: "Buy now" })
@@ -96,8 +96,15 @@ After:
 
 ```ts
 t({ message: "Buy now" })
-defineMessage({ message: "Buy now", context: "checkout button" })
+
+function checkoutButtonLabel() {
+  return t({ message: "Buy now", context: "checkout button" })
+}
 ```
+
+Palamedes does not expose deferred message descriptors. Move former `msg` or
+`defineMessage` declarations into a function or callback and translate with
+`t` when the value is actually needed.
 
 ### 3. Framework integration
 

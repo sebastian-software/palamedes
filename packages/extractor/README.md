@@ -44,7 +44,7 @@ console.log(messages)
 
 ## Supported Inputs
 
-- `t`, `msg`, `defineMessage`, `plural`, `select`, `selectOrdinal`
+- `t`, `plural`, `select`, `selectOrdinal`
 - `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
 - `i18n._(...)` and `i18n.t\`...\`` style runtime calls
 - JavaScript, TypeScript, JSX, and TSX sources

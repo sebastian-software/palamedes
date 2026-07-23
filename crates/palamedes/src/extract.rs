@@ -133,12 +133,14 @@ impl LineLocator {
 
 struct MacroCollector {
     imported_macros: HashMap<String, ImportedMacro>,
+    removed_macro_import: Option<(String, usize)>,
 }
 
 impl MacroCollector {
     fn new() -> Self {
         Self {
             imported_macros: HashMap::new(),
+            removed_macro_import: None,
         }
     }
 }
@@ -153,11 +155,16 @@ impl<'a> Visit<'a> for MacroCollector {
         if let Some(specifiers) = &it.specifiers {
             for specifier in specifiers {
                 if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
+                    let imported_name = specifier.imported.name().to_string();
+                    if matches!(imported_name.as_str(), "msg" | "defineMessage")
+                        && self.removed_macro_import.is_none()
+                    {
+                        self.removed_macro_import =
+                            Some((imported_name.clone(), it.span.start as usize));
+                    }
                     self.imported_macros.insert(
                         specifier.local.name.to_string(),
-                        ImportedMacro {
-                            imported_name: specifier.imported.name().to_string(),
-                        },
+                        ImportedMacro { imported_name },
                     );
                 }
             }
@@ -331,7 +338,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
 
         if let Some(tag_name) = identifier_name(&it.tag) {
             if let Some(macro_name) = self
-                .imported_macro_name(tag_name, &["t", "msg"])
+                .imported_macro_name(tag_name, &["t"])
                 .map(str::to_string)
             {
                 match extract_from_tagged_template(
@@ -381,17 +388,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
 
         if let Some(callee_name) = identifier_name(&it.callee) {
             if let Some(macro_name) = self
-                .imported_macro_name(
-                    callee_name,
-                    &[
-                        "t",
-                        "defineMessage",
-                        "msg",
-                        "plural",
-                        "select",
-                        "selectOrdinal",
-                    ],
-                )
+                .imported_macro_name(callee_name, &["t", "plural", "select", "selectOrdinal"])
                 .map(str::to_string)
             {
                 let message = match macro_name.as_str() {
@@ -743,16 +740,7 @@ fn extract_from_descriptor_call(
 
     let (message, placeholders) = match message_expression.without_parentheses() {
         Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
-        Expression::TemplateLiteral(template) => {
-            if macro_name == "defineMessage" && !template.expressions.is_empty() {
-                return Err(unsupported_macro_syntax(
-                    macro_name,
-                    location,
-                    "interpolated descriptor templates require runtime values; use `t()` or `msg()`, or write a static ICU message",
-                ));
-            }
-            template_to_message(template, source)?
-        }
+        Expression::TemplateLiteral(template) => template_to_message(template, source)?,
         _ => {
             return Err(unsupported_macro_syntax(
                 macro_name,
@@ -857,22 +845,12 @@ fn extract_from_runtime_call(
         return Ok(None);
     };
 
-    if let Argument::ObjectExpression(object) = first_arg {
-        let props = extract_object_properties(object);
-        if props.contains_key("id") {
-            return Err(PalamedesError::ExplicitMessageIdsUnsupported);
-        }
-        let Some(message) = props.get("message").cloned() else {
-            return Ok(None);
-        };
-        return Ok(Some(ExtractedMessageRecord {
-            message,
-            comment: props.get("comment").cloned(),
-            context: props.get("context").cloned(),
-            placeholders: None,
-            origin,
-            scope,
-        }));
+    if matches!(first_arg, Argument::ObjectExpression(_)) {
+        return Err(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: "i18n._".to_string(),
+            location: format!("{}:{}:1", origin.0, origin.1),
+            detail: "object-form runtime messages have been removed; pass a string id as the first argument and source metadata as the third argument".to_string(),
+        });
     }
 
     let mut message = argument_string_value(first_arg);
@@ -1344,6 +1322,15 @@ pub fn extract_messages(
     let mut collector = MacroCollector::new();
     collector.visit_program(&parsed.program);
 
+    if let Some((macro_name, offset)) = collector.removed_macro_import.as_ref() {
+        let (line, column) = line_locator.get_location(*offset);
+        return Err(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: macro_name.clone(),
+            location: format!("{filename}:{line}:{column}"),
+            detail: "this deferred message macro has been removed; translate at the point of use with `t`".to_string(),
+        });
+    }
+
     let mut extractor =
         ExtractionVisitor::new(filename, source, &line_locator, &collector.imported_macros);
     extractor.visit_program(&parsed.program);
@@ -1611,12 +1598,12 @@ mod tests {
     fn extracts_interpolated_descriptor_templates() {
         let messages = extract_messages(
             r#"
-              import { msg, t } from "@palamedes/core/macro"
+              import { t } from "@palamedes/core/macro"
               const first = t({
                 message: `Descriptor ${name}`,
                 context: "probe context",
               })
-              const second = msg({ message: `Locale ${resolved.locale}` })
+              const second = t({ message: `Locale ${resolved.locale}` })
             "#,
             "test.tsx",
         )
@@ -1640,18 +1627,22 @@ mod tests {
     }
 
     #[test]
-    fn rejects_interpolated_define_message_descriptors() {
-        let error = extract_messages(
-            r#"import { defineMessage } from "@palamedes/core/macro"
-const message = defineMessage({ message: `Hello ${name}` })
-"#,
-            "test.ts",
-        )
-        .expect_err("defineMessage cannot capture runtime template values");
+    fn rejects_removed_deferred_macro_imports() {
+        for macro_name in ["msg", "defineMessage"] {
+            let source = format!(
+                r#"import {{ t, {macro_name} as deferred }} from "@palamedes/core/macro"
+const message = t`Hello`
+"#
+            );
+            let error = extract_messages(&source, "test.ts")
+                .expect_err("removed deferred macro imports must fail");
 
-        let message = error.to_string();
-        assert!(message.contains("Unsupported `defineMessage` macro usage at test.ts:2:17"));
-        assert!(message.contains("interpolated descriptor templates require runtime values"));
+            let message = error.to_string();
+            assert!(message.contains(&format!(
+                "Unsupported `{macro_name}` macro usage at test.ts:1:1"
+            )));
+            assert!(message.contains("deferred message macro has been removed"));
+        }
     }
 
     #[test]
@@ -1680,6 +1671,16 @@ const message = t({ message })
         .expect("messages should extract");
 
         assert_eq!(messages[0].message, "Hello {name}");
+    }
+
+    #[test]
+    fn rejects_object_form_runtime_messages() {
+        let error = extract_messages(r#"const message = i18n._({ message: "Hello" })"#, "test.ts")
+            .expect_err("object-form runtime messages must fail");
+
+        assert!(error
+            .to_string()
+            .contains("object-form runtime messages have been removed"));
     }
 
     #[test]

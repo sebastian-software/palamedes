@@ -4,12 +4,7 @@ import type { ReactElement, ReactNode } from "react"
 
 import { getI18n } from "@palamedes/runtime"
 import { formatMessagePattern, parseMessagePattern } from "@palamedes/core"
-import type {
-  MessageChoiceNode,
-  MessageDescriptor,
-  MessageNode,
-  PalamedesI18n,
-} from "@palamedes/core"
+import type { MessageChoiceNode, MessageNode, PalamedesI18n } from "@palamedes/core"
 
 export {
   buildLocaleSwitchItems,
@@ -22,9 +17,12 @@ export type TransProps = {
   // (or choice props) and the Palamedes compiler transform injects the resolved
   // `id` at build time. Hand-written runtime usage may still pass `id` directly.
   id?: string
+  message?: string
+  context?: string
+  comment?: string
   values?: Record<string, unknown>
   components?: Record<string, ReactElement>
-} & MessageDescriptor
+}
 
 type ChoiceComponentProps = {
   value: string | number
@@ -57,7 +55,6 @@ export function Trans({
   const i18n = getI18n<PalamedesI18n>()
   const resolvedId = id ?? message ?? ""
   const pattern = i18n.getMessage(resolvedId, {
-    id: resolvedId,
     message,
     context,
     comment,
@@ -69,19 +66,20 @@ export function Trans({
 
 export function Plural({ value, ...choices }: PluralProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
-  return <>{i18n._({ message: buildChoiceMessage("value", "plural", choices) }, { value })}</>
+  const message = buildChoiceMessage("value", "plural", choices)
+  return <>{i18n._(message, { value }, { message })}</>
 }
 
 export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
-  return (
-    <>{i18n._({ message: buildChoiceMessage("value", "selectordinal", choices) }, { value })}</>
-  )
+  const message = buildChoiceMessage("value", "selectordinal", choices)
+  return <>{i18n._(message, { value }, { message })}</>
 }
 
 export function Select({ value, ...choices }: SelectProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
-  return <>{i18n._({ message: buildChoiceMessage("value", "select", choices) }, { value })}</>
+  const message = buildChoiceMessage("value", "select", choices)
+  return <>{i18n._(message, { value }, { message })}</>
 }
 
 function buildChoiceMessage(

@@ -196,7 +196,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         };
 
-        if !matches!(macro_info.imported_name.as_str(), "t" | "msg") {
+        if macro_info.imported_name != "t" {
             walk::walk_tagged_template_expression(self, it);
             return;
         }
@@ -241,7 +241,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         let location = source_location(self.source, self.filename, it.span.start as usize);
 
         match macro_info.imported_name.as_str() {
-            "t" | "msg" | "defineMessage" => {
+            "t" => {
                 match transform_descriptor_call(
                     it,
                     self.source,
@@ -256,9 +256,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
-                        if macro_info.imported_name != "defineMessage" {
-                            self.needs_runtime_import = true;
-                        }
+                        self.needs_runtime_import = true;
                     }
                     Ok(None) => {
                         self.fail_unsupported_macro(
@@ -383,7 +381,7 @@ fn is_jsx_message_macro(
         })
 }
 
-fn source_location(source: &str, filename: &str, offset: usize) -> String {
+pub(super) fn source_location(source: &str, filename: &str, offset: usize) -> String {
     let mut line = 1usize;
     let mut line_start = 0usize;
 

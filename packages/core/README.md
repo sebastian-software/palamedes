@@ -49,7 +49,7 @@ const i18n = createI18n({
 
 Use `pmds audit --fail-on error` in CI for checked-in catalogs, then wire these
 hooks to observe runtime-loaded catalogs or fast-moving translation changes.
-`getMessage(id, descriptor)` uses the same missing-catalog lookup path as `_()`,
+`getMessage(id, metadata)` uses the same missing-catalog lookup path as `_()`,
 so `onMissing` also fires when callers ask for a raw pattern by id and the
 active catalog does not contain that id.
 
@@ -59,8 +59,7 @@ For authoring imports, use:
 import { t } from "@palamedes/core/macro"
 ```
 
-The macro entry exports `t`, `msg`, `defineMessage`, `plural`, `select`, and
-`selectOrdinal`.
+The macro entry exports `t`, `plural`, `select`, and `selectOrdinal`.
 
 ## Locale Controls
 
@@ -88,15 +87,10 @@ Palamedes supports the common ICU argument types that product UIs usually need
 inside translated sentences:
 
 ```ts
-i18n._(
-  {
-    message: "Paid {amount, number, ::currency/EUR} on {when, date, medium} at {when, time, short}",
-  },
-  {
-    amount: 12.3,
-    when: new Date(),
-  }
-)
+i18n._("Paid {amount, number, ::currency/EUR} on {when, date, medium} at {when, time, short}", {
+  amount: 12.3,
+  when: new Date(),
+})
 ```
 
 Supported runtime styles:

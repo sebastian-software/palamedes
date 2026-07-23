@@ -11,7 +11,7 @@ package names.
 - `parseAcceptLanguage(header)` from `@palamedes/core/locale`
 - `buildLocaleSwitchItems(options)` from `@palamedes/core/locale`
 - `defineLocaleControls(config)` from `@palamedes/core/locale`
-- `MessageDescriptor`
+- `MessageMetadata`
 - `CatalogMessages`
 - `PalamedesI18n`
 - `CreateI18nOptions`
@@ -53,35 +53,36 @@ const label = i18n._("Hello {name}", { name: "Ada" })
 ```ts
 interface PalamedesI18n {
   locale?: string
-  _(idOrDescriptor, values?, descriptor?): string
+  _(id: string, values?, metadata?): string
   load(locale: string, messages: CatalogMessages): void
   activate(locale: string): void
-  getMessage(id: string, descriptor?: MessageDescriptor): string
+  getMessage(id: string, metadata?: MessageMetadata): string
 }
 ```
 
 `load()` merges messages into the locale catalog. `activate()` selects the
 locale used by `_()` and `getMessage()`.
 
-Fallback order for `getMessage(id, descriptor)`:
+Fallback order for `getMessage(id, metadata)`:
 
 1. active catalog entry for `id`
-2. `descriptor.message`
+2. `metadata.message`
 3. `id`
 
-## `MessageDescriptor`
+## `MessageMetadata`
 
 ```ts
-interface MessageDescriptor {
-  id?: string
+interface MessageMetadata {
   message?: string
   context?: string
   comment?: string
 }
 ```
 
-Palamedes source authoring is source-string-first. Use `context` when the same
-source message needs different translations in different UI contexts.
+The compiler emits this metadata alongside compact internal lookup ids so the
+runtime can fall back to the source message and report useful diagnostics.
+It is not a deferred authoring API. Author translations with `t` at the point
+where they are evaluated.
 
 ## Locale Controls
 
@@ -104,8 +105,6 @@ Palamedes plugin before runtime.
 Supported macro names:
 
 - `t`
-- `msg`
-- `defineMessage`
 - `plural`
 - `select`
 - `selectOrdinal`

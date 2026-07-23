@@ -26,7 +26,7 @@ export function extractMessages(source: string, filename: string): ExtractedMess
  *
  * Supports:
  * - JSX: <Trans>, <Plural>, <Select>, <SelectOrdinal>
- * - JS: t`...`, t({...}), plural(), select(), selectOrdinal(), msg`...`, defineMessage()
+ * - JS: t`...`, t({...}), plural(), select(), selectOrdinal()
  *
  * @example
  * ```ts

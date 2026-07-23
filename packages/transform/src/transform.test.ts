@@ -67,25 +67,22 @@ const msg = t({ message: "Hello", context: "informal", comment: "A greeting" });
     expect(result.code).not.toContain('id: "greeting"')
   })
 
-  it.each(["t", "msg"])(
-    "transforms interpolated %s descriptor templates with runtime values",
-    (macroName) => {
-      const code = `
-import { ${macroName} } from "@palamedes/core/macro";
-const descriptor = ${macroName}({
+  it("transforms interpolated descriptor templates with runtime values", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+const message = t({
   message: \`Descriptor \${name}\`,
   context: "probe context",
 });
 `
-      const result = transformPalamedesMacros(code, "test.ts")
+    const result = transformPalamedesMacros(code, "test.ts")
 
-      expect(result.code).toContain('message: "Descriptor {name}"')
-      expect(result.code).toContain("{ name }")
-      expect(result.code).toContain('context: "probe context"')
-      expect(result.code).not.toContain("@palamedes/core/macro")
-      expect(result.code).not.toContain(`${macroName}({`)
-    }
-  )
+    expect(result.code).toContain('message: "Descriptor {name}"')
+    expect(result.code).toContain("{ name }")
+    expect(result.code).toContain('context: "probe context"')
+    expect(result.code).not.toContain("@palamedes/core/macro")
+    expect(result.code).not.toContain("t({")
+  })
 
   it("rejects missing ICU values in interpolated descriptor templates", () => {
     const code = `
@@ -96,15 +93,20 @@ const descriptor = t({ message: \`Hello \${name}, you have {count}\` });
     expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/Missing value\(s\): count/)
   })
 
-  it("rejects interpolated defineMessage descriptor templates with a source location", () => {
-    const code = `import { defineMessage } from "@palamedes/core/macro";
-const descriptor = defineMessage({ message: \`Descriptor \${name}\` });
+  it.each(["msg", "defineMessage"])(
+    "rejects removed %s imports before removing a shared macro import",
+    (macroName) => {
+      const code = `import { t, ${macroName} as deferred } from "@palamedes/core/macro";
+const valid = t\`Hello\`;
 `
 
-    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(
-      /Unsupported `defineMessage` macro usage at test\.ts:2:20.*runtime values/
-    )
-  })
+      expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(
+        new RegExp(
+          `Unsupported \`${macroName}\` macro usage at test\\.ts:1:1.*deferred message macro has been removed`
+        )
+      )
+    }
+  )
 
   it("rejects unsupported macro calls before removing a shared macro import", () => {
     const code = `import { t } from "@palamedes/core/macro";
@@ -144,20 +146,6 @@ const msg = t({ message: "Hello" }, { name });
 `
 
     expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/extra value\(s\): name/)
-  })
-
-  it("transforms defineMessage to a descriptor with an internal lookup key", () => {
-    const code = `
-import { defineMessage } from "@palamedes/core/macro";
-const msg = defineMessage({ message: "Hello" });
-`
-    const result = transformPalamedesMacros(code, "test.ts")
-
-    expect(result.hasChanged).toBe(true)
-    expect(result.code).toContain('id: "')
-    expect(result.code).toContain('message: "Hello"')
-    expect(result.code).not.toContain("getI18n()._")
-    expect(result.compiledIds).toHaveLength(1)
   })
 
   it("transforms <Trans> with generated internal ids", () => {

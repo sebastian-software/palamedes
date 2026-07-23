@@ -136,9 +136,9 @@ describe("extractMessages", () => {
   describe("macro calls", () => {
     it("extracts descriptor messages", () => {
       const code = `
-        import { defineMessage, t } from "@palamedes/core/macro"
+        import { t } from "@palamedes/core/macro"
         const one = t({ message: "Hello" })
-        const two = defineMessage({ message: "Hello {name}", context: "email.subject" })
+        const two = t({ message: "Hello {name}", context: "email.subject" }, { name })
       `
       const messages = extract(code)
       expect(messages).toHaveLength(2)
@@ -149,12 +149,12 @@ describe("extractMessages", () => {
 
     it("extracts interpolated descriptor templates with placeholder metadata", () => {
       const code = `
-        import { msg, t } from "@palamedes/core/macro"
+        import { t } from "@palamedes/core/macro"
         const one = t({
           message: \`Descriptor \${name}\`,
           context: "probe context",
         })
-        const two = msg({ message: \`Locale \${resolved.locale}\` })
+        const two = t({ message: \`Locale \${resolved.locale}\` })
       `
       const messages = extract(code)
 
@@ -170,13 +170,15 @@ describe("extractMessages", () => {
       })
     })
 
-    it("rejects interpolated defineMessage descriptor templates", () => {
-      const code = `import { defineMessage } from "@palamedes/core/macro"
-const descriptor = defineMessage({ message: \`Descriptor \${name}\` })
+    it.each(["msg", "defineMessage"])("rejects removed %s imports", (macroName) => {
+      const code = `import { t, ${macroName} as deferred } from "@palamedes/core/macro"
+const message = t\`Hello\`
 `
 
       expect(() => extract(code)).toThrow(
-        /Unsupported `defineMessage` macro usage at test\.tsx:2:20.*runtime values/
+        new RegExp(
+          `Unsupported \`${macroName}\` macro usage at test\\.tsx:1:1.*deferred message macro has been removed`
+        )
       )
     })
 
@@ -335,12 +337,12 @@ const descriptor = t({ message })
       expect(() => extract(code)).toThrow(/Explicit message ids/)
     })
 
-    it("rejects explicit ids in runtime descriptors", () => {
+    it("rejects object-form runtime messages", () => {
       const code = `
         const x = i18n._({ id: "greeting", message: "Hello" })
       `
 
-      expect(() => extract(code)).toThrow(/Explicit message ids/)
+      expect(() => extract(code)).toThrow(/object-form runtime messages have been removed/)
     })
 
     it("rejects unnamed template placeholders", () => {

@@ -85,13 +85,6 @@ fn transform_descriptor_object(
     let (message, implicit_values) = match message_expression.without_parentheses() {
         Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
         Expression::TemplateLiteral(template) => {
-            if macro_name == "defineMessage" && !template.expressions.is_empty() {
-                return Err(unsupported_macro_syntax(
-                    macro_name,
-                    location,
-                    "interpolated descriptor templates require runtime values; use `t()` or `msg()`, or write a static ICU message",
-                ));
-            }
             let (message, values) = template_to_message(template, source)?;
             (message, values.unwrap_or_default())
         }
@@ -107,38 +100,25 @@ fn transform_descriptor_object(
     let comment = descriptor_static_property(object, "comment", macro_name, location)?;
 
     let lookup_key = compiled_key(&message, context.as_deref());
-    let descriptor = build_message_descriptor(
-        &lookup_key,
-        Some(&message),
-        None,
-        context.as_deref(),
-        comment.as_deref(),
-        options,
-    );
-
-    if macro_name == "defineMessage" {
-        Ok(Some((descriptor, lookup_key)))
-    } else {
-        let values_text = descriptor_values_argument(
-            call,
-            source,
-            &message,
-            implicit_values,
-            macro_name,
-            location,
-        )?;
-        Ok(Some((
-            build_runtime_call_with_values_text(
-                &lookup_key,
-                Some(&message),
-                values_text.as_deref(),
-                context.as_deref(),
-                comment.as_deref(),
-                options,
-            ),
-            lookup_key,
-        )))
-    }
+    let values_text = descriptor_values_argument(
+        call,
+        source,
+        &message,
+        implicit_values,
+        macro_name,
+        location,
+    )?;
+    Ok(Some((
+        build_runtime_call_with_values_text(
+            &lookup_key,
+            Some(&message),
+            values_text.as_deref(),
+            context.as_deref(),
+            comment.as_deref(),
+            options,
+        ),
+        lookup_key,
+    )))
 }
 
 enum DescriptorValues {
@@ -461,43 +441,6 @@ pub(super) fn transform_choice_jsx_element(
         ),
         lookup_key,
     )))
-}
-
-fn build_message_descriptor(
-    lookup_key: &str,
-    message: Option<&str>,
-    values: Option<&[String]>,
-    context: Option<&str>,
-    comment: Option<&str>,
-    options: &NativeTransformOptions,
-) -> String {
-    let mut parts = vec![format!("id: \"{}\"", escape_string(lookup_key))];
-
-    if let Some(message) = message {
-        if !options.strip_message_field.unwrap_or(false) {
-            parts.push(format!("message: \"{}\"", escape_string(message)));
-        }
-    }
-
-    if let Some(values) = values {
-        if !values.is_empty() {
-            parts.push(format!("values: {{ {} }}", values.join(", ")));
-        }
-    }
-
-    if let Some(context) = context {
-        if !options.strip_non_essential_props.unwrap_or(false) {
-            parts.push(format!("context: \"{}\"", escape_string(context)));
-        }
-    }
-
-    if let Some(comment) = comment {
-        if !options.strip_non_essential_props.unwrap_or(false) {
-            parts.push(format!("comment: \"{}\"", escape_string(comment)));
-        }
-    }
-
-    format!("{{ {} }}", parts.join(", "))
 }
 
 fn build_runtime_call(

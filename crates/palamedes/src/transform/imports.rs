@@ -20,6 +20,7 @@ pub(super) struct ImportCollector {
     runtime_import_name: String,
     pub macro_imports: HashMap<String, ImportedMacro>,
     pub macro_import_ranges: Vec<(usize, usize)>,
+    pub removed_macro_import: Option<(String, usize)>,
     pub has_runtime_import: bool,
     pub trans_import_sources: HashSet<String>,
 }
@@ -31,6 +32,7 @@ impl ImportCollector {
             runtime_import_name: runtime_import_name.to_string(),
             macro_imports: HashMap::new(),
             macro_import_ranges: Vec::new(),
+            removed_macro_import: None,
             has_runtime_import: false,
             trans_import_sources: HashSet::new(),
         }
@@ -48,10 +50,17 @@ impl<'a> Visit<'a> for ImportCollector {
             if let Some(specifiers) = &it.specifiers {
                 for specifier in specifiers {
                     if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
+                        let imported_name = specifier.imported.name().to_string();
+                        if matches!(imported_name.as_str(), "msg" | "defineMessage")
+                            && self.removed_macro_import.is_none()
+                        {
+                            self.removed_macro_import =
+                                Some((imported_name.clone(), it.span.start as usize));
+                        }
                         self.macro_imports.insert(
                             specifier.local.name.to_string(),
                             ImportedMacro {
-                                imported_name: specifier.imported.name().to_string(),
+                                imported_name,
                                 source: source.to_string(),
                             },
                         );

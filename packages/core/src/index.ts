@@ -1,7 +1,6 @@
 import { formatMessagePattern, parseMessagePattern } from "./messageFormat"
 
-export type MessageDescriptor = {
-  id?: string
+export type MessageMetadata = {
   message?: string
   context?: string
   comment?: string
@@ -12,7 +11,7 @@ export type CatalogMessages = Record<string, string>
 export type MissingMessageInfo = {
   id: string
   locale: string
-  descriptor?: MessageDescriptor
+  metadata?: MessageMetadata
 }
 
 export type MessageFormatErrorInfo = {
@@ -21,7 +20,7 @@ export type MessageFormatErrorInfo = {
   error: Error
   pattern: string
   fallback: string
-  descriptor?: MessageDescriptor
+  metadata?: MessageMetadata
 }
 
 export type CreateI18nOptions = {
@@ -31,14 +30,10 @@ export type CreateI18nOptions = {
 
 export type PalamedesI18n = {
   locale?: string
-  _: (
-    idOrDescriptor: string | MessageDescriptor,
-    values?: Record<string, unknown>,
-    descriptor?: MessageDescriptor
-  ) => string
+  _: (id: string, values?: Record<string, unknown>, metadata?: MessageMetadata) => string
   load: (locale: string, messages: CatalogMessages) => void
   activate: (locale: string) => void
-  getMessage: (id: string, descriptor?: MessageDescriptor) => string
+  getMessage: (id: string, metadata?: MessageMetadata) => string
 }
 
 type ResolvedMessage = {
@@ -66,10 +61,10 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     }
   }
 
-  function resolveMessage(id: string, descriptor?: MessageDescriptor): ResolvedMessage {
+  function resolveMessage(id: string, metadata?: MessageMetadata): ResolvedMessage {
     const catalog = activeLocale ? catalogs.get(activeLocale) : undefined
     const catalogMessage = catalog?.[id]
-    const fallback = descriptor?.message ?? id
+    const fallback = metadata?.message ?? id
 
     if (catalogMessage !== undefined) {
       return {
@@ -82,7 +77,7 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
       notifyMissing({
         id,
         locale: activeLocale,
-        descriptor,
+        metadata,
       })
     }
 
@@ -96,7 +91,7 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     message: ResolvedMessage,
     values: Record<string, unknown>,
     id?: string,
-    descriptor?: MessageDescriptor
+    metadata?: MessageMetadata
   ): string {
     try {
       return formatMessagePattern(message.pattern, values, activeLocale)
@@ -107,7 +102,7 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
         error: normalizeError(error),
         pattern: message.pattern,
         fallback: message.fallback,
-        descriptor,
+        metadata,
       })
     }
 
@@ -138,31 +133,12 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
       activeLocale = locale
     },
 
-    getMessage(id, descriptor) {
-      return resolveMessage(id, descriptor).pattern
+    getMessage(id, metadata) {
+      return resolveMessage(id, metadata).pattern
     },
 
-    _(idOrDescriptor, values = {}, descriptor) {
-      if (typeof idOrDescriptor === "string") {
-        return renderMessage(
-          resolveMessage(idOrDescriptor, descriptor),
-          values,
-          idOrDescriptor,
-          descriptor
-        )
-      }
-
-      if (idOrDescriptor.id !== undefined) {
-        return renderMessage(
-          resolveMessage(idOrDescriptor.id, idOrDescriptor),
-          values,
-          idOrDescriptor.id,
-          idOrDescriptor
-        )
-      }
-
-      const pattern = idOrDescriptor.message ?? ""
-      return renderMessage({ pattern, fallback: pattern }, values, undefined, idOrDescriptor)
+    _(id, values = {}, metadata) {
+      return renderMessage(resolveMessage(id, metadata), values, id, metadata)
     },
   }
 }

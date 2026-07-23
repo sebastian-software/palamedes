@@ -8,14 +8,6 @@ export function t(..._args: any[]): never {
   return throwMacroError()
 }
 
-export function msg(..._args: any[]): never {
-  return throwMacroError()
-}
-
-export function defineMessage(..._args: any[]): never {
-  return throwMacroError()
-}
-
 export function plural(..._args: any[]): never {
   return throwMacroError()
 }
