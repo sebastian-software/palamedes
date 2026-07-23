@@ -22,7 +22,7 @@
   "devDependencies": {
     "@react-router/dev": "8.3.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^22.20.1",
+    "@types/node": "^24.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "sirv-cli": "^3.0.0",
