@@ -108,7 +108,7 @@ export default function Proof() {
       <Section
         num="04 — ICU semantics"
         title="ICU stays ICU from source to runtime."
-        lede="A checked-in nested select + plural message runs through extraction, PO catalog update, catalog compilation, and six runtime scenarios. The proof compares exact messages and selector structure instead of treating ICU as a yes/no feature checkbox."
+        lede="A checked-in nested select + plural message runs through extraction, macro transformation, PO catalog update, catalog compilation, and six executions of the transformed runtime function. The proof compares exact messages and selector structure instead of treating ICU as a yes/no feature checkbox."
       >
         <div className="max-w-[56em] border-l-4 border-accent pl-4">
           <p className="micro text-[10px] text-gray-spec">Exact boundary</p>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -11,6 +11,8 @@ const fixtureSourcePath = path.join(fixtureRoot, "src", "notification-summary.ts
 const fixtureSourceName = "proof/icu-semantics/src/notification-summary.ts"
 const fixtureTranslationPath = path.join(fixtureRoot, "locales", "de", "messages.po")
 const expected = JSON.parse(await readFile(path.join(fixtureRoot, "expected.json"), "utf8"))
+const runtimeSymbolName = "palamedes.icu-semantics-proof.i18n"
+const runtimeSymbol = Symbol.for(runtimeSymbolName)
 
 const coreNode = await import(
   pathToFileURL(path.join(repoRoot, "packages", "core-node", "dist", "index.mjs")).href
@@ -19,7 +21,13 @@ const core = await import(
   pathToFileURL(path.join(repoRoot, "packages", "core", "dist", "index.mjs")).href
 )
 
-const { compileCatalogArtifact, extractMessagesNative, parsePo, updateCatalogFile } = coreNode
+const {
+  compileCatalogArtifact,
+  extractMessagesNative,
+  parsePo,
+  transformMacrosNative,
+  updateCatalogFile,
+} = coreNode
 const { createI18n, parseMessagePattern } = core
 
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-icu-proof-"))
@@ -31,6 +39,32 @@ try {
   assert.equal(extracted.length, 1, "the fixture must extract exactly one message")
   assert.equal(extracted[0].message, expected.message, "extraction changed the ICU source")
   assert.equal(extracted[0].context, expected.context, "extraction changed the message context")
+
+  const transformedModulePath = path.join(tempRoot, "notification-summary.mjs")
+  const runtimeBridgePath = path.join(tempRoot, "runtime-bridge.mjs")
+  const transformed = transformMacrosNative(source, fixtureSourceName, {
+    runtimeModule: "./runtime-bridge.mjs",
+    runtimeImportName: "getI18n",
+  })
+
+  assert.equal(transformed.hasChanged, true, "the source fixture was not transformed")
+  assert.equal(
+    transformed.compiledIds.length,
+    1,
+    "the transformed fixture must reference one compiled message"
+  )
+  await writeFile(transformedModulePath, transformed.code, "utf8")
+  await writeFile(
+    runtimeBridgePath,
+    `const proofI18nKey = Symbol.for(${JSON.stringify(runtimeSymbolName)})
+export function getI18n() {
+  const i18n = globalThis[proofI18nKey]
+  if (!i18n) throw new Error("ICU proof runtime is not installed")
+  return i18n
+}
+`,
+    "utf8"
+  )
 
   const messages = extracted.map((message) => ({
     message: message.message,
@@ -106,28 +140,42 @@ try {
   const compiledEntries = Object.entries(artifact.messages)
   assert.equal(compiledEntries.length, 1, "the compiled catalog must contain one message")
   const [compiledId, compiledMessage] = compiledEntries[0]
+  assert.equal(
+    transformed.compiledIds[0],
+    compiledId,
+    "the macro transform and catalog compiler produced different message IDs"
+  )
   assert.equal(compiledMessage, expected.translation, "catalog compilation changed the translation")
 
   const i18n = createI18n()
   i18n.load("de", artifact.messages)
   i18n.activate("de")
 
-  for (const scenario of expected.scenarios) {
+  globalThis[runtimeSymbol] = i18n
+  try {
+    const fixtureModule = await import(pathToFileURL(transformedModulePath).href)
     assert.equal(
-      i18n._(compiledId, scenario.values, {
-        message: expected.message,
-        context: expected.context,
-      }),
-      scenario.output,
-      `runtime output changed for ${JSON.stringify(scenario.values)}`
+      typeof fixtureModule.notificationSummary,
+      "function",
+      "the transformed fixture did not export its runtime function"
     )
+
+    for (const scenario of expected.scenarios) {
+      assert.equal(
+        fixtureModule.notificationSummary(scenario.values.role, scenario.values.count),
+        scenario.output,
+        `runtime output changed for ${JSON.stringify(scenario.values)}`
+      )
+    }
+  } finally {
+    delete globalThis[runtimeSymbol]
   }
 
   console.log(
     JSON.stringify(
       {
         status: "passed",
-        pipeline: ["source", "extraction", "po-catalog", "compile", "runtime"],
+        pipeline: ["source", "extraction", "transform", "po-catalog", "compile", "runtime"],
         messageSha256: sha256(expected.message),
         translationSha256: sha256(expected.translation),
         selectorShape: semanticShape(parseMessagePattern(expected.message)),

@@ -163,9 +163,9 @@ natively or through a plugin; a translation platform may edit the raw message,
 split it into forms, convert it into another model, or only validate it.
 
 Palamedes therefore makes a narrower claim about the stages it owns: nested ICU
-selectors remain intact from source through extraction, PO catalog update,
-catalog compilation, and runtime rendering. That claim has a checked fixture
-and command instead of relying on a vendor comparison:
+selectors remain intact from source through extraction, macro transformation,
+PO catalog update, catalog compilation, and runtime rendering. That claim has a
+checked fixture and command instead of relying on a vendor comparison:
 
 ```bash
 pnpm proof:icu

@@ -4,7 +4,7 @@ Palamedes preserves ICU MessageFormat semantics across every pipeline stage it
 controls:
 
 ```text
-source -> extraction -> PO catalog -> catalog compile -> runtime render
+source -> extraction -> macro transform -> PO catalog -> catalog compile -> runtime render
 ```
 
 That scope is deliberate. A translation management system sits outside the
@@ -25,14 +25,17 @@ The fixture contains a `plural` nested inside both branches of a `select`. The
 proof asserts:
 
 1. extraction returns the exact source ICU message and context;
-2. a PO catalog update retains the exact `msgid`, `msgctxt`, and German
+2. the macro transform binds `role` and `count` to the generated runtime call
+   and emits the same compiled message ID as the catalog compiler;
+3. a PO catalog update retains the exact `msgid`, `msgctxt`, and German
    translation;
-3. source and translation retain the same argument names, selector kinds,
+4. source and translation retain the same argument names, selector kinds,
    branch keys, nesting, and `#` substitutions;
-4. catalog compilation emits the exact translated ICU message without missing
+5. catalog compilation emits the exact translated ICU message without missing
    entries or ICU errors;
-5. the runtime renders six checked combinations across both `select` branches
-   and the `=0`, `one`, and `other` plural branches.
+6. the transformed fixture is imported and renders six checked combinations
+   across both `select` branches and the `=0`, `one`, and `other` plural
+   branches.
 
 The script prints hashes, the normalized selector shape, and the number of
 runtime scenarios after all assertions pass.

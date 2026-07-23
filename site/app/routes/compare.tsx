@@ -156,14 +156,15 @@ export default function Compare() {
       <Section
         num="04 — ICU semantics"
         title="The durable claim is about the pipeline we control."
-        lede="ICU support changes across libraries, TMS products, file formats, and project settings. Palamedes makes a narrower, executable claim: nested ICU selectors stay intact from source through PO catalogs, compilation, and runtime rendering."
+        lede="ICU support changes across libraries, TMS products, file formats, and project settings. Palamedes makes a narrower, executable claim: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation, and runtime rendering."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           <div className="bg-paper px-6 py-6">
             <h3 className="text-[15px] font-bold">What we prove</h3>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
               One checked fixture exercises nested select and plural branches across extraction,
-              catalog update, compilation, and six runtime outputs.
+              transformation, catalog update, compilation, and six executions of the transformed
+              runtime function.
             </p>
           </div>
           <div className="bg-paper px-6 py-6">

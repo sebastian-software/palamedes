@@ -13,7 +13,7 @@ This repo can credibly prove five things:
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, catalog update, and catalog compile steps are measured locally and reproducibly
-- nested ICU semantics survive source, extraction, PO catalog update, catalog compile, and runtime rendering
+- nested ICU semantics survive source, extraction, macro transformation, PO catalog update, catalog compile, and runtime rendering
 
 This page is not here to manufacture headline numbers. It is here to make the
 evidence easy to inspect.
@@ -145,9 +145,10 @@ For the checked ICU semantics proof:
 pnpm proof:icu
 ```
 
-This runs one nested `select` + `plural` message through extraction, PO catalog
-update, catalog compilation, and runtime rendering. The exact scope and the
-dated public market snapshot are documented in
+This runs one nested `select` + `plural` message through extraction, macro
+transformation, PO catalog update, catalog compilation, and execution of the
+transformed runtime function. The exact scope and the dated public market
+snapshot are documented in
 [ICU Semantics Proof: Source to Runtime](./icu-semantics-proof.md).
 
 ## Methodology
