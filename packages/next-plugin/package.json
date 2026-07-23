@@ -61,7 +61,7 @@
     "next": "^13 || ^14 || ^15 || ^16"
   },
   "devDependencies": {
-    "next": "^16.2.10",
+    "next": "16.2.11",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.10"
