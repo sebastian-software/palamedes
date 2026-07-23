@@ -1618,8 +1618,8 @@ importers:
         specifier: 8.3.0
         version: 8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(typescript@6.0.3)
       ardo:
-        specifier: 3.8.1
-        version: 3.8.1(23cb7908c74b9bafde3777443f7fa3d7)
+        specifier: 4.2.0
+        version: 4.2.0(8fb7729cabe7b4860dbb120983fd3f2a)
       isbot:
         specifier: ^5.2.1
         version: 5.2.1
@@ -1954,6 +1954,33 @@ packages:
   '@base-ui-components/utils@0.2.2':
     resolution: {integrity: sha512-rNJCD6TFy3OSRDKVHJDzLpxO3esTV1/drRtWNUpe7rCpPN9HZVHUCuP+6rdDYDGWfXnQHbqi05xOyRP2iZAlkw==}
     deprecated: Package was renamed to @base-ui/utils
+    peerDependencies:
+      '@types/react': ^17 || ^18 || ^19
+      react: ^17 || ^18 || ^19
+      react-dom: ^17 || ^18 || ^19
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+
+  '@base-ui/react@1.6.0':
+    resolution: {integrity: sha512-/jzjTWJYXhRFO45Bev9lc3cHbmjzCMpUqbMZ2AgKy/z25mY9B6shGSNcXcjQar9n5doM0KYW1W8fcFv2jZBuMw==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      '@date-fns/tz': ^1.2.0
+      '@types/react': ^17 || ^18 || ^19
+      date-fns: ^4.0.0
+      react: ^17 || ^18 || ^19
+      react-dom: ^17 || ^18 || ^19
+    peerDependenciesMeta:
+      '@date-fns/tz':
+        optional: true
+      '@types/react':
+        optional: true
+      date-fns:
+        optional: true
+
+  '@base-ui/utils@0.3.1':
+    resolution: {integrity: sha512-gFFiltORVmW/N6IILTGxizP3PBpVpysqML1ALY5Vk0mH+7faVkCknOU31goYHN5Aoek2dkjxva1XOD2Ce9WuIg==}
     peerDependencies:
       '@types/react': ^17 || ^18 || ^19
       react: ^17 || ^18 || ^19
@@ -7061,18 +7088,19 @@ packages:
     resolution: {integrity: sha512-ZcbTaIqJOfCc03QwD468Unz/5Ir8ATtvAHsK+FdXbDIbGfihqh9mrvdcYunQzqn4HrvWWaFyaxJhGZagaJJpPQ==}
     engines: {node: '>= 14'}
 
-  ardo@3.8.1:
-    resolution: {integrity: sha512-F8ui4UN1OEiLEfLTh515nyatT9w5Gk9wBNlPf/W70xAQckpQbbvEs1RnmXnx8UiRfXmkblh2u6RGu/Vj/h6L3w==}
+  ardo@4.2.0:
+    resolution: {integrity: sha512-kyK5M8Wqdf8uZfR7i7cnAnInYeZcBmmYi4vXRG4nHFxjPr+VCzUU9tdGIGByh9qF/Jn2jwaV+KBxm1mBe2/7Vg==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@react-router/dev': ^8.0.0
       lucide-react: '>=0.400.0 <2.0.0'
+      mermaid: ^11.0.0
       react: '>=19.0.0 <20.0.0'
       react-dom: '>=19.0.0 <20.0.0'
       react-router: ^8.0.0
       vite: ^8.0.0
     peerDependenciesMeta:
-      lucide-react:
+      mermaid:
         optional: true
 
   are-docs-informative@0.0.2:
@@ -13468,6 +13496,29 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.17
 
+  '@base-ui/react@1.6.0(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@babel/runtime': 7.29.7
+      '@base-ui/utils': 0.3.1(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@floating-ui/react-dom': 2.1.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@floating-ui/utils': 0.2.11
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+      use-sync-external-store: 1.6.0(react@19.2.8)
+    optionalDependencies:
+      '@types/react': 19.2.17
+
+  '@base-ui/utils@0.3.1(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@babel/runtime': 7.29.7
+      '@floating-ui/utils': 0.2.11
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+      reselect: 5.2.0
+      use-sync-external-store: 1.6.0(react@19.2.8)
+    optionalDependencies:
+      '@types/react': 19.2.17
+
   '@bramus/specificity@2.4.2':
     dependencies:
       css-tree: 3.2.1
@@ -18093,8 +18144,9 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  ardo@3.8.1(23cb7908c74b9bafde3777443f7fa3d7):
+  ardo@4.2.0(8fb7729cabe7b4860dbb120983fd3f2a):
     dependencies:
+      '@base-ui/react': 1.6.0(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@mdx-js/rollup': 3.1.1(rollup@4.59.0)(supports-color@10.2.2)
       '@react-router/dev': 8.3.0(@react-router/serve@8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@6.0.3))(@vitejs/plugin-rsc@0.5.27(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.7(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.46)(cssnano@7.1.3(postcss@8.5.22))(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.22)))(react@19.2.8)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)))(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.7(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.46)(cssnano@7.1.3(postcss@8.5.22))(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.22)))(supports-color@10.2.2)(typescript@6.0.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       '@resvg/resvg-js': 2.6.2
@@ -18105,6 +18157,7 @@ snapshots:
       '@vanilla-extract/vite-plugin': 5.2.3(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(supports-color@10.2.2)(terser@5.49.0)(tsx@4.21.0)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))(yaml@2.9.0)
       '@vitejs/plugin-react': 6.0.3(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       gray-matter: 4.0.3
+      lucide-react: 0.577.0(react@19.2.8)
       minisearch: 7.2.0
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -18121,14 +18174,16 @@ snapshots:
       unified: 11.0.5
       unist-util-visit: 5.1.0
       vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
-    optionalDependencies:
-      lucide-react: 0.577.0(react@19.2.8)
+      yaml: 2.9.0
     transitivePeerDependencies:
+      - '@date-fns/tz'
       - '@rolldown/plugin-babel'
       - '@types/node'
+      - '@types/react'
       - '@vitejs/devtools'
       - babel-plugin-macros
       - babel-plugin-react-compiler
+      - date-fns
       - esbuild
       - jiti
       - less
@@ -18141,7 +18196,6 @@ snapshots:
       - terser
       - tsx
       - typescript
-      - yaml
 
   are-docs-informative@0.0.2: {}
 
