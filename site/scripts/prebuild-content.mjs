@@ -73,6 +73,7 @@ async function collectDocs() {
     ["comparison-with-lingui.md", 80],
     ["approach-comparison.md", 90],
     ["proof-and-benchmarks.md", 100],
+    ["icu-semantics-proof.md", 105],
     ["benchmark-e2e-workflow.md", 110],
     ["benchmark-lingui-v6-preview.md", 120],
     ["stability.md", 130],

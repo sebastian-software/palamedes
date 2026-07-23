@@ -114,6 +114,7 @@ export default [
   route("docs/demo-deployments", "routes/docs/demo-deployments.md"),
   route("docs/first-working-translation", "routes/docs/first-working-translation.md"),
   route("docs/framework-example-notes", "routes/docs/framework-example-notes.md"),
+  route("docs/icu-semantics-proof", "routes/docs/icu-semantics-proof.md"),
   route("docs/locale-strategies", "routes/docs/locale-strategies.md"),
   route("docs/migrate-from-lingui", "routes/docs/migrate-from-lingui.md"),
   route("docs/principles", "routes/docs/principles.md"),

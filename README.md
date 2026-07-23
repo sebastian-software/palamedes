@@ -269,6 +269,7 @@ The same foundation also matters for future translation workflows:
 - [Benchmarking against Lingui v6](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
 - [End-to-end workflow benchmark against Lingui and i18next-parser](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
 - [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
+- [Checked ICU semantics proof from source to runtime](https://github.com/sebastian-software/palamedes/blob/main/docs/icu-semantics-proof.md)
 - [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
 - [Translation workflow surface](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-workflow-surface.md)
 - [Translation module boundaries](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-module-boundaries.md)

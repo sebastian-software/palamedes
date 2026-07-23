@@ -61,6 +61,10 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Verify ICU semantics proof
+        if: ${{ matrix.full }}
+        run: pnpm proof:icu:check
+
       - name: Build site
         if: ${{ matrix.full }}
         run: pnpm build:site

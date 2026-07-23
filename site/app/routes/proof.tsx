@@ -16,7 +16,7 @@ export function meta() {
   return pageMeta({
     title: "Palamedes — benchmarks, verification, and the decision trail",
     description:
-      "Claims you can re-run: checked-in extraction benchmarks against Lingui, FormatJS, i18next-parser, and i18next-cli, 24 browser-verified example apps, and 16 architecture decision records.",
+      "Claims you can re-run: checked-in extraction benchmarks, an executable ICU semantics proof, 24 browser-verified example apps, and 16 architecture decision records.",
     path: "/proof",
   })
 }
@@ -106,7 +106,36 @@ export default function Proof() {
       </Section>
 
       <Section
-        num="04 — Decision trail"
+        num="04 — ICU semantics"
+        title="ICU stays ICU from source to runtime."
+        lede="A checked-in nested select + plural message runs through extraction, PO catalog update, catalog compilation, and six runtime scenarios. The proof compares exact messages and selector structure instead of treating ICU as a yes/no feature checkbox."
+      >
+        <div className="max-w-[56em] border-l-4 border-accent pl-4">
+          <p className="micro text-[10px] text-gray-spec">Exact boundary</p>
+          <p className="mt-1 text-[13.5px]">
+            This proves every stage Palamedes controls. A TMS remains an external boundary, so
+            import and export fidelity depends on the selected product, format, and project
+            configuration.
+          </p>
+        </div>
+        <div className="mt-6 space-y-2">
+          <a
+            href={docsHref("icu-semantics-proof")}
+            className="mono-nums block text-[13px] text-accent"
+          >
+            Inspect and re-run the ICU proof →
+          </a>
+          <a
+            href={repoHref("proof/icu-semantics", "tree")}
+            className="mono-nums block text-[13px] text-accent"
+          >
+            Browse the fixture →
+          </a>
+        </div>
+      </Section>
+
+      <Section
+        num="05 — Decision trail"
         title="16 decisions, written down before you depend on them."
         lede="The ADRs cover message identity, the native boundary, adapter architecture — and, just as deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if our tradeoffs match yours."
       >

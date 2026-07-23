@@ -156,6 +156,25 @@ catalogs, and prefer a narrower system that stays easier to trust.
 It is also for teams that care about not having their i18n strategy become
 framework-fragmented as the application evolves.
 
+## ICU As A Pipeline Contract
+
+ICU support is not a useful yes/no checkbox by itself. A library may use ICU
+natively or through a plugin; a translation platform may edit the raw message,
+split it into forms, convert it into another model, or only validate it.
+
+Palamedes therefore makes a narrower claim about the stages it owns: nested ICU
+selectors remain intact from source through extraction, PO catalog update,
+catalog compilation, and runtime rendering. That claim has a checked fixture
+and command instead of relying on a vendor comparison:
+
+```bash
+pnpm proof:icu
+```
+
+See [ICU Semantics Proof: Source to Runtime](./icu-semantics-proof.md) for the
+reproducible proof, the exact claim boundary, and a dated snapshot of public
+FormatJS, i18next, Crowdin, Phrase, and Weblate documentation.
+
 That is the right way to read the benchmark story as well. The Lingui benchmark
 is not meant to imply that every i18n library should be forced into the same
 race. It exists because Lingui and Palamedes actually run on comparable
