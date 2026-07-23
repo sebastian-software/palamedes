@@ -18,7 +18,7 @@ use string_wizard::{Hires, MagicString, SourceMapOptions};
 use crate::error::{PalamedesError, PalamedesResult};
 
 use self::imports::ImportCollector;
-use self::visitor::{Replacement, TransformVisitor};
+use self::visitor::{source_location, Replacement, TransformVisitor};
 
 /// Options controlling how macro transforms emit runtime code.
 #[derive(Debug, Default, Deserialize)]
@@ -131,6 +131,14 @@ pub fn transform_macros(
 
     let mut collector = ImportCollector::new(&runtime_module, &runtime_import_name);
     collector.visit_program(&parsed.program);
+
+    if let Some((macro_name, offset)) = collector.removed_macro_import.as_ref() {
+        return Err(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: macro_name.clone(),
+            location: source_location(source, filename, *offset),
+            detail: "this deferred message macro has been removed; translate at the point of use with `t`".to_string(),
+        });
+    }
 
     if collector.macro_imports.is_empty() {
         return Ok(unchanged_result(source));

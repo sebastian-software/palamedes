@@ -78,43 +78,24 @@ fn preserves_member_expression_values_in_tagged_templates() {
 }
 
 #[test]
-fn transforms_define_message_without_runtime_import() {
-    let result = transform_macros(
-        "import { defineMessage } from \"@palamedes/core/macro\";\nconst msg = defineMessage({ message: \"Hello\" });\n",
-        "test.ts",
-        None,
-    )
-    .expect("transform should succeed");
-
-    assert!(result.code.contains("id:"));
-    assert!(result.code.contains("message: \"Hello\""));
-    assert!(!result.code.contains("getI18n()._("));
-    assert_eq!(result.compiled_ids, vec![compiled_key("Hello", None)]);
-}
-
-#[test]
 fn transforms_interpolated_descriptor_templates() {
-    for macro_name in ["t", "msg"] {
-        let source = format!(
-            r#"import {{ {macro_name} }} from "@palamedes/core/macro";
-const message = {macro_name}({{
-  message: `Descriptor ${{name}}`,
+    let source = r#"import { t } from "@palamedes/core/macro";
+const message = t({
+  message: `Descriptor ${name}`,
   context: "probe context",
-}});
-"#
-        );
-        let result = transform_macros(&source, "test.ts", None).expect("transform should succeed");
+});
+"#;
+    let result = transform_macros(source, "test.ts", None).expect("transform should succeed");
 
-        assert!(result.code.contains("message: \"Descriptor {name}\""));
-        assert!(result.code.contains("{ name }"));
-        assert!(result.code.contains("context: \"probe context\""));
-        assert!(!result.code.contains("@palamedes/core/macro"));
-        assert!(!result.code.contains(&format!("{macro_name}({{")));
-        assert_eq!(
-            result.compiled_ids,
-            vec![compiled_key("Descriptor {name}", Some("probe context"))]
-        );
-    }
+    assert!(result.code.contains("message: \"Descriptor {name}\""));
+    assert!(result.code.contains("{ name }"));
+    assert!(result.code.contains("context: \"probe context\""));
+    assert!(!result.code.contains("@palamedes/core/macro"));
+    assert!(!result.code.contains("t({"));
+    assert_eq!(
+        result.compiled_ids,
+        vec![compiled_key("Descriptor {name}", Some("probe context"))]
+    );
 }
 
 #[test]
@@ -151,19 +132,22 @@ const message = t({ message: `Hello ${name}, you have {count}` });
 }
 
 #[test]
-fn rejects_interpolated_define_message_descriptors() {
-    let error = transform_macros(
-        r#"import { defineMessage } from "@palamedes/core/macro";
-const message = defineMessage({ message: `Hello ${name}` });
-"#,
-        "test.ts",
-        None,
-    )
-    .expect_err("defineMessage cannot capture runtime template values");
+fn rejects_removed_deferred_macro_imports_before_removing_shared_imports() {
+    for macro_name in ["msg", "defineMessage"] {
+        let source = format!(
+            r#"import {{ t, {macro_name} as deferred }} from "@palamedes/core/macro";
+const valid = t`Hello`;
+"#
+        );
+        let error = transform_macros(&source, "test.ts", None)
+            .expect_err("removed deferred macro imports must fail");
 
-    let message = error.to_string();
-    assert!(message.contains("Unsupported `defineMessage` macro usage at test.ts:2:17"));
-    assert!(message.contains("interpolated descriptor templates require runtime values"));
+        let message = error.to_string();
+        assert!(message.contains(&format!(
+            "Unsupported `{macro_name}` macro usage at test.ts:1:1"
+        )));
+        assert!(message.contains("deferred message macro has been removed"));
+    }
 }
 
 #[test]

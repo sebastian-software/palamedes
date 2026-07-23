@@ -1,12 +1,7 @@
 import type { JSX } from "solid-js"
 
 import { formatMessagePattern, parseMessagePattern } from "@palamedes/core"
-import type {
-  MessageChoiceNode,
-  MessageDescriptor,
-  MessageNode,
-  PalamedesI18n,
-} from "@palamedes/core"
+import type { MessageChoiceNode, MessageNode, PalamedesI18n } from "@palamedes/core"
 
 import { getI18n } from "./runtime"
 
@@ -31,9 +26,12 @@ export type TransProps = {
   // (or choice props) and the Palamedes compiler transform injects the resolved
   // `id` at build time. Hand-written runtime usage may still pass `id` directly.
   id?: string
+  message?: string
+  context?: string
+  comment?: string
   values?: Record<string, unknown>
   components?: Record<string, WrapperComponent | JSX.Element>
-} & MessageDescriptor
+}
 
 type ChoiceComponentProps = {
   value: string | number
@@ -70,7 +68,6 @@ export function Trans({
   return (() => {
     const i18n = useReactiveI18n()
     const pattern = i18n.getMessage(resolvedId, {
-      id: resolvedId,
       message,
       context,
       comment,
@@ -83,21 +80,24 @@ export function Trans({
 export function Plural({ value, ...choices }: PluralProps): JSX.Element {
   return (() => {
     const i18n = useReactiveI18n()
-    return i18n._({ message: buildChoiceMessage("value", "plural", choices) }, { value })
+    const message = buildChoiceMessage("value", "plural", choices)
+    return i18n._(message, { value }, { message })
   }) as unknown as JSX.Element
 }
 
 export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): JSX.Element {
   return (() => {
     const i18n = useReactiveI18n()
-    return i18n._({ message: buildChoiceMessage("value", "selectordinal", choices) }, { value })
+    const message = buildChoiceMessage("value", "selectordinal", choices)
+    return i18n._(message, { value }, { message })
   }) as unknown as JSX.Element
 }
 
 export function Select({ value, ...choices }: SelectProps): JSX.Element {
   return (() => {
     const i18n = useReactiveI18n()
-    return i18n._({ message: buildChoiceMessage("value", "select", choices) }, { value })
+    const message = buildChoiceMessage("value", "select", choices)
+    return i18n._(message, { value }, { message })
   }) as unknown as JSX.Element
 }
 

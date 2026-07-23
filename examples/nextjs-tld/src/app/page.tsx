@@ -1,5 +1,4 @@
-import { defineMessage } from "@palamedes/core/macro"
-import type { MessageDescriptor, PalamedesI18n } from "@palamedes/core"
+import { t } from "@palamedes/core/macro"
 import { EVENT } from "@palamedes/example-ui"
 import { ClientLocaleBoundary } from "@/components/ClientLocaleBoundary"
 import { ClientReady } from "@/components/ClientReady"
@@ -10,51 +9,46 @@ import { TicketPanel } from "@/components/TicketPanel"
 import { createActiveServerI18n, getTldLocale } from "@/lib/i18n.server"
 import { getLocaleLabel, type Locale } from "@/lib/i18n"
 
-// Server-rendered strings resolve through the concrete request-local i18n
-// instance (see `translate` below). Direct `<Trans>`/`t` macros are reserved
-// for the client components, where the client i18n scope is active; the RSC
-// server scope is addressed explicitly here.
-const eyebrowMessage = defineMessage({
-  message: "Localized live with Palamedes",
-}) as unknown as MessageDescriptor
-const headlineMessage = defineMessage({
-  message: "Book your seat at Frontend Stage 2026",
-}) as unknown as MessageDescriptor
-const greetMessage = defineMessage({
-  message: "Welcome back, {attendeeName}.",
-}) as unknown as MessageDescriptor
-const ledeMessage = defineMessage({
-  message: "Three days of talks on the craft of building for the web. Choose your tickets below.",
-}) as unknown as MessageDescriptor
-const renderedWithMessage = defineMessage({
-  message: "Rendered with Next.js",
-}) as unknown as MessageDescriptor
-const serverLocaleMessage = defineMessage({
-  message: "server locale",
-}) as unknown as MessageDescriptor
-const switchToRecommendedMessage = defineMessage({
-  message: "Switch to the recommended locale",
-}) as unknown as MessageDescriptor
+// These functions run only after `createActiveServerI18n()` activated the
+// request-local runtime scope.
+function translateEyebrow(): string {
+  return t`Localized live with Palamedes`
+}
 
-function translate(
-  i18n: PalamedesI18n,
-  descriptor: MessageDescriptor,
-  values?: Record<string, unknown>
-): string {
-  const id = descriptor.id ?? descriptor.message ?? ""
-  return i18n._(id, values, descriptor)
+function translateHeadline(): string {
+  return t`Book your seat at Frontend Stage 2026`
+}
+
+function translateGreeting(attendeeName: string): string {
+  return t`Welcome back, ${attendeeName}.`
+}
+
+function translateLede(): string {
+  return t`Three days of talks on the craft of building for the web. Choose your tickets below.`
+}
+
+function translateRenderedWith(): string {
+  return t`Rendered with Next.js`
+}
+
+function translateServerLocale(): string {
+  return t`server locale`
+}
+
+function translateSwitchToRecommended(): string {
+  return t`Switch to the recommended locale`
 }
 
 export default async function TldHome() {
   const { banner, host, locale } = await getTldLocale()
-  const { i18n } = await createActiveServerI18n(locale as Locale)
+  await createActiveServerI18n(locale as Locale)
   const localeLabel = getLocaleLabel(locale)
 
   return (
     <main className="page-shell">
       {banner ? (
         <SuggestionBanner
-          ctaLabel={translate(i18n, switchToRecommendedMessage)}
+          ctaLabel={translateSwitchToRecommended()}
           currentLocale={locale}
           description={banner.description}
           recommendedLocale={banner.recommendedLocale}
@@ -75,13 +69,11 @@ export default async function TldHome() {
       <section className="hero">
         <p className="eyebrow">
           <span className="dot" aria-hidden="true" />
-          {translate(i18n, eyebrowMessage)}
+          {translateEyebrow()}
         </p>
-        <h1>{translate(i18n, headlineMessage)}</h1>
-        <p className="greet">
-          {translate(i18n, greetMessage, { attendeeName: EVENT.attendeeName })}
-        </p>
-        <p className="lede">{translate(i18n, ledeMessage)}</p>
+        <h1>{translateHeadline()}</h1>
+        <p className="greet">{translateGreeting(EVENT.attendeeName)}</p>
+        <p className="lede">{translateLede()}</p>
       </section>
 
       <ClientLocaleBoundary locale={locale}>
@@ -93,10 +85,9 @@ export default async function TldHome() {
 
       <footer className="foot">
         <span className="foot-badge">Palamedes</span>
-        {translate(i18n, renderedWithMessage)}
+        {translateRenderedWith()}
         {" · "}
-        {translate(i18n, serverLocaleMessage)}{" "}
-        <strong data-testid="server-locale-value">{localeLabel}</strong>
+        {translateServerLocale()} <strong data-testid="server-locale-value">{localeLabel}</strong>
       </footer>
 
       <ClientReady />

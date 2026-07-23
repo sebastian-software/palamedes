@@ -15,7 +15,7 @@ describe("createI18n", () => {
     expect(i18n._("greeting", { name: "Ada" })).toBe("Hallo Ada")
   })
 
-  it("falls back to the descriptor message when the compiled catalog is missing a key", () => {
+  it("falls back to source metadata when the compiled catalog is missing a key", () => {
     const i18n = createI18n()
     i18n.activate("en")
 
@@ -28,7 +28,7 @@ describe("createI18n", () => {
     ).toBe("2 files")
   })
 
-  it("resolves descriptor ids through the active catalog", () => {
+  it("resolves compiled ids through the active catalog", () => {
     const i18n = createI18n()
 
     i18n.load("de", {
@@ -38,31 +38,27 @@ describe("createI18n", () => {
 
     expect(
       i18n._(
-        {
-          id: "inbox.summary",
-          message: "{count, plural, one {# message} other {# messages}} for {name}",
-        },
-        { count: 2, name: "Ada" }
+        "inbox.summary",
+        { count: 2, name: "Ada" },
+        { message: "{count, plural, one {# message} other {# messages}} for {name}" }
       )
     ).toBe("2 Nachrichten fuer Ada")
   })
 
-  it("falls back to the descriptor message when its active catalog is missing", () => {
+  it("falls back to source metadata when its active catalog is missing", () => {
     const i18n = createI18n()
     i18n.activate("de")
 
     expect(
       i18n._(
-        {
-          id: "inbox.summary",
-          message: "{count, plural, one {# message} other {# messages}} for {name}",
-        },
-        { count: 1, name: "Ada" }
+        "inbox.summary",
+        { count: 1, name: "Ada" },
+        { message: "{count, plural, one {# message} other {# messages}} for {name}" }
       )
     ).toBe("1 message for Ada")
   })
 
-  it("falls back to the descriptor message when its active catalog lacks the id", () => {
+  it("falls back to source metadata when its active catalog lacks the id", () => {
     const i18n = createI18n()
 
     i18n.load("de", {
@@ -72,11 +68,9 @@ describe("createI18n", () => {
 
     expect(
       i18n._(
-        {
-          id: "inbox.summary",
-          message: "{count, plural, one {# message} other {# messages}} for {name}",
-        },
-        { count: 2, name: "Ada" }
+        "inbox.summary",
+        { count: 2, name: "Ada" },
+        { message: "{count, plural, one {# message} other {# messages}} for {name}" }
       )
     ).toBe("2 messages for Ada")
   })
@@ -155,7 +149,7 @@ describe("createI18n", () => {
       },
     })
 
-    expect(i18n._({ message: "{count, plural one {# file} other {# files}}" }, { count: 2 })).toBe(
+    expect(i18n._("{count, plural one {# file} other {# files}}", { count: 2 })).toBe(
       "{count, plural one {# file} other {# files}}"
     )
     expect(errors).toStrictEqual(["{count, plural one {# file} other {# files}}"])
@@ -174,17 +168,6 @@ describe("createI18n", () => {
     i18n.activate("de")
 
     expect(i18n._("broken", {}, { message: "{name" })).toBe("{name")
-  })
-
-  it("keeps descriptors without ids message-only", () => {
-    const i18n = createI18n()
-
-    i18n.load("de", {
-      "{name}": "Ada aus dem Katalog",
-    })
-    i18n.activate("de")
-
-    expect(i18n._({ message: "{name}" }, { name: "Inline" })).toBe("Inline")
   })
 
   it("formats select and selectordinal messages", () => {
@@ -211,16 +194,16 @@ describe("createI18n", () => {
     const i18n = createI18n()
     i18n.activate("en-US")
 
-    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: 12.3 })).toBe(
+    expect(i18n._("Total: {amount, number, ::currency/EUR}", { amount: 12.3 })).toBe(
       `Total: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" }).format(12.3)}`
     )
-    expect(i18n._({ message: "Bare: {amount, number, currency/EUR}" }, { amount: 12.3 })).toBe(
+    expect(i18n._("Bare: {amount, number, currency/EUR}", { amount: 12.3 })).toBe(
       `Bare: ${new Intl.NumberFormat("en-US").format(12.3)}`
     )
-    expect(i18n._({ message: "Progress: {ratio, number, percent}" }, { ratio: 0.42 })).toBe(
+    expect(i18n._("Progress: {ratio, number, percent}", { ratio: 0.42 })).toBe(
       `Progress: ${new Intl.NumberFormat("en-US", { style: "percent" }).format(0.42)}`
     )
-    expect(i18n._({ message: "Rounded: {count, number, integer}" }, { count: 12.8 })).toBe(
+    expect(i18n._("Rounded: {count, number, integer}", { count: 12.8 })).toBe(
       `Rounded: ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(12.8)}`
     )
   })
@@ -229,15 +212,12 @@ describe("createI18n", () => {
     const i18n = createI18n()
     i18n.activate("en-US")
 
-    expect(i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, {})).toBe("Total: ")
+    expect(i18n._("Total: {amount, number, ::currency/EUR}", {})).toBe("Total: ")
+    expect(i18n._("Total: {amount, number, ::currency/EUR}", { amount: Number.NaN })).toBe(
+      "Total: NaN"
+    )
     expect(
-      i18n._({ message: "Total: {amount, number, ::currency/EUR}" }, { amount: Number.NaN })
-    ).toBe("Total: NaN")
-    expect(
-      i18n._(
-        { message: "Total: {amount, number, ::currency/EUR}" },
-        { amount: Number.POSITIVE_INFINITY }
-      )
+      i18n._("Total: {amount, number, ::currency/EUR}", { amount: Number.POSITIVE_INFINITY })
     ).toBe("Total: Infinity")
   })
 
@@ -246,13 +226,13 @@ describe("createI18n", () => {
     i18n.activate("en-US")
     const when = new Date(Date.UTC(2026, 5, 12, 13, 45, 0))
 
-    expect(i18n._({ message: "Due {when, date, medium}" }, { when })).toBe(
+    expect(i18n._("Due {when, date, medium}", { when })).toBe(
       `Due ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(when)}`
     )
-    expect(i18n._({ message: "Starts {when, time, short}" }, { when })).toBe(
+    expect(i18n._("Starts {when, time, short}", { when })).toBe(
       `Starts ${new Intl.DateTimeFormat("en-US", { timeStyle: "short" }).format(when)}`
     )
-    expect(i18n._({ message: "Starts {when, time}" }, { when })).toBe(
+    expect(i18n._("Starts {when, time}", { when })).toBe(
       `Starts ${new Intl.DateTimeFormat("en-US", { timeStyle: "short" }).format(when)}`
     )
   })

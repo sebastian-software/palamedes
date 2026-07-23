@@ -54,7 +54,7 @@ export const PALAMEDES_MACRO_PACKAGES = [
 /**
  * JS macro function names
  */
-export const JS_MACROS = ["t", "msg", "defineMessage", "plural", "select", "selectOrdinal"] as const
+export const JS_MACROS = ["t", "plural", "select", "selectOrdinal"] as const
 
 /**
  * JSX macro component names

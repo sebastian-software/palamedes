@@ -22,14 +22,14 @@ transform before Node executes the module.
 This integration is tested against `remix@3.0.0-beta.5` and supports
 server-loaded Remix modules:
 
-| Area                                                                         | Status                                                                        |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| JS macros (`t`, `msg`, `plural`, `select`, `selectOrdinal`, `defineMessage`) | Supported in server-loaded modules                                            |
-| `.po` catalog imports                                                        | Supported through the Palamedes register hook                                 |
-| Request-local i18n                                                           | Supported through `createRemixI18nServer()` and middleware/request helpers    |
-| Locale strategies                                                            | Cookie, route, subdomain, and TLD examples are covered by smoke tests         |
-| Rich JSX messages                                                            | Not supported yet; Remix lowers JSX before the Palamedes hook sees the source |
-| Browser/client modules                                                       | Not supported yet; Remix's asset pipeline has no script transform hook        |
+| Area                                                 | Status                                                                        |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| JS macros (`t`, `plural`, `select`, `selectOrdinal`) | Supported in server-loaded modules                                            |
+| `.po` catalog imports                                | Supported through the Palamedes register hook                                 |
+| Request-local i18n                                   | Supported through `createRemixI18nServer()` and middleware/request helpers    |
+| Locale strategies                                    | Cookie, route, subdomain, and TLD examples are covered by smoke tests         |
+| Rich JSX messages                                    | Not supported yet; Remix lowers JSX before the Palamedes hook sees the source |
+| Browser/client modules                               | Not supported yet; Remix's asset pipeline has no script transform hook        |
 
 The hook only reaches server-executed modules. Browser-delivered Remix v3 modules
 are compiled by Remix's asset pipeline, which does not currently expose a script

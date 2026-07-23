@@ -71,9 +71,8 @@ The root package also re-exports catalog-loader helpers from
 
 ## Supported Macro Shapes
 
-- tagged templates such as `t\`...\``and`msg\`...\``
+- tagged templates such as `t\`...\``
 - descriptor calls such as `t({ message: "..." })`
-- `defineMessage(...)`
 - `plural(...)`, `select(...)`, `selectOrdinal(...)`
 - `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
 
