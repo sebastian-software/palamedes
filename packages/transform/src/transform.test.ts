@@ -67,6 +67,47 @@ const msg = t({ message: "Hello", context: "informal", comment: "A greeting" });
     expect(result.code).not.toContain('id: "greeting"')
   })
 
+  it.each(["t", "msg"])(
+    "transforms interpolated %s descriptor templates with runtime values",
+    (macroName) => {
+      const code = `
+import { ${macroName} } from "@palamedes/core/macro";
+const descriptor = ${macroName}({
+  message: \`Descriptor \${name}\`,
+  context: "probe context",
+});
+`
+      const result = transformPalamedesMacros(code, "test.ts")
+
+      expect(result.code).toContain('message: "Descriptor {name}"')
+      expect(result.code).toContain("{ name }")
+      expect(result.code).toContain('context: "probe context"')
+      expect(result.code).not.toContain("@palamedes/core/macro")
+      expect(result.code).not.toContain(`${macroName}({`)
+    }
+  )
+
+  it("rejects interpolated defineMessage descriptor templates with a source location", () => {
+    const code = `import { defineMessage } from "@palamedes/core/macro";
+const descriptor = defineMessage({ message: \`Descriptor \${name}\` });
+`
+
+    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(
+      /Unsupported `defineMessage` macro usage at test\.ts:2:20.*runtime values/
+    )
+  })
+
+  it("rejects unsupported macro calls before removing a shared macro import", () => {
+    const code = `import { t } from "@palamedes/core/macro";
+const valid = t\`Hello\`;
+const broken = t({ message });
+`
+
+    expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(
+      /Unsupported `t` macro usage at test\.ts:3:16.*string literal or template literal/
+    )
+  })
+
   it("forwards descriptor macro values object literals", () => {
     const code = `
 import { t } from "@palamedes/core/macro";

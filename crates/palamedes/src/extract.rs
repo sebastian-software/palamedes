@@ -200,6 +200,14 @@ impl<'a> ExtractionVisitor<'a> {
         }
     }
 
+    fn fail_unsupported_macro(&mut self, macro_name: &str, span_start: usize) {
+        self.fail(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: macro_name.to_string(),
+            location: self.location(span_start),
+            detail: "the macro could not be statically extracted; use a supported literal, template, descriptor, or choice shape".to_string(),
+        });
+    }
+
     fn origin(&self, span_start: usize) -> (String, usize, Option<usize>) {
         (
             self.filename.clone(),
@@ -275,10 +283,13 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             return;
         };
 
-        if let Some(macro_name) = self.imported_macro_name(
-            tag_name.as_str(),
-            &["Trans", "Plural", "Select", "SelectOrdinal"],
-        ) {
+        if let Some(macro_name) = self
+            .imported_macro_name(
+                tag_name.as_str(),
+                &["Trans", "Plural", "Select", "SelectOrdinal"],
+            )
+            .map(str::to_string)
+        {
             if let Some(nested_start) =
                 nested_message_macro_in_children(&it.children, self.imported_macros)
             {
@@ -290,13 +301,16 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
 
             match extract_from_jsx_element(
                 it,
-                macro_name,
+                &macro_name,
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
             ) {
                 Ok(Some(message)) => self.push(message),
-                Ok(None) => {}
+                Ok(None) => {
+                    self.fail_unsupported_macro(&macro_name, it.span.start as usize);
+                    return;
+                }
                 Err(error) => {
                     self.fail(error);
                     return;
@@ -313,10 +327,10 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
         }
 
         if let Some(tag_name) = identifier_name(&it.tag) {
-            if matches!(
-                self.imported_macro_name(tag_name, &["t", "msg"]),
-                Some("t" | "msg")
-            ) {
+            if let Some(macro_name) = self
+                .imported_macro_name(tag_name, &["t", "msg"])
+                .map(str::to_string)
+            {
                 match extract_from_tagged_template(
                     &it.quasi,
                     self.origin(it.span.start as usize),
@@ -325,7 +339,10 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     false,
                 ) {
                     Ok(Some(message)) => self.push(message),
-                    Ok(None) => {}
+                    Ok(None) => {
+                        self.fail_unsupported_macro(&macro_name, it.span.start as usize);
+                        return;
+                    }
                     Err(error) => {
                         self.fail(error);
                         return;
@@ -360,36 +377,44 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
         }
 
         if let Some(callee_name) = identifier_name(&it.callee) {
-            if let Some(macro_name) = self.imported_macro_name(
-                callee_name,
-                &[
-                    "t",
-                    "defineMessage",
-                    "msg",
-                    "plural",
-                    "select",
-                    "selectOrdinal",
-                ],
-            ) {
-                let message = match macro_name {
+            if let Some(macro_name) = self
+                .imported_macro_name(
+                    callee_name,
+                    &[
+                        "t",
+                        "defineMessage",
+                        "msg",
+                        "plural",
+                        "select",
+                        "selectOrdinal",
+                    ],
+                )
+                .map(str::to_string)
+            {
+                let message = match macro_name.as_str() {
                     "plural" | "select" | "selectOrdinal" => extract_from_choice_call(
                         it,
-                        macro_name,
+                        &macro_name,
                         self.origin(it.span.start as usize),
                         self.current_scope(),
                         self.source,
                     ),
                     _ => extract_from_descriptor_call(
                         it,
-                        macro_name,
+                        &macro_name,
                         self.origin(it.span.start as usize),
                         self.current_scope(),
+                        self.source,
+                        &self.location(it.span.start as usize),
                     ),
                 };
 
                 match message {
                     Ok(Some(message)) => self.push(message),
-                    Ok(None) => {}
+                    Ok(None) => {
+                        self.fail_unsupported_macro(&macro_name, it.span.start as usize);
+                        return;
+                    }
                     Err(error) => {
                         self.fail(error);
                         return;
@@ -683,40 +708,112 @@ fn extract_from_descriptor_call(
     macro_name: &str,
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
+    source: &str,
+    location: &str,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(first_arg) = call.arguments.first() else {
-        return Ok(None);
+        return Err(unsupported_macro_syntax(
+            macro_name,
+            location,
+            "the first argument must be a descriptor object",
+        ));
     };
     let Argument::ObjectExpression(object) = first_arg else {
-        return Ok(None);
+        return Err(unsupported_macro_syntax(
+            macro_name,
+            location,
+            "the first argument must be a descriptor object",
+        ));
     };
 
-    let props = extract_object_properties(object);
-    if props.contains_key("id") {
+    if descriptor_property_value(object, "id").is_some() {
         return Err(PalamedesError::ExplicitMessageIdsUnsupported);
     }
-    let message = props.get("message").cloned();
-    let comment = props.get("comment").cloned();
-    let context = props.get("context").cloned();
 
-    if message.is_none() {
-        return Ok(None);
-    }
-
-    let message = if macro_name == "t" || macro_name == "defineMessage" || macro_name == "msg" {
-        message
-    } else {
-        None
+    let Some(message_expression) = descriptor_property_value(object, "message") else {
+        return Err(unsupported_macro_syntax(
+            macro_name,
+            location,
+            "the descriptor must contain a static `message` property",
+        ));
     };
 
-    Ok(message.map(|message| ExtractedMessageRecord {
+    let (message, placeholders) = match message_expression.without_parentheses() {
+        Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
+        Expression::TemplateLiteral(template) => {
+            if macro_name == "defineMessage" && !template.expressions.is_empty() {
+                return Err(unsupported_macro_syntax(
+                    macro_name,
+                    location,
+                    "interpolated descriptor templates require runtime values; use `t()` or `msg()`, or write a static ICU message",
+                ));
+            }
+            template_to_message(template, source)?
+        }
+        _ => {
+            return Err(unsupported_macro_syntax(
+                macro_name,
+                location,
+                "the descriptor `message` must be a string literal or template literal",
+            ));
+        }
+    };
+    let comment = descriptor_static_property(object, "comment", macro_name, location)?;
+    let context = descriptor_static_property(object, "context", macro_name, location)?;
+
+    Ok(Some(ExtractedMessageRecord {
         message,
         comment,
         context,
-        placeholders: None,
+        placeholders: (!placeholders.is_empty()).then_some(placeholders),
         origin,
         scope,
     }))
+}
+
+fn descriptor_property_value<'a>(
+    object: &'a ObjectExpression<'a>,
+    property_name: &str,
+) -> Option<&'a Expression<'a>> {
+    object.properties.iter().rev().find_map(|property| {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        (property.key.static_name().as_deref() == Some(property_name)).then_some(&property.value)
+    })
+}
+
+fn descriptor_static_property(
+    object: &ObjectExpression<'_>,
+    property_name: &str,
+    macro_name: &str,
+    location: &str,
+) -> PalamedesResult<Option<String>> {
+    let Some(value) = descriptor_property_value(object, property_name) else {
+        return Ok(None);
+    };
+    let Some(value) = string_value(value) else {
+        return Err(unsupported_macro_syntax(
+            macro_name,
+            location,
+            format!(
+                "the descriptor `{property_name}` must be a string literal or expression-free template literal"
+            ),
+        ));
+    };
+    Ok(Some(value))
+}
+
+fn unsupported_macro_syntax(
+    macro_name: &str,
+    location: &str,
+    detail: impl Into<String>,
+) -> PalamedesError {
+    PalamedesError::UnsupportedMacroSyntax {
+        macro_name: macro_name.to_string(),
+        location: location.to_string(),
+        detail: detail.into(),
+    }
 }
 
 fn extract_from_choice_call(
@@ -1336,7 +1433,8 @@ pub fn extract_catalog_messages_from_files(
             Ok(messages) => messages,
             Err(
                 error @ (PalamedesError::ExplicitMessageIdsUnsupported
-                | PalamedesError::NestedMessageMacro { .. }),
+                | PalamedesError::NestedMessageMacro { .. }
+                | PalamedesError::UnsupportedMacroSyntax { .. }),
             ) => {
                 return Err(error);
             }
@@ -1549,6 +1647,68 @@ mod tests {
             placeholders.get("locale").map(String::as_str),
             Some("resolved.locale")
         );
+    }
+
+    #[test]
+    fn extracts_interpolated_descriptor_templates() {
+        let messages = extract_messages(
+            r#"
+              import { msg, t } from "@palamedes/core/macro"
+              const first = t({
+                message: `Descriptor ${name}`,
+                context: "probe context",
+              })
+              const second = msg({ message: `Locale ${resolved.locale}` })
+            "#,
+            "test.tsx",
+        )
+        .expect("messages should extract");
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].message, "Descriptor {name}");
+        assert_eq!(messages[0].context.as_deref(), Some("probe context"));
+        assert_eq!(
+            messages[0].placeholders,
+            Some(BTreeMap::from([("name".to_string(), "name".to_string())]))
+        );
+        assert_eq!(messages[1].message, "Locale {locale}");
+        assert_eq!(
+            messages[1].placeholders,
+            Some(BTreeMap::from([(
+                "locale".to_string(),
+                "resolved.locale".to_string()
+            )]))
+        );
+    }
+
+    #[test]
+    fn rejects_interpolated_define_message_descriptors() {
+        let error = extract_messages(
+            r#"import { defineMessage } from "@palamedes/core/macro"
+const message = defineMessage({ message: `Hello ${name}` })
+"#,
+            "test.ts",
+        )
+        .expect_err("defineMessage cannot capture runtime template values");
+
+        let message = error.to_string();
+        assert!(message.contains("Unsupported `defineMessage` macro usage at test.ts:2:17"));
+        assert!(message.contains("interpolated descriptor templates require runtime values"));
+    }
+
+    #[test]
+    fn rejects_dynamic_descriptor_messages_with_location() {
+        let error = extract_messages(
+            r#"import { t } from "@palamedes/core/macro"
+const message = t({ message })
+"#,
+            "test.ts",
+        )
+        .expect_err("dynamic descriptor messages must fail");
+
+        let message = error.to_string();
+        assert!(message.contains("Unsupported `t` macro usage at test.ts:2:17"));
+        assert!(message.contains("must be a string literal or template literal"));
     }
 
     #[test]
@@ -2315,6 +2475,30 @@ mod tests {
         .expect_err("nested message macros should fail");
 
         assert!(error.to_string().contains("Nested i18n macro"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_keeps_unsupported_macro_syntax_fatal() {
+        let root = temp_root("batch-unsupported-macro");
+        fs::create_dir_all(&root).expect("root dir");
+        let source = root.join("bad.ts");
+        fs::write(
+            &source,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              const message = t({ message })
+            "#,
+        )
+        .expect("source");
+
+        let error = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![source.to_string_lossy().into_owned()],
+        })
+        .expect_err("unsupported macro syntax should fail");
+
+        assert!(error.to_string().contains("Unsupported `t` macro usage"));
         fs::remove_dir_all(root).expect("cleanup");
     }
 
