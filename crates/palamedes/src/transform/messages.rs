@@ -32,16 +32,6 @@ pub(super) fn identifier_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
     }
 }
 
-pub(super) fn string_value(expr: &Expression<'_>) -> Option<String> {
-    match expr.without_parentheses() {
-        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
-        Expression::TemplateLiteral(template) => {
-            template.single_quasi().map(|value| value.to_string())
-        }
-        _ => None,
-    }
-}
-
 pub(super) fn extract_choice_options(
     object: &ObjectExpression<'_>,
     source: &str,

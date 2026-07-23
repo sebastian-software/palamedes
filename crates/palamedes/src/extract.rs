@@ -3,6 +3,9 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
+use crate::descriptor::{
+    descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
+};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
@@ -769,51 +772,6 @@ fn extract_from_descriptor_call(
         origin,
         scope,
     }))
-}
-
-fn descriptor_property_value<'a>(
-    object: &'a ObjectExpression<'a>,
-    property_name: &str,
-) -> Option<&'a Expression<'a>> {
-    object.properties.iter().rev().find_map(|property| {
-        let ObjectPropertyKind::ObjectProperty(property) = property else {
-            return None;
-        };
-        (property.key.static_name().as_deref() == Some(property_name)).then_some(&property.value)
-    })
-}
-
-fn descriptor_static_property(
-    object: &ObjectExpression<'_>,
-    property_name: &str,
-    macro_name: &str,
-    location: &str,
-) -> PalamedesResult<Option<String>> {
-    let Some(value) = descriptor_property_value(object, property_name) else {
-        return Ok(None);
-    };
-    let Some(value) = string_value(value) else {
-        return Err(unsupported_macro_syntax(
-            macro_name,
-            location,
-            format!(
-                "the descriptor `{property_name}` must be a string literal or expression-free template literal"
-            ),
-        ));
-    };
-    Ok(Some(value))
-}
-
-fn unsupported_macro_syntax(
-    macro_name: &str,
-    location: &str,
-    detail: impl Into<String>,
-) -> PalamedesError {
-    PalamedesError::UnsupportedMacroSyntax {
-        macro_name: macro_name.to_string(),
-        location: location.to_string(),
-        detail: detail.into(),
-    }
 }
 
 fn extract_from_choice_call(

@@ -135,6 +135,22 @@ const message = t({ message: `Hello ${name}, you have {count}` }, { count });
 }
 
 #[test]
+fn rejects_missing_icu_values_in_interpolated_descriptor_templates() {
+    let error = transform_macros(
+        r#"import { t } from "@palamedes/core/macro";
+const message = t({ message: `Hello ${name}, you have {count}` });
+"#,
+        "test.ts",
+        None,
+    )
+    .expect_err("implicit template values must validate all message placeholders");
+
+    let message = error.to_string();
+    assert!(message.contains("Missing value(s): count"));
+    assert!(message.contains("extra value(s): none"));
+}
+
+#[test]
 fn rejects_interpolated_define_message_descriptors() {
     let error = transform_macros(
         r#"import { defineMessage } from "@palamedes/core/macro";
