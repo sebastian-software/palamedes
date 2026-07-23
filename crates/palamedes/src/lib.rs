@@ -29,6 +29,8 @@ mod extract;
 mod jsx_entities;
 mod jsx_message;
 mod message_metadata;
+#[cfg(test)]
+mod test_support;
 mod transform;
 mod translation_scope;
 

@@ -53,7 +53,8 @@ console.log(messages)
 The extractor rejects eager `t`, `plural`, `select`, and `selectOrdinal`
 macros, plus `<Plural>`, `<Select>`, and `<SelectOrdinal>`, when they appear
 outside a function, method, or callback. `<Trans>` is safe at module scope
-because translation occurs during component rendering.
+because translation occurs during component rendering. Class field initializers
+do not count as function scope; use a method or getter instead.
 
 Rich JSX children inside `<Trans>` are extracted with numeric component slots. For example,
 `<Trans><strong>A</strong> and <strong>B</strong></Trans>` extracts as

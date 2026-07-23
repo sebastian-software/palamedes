@@ -1,22 +1,7 @@
 import { extractMessages, extractor, type ExtractedMessageInfo } from "./index"
 
 function extract(code: string) {
-  return extractMessages(scopeMacroTestSource(code), "test.tsx")
-}
-
-function scopeMacroTestSource(code: string): string {
-  if (!/@palamedes\/(?:core|react|solid)\/macro/.test(code)) {
-    return code
-  }
-
-  const imports = [...code.matchAll(/^[ \t]*import[^\n]*$/gm)]
-  const lastImport = imports.at(-1)
-  if (!lastImport || lastImport.index === undefined) {
-    return code
-  }
-
-  const insertion = lastImport.index + lastImport[0].length
-  return `${code.slice(0, insertion)}; function __palamedesTestScope() {${code.slice(insertion)}\n}`
+  return extractMessages(code, "test.tsx")
 }
 
 describe("extractMessages", () => {
@@ -34,6 +19,7 @@ describe("extractMessages", () => {
         'import { Select } from "@palamedes/react/macro"\nconst value = <Select value={kind} other="Other" />',
         "Select",
       ],
+      ['import { t } from "@palamedes/core/macro"\nclass Formatter { label = t`Hello` }', "t"],
     ])("rejects top-level %s usage", (code, macroName) => {
       expect(() => extractMessages(code, "test.tsx")).toThrow(
         new RegExp(`Translation macro \`${macroName}\` must be used inside a function`)
@@ -42,7 +28,10 @@ describe("extractMessages", () => {
 
     it("allows eager macros inside functions, methods, and callbacks", () => {
       const code = `
-        import { t, plural } from "@palamedes/core/macro"
+        import {
+          plural,
+          t,
+        } from "@palamedes/core/macro"
         import { Select } from "@palamedes/react/macro"
         function label() { return t\`Hello\` }
         const countLabel = () => plural(count, { one: "# item", other: "# items" })
@@ -196,9 +185,10 @@ describe("extractMessages", () => {
   describe("macro calls", () => {
     it("extracts descriptor messages", () => {
       const code = `
-        import { t } from "@palamedes/core/macro"
+        import { t } from "@palamedes/core/macro"; function messages() {
         const one = t({ message: "Hello" })
         const two = t({ message: "Hello {name}", context: "email.subject" }, { name })
+        }
       `
       const messages = extract(code)
       expect(messages).toHaveLength(2)
@@ -209,12 +199,13 @@ describe("extractMessages", () => {
 
     it("extracts interpolated descriptor templates with placeholder metadata", () => {
       const code = `
-        import { t } from "@palamedes/core/macro"
+        import { t } from "@palamedes/core/macro"; function messages() {
         const one = t({
           message: \`Descriptor \${name}\`,
           context: "probe context",
         })
         const two = t({ message: \`Locale \${resolved.locale}\` })
+        }
       `
       const messages = extract(code)
 
@@ -243,8 +234,9 @@ const message = t\`Hello\`
     })
 
     it("rejects dynamic descriptor messages with a source location", () => {
-      const code = `import { t } from "@palamedes/core/macro"
+      const code = `import { t } from "@palamedes/core/macro"; function message() {
 const descriptor = t({ message })
+}
 `
 
       expect(() => extract(code)).toThrow(
@@ -254,9 +246,10 @@ const descriptor = t({ message })
 
     it("extracts plural and select messages", () => {
       const code = `
-        import { plural, select } from "@palamedes/core/macro"
+        import { plural, select } from "@palamedes/core/macro"; function messages() {
         const one = plural(count, { one: "# item", other: "# items" })
         const two = select(gender, { male: "He", female: "She", other: "They" })
+        }
       `
       const messages = extract(code)
       expect(messages).toHaveLength(2)
@@ -267,7 +260,7 @@ const descriptor = t({ message })
     it("extracts interpolated plural branches with placeholder metadata", () => {
       const code = `
         import { plural } from "@palamedes/core/macro"
-        import { Plural } from "@palamedes/react/macro"
+        import { Plural } from "@palamedes/react/macro"; function messages() {
         const call = plural(count, {
           one: \`# item will be archived because \${planLabel} allows a maximum of \${max}\`,
           other: \`# items will be archived because \${planLabel} allows a maximum of \${max}\`,
@@ -277,6 +270,7 @@ const descriptor = t({ message })
           one={\`# item will be archived because \${planLabel} allows a maximum of \${max}\`}
           other={\`# items will be archived because \${planLabel} allows a maximum of \${max}\`}
         />
+        }
       `
       const messages = extract(code)
       const expected =
@@ -323,8 +317,9 @@ const descriptor = t({ message })
   describe("placeholder metadata", () => {
     it("keeps source expressions for template literal placeholder hints", () => {
       const code = `
-        import { t } from "@palamedes/core/macro"
+        import { t } from "@palamedes/core/macro"; function message() {
         const message = t\`Hello \${name}, \${resolved.locale}\`
+        }
       `
       const messages = extract(code)
 
@@ -394,8 +389,9 @@ const descriptor = t({ message })
   describe("breaking changes", () => {
     it("rejects explicit ids in macros", () => {
       const code = `
-        import { t } from "@palamedes/core/macro"
+        import { t } from "@palamedes/core/macro"; function message() {
         const x = t({ id: "greeting", message: "Hello" })
+        }
       `
 
       expect(() => extract(code)).toThrow(/Explicit message ids/)
@@ -411,8 +407,9 @@ const descriptor = t({ message })
 
     it("rejects unnamed template placeholders", () => {
       const code = [
-        `import { t } from "@palamedes/core/macro"`,
+        `import { t } from "@palamedes/core/macro"; function message() {`,
         "const x = t`Hello ${firstName + lastName}`",
+        "}",
       ].join("\n")
 
       expect(() => extract(code)).toThrow(/stable placeholder name/)
@@ -429,8 +426,9 @@ const descriptor = t({ message })
 
     it("rejects nested JSX message macros", () => {
       const code = `
-        import { Plural, Trans } from "@palamedes/react/macro"
+        import { Plural, Trans } from "@palamedes/react/macro"; function Message() {
         const x = <Trans><Plural value={contractCount} one="# contract" other="# contracts" /> ({capacityMW} MW)</Trans>
+        }
       `
 
       expect(() => extract(code)).toThrow(
@@ -447,8 +445,9 @@ const descriptor = t({ message })
 
       for (const jsx of cases) {
         const code = `
-          import { Plural, Trans } from "@palamedes/react/macro"
+          import { Plural, Trans } from "@palamedes/react/macro"; function Message() {
           const x = ${jsx}
+          }
         `
 
         expect(() => extract(code)).toThrow(
@@ -472,10 +471,11 @@ const descriptor = t({ message })
     it("accepts computed, defaulted, and literal choice values", () => {
       const code = `
         import { plural } from "@palamedes/core/macro"
-        import { Plural } from "@palamedes/react/macro"
+        import { Plural } from "@palamedes/react/macro"; function messages() {
         const computed = plural(periodCounts[period] ?? 0, { one: "# entry", other: "# entries" })
         const literal = plural(21, { one: "# month", other: "# months" })
         const jsx = <Plural value={node.locationCount ?? 0} one="# location" other="# locations" />
+        }
       `
       const messages = extract(code)
 

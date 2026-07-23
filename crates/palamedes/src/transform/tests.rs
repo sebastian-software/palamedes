@@ -2,6 +2,7 @@ use super::{
     transform_macros as transform_macros_raw, NativeTransformOptions, NativeTransformResult,
 };
 use crate::error::PalamedesResult;
+use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
 
 fn transform_macros(
@@ -9,7 +10,7 @@ fn transform_macros(
     filename: &str,
     options: Option<NativeTransformOptions>,
 ) -> PalamedesResult<NativeTransformResult> {
-    let scoped_source = scope_macro_test_source(source);
+    let scoped_source = scope_macro_test_source(source, filename);
     let mut result = transform_macros_raw(&scoped_source, filename, options)?;
 
     if let Some(map) = result.map.as_mut() {
@@ -17,41 +18,6 @@ fn transform_macros(
     }
 
     Ok(result)
-}
-
-fn scope_macro_test_source(source: &str) -> String {
-    if ![
-        "@palamedes/core/macro",
-        "@palamedes/react/macro",
-        "@palamedes/solid/macro",
-    ]
-    .iter()
-    .any(|macro_module| source.contains(macro_module))
-    {
-        return source.to_string();
-    }
-
-    let mut last_import_end = None;
-    let mut offset = 0;
-
-    for line in source.split_inclusive('\n') {
-        let line_without_newline = line.strip_suffix('\n').unwrap_or(line);
-        if line_without_newline.trim_start().starts_with("import ") {
-            last_import_end = Some(offset + line_without_newline.len());
-        }
-        offset += line.len();
-    }
-
-    let Some(import_end) = last_import_end else {
-        return source.to_string();
-    };
-
-    let mut scoped = String::with_capacity(source.len() + 48);
-    scoped.push_str(&source[..import_end]);
-    scoped.push_str("; function __palamedes_test_scope() {");
-    scoped.push_str(&source[import_end..]);
-    scoped.push_str("\n}");
-    scoped
 }
 
 #[test]
@@ -77,6 +43,13 @@ const message = <Choice value={gender} other="They" />;
 "#,
             "test.tsx",
             "Select",
+        ),
+        (
+            r#"import { t } from "@palamedes/core/macro";
+class Formatter { label = t`Hello`; }
+"#,
+            "test.ts",
+            "t",
         ),
     ];
 

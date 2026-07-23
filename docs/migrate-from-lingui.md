@@ -64,7 +64,8 @@ or callback. This applies to `t`, `plural`, `select`, `selectOrdinal`,
 `<Plural>`, `<Select>`, and `<SelectOrdinal>` and prevents translation from
 running while a module is loaded, before request- or render-local i18n
 activation. `<Trans>` can remain at module scope because it resolves when the
-component renders.
+component renders. Class field initializers do not satisfy the rule, even for
+instance fields; migrate those calls to a method or getter.
 
 That continuity is the point. The migration is primarily a tooling, catalog,
 and runtime cleanup, not an authoring reset.
