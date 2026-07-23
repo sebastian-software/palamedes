@@ -5,7 +5,7 @@ packages:
   - "site"
 
 overrides:
-  "eslint-config-setup>eslint-plugin-oxlint": "1.72.0"
+  "eslint-config-setup>eslint-plugin-oxlint": "1.75.0"
   "waku>vite": "^8.0.16"
   "waku>@vitejs/plugin-react": "^6.0.1"
 

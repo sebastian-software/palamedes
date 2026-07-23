@@ -90,15 +90,16 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 (All figures USD; no EUR pricing found. Source: locize.com/pricing, fetched 2026-07-06.)
 
 **Fixed monthly tiers:**
-| Plan | Price/mo | Words | Languages | Namespaces | Users | Standard CDN downloads |
-|---|---|---|---|---|---|---|
-| Free | $0 | 2,000 | 2 | 5 | 1 | 100K |
-| Starter | $7 | 15,000 | 5 | 10 | 5 | 1M |
-| Starter-Plus | $19 | 30,000 | 7 | 25 | 5 | 3M |
-| Growth | $49 | 60,000 | 10 | 50 | 10 | 5M (+150K Pro CDN, 1.5K private) |
-| Professional | $99 | 100,000 | 20 | 75 | Unlimited | 7M (+250K Pro CDN, 2.5K private) |
-| Professional-Plus | $149 | 150,000 | 50 | 150 | Unlimited | 10M (+350K Pro CDN, 3.5K private) |
-| Enterprise | $199 | 200,000 | 150 | 300 | Unlimited | 15M (+500K Pro CDN, 5K private) |
+
+| Plan              | Price/mo | Words   | Languages | Namespaces | Users     | Standard CDN downloads            |
+| ----------------- | -------- | ------- | --------- | ---------- | --------- | --------------------------------- |
+| Free              | $0       | 2,000   | 2         | 5          | 1         | 100K                              |
+| Starter           | $7       | 15,000  | 5         | 10         | 5         | 1M                                |
+| Starter-Plus      | $19      | 30,000  | 7         | 25         | 5         | 3M                                |
+| Growth            | $49      | 60,000  | 10        | 50         | 10        | 5M (+150K Pro CDN, 1.5K private)  |
+| Professional      | $99      | 100,000 | 20        | 75         | Unlimited | 7M (+250K Pro CDN, 2.5K private)  |
+| Professional-Plus | $149     | 150,000 | 50        | 150        | Unlimited | 10M (+350K Pro CDN, 3.5K private) |
+| Enterprise        | $199     | 200,000 | 150       | 300        | Unlimited | 15M (+500K Pro CDN, 5K private)   |
 
 **Overage pricing (pay for what exceeds plan quota):**
 
