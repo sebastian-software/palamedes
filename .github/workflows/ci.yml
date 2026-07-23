@@ -92,7 +92,7 @@ jobs:
       matrix:
         toolchain:
           - stable
-          - "1.93"
+          - "1.95"
 
     steps:
       - name: Check out repository
