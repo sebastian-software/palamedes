@@ -1,0 +1,13 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#. Nested select and plural fixture for the checked ICU semantics proof.
+#: proof/icu-semantics/src/notification-summary.ts#notificationSummary
+msgctxt "dashboard.notifications"
+msgid "{role, select, admin {{count, plural, =0 {No pending approvals} one {# pending approval} other {# pending approvals}}} other {{count, plural, =0 {No pending tasks} one {# pending task} other {# pending tasks}}}}"
+msgstr "{role, select, admin {{count, plural, =0 {Keine ausstehenden Freigaben} one {# ausstehende Freigabe} other {# ausstehende Freigaben}}} other {{count, plural, =0 {Keine ausstehenden Aufgaben} one {# ausstehende Aufgabe} other {# ausstehende Aufgaben}}}}"

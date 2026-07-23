@@ -7,12 +7,13 @@ This page shows the work behind that claim. The goal is confidence, not hype.
 
 ## What This Repo Can Prove
 
-This repo can credibly prove four things:
+This repo can credibly prove five things:
 
 - Palamedes is verified across Next.js, TanStack Start, SolidStart, Waku, and React Router
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, catalog update, and catalog compile steps are measured locally and reproducibly
+- nested ICU semantics survive source, extraction, macro transformation, PO catalog update, catalog compile, and runtime rendering
 
 This page is not here to manufacture headline numbers. It is here to make the
 evidence easy to inspect.
@@ -137,6 +138,18 @@ That workflow benchmark times source discovery, source parsing needed for
 message extraction, extraction, catalog update/merge, and catalog writes in one
 CLI command per tool. It does not time runtime catalog/artifact compilation,
 type-checking, linting, bundling, or the post-run semantic validation step.
+
+For the checked ICU semantics proof:
+
+```bash
+pnpm proof:icu
+```
+
+This runs one nested `select` + `plural` message through extraction, macro
+transformation, PO catalog update, catalog compilation, and execution of the
+transformed runtime function. The exact scope and the dated public market
+snapshot are documented in
+[ICU Semantics Proof: Source to Runtime](./icu-semantics-proof.md).
 
 ## Methodology
 

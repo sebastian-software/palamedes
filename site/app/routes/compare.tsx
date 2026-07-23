@@ -153,7 +153,37 @@ export default function Compare() {
         lede="A category difference, not a feature race. GT is a translation platform — hosted workflows, AI translation, delivery. Palamedes is local-first tooling: your repo owns the catalogs, the QA, and the history. The two concerns can even stack: Palamedes as the local foundation, a service layer on top."
       />
 
-      <StatementBand num="04 — The honest bit">
+      <Section
+        num="04 — ICU semantics"
+        title="The durable claim is about the pipeline we control."
+        lede="ICU support changes across libraries, TMS products, file formats, and project settings. Palamedes makes a narrower, executable claim: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation, and runtime rendering."
+      >
+        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
+          <div className="bg-paper px-6 py-6">
+            <h3 className="text-[15px] font-bold">What we prove</h3>
+            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
+              One checked fixture exercises nested select and plural branches across extraction,
+              transformation, catalog update, compilation, and six executions of the transformed
+              runtime function.
+            </p>
+          </div>
+          <div className="bg-paper px-6 py-6">
+            <h3 className="text-[15px] font-bold">What we snapshot</h3>
+            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
+              Statements about other tools are dated observations from their public docs, not
+              permanent claims about their internals or roadmap.
+            </p>
+          </div>
+        </div>
+        <a
+          href={docsHref("icu-semantics-proof")}
+          className="mono-nums mt-6 block text-[13px] text-accent"
+        >
+          Re-run the proof and inspect the sources →
+        </a>
+      </Section>
+
+      <StatementBand num="05 — The honest bit">
         Every tool on this page is good software. The question is which tradeoffs match your team —
         ours are written down in 16 ADRs, so you can check before you commit.
       </StatementBand>

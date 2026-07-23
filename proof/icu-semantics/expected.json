@@ -1,0 +1,49 @@
+{
+  "message": "{role, select, admin {{count, plural, =0 {No pending approvals} one {# pending approval} other {# pending approvals}}} other {{count, plural, =0 {No pending tasks} one {# pending task} other {# pending tasks}}}}",
+  "context": "dashboard.notifications",
+  "translation": "{role, select, admin {{count, plural, =0 {Keine ausstehenden Freigaben} one {# ausstehende Freigabe} other {# ausstehende Freigaben}}} other {{count, plural, =0 {Keine ausstehenden Aufgaben} one {# ausstehende Aufgabe} other {# ausstehende Aufgaben}}}}",
+  "scenarios": [
+    {
+      "values": {
+        "role": "admin",
+        "count": 0
+      },
+      "output": "Keine ausstehenden Freigaben"
+    },
+    {
+      "values": {
+        "role": "admin",
+        "count": 1
+      },
+      "output": "1 ausstehende Freigabe"
+    },
+    {
+      "values": {
+        "role": "admin",
+        "count": 3
+      },
+      "output": "3 ausstehende Freigaben"
+    },
+    {
+      "values": {
+        "role": "member",
+        "count": 0
+      },
+      "output": "Keine ausstehenden Aufgaben"
+    },
+    {
+      "values": {
+        "role": "member",
+        "count": 1
+      },
+      "output": "1 ausstehende Aufgabe"
+    },
+    {
+      "values": {
+        "role": "member",
+        "count": 4
+      },
+      "output": "4 ausstehende Aufgaben"
+    }
+  ]
+}

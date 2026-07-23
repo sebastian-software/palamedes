@@ -30,6 +30,8 @@
     "benchmark:e2e-workflow:quick": "cargo build --release -p palamedes-cli && pnpm --filter @palamedes/benchmark-e2e-workflow benchmark:quick",
     "benchmark:lingui-v6": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark",
     "benchmark:lingui-v6:quick": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark:quick",
+    "proof:icu": "pnpm build && node ./scripts/proof-icu-semantics.mjs",
+    "proof:icu:check": "node ./scripts/proof-icu-semantics.mjs",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check:release-set": "node ./scripts/check-release-set.mjs",
