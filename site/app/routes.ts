@@ -40,6 +40,7 @@ export default [
   route("docs", "routes/docs/index.md"),
   route("docs/api", "routes/docs/api/index.md"),
   route("docs/api/cli", "routes/docs/api/cli/index.md"),
+  route("docs/api/cli-plugin", "routes/docs/api/cli-plugin/index.md"),
   route("docs/api/config", "routes/docs/api/config/index.md"),
   route("docs/api/core", "routes/docs/api/core/index.md"),
   route("docs/api/core-node", "routes/docs/api/core-node/index.md"),

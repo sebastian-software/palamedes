@@ -11,10 +11,3 @@ declare module "virtual:ardo/config" {
   const config: ArdoConfig
   export default config
 }
-
-declare module "virtual:ardo/sidebars" {
-  import type { SidebarItem } from "ardo"
-
-  const sidebars: Record<string, SidebarItem[]>
-  export default sidebars
-}
