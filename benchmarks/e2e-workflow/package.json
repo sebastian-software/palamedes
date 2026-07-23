@@ -14,9 +14,9 @@
   },
   "dependencies": {
     "@formatjs/cli": "6.16.14",
-    "@lingui/cli": "6.4.0",
-    "@lingui/conf": "6.4.0",
-    "@lingui/format-po": "6.4.0",
+    "@lingui/cli": "6.5.0",
+    "@lingui/conf": "6.5.0",
+    "@lingui/format-po": "6.5.0",
     "i18next-cli": "1.66.2",
     "i18next-parser": "9.4.0"
   }
