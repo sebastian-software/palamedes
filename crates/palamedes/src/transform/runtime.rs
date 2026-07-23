@@ -2,7 +2,8 @@ use ferrocat::compiled_key;
 use std::collections::BTreeSet;
 
 use oxc_ast::ast::{
-    Argument, CallExpression, JSXElement, ObjectExpression, ObjectPropertyKind, TemplateLiteral,
+    Argument, CallExpression, Expression, JSXElement, ObjectExpression, ObjectPropertyKind,
+    TemplateLiteral,
 };
 use oxc_span::GetSpan;
 
@@ -11,8 +12,8 @@ use crate::error::{PalamedesError, PalamedesResult};
 use super::messages::{
     append_unique_bindings, build_icu_message, choice_expression_binding, escape_string,
     expression_source, extract_choice_options, extract_choice_options_from_jsx,
-    extract_jsx_children_parts, extract_jsx_value_binding, extract_object_properties,
-    first_argument_object, jsx_attributes, template_to_message, ValueBinding,
+    extract_jsx_children_parts, extract_jsx_value_binding, first_argument_object, jsx_attributes,
+    string_value, template_to_message, ValueBinding,
 };
 use super::NativeTransformOptions;
 
@@ -44,13 +45,18 @@ pub(super) fn transform_descriptor_call(
     call: &CallExpression<'_>,
     source: &str,
     macro_name: &str,
+    location: &str,
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let Some(object) = first_argument_object(call) else {
-        return Ok(None);
+        return Err(unsupported_macro_syntax(
+            macro_name,
+            location,
+            "the first argument must be a descriptor object",
+        ));
     };
 
-    transform_descriptor_object(call, object, source, macro_name, options)
+    transform_descriptor_object(call, object, source, macro_name, location, options)
 }
 
 fn transform_descriptor_object(
@@ -58,25 +64,44 @@ fn transform_descriptor_object(
     object: &ObjectExpression<'_>,
     source: &str,
     macro_name: &str,
+    location: &str,
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
-    let props = extract_object_properties(object);
-    if props.contains_key("id") {
+    if object_property_value(object, "id").is_some() {
         return Err(PalamedesError::ExplicitMessageIdsUnsupported);
     }
-    let message = props.get("message").cloned();
-    let context = props.get("context").cloned();
-    let comment = props.get("comment").cloned();
 
-    let Some(message) = message else {
-        return Ok(None);
+    let Some(message_expression) = object_property_value(object, "message") else {
+        return Err(unsupported_macro_syntax(
+            macro_name,
+            location,
+            "the descriptor must contain a static `message` property",
+        ));
     };
 
-    let message = if matches!(macro_name, "t" | "defineMessage" | "msg") {
-        message
-    } else {
-        return Ok(None);
+    let (message, implicit_values) = match message_expression.without_parentheses() {
+        Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
+        Expression::TemplateLiteral(template) => {
+            if macro_name == "defineMessage" && !template.expressions.is_empty() {
+                return Err(unsupported_macro_syntax(
+                    macro_name,
+                    location,
+                    "interpolated descriptor templates require runtime values; use `t()` or `msg()`, or write a static ICU message",
+                ));
+            }
+            let (message, values) = template_to_message(template, source)?;
+            (message, values.unwrap_or_default())
+        }
+        _ => {
+            return Err(unsupported_macro_syntax(
+                macro_name,
+                location,
+                "the descriptor `message` must be a string literal or template literal",
+            ));
+        }
     };
+    let context = descriptor_static_property(object, "context", macro_name, location)?;
+    let comment = descriptor_static_property(object, "comment", macro_name, location)?;
 
     let lookup_key = compiled_key(&message, context.as_deref());
     let descriptor = build_message_descriptor(
@@ -91,7 +116,14 @@ fn transform_descriptor_object(
     if macro_name == "defineMessage" {
         Ok(Some((descriptor, lookup_key)))
     } else {
-        let values_text = descriptor_values_argument(call, source, &message)?;
+        let values_text = descriptor_values_argument(
+            call,
+            source,
+            &message,
+            implicit_values,
+            macro_name,
+            location,
+        )?;
         Ok(Some((
             build_runtime_call_with_values_text(
                 &lookup_key,
@@ -111,21 +143,108 @@ enum DescriptorValues {
     Raw(String),
 }
 
+fn object_property_value<'a>(
+    object: &'a ObjectExpression<'a>,
+    property_name: &str,
+) -> Option<&'a Expression<'a>> {
+    object.properties.iter().rev().find_map(|property| {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        (property.key.static_name().as_deref() == Some(property_name)).then_some(&property.value)
+    })
+}
+
+fn descriptor_static_property(
+    object: &ObjectExpression<'_>,
+    property_name: &str,
+    macro_name: &str,
+    location: &str,
+) -> PalamedesResult<Option<String>> {
+    let Some(value) = object_property_value(object, property_name) else {
+        return Ok(None);
+    };
+    let Some(value) = string_value(value) else {
+        return Err(unsupported_macro_syntax(
+            macro_name,
+            location,
+            format!(
+                "the descriptor `{property_name}` must be a string literal or expression-free template literal"
+            ),
+        ));
+    };
+    Ok(Some(value))
+}
+
 fn descriptor_values_argument(
     call: &CallExpression<'_>,
     source: &str,
     message: &str,
+    implicit_values: Vec<ValueBinding>,
+    macro_name: &str,
+    location: &str,
 ) -> PalamedesResult<Option<String>> {
     let Some(argument) = call.arguments.get(1) else {
-        return Ok(None);
+        return Ok((!implicit_values.is_empty()).then(|| render_values_object(&implicit_values)));
     };
 
     match extract_descriptor_values(argument, source) {
-        DescriptorValues::Bindings(bindings) => {
+        DescriptorValues::Bindings(explicit_values) => {
+            let bindings = merge_descriptor_values(
+                implicit_values,
+                explicit_values,
+                macro_name,
+                location,
+            )?;
             validate_message_values(message, &bindings)?;
             Ok(Some(render_values_object(&bindings)))
         }
-        DescriptorValues::Raw(source) => Ok(Some(source)),
+        DescriptorValues::Raw(source) if implicit_values.is_empty() => Ok(Some(source)),
+        DescriptorValues::Raw(_) => Err(unsupported_macro_syntax(
+            macro_name,
+            location,
+            "interpolated descriptor templates can only be combined with an object-literal values argument",
+        )),
+    }
+}
+
+fn merge_descriptor_values(
+    mut implicit_values: Vec<ValueBinding>,
+    explicit_values: Vec<ValueBinding>,
+    macro_name: &str,
+    location: &str,
+) -> PalamedesResult<Vec<ValueBinding>> {
+    for binding in explicit_values {
+        if let Some(existing) = implicit_values
+            .iter()
+            .find(|existing| existing.name == binding.name)
+        {
+            if existing.expression == binding.expression {
+                continue;
+            }
+            return Err(unsupported_macro_syntax(
+                macro_name,
+                location,
+                format!(
+                    "the explicit value `{}` conflicts with the expression captured by the message template",
+                    binding.name
+                ),
+            ));
+        }
+        implicit_values.push(binding);
+    }
+    Ok(implicit_values)
+}
+
+fn unsupported_macro_syntax(
+    macro_name: &str,
+    location: &str,
+    detail: impl Into<String>,
+) -> PalamedesError {
+    PalamedesError::UnsupportedMacroSyntax {
+        macro_name: macro_name.to_string(),
+        location: location.to_string(),
+        detail: detail.into(),
     }
 }
 

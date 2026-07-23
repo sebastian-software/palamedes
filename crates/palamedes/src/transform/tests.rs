@@ -93,6 +93,81 @@ fn transforms_define_message_without_runtime_import() {
 }
 
 #[test]
+fn transforms_interpolated_descriptor_templates() {
+    for macro_name in ["t", "msg"] {
+        let source = format!(
+            r#"import {{ {macro_name} }} from "@palamedes/core/macro";
+const message = {macro_name}({{
+  message: `Descriptor ${{name}}`,
+  context: "probe context",
+}});
+"#
+        );
+        let result = transform_macros(&source, "test.ts", None).expect("transform should succeed");
+
+        assert!(result.code.contains("message: \"Descriptor {name}\""));
+        assert!(result.code.contains("{ name }"));
+        assert!(result.code.contains("context: \"probe context\""));
+        assert!(!result.code.contains("@palamedes/core/macro"));
+        assert!(!result.code.contains(&format!("{macro_name}({{")));
+        assert_eq!(
+            result.compiled_ids,
+            vec![compiled_key("Descriptor {name}", Some("probe context"))]
+        );
+    }
+}
+
+#[test]
+fn merges_interpolated_descriptor_values_with_explicit_values() {
+    let result = transform_macros(
+        r#"import { t } from "@palamedes/core/macro";
+const message = t({ message: `Hello ${name}, you have {count}` }, { count });
+"#,
+        "test.ts",
+        None,
+    )
+    .expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains("message: \"Hello {name}, you have {count}\""));
+    assert!(result.code.contains("{ name, count }"));
+}
+
+#[test]
+fn rejects_interpolated_define_message_descriptors() {
+    let error = transform_macros(
+        r#"import { defineMessage } from "@palamedes/core/macro";
+const message = defineMessage({ message: `Hello ${name}` });
+"#,
+        "test.ts",
+        None,
+    )
+    .expect_err("defineMessage cannot capture runtime template values");
+
+    let message = error.to_string();
+    assert!(message.contains("Unsupported `defineMessage` macro usage at test.ts:2:17"));
+    assert!(message.contains("interpolated descriptor templates require runtime values"));
+}
+
+#[test]
+fn rejects_untransformable_macro_calls_before_removing_imports() {
+    let error = transform_macros(
+        r#"import { t } from "@palamedes/core/macro";
+const valid = t`Hello`;
+const broken = t({ message });
+"#,
+        "test.ts",
+        None,
+    )
+    .expect_err("untransformable macros must fail the module");
+
+    let message = error.to_string();
+    assert!(message.contains("Unsupported `t` macro usage at test.ts:3:16"));
+    assert!(message.contains("must be a string literal or template literal"));
+}
+
+#[test]
 fn transforms_plural_choice_macros() {
     let result = transform_macros(
         "import { plural } from \"@palamedes/core/macro\";\nconst msg = plural(count, { one: \"# item\", other: \"# items\" });\n",

@@ -163,6 +163,16 @@ pub enum PalamedesError {
         /// Value names provided by values but not referenced by the message.
         extra: String,
     },
+    /// A recognized macro call used a source shape that cannot be transformed safely.
+    #[error("Unsupported `{macro_name}` macro usage at {location}: {detail}")]
+    UnsupportedMacroSyntax {
+        /// Public macro name used at the call site.
+        macro_name: String,
+        /// Source filename, line, and column.
+        location: String,
+        /// Human-readable explanation of the unsupported source shape.
+        detail: String,
+    },
     /// A JSX message macro was nested inside another JSX message macro.
     #[error(
         "Nested i18n macro is not extractable as a single message at {location}. Move the full sentence into <Plural> branches or use plural() so translators receive the complete sentence."

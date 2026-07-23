@@ -147,6 +147,49 @@ describe("extractMessages", () => {
       expect(messages[1].context).toBe("email.subject")
     })
 
+    it("extracts interpolated descriptor templates with placeholder metadata", () => {
+      const code = `
+        import { msg, t } from "@palamedes/core/macro"
+        const one = t({
+          message: \`Descriptor \${name}\`,
+          context: "probe context",
+        })
+        const two = msg({ message: \`Locale \${resolved.locale}\` })
+      `
+      const messages = extract(code)
+
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        message: "Descriptor {name}",
+        context: "probe context",
+        placeholders: { name: "name" },
+      })
+      expect(messages[1]).toMatchObject({
+        message: "Locale {locale}",
+        placeholders: { locale: "resolved.locale" },
+      })
+    })
+
+    it("rejects interpolated defineMessage descriptor templates", () => {
+      const code = `import { defineMessage } from "@palamedes/core/macro"
+const descriptor = defineMessage({ message: \`Descriptor \${name}\` })
+`
+
+      expect(() => extract(code)).toThrow(
+        /Unsupported `defineMessage` macro usage at test\.tsx:2:20.*runtime values/
+      )
+    })
+
+    it("rejects dynamic descriptor messages with a source location", () => {
+      const code = `import { t } from "@palamedes/core/macro"
+const descriptor = t({ message })
+`
+
+      expect(() => extract(code)).toThrow(
+        /Unsupported `t` macro usage at test\.tsx:2:20.*string literal or template literal/
+      )
+    })
+
     it("extracts plural and select messages", () => {
       const code = `
         import { plural, select } from "@palamedes/core/macro"

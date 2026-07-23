@@ -72,6 +72,14 @@ impl<'a> TransformVisitor<'a> {
         }
     }
 
+    fn fail_unsupported_macro(&mut self, macro_name: &str, start: usize) {
+        self.fail(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: macro_name.to_string(),
+            location: source_location(self.source, self.filename, start),
+            detail: "the macro could not be statically transformed; use a supported literal, template, descriptor, or choice shape".to_string(),
+        });
+    }
+
     fn is_current_jsx_child_element(&self, element: &JSXElement<'_>) -> bool {
         self.jsx_child_element_spans
             .last()
@@ -92,7 +100,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         };
 
-        let Some(macro_info) = self.macro_imports.get(tag_name.as_str()) else {
+        let Some(macro_info) = self.macro_imports.get(tag_name.as_str()).cloned() else {
             walk::walk_jsx_element(self, it);
             return;
         };
@@ -152,16 +160,14 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 } else {
                     self.needs_runtime_import = true;
                 }
-                return;
             }
-            Ok(None) => {}
+            Ok(None) => {
+                self.fail_unsupported_macro(&macro_info.imported_name, it.span.start as usize);
+            }
             Err(error) => {
                 self.fail(error);
-                return;
             }
         }
-
-        walk::walk_jsx_element(self, it);
     }
 
     fn visit_jsx_child(&mut self, it: &JSXChild<'a>) {
@@ -185,7 +191,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         };
 
-        let Some(macro_info) = self.macro_imports.get(local_name) else {
+        let Some(macro_info) = self.macro_imports.get(local_name).cloned() else {
             walk::walk_tagged_template_expression(self, it);
             return;
         };
@@ -205,7 +211,10 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 self.push_compiled_id(&compiled_id);
                 self.needs_runtime_import = true;
             }
-            Ok(None) => {}
+            Ok(None) => {
+                self.fail_unsupported_macro(&macro_info.imported_name, it.span.start as usize);
+                return;
+            }
             Err(error) => {
                 self.fail(error);
                 return;
@@ -225,10 +234,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         };
 
-        let Some(macro_info) = self.macro_imports.get(local_name) else {
+        let Some(macro_info) = self.macro_imports.get(local_name).cloned() else {
             walk::walk_call_expression(self, it);
             return;
         };
+        let location = source_location(self.source, self.filename, it.span.start as usize);
 
         match macro_info.imported_name.as_str() {
             "t" | "msg" | "defineMessage" => {
@@ -236,6 +246,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     it,
                     self.source,
                     &macro_info.imported_name,
+                    &location,
                     self.options,
                 ) {
                     Ok(Some((text, compiled_id))) => {
@@ -249,7 +260,13 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             self.needs_runtime_import = true;
                         }
                     }
-                    Ok(None) => {}
+                    Ok(None) => {
+                        self.fail_unsupported_macro(
+                            &macro_info.imported_name,
+                            it.span.start as usize,
+                        );
+                        return;
+                    }
                     Err(error) => {
                         self.fail(error);
                         return;
@@ -272,7 +289,13 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                         self.push_compiled_id(&compiled_id);
                         self.needs_runtime_import = true;
                     }
-                    Ok(None) => {}
+                    Ok(None) => {
+                        self.fail_unsupported_macro(
+                            &macro_info.imported_name,
+                            it.span.start as usize,
+                        );
+                        return;
+                    }
                     Err(error) => {
                         self.fail(error);
                         return;

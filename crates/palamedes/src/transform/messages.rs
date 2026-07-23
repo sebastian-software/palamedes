@@ -42,25 +42,6 @@ pub(super) fn string_value(expr: &Expression<'_>) -> Option<String> {
     }
 }
 
-pub(super) fn extract_object_properties(object: &ObjectExpression<'_>) -> HashMap<String, String> {
-    let mut properties = HashMap::new();
-
-    for property in &object.properties {
-        let ObjectPropertyKind::ObjectProperty(property) = property else {
-            continue;
-        };
-        let Some(key) = property.key.static_name() else {
-            continue;
-        };
-        let Some(value) = string_value(&property.value) else {
-            continue;
-        };
-        properties.insert(key.into_owned(), value);
-    }
-
-    properties
-}
-
 pub(super) fn extract_choice_options(
     object: &ObjectExpression<'_>,
     source: &str,
