@@ -1579,6 +1579,7 @@ mod tests {
         ExtractCatalogMessagesRequest, ExtractedMessageRecord,
     };
     use crate::error::PalamedesResult;
+    use crate::test_support::scope_macro_test_source;
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -1586,42 +1587,7 @@ mod tests {
         source: &str,
         filename: &str,
     ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
-        extract_messages_raw(&scope_macro_test_source(source), filename)
-    }
-
-    fn scope_macro_test_source(source: &str) -> String {
-        if ![
-            "@palamedes/core/macro",
-            "@palamedes/react/macro",
-            "@palamedes/solid/macro",
-        ]
-        .iter()
-        .any(|macro_module| source.contains(macro_module))
-        {
-            return source.to_string();
-        }
-
-        let mut last_import_end = None;
-        let mut offset = 0;
-
-        for line in source.split_inclusive('\n') {
-            let line_without_newline = line.strip_suffix('\n').unwrap_or(line);
-            if line_without_newline.trim_start().starts_with("import ") {
-                last_import_end = Some(offset + line_without_newline.len());
-            }
-            offset += line.len();
-        }
-
-        let Some(import_end) = last_import_end else {
-            return source.to_string();
-        };
-
-        let mut scoped = String::with_capacity(source.len() + 48);
-        scoped.push_str(&source[..import_end]);
-        scoped.push_str("; function __palamedes_test_scope() {");
-        scoped.push_str(&source[import_end..]);
-        scoped.push_str("\n}");
-        scoped
+        extract_messages_raw(&scope_macro_test_source(source, filename), filename)
     }
 
     #[test]
@@ -1647,6 +1613,13 @@ const message = <Choice value={gender} other="They" />;
 "#,
                 "test.tsx",
                 "Select",
+            ),
+            (
+                r#"import { t } from "@palamedes/core/macro";
+class Formatter { label = t`Hello`; }
+"#,
+                "test.ts",
+                "t",
             ),
         ];
 

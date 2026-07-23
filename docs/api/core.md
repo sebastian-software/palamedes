@@ -112,7 +112,8 @@ Supported macro names:
 All four macros resolve translations eagerly. They must therefore be used
 inside a function, method, or callback, after the application has activated
 the relevant i18n scope. Palamedes rejects these macros at module scope during
-transformation and extraction.
+transformation and extraction. Class field initializers, including instance
+fields, do not satisfy this syntactic rule; use a method or getter instead.
 
 ## Runtime Formatting
 

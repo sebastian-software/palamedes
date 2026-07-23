@@ -80,7 +80,9 @@ The eager `t`, `plural`, `select`, and `selectOrdinal` macros, plus
 `<Plural>`, `<Select>`, and `<SelectOrdinal>`, must be syntactically inside a
 function, method, or callback. This prevents translation from running as a
 module-loading side effect before i18n activation. `<Trans>` may remain at
-module scope because translation occurs when the component renders.
+module scope because translation occurs when the component renders. Class field
+initializers, including instance fields, are intentionally rejected; use a
+method or getter instead.
 
 Explicit author-facing `id` fields are intentionally not part of the supported end-state model.
 

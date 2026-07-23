@@ -16,10 +16,10 @@ use serde::{Deserialize, Serialize};
 use string_wizard::{Hires, MagicString, SourceMapOptions};
 
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::translation_scope::validate_translation_macro_scopes;
+use crate::translation_scope::{source_location, validate_translation_macro_scopes};
 
 use self::imports::ImportCollector;
-use self::visitor::{source_location, Replacement, TransformVisitor};
+use self::visitor::{Replacement, TransformVisitor};
 
 /// Options controlling how macro transforms emit runtime code.
 #[derive(Debug, Default, Deserialize)]

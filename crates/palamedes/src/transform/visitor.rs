@@ -6,6 +6,7 @@ use oxc_ast::ast::{
 use oxc_ast_visit::{walk, Visit};
 
 use crate::error::PalamedesError;
+use crate::translation_scope::source_location;
 
 use super::imports::ImportedMacro;
 use super::messages::identifier_name;
@@ -379,23 +380,4 @@ fn is_jsx_message_macro(
                 "Trans" | "Plural" | "Select" | "SelectOrdinal"
             )
         })
-}
-
-pub(super) fn source_location(source: &str, filename: &str, offset: usize) -> String {
-    let mut line = 1usize;
-    let mut line_start = 0usize;
-
-    for (index, ch) in source.char_indices() {
-        if index >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            line_start = index + 1;
-        }
-    }
-
-    let column = offset.saturating_sub(line_start) + 1;
-
-    format!("{filename}:{line}:{column}")
 }

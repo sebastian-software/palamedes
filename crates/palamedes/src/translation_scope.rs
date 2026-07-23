@@ -138,7 +138,8 @@ fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     }
 }
 
-fn source_location(source: &str, filename: &str, offset: usize) -> String {
+/// Formats a byte offset as a one-based filename, line, and column location.
+pub(crate) fn source_location(source: &str, filename: &str, offset: usize) -> String {
     let mut line = 1usize;
     let mut line_start = 0usize;
 

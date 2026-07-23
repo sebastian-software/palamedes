@@ -1,33 +1,4 @@
-import { transformPalamedesMacros as transformPalamedesMacrosRaw } from "./transform"
-import type { TransformOptions, TransformResult } from "./types"
-
-function transformPalamedesMacros(
-  code: string,
-  filename: string,
-  options: TransformOptions = {}
-): TransformResult {
-  const scopedCode = scopeMacroTestSource(code)
-  const result = transformPalamedesMacrosRaw(scopedCode, filename, options)
-  if (result.map?.sourcesContent) {
-    result.map.sourcesContent = [code]
-  }
-  return result
-}
-
-function scopeMacroTestSource(code: string): string {
-  if (!/@palamedes\/(?:core|react|solid)\/macro/.test(code)) {
-    return code
-  }
-
-  const imports = [...code.matchAll(/^[ \t]*import[^\n]*$/gm)]
-  const lastImport = imports.at(-1)
-  if (!lastImport || lastImport.index === undefined) {
-    return code
-  }
-
-  const insertion = lastImport.index + lastImport[0].length
-  return `${code.slice(0, insertion)}; function __palamedesTestScope() {${code.slice(insertion)}\n}`
-}
+import { transformPalamedesMacros } from "./transform"
 
 type SourceMapLike = {
   file?: string
@@ -51,16 +22,20 @@ describe("transformPalamedesMacros", () => {
       'import { Select } from "@palamedes/react/macro";\nconst value = <Select value={kind} other="Other" />;',
       "Select",
     ],
+    ['import { t } from "@palamedes/core/macro";\nclass Formatter { label = t`Hello`; }', "t"],
   ])("rejects top-level %s usage", (code, macroName) => {
-    expect(() => transformPalamedesMacrosRaw(code, "test.tsx")).toThrow(
+    expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(
       new RegExp(`Translation macro \`${macroName}\` must be used inside a function`)
     )
   })
 
   it("allows eager macros inside functions, methods, and callbacks", () => {
     const code = `
-import { t, plural } from "@palamedes/core/macro";
-import { Select } from "@palamedes/react/macro";
+	import {
+	  plural,
+	  t,
+	} from "@palamedes/core/macro";
+	import { Select } from "@palamedes/react/macro";
 function label() { return t\`Hello\`; }
 const countLabel = () => plural(count, { one: "# item", other: "# items" });
 const formatter = { label() { return t\`Method\`; } };
@@ -69,7 +44,7 @@ items.map((item) => t\`Item \${item.name}\`);
 function View() { return <Select value={kind} other="Other" />; }
 `
 
-    expect(() => transformPalamedesMacrosRaw(code, "test.tsx")).not.toThrow()
+    expect(() => transformPalamedesMacros(code, "test.tsx")).not.toThrow()
   })
 
   it("returns unchanged code without Palamedes macro imports", () => {
@@ -84,7 +59,9 @@ function View() { return <Select value={kind} other="Other" />; }
   it("transforms tagged templates into compact runtime lookups", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t\`Hello \${name}\`;
+}
 `
     const result = transformPalamedesMacros(code, "test.ts")
 
@@ -108,7 +85,9 @@ const msg = t\`Hello \${name}\`;
   it("preserves member expression values in tagged templates", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t\`Locale \${resolved.locale}\`;
+}
 `
     const result = transformPalamedesMacros(code, "test.ts")
 
@@ -119,7 +98,9 @@ const msg = t\`Locale \${resolved.locale}\`;
   it("transforms descriptor macros without preserving public ids", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t({ message: "Hello", context: "informal", comment: "A greeting" });
+}
 `
     const result = transformPalamedesMacros(code, "test.ts")
 
@@ -133,10 +114,12 @@ const msg = t({ message: "Hello", context: "informal", comment: "A greeting" });
   it("transforms interpolated descriptor templates with runtime values", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const message = t({
   message: \`Descriptor \${name}\`,
   context: "probe context",
 });
+}
 `
     const result = transformPalamedesMacros(code, "test.ts")
 
@@ -149,8 +132,9 @@ const message = t({
 
   it("rejects missing ICU values in interpolated descriptor templates", () => {
     const code = `
-import { t } from "@palamedes/core/macro";
+import { t } from "@palamedes/core/macro"; function message() {
 const descriptor = t({ message: \`Hello \${name}, you have {count}\` });
+}
 `
 
     expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/Missing value\(s\): count/)
@@ -172,9 +156,10 @@ const valid = t\`Hello\`;
   )
 
   it("rejects unsupported macro calls before removing a shared macro import", () => {
-    const code = `import { t } from "@palamedes/core/macro";
+    const code = `import { t } from "@palamedes/core/macro"; function test() {
 const valid = t\`Hello\`;
 const broken = t({ message });
+}
 `
 
     expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(
@@ -185,7 +170,9 @@ const broken = t({ message });
   it("forwards descriptor macro values object literals", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t({ message: "Hello {name}" }, { name });
+}
 `
     const result = transformPalamedesMacros(code, "test.ts")
 
@@ -196,7 +183,9 @@ const msg = t({ message: "Hello {name}" }, { name });
   it("rejects descriptor macro values missing message placeholders", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t({ message: "Hello {name}" }, { naem: user.name });
+}
 `
 
     expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/Missing value\(s\): name/)
@@ -205,7 +194,9 @@ const msg = t({ message: "Hello {name}" }, { naem: user.name });
   it("rejects descriptor macro values not used by the message", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t({ message: "Hello" }, { name });
+}
 `
 
     expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/extra value\(s\): name/)
@@ -343,7 +334,9 @@ const manager = <Trans> — no manager</Trans>;
   it("strips the message field when requested", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t({ message: "Hello" });
+}
 `
     const result = transformPalamedesMacros(code, "test.ts", {
       stripMessageField: true,
@@ -408,8 +401,9 @@ export function Demo({ totalRows }: { totalRows: number }) {
 
   it("rejects nested JSX message macros", () => {
     const code = `
-import { Plural, Trans } from "@palamedes/react/macro";
+import { Plural, Trans } from "@palamedes/react/macro"; function Message() {
 const el = <Trans><Plural value={contractCount} one="# contract" other="# contracts" /> ({capacityMW} MW)</Trans>;
+}
 `
 
     expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(
@@ -419,8 +413,9 @@ const el = <Trans><Plural value={contractCount} one="# contract" other="# contra
 
   it("keeps JSX choice macro replacements as expressions outside JSX children", () => {
     const code = `
-import { Plural } from "@palamedes/react/macro";
+import { Plural } from "@palamedes/react/macro"; function message() {
 const text = <Plural one="# row" other="# rows" value={totalRows} />;
+}
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
@@ -485,8 +480,9 @@ function ResultCount({ shownCount, totalCount, quickSearch }) {
 
   it("accepts getter call value names for JSX choice macros", () => {
     const code = `
-import { Plural } from "@palamedes/react/macro";
+import { Plural } from "@palamedes/react/macro"; function message() {
 const text = <Plural one="# unit" other="# units" value={getDemand()} />;
+}
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
@@ -497,7 +493,9 @@ const text = <Plural one="# unit" other="# units" value={getDemand()} />;
   it("rejects explicit ids in macro authoring", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t({ id: "greeting", message: "Hello" });
+}
 `
 
     expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/Explicit message ids/)
@@ -515,7 +513,9 @@ const el = <Trans id="greeting">Hello</Trans>;
   it("rejects unnamed template placeholders", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
+function message() {
 const msg = t\`Hello \${firstName + lastName}\`;
+}
 `
 
     expect(() => transformPalamedesMacros(code, "test.ts")).toThrow(/stable placeholder name/)
@@ -539,8 +539,9 @@ const el = <Trans>Hello {firstName + lastName}</Trans>;
 
     for (const jsx of cases) {
       const code = `
-import { Plural, Trans } from "@palamedes/react/macro";
-const el = ${jsx};
+	import { Plural, Trans } from "@palamedes/react/macro"; function Message() {
+	const el = ${jsx};
+	}
 `
 
       expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(
@@ -566,8 +567,10 @@ const el = <Trans><List renderItem={() => <Plural value={count} one="one" other=
   it("accepts computed, defaulted, and literal choice values", () => {
     const code = `
 import { plural } from "@palamedes/core/macro";
+function messages() {
 const computed = plural(periodCounts[period] ?? 0, { one: "# entry", other: "# entries" });
 const literal = plural(21, { one: "# month", other: "# months" });
+}
 `
     const result = transformPalamedesMacros(code, "test.ts")
 
@@ -580,7 +583,7 @@ const literal = plural(21, { one: "# month", other: "# months" });
   it("transforms interpolated plural branches and forwards their values", () => {
     const code = `
 import { plural } from "@palamedes/core/macro";
-import { Plural } from "@palamedes/react/macro";
+import { Plural } from "@palamedes/react/macro"; function messages() {
 const call = plural(count, {
   one: \`# item will be archived because \${planLabel} allows a maximum of \${max}\`,
   other: \`# items will be archived because \${planLabel} allows a maximum of \${max}\`,
@@ -590,6 +593,7 @@ const jsx = <Plural
   one={\`# item will be archived because \${planLabel} allows a maximum of \${max}\`}
   other={\`# items will be archived because \${planLabel} allows a maximum of \${max}\`}
 />;
+}
 `
     const result = transformPalamedesMacros(code, "test.tsx")
     const expected =
@@ -601,8 +605,9 @@ const jsx = <Plural
 
   it("accepts defaulted JSX choice values", () => {
     const code = `
-import { Plural } from "@palamedes/react/macro";
+import { Plural } from "@palamedes/react/macro"; function message() {
 const el = <Plural value={node.locationCount ?? 0} one="# location" other="# locations" />;
+}
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
