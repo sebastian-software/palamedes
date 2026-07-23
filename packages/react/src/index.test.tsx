@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { createI18n } from "@palamedes/core"
 import { resetI18nRuntime, setClientI18n } from "@palamedes/runtime"
 
-import { Plural, Trans, buildLocaleSwitchItems } from "./index"
+import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
 import { useClientLocale } from "./client"
 
 describe("@palamedes/react", () => {
@@ -48,6 +48,24 @@ describe("@palamedes/react", () => {
     const html = renderToStaticMarkup(<Plural value={2} one="# item" other="# items" />)
 
     expect(html).toBe("2 items")
+  })
+
+  it("formats direct choice components without reporting missing catalog entries", () => {
+    const onMissing = vi.fn()
+    const i18n = createI18n({ onMissing })
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <>
+        <Plural value={2} one="# item" other="# items" />
+        <Select value="female" female="She" other="They" />
+        <SelectOrdinal value={2} one="#st" two="#nd" other="#th" />
+      </>
+    )
+
+    expect(html).toBe("2 itemsShe2nd")
+    expect(onMissing).not.toHaveBeenCalled()
   })
 
   it("renders formatted ICU arguments through Trans", () => {
