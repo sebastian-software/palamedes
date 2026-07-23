@@ -38,7 +38,7 @@ pnpm add -D @palamedes/transform
 import { transformPalamedesMacros } from "@palamedes/transform"
 
 const result = transformPalamedesMacros(
-  'import { t } from "@palamedes/core/macro"; const message = t`Hello ${name}`',
+  'import { t } from "@palamedes/core/macro"; function message(name) { return t`Hello ${name}` }',
   "example.ts",
   {
     runtimeModule: "@palamedes/runtime",
@@ -75,6 +75,12 @@ The root package also re-exports catalog-loader helpers from
 - descriptor calls such as `t({ message: "..." })`
 - `plural(...)`, `select(...)`, `selectOrdinal(...)`
 - `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
+
+The eager `t`, `plural`, `select`, and `selectOrdinal` macros, plus
+`<Plural>`, `<Select>`, and `<SelectOrdinal>`, must be syntactically inside a
+function, method, or callback. This prevents translation from running as a
+module-loading side effect before i18n activation. `<Trans>` may remain at
+module scope because translation occurs when the component renders.
 
 Explicit author-facing `id` fields are intentionally not part of the supported end-state model.
 

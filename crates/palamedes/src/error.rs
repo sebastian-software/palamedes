@@ -173,6 +173,16 @@ pub enum PalamedesError {
         /// Human-readable explanation of the unsupported source shape.
         detail: String,
     },
+    /// An eager translation macro would run while its module is loading.
+    #[error(
+        "Translation macro `{macro_name}` must be used inside a function at {location}. Wrap the translation in a function, method, or callback so it runs after i18n activation."
+    )]
+    TranslationMacroOutsideFunction {
+        /// Public macro name used at module scope.
+        macro_name: String,
+        /// Source filename, line, and column.
+        location: String,
+    },
     /// A JSX message macro was nested inside another JSX message macro.
     #[error(
         "Nested i18n macro is not extractable as a single message at {location}. Move the full sentence into <Plural> branches or use plural() so translators receive the complete sentence."

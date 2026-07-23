@@ -1080,7 +1080,7 @@ mod tests {
         write_config(&app, None);
         fs::write(
             app.join("app/page.tsx"),
-            "import { t } from \"@palamedes/core/macro\";\nexport const title = t`Dashboard`;\n",
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Dashboard`; }\n",
         )
         .expect("write source");
 
@@ -1099,7 +1099,7 @@ mod tests {
         write_config(&app, Some("config"));
         fs::write(
             app.join("app/page.tsx"),
-            "import { t } from \"@palamedes/core/macro\";\nexport const title = t`Dashboard`;\n",
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Dashboard`; }\n",
         )
         .expect("write source");
 
@@ -1127,7 +1127,7 @@ catalogs:
         .expect("write config");
         fs::write(
             app.join("app/page.tsx"),
-            "import { t } from \"@palamedes/core/macro\";\nexport const title = t`Dashboard`;\n",
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Dashboard`; }\n",
         )
         .expect("write source");
 

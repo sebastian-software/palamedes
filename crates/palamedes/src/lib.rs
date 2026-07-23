@@ -30,6 +30,7 @@ mod jsx_entities;
 mod jsx_message;
 mod message_metadata;
 mod transform;
+mod translation_scope;
 
 use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
 use serde::Serialize;

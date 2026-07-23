@@ -32,7 +32,8 @@ pnpm add -D @palamedes/extractor
 ```ts
 import { extractor } from "@palamedes/extractor"
 
-const source = 'import { t } from "@palamedes/core/macro"; const message = t`Hello ${name}`'
+const source =
+  'import { t } from "@palamedes/core/macro"; function message(name) { return t`Hello ${name}` }'
 const messages = []
 
 await extractor.extract("example.ts", source, (message) => {
@@ -48,6 +49,11 @@ console.log(messages)
 - `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
 - `i18n._(...)` and `i18n.t\`...\`` style runtime calls
 - JavaScript, TypeScript, JSX, and TSX sources
+
+The extractor rejects eager `t`, `plural`, `select`, and `selectOrdinal`
+macros, plus `<Plural>`, `<Select>`, and `<SelectOrdinal>`, when they appear
+outside a function, method, or callback. `<Trans>` is safe at module scope
+because translation occurs during component rendering.
 
 Rich JSX children inside `<Trans>` are extracted with numeric component slots. For example,
 `<Trans><strong>A</strong> and <strong>B</strong></Trans>` extracts as
