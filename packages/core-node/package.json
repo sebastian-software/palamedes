@@ -55,9 +55,9 @@
     "@palamedes/core-node-win32-x64-msvc": "workspace:^"
   },
   "devDependencies": {
-    "@types/node": "^22.20.0",
+    "@types/node": "^22.20.1",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }
