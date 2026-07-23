@@ -1275,9 +1275,9 @@ pub fn extract_messages(
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
     let parsed = Parser::new(&allocator, source, source_type).parse();
 
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         let messages = parsed
-            .errors
+            .diagnostics
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>()
