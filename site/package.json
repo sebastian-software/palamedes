@@ -14,8 +14,8 @@
     "@react-router/node": "8.2.0",
     "ardo": "3.6.1",
     "lucide-react": "^0.545.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "react-router": "8.2.0",
     "isbot": "^5"
   },
