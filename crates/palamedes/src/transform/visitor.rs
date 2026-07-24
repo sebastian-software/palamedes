@@ -133,6 +133,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 it,
                 self.source,
                 &macro_info.imported_name,
+                &source_location(self.source, self.filename, it.span.start as usize),
                 self.options,
             ),
             _ => Ok(None),
@@ -277,6 +278,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     it,
                     self.source,
                     &macro_info.imported_name,
+                    &location,
                     self.options,
                 ) {
                     Ok(Some((text, compiled_id))) => {

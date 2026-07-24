@@ -34,9 +34,13 @@ type ChoiceComponentProps = {
   other: string
 }
 
-export type PluralProps = {} & ChoiceComponentProps
+export type PluralProps = ChoiceComponentProps & {
+  offset?: number
+}
 
-export type SelectOrdinalProps = {} & ChoiceComponentProps
+export type SelectOrdinalProps = ChoiceComponentProps & {
+  offset?: number
+}
 
 export type SelectProps = {
   value: string | number
@@ -62,15 +66,15 @@ export function Trans({
   return <>{renderNodes(nodes, values ?? {}, components ?? {}, i18n.locale)}</>
 }
 
-export function Plural({ value, ...choices }: PluralProps): ReactNode {
+export function Plural({ value, offset, ...choices }: PluralProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
-  const message = buildChoiceMessage("value", "plural", choices)
+  const message = buildChoiceMessage("value", "plural", choices, offset)
   return <>{formatMessagePattern(message, { value }, i18n.locale)}</>
 }
 
-export function SelectOrdinal({ value, ...choices }: SelectOrdinalProps): ReactNode {
+export function SelectOrdinal({ value, offset, ...choices }: SelectOrdinalProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
-  const message = buildChoiceMessage("value", "selectordinal", choices)
+  const message = buildChoiceMessage("value", "selectordinal", choices, offset)
   return <>{formatMessagePattern(message, { value }, i18n.locale)}</>
 }
 
@@ -83,12 +87,21 @@ export function Select({ value, ...choices }: SelectProps): ReactNode {
 function buildChoiceMessage(
   variable: string,
   kind: "plural" | "select" | "selectordinal",
-  choices: Record<string, string | number | undefined>
+  choices: Record<string, string | number | undefined>,
+  offset?: number
 ): string {
+  validatePluralOffset(offset)
   const parts = Object.entries(choices)
     .filter((entry): entry is [string, string] => typeof entry[1] === "string")
     .map(([key, value]) => `${key} {${value}}`)
-  return `{${variable}, ${kind}, ${parts.join(" ")}}`
+  const offsetPart = offset === undefined ? "" : ` offset:${offset}`
+  return `{${variable}, ${kind},${offsetPart} ${parts.join(" ")}}`
+}
+
+function validatePluralOffset(offset: number | undefined): void {
+  if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0)) {
+    throw new RangeError("Plural offset must be a non-negative safe integer.")
+  }
 }
 
 function renderNodes(
@@ -138,7 +151,8 @@ function renderNode(
     }
     case "choice": {
       const value = values[node.variable]
-      const nextPluralValue = node.kind === "select" ? pluralValue : normalizeNumericValue(value)
+      const nextPluralValue =
+        node.kind === "select" ? pluralValue : pluralOperand(node, normalizeNumericValue(value))
       const choice = selectChoice(node, value, locale)
       return renderNodes(choice, values, components, locale, nextPluralValue)
     }
@@ -163,11 +177,16 @@ function selectChoice(node: MessageChoiceNode, value: unknown, locale: string): 
     return node.options[exactKey]
   }
 
+  const operand = pluralOperand(node, numericValue)
   const pluralRules = new Intl.PluralRules(locale, {
     type: node.kind === "selectordinal" ? "ordinal" : "cardinal",
   })
-  const category = pluralRules.select(numericValue)
+  const category = pluralRules.select(operand)
   return node.options[category] ?? node.options.other ?? []
+}
+
+function pluralOperand(node: MessageChoiceNode, numericValue: number): number {
+  return numericValue - (node.offset ?? 0)
 }
 
 function renderVariable(value: unknown): ReactNode {

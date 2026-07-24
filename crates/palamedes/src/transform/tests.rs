@@ -534,6 +534,56 @@ fn transforms_plural_jsx_macro() {
 }
 
 #[test]
+fn transforms_plural_offsets_from_calls_and_jsx() {
+    let result = transform_macros(
+        r##"import { plural } from "@palamedes/core/macro";
+import { Plural } from "@palamedes/react/macro";
+const call = plural(count, { offset: 1, one: "# item", other: "# items" });
+const stringCall = plural(count, { offset: "2", one: "# item", other: "# items" });
+const jsx = <Plural value={count} offset={1} one="# item" other="# items" />;
+"##,
+        "test.tsx",
+        None,
+    )
+    .expect("static plural offsets should transform");
+
+    assert!(result
+        .code
+        .contains("message: \"{count, plural, offset:1 one {# item} other {# items}}\""));
+    assert!(result
+        .code
+        .contains("message: \"{count, plural, offset:2 one {# item} other {# items}}\""));
+    assert_eq!(
+        result
+            .code
+            .matches("message: \"{count, plural, offset:1 one {# item} other {# items}}\"")
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn rejects_invalid_plural_offsets_and_categories() {
+    let cases = [
+        r##"import { plural } from "@palamedes/core/macro";
+const message = plural(count, { offset: dynamicOffset, one: "# item", other: "# items" });
+"##,
+        r##"import { plural } from "@palamedes/core/macro";
+const message = plural(count, { invalid: "broken", other: "# items" });
+"##,
+        r##"import { Plural } from "@palamedes/react/macro";
+const message = <Plural value={count} offset={-1} one="# item" other="# items" />;
+"##,
+    ];
+
+    for source in cases {
+        let error = transform_macros(source, "test.tsx", None)
+            .expect_err("invalid plural metadata should fail");
+        assert!(error.to_string().contains("Unsupported"));
+    }
+}
+
+#[test]
 fn transforms_plural_jsx_branch_interpolations() {
     let result = transform_macros(
         r##"import { Plural } from "@palamedes/react/macro";

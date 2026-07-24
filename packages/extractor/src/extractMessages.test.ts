@@ -257,6 +257,35 @@ const descriptor = t({ message })
       expect(messages[1].message).toBe("{gender, select, male {He} female {She} other {They}}")
     })
 
+    it("extracts static plural offsets and rejects invalid choice metadata", () => {
+      const code = `
+        import { plural } from "@palamedes/core/macro"
+        import { Plural } from "@palamedes/react/macro"; function messages() {
+        const call = plural(count, { offset: 1, one: "# item", other: "# items" })
+        const jsx = <Plural value={count} offset={1} one="# item" other="# items" />
+        }
+      `
+
+      expect(extract(code).map((message) => message.message)).toStrictEqual([
+        "{count, plural, offset:1 one {# item} other {# items}}",
+        "{count, plural, offset:1 one {# item} other {# items}}",
+      ])
+      expect(() =>
+        extract(`
+          import { plural } from "@palamedes/core/macro"; function messages() {
+          plural(count, { offset: dynamicOffset, one: "# item", other: "# items" })
+          }
+        `)
+      ).toThrow(/`offset` must be a static non-negative integer/)
+      expect(() =>
+        extract(`
+          import { plural } from "@palamedes/core/macro"; function messages() {
+          plural(count, { invalid: "broken", other: "# items" })
+          }
+        `)
+      ).toThrow(/`invalid` is not a valid plural category/)
+    })
+
     it("extracts interpolated plural branches with placeholder metadata", () => {
       const code = `
         import { plural } from "@palamedes/core/macro"

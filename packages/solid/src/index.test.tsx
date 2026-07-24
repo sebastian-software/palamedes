@@ -74,6 +74,35 @@ describe("@palamedes/solid", () => {
     expect(html).toBe("2 items")
   })
 
+  it("applies plural offsets in direct and rich messages", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setServerI18nGetter(() => i18n)
+
+    const direct = renderToString(() => (
+      <Plural value={2} offset={1} one="# item" other="# items" />
+    ))
+    const rich = Trans({
+      id: "companions",
+      message: "{count, plural, offset:1 one {you and one other} other {you and # others}}",
+      values: { count: 3 },
+    }) as unknown as () => unknown
+
+    expect(direct).toBe("1 item")
+    expect([rich()].flat().join("")).toBe("you and 2 others")
+  })
+
+  it("rejects invalid offsets at the direct component boundary", () => {
+    const i18n = createI18n()
+    setServerI18nGetter(() => i18n)
+
+    for (const offset of [Number.NaN, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        renderToString(() => <Plural value={2} offset={offset} one="# item" other="# items" />)
+      ).toThrow("Plural offset must be a non-negative safe integer.")
+    }
+  })
+
   it("formats direct choice components without reporting missing catalog entries", () => {
     const onMissing = vi.fn()
     const i18n = createI18n({ onMissing })

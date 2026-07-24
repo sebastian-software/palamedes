@@ -3,6 +3,10 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
+use crate::choice::{
+    expression_offset_value, invalid_choice_option, invalid_offset, is_plural_format,
+    jsx_offset_value, normalize_choice_option_key,
+};
 use crate::descriptor::{
     descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
 };
@@ -32,6 +36,12 @@ const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
 ];
 type ChoiceOptions = Vec<(String, String)>;
 const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
+
+struct ExtractedChoiceOptions {
+    options: ChoiceOptions,
+    placeholders: BTreeMap<String, String>,
+    offset: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 struct ImportedMacro {
@@ -317,6 +327,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
+                &self.location(it.span.start as usize),
             ) {
                 Ok(Some(message)) => self.push(message),
                 Ok(None) => {
@@ -400,6 +411,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                         self.origin(it.span.start as usize),
                         self.current_scope(),
                         self.source,
+                        &self.location(it.span.start as usize),
                     ),
                     _ => extract_from_descriptor_call(
                         it,
@@ -565,9 +577,13 @@ fn extract_choice_options_from_object(
     object: &ObjectExpression<'_>,
     source: &str,
     used_value_names: &mut HashMap<String, String>,
-) -> PalamedesResult<(ChoiceOptions, BTreeMap<String, String>)> {
+    format: &str,
+    macro_name: &str,
+    location: &str,
+) -> PalamedesResult<ExtractedChoiceOptions> {
     let mut options = Vec::new();
     let mut placeholders = BTreeMap::new();
+    let mut offset = None;
 
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -575,6 +591,17 @@ fn extract_choice_options_from_object(
         };
         let Some(key) = property.key.static_name() else {
             continue;
+        };
+        let key = key.into_owned();
+        if is_plural_format(format) && key == "offset" {
+            offset = Some(
+                expression_offset_value(&property.value)
+                    .ok_or_else(|| invalid_offset(macro_name, location))?,
+            );
+            continue;
+        }
+        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
+            return Err(invalid_choice_option(macro_name, location, &key));
         };
         let (value, option_placeholders) = match property.value.without_parentheses() {
             Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
@@ -587,16 +614,15 @@ fn extract_choice_options_from_object(
             _ => continue,
         };
 
-        let key = key.into_owned();
-        if let Some(exact) = key.strip_prefix('_') {
-            options.push((format!("={exact}"), value));
-        } else {
-            options.push((key, value));
-        }
+        options.push((normalized_key, value));
         placeholders.extend(option_placeholders);
     }
 
-    Ok((options, placeholders))
+    Ok(ExtractedChoiceOptions {
+        options,
+        placeholders,
+        offset,
+    })
 }
 
 fn extract_from_jsx_element(
@@ -605,6 +631,7 @@ fn extract_from_jsx_element(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
+    location: &str,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let attrs = jsx_attributes(&element.opening_element);
 
@@ -645,28 +672,30 @@ fn extract_from_jsx_element(
         else {
             return Ok(None);
         };
-        let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
-        let (options, placeholders) = extract_choice_options_from_jsx(
-            &element.opening_element,
-            source,
-            &mut used_value_names,
-        )?;
-        if options.is_empty() {
-            return Ok(None);
-        }
-
         let format = match macro_name {
             "Plural" => "plural",
             "Select" => "select",
             "SelectOrdinal" => "selectordinal",
             _ => return Ok(None),
         };
+        let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
+        let extracted_options = extract_choice_options_from_jsx(
+            &element.opening_element,
+            source,
+            &mut used_value_names,
+            format,
+            macro_name,
+            location,
+        )?;
+        if extracted_options.options.is_empty() {
+            return Ok(None);
+        }
 
         let message = build_icu_message(
             format,
             &value_name,
-            &options,
-            attrs.get("offset").map(String::as_str),
+            &extracted_options.options,
+            extracted_options.offset.as_deref(),
         );
         let context = attrs.get("context").cloned();
 
@@ -674,7 +703,8 @@ fn extract_from_jsx_element(
             message,
             comment: attrs.get("comment").cloned(),
             context,
-            placeholders: (!placeholders.is_empty()).then_some(placeholders),
+            placeholders: (!extracted_options.placeholders.is_empty())
+                .then_some(extracted_options.placeholders),
             origin,
             scope,
         }));
@@ -770,6 +800,7 @@ fn extract_from_choice_call(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
+    location: &str,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let Some(value_arg) = call.arguments.first() else {
         return Ok(None);
@@ -788,26 +819,37 @@ fn extract_from_choice_call(
         .and_then(|expression| expression_source(expression, source))
         .unwrap_or_else(|| value_name.clone());
     let mut used_value_names = HashMap::from([(value_name.clone(), value_expression)]);
-    let (options, placeholders) =
-        extract_choice_options_from_object(object, source, &mut used_value_names)?;
-    if options.is_empty() {
-        return Ok(None);
-    }
-
     let format = match macro_name {
         "plural" => "plural",
         "select" => "select",
         "selectOrdinal" => "selectordinal",
         _ => return Ok(None),
     };
+    let extracted_options = extract_choice_options_from_object(
+        object,
+        source,
+        &mut used_value_names,
+        format,
+        macro_name,
+        location,
+    )?;
+    if extracted_options.options.is_empty() {
+        return Ok(None);
+    }
 
-    let message = build_icu_message(format, &value_name, &options, None);
+    let message = build_icu_message(
+        format,
+        &value_name,
+        &extracted_options.options,
+        extracted_options.offset.as_deref(),
+    );
 
     Ok(Some(ExtractedMessageRecord {
         message,
         comment: None,
         context: None,
-        placeholders: (!placeholders.is_empty()).then_some(placeholders),
+        placeholders: (!extracted_options.placeholders.is_empty())
+            .then_some(extracted_options.placeholders),
         origin,
         scope,
     }))
@@ -1144,9 +1186,13 @@ fn extract_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
     used_value_names: &mut HashMap<String, String>,
-) -> PalamedesResult<(ChoiceOptions, BTreeMap<String, String>)> {
+    format: &str,
+    macro_name: &str,
+    location: &str,
+) -> PalamedesResult<ExtractedChoiceOptions> {
     let mut options = Vec::new();
     let mut placeholders = BTreeMap::new();
+    let mut offset = None;
 
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
@@ -1155,10 +1201,22 @@ fn extract_choice_options_from_jsx(
         let key = attr.name.get_identifier().name.to_string();
         if matches!(
             key.as_str(),
-            "id" | "message" | "comment" | "context" | "value" | "offset"
+            "id" | "message" | "comment" | "context" | "value"
         ) {
             continue;
         }
+        if is_plural_format(format) && key == "offset" {
+            offset = Some(
+                attr.value
+                    .as_ref()
+                    .and_then(jsx_offset_value)
+                    .ok_or_else(|| invalid_offset(macro_name, location))?,
+            );
+            continue;
+        }
+        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
+            return Err(invalid_choice_option(macro_name, location, &key));
+        };
         let Some(attr_value) = attr.value.as_ref() else {
             continue;
         };
@@ -1181,15 +1239,15 @@ fn extract_choice_options_from_jsx(
             _ => continue,
         };
 
-        if let Some(exact) = key.strip_prefix('_') {
-            options.push((format!("={exact}"), value));
-        } else {
-            options.push((key, value));
-        }
+        options.push((normalized_key, value));
         placeholders.extend(option_placeholders);
     }
 
-    Ok((options, placeholders))
+    Ok(ExtractedChoiceOptions {
+        options,
+        placeholders,
+        offset,
+    })
 }
 
 fn build_icu_message(
@@ -1642,6 +1700,57 @@ function choices() {
                 "count()".to_string()
             )]))
         );
+    }
+
+    #[test]
+    fn extracts_plural_offsets_from_calls_and_jsx() {
+        let messages = extract_messages(
+            r##"
+              import { plural } from "@palamedes/core/macro"
+              import { Plural } from "@palamedes/react/macro"
+
+              const call = plural(count, { offset: 1, one: "# item", other: "# items" })
+              const stringCall = plural(count, { offset: "2", one: "# item", other: "# items" })
+              const jsx = <Plural value={count} offset={1} one="# item" other="# items" />
+            "##,
+            "test.tsx",
+        )
+        .expect("static plural offsets should extract");
+
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "{count, plural, offset:1 one {# item} other {# items}}",
+                "{count, plural, offset:2 one {# item} other {# items}}",
+                "{count, plural, offset:1 one {# item} other {# items}}",
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_plural_offsets_and_categories() {
+        let cases = [
+            r##"
+              import { plural } from "@palamedes/core/macro"
+              const message = plural(count, { offset: dynamicOffset, one: "# item", other: "# items" })
+            "##,
+            r##"
+              import { plural } from "@palamedes/core/macro"
+              const message = plural(count, { invalid: "broken", other: "# items" })
+            "##,
+            r##"
+              import { Plural } from "@palamedes/react/macro"
+              const message = <Plural value={count} offset={-1} one="# item" other="# items" />
+            "##,
+        ];
+
+        for source in cases {
+            let error = extract_messages(source, "test.tsx").expect_err("invalid plural metadata");
+            assert!(error.to_string().contains("Unsupported"));
+        }
     }
 
     #[test]

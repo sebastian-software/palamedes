@@ -42,6 +42,25 @@ describe("parseMessagePattern", () => {
       },
     ])
   })
+
+  it("parses plural offsets separately from choice keys", () => {
+    expect(
+      parseMessagePattern(
+        "{count, plural, offset:1 one {you and one other} other {you and # others}}"
+      )
+    ).toStrictEqual([
+      {
+        type: "choice",
+        variable: "count",
+        kind: "plural",
+        offset: 1,
+        options: {
+          one: [{ type: "text", value: "you and one other" }],
+          other: [{ type: "text", value: "you and # others" }],
+        },
+      },
+    ])
+  })
 })
 
 describe("formatMessagePattern", () => {
@@ -75,5 +94,24 @@ describe("formatMessagePattern", () => {
 
   it("renders a self-closing placeholder as empty text", () => {
     expect(formatMessagePattern("Line one<0/>Line two")).toBe("Line oneLine two")
+  })
+
+  it("applies plural offsets to category selection and pound replacement", () => {
+    const message =
+      "{n, plural, offset:1 =0 {nobody} =3 {exactly #} one {you and one other} other {you and # others}}"
+
+    expect(formatMessagePattern(message, { n: 0 }, "en")).toBe("nobody")
+    expect(formatMessagePattern(message, { n: 2 }, "en")).toBe("you and one other")
+    expect(formatMessagePattern(message, { n: 3 }, "en")).toBe("exactly 2")
+    expect(formatMessagePattern(message, { n: 4 }, "en")).toBe("you and 3 others")
+  })
+
+  it("rejects malformed plural offsets", () => {
+    expect(() =>
+      formatMessagePattern("{n, plural, offset:-1 other {# items}}", { n: 2 }, "en")
+    ).toThrow(/non-negative integer plural offset/)
+    expect(() =>
+      formatMessagePattern("{n, plural, offset:1.5 other {# items}}", { n: 2 }, "en")
+    ).toThrow(/non-negative integer plural offset/)
   })
 })

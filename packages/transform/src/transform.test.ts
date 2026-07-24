@@ -603,6 +603,41 @@ const jsx = <Plural
     expect(result.code.split("{ count, planLabel, max }")).toHaveLength(3)
   })
 
+  it("transforms static plural offsets and rejects invalid choice metadata", () => {
+    const code = `
+import { plural } from "@palamedes/core/macro";
+import { Plural } from "@palamedes/react/macro"; function messages() {
+const call = plural(count, { offset: 1, one: "# item", other: "# items" });
+const jsx = <Plural value={count} offset={1} one="# item" other="# items" />;
+}
+`
+
+    const result = transformPalamedesMacros(code, "test.tsx")
+    expect(
+      result.code.match(/message: "\{count, plural, offset:1 one \{# item\} other \{# items\}\}"/g)
+    ).toHaveLength(2)
+    expect(() =>
+      transformPalamedesMacros(
+        `
+import { plural } from "@palamedes/core/macro"; function messages() {
+plural(count, { offset: dynamicOffset, one: "# item", other: "# items" });
+}
+`,
+        "test.ts"
+      )
+    ).toThrow(/`offset` must be a static non-negative integer/)
+    expect(() =>
+      transformPalamedesMacros(
+        `
+import { plural } from "@palamedes/core/macro"; function messages() {
+plural(count, { invalid: "broken", other: "# items" });
+}
+`,
+        "test.ts"
+      )
+    ).toThrow(/`invalid` is not a valid plural category/)
+  })
+
   it("accepts defaulted JSX choice values", () => {
     const code = `
 import { Plural } from "@palamedes/react/macro"; function message() {
