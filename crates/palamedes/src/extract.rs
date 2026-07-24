@@ -1132,6 +1132,7 @@ fn extract_jsx_children_as_message_with_state(
                 }
             }
             JSXChild::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::EmptyExpression(_) => {}
                 JSXExpression::StringLiteral(literal) => {
                     parts.push(JsxMessagePart::Text(literal.value.to_string()));
                 }
@@ -1700,6 +1701,22 @@ function choices() {
                 "count()".to_string()
             )]))
         );
+    }
+
+    #[test]
+    fn ignores_jsx_comments_inside_trans() {
+        let messages = extract_messages(
+            r#"
+              import { Trans } from "@palamedes/react/macro"
+              const message = <Trans>Hello {/* translator note */} world</Trans>
+            "#,
+            "test.tsx",
+        )
+        .expect("JSX comments should be ignored");
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message, "Hello world");
+        assert_eq!(messages[0].placeholders, None);
     }
 
     #[test]

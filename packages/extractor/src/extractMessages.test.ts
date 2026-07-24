@@ -65,6 +65,18 @@ describe("extractMessages", () => {
       expect(messages[0].message).toBe("Hello World")
     })
 
+    it("ignores JSX comments inside Trans", () => {
+      const code = `
+        import { Trans } from "@palamedes/react/macro"
+        const x = <Trans>Hello {/* translator note */} world</Trans>
+      `
+      const messages = extract(code)
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toMatchObject({
+        message: "Hello world",
+      })
+    })
+
     it("extracts Trans with interpolation", () => {
       const code = `
         import { Trans } from "@palamedes/react/macro"

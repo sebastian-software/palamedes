@@ -300,6 +300,7 @@ fn extract_jsx_children_parts_with_state(
                 }
             }
             JSXChild::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::EmptyExpression(_) => {}
                 JSXExpression::StringLiteral(literal) => {
                     parts.push(JsxMessagePart::Text(literal.value.to_string()));
                 }
