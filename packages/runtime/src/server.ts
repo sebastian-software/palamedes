@@ -1,17 +1,13 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 
-import { type I18nInstance, setServerI18nGetter } from "./index"
+import { type I18nInstance, type ServerI18nScope, setServerI18nGetter } from "./index"
+
+export type { ServerI18nScope } from "./index"
 
 const SERVER_SCOPE_STATE_KEY = Symbol.for("palamedes.runtime.serverI18nScopeState")
 
 type ServerScopeState = {
   active: AsyncLocalStorage<I18nInstance>
-}
-
-export type ServerI18nScope<T extends I18nInstance = I18nInstance> = {
-  run<Result>(i18n: T, callback: () => Result): Result
-  activate(i18n: T): T
-  get(): T | undefined
 }
 
 function getServerScopeState(): ServerScopeState {
