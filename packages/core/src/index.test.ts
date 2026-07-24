@@ -11,6 +11,18 @@ describe("createI18n", () => {
     expectTypeOf(i18n.locale).toEqualTypeOf<string>()
   })
 
+  it("reports missing messages with the default locale before catalogs load", () => {
+    const onMissing = vi.fn()
+    const i18n = createI18n({ onMissing })
+
+    expect(i18n._("missing-key", {}, { message: "Fallback" })).toBe("Fallback")
+    expect(onMissing).toHaveBeenCalledWith({
+      id: "missing-key",
+      locale: DEFAULT_LOCALE,
+      metadata: { message: "Fallback" },
+    })
+  })
+
   it("uses the initial locale for catalogs, source fallback, and missing-message telemetry", () => {
     const onMissing = vi.fn()
     const i18n = createI18n({ locale: "de", onMissing })
