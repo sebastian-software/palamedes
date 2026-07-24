@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use oxc_ast::ast::{
-    Argument, CallExpression, Expression, JSXAttributeValue, JSXChild, JSXExpression,
-    JSXOpeningElement, ObjectExpression, ObjectPropertyKind, TemplateLiteral,
+    Argument, Expression, JSXAttributeValue, JSXChild, JSXExpression, JSXOpeningElement,
+    ObjectExpression, ObjectPropertyKind, TemplateLiteral,
 };
 use oxc_span::GetSpan;
 
@@ -11,6 +11,7 @@ use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
 };
+use crate::placeholder_name::{expression_name, jsx_expression_name};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ValueBinding {
@@ -133,48 +134,6 @@ pub(super) fn extract_jsx_value_binding(
     }
 
     Ok(None)
-}
-
-pub(super) fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
-    match expr {
-        JSXExpression::Identifier(identifier) => Some(identifier.name.to_string()),
-        JSXExpression::StaticMemberExpression(member) => Some(member.property.name.to_string()),
-        JSXExpression::ComputedMemberExpression(member) => member
-            .static_property_name()
-            .map(|name| name.to_string())
-            .or_else(|| expression_name(&member.expression)),
-        JSXExpression::CallExpression(call) => call_expression_name(call),
-        JSXExpression::LogicalExpression(logical) if logical.operator.is_coalesce() => {
-            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
-        }
-        JSXExpression::LogicalExpression(logical) if logical.operator.is_or() => {
-            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
-        }
-        JSXExpression::ParenthesizedExpression(expr) => expression_name(&expr.expression),
-        _ => None,
-    }
-}
-
-fn getter_name(name: &str) -> Option<String> {
-    if !name.starts_with("get") || name.len() <= 3 {
-        return None;
-    }
-    let suffix = &name[3..];
-    let first = suffix.chars().next()?;
-    first.is_ascii_uppercase().then(|| {
-        let mut result = first.to_ascii_lowercase().to_string();
-        result.push_str(&suffix[first.len_utf8()..]);
-        result
-    })
-}
-
-// Derive a placeholder name from a call expression. Prefer the unwrapped
-// getter name (`getCount()` -> `count`), but fall back to the bare callee for
-// argument-less accessor calls so reactive signal reads (`count()`, Solid's
-// `props.quantity()`) keep their own name instead of collapsing to "value".
-fn call_expression_name(call: &CallExpression<'_>) -> Option<String> {
-    let callee = call.callee_name()?;
-    getter_name(callee).or_else(|| call.arguments.is_empty().then(|| callee.to_string()))
 }
 
 pub(super) fn extract_choice_options_from_jsx(
@@ -399,27 +358,6 @@ pub(super) fn append_unique_bindings(
 ) {
     for binding in incoming {
         push_unique_binding(bindings, binding);
-    }
-}
-
-pub(super) fn expression_name(expr: &Expression<'_>) -> Option<String> {
-    let expr = expr.without_parentheses();
-
-    match expr {
-        Expression::Identifier(identifier) => Some(identifier.name.to_string()),
-        Expression::StaticMemberExpression(member) => Some(member.property.name.to_string()),
-        Expression::ComputedMemberExpression(member) => member
-            .static_property_name()
-            .map(|name| name.to_string())
-            .or_else(|| expression_name(&member.expression)),
-        Expression::CallExpression(call) => call_expression_name(call),
-        Expression::LogicalExpression(logical) if logical.operator.is_coalesce() => {
-            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
-        }
-        Expression::LogicalExpression(logical) if logical.operator.is_or() => {
-            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
-        }
-        _ => None,
     }
 }
 
