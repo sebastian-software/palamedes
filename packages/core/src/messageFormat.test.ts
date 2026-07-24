@@ -51,6 +51,15 @@ describe("formatMessagePattern", () => {
     expect(formatMessagePattern("This '{isn''t}' obvious")).toBe("This {isn't} obvious")
   })
 
+  it("auto-closes an unterminated quoted sequence at the end of the pattern", () => {
+    expect(
+      formatMessagePattern("Send '{name} to {target}", {
+        name: "Alice",
+        target: "Bob",
+      })
+    ).toBe("Send {name} to {target}")
+  })
+
   it("keeps quoted arguments and plural pound signs literal", () => {
     expect(formatMessagePattern("Literal '{name}' here", { name: "value" })).toBe(
       "Literal {name} here"
