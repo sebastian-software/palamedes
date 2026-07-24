@@ -3,7 +3,7 @@ import { cloneElement, Fragment, isValidElement } from "react"
 import type { ReactElement, ReactNode } from "react"
 
 import { getI18n } from "@palamedes/runtime"
-import { formatMessagePattern, parseMessagePattern } from "@palamedes/core"
+import { formatMessagePattern } from "@palamedes/core"
 import type { MessageChoiceNode, MessageNode, PalamedesI18n } from "@palamedes/core"
 
 export {
@@ -54,14 +54,12 @@ export function Trans({
 }: TransProps): ReactNode {
   const i18n = getI18n<PalamedesI18n>()
   const resolvedId = id ?? message ?? ""
-  const pattern = i18n.getMessage(resolvedId, {
+  const nodes = i18n.getMessageNodes(resolvedId, {
     message,
     context,
     comment,
   })
-  return (
-    <>{renderNodes(parseMessagePattern(pattern), values ?? {}, components ?? {}, i18n.locale)}</>
-  )
+  return <>{renderNodes(nodes, values ?? {}, components ?? {}, i18n.locale)}</>
 }
 
 export function Plural({ value, ...choices }: PluralProps): ReactNode {
