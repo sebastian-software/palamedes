@@ -32,7 +32,7 @@ describe("createRemixI18nRequestScope", () => {
         expect(remixI18n.get()).toBe(i18n)
         expect(getI18n()).toBe(i18n)
         return new Response(String(getI18n()._("checkout.title")), {
-          headers: { "x-locale": i18n.locale ?? "" },
+          headers: { "x-locale": i18n.locale },
         })
       }
     )

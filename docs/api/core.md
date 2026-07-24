@@ -5,7 +5,8 @@ package names.
 
 ## Exports
 
-- `createI18n()`
+- `createI18n(options?)`
+- `DEFAULT_LOCALE`
 - `formatMessagePattern(pattern, values, locale?)`
 - `parseMessagePattern(pattern)`
 - `parseAcceptLanguage(header)` from `@palamedes/core/locale`
@@ -23,11 +24,13 @@ package names.
 - `MessageTagNode`
 - `MessageVariableNode`
 
-## `createI18n()`
+## `createI18n(options?)`
 
-Creates an in-memory i18n instance. Optional telemetry hooks receive missing
-message and runtime formatting failures without changing the source-message
-fallback behavior.
+Creates an in-memory i18n instance. It starts with `DEFAULT_LOCALE` (`"en"`).
+The optional `locale` setting overrides that initial locale for catalog lookup,
+message formatting, and telemetry before any later `activate()` call. Optional
+telemetry hooks receive missing-message and runtime formatting failures without
+changing the source-message fallback behavior.
 
 ```ts
 import { createI18n } from "@palamedes/core"
@@ -52,7 +55,7 @@ const label = i18n._("Hello {name}", { name: "Ada" })
 
 ```ts
 interface PalamedesI18n {
-  locale?: string
+  readonly locale: string
   _(id: string, values?, metadata?): string
   load(locale: string, messages: CatalogMessages): void
   activate(locale: string): void
@@ -60,14 +63,21 @@ interface PalamedesI18n {
 }
 ```
 
-`load()` merges messages into the locale catalog. `activate()` selects the
-locale used by `_()` and `getMessage()`.
+`load()` merges messages into the locale catalog. The locale passed to
+`createI18n({ locale })`, or `DEFAULT_LOCALE` when omitted, is active
+immediately. `activate()` switches the locale used by `_()` and `getMessage()`.
 
 Fallback order for `getMessage(id, metadata)`:
 
 1. active catalog entry for `id`
 2. `metadata.message`
 3. `id`
+
+Because the initial locale is active immediately, `onMissing` also runs before
+the first `load()` or `activate()` call when that locale has no matching catalog
+entry. Applications that intentionally use source messages for the default
+locale without loading its catalog should account for those default-locale
+events in their telemetry policy.
 
 ## `MessageMetadata`
 
@@ -117,8 +127,8 @@ fields, do not satisfy this syntactic rule; use a method or getter instead.
 
 ## Runtime Formatting
 
-`formatMessagePattern()` and `createI18n()._()` support the formatter subset
-implemented by the Palamedes runtime:
+`formatMessagePattern()` and the `_()` method returned by `createI18n()` support
+the formatter subset implemented by the Palamedes runtime:
 
 - `{value, number}`
 - `{value, number, percent}` and `{value, number, integer}`

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Compatibility Notes
+
+- `createI18n()` now starts with `DEFAULT_LOCALE` (`"en"`), so `onMissing` can
+  report default-locale misses before the first `load()` or `activate()` call.
+- Custom `I18nInstance` implementations must expose an initialized
+  `locale: string`; implementations that omitted the property or declared it as
+  optional need to update.
+
 ## [1.5.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.5.0...palamedes-v1.5.1) (2026-07-24)
 
 

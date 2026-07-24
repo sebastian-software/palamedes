@@ -1,8 +1,51 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, expectTypeOf, it, vi } from "vitest"
 
-import { createI18n } from "./index"
+import { createI18n, DEFAULT_LOCALE } from "./index"
 
 describe("createI18n", () => {
+  it("starts with the default locale as a non-optional string", () => {
+    const i18n = createI18n()
+
+    expect(DEFAULT_LOCALE).toBe("en")
+    expect(i18n.locale).toBe(DEFAULT_LOCALE)
+    expectTypeOf(i18n.locale).toEqualTypeOf<string>()
+  })
+
+  it("reports missing messages with the default locale before catalogs load", () => {
+    const onMissing = vi.fn()
+    const i18n = createI18n({ onMissing })
+
+    expect(i18n._("missing-key", {}, { message: "Fallback" })).toBe("Fallback")
+    expect(onMissing).toHaveBeenCalledWith({
+      id: "missing-key",
+      locale: DEFAULT_LOCALE,
+      metadata: { message: "Fallback" },
+    })
+  })
+
+  it("uses the initial locale for catalogs, source fallback, and missing-message telemetry", () => {
+    const onMissing = vi.fn()
+    const i18n = createI18n({ locale: "de", onMissing })
+    i18n.load("de", { greeting: "Hallo" })
+
+    expect(i18n._("greeting")).toBe("Hallo")
+
+    expect(
+      i18n._(
+        "inbox.summary",
+        { count: 2 },
+        { message: "{count, plural, one {# Nachricht} other {# Nachrichten}}" }
+      )
+    ).toBe("2 Nachrichten")
+    expect(onMissing).toHaveBeenCalledWith({
+      id: "inbox.summary",
+      locale: "de",
+      metadata: {
+        message: "{count, plural, one {# Nachricht} other {# Nachrichten}}",
+      },
+    })
+  })
+
   it("loads messages, activates a locale, and resolves simple lookups", () => {
     const i18n = createI18n()
 
@@ -107,7 +150,7 @@ describe("createI18n", () => {
   })
 
   it("reports malformed catalog patterns and falls back to the formatted source message", () => {
-    const errors: Array<{ id?: string; locale?: string; pattern: string; fallback: string }> = []
+    const errors: Array<{ id?: string; locale: string; pattern: string; fallback: string }> = []
     const i18n = createI18n({
       onError(info) {
         errors.push({

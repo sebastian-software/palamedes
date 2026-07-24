@@ -95,7 +95,7 @@ function renderNodes(
   nodes: MessageNode[],
   values: Record<string, unknown>,
   components: Record<string, ReactElement>,
-  locale?: string,
+  locale: string,
   pluralValue?: number
 ): ReactNode[] {
   return nodes.flatMap((node, index) =>
@@ -108,7 +108,7 @@ function renderNode(
   values: Record<string, unknown>,
   components: Record<string, ReactElement>,
   key: number,
-  locale?: string,
+  locale: string,
   pluralValue?: number
 ): ReactNode[] {
   switch (node.type) {
@@ -151,7 +151,7 @@ function buildFormattedMessage(node: Extract<MessageNode, { type: "formatted" }>
   return `{${node.variable}, ${node.format}${node.style ? `, ${node.style}` : ""}}`
 }
 
-function selectChoice(node: MessageChoiceNode, value: unknown, locale?: string): MessageNode[] {
+function selectChoice(node: MessageChoiceNode, value: unknown, locale: string): MessageNode[] {
   if (node.kind === "select") {
     const exact = value == null ? undefined : node.options[String(value)]
     return exact ?? node.options.other ?? []
@@ -191,7 +191,7 @@ function normalizeNumericValue(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function formatNumber(value: number, locale?: string): string {
+function formatNumber(value: number, locale: string): string {
   return new Intl.NumberFormat(locale).format(value)
 }
 

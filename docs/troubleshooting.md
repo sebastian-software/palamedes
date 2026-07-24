@@ -55,7 +55,8 @@ const i18n = createI18n()
 setClientI18n(i18n)
 ```
 
-Load and activate the active locale before rendering translated components.
+Load the active locale's catalog and call `activate()` if it differs from the
+initial locale before rendering translated components.
 
 ## `getI18n()` Has No Server Instance
 
