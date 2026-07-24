@@ -1,4 +1,4 @@
-import { Tabs } from "@base-ui-components/react/tabs"
+import { Tabs } from "@base-ui/react/tabs"
 
 import { LocaleBookingCards } from "./LocaleBookingCards"
 

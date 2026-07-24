@@ -1,4 +1,4 @@
-import { Tabs } from "@base-ui-components/react/tabs"
+import { Tabs } from "@base-ui/react/tabs"
 import { StepFlow } from "~/components/get-started/StepFlow"
 import { QUICKSTART_STEPS, STACKS } from "~/data/steps"
 
