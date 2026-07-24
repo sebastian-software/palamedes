@@ -38,6 +38,10 @@ const i18n = createI18n()
 setClientI18n(i18n)
 ```
 
+The public `I18nInstance` contract requires an initialized `locale: string`.
+Custom adapters registered with the client or server runtime must expose that
+property before registration.
+
 For server-side rendering or server components, register a getter for the active request-local i18n instance:
 
 ```ts

@@ -40,6 +40,11 @@ On the client, `getI18n()` reads the instance registered with
 `getI18n()` throws a descriptive error when no active client instance or server
 getter result is available. Initialize the runtime before translated code runs.
 
+`I18nInstance.locale` is required. Custom adapters registered with the client or
+server runtime must expose an initialized `locale: string`; adapters that
+previously omitted the property or declared it as optional need to initialize it
+before registration.
+
 ## `subscribeClientI18n(listener)`
 
 Registers a listener invoked on every `setClientI18n()` call, including

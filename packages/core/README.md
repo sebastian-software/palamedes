@@ -59,7 +59,10 @@ Use `pmds audit --fail-on error` in CI for checked-in catalogs, then wire these
 hooks to observe runtime-loaded catalogs or fast-moving translation changes.
 `getMessage(id, metadata)` uses the same missing-catalog lookup path as `_()`,
 so `onMissing` also fires when callers ask for a raw pattern by id and the
-active catalog does not contain that id.
+active catalog does not contain that id. Since the initial locale is active
+immediately, this includes lookups before the first `load()` or `activate()`
+call. Apps that use source messages for the default locale without loading its
+catalog should account for those events in their telemetry policy.
 
 For authoring imports, use:
 

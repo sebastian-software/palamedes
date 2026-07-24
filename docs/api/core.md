@@ -73,6 +73,12 @@ Fallback order for `getMessage(id, metadata)`:
 2. `metadata.message`
 3. `id`
 
+Because the initial locale is active immediately, `onMissing` also runs before
+the first `load()` or `activate()` call when that locale has no matching catalog
+entry. Applications that intentionally use source messages for the default
+locale without loading its catalog should account for those default-locale
+events in their telemetry policy.
+
 ## `MessageMetadata`
 
 ```ts
