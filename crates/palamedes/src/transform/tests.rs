@@ -800,7 +800,7 @@ fn transforms_nested_jsx_message_macros_inside_render_prop_attributes() {
 fn transforms_trans_macros_inside_component_attributes() {
     for module in ["react", "solid"] {
         let source = format!(
-            "import {{ Trans }} from \"@palamedes/{module}/macro\";\nconst el = <Trans>Click <Button title={{<Trans>Tooltip</Trans>}} /> now</Trans>;\n"
+            "import {{ Trans }} from \"@palamedes/{module}/macro\";\nconst el = <Trans>Click <Button title={{<Trans>Tooltip</Trans>}} description={{<Trans>Details</Trans>}} /> now</Trans>;\n"
         );
         let result = transform_macros(&source, "test.tsx", None)
             .expect("Trans macros in component attributes should transform");
@@ -808,10 +808,24 @@ fn transforms_trans_macros_inside_component_attributes() {
         assert!(result.code.contains("message={\"Click <0/> now\"}"));
         assert!(result.code.contains("title={<Trans id=\""));
         assert!(result.code.contains("message={\"Tooltip\"}"));
-        assert_eq!(result.code.matches("<Trans id=").count(), 2);
-        assert_eq!(result.compiled_ids.len(), 2);
+        assert!(result.code.contains("description={<Trans id=\""));
+        assert!(result.code.contains("message={\"Details\"}"));
+        assert_eq!(result.code.matches("<Trans id=").count(), 3);
+        assert_eq!(result.compiled_ids.len(), 3);
         assert!(!result.code.contains(&format!("@palamedes/{module}/macro")));
     }
+}
+
+#[test]
+fn rejects_component_attribute_macros_inside_trans_expression_children() {
+    let error = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>{cond && <Button title={<Trans>Tooltip</Trans>} />}</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect_err("complex JSX child expressions should remain unsupported");
+
+    assert!(error.to_string().contains("stable placeholder name"));
 }
 
 #[test]

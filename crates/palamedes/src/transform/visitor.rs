@@ -96,6 +96,9 @@ impl<'a> TransformVisitor<'a> {
                 JSXChild::Fragment(fragment) => {
                     self.visit_preserved_attribute_macros(&fragment.children);
                 }
+                JSXChild::ExpressionContainer(container) => {
+                    walk::walk_jsx_expression_container(self, container);
+                }
                 _ => {}
             }
         }

@@ -582,18 +582,29 @@ const el = <Trans><List renderItem={() => <Plural value={count} one="one" other=
     (framework) => {
       const code = `
 import { Trans } from "@palamedes/${framework}/macro";
-const el = <Trans>Click <Button title={<Trans>Tooltip</Trans>} /> now</Trans>;
+const el = <Trans>Click <Button title={<Trans>Tooltip</Trans>} description={<Trans>Details</Trans>} /> now</Trans>;
 `
       const result = transformPalamedesMacros(code, "test.tsx")
 
       expect(result.code).toContain('message={"Click <0/> now"}')
       expect(result.code).toContain('title={<Trans id="')
       expect(result.code).toContain('message={"Tooltip"}')
-      expect(result.code.match(/<Trans id=/g)).toHaveLength(2)
-      expect(result.compiledIds).toHaveLength(2)
+      expect(result.code).toContain('description={<Trans id="')
+      expect(result.code).toContain('message={"Details"}')
+      expect(result.code.match(/<Trans id=/g)).toHaveLength(3)
+      expect(result.compiledIds).toHaveLength(3)
       expect(result.code).not.toContain(`@palamedes/${framework}/macro`)
     }
   )
+
+  it("rejects component attribute macros inside Trans expression children", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans>{cond && <Button title={<Trans>Tooltip</Trans>} />}</Trans>;
+`
+
+    expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(/stable placeholder name/)
+  })
 
   it("accepts computed, defaulted, and literal choice values", () => {
     const code = `

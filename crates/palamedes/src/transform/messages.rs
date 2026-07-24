@@ -279,6 +279,12 @@ fn source_range_with_replacements(
         .filter(|replacement| replacement.start >= start && replacement.end <= end)
         .collect::<Vec<_>>();
     contained.sort_by(|left, right| right.start.cmp(&left.start).then(right.end.cmp(&left.end)));
+    debug_assert!(
+        contained
+            .windows(2)
+            .all(|pair| pair[0].start >= pair[1].end),
+        "component source replacements must not overlap"
+    );
 
     for replacement in contained {
         text.replace_range(
