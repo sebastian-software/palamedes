@@ -38,42 +38,40 @@ export default async function Home() {
   const localeLabel = getLocaleLabel(locale)
 
   return runWithServerI18n(i18n, () => (
-    <main className="page-shell">
-      <header className="topbar">
-        <div className="brand">
-          <b>Frontend Stage</b>
-          <span className="brand-meta">Berlin · 2026</span>
-        </div>
-        <ClientLocaleBoundary locale={locale}>
+    <ClientLocaleBoundary locale={locale}>
+      <main className="page-shell">
+        <header className="topbar">
+          <div className="brand">
+            <b>Frontend Stage</b>
+            <span className="brand-meta">Berlin · 2026</span>
+          </div>
           <LocaleSwitcher locale={locale} />
-        </ClientLocaleBoundary>
-      </header>
+        </header>
 
-      <section className="hero">
-        <p className="eyebrow">
-          <span className="dot" aria-hidden="true" />
-          {translateEyebrow()}
-        </p>
-        <h1>{translateHeadline()}</h1>
-        <p className="greet">{translateGreeting(EVENT.attendeeName)}</p>
-        <p className="lede">{translateLede()}</p>
-      </section>
+        <section className="hero">
+          <p className="eyebrow">
+            <span className="dot" aria-hidden="true" />
+            {translateEyebrow()}
+          </p>
+          <h1>{translateHeadline()}</h1>
+          <p className="greet">{translateGreeting(EVENT.attendeeName)}</p>
+          <p className="lede">{translateLede()}</p>
+        </section>
 
-      <ClientLocaleBoundary locale={locale}>
         <div className="grid">
           <TicketPanel locale={locale} />
           <ProofPanel locale={locale} />
         </div>
-      </ClientLocaleBoundary>
 
-      <footer className="foot">
-        <span className="foot-badge">Palamedes</span>
-        {translateRenderedWith()}
-        {" · "}
-        {translateServerLocale()} <strong data-testid="server-locale-value">{localeLabel}</strong>
-      </footer>
+        <footer className="foot">
+          <span className="foot-badge">Palamedes</span>
+          {translateRenderedWith()}
+          {" · "}
+          {translateServerLocale()} <strong data-testid="server-locale-value">{localeLabel}</strong>
+        </footer>
 
-      <ClientReady />
-    </main>
+        <ClientReady />
+      </main>
+    </ClientLocaleBoundary>
   ))
 }

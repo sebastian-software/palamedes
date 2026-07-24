@@ -72,6 +72,22 @@ describe("@palamedes/runtime/server", () => {
     isolatedRuntime.resetI18nRuntime()
   })
 
+  it("reuses an active instance when an SSR boundary render is retried", async () => {
+    const scope = createServerI18nScope<I18nInstance>()
+    const outerI18n = createTestI18n("en")
+    const clientComponentI18n = createTestI18n("de")
+    vi.resetModules()
+    const isolatedRuntime = await import("./index")
+
+    scope.run(outerI18n, () => {
+      expect(isolatedRuntime.activateServerI18n(clientComponentI18n)).toBe(clientComponentI18n)
+      expect(isolatedRuntime.activateServerI18n(clientComponentI18n)).toBe(clientComponentI18n)
+      expect(isolatedRuntime.getI18n()).toBe(clientComponentI18n)
+    })
+
+    isolatedRuntime.resetI18nRuntime()
+  })
+
   it("keeps isolated SSR bundle activations request-local under concurrency", async () => {
     const scope = createServerI18nScope<I18nInstance>()
     const deI18n = createTestI18n("de")

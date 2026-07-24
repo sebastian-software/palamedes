@@ -101,7 +101,11 @@ export function activateServerI18n<T extends I18nInstance>(i18n: T): T {
       "No server i18n scope is configured. Create one with createServerI18nScope() from @palamedes/runtime/server before activating SSR client components."
     )
   }
-  serverI18nGetter = () => scopeState.active.getStore()
+  serverI18nGetter ??= () => scopeState.active.getStore()
+  const activeI18n = scopeState.active.getStore()
+  if (activeI18n === i18n) {
+    return i18n
+  }
   scopeState.active.enterWith(i18n)
   return i18n
 }

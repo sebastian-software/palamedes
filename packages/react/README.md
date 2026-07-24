@@ -60,7 +60,7 @@ primitives that repeat across apps:
 
 `useClientLocale` does not run its sync callback during SSR. If the initial HTML
 contains translated client components, initialize `setClientI18n()` before
-hydration; subsequent locale changes are synchronized after commit.
+hydration; all hook-driven locale synchronization happens after commit.
 
 ```tsx
 import { buildLocaleSwitchItems } from "@palamedes/react"

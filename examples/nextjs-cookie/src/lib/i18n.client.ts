@@ -1,5 +1,6 @@
 import type { CatalogMessages } from "@palamedes/core"
 import { activateServerI18n, setClientI18n } from "@palamedes/runtime"
+import { cache } from "react"
 import { createExampleI18n, locales, type Locale } from "./i18n"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
@@ -18,11 +19,15 @@ const CATALOGS: Record<Locale, CatalogMessages> = {
 
 const clientI18n = createExampleI18n()
 
-export function activateServerClientI18n(locale: Locale) {
+const getServerClientI18n = cache((locale: Locale) => {
   const i18n = createExampleI18n()
   i18n.load(locale, CATALOGS[locale])
   i18n.activate(locale)
-  activateServerI18n(i18n)
+  return i18n
+})
+
+export function activateServerClientI18n(locale: Locale) {
+  activateServerI18n(getServerClientI18n(locale))
 }
 
 export function syncClientI18n(locale: Locale) {
