@@ -52,6 +52,27 @@ describe("@palamedes/react", () => {
     expect(html).toBe("2 items")
   })
 
+  it("applies plural offsets in direct and rich messages", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const direct = renderToStaticMarkup(
+      <Plural value={2} offset={1} one="# item" other="# items" />
+    )
+    const rich = renderToStaticMarkup(
+      <Trans
+        id="companions"
+        message="{count, plural, offset:1 one {you and <0>one</0> other} other {you and <0>#</0> others}}"
+        values={{ count: 3 }}
+        components={{ 0: <strong /> }}
+      />
+    )
+
+    expect(direct).toBe("1 item")
+    expect(rich).toBe("you and <strong>2</strong> others")
+  })
+
   it("formats direct choice components without reporting missing catalog entries", () => {
     const onMissing = vi.fn()
     const i18n = createI18n({ onMissing })

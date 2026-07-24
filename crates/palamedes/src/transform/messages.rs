@@ -6,6 +6,10 @@ use oxc_ast::ast::{
 };
 use oxc_span::GetSpan;
 
+use crate::choice::{
+    is_plural_format, normalize_choice_option_key, normalize_numeric_offset,
+    normalize_string_offset,
+};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
@@ -22,6 +26,7 @@ pub(super) struct ValueBinding {
 pub(super) struct ExtractedChoiceOptions {
     pub options: Vec<(String, String)>,
     pub values: Vec<ValueBinding>,
+    pub offset: Option<String>,
 }
 
 const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
@@ -37,9 +42,13 @@ pub(super) fn extract_choice_options(
     object: &ObjectExpression<'_>,
     source: &str,
     used_value_names: &mut HashMap<String, String>,
+    format: &str,
+    macro_name: &str,
+    location: &str,
 ) -> PalamedesResult<ExtractedChoiceOptions> {
     let mut options = Vec::new();
     let mut values = Vec::new();
+    let mut offset = None;
 
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -47,6 +56,17 @@ pub(super) fn extract_choice_options(
         };
         let Some(key) = property.key.static_name() else {
             continue;
+        };
+        let key = key.into_owned();
+        if is_plural_format(format) && key == "offset" {
+            offset = Some(
+                expression_offset_value(&property.value)
+                    .ok_or_else(|| invalid_offset(macro_name, location))?,
+            );
+            continue;
+        }
+        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
+            return Err(invalid_choice_option(macro_name, location, &key));
         };
         let (value, option_values) = match property.value.without_parentheses() {
             Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
@@ -59,16 +79,15 @@ pub(super) fn extract_choice_options(
             _ => continue,
         };
 
-        let normalized_key = if let Some(exact) = key.strip_prefix('_') {
-            format!("={exact}")
-        } else {
-            key.into_owned()
-        };
         options.push((normalized_key, value));
         append_unique_bindings(&mut values, option_values);
     }
 
-    Ok(ExtractedChoiceOptions { options, values })
+    Ok(ExtractedChoiceOptions {
+        options,
+        values,
+        offset,
+    })
 }
 
 pub(super) fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
@@ -140,9 +159,13 @@ pub(super) fn extract_choice_options_from_jsx(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
     used_value_names: &mut HashMap<String, String>,
+    format: &str,
+    macro_name: &str,
+    location: &str,
 ) -> PalamedesResult<ExtractedChoiceOptions> {
     let mut options = Vec::new();
     let mut values = Vec::new();
+    let mut offset = None;
 
     for attr in &opening_element.attributes {
         let Some(attr) = attr.as_attribute() else {
@@ -151,10 +174,22 @@ pub(super) fn extract_choice_options_from_jsx(
         let key = attr.name.get_identifier().name.to_string();
         if matches!(
             key.as_str(),
-            "id" | "message" | "comment" | "context" | "value" | "offset"
+            "id" | "message" | "comment" | "context" | "value"
         ) {
             continue;
         }
+        if is_plural_format(format) && key == "offset" {
+            offset = Some(
+                attr.value
+                    .as_ref()
+                    .and_then(jsx_offset_value)
+                    .ok_or_else(|| invalid_offset(macro_name, location))?,
+            );
+            continue;
+        }
+        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
+            return Err(invalid_choice_option(macro_name, location, &key));
+        };
         let Some(attr_value) = attr.value.as_ref() else {
             continue;
         };
@@ -175,15 +210,63 @@ pub(super) fn extract_choice_options_from_jsx(
             _ => continue,
         };
 
-        if let Some(exact) = key.strip_prefix('_') {
-            options.push((format!("={exact}"), value));
-        } else {
-            options.push((key, value));
-        }
+        options.push((normalized_key, value));
         append_unique_bindings(&mut values, option_values);
     }
 
-    Ok(ExtractedChoiceOptions { options, values })
+    Ok(ExtractedChoiceOptions {
+        options,
+        values,
+        offset,
+    })
+}
+
+fn expression_offset_value(expression: &Expression<'_>) -> Option<String> {
+    match expression.without_parentheses() {
+        Expression::StringLiteral(literal) => normalize_string_offset(literal.value.as_str()),
+        Expression::TemplateLiteral(template) => template
+            .single_quasi()
+            .and_then(|value| normalize_string_offset(value.as_str())),
+        Expression::NumericLiteral(literal) => normalize_numeric_offset(literal.value),
+        _ => None,
+    }
+}
+
+fn jsx_offset_value(value: &JSXAttributeValue<'_>) -> Option<String> {
+    match value {
+        JSXAttributeValue::StringLiteral(literal) => {
+            normalize_string_offset(literal.value.as_str())
+        }
+        JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
+            JSXExpression::StringLiteral(literal) => {
+                normalize_string_offset(literal.value.as_str())
+            }
+            JSXExpression::TemplateLiteral(template) => template
+                .single_quasi()
+                .and_then(|value| normalize_string_offset(value.as_str())),
+            JSXExpression::NumericLiteral(literal) => normalize_numeric_offset(literal.value),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn invalid_offset(macro_name: &str, location: &str) -> PalamedesError {
+    PalamedesError::UnsupportedMacroSyntax {
+        macro_name: macro_name.to_string(),
+        location: location.to_string(),
+        detail: "`offset` must be a static non-negative integer".to_string(),
+    }
+}
+
+fn invalid_choice_option(macro_name: &str, location: &str, key: &str) -> PalamedesError {
+    PalamedesError::UnsupportedMacroSyntax {
+        macro_name: macro_name.to_string(),
+        location: location.to_string(),
+        detail: format!(
+            "`{key}` is not a valid plural category; use zero, one, two, few, many, other, or an exact _N key"
+        ),
+    }
 }
 
 pub(super) fn opening_element_to_component(

@@ -24,6 +24,7 @@ export type MessageChoiceNode = {
   type: "choice"
   variable: string
   kind: "plural" | "select" | "selectordinal"
+  offset?: number
   options: Record<string, MessageNode[]>
 }
 
@@ -174,6 +175,7 @@ function parseBraceExpression(state: ParserState, poundIsSyntax: boolean): Messa
   }
 
   expectChar(state, ",")
+  const offset = kind === "plural" || kind === "selectordinal" ? readPluralOffset(state) : undefined
 
   const options: Record<string, MessageNode[]> = {}
   while (state.index < state.input.length) {
@@ -195,8 +197,34 @@ function parseBraceExpression(state: ParserState, poundIsSyntax: boolean): Messa
     type: "choice",
     variable: name,
     kind: kind as MessageChoiceNode["kind"],
+    ...(offset === undefined ? {} : { offset }),
     options,
   }
+}
+
+function readPluralOffset(state: ParserState): number | undefined {
+  skipWhitespace(state)
+  if (!state.input.startsWith("offset:", state.index)) {
+    return undefined
+  }
+
+  state.index += "offset:".length
+  skipWhitespace(state)
+  const start = state.index
+  while (/\d/.test(state.input[state.index] ?? "")) {
+    state.index += 1
+  }
+
+  const offset = Number(state.input.slice(start, state.index))
+  if (
+    state.index === start ||
+    !Number.isSafeInteger(offset) ||
+    !/\s/.test(state.input[state.index] ?? "")
+  ) {
+    throw new Error("Expected a non-negative integer plural offset while parsing message pattern.")
+  }
+
+  return offset
 }
 
 function isFormattedArgumentKind(kind: string): kind is MessageFormattedArgumentNode["format"] {
@@ -419,7 +447,8 @@ function renderNodeToString(
     }
     case "choice": {
       const value = values[node.variable]
-      const nextPluralValue = node.kind === "select" ? pluralValue : normalizeNumericValue(value)
+      const nextPluralValue =
+        node.kind === "select" ? pluralValue : pluralOperand(node, normalizeNumericValue(value))
       return renderNodesToString(selectChoice(node, value, locale), values, locale, nextPluralValue)
     }
   }
@@ -550,6 +579,7 @@ function selectChoice(node: MessageChoiceNode, value: unknown, locale?: string):
     return node.options[exactKey]
   }
 
+  const operand = pluralOperand(node, numericValue)
   const pluralRules = new Intl.PluralRules(undefined, {
     localeMatcher: "best fit",
     type: node.kind === "selectordinal" ? "ordinal" : "cardinal",
@@ -557,8 +587,12 @@ function selectChoice(node: MessageChoiceNode, value: unknown, locale?: string):
   const resolvedRules = locale
     ? new Intl.PluralRules(locale, { type: node.kind === "selectordinal" ? "ordinal" : "cardinal" })
     : pluralRules
-  const category = resolvedRules.select(numericValue)
+  const category = resolvedRules.select(operand)
   return node.options[category] ?? node.options.other ?? []
+}
+
+function pluralOperand(node: MessageChoiceNode, numericValue: number): number {
+  return numericValue - (node.offset ?? 0)
 }
 
 function normalizeNumericValue(value: unknown): number {

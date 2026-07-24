@@ -299,6 +299,7 @@ pub(super) fn transform_choice_call(
     call: &CallExpression<'_>,
     source: &str,
     macro_name: &str,
+    location: &str,
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let Some(value_arg) = call.arguments.first() else {
@@ -318,18 +319,30 @@ pub(super) fn transform_choice_call(
     let mut used_value_names = std::collections::HashMap::new();
     let value_binding = choice_expression_binding(value_expr, source, &mut used_value_names);
     let value_name = value_binding.name.clone();
-    let extracted_options = extract_choice_options(choice_object, source, &mut used_value_names)?;
-
-    if extracted_options.options.is_empty() {
-        return Ok(None);
-    }
-
     let format = if macro_name == "selectOrdinal" {
         "selectordinal"
     } else {
         macro_name
     };
-    let message = build_icu_message(format, &value_name, &extracted_options.options, None);
+    let extracted_options = extract_choice_options(
+        choice_object,
+        source,
+        &mut used_value_names,
+        format,
+        macro_name,
+        location,
+    )?;
+
+    if extracted_options.options.is_empty() {
+        return Ok(None);
+    }
+
+    let message = build_icu_message(
+        format,
+        &value_name,
+        &extracted_options.options,
+        extracted_options.offset.as_deref(),
+    );
     let lookup_key = compiled_key(&message, None);
     let mut values = vec![value_binding];
     append_unique_bindings(&mut values, extracted_options.values);
@@ -393,6 +406,7 @@ pub(super) fn transform_choice_jsx_element(
     element: &JSXElement<'_>,
     source: &str,
     macro_name: &str,
+    location: &str,
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let attrs = jsx_attributes(&element.opening_element);
@@ -408,24 +422,30 @@ pub(super) fn transform_choice_jsx_element(
         return Ok(None);
     };
     let value_name = value_binding.name.clone();
-    let extracted_options =
-        extract_choice_options_from_jsx(&element.opening_element, source, &mut used_value_names)?;
-
-    if extracted_options.options.is_empty() {
-        return Ok(None);
-    }
-
     let format = match macro_name {
         "Plural" => "plural",
         "Select" => "select",
         "SelectOrdinal" => "selectordinal",
         _ => return Ok(None),
     };
+    let extracted_options = extract_choice_options_from_jsx(
+        &element.opening_element,
+        source,
+        &mut used_value_names,
+        format,
+        macro_name,
+        location,
+    )?;
+
+    if extracted_options.options.is_empty() {
+        return Ok(None);
+    }
+
     let message = build_icu_message(
         format,
         &value_name,
         &extracted_options.options,
-        attrs.get("offset").map(String::as_str),
+        extracted_options.offset.as_deref(),
     );
     let lookup_key = compiled_key(&message, context.as_deref());
     let mut values = vec![value_binding];
