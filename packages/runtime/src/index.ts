@@ -161,5 +161,6 @@ export function resetI18nRuntime(): void {
   const state = globalRuntimeState()
   delete state[CLIENT_I18N_KEY]
   delete state[CLIENT_I18N_SNAPSHOT_KEY]
+  delete state[CLIENT_I18N_LISTENERS_KEY]
   delete state[SERVER_I18N_GETTER_KEY]
 }

@@ -83,6 +83,16 @@ describe("@palamedes/runtime", () => {
     }
   })
 
+  it("clears client listeners when the runtime is reset", () => {
+    const listener = vi.fn()
+    subscribeClientI18n(listener)
+
+    resetI18nRuntime()
+    setClientI18n(createTestI18n())
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
   it("resolves the request-local server instance", () => {
     const i18n = createTestI18n()
     setServerI18nGetter(() => i18n)
