@@ -369,6 +369,20 @@ fn transforms_trans_jsx_macro() {
 }
 
 #[test]
+fn ignores_jsx_comments_inside_trans() {
+    let result = transform_macros(
+        "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello {/* translator note */} world</Trans>;\n",
+        "test.tsx",
+        None,
+    )
+    .expect("JSX comments should be ignored");
+
+    assert!(result.code.contains("message={\"Hello world\"}"));
+    assert!(!result.code.contains("translator note"));
+    assert!(!result.code.contains("values="));
+}
+
+#[test]
 fn transforms_solid_trans_jsx_macro() {
     let result = transform_macros(
         "import { Trans } from \"@palamedes/solid/macro\";\nconst el = <Trans>Hello <strong>{name}</strong></Trans>;\n",

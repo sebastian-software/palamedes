@@ -215,6 +215,18 @@ const el = <Trans>Hello {name}</Trans>;
     expect(result.code).toContain("values={{ name }}")
   })
 
+  it("ignores JSX comments inside <Trans>", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans>Hello {/* translator note */} world</Trans>;
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+
+    expect(result.code).toContain('message={"Hello world"}')
+    expect(result.code).not.toContain("translator note")
+    expect(result.code).not.toContain("values=")
+  })
+
   it("applies native UTF-8 byte edit offsets to JavaScript strings", () => {
     const code = `import { Trans } from "@palamedes/react/macro";
 const x = "äöü";
