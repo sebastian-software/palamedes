@@ -19,4 +19,5 @@ oxc_span = "0.141.0"
 regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }
 string_wizard = "1.1.3"
+tempfile = "3.27.0"
 thiserror = "2.0.18"

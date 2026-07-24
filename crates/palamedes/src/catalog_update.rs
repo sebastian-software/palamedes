@@ -1,14 +1,16 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::{
-    parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
+    parse_catalog as ferrocat_parse_catalog, parse_po as ferrocat_parse_po,
+    stringify_po as ferrocat_stringify_po, update_catalog as ferrocat_update_catalog, ApiError,
     CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, EffectiveTranslationRef,
     ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, RenderOptions,
-    SourceExtractedMessage, UpdateCatalogFileOptions, UpdateCatalogOptions,
+    SerializeOptions, SourceExtractedMessage, UpdateCatalogOptions,
 };
 use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
 use serde::{Deserialize, Serialize};
@@ -242,6 +244,12 @@ fn update_catalog_file_source_first(
     request: CatalogUpdateRequest,
 ) -> PalamedesResult<CatalogUpdateResponse> {
     let target_path = PathBuf::from(&request.target_path);
+    if target_path.as_os_str().is_empty() {
+        return Err(PalamedesError::from(ApiError::InvalidArguments(
+            "target_path must not be empty".to_owned(),
+        )));
+    }
+    let existing = read_existing_catalog(&target_path, request.format)?;
     let custom_header_attributes =
         BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
     let input = CatalogUpdateInput::SourceFirst(
@@ -267,23 +275,139 @@ fn update_catalog_file_source_first(
     if request.format == super::catalog_artifact::PalamedesCatalogFormat::Po {
         render = render.with_custom_header_attributes(&custom_header_attributes);
     }
-    let update_options = UpdateCatalogOptions::new(&request.source_locale, input)
+    let mut update_options = UpdateCatalogOptions::new(&request.source_locale, input)
         .with_locale(&request.locale)
         .with_mode(request.format.ferrocat_mode())
         .with_obsolete_strategy(obsolete_strategy)
         .with_overwrite_source_translations(true)
         .with_render(render)
         .with_now(&now);
-    let options = UpdateCatalogFileOptions::new(
-        &target_path,
-        &request.source_locale,
-        Vec::<SourceExtractedMessage>::new(),
-    )
-    .with_options(update_options);
+    if let Some(existing) = &existing {
+        update_options = update_options.with_existing(&existing.update_input);
+    }
 
-    let result = ferrocat_update_catalog_file(options).map_err(PalamedesError::from)?;
+    let mut result = ferrocat_update_catalog(update_options).map_err(PalamedesError::from)?;
+    if let Some(existing) = &existing {
+        if let Some(metadata) = &existing.po_metadata {
+            result.content = restore_po_metadata(&result.content, metadata)?;
+        }
+        result.updated = result.content != existing.original;
+    }
+
+    if result.created || result.updated {
+        atomic_write_catalog(&target_path, &result.content)?;
+    }
 
     Ok(public_update_result(result))
+}
+
+#[derive(Debug)]
+struct ExistingCatalog {
+    original: String,
+    update_input: String,
+    po_metadata: Option<BTreeMap<PoMessageKey, PreservedPoMetadata>>,
+}
+
+type PoMessageKey = (Option<String>, String);
+
+#[derive(Clone, Debug)]
+struct PreservedPoMetadata {
+    comments: Vec<String>,
+    flags: Vec<String>,
+}
+
+fn read_existing_catalog(
+    target_path: &Path,
+    format: super::catalog_artifact::PalamedesCatalogFormat,
+) -> PalamedesResult<Option<ExistingCatalog>> {
+    let original = match std::fs::read_to_string(target_path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(PalamedesError::from(ApiError::io_with_path(
+                target_path,
+                error,
+            )))
+        }
+    };
+
+    if format != super::catalog_artifact::PalamedesCatalogFormat::Po {
+        return Ok(Some(ExistingCatalog {
+            update_input: original.clone(),
+            original,
+            po_metadata: None,
+        }));
+    }
+
+    let mut po = ferrocat_parse_po(&original)?;
+    let metadata = po
+        .items
+        .iter_mut()
+        .map(|item| {
+            let key = (item.msgctxt.clone(), item.msgid.clone());
+            let metadata = PreservedPoMetadata {
+                comments: item.comments.iter().cloned().collect(),
+                flags: item.flags.iter().cloned().collect(),
+            };
+            item.comments.clear();
+            item.flags.clear();
+            (key, metadata)
+        })
+        .collect();
+    let update_input = ferrocat_stringify_po(&po, &SerializeOptions::default());
+
+    Ok(Some(ExistingCatalog {
+        original,
+        update_input,
+        po_metadata: Some(metadata),
+    }))
+}
+
+fn restore_po_metadata(
+    updated: &str,
+    metadata: &BTreeMap<PoMessageKey, PreservedPoMetadata>,
+) -> PalamedesResult<String> {
+    let mut po = ferrocat_parse_po(updated)?;
+    for item in &mut po.items {
+        let key = (item.msgctxt.clone(), item.msgid.clone());
+        if let Some(metadata) = metadata.get(&key) {
+            item.comments = metadata.comments.clone().into();
+            item.flags = metadata.flags.clone().into();
+        }
+    }
+    Ok(ferrocat_stringify_po(&po, &SerializeOptions::default()))
+}
+
+fn atomic_write_catalog(target_path: &Path, content: &str) -> PalamedesResult<()> {
+    let directory = target_path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(directory).map_err(|error| ApiError::io_with_path(directory, error))?;
+    let mut temporary = tempfile::NamedTempFile::new_in(directory)
+        .map_err(|error| ApiError::io_with_path(directory, error))?;
+    temporary
+        .write_all(content.as_bytes())
+        .map_err(|error| ApiError::io_with_path(target_path, error))?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|error| ApiError::io_with_path(target_path, error))?;
+    temporary
+        .persist(target_path)
+        .map_err(|error| ApiError::io_with_path(target_path, error.error))?;
+    sync_catalog_directory(directory)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_catalog_directory(directory: &Path) -> PalamedesResult<()> {
+    std::fs::File::open(directory)
+        .and_then(|file| file.sync_all())
+        .map_err(|error| ApiError::io_with_path(directory, error))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_catalog_directory(_directory: &Path) -> PalamedesResult<()> {
+    Ok(())
 }
 
 fn project_message(message: CatalogUpdateMessage) -> PalamedesResult<SourceExtractedMessage> {
@@ -520,6 +644,99 @@ mod tests {
         let output = std::fs::read_to_string(&path).expect("read");
         assert!(output.contains("msgstr \"Hallo\""));
         assert!(output.contains("#~ msgid \"Old\""));
+    }
+
+    #[test]
+    fn preserves_po_translator_comments_and_flags_while_refreshing_source_metadata() {
+        let path = temp_file("po-metadata");
+        std::fs::write(
+            &path,
+            concat!(
+                "# translator note\n",
+                "#. stale extractor note\n",
+                "#: src/Old.tsx\n",
+                "#, fuzzy, no-wrap\n",
+                "msgctxt \"button\"\n",
+                "msgid \"Hello\"\n",
+                "msgstr \"Hallo (alt)\"\n",
+            ),
+        )
+        .expect("write existing");
+
+        let request = || CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            messages: vec![CatalogUpdateMessage {
+                message: "Hello".to_owned(),
+                context: Some("button".to_owned()),
+                placeholders: BTreeMap::new(),
+                extracted_comments: vec!["fresh extractor note".to_owned()],
+                origins: vec![CatalogUpdateOrigin {
+                    file: "src/New.tsx".to_owned(),
+                    line: 9,
+                    scope: None,
+                }],
+            }],
+        };
+        update_catalog_file(request()).expect("update");
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        let po = parse_po(&output).expect("parse output");
+        let item = &po.items[0];
+        assert_eq!(item.msgstr.first().map(String::as_str), Some("Hallo (alt)"));
+        assert_eq!(item.comments.as_slice(), ["translator note"]);
+        assert_eq!(
+            item.flags,
+            BTreeMap::from([("fuzzy".to_owned(), true), ("no-wrap".to_owned(), true)])
+        );
+        assert_eq!(item.extracted_comments.as_slice(), ["fresh extractor note"]);
+        assert_eq!(item.references.as_slice(), ["src/New.tsx"]);
+
+        let repeated = update_catalog_file(request()).expect("repeat update");
+        assert!(!repeated.updated);
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read repeated output"),
+            output
+        );
+    }
+
+    #[test]
+    fn keeps_po_metadata_separate_when_marking_messages_obsolete() {
+        let path = temp_file("obsolete-po-metadata");
+        std::fs::write(
+            &path,
+            concat!(
+                "# translator note\n",
+                "#. source note\n",
+                "#, fuzzy\n",
+                "msgid \"Old\"\n",
+                "msgstr \"Alt\"\n",
+            ),
+        )
+        .expect("write existing");
+
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            messages: vec![],
+        })
+        .expect("update");
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        let po = parse_po(&output).expect("parse output");
+        let item = &po.items[0];
+        assert!(item.obsolete);
+        assert_eq!(item.comments.as_slice(), ["translator note"]);
+        assert_eq!(item.extracted_comments.as_slice(), ["source note"]);
+        assert_eq!(item.flags, BTreeMap::from([("fuzzy".to_owned(), true)]));
     }
 
     #[test]
