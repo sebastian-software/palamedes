@@ -190,5 +190,6 @@ export type {
   MessageFormattedArgumentNode,
   MessageLiteralNode,
   MessageTagNode,
+  MessageTextNode,
   MessageVariableNode,
 } from "./messageFormat"
