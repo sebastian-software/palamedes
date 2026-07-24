@@ -4,7 +4,7 @@
   "description": "Next.js integration for Palamedes using OXC-based macro transformation",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
+  "types": "./dist/index.d.ts",
   "sideEffects": false,
   "license": "MIT",
   "keywords": [

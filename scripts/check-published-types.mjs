@@ -75,6 +75,20 @@ export const config = nextPlugin.withPalamedes({})
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
   })
+
+  const legacyCommonJsFixture = path.join(fixtureRoot, "legacy-consumer.ts")
+  writeFileSync(
+    legacyCommonJsFixture,
+    `import nextPlugin = require("@palamedes/next-plugin")
+
+export const config = nextPlugin.withPalamedes({})
+`
+  )
+  checkProgram(legacyCommonJsFixture, {
+    ignoreDeprecations: "6.0",
+    module: ts.ModuleKind.CommonJS,
+    moduleResolution: ts.ModuleResolutionKind.Node10,
+  })
 } finally {
   rmSync(fixtureRoot, { force: true, recursive: true })
 }
