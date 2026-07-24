@@ -17,6 +17,8 @@ use crate::jsx_message::{
 };
 use crate::placeholder_name::{expression_name, jsx_expression_name};
 
+use super::Replacement;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ValueBinding {
     pub expression: String,
@@ -224,13 +226,14 @@ pub(super) fn extract_choice_options_from_jsx(
 pub(super) fn opening_element_to_component(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
+    replacements: &[Replacement],
 ) -> String {
     let start = opening_element.span.start as usize;
     let end = opening_element.span.end as usize;
-    let markup = &source[start..end];
+    let markup = source_range_with_replacements(source, start, end, replacements);
 
     if markup.trim_end().ends_with("/>") {
-        return markup.to_string();
+        return markup;
     }
 
     if let Some(prefix) = markup.strip_suffix('>') {
@@ -243,10 +246,13 @@ pub(super) fn opening_element_to_component(
 pub(super) fn opening_element_to_component_wrapper(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
+    replacements: &[Replacement],
 ) -> String {
     let start = opening_element.span.start as usize;
     let end = opening_element.span.end as usize;
-    let markup = source[start..end].trim().to_string();
+    let markup = source_range_with_replacements(source, start, end, replacements)
+        .trim()
+        .to_string();
     let name_span = opening_element.name.span();
     let name = source[name_span.start as usize..name_span.end as usize].to_string();
 
@@ -261,10 +267,34 @@ pub(super) fn opening_element_to_component_wrapper(
     format!("(children) => {opening}{{children}}</{name}>")
 }
 
+fn source_range_with_replacements(
+    source: &str,
+    start: usize,
+    end: usize,
+    replacements: &[Replacement],
+) -> String {
+    let mut text = source[start..end].to_string();
+    let mut contained = replacements
+        .iter()
+        .filter(|replacement| replacement.start >= start && replacement.end <= end)
+        .collect::<Vec<_>>();
+    contained.sort_by(|left, right| right.start.cmp(&left.start).then(right.end.cmp(&left.end)));
+
+    for replacement in contained {
+        text.replace_range(
+            replacement.start - start..replacement.end - start,
+            &replacement.text,
+        );
+    }
+
+    text
+}
+
 pub(super) fn extract_jsx_children_parts(
     children: &[JSXChild<'_>],
     source: &str,
     solid_wrappers: bool,
+    replacements: &[Replacement],
 ) -> PalamedesResult<(String, Vec<ValueBinding>, Vec<ValueBinding>)> {
     let mut used_value_names = HashMap::<String, String>::new();
     let mut next_component_index = 0usize;
@@ -273,6 +303,7 @@ pub(super) fn extract_jsx_children_parts(
         children,
         source,
         solid_wrappers,
+        replacements,
         &mut used_value_names,
         &mut next_component_index,
     )?;
@@ -284,6 +315,7 @@ fn extract_jsx_children_parts_with_state(
     children: &[JSXChild<'_>],
     source: &str,
     solid_wrappers: bool,
+    replacements: &[Replacement],
     used_value_names: &mut HashMap<String, String>,
     next_component_index: &mut usize,
 ) -> PalamedesResult<(JoinedJsxMessage, Vec<ValueBinding>, Vec<ValueBinding>)> {
@@ -316,9 +348,13 @@ fn extract_jsx_children_parts_with_state(
             },
             JSXChild::Element(element) => {
                 let component_expression = if solid_wrappers {
-                    opening_element_to_component_wrapper(&element.opening_element, source)
+                    opening_element_to_component_wrapper(
+                        &element.opening_element,
+                        source,
+                        replacements,
+                    )
                 } else {
-                    opening_element_to_component(&element.opening_element, source)
+                    opening_element_to_component(&element.opening_element, source, replacements)
                 };
                 let component_name = next_component_index.to_string();
                 *next_component_index += 1;
@@ -328,6 +364,7 @@ fn extract_jsx_children_parts_with_state(
                         &element.children,
                         source,
                         solid_wrappers,
+                        replacements,
                         used_value_names,
                         next_component_index,
                     )?;
@@ -354,6 +391,7 @@ fn extract_jsx_children_parts_with_state(
                         &fragment.children,
                         source,
                         solid_wrappers,
+                        replacements,
                         used_value_names,
                         next_component_index,
                     )?;

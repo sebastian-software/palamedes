@@ -14,14 +14,7 @@ use super::runtime::{
     transform_choice_call, transform_choice_jsx_element, transform_descriptor_call,
     transform_tagged_template, transform_trans_element,
 };
-use super::NativeTransformOptions;
-
-#[derive(Debug, Clone)]
-pub(super) struct Replacement {
-    pub start: usize,
-    pub end: usize,
-    pub text: String,
-}
+use super::{NativeTransformOptions, Replacement};
 
 pub(super) struct TransformVisitor<'a> {
     filename: &'a str,
@@ -88,6 +81,25 @@ impl<'a> TransformVisitor<'a> {
                 *start == element.span.start as usize && *end == element.span.end as usize
             })
     }
+
+    fn visit_preserved_attribute_macros(&mut self, children: &[JSXChild<'a>]) {
+        for child in children {
+            if self.error.is_some() {
+                return;
+            }
+
+            match child {
+                JSXChild::Element(element) => {
+                    walk::walk_jsx_opening_element(self, &element.opening_element);
+                    self.visit_preserved_attribute_macros(&element.children);
+                }
+                JSXChild::Fragment(fragment) => {
+                    self.visit_preserved_attribute_macros(&fragment.children);
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 impl<'a> Visit<'a> for TransformVisitor<'a> {
@@ -120,6 +132,15 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             }
         }
 
+        let attribute_replacement_start = self.replacements.len();
+        if macro_info.imported_name == "Trans" {
+            self.visit_preserved_attribute_macros(&it.children);
+            if self.error.is_some() {
+                return;
+            }
+        }
+        let attribute_replacements = self.replacements.split_off(attribute_replacement_start);
+
         let replacement = match macro_info.imported_name.as_str() {
             "Trans" => transform_trans_element(
                 it,
@@ -128,6 +149,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     .source
                     .strip_suffix("/macro")
                     .unwrap_or("@palamedes/react"),
+                &attribute_replacements,
             ),
             "Plural" | "Select" | "SelectOrdinal" => transform_choice_jsx_element(
                 it,

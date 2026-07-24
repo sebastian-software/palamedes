@@ -783,16 +783,35 @@ fn rejects_nested_jsx_message_macros_inside_map_callbacks() {
 }
 
 #[test]
-fn allows_nested_jsx_message_macros_inside_render_prop_attributes() {
+fn transforms_nested_jsx_message_macros_inside_render_prop_attributes() {
     let result = transform_macros(
         "import { Plural, Trans } from \"@palamedes/react/macro\";\nconst el = <Trans><List renderItem={() => <Plural value={count} one=\"one\" other=\"other\" />} /></Trans>;\n",
         "test.tsx",
         None,
     )
-    .expect("nested message macros in render prop attributes should not fail");
+    .expect("nested message macros in render prop attributes should transform");
 
     assert!(result.code.contains("message={\"<0/>\"}"));
-    assert!(result.code.contains("renderItem={() => <Plural"));
+    assert!(result.code.contains("renderItem={() => getI18n()._(\""));
+    assert!(!result.code.contains("<Plural"));
+}
+
+#[test]
+fn transforms_trans_macros_inside_component_attributes() {
+    for module in ["react", "solid"] {
+        let source = format!(
+            "import {{ Trans }} from \"@palamedes/{module}/macro\";\nconst el = <Trans>Click <Button title={{<Trans>Tooltip</Trans>}} /> now</Trans>;\n"
+        );
+        let result = transform_macros(&source, "test.tsx", None)
+            .expect("Trans macros in component attributes should transform");
+
+        assert!(result.code.contains("message={\"Click <0/> now\"}"));
+        assert!(result.code.contains("title={<Trans id=\""));
+        assert!(result.code.contains("message={\"Tooltip\"}"));
+        assert_eq!(result.code.matches("<Trans id=").count(), 2);
+        assert_eq!(result.compiled_ids.len(), 2);
+        assert!(!result.code.contains(&format!("@palamedes/{module}/macro")));
+    }
 }
 
 #[test]

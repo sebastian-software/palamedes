@@ -363,6 +363,7 @@ pub(super) fn transform_trans_element(
     element: &JSXElement<'_>,
     source: &str,
     jsx_runtime_module: &str,
+    replacements: &[super::Replacement],
 ) -> PalamedesResult<Option<(String, String)>> {
     let attrs = jsx_attributes(&element.opening_element);
     if attrs.contains_key("id") {
@@ -372,7 +373,7 @@ pub(super) fn transform_trans_element(
     let solid_wrappers = jsx_runtime_module == "@palamedes/solid";
 
     let (children_message, values, components) =
-        extract_jsx_children_parts(&element.children, source, solid_wrappers)?;
+        extract_jsx_children_parts(&element.children, source, solid_wrappers, replacements)?;
     let message = attrs
         .get("message")
         .cloned()

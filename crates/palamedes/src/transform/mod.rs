@@ -19,7 +19,14 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::translation_scope::{source_location, validate_translation_macro_scopes};
 
 use self::imports::ImportCollector;
-use self::visitor::{Replacement, TransformVisitor};
+use self::visitor::TransformVisitor;
+
+#[derive(Debug, Clone)]
+pub(super) struct Replacement {
+    pub start: usize,
+    pub end: usize,
+    pub text: String,
+}
 
 /// Options controlling how macro transforms emit runtime code.
 #[derive(Debug, Default, Deserialize)]
