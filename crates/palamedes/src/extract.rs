@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
 use crate::choice::{
-    is_plural_format, normalize_choice_option_key, normalize_numeric_offset,
-    normalize_string_offset,
+    expression_offset_value, invalid_choice_option, invalid_offset, is_plural_format,
+    jsx_offset_value, normalize_choice_option_key,
 };
 use crate::descriptor::{
     descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
@@ -1248,54 +1248,6 @@ fn extract_choice_options_from_jsx(
         placeholders,
         offset,
     })
-}
-
-fn expression_offset_value(expression: &Expression<'_>) -> Option<String> {
-    match expression.without_parentheses() {
-        Expression::StringLiteral(literal) => normalize_string_offset(literal.value.as_str()),
-        Expression::TemplateLiteral(template) => template
-            .single_quasi()
-            .and_then(|value| normalize_string_offset(value.as_str())),
-        Expression::NumericLiteral(literal) => normalize_numeric_offset(literal.value),
-        _ => None,
-    }
-}
-
-fn jsx_offset_value(value: &JSXAttributeValue<'_>) -> Option<String> {
-    match value {
-        JSXAttributeValue::StringLiteral(literal) => {
-            normalize_string_offset(literal.value.as_str())
-        }
-        JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
-            JSXExpression::StringLiteral(literal) => {
-                normalize_string_offset(literal.value.as_str())
-            }
-            JSXExpression::TemplateLiteral(template) => template
-                .single_quasi()
-                .and_then(|value| normalize_string_offset(value.as_str())),
-            JSXExpression::NumericLiteral(literal) => normalize_numeric_offset(literal.value),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn invalid_offset(macro_name: &str, location: &str) -> PalamedesError {
-    PalamedesError::UnsupportedMacroSyntax {
-        macro_name: macro_name.to_string(),
-        location: location.to_string(),
-        detail: "`offset` must be a static non-negative integer".to_string(),
-    }
-}
-
-fn invalid_choice_option(macro_name: &str, location: &str, key: &str) -> PalamedesError {
-    PalamedesError::UnsupportedMacroSyntax {
-        macro_name: macro_name.to_string(),
-        location: location.to_string(),
-        detail: format!(
-            "`{key}` is not a valid plural category; use zero, one, two, few, many, other, or an exact _N key"
-        ),
-    }
 }
 
 fn build_icu_message(

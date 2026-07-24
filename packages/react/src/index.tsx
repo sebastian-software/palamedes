@@ -90,11 +90,18 @@ function buildChoiceMessage(
   choices: Record<string, string | number | undefined>,
   offset?: number
 ): string {
+  validatePluralOffset(offset)
   const parts = Object.entries(choices)
     .filter((entry): entry is [string, string] => typeof entry[1] === "string")
     .map(([key, value]) => `${key} {${value}}`)
   const offsetPart = offset === undefined ? "" : ` offset:${offset}`
   return `{${variable}, ${kind},${offsetPart} ${parts.join(" ")}}`
+}
+
+function validatePluralOffset(offset: number | undefined): void {
+  if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0)) {
+    throw new RangeError("Plural offset must be a non-negative safe integer.")
+  }
 }
 
 function renderNodes(

@@ -1,3 +1,7 @@
+use oxc_ast::ast::{Expression, JSXAttributeValue, JSXExpression};
+
+use crate::error::PalamedesError;
+
 const PLURAL_CATEGORIES: [&str; 6] = ["zero", "one", "two", "few", "many", "other"];
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 
@@ -27,6 +31,54 @@ pub(crate) fn normalize_string_offset(value: &str) -> Option<String> {
 pub(crate) fn normalize_numeric_offset(value: f64) -> Option<String> {
     (value.is_finite() && (0.0..=MAX_SAFE_INTEGER).contains(&value) && value.fract() == 0.0)
         .then(|| format!("{value:.0}"))
+}
+
+pub(crate) fn expression_offset_value(expression: &Expression<'_>) -> Option<String> {
+    match expression.without_parentheses() {
+        Expression::StringLiteral(literal) => normalize_string_offset(literal.value.as_str()),
+        Expression::TemplateLiteral(template) => template
+            .single_quasi()
+            .and_then(|value| normalize_string_offset(value.as_str())),
+        Expression::NumericLiteral(literal) => normalize_numeric_offset(literal.value),
+        _ => None,
+    }
+}
+
+pub(crate) fn jsx_offset_value(value: &JSXAttributeValue<'_>) -> Option<String> {
+    match value {
+        JSXAttributeValue::StringLiteral(literal) => {
+            normalize_string_offset(literal.value.as_str())
+        }
+        JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
+            JSXExpression::StringLiteral(literal) => {
+                normalize_string_offset(literal.value.as_str())
+            }
+            JSXExpression::TemplateLiteral(template) => template
+                .single_quasi()
+                .and_then(|value| normalize_string_offset(value.as_str())),
+            JSXExpression::NumericLiteral(literal) => normalize_numeric_offset(literal.value),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn invalid_offset(macro_name: &str, location: &str) -> PalamedesError {
+    PalamedesError::UnsupportedMacroSyntax {
+        macro_name: macro_name.to_string(),
+        location: location.to_string(),
+        detail: "`offset` must be a static non-negative integer".to_string(),
+    }
+}
+
+pub(crate) fn invalid_choice_option(macro_name: &str, location: &str, key: &str) -> PalamedesError {
+    PalamedesError::UnsupportedMacroSyntax {
+        macro_name: macro_name.to_string(),
+        location: location.to_string(),
+        detail: format!(
+            "`{key}` is not a valid plural category; use zero, one, two, few, many, other, or an exact _N key"
+        ),
+    }
 }
 
 fn is_non_negative_integer(value: &str) -> bool {
