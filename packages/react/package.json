@@ -20,6 +20,7 @@
     ".": {
       "types": "./dist/index.d.ts",
       "react-server": {
+        "types": "./dist/index-server.d.ts",
         "import": "./dist/index-server.mjs",
         "require": "./dist/index-server.cjs"
       },
@@ -34,6 +35,7 @@
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "react-server": {
+        "types": "./dist/runtime-server.d.ts",
         "import": "./dist/runtime-server.mjs",
         "require": "./dist/runtime-server.cjs"
       },
