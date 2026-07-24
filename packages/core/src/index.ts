@@ -152,6 +152,7 @@ export type {
   MessageNode,
   MessageChoiceNode,
   MessageFormattedArgumentNode,
+  MessageLiteralNode,
   MessageTagNode,
   MessageVariableNode,
 } from "./messageFormat"

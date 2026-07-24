@@ -140,6 +140,9 @@ function renderNode(
           : node.value.replaceAll("#", formatNumber(pluralValue, locale)),
       ]
     }
+    case "literal": {
+      return [node.value]
+    }
     case "variable": {
       return [renderVariable(values[node.name])]
     }

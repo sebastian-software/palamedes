@@ -90,6 +90,20 @@ describe("@palamedes/solid", () => {
     expect(onMissing).not.toHaveBeenCalled()
   })
 
+  it("renders ICU-quoted syntax literally through Trans", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setServerI18nGetter(() => i18n)
+
+    const render = Trans({
+      id: "quoted",
+      message: "Literal '{name}': {count, plural, other {'#' of #}}",
+      values: { count: 5, name: "ignored" },
+    }) as unknown as () => unknown
+
+    expect([render()].flat().join("")).toBe("Literal {name}: # of 5")
+  })
+
   it("builds locale switch items headlessly", () => {
     expect(
       buildLocaleSwitchItems({
