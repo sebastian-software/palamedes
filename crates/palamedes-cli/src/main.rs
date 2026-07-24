@@ -214,6 +214,8 @@ enum CliError {
     AuditFailedOnWarning { errors: usize, warnings: usize },
     #[error("Catalog completeness below {threshold} for {locales}.")]
     CompletenessBelowThreshold { threshold: String, locales: String },
+    #[error("Extraction failed for {failures} source file(s); catalogs were not updated.")]
+    ExtractionFailed { failures: usize },
     #[error("Could not build glob pattern {pattern}: {source}")]
     GlobPattern {
         pattern: String,
@@ -228,6 +230,7 @@ enum CliError {
 struct CatalogExtractionResult {
     messages: Vec<CatalogUpdateMessage>,
     file_count: usize,
+    failed_file_count: usize,
     glob_ms: u128,
     extract_ms: u128,
 }
@@ -320,6 +323,8 @@ fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
     let mut total_extract_ms = 0;
     let mut total_messages = 0;
     let mut total_files = 0;
+    let mut total_failed_files = 0;
+    let mut results = Vec::with_capacity(config.catalogs.len());
 
     for catalog in &config.catalogs {
         let result = extract_from_catalog(catalog, config, options.verbose)?;
@@ -327,7 +332,17 @@ fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
         total_extract_ms += result.extract_ms;
         total_messages += result.messages.len();
         total_files += result.file_count;
+        total_failed_files += result.failed_file_count;
+        results.push(result);
+    }
 
+    if total_failed_files > 0 {
+        return Err(CliError::ExtractionFailed {
+            failures: total_failed_files,
+        });
+    }
+
+    for (catalog, result) in config.catalogs.iter().zip(&results) {
         for locale in &config.locales {
             total_write_ms += write_catalog(catalog, locale, &result.messages, config, options)?;
         }
@@ -383,18 +398,17 @@ fn extract_from_catalog(
     })?;
     let extract_ms = extract_started_at.elapsed().as_millis();
 
-    if verbose {
-        for failure in &result.failed_files {
-            eprintln!(
-                "Warning: Failed to extract from {}: {}",
-                failure.path, failure.message
-            );
-        }
+    for failure in &result.failed_files {
+        eprintln!(
+            "Warning: Failed to extract from {}: {}",
+            failure.path, failure.message
+        );
     }
 
     Ok(CatalogExtractionResult {
         messages: result.messages,
         file_count: result.file_count,
+        failed_file_count: result.failed_files.len(),
         glob_ms,
         extract_ms,
     })
@@ -1069,7 +1083,7 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{build_report, load_config, run_extraction, ExtractOptions};
+    use super::{build_report, load_config, run_extraction, CliError, ExtractOptions};
 
     #[test]
     fn extract_writes_git_relative_origins_from_yaml_config() {
@@ -1139,6 +1153,28 @@ catalogs:
             output.contains("msgid \"Dashboard\""),
             "dot-path include should extract messages, got:\n{output}"
         );
+    }
+
+    #[test]
+    fn extraction_failures_leave_existing_catalogs_unchanged() {
+        let app = temp_dir("extract-failure");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        write_config(&app, None);
+        fs::write(app.join("app/page.tsx"), "const broken =").expect("write invalid source");
+        fs::create_dir_all(app.join("locales/en")).expect("create source locale");
+        let catalog_path = app.join("locales/en/messages.po");
+        let original = "msgid \"Existing\"\nmsgstr \"Existing\"\n";
+        fs::write(&catalog_path, original).expect("write existing catalog");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let error = run_extraction(&config, &extract_options()).expect_err("extract should fail");
+
+        assert!(matches!(error, CliError::ExtractionFailed { failures: 1 }));
+        assert_eq!(
+            fs::read_to_string(catalog_path).expect("read existing catalog"),
+            original
+        );
+        assert!(!app.join("locales/de/messages.po").exists());
     }
 
     #[test]
