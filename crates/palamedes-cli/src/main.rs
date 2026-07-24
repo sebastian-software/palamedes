@@ -570,7 +570,7 @@ fn build_exclude_set(catalog: &ConfigCatalog, config: &LoadedConfig) -> Result<G
 
 fn run_watch_mode(config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
     println!("Watching for changes...");
-    run_extraction(config, options)?;
+    run_watch_extraction(config, options)?;
 
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
@@ -587,12 +587,24 @@ fn run_watch_mode(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
                     if options.verbose {
                         eprintln!("Source changed; extracting catalogs");
                     }
-                    run_extraction(config, options)?;
+                    run_watch_extraction(config, options)?;
                 }
             }
             Ok(Err(error)) => return Err(CliError::Watch(error)),
             Err(_) => return Ok(()),
         }
+    }
+}
+
+fn run_watch_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
+    match run_extraction(config, options) {
+        Err(CliError::ExtractionFailed { failures }) => {
+            eprintln!(
+                "Warning: Extraction failed for {failures} source file(s); catalogs were not updated. Continuing to watch for changes."
+            );
+            Ok(())
+        }
+        result => result,
     }
 }
 
@@ -1083,7 +1095,9 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{build_report, load_config, run_extraction, CliError, ExtractOptions};
+    use super::{
+        build_report, load_config, run_extraction, run_watch_extraction, CliError, ExtractOptions,
+    };
 
     #[test]
     fn extract_writes_git_relative_origins_from_yaml_config() {
@@ -1175,6 +1189,30 @@ catalogs:
             original
         );
         assert!(!app.join("locales/de/messages.po").exists());
+    }
+
+    #[test]
+    fn watch_extraction_recovers_after_parse_failures() {
+        let app = temp_dir("watch-extract-failure");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        write_config(&app, None);
+        let source_path = app.join("app/page.tsx");
+        fs::write(&source_path, "const broken =").expect("write invalid source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        run_watch_extraction(&config, &extract_options()).expect("watch should remain active");
+        assert!(!app.join("locales/en/messages.po").exists());
+
+        fs::write(
+            source_path,
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Recovered`; }\n",
+        )
+        .expect("repair source");
+        run_watch_extraction(&config, &extract_options()).expect("watch should recover");
+
+        let output =
+            fs::read_to_string(app.join("locales/en/messages.po")).expect("read recovered catalog");
+        assert!(output.contains("msgid \"Recovered\""));
     }
 
     #[test]
