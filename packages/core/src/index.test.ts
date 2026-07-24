@@ -155,6 +155,32 @@ describe("createI18n", () => {
     expect(errors).toStrictEqual(["{count, plural one {# file} other {# files}}"])
   })
 
+  it("returns fallback nodes when a catalog pattern is malformed", () => {
+    const errors: string[] = []
+    const i18n = createI18n({
+      onError(info) {
+        errors.push(info.pattern)
+      },
+    })
+
+    i18n.load("de", {
+      greeting: "Hallo {name",
+    })
+    i18n.activate("de")
+
+    expect(i18n.getMessageNodes("greeting", { message: "Hello {name}" })).toStrictEqual([
+      { type: "text", value: "Hello " },
+      { type: "variable", name: "name" },
+    ])
+    expect(errors).toStrictEqual(["Hallo {name"])
+  })
+
+  it("returns malformed source messages as plain-text nodes", () => {
+    const i18n = createI18n()
+
+    expect(i18n.getMessageNodes("{name")).toStrictEqual([{ type: "text", value: "{name" }])
+  })
+
   it("keeps rendering resilient when hooks throw", () => {
     const i18n = createI18n({
       onMissing() {

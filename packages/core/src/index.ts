@@ -1,4 +1,4 @@
-import { formatMessagePattern, parseMessagePattern } from "./messageFormat"
+import { formatMessagePattern, parseMessagePattern, type MessageNode } from "./messageFormat"
 
 export type MessageMetadata = {
   message?: string
@@ -34,6 +34,7 @@ export type PalamedesI18n = {
   load: (locale: string, messages: CatalogMessages) => void
   activate: (locale: string) => void
   getMessage: (id: string, metadata?: MessageMetadata) => string
+  getMessageNodes: (id: string, metadata?: MessageMetadata) => MessageNode[]
 }
 
 type ResolvedMessage = {
@@ -119,6 +120,37 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     return message.fallback
   }
 
+  function parseMessage(
+    message: ResolvedMessage,
+    id?: string,
+    metadata?: MessageMetadata
+  ): MessageNode[] {
+    try {
+      return parseMessagePattern(message.pattern)
+    } catch (error) {
+      notifyError({
+        id,
+        locale: activeLocale,
+        error: normalizeError(error),
+        pattern: message.pattern,
+        fallback: message.fallback,
+        metadata,
+      })
+    }
+
+    // Rich-text renderers need the same resilience as string formatting:
+    // parse the source fallback, then render malformed source as plain text.
+    if (message.pattern !== message.fallback) {
+      try {
+        return parseMessagePattern(message.fallback)
+      } catch {
+        return [{ type: "text", value: message.fallback }]
+      }
+    }
+
+    return [{ type: "text", value: message.fallback }]
+  }
+
   return {
     get locale() {
       return activeLocale
@@ -135,6 +167,10 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
 
     getMessage(id, metadata) {
       return resolveMessage(id, metadata).pattern
+    },
+
+    getMessageNodes(id, metadata) {
+      return parseMessage(resolveMessage(id, metadata), id, metadata)
     },
 
     _(id, values = {}, metadata) {
