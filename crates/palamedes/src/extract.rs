@@ -11,6 +11,7 @@ use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
 };
+use crate::placeholder_name::{expression_name, jsx_expression_name};
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -1065,26 +1066,6 @@ fn extract_jsx_choice_value(
     Ok(None)
 }
 
-fn jsx_expression_name(expr: &JSXExpression<'_>) -> Option<String> {
-    match expr {
-        JSXExpression::Identifier(identifier) => Some(identifier.name.to_string()),
-        JSXExpression::StaticMemberExpression(member) => Some(member.property.name.to_string()),
-        JSXExpression::ComputedMemberExpression(member) => member
-            .static_property_name()
-            .map(|name| name.to_string())
-            .or_else(|| expression_name(&member.expression)),
-        JSXExpression::CallExpression(call) => getter_name(call.callee_name()?),
-        JSXExpression::LogicalExpression(logical) if logical.operator.is_coalesce() => {
-            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
-        }
-        JSXExpression::LogicalExpression(logical) if logical.operator.is_or() => {
-            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
-        }
-        JSXExpression::ParenthesizedExpression(expr) => expression_name(&expr.expression),
-        _ => None,
-    }
-}
-
 fn extract_jsx_children_as_message(
     children: &[JSXChild<'_>],
     _source: &str,
@@ -1230,69 +1211,7 @@ fn build_icu_message(
 }
 
 fn argument_expression_name(arg: &Argument<'_>) -> Option<String> {
-    match arg {
-        Argument::Identifier(identifier) => Some(identifier.name.to_string()),
-        Argument::StaticMemberExpression(member) => Some(member.property.name.to_string()),
-        Argument::ComputedMemberExpression(member) => member
-            .static_property_name()
-            .map(|name| name.to_string())
-            .or_else(|| expression_name(&member.expression)),
-        Argument::CallExpression(call) => getter_name(call.callee_name()?),
-        Argument::LogicalExpression(logical) if logical.operator.is_coalesce() => {
-            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
-        }
-        Argument::LogicalExpression(logical) if logical.operator.is_or() => {
-            expression_name(&logical.left).or_else(|| expression_name(&logical.right))
-        }
-        Argument::ParenthesizedExpression(expr) => expression_name(&expr.expression),
-        _ => None,
-    }
-}
-
-fn expression_name(expr: &Expression<'_>) -> Option<String> {
-    let expr = expr.without_parentheses();
-
-    if let Expression::Identifier(identifier) = expr {
-        return Some(identifier.name.to_string());
-    }
-
-    if let Some(member) = expr.as_member_expression() {
-        return match member {
-            MemberExpression::ComputedMemberExpression(member) => member
-                .static_property_name()
-                .map(|name| name.to_string())
-                .or_else(|| expression_name(&member.expression)),
-            MemberExpression::StaticMemberExpression(member) => {
-                Some(member.property.name.to_string())
-            }
-            MemberExpression::PrivateFieldExpression(_) => None,
-        };
-    }
-
-    if let Expression::CallExpression(call) = expr {
-        return getter_name(call.callee_name()?);
-    }
-
-    if let Expression::LogicalExpression(logical) = expr {
-        if logical.operator.is_coalesce() || logical.operator.is_or() {
-            return expression_name(&logical.left).or_else(|| expression_name(&logical.right));
-        }
-    }
-
-    None
-}
-
-fn getter_name(name: &str) -> Option<String> {
-    if !name.starts_with("get") || name.len() <= 3 {
-        return None;
-    }
-    let suffix = &name[3..];
-    let first = suffix.chars().next()?;
-    first.is_ascii_uppercase().then(|| {
-        let mut result = first.to_ascii_lowercase().to_string();
-        result.push_str(&suffix[first.len_utf8()..]);
-        result
-    })
+    arg.as_expression().and_then(expression_name)
 }
 
 /// Extracts source-string-first messages from a JavaScript or TypeScript module.
@@ -1685,6 +1604,43 @@ function choices() {
         assert_eq!(
             placeholders.get("locale").map(String::as_str),
             Some("resolved.locale")
+        );
+    }
+
+    #[test]
+    fn extracts_zero_argument_accessor_placeholder_names() {
+        let messages = extract_messages(
+            r##"
+              import { plural, t } from "@palamedes/core/macro"
+              import { Plural, Trans } from "@palamedes/react/macro"
+
+              const tagged = t`You have ${count()} items`
+              const rich = <Trans>There are {props.quantity()} tasks</Trans>
+              const choice = plural(count(), { one: "# item", other: "# items" })
+              const richChoice = <Plural value={props.quantity()} one="# task" other="# tasks" />
+            "##,
+            "test.tsx",
+        )
+        .expect("zero-argument accessors should extract");
+
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "You have {count} items",
+                "There are {quantity} tasks",
+                "{count, plural, one {# item} other {# items}}",
+                "{quantity, plural, one {# task} other {# tasks}}",
+            ]
+        );
+        assert_eq!(
+            messages[0].placeholders,
+            Some(BTreeMap::from([(
+                "count".to_string(),
+                "count()".to_string()
+            )]))
         );
     }
 

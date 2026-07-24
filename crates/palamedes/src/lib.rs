@@ -29,6 +29,7 @@ mod extract;
 mod jsx_entities;
 mod jsx_message;
 mod message_metadata;
+mod placeholder_name;
 #[cfg(test)]
 mod test_support;
 mod transform;

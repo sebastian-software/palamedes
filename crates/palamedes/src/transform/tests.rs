@@ -312,6 +312,29 @@ fn transforms_plural_choice_with_signal_accessor() {
 }
 
 #[test]
+fn extractor_and_transform_share_zero_argument_accessor_names() {
+    let source = r##"import { plural, t } from "@palamedes/core/macro";
+import { Plural, Trans } from "@palamedes/react/macro";
+
+const tagged = t`You have ${count()} items`;
+const rich = <Trans>There are {props.quantity()} tasks</Trans>;
+const choice = plural(count(), { one: "# item", other: "# items" });
+const richChoice = <Plural value={props.quantity()} one="# task" other="# tasks" />;
+"##;
+    let scoped_source = scope_macro_test_source(source, "test.tsx");
+    let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
+        .expect("zero-argument accessors should extract");
+    let transformed = transform_macros(source, "test.tsx", None)
+        .expect("zero-argument accessors should transform");
+    let extracted_ids = extracted
+        .iter()
+        .map(|message| compiled_key(&message.message, message.context.as_deref()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(transformed.compiled_ids, extracted_ids);
+}
+
+#[test]
 fn transforms_select_ordinal_choice_macros() {
     let result = transform_macros(
         "import { selectOrdinal } from \"@palamedes/core/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",
