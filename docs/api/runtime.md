@@ -31,8 +31,8 @@ Call `setClientI18n()` before translated client UI renders.
 
 ## `getI18n<T>()`
 
-Returns the active runtime instance. Transformed macro code calls this
-automatically.
+Returns the active runtime instance. Its `locale` is always a `string`.
+Transformed macro code calls this automatically.
 
 On the client, `getI18n()` reads the instance registered with
 `setClientI18n()`. On the server, it reads the active server getter.

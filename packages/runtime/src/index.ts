@@ -1,6 +1,6 @@
 export type I18nInstance = {
   _: (...args: any[]) => unknown
-  locale?: string
+  locale: string
 }
 
 type ServerI18nGetter<T extends I18nInstance = I18nInstance> = () => T | undefined

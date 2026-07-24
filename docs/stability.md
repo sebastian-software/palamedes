@@ -61,7 +61,7 @@ Palamedes treats these as stable adoption surfaces:
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs
 - runtime access through `getI18n()`
-- `createI18n()` and descriptor-based lookup behavior
+- `createI18n(options?)` and descriptor-based lookup behavior
 - React and Solid runtime components and macro package names
 
 If one of these must change after 1.0, the release should include:

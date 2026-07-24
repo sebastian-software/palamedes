@@ -42,7 +42,7 @@ describe("@palamedes/runtime", () => {
   })
 
   it("notifies subscribers on every setClientI18n call, including re-activation", () => {
-    const seen: Array<string | undefined> = []
+    const seen: string[] = []
     const unsubscribe = subscribeClientI18n((clientI18n) => seen.push(clientI18n.locale))
 
     const i18n = createTestI18n("en")

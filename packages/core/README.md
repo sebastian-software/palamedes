@@ -30,7 +30,9 @@ setClientI18n(i18n)
 
 ## Runtime Fallback Hooks
 
-`createI18n` accepts optional hooks for production telemetry. Missing active-locale
+`createI18n` starts with `DEFAULT_LOCALE` (`"en"`) and accepts an optional
+`locale` override plus hooks for production telemetry. The initial locale is
+active immediately, including before its catalog is loaded. Missing active-locale
 catalog entries still render the source message, but `onMissing` lets apps count
 them. Malformed runtime patterns fall back to the source message instead of
 throwing through the component tree, and `onError` receives the parse/format
@@ -45,6 +47,12 @@ const i18n = createI18n({
     captureException(error, { tags: { id, locale } })
   },
 })
+```
+
+Pass `locale` when the instance should start in another locale:
+
+```ts
+const i18n = createI18n({ locale: "de" })
 ```
 
 Use `pmds audit --fail-on error` in CI for checked-in catalogs, then wire these

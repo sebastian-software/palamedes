@@ -8,6 +8,8 @@ export type MessageMetadata = {
 
 export type CatalogMessages = Record<string, string>
 
+export const DEFAULT_LOCALE = "en"
+
 export type MissingMessageInfo = {
   id: string
   locale: string
@@ -16,7 +18,7 @@ export type MissingMessageInfo = {
 
 export type MessageFormatErrorInfo = {
   id?: string
-  locale?: string
+  locale: string
   error: Error
   pattern: string
   fallback: string
@@ -24,12 +26,13 @@ export type MessageFormatErrorInfo = {
 }
 
 export type CreateI18nOptions = {
+  locale?: string
   onMissing?: (info: MissingMessageInfo) => void
   onError?: (info: MessageFormatErrorInfo) => void
 }
 
 export type PalamedesI18n = {
-  locale?: string
+  readonly locale: string
   _: (id: string, values?: Record<string, unknown>, metadata?: MessageMetadata) => string
   load: (locale: string, messages: CatalogMessages) => void
   activate: (locale: string) => void
@@ -43,7 +46,7 @@ type ResolvedMessage = {
 
 export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
   const catalogs = new Map<string, CatalogMessages>()
-  let activeLocale: string | undefined
+  let activeLocale = options.locale ?? DEFAULT_LOCALE
 
   function notifyMissing(info: MissingMessageInfo): void {
     try {
@@ -62,7 +65,7 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
   }
 
   function resolveMessage(id: string, metadata?: MessageMetadata): ResolvedMessage {
-    const catalog = activeLocale ? catalogs.get(activeLocale) : undefined
+    const catalog = catalogs.get(activeLocale)
     const catalogMessage = catalog?.[id]
     const fallback = metadata?.message ?? id
 
@@ -73,13 +76,11 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
       }
     }
 
-    if (activeLocale) {
-      notifyMissing({
-        id,
-        locale: activeLocale,
-        metadata,
-      })
-    }
+    notifyMissing({
+      id,
+      locale: activeLocale,
+      metadata,
+    })
 
     return {
       pattern: fallback,
