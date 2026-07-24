@@ -33,6 +33,24 @@ export function Footer() {
 }
 ```
 
+For live client-side locale switches, point the macro transform at React's
+external-store bridge:
+
+```ts
+palamedes({ runtimeModule: "@palamedes/react/runtime" })
+```
+
+The `@palamedes/react/runtime` subpath exports a React-aware `getI18n()` that
+subscribes the rendering component to every `setClientI18n()` activation,
+including re-activation of the same mutable instance. React Server Components
+resolve the hook-free server implementation through the `react-server` export
+condition.
+
+`<Trans>`, `<Plural>`, `<Select>`, and `<SelectOrdinal>` use the same subscription
+automatically. The transform override is needed for inline `t` / `plural` macro
+calls. Because the reactive getter is a custom hook, those inline calls must run
+unconditionally during a function-component or custom-hook render.
+
 ## License
 
 [![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)

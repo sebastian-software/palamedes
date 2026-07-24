@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import { memo } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { render } from "@testing-library/react"
+import { act, render } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createI18n } from "@palamedes/core"
@@ -9,6 +10,7 @@ import { createServerI18nScope } from "@palamedes/runtime/server"
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
 import { useClientLocale } from "./client"
+import { getI18n as getReactiveI18n } from "./runtime"
 
 describe("@palamedes/react", () => {
   afterEach(() => {
@@ -191,6 +193,50 @@ describe("@palamedes/react", () => {
 
     view.rerender(<Probe locale="de" />)
     expect(sync).toHaveBeenLastCalledWith("de")
+    expect(view.container.textContent).toBe("Hallo")
+  })
+
+  it("re-renders memoized macro output after a client locale switch", () => {
+    const i18n = createI18n()
+    i18n.load("en", { greeting: "Hello" })
+    i18n.load("de", { greeting: "Hallo" })
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const MacroOutput = memo(function MacroOutput() {
+      return <span>{String(getReactiveI18n<typeof i18n>()._("greeting"))}</span>
+    })
+
+    const view = render(<MacroOutput />)
+    expect(view.container.textContent).toBe("Hello")
+
+    act(() => {
+      i18n.activate("de")
+      setClientI18n(i18n)
+    })
+
+    expect(view.container.textContent).toBe("Hallo")
+  })
+
+  it("re-renders memoized Trans output after a client locale switch", () => {
+    const i18n = createI18n()
+    i18n.load("en", { greeting: "Hello" })
+    i18n.load("de", { greeting: "Hallo" })
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const MemoizedTrans = memo(function MemoizedTrans() {
+      return <Trans id="greeting" message="Greeting" />
+    })
+
+    const view = render(<MemoizedTrans />)
+    expect(view.container.textContent).toBe("Hello")
+
+    act(() => {
+      i18n.activate("de")
+      setClientI18n(i18n)
+    })
+
     expect(view.container.textContent).toBe("Hallo")
   })
 

@@ -1,6 +1,5 @@
-"use client"
+import { getI18n } from "@palamedes/runtime"
 
-import { getI18n as useI18n } from "./runtime"
 import { createRuntimeComponents } from "./shared"
 
 export {
@@ -16,4 +15,4 @@ export {
   type TransProps,
 } from "./shared"
 
-export const { Plural, Select, SelectOrdinal, Trans } = createRuntimeComponents(useI18n)
+export const { Plural, Select, SelectOrdinal, Trans } = createRuntimeComponents(getI18n)
