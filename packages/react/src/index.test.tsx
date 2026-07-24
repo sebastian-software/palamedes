@@ -86,6 +86,39 @@ describe("@palamedes/react", () => {
     )
   })
 
+  it("renders ICU-quoted syntax literally through Trans", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <Trans
+        id="quoted"
+        message="Literal '{name}': {count, plural, other {'#' of #}}"
+        values={{ count: 5, name: "ignored" }}
+      />
+    )
+
+    expect(html).toBe("Literal {name}: # of 5")
+  })
+
+  it("falls back when Trans encounters a malformed catalog pattern", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+    i18n.load("de", {
+      greeting: "Hallo {name",
+    })
+    i18n.activate("de")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />
+    )
+
+    expect(html).toBe("Hello Ada")
+    expect(onError).toHaveBeenCalledOnce()
+  })
+
   it("builds locale switch items headlessly", () => {
     expect(
       buildLocaleSwitchItems({

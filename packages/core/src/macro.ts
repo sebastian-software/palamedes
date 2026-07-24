@@ -4,18 +4,18 @@ function throwMacroError(): never {
   )
 }
 
-export function t(..._args: any[]): never {
+export function t(..._args: any[]): string {
   return throwMacroError()
 }
 
-export function plural(..._args: any[]): never {
+export function plural(..._args: any[]): string {
   return throwMacroError()
 }
 
-export function select(..._args: any[]): never {
+export function select(..._args: any[]): string {
   return throwMacroError()
 }
 
-export function selectOrdinal(..._args: any[]): never {
+export function selectOrdinal(..._args: any[]): string {
   return throwMacroError()
 }

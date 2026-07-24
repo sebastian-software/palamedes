@@ -10,6 +10,15 @@
   `locale: string`; implementations that omitted the property or declared it as
   optional need to update.
 
+## [1.5.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.5.0...palamedes-v1.5.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* correct published TypeScript declarations ([335aae5](https://github.com/sebastian-software/palamedes/commit/335aae57e668f371cdd3978f5a031d301fa512e1))
+* correct published TypeScript declarations ([abdf985](https://github.com/sebastian-software/palamedes/commit/abdf9851ace033d33014f01ab56427df68b9fc1e))
+* preserve legacy TypeScript resolution ([684f438](https://github.com/sebastian-software/palamedes/commit/684f438354f68cdb7fa05e017ec69b31451eab6f))
+
 ## [1.5.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.4.0...palamedes-v1.5.0) (2026-07-23)
 
 

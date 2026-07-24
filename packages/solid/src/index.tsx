@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js"
 
-import { formatMessagePattern, parseMessagePattern } from "@palamedes/core"
+import { formatMessagePattern } from "@palamedes/core"
 import type { MessageChoiceNode, MessageNode, PalamedesI18n } from "@palamedes/core"
 
 import { getI18n } from "./runtime"
@@ -67,13 +67,13 @@ export function Trans({
   // a client locale switch, so the rendered nodes follow the active i18n.
   return (() => {
     const i18n = useReactiveI18n()
-    const pattern = i18n.getMessage(resolvedId, {
+    const nodes = i18n.getMessageNodes(resolvedId, {
       message,
       context,
       comment,
     })
 
-    return renderNodes(parseMessagePattern(pattern), values ?? {}, components ?? {}, i18n.locale)
+    return renderNodes(nodes, values ?? {}, components ?? {}, i18n.locale)
   }) as unknown as JSX.Element
 }
 
@@ -139,6 +139,9 @@ function renderNode(
           ? node.value
           : node.value.replaceAll("#", formatNumber(pluralValue, locale)),
       ]
+    }
+    case "literal": {
+      return [node.value]
     }
     case "variable": {
       return [renderVariable(values[node.name])]

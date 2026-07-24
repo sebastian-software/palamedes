@@ -61,6 +61,10 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Check published TypeScript declarations
+        if: ${{ matrix.full }}
+        run: pnpm check:published-types
+
       - name: Verify ICU semantics proof
         if: ${{ matrix.full }}
         run: pnpm proof:icu:check

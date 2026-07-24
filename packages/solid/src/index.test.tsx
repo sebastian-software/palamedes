@@ -90,6 +90,39 @@ describe("@palamedes/solid", () => {
     expect(onMissing).not.toHaveBeenCalled()
   })
 
+  it("renders ICU-quoted syntax literally through Trans", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setServerI18nGetter(() => i18n)
+
+    const render = Trans({
+      id: "quoted",
+      message: "Literal '{name}': {count, plural, other {'#' of #}}",
+      values: { count: 5, name: "ignored" },
+    }) as unknown as () => unknown
+
+    expect([render()].flat().join("")).toBe("Literal {name}: # of 5")
+  })
+
+  it("falls back when Trans encounters a malformed catalog pattern", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+    i18n.load("de", {
+      greeting: "Hallo {name",
+    })
+    i18n.activate("de")
+    setServerI18nGetter(() => i18n)
+
+    const render = Trans({
+      id: "greeting",
+      message: "Hello {name}",
+      values: { name: "Ada" },
+    }) as unknown as () => unknown
+
+    expect([render()].flat().join("")).toBe("Hello Ada")
+    expect(onError).toHaveBeenCalledOnce()
+  })
+
   it("builds locale switch items headlessly", () => {
     expect(
       buildLocaleSwitchItems({
