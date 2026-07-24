@@ -86,6 +86,22 @@ describe("@palamedes/react", () => {
     )
   })
 
+  it("renders ICU-quoted syntax literally through Trans", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <Trans
+        id="quoted"
+        message="Literal '{name}': {count, plural, other {'#' of #}}"
+        values={{ count: 5, name: "ignored" }}
+      />
+    )
+
+    expect(html).toBe("Literal {name}: # of 5")
+  })
+
   it("builds locale switch items headlessly", () => {
     expect(
       buildLocaleSwitchItems({

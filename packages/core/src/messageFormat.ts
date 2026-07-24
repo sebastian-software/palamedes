@@ -3,6 +3,11 @@ export type MessageTextNode = {
   value: string
 }
 
+export type MessageLiteralNode = {
+  type: "literal"
+  value: string
+}
+
 export type MessageVariableNode = {
   type: "variable"
   name: string
@@ -30,6 +35,7 @@ export type MessageTagNode = {
 
 export type MessageNode =
   | MessageTextNode
+  | MessageLiteralNode
   | MessageVariableNode
   | MessageFormattedArgumentNode
   | MessageChoiceNode
@@ -55,7 +61,7 @@ export function parseMessagePattern(pattern: string): MessageNode[] {
     input: pattern,
     index: 0,
   }
-  const nodes = parseNodes(state)
+  const nodes = parseNodes(state, undefined, false)
   parseCache.set(pattern, nodes)
   return nodes
 }
@@ -68,7 +74,11 @@ export function formatMessagePattern(
   return renderNodesToString(parseMessagePattern(pattern), values, locale)
 }
 
-function parseNodes(state: ParserState, closingTag?: string): MessageNode[] {
+function parseNodes(
+  state: ParserState,
+  closingTag: string | undefined,
+  poundIsSyntax: boolean
+): MessageNode[] {
   const nodes: MessageNode[] = []
 
   while (state.index < state.input.length) {
@@ -79,22 +89,31 @@ function parseNodes(state: ParserState, closingTag?: string): MessageNode[] {
 
     const char = state.input[state.index]
     if (char === "{") {
-      nodes.push(parseBraceExpression(state))
+      nodes.push(parseBraceExpression(state, poundIsSyntax))
       continue
     }
 
     if (char === "<" && isTagStart(state)) {
-      nodes.push(parseTag(state))
+      nodes.push(parseTag(state, poundIsSyntax))
       continue
     }
 
-    nodes.push(parseText(state, closingTag))
+    if (char === "'" && startsQuotedLiteral(state, poundIsSyntax)) {
+      nodes.push(parseQuotedLiteral(state))
+      continue
+    }
+
+    nodes.push(parseText(state, closingTag, poundIsSyntax))
   }
 
   return mergeTextNodes(nodes)
 }
 
-function parseText(state: ParserState, closingTag?: string): MessageTextNode {
+function parseText(
+  state: ParserState,
+  closingTag: string | undefined,
+  poundIsSyntax: boolean
+): MessageTextNode {
   const start = state.index
 
   while (state.index < state.input.length) {
@@ -111,6 +130,10 @@ function parseText(state: ParserState, closingTag?: string): MessageTextNode {
       break
     }
 
+    if (char === "'" && startsQuotedLiteral(state, poundIsSyntax)) {
+      break
+    }
+
     state.index += 1
   }
 
@@ -120,7 +143,7 @@ function parseText(state: ParserState, closingTag?: string): MessageTextNode {
   }
 }
 
-function parseBraceExpression(state: ParserState): MessageNode {
+function parseBraceExpression(state: ParserState, poundIsSyntax: boolean): MessageNode {
   state.index += 1
   skipWhitespace(state)
   const name = readUntil(state, [",", "}"]).trim()
@@ -162,7 +185,10 @@ function parseBraceExpression(state: ParserState): MessageNode {
 
     const key = readUntil(state, ["{"]).trim()
     expectChar(state, "{")
-    options[key] = parseNodesUntilBrace(state)
+    options[key] = parseNodesUntilBrace(
+      state,
+      kind === "plural" || kind === "selectordinal" || poundIsSyntax
+    )
   }
 
   return {
@@ -187,7 +213,7 @@ function readOptionalStyle(state: ParserState): string | undefined {
   return style.length > 0 ? style : undefined
 }
 
-function parseNodesUntilBrace(state: ParserState): MessageNode[] {
+function parseNodesUntilBrace(state: ParserState, poundIsSyntax: boolean): MessageNode[] {
   const nodes: MessageNode[] = []
 
   while (state.index < state.input.length) {
@@ -198,22 +224,27 @@ function parseNodesUntilBrace(state: ParserState): MessageNode[] {
     }
 
     if (char === "{") {
-      nodes.push(parseBraceExpression(state))
+      nodes.push(parseBraceExpression(state, poundIsSyntax))
       continue
     }
 
     if (char === "<" && isTagStart(state)) {
-      nodes.push(parseTag(state))
+      nodes.push(parseTag(state, poundIsSyntax))
       continue
     }
 
-    nodes.push(parseTextUntilBrace(state))
+    if (char === "'" && startsQuotedLiteral(state, poundIsSyntax)) {
+      nodes.push(parseQuotedLiteral(state))
+      continue
+    }
+
+    nodes.push(parseTextUntilBrace(state, poundIsSyntax))
   }
 
   return mergeTextNodes(nodes)
 }
 
-function parseTextUntilBrace(state: ParserState): MessageTextNode {
+function parseTextUntilBrace(state: ParserState, poundIsSyntax: boolean): MessageTextNode {
   const start = state.index
 
   while (state.index < state.input.length) {
@@ -226,6 +257,10 @@ function parseTextUntilBrace(state: ParserState): MessageTextNode {
       break
     }
 
+    if (char === "'" && startsQuotedLiteral(state, poundIsSyntax)) {
+      break
+    }
+
     state.index += 1
   }
 
@@ -235,7 +270,7 @@ function parseTextUntilBrace(state: ParserState): MessageTextNode {
   }
 }
 
-function parseTag(state: ParserState): MessageTagNode {
+function parseTag(state: ParserState, poundIsSyntax: boolean): MessageTagNode {
   expectChar(state, "<")
   const name = readUntil(state, ["/", ">"]).trim()
 
@@ -254,12 +289,53 @@ function parseTag(state: ParserState): MessageTagNode {
   }
 
   expectChar(state, ">")
-  const children = parseNodes(state, name)
+  const children = parseNodes(state, name, poundIsSyntax)
 
   return {
     type: "tag",
     name,
     children,
+  }
+}
+
+function startsQuotedLiteral(state: ParserState, poundIsSyntax: boolean): boolean {
+  const next = state.input[state.index + 1]
+  return next === "'" || next === "{" || next === "}" || (poundIsSyntax && next === "#")
+}
+
+function parseQuotedLiteral(state: ParserState): MessageLiteralNode {
+  state.index += 1
+
+  if (state.input[state.index] === "'") {
+    state.index += 1
+    return {
+      type: "literal",
+      value: "'",
+    }
+  }
+
+  let value = ""
+  while (state.index < state.input.length) {
+    const char = state.input[state.index]
+    if (char !== "'") {
+      value += char
+      state.index += 1
+      continue
+    }
+
+    if (state.input[state.index + 1] === "'") {
+      value += "'"
+      state.index += 2
+      continue
+    }
+
+    state.index += 1
+    break
+  }
+
+  return {
+    type: "literal",
+    value,
   }
 }
 
@@ -328,6 +404,9 @@ function renderNodeToString(
   switch (node.type) {
     case "text": {
       return pluralValue === undefined ? node.value : replacePound(node.value, pluralValue, locale)
+    }
+    case "literal": {
+      return node.value
     }
     case "variable": {
       return stringifyValue(values[node.name])
