@@ -32,6 +32,16 @@ describe("@palamedes/solid", () => {
     // Pretend we are on the client so `getI18n` reads the client instance.
     ;(globalThis as { window?: unknown }).window = {}
 
+    const previousI18n = createI18n()
+    previousI18n.activate("en")
+    setClientI18n(previousI18n)
+    const previousRender = Trans({
+      id: "title",
+      message: "Book your seat",
+    }) as unknown as () => unknown
+    previousRender()
+    resetI18nRuntime()
+
     const i18n = createI18n()
     i18n.load("en", { title: "Book your seat" })
     i18n.load("de", { title: "Sichere dir deinen Platz" })

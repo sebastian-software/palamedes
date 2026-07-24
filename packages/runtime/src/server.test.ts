@@ -31,6 +31,19 @@ describe("@palamedes/runtime/server", () => {
     expect(scope.get()).toBeUndefined()
   })
 
+  it("shares the active request scope with isolated module graphs", async () => {
+    const scope = createServerI18nScope<I18nInstance>()
+    const i18n = createTestI18n("de")
+    vi.resetModules()
+    const isolatedRuntime = await import("./index")
+
+    scope.run(i18n, () => {
+      expect(isolatedRuntime.getI18n()).toBe(i18n)
+    })
+
+    isolatedRuntime.resetI18nRuntime()
+  })
+
   it("activates an i18n instance for the current async server context", async () => {
     const scope = createServerI18nScope<I18nInstance>()
     const i18n = createTestI18n()

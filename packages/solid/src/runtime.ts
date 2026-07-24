@@ -14,19 +14,17 @@ import { getI18n as getRuntimeI18n, subscribeClientI18n } from "@palamedes/runti
 // change detection would never fire.
 const [trackClientI18n, notifyClientI18n] = createSignal(undefined, { equals: false })
 
-// Subscribe lazily on first use rather than at module load: this package sets
+// Subscribe lazily on use rather than at module load: this package sets
 // `sideEffects: false`, so a top-level subscription could be dropped by a bundler
-// that considers it dead code. Registering from inside `getI18n` keeps it alive.
-let subscribed = false
+// that considers it dead code. The runtime stores listeners in a Set, making
+// repeated registration of this stable callback idempotent. Registering on every
+// read also reconnects the bridge after resetI18nRuntime clears shared listeners.
+const notifyClientLocaleChanged = () => {
+  notifyClientI18n()
+}
 
 function ensureSubscribed(): void {
-  if (subscribed) {
-    return
-  }
-  subscribed = true
-  subscribeClientI18n(() => {
-    notifyClientI18n()
-  })
+  subscribeClientI18n(notifyClientLocaleChanged)
 }
 
 /**

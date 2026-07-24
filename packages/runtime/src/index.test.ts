@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   type I18nInstance,
@@ -62,6 +62,35 @@ describe("@palamedes/runtime", () => {
     expect(firstSnapshot.i18n).toBe(i18n)
     expect(secondSnapshot.i18n).toBe(i18n)
     expect(secondSnapshot.revision).toBe(firstSnapshot.revision + 1)
+  })
+
+  it("shares client snapshots and listeners across isolated module graphs", async () => {
+    ;(globalThis as Record<string, unknown>).window = {}
+    const seen: string[] = []
+    const unsubscribe = subscribeClientI18n((clientI18n) => seen.push(clientI18n.locale))
+    vi.resetModules()
+    const isolatedRuntime = await import("./index")
+    const i18n = createTestI18n("de")
+
+    try {
+      isolatedRuntime.setClientI18n(i18n)
+
+      expect(seen).toStrictEqual(["de"])
+      expect(getClientI18nSnapshot()).toBe(isolatedRuntime.getClientI18nSnapshot())
+      expect(getI18n()).toBe(i18n)
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it("clears client listeners when the runtime is reset", () => {
+    const listener = vi.fn()
+    subscribeClientI18n(listener)
+
+    resetI18nRuntime()
+    setClientI18n(createTestI18n())
+
+    expect(listener).not.toHaveBeenCalled()
   })
 
   it("resolves the request-local server instance", () => {

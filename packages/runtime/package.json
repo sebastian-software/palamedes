@@ -23,8 +23,14 @@
         "import": "./dist/server.mjs",
         "require": "./dist/server.cjs"
       },
-      "browser": "./dist/server-unavailable.mjs",
-      "default": "./dist/server-unavailable.mjs"
+      "browser": {
+        "import": "./dist/server-unavailable.mjs",
+        "require": "./dist/server-unavailable.cjs"
+      },
+      "default": {
+        "import": "./dist/server-unavailable.mjs",
+        "require": "./dist/server-unavailable.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",
