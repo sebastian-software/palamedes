@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import {
   type I18nInstance,
+  getClientI18nSnapshot,
   getI18n,
   resetI18nRuntime,
   setClientI18n,
@@ -47,15 +48,20 @@ describe("@palamedes/runtime", () => {
 
     const i18n = createTestI18n("en")
     setClientI18n(i18n)
+    const firstSnapshot = getClientI18nSnapshot()
 
     // Same instance, re-activated in place: still notifies so bindings re-render.
     i18n.locale = "de"
     setClientI18n(i18n)
+    const secondSnapshot = getClientI18nSnapshot()
 
     unsubscribe()
     setClientI18n(createTestI18n("es"))
 
     expect(seen).toStrictEqual(["en", "de"])
+    expect(firstSnapshot.i18n).toBe(i18n)
+    expect(secondSnapshot.i18n).toBe(i18n)
+    expect(secondSnapshot.revision).toBe(firstSnapshot.revision + 1)
   })
 
   it("resolves the request-local server instance", () => {

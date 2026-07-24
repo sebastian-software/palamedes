@@ -5,11 +5,10 @@ import { ClientReady } from "@/components/ClientReady"
 import { LocaleSwitcher } from "@/components/LocaleSwitcher"
 import { ProofPanel } from "@/components/ProofPanel"
 import { TicketPanel } from "@/components/TicketPanel"
-import { createActiveServerI18n } from "@/lib/i18n.server"
+import { createActiveServerI18n, runWithServerI18n } from "@/lib/i18n.server"
 import { getLocaleLabel } from "@/lib/i18n"
 
-// These functions run only after `createActiveServerI18n()` activated the
-// request-local runtime scope.
+// These functions run only inside `runWithServerI18n()`'s request-local scope.
 function translateEyebrow(): string {
   return t`Localized live with Palamedes`
 }
@@ -35,10 +34,10 @@ function translateServerLocale(): string {
 }
 
 export default async function Home() {
-  const { locale } = await createActiveServerI18n()
+  const { i18n, locale } = await createActiveServerI18n()
   const localeLabel = getLocaleLabel(locale)
 
-  return (
+  return runWithServerI18n(i18n, () => (
     <main className="page-shell">
       <header className="topbar">
         <div className="brand">
@@ -76,5 +75,5 @@ export default async function Home() {
 
       <ClientReady />
     </main>
-  )
+  ))
 }

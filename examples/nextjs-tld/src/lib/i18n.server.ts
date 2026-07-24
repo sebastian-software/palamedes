@@ -8,6 +8,10 @@ import { createExampleI18n, type Locale, loadMessages, locales } from "./i18n"
 
 export const serverI18nScope = createServerI18nScope<PalamedesI18n>()
 
+export function runWithServerI18n<Result>(i18n: PalamedesI18n, callback: () => Result): Result {
+  return serverI18nScope.run(i18n, callback)
+}
+
 export async function getTldLocale(): Promise<{
   banner: LocaleSuggestion<Locale> | null
   host: string | null

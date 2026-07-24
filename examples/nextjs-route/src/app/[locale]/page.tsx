@@ -6,11 +6,10 @@ import { LocaleSwitcher } from "@/components/LocaleSwitcher"
 import { ProofPanel } from "@/components/ProofPanel"
 import { SuggestionBanner } from "@/components/SuggestionBanner"
 import { TicketPanel } from "@/components/TicketPanel"
-import { createActiveServerI18n, getRouteLocale } from "@/lib/i18n.server"
+import { createActiveServerI18n, getRouteLocale, runWithServerI18n } from "@/lib/i18n.server"
 import { getLocaleLabel, type Locale } from "@/lib/i18n"
 
-// These functions run only after `createActiveServerI18n()` activated the
-// request-local runtime scope.
+// These functions run only inside `runWithServerI18n()`'s request-local scope.
 function translateEyebrow(): string {
   return t`Localized live with Palamedes`
 }
@@ -42,10 +41,10 @@ function translateSwitchToRecommended(): string {
 export default async function RouteHome({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: rawLocale } = await params
   const { banner, locale } = await getRouteLocale(rawLocale)
-  await createActiveServerI18n(locale as Locale)
+  const { i18n } = await createActiveServerI18n(locale as Locale)
   const localeLabel = getLocaleLabel(locale)
 
-  return (
+  return runWithServerI18n(i18n, () => (
     <main className="page-shell">
       {banner ? (
         <SuggestionBanner
@@ -93,5 +92,5 @@ export default async function RouteHome({ params }: { params: Promise<{ locale: 
 
       <ClientReady />
     </main>
-  )
+  ))
 }
