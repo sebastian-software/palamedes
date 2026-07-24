@@ -10,7 +10,7 @@
     "typecheck": "node ./scripts/prebuild-content.mjs && react-router typegen && tsc"
   },
   "dependencies": {
-    "@base-ui-components/react": "1.0.0-rc.0",
+    "@base-ui/react": "1.6.0",
     "@react-router/node": "8.3.0",
     "ardo": "4.2.0",
     "lucide-react": "^1.0.0",
