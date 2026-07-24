@@ -165,6 +165,29 @@ deliberate, that robustness is almost always worth the small reload UX cost.
 Reach for live only when instant, state-preserving switches are a genuine product
 requirement and the team is prepared to key every locale-derived value.
 
+### Enabling live switching (React)
+
+Live switching in React has two pieces:
+
+- `useClientLocale(locale, syncClientI18n)` pushes committed locale changes into
+  the client runtime
+- point the macro transform at React's external-store bridge so memoized
+  `t` / `plural` output follows every activation:
+
+  ```ts
+  palamedes({ runtimeModule: "@palamedes/react/runtime" })
+  ```
+
+The runtime subpath selects a hook-free implementation under the `react-server`
+condition, so the same transform target remains valid for React Server
+Components and server actions.
+
+`<Trans>` / `<Plural>` / `<Select>` / `<SelectOrdinal>` subscribe on their own
+and follow a live switch even with the default `runtimeModule`. Only inline
+`t` / `plural` calls need the reactive transform target. Those calls are
+hook-backed and therefore must execute unconditionally during a React
+function-component or custom-hook render.
+
 ### Enabling live switching (Solid)
 
 Reload needs nothing beyond a normal server render. Live switching in Solid has

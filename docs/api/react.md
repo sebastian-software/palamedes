@@ -28,6 +28,11 @@ The client subpath `@palamedes/react/client` exports:
 
 - `useClientLocale(locale, sync)`
 
+The runtime subpath `@palamedes/react/runtime` exports:
+
+- `getI18n<T>()` — a React-aware transform target backed by
+  `useSyncExternalStore`
+
 The macro subpath `@palamedes/react/macro` exports compile-time macro
 components:
 
@@ -38,8 +43,9 @@ components:
 
 ## Runtime Components
 
-Runtime components read the active i18n instance through
-`@palamedes/runtime`.
+Runtime components subscribe to the client activation snapshot and read the
+active request-local instance during server rendering. They therefore update
+independently when nested below `React.memo` components with unchanged props.
 
 ```tsx
 import { Trans } from "@palamedes/react"
@@ -70,3 +76,24 @@ render in the initial HTML. The hook never invokes the sync callback during
 render; this avoids external-store mutations during both SSR and client render
 retries. The sync function may return a promise; the hook intentionally does
 not own loading UI or routing policy.
+
+## Reactive Macro Runtime
+
+Macro `t` / `plural` calls use the transform's configured `runtimeModule`.
+Point it at the React runtime when a client-side locale switch must update
+memoized translated components:
+
+```ts
+palamedes({ runtimeModule: "@palamedes/react/runtime" })
+```
+
+The bridge observes the activation revision rather than only object identity, so
+mutating and re-activating the same i18n instance still schedules a render. Under
+the `react-server` condition, the subpath resolves to the hook-free
+`@palamedes/runtime` getter so Server Components and server actions retain
+request-local runtime behavior.
+
+The reactive getter is a custom hook. Inline `t` / `plural` macros transformed
+to this runtime must execute unconditionally during a function-component or
+custom-hook render. For conditional translated output, render a child component
+such as `<Trans>` in the branch instead of invoking an inline macro conditionally.

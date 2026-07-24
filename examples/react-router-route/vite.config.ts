@@ -3,7 +3,7 @@ import { palamedes } from "@palamedes/vite-plugin"
 import { defineConfig } from "vite"
 
 export default defineConfig({
-  plugins: [palamedes(), reactRouter()],
+  plugins: [palamedes({ runtimeModule: "@palamedes/react/runtime" }), reactRouter()],
   resolve: {
     tsconfigPaths: true,
   },

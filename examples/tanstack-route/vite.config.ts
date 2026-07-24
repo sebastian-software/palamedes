@@ -4,7 +4,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [tanstackStart(), palamedes(), react()],
+  plugins: [tanstackStart(), palamedes({ runtimeModule: "@palamedes/react/runtime" }), react()],
   preview: {
     allowedHosts: [".examples.palamedes.dev", "de.lvh.me", "en.lvh.me", "es.lvh.me"],
   },
