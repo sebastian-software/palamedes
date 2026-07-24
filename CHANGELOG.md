@@ -10,6 +10,49 @@
   `locale: string`; implementations that omitted the property or declared it as
   optional need to update.
 
+## [1.6.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.5.1...palamedes-v1.6.0) (2026-07-24)
+
+
+### Features
+
+* **core:** initialize every i18n locale ([#432](https://github.com/sebastian-software/palamedes/issues/432)) ([57b6ecd](https://github.com/sebastian-software/palamedes/commit/57b6ecd2eb347d49d1c27b52b757c1da17ad910f))
+
+
+### Bug Fixes
+
+* add reactive React runtime bridge ([5770cda](https://github.com/sebastian-software/palamedes/commit/5770cda2a66a3b14fbd2e643e6e53a1ee9a2450e))
+* clear shared runtime listeners on reset ([8c72577](https://github.com/sebastian-software/palamedes/commit/8c725777be95c300a077c692461ba935cfa4afa7))
+* **cli:** fail safely on extraction errors ([3f58b2f](https://github.com/sebastian-software/palamedes/commit/3f58b2fe24b7b6b176a7578c8e7c2faf904d66b4))
+* **cli:** fail safely on extraction errors ([3b4557e](https://github.com/sebastian-software/palamedes/commit/3b4557ea8445a8f8490e033a60b826768166ec95))
+* **cli:** keep watch mode alive after parse errors ([44829e4](https://github.com/sebastian-software/palamedes/commit/44829e437f76a8a863a294af2130f7e29a73ea2b))
+* **core:** export message text nodes ([39398f9](https://github.com/sebastian-software/palamedes/commit/39398f93a48e7b5437436ce75d03841ecb1bb65e))
+* **core:** preserve PO translator metadata ([37294b0](https://github.com/sebastian-software/palamedes/commit/37294b01748082c4f22ee99de0336138b458d112))
+* **core:** preserve PO translator metadata ([5b69165](https://github.com/sebastian-software/palamedes/commit/5b69165f1f74b11e26b82f5dd429591e12b3b2c9))
+* **core:** support ICU apostrophe quoting ([30a3e98](https://github.com/sebastian-software/palamedes/commit/30a3e983a61decb79f3a991224c691e3567e2ea0))
+* **core:** support ICU apostrophe quoting ([42d64a8](https://github.com/sebastian-software/palamedes/commit/42d64a81c29f084138f1abc212501ecb794ffce2))
+* **deps:** replace dependency @base-ui-components/react with @base-ui/react 1.0.0 ([#397](https://github.com/sebastian-software/palamedes/issues/397)) ([6e7970b](https://github.com/sebastian-software/palamedes/commit/6e7970b527a544dfbdae030e49972de80b21a620))
+* **deps:** update lucide monorepo to v1 ([ab70673](https://github.com/sebastian-software/palamedes/commit/ab70673b373834a838cf9922ea20abf4be2a1a59))
+* **deps:** update testing-library monorepo to v7 ([6f31062](https://github.com/sebastian-software/palamedes/commit/6f31062dcbe35778529b2eb961dc6212b8b8e27a))
+* **extract:** align accessor placeholder names ([91a49e4](https://github.com/sebastian-software/palamedes/commit/91a49e462bcc4a9b6504fa0a306971faa3638576))
+* **extract:** align accessor placeholder names ([a3c7692](https://github.com/sebastian-software/palamedes/commit/a3c76922ba54eef7796d4722e0ebcfdae2486681))
+* **i18n:** support plural offsets end to end ([7898d2a](https://github.com/sebastian-software/palamedes/commit/7898d2a139f8edcb6aa00c94df4a0feadbbe1f85))
+* **i18n:** support plural offsets end to end ([f2dcf9d](https://github.com/sebastian-software/palamedes/commit/f2dcf9d036ea8bb352f004b99933fcecb7c9b0ef))
+* **i18n:** validate direct plural offsets ([02ceb31](https://github.com/sebastian-software/palamedes/commit/02ceb31dec06ece1f4e45f00596eb075a5c91f77))
+* ignore JSX comments inside Trans ([860ea94](https://github.com/sebastian-software/palamedes/commit/860ea943fd8a74fa096938c9797e6020113f6664))
+* ignore JSX comments inside Trans ([c9e1bf3](https://github.com/sebastian-software/palamedes/commit/c9e1bf33c63800733b78a33204f2cd75d382d6ad))
+* **react:** add reactive runtime bridge ([#440](https://github.com/sebastian-software/palamedes/issues/440)) ([92a1c45](https://github.com/sebastian-software/palamedes/commit/92a1c451ca6e8d66084af41ecc0e63a492cc28dd)), closes [#415](https://github.com/sebastian-software/palamedes/issues/415)
+* **react:** expose server-specific types ([0a95160](https://github.com/sebastian-software/palamedes/commit/0a95160c4d7bbc745a18b3213c25cda3710375b0))
+* reconnect Solid runtime after reset ([31fba43](https://github.com/sebastian-software/palamedes/commit/31fba43ea04666d62511e14d7ab87c160f25cfda))
+* **runtime:** address SSR review feedback ([c32c45c](https://github.com/sebastian-software/palamedes/commit/c32c45c4544f81f24b22a73e3fdb599ec8b41de6))
+* **runtime:** isolate SSR client locale activation ([587fa45](https://github.com/sebastian-software/palamedes/commit/587fa454b8f176346d6fcd6fd10455eb627931f5))
+* **runtime:** isolate SSR client locale activation ([82e4cdc](https://github.com/sebastian-software/palamedes/commit/82e4cdcf3d82d9ce8aec882369ab62b2b05fb61e))
+* share runtime state across module graphs ([a085f34](https://github.com/sebastian-software/palamedes/commit/a085f34bc9d7cf9884618cb5adfcd301f4666dce))
+* share runtime state across module graphs ([52a7e46](https://github.com/sebastian-software/palamedes/commit/52a7e465b0ef1386d2ed6f160b6c65e3b3227374))
+* transform macros in Trans component attributes ([5488c13](https://github.com/sebastian-software/palamedes/commit/5488c1374ffda82a6c3c491fbc964d854b4dcfeb))
+* transform macros in Trans component attributes ([f7c0df0](https://github.com/sebastian-software/palamedes/commit/f7c0df06222eaea491ce605ef17cfbb5ff82ba77))
+* **ui:** make Trans catalog parsing resilient ([f5c5e87](https://github.com/sebastian-software/palamedes/commit/f5c5e87cb1c0e69b445e0a34fb2d593759e1f0af))
+* **ui:** make Trans catalog parsing resilient ([9d57535](https://github.com/sebastian-software/palamedes/commit/9d57535c6a941ad08a678e0c56cef8029c13c80c))
+
 ## [1.5.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.5.0...palamedes-v1.5.1) (2026-07-24)
 
 
