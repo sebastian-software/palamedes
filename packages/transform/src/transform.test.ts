@@ -565,7 +565,7 @@ const el = <Trans>Hello {firstName + lastName}</Trans>;
     }
   })
 
-  it("allows nested JSX message macros in render prop attributes", () => {
+  it("transforms nested JSX message macros in render prop attributes", () => {
     const code = `
 import { Plural, Trans } from "@palamedes/react/macro";
 const el = <Trans><List renderItem={() => <Plural value={count} one="one" other="other" />} /></Trans>;
@@ -573,7 +573,37 @@ const el = <Trans><List renderItem={() => <Plural value={count} one="one" other=
     const result = transformPalamedesMacros(code, "test.tsx")
 
     expect(result.code).toContain('message={"<0/>"}')
-    expect(result.code).toContain("renderItem={() => <Plural")
+    expect(result.code).toContain('renderItem={() => getI18n()._("')
+    expect(result.code).not.toContain("<Plural")
+  })
+
+  it.each(["react", "solid"])(
+    "transforms Trans macros inside %s component attributes",
+    (framework) => {
+      const code = `
+import { Trans } from "@palamedes/${framework}/macro";
+const el = <Trans>Click <Button title={<Trans>Tooltip</Trans>} description={<Trans>Details</Trans>} /> now</Trans>;
+`
+      const result = transformPalamedesMacros(code, "test.tsx")
+
+      expect(result.code).toContain('message={"Click <0/> now"}')
+      expect(result.code).toContain('title={<Trans id="')
+      expect(result.code).toContain('message={"Tooltip"}')
+      expect(result.code).toContain('description={<Trans id="')
+      expect(result.code).toContain('message={"Details"}')
+      expect(result.code.match(/<Trans id=/g)).toHaveLength(3)
+      expect(result.compiledIds).toHaveLength(3)
+      expect(result.code).not.toContain(`@palamedes/${framework}/macro`)
+    }
+  )
+
+  it("rejects component attribute macros inside Trans expression children", () => {
+    const code = `
+import { Trans } from "@palamedes/react/macro";
+const el = <Trans>{cond && <Button title={<Trans>Tooltip</Trans>} />}</Trans>;
+`
+
+    expect(() => transformPalamedesMacros(code, "test.tsx")).toThrow(/stable placeholder name/)
   })
 
   it("accepts computed, defaulted, and literal choice values", () => {
