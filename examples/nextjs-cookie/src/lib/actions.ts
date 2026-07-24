@@ -4,7 +4,7 @@ import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { t } from "@palamedes/core/macro"
 import { getLocaleLabel, type Locale, LOCALES, LOCALE_COOKIE } from "./i18n"
-import { createActiveServerI18n } from "./i18n.server"
+import { createActiveServerI18n, runWithServerI18n } from "./i18n.server"
 
 export async function setLocaleAction(locale: Locale) {
   if (!LOCALES.includes(locale)) {
@@ -22,12 +22,12 @@ export async function setLocaleAction(locale: Locale) {
 }
 
 export async function getServerActionProof() {
-  const { locale } = await createActiveServerI18n()
+  const { i18n, locale } = await createActiveServerI18n()
 
-  return {
+  return runWithServerI18n(i18n, () => ({
     locale,
     localeLabel: getLocaleLabel(locale),
     handledAt: new Date().toISOString(),
     message: t`Server action confirmed locale ${locale}.`,
-  }
+  }))
 }

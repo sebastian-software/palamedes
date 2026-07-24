@@ -1,6 +1,7 @@
 import type { CatalogMessages } from "@palamedes/core"
-import { setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
-import { createExampleI18n, type Locale } from "./i18n"
+import { activateServerI18n, setClientI18n } from "@palamedes/runtime"
+import { cache } from "react"
+import { createExampleI18n, locales, type Locale } from "./i18n"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
 import { messages as esMessages } from "../locales/es.po"
@@ -20,19 +21,33 @@ const CATALOGS: Record<Locale, CatalogMessages> = {
 
 const clientI18n = createExampleI18n()
 
+const getServerClientI18n = cache((locale: Locale) => {
+  const i18n = createExampleI18n()
+  i18n.load(locale, CATALOGS[locale])
+  i18n.activate(locale)
+  return i18n
+})
+
+export function activateServerClientI18n(locale: Locale) {
+  activateServerI18n(getServerClientI18n(locale))
+}
+
 export function syncClientI18n(locale: Locale) {
+  if (typeof window === "undefined") {
+    return
+  }
+
   clientI18n.load(locale, CATALOGS[locale])
   clientI18n.activate(locale)
+  setClientI18n(clientI18n)
+}
 
-  if (typeof window === "undefined") {
-    // During SSR the client components still render on the server, so they
-    // resolve translations through the server scope. Point it at this
-    // synchronously-populated instance.
-    setServerI18nGetter(() => clientI18n)
-  } else {
-    // At hydration the catalog is already loaded synchronously above, so the
-    // client i18n is active in the same render pass — no async gap that would
-    // throw "No active client i18n instance".
-    setClientI18n(clientI18n)
+declare global {
+  interface Window {
+    __PALAMEDES_LOCALE__?: string
   }
+}
+
+if (typeof window !== "undefined" && locales.isLocale(window.__PALAMEDES_LOCALE__)) {
+  syncClientI18n(window.__PALAMEDES_LOCALE__)
 }

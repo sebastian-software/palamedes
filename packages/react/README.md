@@ -58,6 +58,10 @@ primitives that repeat across apps:
 - keeping the active client locale synchronized
 - building render-ready locale switch models for buttons, links, or forms
 
+`useClientLocale` does not run its sync callback during SSR. If the initial HTML
+contains translated client components, initialize `setClientI18n()` before
+hydration; all hook-driven locale synchronization happens after commit.
+
 ```tsx
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { useClientLocale } from "@palamedes/react/client"

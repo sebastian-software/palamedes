@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 
-import { describe, expect, it, afterEach } from "vitest"
+import { describe, expect, it, afterEach, vi } from "vitest"
 
 import { type I18nInstance, getI18n, resetI18nRuntime } from "./index"
 import { createServerI18nScope } from "./server"
@@ -54,6 +54,61 @@ describe("@palamedes/runtime/server", () => {
       expect(firstScope.get()).toBe(i18n)
       expect(getI18n()).toBe(i18n)
     })
+  })
+
+  it("connects an isolated SSR bundle to the active request scope", async () => {
+    const scope = createServerI18nScope<I18nInstance>()
+    const outerI18n = createTestI18n("en")
+    const clientComponentI18n = createTestI18n("de")
+    vi.resetModules()
+    const isolatedRuntime = await import("./index")
+
+    scope.run(outerI18n, () => {
+      expect(isolatedRuntime.activateServerI18n(clientComponentI18n)).toBe(clientComponentI18n)
+      expect(isolatedRuntime.getI18n()).toBe(clientComponentI18n)
+      expect(getI18n()).toBe(clientComponentI18n)
+    })
+
+    isolatedRuntime.resetI18nRuntime()
+  })
+
+  it("reuses an active instance when an SSR boundary render is retried", async () => {
+    const scope = createServerI18nScope<I18nInstance>()
+    const outerI18n = createTestI18n("en")
+    const clientComponentI18n = createTestI18n("de")
+    vi.resetModules()
+    const isolatedRuntime = await import("./index")
+
+    scope.run(outerI18n, () => {
+      expect(isolatedRuntime.activateServerI18n(clientComponentI18n)).toBe(clientComponentI18n)
+      expect(isolatedRuntime.activateServerI18n(clientComponentI18n)).toBe(clientComponentI18n)
+      expect(isolatedRuntime.getI18n()).toBe(clientComponentI18n)
+    })
+
+    isolatedRuntime.resetI18nRuntime()
+  })
+
+  it("keeps isolated SSR bundle activations request-local under concurrency", async () => {
+    const scope = createServerI18nScope<I18nInstance>()
+    const deI18n = createTestI18n("de")
+    const enI18n = createTestI18n("en")
+    vi.resetModules()
+    const isolatedRuntime = await import("./index")
+
+    await Promise.all([
+      scope.run(enI18n, async () => {
+        isolatedRuntime.activateServerI18n(deI18n)
+        await Promise.resolve()
+        expect(isolatedRuntime.getI18n()).toBe(deI18n)
+      }),
+      scope.run(deI18n, async () => {
+        isolatedRuntime.activateServerI18n(enI18n)
+        await Promise.resolve()
+        expect(isolatedRuntime.getI18n()).toBe(enI18n)
+      }),
+    ])
+
+    isolatedRuntime.resetI18nRuntime()
   })
 
   it("keeps concurrent async server scopes isolated", async () => {

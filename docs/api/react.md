@@ -61,6 +61,12 @@ const items = buildLocaleSwitchItems({
 })
 ```
 
-`useClientLocale(locale, sync)` calls `sync(locale)` from a client component.
-The sync function may return a promise; the hook intentionally does not own
-loading UI or routing policy.
+`useClientLocale(locale, sync)` never calls `sync` during server rendering.
+After the client commits, it synchronizes the locale and subscribes to
+`setClientI18n()` activations so translated descendants re-render.
+
+Initialize the client i18n before hydration when translated client components
+render in the initial HTML. The hook never invokes the sync callback during
+render; this avoids external-store mutations during both SSR and client render
+retries. The sync function may return a promise; the hook intentionally does
+not own loading UI or routing policy.

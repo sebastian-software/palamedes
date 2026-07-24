@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createI18n } from "@palamedes/core"
 import { resetI18nRuntime, setClientI18n } from "@palamedes/runtime"
+import { createServerI18nScope } from "@palamedes/runtime/server"
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
 import { useClientLocale } from "./client"
@@ -12,6 +13,7 @@ import { useClientLocale } from "./client"
 describe("@palamedes/react", () => {
   afterEach(() => {
     resetI18nRuntime()
+    vi.unstubAllGlobals()
   })
 
   it("renders Trans without a provider by reading the active runtime instance", () => {
@@ -136,17 +138,59 @@ describe("@palamedes/react", () => {
   })
 
   it("syncs the active client locale through useClientLocale", () => {
-    const sync = vi.fn()
+    const i18n = createI18n()
+    i18n.load("en", { greeting: "Hello" })
+    i18n.load("de", { greeting: "Hallo" })
+    i18n.activate("en")
+    setClientI18n(i18n)
+    const sync = vi.fn((locale: "en" | "de") => {
+      i18n.activate(locale)
+      setClientI18n(i18n)
+    })
 
     function Probe({ locale }: { locale: "en" | "de" }) {
       useClientLocale(locale, sync)
-      return null
+      return <Trans id="greeting" message="Greeting" />
     }
 
     const view = render(<Probe locale="en" />)
     expect(sync).toHaveBeenCalledWith("en")
+    expect(view.container.textContent).toBe("Hello")
 
     view.rerender(<Probe locale="de" />)
     expect(sync).toHaveBeenLastCalledWith("de")
+    expect(view.container.textContent).toBe("Hallo")
+  })
+
+  it("does not mutate client state during server rendering", async () => {
+    vi.stubGlobal("window", undefined)
+    const scope = createServerI18nScope<ReturnType<typeof createI18n>>()
+    const deI18n = createI18n()
+    const enI18n = createI18n()
+    deI18n.load("de", { greeting: "Hallo" })
+    enI18n.load("en", { greeting: "Hello" })
+    deI18n.activate("de")
+    enI18n.activate("en")
+    const sync = vi.fn()
+
+    function Probe({ locale }: { locale: "en" | "de" }) {
+      useClientLocale(locale, sync)
+      return <Trans id="greeting" message="Greeting" />
+    }
+
+    const [deHtml, enHtml] = await Promise.all([
+      scope.run(deI18n, async () => {
+        await Promise.resolve()
+        return renderToStaticMarkup(<Probe locale="de" />)
+      }),
+      scope.run(enI18n, async () => {
+        await Promise.resolve()
+        return renderToStaticMarkup(<Probe locale="en" />)
+      }),
+    ])
+
+    expect(deHtml).toBe("Hallo")
+    expect(enHtml).toBe("Hello")
+    expect(sync).not.toHaveBeenCalled()
   })
 })

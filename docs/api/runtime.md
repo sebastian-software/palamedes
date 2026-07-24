@@ -6,8 +6,10 @@ macro output.
 ## Exports
 
 - `getI18n<T>()`
+- `getClientI18nSnapshot()`
 - `setClientI18n(i18n)`
 - `subscribeClientI18n(listener)`
+- `activateServerI18n(i18n)`
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
 - `I18nInstance`
@@ -61,6 +63,11 @@ const unsubscribe = subscribeClientI18n((i18n) => {
 })
 ```
 
+`getClientI18nSnapshot()` returns the current client instance plus a monotonic
+activation revision. The snapshot changes on every `setClientI18n()` call, even
+when an application reuses and mutates the same i18n object. Framework bindings
+use it with external-store APIs; application code rarely needs it directly.
+
 ## Server Runtime
 
 For request-local server rendering, prefer `@palamedes/runtime/server`:
@@ -76,6 +83,12 @@ serverI18n.activate(i18n)
 
 `createServerI18nScope()` uses Node `AsyncLocalStorage`, so keep it out of
 client bundles and Edge-only runtime paths.
+
+Isomorphic SSR client-component bundles can call `activateServerI18n(i18n)` to
+enter that existing request scope without importing the Node-only server
+subpath. The helper requires `createServerI18nScope()` to have been configured
+by the server entry point; it does not create a scope or make an i18n singleton
+request-safe.
 
 ## Test Reset
 
