@@ -104,6 +104,78 @@ describe("@palamedes/react", () => {
     expect(onMissing).not.toHaveBeenCalled()
   })
 
+  it("translates direct choice components through the active catalog", () => {
+    const i18n = createI18n()
+    i18n.load("de", {
+      "{value, plural, one {# item} other {# items}}":
+        "{value, plural, one {# Artikel} other {# Artikel}}",
+    })
+    i18n.activate("de")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(<Plural value={2} one="# item" other="# items" />)
+
+    expect(html).toBe("2 Artikel")
+  })
+
+  it("normalizes _N exact-match props like the macro transform", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <>
+        <Plural value={2} _2="a pair" other="# items" />
+        <Plural value={3} _2="a pair" other="# items" />
+      </>
+    )
+
+    expect(html).toBe("a pair3 items")
+  })
+
+  it("rejects invalid plural option props instead of emitting dead branches", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    expect(() =>
+      renderToStaticMarkup(<Plural value={2} {...{ _pair: "a pair" }} other="# items" />)
+    ).toThrow(/Invalid plural option "_pair"/)
+  })
+
+  it("rejects choice option text with unbalanced braces instead of corrupting the pattern", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    expect(() => renderToStaticMarkup(<Select value="a" a="a } b}" other="other" />)).toThrow(
+      /invalid ICU pattern/
+    )
+  })
+
+  it("renders Date values deterministically like the core string renderer", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const when = new Date(Date.UTC(2026, 6, 24, 2, 0, 0))
+    const html = renderToStaticMarkup(<Trans id="when" message="At {when}" values={{ when }} />)
+
+    expect(html).toBe(`At ${when.toISOString()}`)
+  })
+
+  it("throws on missing plural values instead of matching zero branches", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    expect(() =>
+      renderToStaticMarkup(
+        <Trans id="items" message="{n, plural, =0 {none} other {# items}}" values={{}} />
+      )
+    ).toThrow(/Missing or non-numeric value/)
+  })
+
   it("renders formatted ICU arguments through Trans", () => {
     const i18n = createI18n()
     i18n.activate("en-US")
