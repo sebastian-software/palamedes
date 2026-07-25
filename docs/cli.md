@@ -19,8 +19,9 @@ pmds <plugin> <command> --config ./palamedes.yaml [...args]
 fall back to the native CLI's normal unknown-command diagnostic.
 
 Plugin loading is explicit and applies only to non-built-in namespaces. See the
-[configuration field](./configuration.md#cli-plugins) and
-[`@palamedes/cli/plugin` API](./api/cli-plugin.md).
+[configuration field](./configuration.md#cli-plugins), the
+[`@palamedes/cli/plugin` API](./api/cli-plugin.md), and the
+[binary plugin protocol](./api/cli-binary-plugin.md) for executable plugins.
 
 ## `pmds extract`
 

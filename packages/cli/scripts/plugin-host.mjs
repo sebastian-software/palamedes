@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url"
 import { resolve as resolveImport } from "import-meta-resolve"
 
 import { PALAMEDES_PLUGIN_API_VERSION } from "../plugin-api.mjs"
+import { loadBinaryPlugin, resolveBinaryPlugin } from "./binary-plugin.mjs"
 import { spawnNative } from "./native.mjs"
 
 const BUILT_IN_NAMESPACES = new Set(["extract", "audit", "report", "catalog", "version"])
@@ -48,7 +49,10 @@ export async function tryRunPluginCommand(argv, options = {}) {
 
   let plugins
   try {
-    plugins = await loadPlugins(config, options.importPlugin)
+    plugins = await loadPlugins(config, options.importPlugin, {
+      cwd: options.cwd ?? process.cwd(),
+      nativeExecutable: options.nativeExecutable,
+    })
   } catch (error) {
     return emitHostFailure(invocation, io, error.code ?? "PLUGIN_LOAD_FAILED", error)
   }
@@ -134,22 +138,27 @@ export async function tryRunPluginCommand(argv, options = {}) {
   }
 }
 
-export async function loadPlugins(config, importPlugin = importPluginFromConfig) {
+export async function loadPlugins(config, importPlugin = importPluginFromConfig, context = {}) {
   const registry = new Map()
 
   for (const declaration of config.plugins ?? []) {
     const [specifier, pluginOptions] = normalizeDeclaration(declaration)
-    let imported
-    try {
-      imported = await importPlugin(specifier, config.configPath)
-    } catch (error) {
-      throw codedError(
-        "PLUGIN_MISSING",
-        `Could not load configured Palamedes plugin "${specifier}": ${errorMessage(error)}`
-      )
+    let plugin
+    const binary = resolveBinaryPlugin(specifier, config.configPath)
+    if (binary) {
+      plugin = await loadBinaryPlugin(binary, context)
+    } else {
+      let imported
+      try {
+        imported = await importPlugin(specifier, config.configPath)
+      } catch (error) {
+        throw codedError(
+          "PLUGIN_MISSING",
+          `Could not load configured Palamedes plugin "${specifier}": ${errorMessage(error)}`
+        )
+      }
+      plugin = imported?.default ?? imported?.plugin ?? imported
     }
-
-    const plugin = imported?.default ?? imported?.plugin ?? imported
     validatePlugin(plugin, specifier)
 
     if (registry.has(plugin.name)) {
