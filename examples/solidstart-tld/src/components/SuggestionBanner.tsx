@@ -19,7 +19,7 @@ export function SuggestionBanner(props: SuggestionBannerProps) {
         <a
           class="notice-cta"
           data-testid="locale-suggestion-cta"
-          href={props.recommendedUrl.replace(/^https?:/, "")}
+          href={props.recommendedUrl}
           onClick={() => {
             document.cookie = locales.serializeChoice(props.recommendedLocale)
           }}

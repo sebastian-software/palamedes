@@ -110,7 +110,24 @@ describe("locale controls", () => {
         requestHost: "de.lvh.me:4100",
         search: "?probe=1",
       })
-    ).toBe("http://es.lvh.me:4100/es/docs?probe=1")
+    ).toBe("//es.lvh.me:4100/es/docs?probe=1")
+  })
+
+  it("emits absolute urls when a protocol is configured", () => {
+    const secured = defineLocaleControls({
+      locales: ["en", "de", "es"] as const,
+      defaultLocale: "en",
+      protocol: "https",
+      hosts: { mode: "subdomain" },
+    })
+
+    expect(
+      secured.canonicalUrl({
+        locale: "es",
+        pathname: "/",
+        requestHost: "de.example.com",
+      })
+    ).toBe("https://es.example.com/")
   })
 
   it("suggests on accept-language and host mismatch", () => {
@@ -210,7 +227,7 @@ describe("subdomain strategy", () => {
         requestHost: "de.nextjs-subdomain.examples.palamedes.dev",
         search: "?seat=1",
       })
-    ).toBe("http://en.nextjs-subdomain.examples.palamedes.dev/checkout?seat=1")
+    ).toBe("//en.nextjs-subdomain.examples.palamedes.dev/checkout?seat=1")
   })
 
   it("preserves the request port in switch urls", () => {
@@ -220,7 +237,7 @@ describe("subdomain strategy", () => {
         pathname: "/",
         requestHost: "de.lvh.me:4012",
       })
-    ).toBe("http://es.lvh.me:4012/")
+    ).toBe("//es.lvh.me:4012/")
   })
 
   it("prepends the locale label when the host has none yet", () => {
@@ -230,7 +247,7 @@ describe("subdomain strategy", () => {
         pathname: "/",
         requestHost: "nextjs-subdomain.examples.palamedes.dev",
       })
-    ).toBe("http://de.nextjs-subdomain.examples.palamedes.dev/")
+    ).toBe("//de.nextjs-subdomain.examples.palamedes.dev/")
   })
 
   it("returns a bare path when no request host is available", () => {
@@ -261,7 +278,7 @@ describe("subdomain strategy", () => {
     })
     expect(suggestion?.reason).toBe("accept-language")
     expect(suggestion?.recommendedLocale).toBe("es")
-    expect(suggestion?.recommendedUrl).toBe("http://es.lvh.me:4012/")
+    expect(suggestion?.recommendedUrl).toBe("//es.lvh.me:4012/")
   })
 })
 
@@ -351,7 +368,7 @@ describe("tld strategy", () => {
         requestHost: "nextjs.palamedes-i18n.de",
         search: "?seat=1",
       })
-    ).toBe("http://nextjs.palamedes-i18n.fr/checkout?seat=1")
+    ).toBe("//nextjs.palamedes-i18n.fr/checkout?seat=1")
   })
 
   it("routes the default locale to defaultTld (.com), which has no authoritative tld", () => {
@@ -361,7 +378,7 @@ describe("tld strategy", () => {
         pathname: "/",
         requestHost: "nextjs.palamedes-i18n.de",
       })
-    ).toBe("http://nextjs.palamedes-i18n.com/")
+    ).toBe("//nextjs.palamedes-i18n.com/")
   })
 
   it("preserves the request port in switch urls", () => {
@@ -371,7 +388,7 @@ describe("tld strategy", () => {
         pathname: "/",
         requestHost: "palamedes-i18n.de:4013",
       })
-    ).toBe("http://palamedes-i18n.es:4013/")
+    ).toBe("//palamedes-i18n.es:4013/")
   })
 
   it("returns a bare path when no request host is available", () => {
@@ -405,6 +422,6 @@ describe("tld strategy", () => {
     })
     expect(suggestion?.reason).toBe("host")
     expect(suggestion?.recommendedLocale).toBe("fr")
-    expect(suggestion?.recommendedUrl).toBe("http://nextjs.palamedes-i18n.fr/")
+    expect(suggestion?.recommendedUrl).toBe("//nextjs.palamedes-i18n.fr/")
   })
 })
