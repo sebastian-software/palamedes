@@ -58,12 +58,12 @@ example `<0>Palamedes</0>`, while the React component is passed separately.
 
 Besides the macro entry point, the package's main entry exports the runtime
 components `Trans`, `Plural`, `Select`, and `SelectOrdinal` (plus the
-`TransProps` type). These are what macro-transformed JSX renders through.
-`Trans` resolves messages through the active i18n instance; the hand-written
-(non-macro) use of the choice components currently formats the source-language
-props directly without catalog lookup — see
-[#417](https://github.com/sebastian-software/palamedes/issues/417) before
-using them outside macro output.
+`TransProps` type). These are what macro-transformed JSX renders through, and
+all of them resolve messages through the active i18n instance. The choice
+components accept plural categories (`zero` … `other`), exact matches written
+as `_0`/`_1`/… (normalized to ICU `=N`, mirroring the macro transform), and
+`offset`; invalid option props and option text with unbalanced braces are
+rejected with a descriptive error instead of silently misrendering.
 
 ## Headless Frontend Helpers
 

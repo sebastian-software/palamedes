@@ -446,10 +446,9 @@ function renderNodeToString(
       return renderNodesToString(node.children, values, locale, pluralValue)
     }
     case "choice": {
-      const value = values[node.variable]
-      const nextPluralValue =
-        node.kind === "select" ? pluralValue : pluralOperand(node, normalizeNumericValue(value))
-      return renderNodesToString(selectChoice(node, value, locale), values, locale, nextPluralValue)
+      const resolved = resolveChoice(node, values[node.variable], locale)
+      const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue
+      return renderNodesToString(resolved.nodes, values, locale, nextPluralValue)
     }
   }
 }
@@ -567,41 +566,71 @@ function normalizeDateTimeStyle(
   return format === "time" ? "short" : undefined
 }
 
-function selectChoice(node: MessageChoiceNode, value: unknown, locale?: string): MessageNode[] {
+export type ResolvedChoice = {
+  nodes: MessageNode[]
+  /** Operand rendered for `#` inside the branch; undefined for `select`. */
+  pluralValue?: number
+}
+
+/**
+ * Selects the branch of a plural/select/selectordinal node for a value.
+ *
+ * Shared by the string renderer and the host-adapter rich renderers so exact
+ * matches, offsets, and missing-value handling cannot drift between them.
+ * Throws when a plural/selectordinal value is absent or non-numeric instead of
+ * silently coercing to 0 (which used to match `=0`/`zero` branches).
+ */
+export function resolveChoice(
+  node: MessageChoiceNode,
+  value: unknown,
+  locale?: string
+): ResolvedChoice {
   if (node.kind === "select") {
     const exact = value == null ? undefined : node.options[String(value)]
-    return exact ?? node.options.other ?? []
+    return { nodes: exact ?? node.options.other ?? [] }
   }
 
-  const numericValue = normalizeNumericValue(value)
+  const numericValue = requireChoiceNumericValue(node, value)
+  const operand = numericValue - (node.offset ?? 0)
   const exactKey = `=${numericValue}`
   if (node.options[exactKey]) {
-    return node.options[exactKey]
+    return { nodes: node.options[exactKey], pluralValue: operand }
   }
 
-  const operand = pluralOperand(node, numericValue)
-  const pluralRules = new Intl.PluralRules(undefined, {
-    localeMatcher: "best fit",
+  const pluralRules = new Intl.PluralRules(locale, {
     type: node.kind === "selectordinal" ? "ordinal" : "cardinal",
   })
-  const resolvedRules = locale
-    ? new Intl.PluralRules(locale, { type: node.kind === "selectordinal" ? "ordinal" : "cardinal" })
-    : pluralRules
-  const category = resolvedRules.select(operand)
-  return node.options[category] ?? node.options.other ?? []
+  const category = pluralRules.select(operand)
+  return { nodes: node.options[category] ?? node.options.other ?? [], pluralValue: operand }
 }
 
-function pluralOperand(node: MessageChoiceNode, numericValue: number): number {
-  return numericValue - (node.offset ?? 0)
-}
-
-function normalizeNumericValue(value: unknown): number {
+function requireChoiceNumericValue(node: MessageChoiceNode, value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value
   }
 
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  throw new Error(
+    `Missing or non-numeric value for {${node.variable}, ${node.kind}, …}: received ${describeValue(
+      value
+    )}.`
+  )
+}
+
+function describeValue(value: unknown): string {
+  if (value === undefined) {
+    return "undefined"
+  }
+  if (value === null) {
+    return "null"
+  }
+  return typeof value === "string" ? `"${value}"` : String(value)
 }
 
 function normalizeFormattedNumberValue(value: unknown): number | undefined {
@@ -637,7 +666,7 @@ function replacePound(value: string, numericValue: number, locale?: string): str
   return value.replaceAll("#", new Intl.NumberFormat(locale).format(numericValue))
 }
 
-function stringifyValue(value: unknown): string {
+export function stringifyValue(value: unknown): string {
   if (value === null || value === undefined) {
     return ""
   }
@@ -647,7 +676,9 @@ function stringifyValue(value: unknown): string {
   }
 
   if (value instanceof Date) {
-    return value.toISOString()
+    // An invalid Date degrades to "Invalid Date" instead of letting
+    // toISOString() throw and abort adapter rendering.
+    return Number.isNaN(value.getTime()) ? String(value) : value.toISOString()
   }
 
   return String(value)

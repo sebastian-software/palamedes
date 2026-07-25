@@ -9,6 +9,8 @@ package names.
 - `DEFAULT_LOCALE`
 - `formatMessagePattern(pattern, values, locale?)`
 - `parseMessagePattern(pattern)`
+- `resolveChoice(node, value, locale?)` and `ResolvedChoice`
+- `stringifyValue(value)`
 - `parseAcceptLanguage(header)` from `@palamedes/core/locale`
 - `buildLocaleSwitchItems(options)` from `@palamedes/core/locale`
 - `defineLocaleControls(config)` from `@palamedes/core/locale`
@@ -93,8 +95,13 @@ interface MessageMetadata {
   message?: string
   context?: string
   comment?: string
+  reportMissing?: boolean
 }
 ```
+
+`reportMissing: false` suppresses `onMissing` for a single lookup. The runtime
+choice components use it because their synthesized source patterns are
+expected to miss the catalog in apps that never loaded matching entries.
 
 The compiler emits this metadata alongside compact internal lookup ids so the
 runtime can fall back to the source message and report useful diagnostics.
@@ -112,7 +119,9 @@ matrix and reusable in apps:
   labels, active state, locale, and test ids.
 - `defineLocaleControls(config)`: binds locale resolution, deliberate-choice
   cookies, canonical URLs, and suggestion decisions for cookie, route,
-  subdomain, and tld strategies.
+  subdomain, and tld strategies. Host-carrying URLs from `canonicalUrl` and
+  `suggest` are protocol-relative (`//host/path`) unless the config sets
+  `protocol` (e.g. `"https"`), so HTTPS pages never link users to `http://`.
 
 ## Macro Entry Point
 
@@ -152,3 +161,14 @@ Catalog artifact compilation reports `list`, `duration`, `ago`, `name`, and
 other unsupported formatter kinds as errors. Unsupported styles on `number`,
 `date`, and `time` are warnings because the runtime currently falls back to the
 default `Intl` formatter for that argument type.
+
+Plural and selectordinal arguments require a present, numeric value (numeric
+strings are accepted). A missing or non-numeric value throws instead of
+silently coercing to `0` — inside `_()`/`getMessage()` that error is reported
+through `onError` and rendering falls back to the source message.
+
+Two helpers back the host-adapter renderers and are public for custom
+adapters: `resolveChoice(node, value, locale?)` selects the branch of a parsed
+plural/select/selectordinal node (returning the branch nodes plus the operand
+for `#`), and `stringifyValue(value)` is the string renderer's value
+stringification, where `Date` values become deterministic ISO strings.

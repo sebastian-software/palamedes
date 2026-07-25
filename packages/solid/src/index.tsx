@@ -1,7 +1,12 @@
 import type { JSX } from "solid-js"
 
-import { formatMessagePattern } from "@palamedes/core"
-import type { MessageChoiceNode, MessageNode, PalamedesI18n } from "@palamedes/core"
+import {
+  formatMessagePattern,
+  parseMessagePattern,
+  resolveChoice,
+  stringifyValue,
+} from "@palamedes/core"
+import type { MessageNode, PalamedesI18n } from "@palamedes/core"
 
 import { getI18n } from "./runtime"
 
@@ -41,7 +46,10 @@ type ChoiceComponentProps = {
   few?: string
   many?: string
   other: string
-}
+} & // Exact matches use the `_N` prop spelling (`_0`, `_1`, …) because JSX
+  // attributes cannot start with `=`; they are normalized to ICU `=N` options,
+  // mirroring the macro transform.
+  Record<`_${number}`, string>
 
 export type PluralProps = ChoiceComponentProps & {
   offset?: number
@@ -81,29 +89,40 @@ export function Trans({
   }) as unknown as JSX.Element
 }
 
-export function Plural({ value, offset, ...choices }: PluralProps): JSX.Element {
+/*
+ * The choice components resolve through the i18n instance exactly like Trans:
+ * the synthesized ICU pattern is the source message, the catalog can override
+ * it (when an `id` mapping exists), and rendering shares the same node
+ * pipeline. Formatting the source props directly — the previous behavior —
+ * silently skipped translation entirely.
+ */
+function renderChoice(
+  kind: "plural" | "select" | "selectordinal",
+  value: string | number,
+  choices: Record<string, string | number | undefined>,
+  offset?: number
+): JSX.Element {
   return (() => {
     const i18n = useReactiveI18n()
-    const message = buildChoiceMessage("value", "plural", choices, offset)
-    return formatMessagePattern(message, { value }, i18n.locale)
+    const message = buildChoiceMessage("value", kind, choices, offset)
+    const nodes = i18n.getMessageNodes(message, { message, reportMissing: false })
+    return renderNodes(nodes, { value }, {}, i18n.locale)
   }) as unknown as JSX.Element
+}
+
+export function Plural({ value, offset, ...choices }: PluralProps): JSX.Element {
+  return renderChoice("plural", value, choices, offset)
 }
 
 export function SelectOrdinal({ value, offset, ...choices }: SelectOrdinalProps): JSX.Element {
-  return (() => {
-    const i18n = useReactiveI18n()
-    const message = buildChoiceMessage("value", "selectordinal", choices, offset)
-    return formatMessagePattern(message, { value }, i18n.locale)
-  }) as unknown as JSX.Element
+  return renderChoice("selectordinal", value, choices, offset)
 }
 
 export function Select({ value, ...choices }: SelectProps): JSX.Element {
-  return (() => {
-    const i18n = useReactiveI18n()
-    const message = buildChoiceMessage("value", "select", choices)
-    return formatMessagePattern(message, { value }, i18n.locale)
-  }) as unknown as JSX.Element
+  return renderChoice("select", value, choices)
 }
+
+const PLURAL_CATEGORIES = new Set(["zero", "one", "two", "few", "many", "other"])
 
 function buildChoiceMessage(
   variable: string,
@@ -112,11 +131,72 @@ function buildChoiceMessage(
   offset?: number
 ): string {
   validatePluralOffset(offset)
-  const parts = Object.entries(choices)
-    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
-    .map(([key, value]) => `${key} {${value}}`)
+  const entries = Object.entries(choices).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string"
+  )
+  const keys = entries.map(([key]) => normalizeChoiceKey(kind, key))
+  const parts = entries.map(([key, value], index) => `${keys[index]} {${value}}`)
   const offsetPart = offset === undefined ? "" : ` offset:${offset}`
-  return `{${variable}, ${kind},${offsetPart} ${parts.join(" ")}}`
+  const message = `{${variable}, ${kind},${offsetPart} ${parts.join(" ")}}`
+  assertParseableChoiceMessage(message, kind, keys)
+  return message
+}
+
+/*
+ * Mirrors the macro transform's option-key rules: select keys pass through
+ * verbatim; plural/selectordinal keys must be a plural category or an exact
+ * match written as `_N`/`=N`, which normalizes to ICU `=N`. Anything else was
+ * previously emitted verbatim and could never match at runtime.
+ */
+function normalizeChoiceKey(kind: "plural" | "select" | "selectordinal", key: string): string {
+  if (kind === "select") {
+    return key
+  }
+
+  if (PLURAL_CATEGORIES.has(key)) {
+    return key
+  }
+
+  const exact = key.startsWith("_") || key.startsWith("=") ? key.slice(1) : undefined
+  if (exact !== undefined && /^\d+$/.test(exact)) {
+    return `=${exact}`
+  }
+
+  throw new RangeError(
+    `Invalid ${kind} option "${key}". Use a plural category (zero, one, two, few, many, other) or an exact match such as _0.`
+  )
+}
+
+/*
+ * Guards against option text with unbalanced braces silently corrupting the
+ * synthesized pattern (e.g. `other="a } b"` producing a pattern that parses
+ * into something unrelated).
+ */
+function assertParseableChoiceMessage(message: string, kind: string, expectedKeys: string[]): void {
+  let parsed: MessageNode[]
+  try {
+    parsed = parseMessagePattern(message)
+  } catch (error) {
+    throw new RangeError(
+      `Choice options for the ${kind} component produced an invalid ICU pattern (${message}): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      { cause: error }
+    )
+  }
+
+  const node = parsed.length === 1 && parsed[0]?.type === "choice" ? parsed[0] : undefined
+  const parsedKeys = node ? Object.keys(node.options) : []
+  const intact =
+    node !== undefined &&
+    parsedKeys.length === expectedKeys.length &&
+    expectedKeys.every((key) => key in node.options)
+
+  if (!intact) {
+    throw new RangeError(
+      `Choice options for the ${kind} component produced an invalid ICU pattern (${message}). Check option text for unbalanced "{" or "}" characters.`
+    )
+  }
 }
 
 function validatePluralOffset(offset: number | undefined): void {
@@ -177,11 +257,9 @@ function renderNode(
       return children
     }
     case "choice": {
-      const value = values[node.variable]
-      const nextPluralValue =
-        node.kind === "select" ? pluralValue : pluralOperand(node, normalizeNumericValue(value))
-      const choice = selectChoice(node, value, locale)
-      return renderNodes(choice, values, components, locale, nextPluralValue)
+      const resolved = resolveChoice(node, values[node.variable], locale)
+      const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue
+      return renderNodes(resolved.nodes, values, components, locale, nextPluralValue)
     }
   }
 
@@ -190,30 +268,6 @@ function renderNode(
 
 function buildFormattedMessage(node: Extract<MessageNode, { type: "formatted" }>): string {
   return `{${node.variable}, ${node.format}${node.style ? `, ${node.style}` : ""}}`
-}
-
-function selectChoice(node: MessageChoiceNode, value: unknown, locale: string): MessageNode[] {
-  if (node.kind === "select") {
-    const exact = value == null ? undefined : node.options[String(value)]
-    return exact ?? node.options.other ?? []
-  }
-
-  const numericValue = normalizeNumericValue(value)
-  const exactKey = `=${numericValue}`
-  if (node.options[exactKey]) {
-    return node.options[exactKey]
-  }
-
-  const operand = pluralOperand(node, numericValue)
-  const pluralRules = new Intl.PluralRules(locale, {
-    type: node.kind === "selectordinal" ? "ordinal" : "cardinal",
-  })
-  const category = pluralRules.select(operand)
-  return node.options[category] ?? node.options.other ?? []
-}
-
-function pluralOperand(node: MessageChoiceNode, numericValue: number): number {
-  return numericValue - (node.offset ?? 0)
 }
 
 function renderVariable(value: unknown): JSX.Element {
@@ -225,16 +279,13 @@ function renderVariable(value: unknown): JSX.Element {
     return String(value)
   }
 
-  return value as JSX.Element
-}
-
-function normalizeNumericValue(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value
+  // Same stringification as the core string renderer (`i18n._`), so Dates
+  // render as deterministic ISO strings on server and client alike.
+  if (value instanceof Date) {
+    return stringifyValue(value)
   }
 
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
+  return value as JSX.Element
 }
 
 function formatNumber(value: number, locale: string): string {

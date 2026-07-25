@@ -4,6 +4,12 @@ export type MessageMetadata = {
   message?: string
   context?: string
   comment?: string
+  /**
+   * Suppress `onMissing` for this lookup. Used by the runtime choice
+   * components, whose synthesized source patterns are expected to miss the
+   * catalog in apps that never loaded matching entries.
+   */
+  reportMissing?: boolean
 }
 
 export type CatalogMessages = Record<string, string>
@@ -77,11 +83,13 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
       }
     }
 
-    notifyMissing({
-      id,
-      locale: activeLocale,
-      metadata,
-    })
+    if (metadata?.reportMissing !== false) {
+      notifyMissing({
+        id,
+        locale: activeLocale,
+        metadata,
+      })
+    }
 
     return {
       pattern: fallback,
@@ -185,6 +193,7 @@ function normalizeError(error: unknown): Error {
 }
 
 export { formatMessagePattern, parseMessagePattern }
+export { resolveChoice, stringifyValue, type ResolvedChoice } from "./messageFormat"
 export type {
   MessageNode,
   MessageChoiceNode,

@@ -114,4 +114,31 @@ describe("formatMessagePattern", () => {
       formatMessagePattern("{n, plural, offset:1.5 other {# items}}", { n: 2 }, "en")
     ).toThrow(/non-negative integer plural offset/)
   })
+
+  it("rejects absent or non-numeric plural values instead of coercing to 0", () => {
+    const message = "{n, plural, =0 {none} one {one} other {# items}}"
+
+    expect(() => formatMessagePattern(message, {}, "en")).toThrow(/Missing or non-numeric value/)
+    expect(() => formatMessagePattern(message, { n: undefined }, "en")).toThrow(
+      /received undefined/
+    )
+    expect(() => formatMessagePattern(message, { n: Number.NaN }, "en")).toThrow(/received NaN/)
+    expect(() =>
+      formatMessagePattern("{n, selectordinal, other {#th}}", { n: "abc" }, "en")
+    ).toThrow(/received "abc"/)
+  })
+
+  it("still accepts numeric strings for plural values", () => {
+    const message = "{n, plural, =0 {none} other {# items}}"
+
+    expect(formatMessagePattern(message, { n: "0" }, "en")).toBe("none")
+    expect(formatMessagePattern(message, { n: "4" }, "en")).toBe("4 items")
+  })
+
+  it("renders Date values as ISO strings and degrades invalid Dates", () => {
+    const when = new Date(Date.UTC(2026, 6, 24, 2, 0, 0))
+
+    expect(formatMessagePattern("At {when}", { when })).toBe(`At ${when.toISOString()}`)
+    expect(formatMessagePattern("At {when}", { when: new Date("garbage") })).toBe("At Invalid Date")
+  })
 })

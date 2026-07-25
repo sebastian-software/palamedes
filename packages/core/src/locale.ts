@@ -71,6 +71,12 @@ export type LocaleControlsConfig<TLocale extends string> = {
   }
   /** Optional host strategy (locale per host). */
   hosts?: HostLocaleConfig<TLocale>
+  /**
+   * Scheme for host-carrying URLs from `canonicalUrl` and `suggest` (e.g.
+   * `"https"`). Without it those URLs are protocol-relative (`//host/path`),
+   * which stays correct on http (local) and https (deployed) alike.
+   */
+  protocol?: string
 }
 
 export type LocaleSwitchItem<TLocale extends string = string> = {
@@ -516,7 +522,10 @@ export function defineLocaleControls<TLocale extends string>(
         ? `${canonicalHost}:${requestPort}`
         : canonicalHost
 
-    return `http://${hostWithPort}${canonicalPath}${options.search ?? ""}`
+    // Protocol-relative by default so an HTTPS page never links users to
+    // http://; an explicit `protocol` config produces absolute URLs.
+    const scheme = config.protocol ? `${config.protocol.replace(/:$/, "")}:` : ""
+    return `${scheme}//${hostWithPort}${canonicalPath}${options.search ?? ""}`
   }
 
   const suggest = (options: {

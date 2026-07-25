@@ -129,6 +129,30 @@ describe("@palamedes/solid", () => {
     expect(onMissing).not.toHaveBeenCalled()
   })
 
+  it("translates direct choice components through the active catalog", () => {
+    const i18n = createI18n()
+    i18n.load("de", {
+      "{value, plural, one {# item} other {# items}}":
+        "{value, plural, one {# Artikel} other {# Artikel}}",
+    })
+    i18n.activate("de")
+    setServerI18nGetter(() => i18n)
+
+    const html = renderToString(() => <Plural value={2} one="# item" other="# items" />)
+
+    expect(html).toBe("2 Artikel")
+  })
+
+  it("normalizes _N exact-match props like the macro transform", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setServerI18nGetter(() => i18n)
+
+    const html = renderToString(() => <Plural value={2} _2="a pair" other="# items" />)
+
+    expect(html).toBe("a pair")
+  })
+
   it("renders ICU-quoted syntax literally through Trans", () => {
     const i18n = createI18n()
     i18n.activate("en")
