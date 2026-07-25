@@ -1,0 +1,8 @@
+{
+  "name": "palamedes-binary-plugin-fixture",
+  "private": true,
+  "type": "module",
+  "palamedes": {
+    "pluginBinary": "./plugin.mjs"
+  }
+}

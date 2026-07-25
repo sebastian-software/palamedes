@@ -2,6 +2,9 @@
 
 The versioned CLI plugin API defines explicit, namespaced workflow commands. It
 does not provide lifecycle hooks and does not expose Rust or N-API internals.
+Plugins that are standalone executables instead of Node modules use the
+[binary plugin protocol](./cli-binary-plugin.md) with the same configuration
+and output contract.
 
 ## Define A Plugin
 

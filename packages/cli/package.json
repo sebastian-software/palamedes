@@ -38,7 +38,7 @@
   "scripts": {
     "build": "node ./scripts/build.mjs",
     "postinstall": "node ./scripts/install.mjs",
-    "test": "node --test ./scripts/plugin-host.test.mjs && node ./scripts/smoke.mjs"
+    "test": "node --test ./scripts/plugin-host.test.mjs ./scripts/binary-plugin.test.mjs && node ./scripts/smoke.mjs"
   },
   "engines": {
     "node": ">=22.0.0"
