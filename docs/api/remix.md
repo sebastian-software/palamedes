@@ -28,6 +28,9 @@ interface PalamedesRemixRegisterOptions {
   include?: RegExp
   exclude?: RegExp
   runtimeModule?: string
+  configPath?: string
+  failOnMissing?: boolean
+  failOnCompileError?: boolean
 }
 ```
 
@@ -36,6 +39,10 @@ Defaults:
 - `include`: `/\.(tsx?|jsx?|mjs)$/`
 - `exclude`: `/[/\\]node_modules[/\\]/`
 - `runtimeModule`: `"@palamedes/runtime"`
+- `configPath`: unset — `.po` imports discover the Palamedes config from the
+  imported catalog file's directory; relative paths resolve from there
+- `failOnMissing` / `failOnCompileError`: `false` — missing translations and
+  catalog diagnostics warn instead of failing `.po` compilation
 
 The default intentionally excludes `.cjs` because the macro transform injects
 ESM imports. Pass a custom `include` only if your hook also provides a
@@ -84,6 +91,16 @@ Supported strategies are `cookie`, `route`, `subdomain`, and `tld`. Route
 strategy reads `context.params.locale` by default; pass `routeParam` to use a
 different param name. Cookie serialization is available through
 `remixI18n.serializeLocaleCookie(locale)`.
+
+Further `createRemixI18nServer` options: `createI18n` (factory for the
+request-local instance), `cookieName` (default `"locale"`), and `cookieMaxAge`
+(default one year, in seconds).
+
+Besides `run()`, `middleware()`, and `serializeLocaleCookie()`, the server
+object exposes `resolveLocale(input)` for standalone locale resolution,
+`createI18n(locale)` for manual instance creation, and `get(context?)` — the
+read accessor for the active request scope, which is how handlers running
+under `middleware()` reach the current i18n instance.
 
 ## Current Scope
 

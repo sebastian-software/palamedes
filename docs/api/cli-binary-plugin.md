@@ -1,7 +1,7 @@
 # `pmds` Binary Plugin Protocol
 
 Binary plugins are standalone executables that extend `pmds` with namespaced
-commands, following [ADR 002](../adr/002-binary-plugin-protocol.md). They speak
+commands, following [ADR 018](../../adr/018-binary-plugin-protocol.md). They speak
 a versioned newline-delimited JSON protocol over stdio, so Rust-first
 extensions can link the `palamedes` crates directly without maintaining Node
 bindings. The [ESM plugin API](./cli-plugin.md) remains fully supported; both
@@ -117,7 +117,7 @@ The plugin answers with newline-delimited events on stdout — zero or more
 Instead of a bidirectional channel, the host exports the resolved
 `pmds-native` executable path as the `PALAMEDES_NATIVE` environment variable.
 Binary plugins are trusted local code — the trust model from
-[ADR 001](../adr/001-cli-plugin-execution-boundary.md) applies unchanged — so
+[ADR 017](../../adr/017-cli-plugin-execution-boundary.md) applies unchanged — so
 they may invoke documented built-in commands directly as subprocesses. In JSON
 mode a plugin should capture that output rather than let it corrupt the single
 envelope on its own stdout.

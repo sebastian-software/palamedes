@@ -14,13 +14,16 @@ plugins.
 - `TransformOptions`
 - `TransformResult`
 - `SourceMap`
-- `createCatalogLoaderResult(artifact, options)`
-- `renderCatalogModule(artifact, options)`
-- `createCompileErrorMessage(diagnostic)`
-- `createDiagnosticMessage(diagnostic)`
-- `createMissingErrorMessage(message)`
+- `createCatalogLoaderResult(result, options)`
+- `renderCatalogModule(messages)`
+- `createCompileErrorMessage(locale, diagnostics)`
+- `createDiagnosticMessage(locale, diagnostics)`
+- `createMissingErrorMessage(locale, missingMessages)`
+- `CatalogCompileArtifactResult`
+- `CatalogDiagnostic`
 - `CatalogLoaderOptions`
 - `CatalogLoaderResult`
+- `CatalogSourceKey`
 - `MissingCatalogMessage`
 
 `findMacroImports()` expects a parsed AST program, not a source string. Use

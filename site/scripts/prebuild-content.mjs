@@ -54,9 +54,33 @@ await normalizeTypedocModuleLinks()
 await dedupeTypedocLedes()
 await ensureDirectoryIndexes(join(routesRoot, "api-reference"))
 
+await writeContentStats(adrs)
+
 console.log(
   `prebuild-content: generated ${docs.length} docs, ${adrs.length} ADRs, ${posts.length} posts, and TypeDoc API routes`
 )
+
+/*
+ * Derives the stat-tile numbers (ADR count, example matrix shape) from the
+ * repository itself so the site cannot drift from reality when ADRs or
+ * examples are added.
+ */
+async function writeContentStats(adrEntries) {
+  const exampleDirs = (await readdir(join(repoRoot, "examples"), { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+  const frameworks = new Set(exampleDirs.map((name) => name.slice(0, name.lastIndexOf("-"))))
+  const strategies = new Set(exampleDirs.map((name) => name.slice(name.lastIndexOf("-") + 1)))
+  const stats = {
+    adrCount: adrEntries.length,
+    exampleCount: exampleDirs.length,
+    frameworkCount: frameworks.size,
+    strategyCount: strategies.size,
+  }
+  const generatedDir = join(siteRoot, "app/data/generated")
+  await mkdir(generatedDir, { recursive: true })
+  await writeFile(join(generatedDir, "content-stats.json"), `${JSON.stringify(stats, null, 2)}\n`)
+}
 
 async function collectDocs() {
   const entries = []
@@ -571,6 +595,7 @@ function extractLede(content) {
     if (paragraph.startsWith("|") || paragraph.startsWith("- ") || paragraph.startsWith("* "))
       continue
     if (/^\*\*(Status|Date):\*\*/u.test(paragraph)) continue
+    if (/^(Status|Date):/u.test(paragraph)) continue
     return {
       start: blockStart + innerOffset,
       end: blockStart + block.length,

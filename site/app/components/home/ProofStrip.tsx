@@ -1,6 +1,8 @@
 import { useRef } from "react"
 import { Link } from "react-router"
 
+import { BENCH_REALISTIC } from "~/data/bench"
+import contentStats from "~/data/generated/content-stats.json"
 import { decisionHref } from "~/data/links"
 import { useCountUp } from "~/hooks/useCountUp"
 import { useInView } from "~/hooks/useInView"
@@ -11,15 +13,28 @@ interface Stat {
   href: string
 }
 
+/*
+ * Counts come from content-stats.json (generated from the repo during
+ * prebuild) and the ratio from bench.ts (guarded against the checked
+ * benchmark report), so none of these numbers can silently drift.
+ */
 const STATS: Stat[] = [
-  { value: "24", label: "verified example apps", href: "/frameworks" },
-  { value: "6 × 4", label: "frameworks × locale strategies", href: "/frameworks" },
+  { value: `${contentStats.exampleCount}`, label: "verified example apps", href: "/frameworks" },
   {
-    value: "12.45×",
+    value: `${contentStats.frameworkCount} × ${contentStats.strategyCount}`,
+    label: "frameworks × locale strategies",
+    href: "/frameworks",
+  },
+  {
+    value: BENCH_REALISTIC.ratios.lingui,
     label: "faster than Lingui — realistic 1,500-file extract/update benchmark, machine-local run",
     href: "/proof",
   },
-  { value: "16", label: "ADRs documenting every tradeoff", href: decisionHref() },
+  {
+    value: `${contentStats.adrCount}`,
+    label: "ADRs documenting every tradeoff",
+    href: decisionHref(),
+  },
 ]
 
 function StatCell({ stat, active }: { stat: Stat; active: boolean }) {

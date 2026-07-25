@@ -15,6 +15,7 @@ import { TerminalCascade } from "~/components/home/TerminalCascade"
 import { WorkflowFlow } from "~/components/home/WorkflowFlow"
 import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
 import { BENCH_REALISTIC } from "~/data/bench"
+import contentStats from "~/data/generated/content-stats.json"
 import { HOME_MODEL_CARDS } from "~/data/features"
 import { decisionHref, DEMO_NEXTJS_COOKIE, REPO } from "~/data/links"
 
@@ -51,8 +52,8 @@ export default function Home() {
             Write messages where your UI happens. Keep source-string-first <code>.po</code> catalogs
             your translators can actually read. Ship the same runtime model across Next.js, TanStack
             Start, SolidStart, Waku, React Router, and Remix v3 — with a Rust core that ran a
-            checked extract/update benchmark across a real-app-shaped 1,500-file corpus 12.45×
-            faster than Lingui on the recorded machine-local run.
+            checked extract/update benchmark across a real-app-shaped 1,500-file corpus{" "}
+            {BENCH_REALISTIC.ratios.lingui} faster than Lingui on the recorded machine-local run.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <ButtonLink href="/get-started">Get started in 5 minutes</ButtonLink>
@@ -115,8 +116,8 @@ export default function Home() {
             Palamedes is maintained by Sebastian Software GmbH. It is the third generation of
             source-string-first JavaScript i18n tooling from the same author — from gettext-style
             macro systems in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by
-            Salesforce in 2025). The lessons are written down as 16 ADRs before you depend on the
-            tool.
+            Salesforce in 2025). The lessons are written down as {contentStats.adrCount} ADRs before
+            you depend on the tool.
           </p>
           <div className="space-y-2">
             <a href={decisionHref()} className="mono-nums block text-[13px] text-accent">

@@ -12,17 +12,29 @@ It uses Vite plus React because that is the smallest copy-paste setup today.
 The same Vite plugin, runtime model, and `.po` flow now also work with Solid
 through `@palamedes/solid` and `vite-plugin-solid`.
 
+The steps assume an existing Vite app (with an `index.html`, an entry module,
+and a `dev` script). If you are starting from an empty directory, scaffold one
+first:
+
+```bash
+pnpm create vite@latest . --template react-ts
+pnpm install
+```
+
 ## 1. Install the packages
 
 ```bash
-pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin react react-dom
 pnpm add -D @palamedes/cli @vitejs/plugin-react vite typescript
 ```
+
+(`react` and `react-dom` are already present in a scaffolded React app; the
+line above just makes the full dependency set explicit.)
 
 For Solid, swap the host package pair:
 
 ```bash
-pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin solid-js
 pnpm add -D @palamedes/cli vite-plugin-solid vite typescript
 ```
 

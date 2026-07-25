@@ -21,7 +21,9 @@ package names.
 - `MessageNode`
 - `MessageChoiceNode`
 - `MessageFormattedArgumentNode`
+- `MessageLiteralNode`
 - `MessageTagNode`
+- `MessageTextNode`
 - `MessageVariableNode`
 
 ## `createI18n(options?)`
@@ -60,8 +62,13 @@ interface PalamedesI18n {
   load(locale: string, messages: CatalogMessages): void
   activate(locale: string): void
   getMessage(id: string, metadata?: MessageMetadata): string
+  getMessageNodes(id: string, metadata?: MessageMetadata): MessageNode[]
 }
 ```
+
+`getMessageNodes()` returns the parsed message as a `MessageNode[]` tree. The
+`<Trans>`-style components in `@palamedes/react` and `@palamedes/solid` render
+from this structure; custom `PalamedesI18n` implementations must provide it.
 
 `load()` merges messages into the locale catalog. The locale passed to
 `createI18n({ locale })`, or `DEFAULT_LOCALE` when omitted, is active

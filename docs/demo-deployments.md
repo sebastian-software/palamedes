@@ -6,9 +6,10 @@ matrix spans 24 examples (six frameworks × four locale strategies). Public demo
 URLs are documented as the live reference surface where hosting exists, but
 reachability depends on the hosting and DNS notes in this document. The five
 currently hosted subdomain demos require the per-example wildcard DNS records
-described under Subdomain Locale Hosting. The five currently hosted tld demos
-require the `examples.palamedes-i18n.*` domains described under TLD Locale
-Hosting. Remix v3 is verified locally and in CI, but is not yet a public demo
+described under Subdomain Locale Hosting. The five tld rows describe the
+intended shape only: the `examples.palamedes-i18n.*` domains described under
+TLD Locale Hosting are not provisioned yet, so those URLs are not publicly
+reachable. Remix v3 is verified locally and in CI, but is not yet a public demo
 deployment target.
 
 ## Current Policy
@@ -170,7 +171,7 @@ deployment yet.
 
 The optional deployment workflow lives at:
 
-- [deploy-examples.yml](.github/workflows/deploy-examples.yml)
+- [deploy-examples.yml](../.github/workflows/deploy-examples.yml)
 
 It is `workflow_dispatch` only and intentionally excludes the Next.js examples.
 If used, it runs:

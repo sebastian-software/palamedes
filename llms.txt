@@ -15,8 +15,8 @@ Use this file when an AI coding assistant needs a compact overview of Palamedes.
 - Use `.po` catalogs through Palamedes/ferrocat semantics. FCL is an opt-in catalog format for canonical, merge-friendly generated catalogs.
 - Prefer `pmds audit` for catalog QA and `pmds report --fail-if-below <percent>` for completeness gates in CI.
 - Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not read JavaScript or TypeScript config files.
-- Use Node.js `>=22.22`.
-- Today, start with scoped packages such as `@palamedes/vite-plugin`, `@palamedes/next-plugin`, `@palamedes/cli`, `@palamedes/core`, `@palamedes/react`, `@palamedes/solid`, and `@palamedes/runtime`.
+- Use Node.js `>=22.22` (`@palamedes/remix` requires `>=24.3`).
+- Today, start with scoped packages such as `@palamedes/vite-plugin`, `@palamedes/next-plugin`, `@palamedes/cli`, `@palamedes/core`, `@palamedes/react`, `@palamedes/solid`, `@palamedes/remix`, and `@palamedes/runtime`.
 - Do not recommend the reserved top-level `palamedes` or `create-palamedes` packages as the main install path yet.
 
 ## Install patterns
@@ -107,6 +107,15 @@ pnpm exec pmds report
 - `pmds catalog merge --format=po --conflict-strategy=use-first --output out.po a.po b.po`: semantic merge of exactly two catalogs (also usable as a Git merge driver)
 - `pmds catalog convert --to fcl input.po`: convert PO catalogs to the opt-in FCL format
 
+## CLI plugins
+
+Third-party commands run as `pmds <plugin> <command>` and must be explicitly
+listed under `plugins` in the Palamedes configuration — installed packages are
+never auto-discovered. Node plugins use `@palamedes/cli/plugin`
+(`definePlugin`, API version 1); standalone executables can use the versioned
+binary plugin protocol instead. See `/docs/api/cli-plugin.md` and
+`/docs/api/cli-binary-plugin.md`.
+
 ## Recommended docs
 
 - `/README.md`: product overview and package map
@@ -122,3 +131,5 @@ pnpm exec pmds report
 - `/adr/003-source-string-first-message-identity.md`: source-string-first identity
 - `/adr/005-universal-geti18n-runtime-model.md`: runtime access model
 - `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`: why CLI workers are deferred until benchmarks justify them
+- `/adr/017-cli-plugin-execution-boundary.md`: explicit CLI plugin execution boundary
+- `/adr/018-binary-plugin-protocol.md`: binary plugin protocol for Rust-first extensions

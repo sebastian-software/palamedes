@@ -108,8 +108,6 @@ shipped repository fixtures rather than removed CLI internals.
 The synthetic corpus currently exercises the subset that both toolchains compare cleanly in practice:
 
 - `t`
-- `msg`
-- `defineMessage`
 - `plural`
 - `select`
 - `selectOrdinal`
@@ -120,6 +118,9 @@ The synthetic corpus currently exercises the subset that both toolchains compare
 Excluded on purpose:
 
 - explicit IDs
+- `msg` and `defineMessage` (deferred message descriptors were removed from
+  Palamedes in 1.5.0, so they no longer exist on the Palamedes side of the
+  comparison)
 - ignore comments
 - runtime calls such as `i18n._(...)`
 - watch or bundler integration

@@ -39,7 +39,8 @@ Recommended app-facing packages:
 - `@palamedes/solid`: Solid translation components and Solid macro entry point
 - `@palamedes/vite-plugin`: Vite integration and `.po` loading
 - `@palamedes/next-plugin`: Next.js integration
-- `@palamedes/cli`: native CLI (`pmds extract`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog convert`)
+- `@palamedes/remix`: server-first Remix v3 integration (requires Node.js `>=24.3`)
+- `@palamedes/cli`: native CLI (`pmds extract`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog convert`); also hosts explicitly configured CLI plugins via `@palamedes/cli/plugin`
 - `@palamedes/config`: config loading for the JS plugin loaders; also reads legacy `palamedes.config.ts`/`.js` as a compatibility path (the native CLI reads only YAML/JSON/TOML)
 
 Advanced/custom-tooling packages:
@@ -257,6 +258,20 @@ git config merge.palamedes-catalog.driver \
 
 Do not recommend `--workers` today. Palamedes currently defers worker-thread parallelism until end-to-end benchmarks show user-visible benefit. See `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`.
 
+Plugin commands:
+
+```bash
+pnpm exec pmds <plugin> <command> [...args]
+```
+
+Third-party CLI plugins must be explicitly listed under `plugins` in the
+Palamedes configuration — installed packages are never auto-discovered. Node
+plugins implement `definePlugin` from `@palamedes/cli/plugin` (API version 1);
+standalone executables can implement the versioned binary plugin protocol
+instead. See `/docs/api/cli-plugin.md`, `/docs/api/cli-binary-plugin.md`,
+`/adr/017-cli-plugin-execution-boundary.md`, and
+`/adr/018-binary-plugin-protocol.md`.
+
 ## Framework guidance
 
 ### Vite
@@ -266,6 +281,10 @@ Use `@palamedes/vite-plugin`. Put `palamedes()` in the Vite plugin list alongsid
 ### Next.js
 
 Use `@palamedes/next-plugin`. Keep Next-specific behavior in the adapter; do not move catalog semantics into application code.
+
+### Remix v3
+
+Use `@palamedes/remix`. The integration is server-first (register hook plus request-scoped server i18n) and requires Node.js `>=24.3`. See `/docs/api/remix.md`.
 
 ### TanStack Start, SolidStart, Waku, React Router
 
@@ -328,6 +347,8 @@ ADRs:
 - `/adr/014-native-transform-source-maps.md`
 - `/adr/015-runtime-formatter-subset-diagnostics.md`
 - `/adr/016-native-cli-and-yaml-first-configuration.md`
+- `/adr/017-cli-plugin-execution-boundary.md`
+- `/adr/018-binary-plugin-protocol.md`
 
 ## Development commands
 

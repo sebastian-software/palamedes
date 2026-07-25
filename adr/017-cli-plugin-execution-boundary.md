@@ -1,4 +1,4 @@
-# 001 — Host Explicit CLI Plugins In The npm Wrapper
+# 017 — Host Explicit CLI Plugins In The npm Wrapper
 
 - Status: Accepted
 - Date: 2026-07-22

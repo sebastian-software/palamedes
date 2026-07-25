@@ -43,6 +43,8 @@ export function FwPanels() {
       {PANELS.map((panel, index) => {
         const cookie = cellFor(panel.slug, "cookie")
         const route = cellFor(panel.slug, "route")
+        const subdomain = cellFor(panel.slug, "subdomain")
+        const tld = cellFor(panel.slug, "tld")
         return (
           <div
             key={panel.slug}
@@ -67,8 +69,20 @@ export function FwPanels() {
                     <span aria-hidden>● </span>route
                   </a>
                 ) : null}
-                <span className="text-gray-spec">◌ subdomain</span>
-                <span className="text-gray-spec">◌ tld</span>
+                {subdomain.demoLinks?.[0] ? (
+                  <a href={subdomain.demoLinks[0].href} className="text-accent hover:text-ink">
+                    <span aria-hidden>● </span>subdomain
+                  </a>
+                ) : (
+                  <span className="text-gray-spec">◌ subdomain</span>
+                )}
+                {tld.demoLinks?.[0] ? (
+                  <a href={tld.demoLinks[0].href} className="text-accent hover:text-ink">
+                    <span aria-hidden>● </span>tld
+                  </a>
+                ) : (
+                  <span className="text-gray-spec">◌ tld</span>
+                )}
                 <a
                   href={repoHref(`examples/${panel.slug}-route`, "tree")}
                   className="text-gray-spec hover:text-accent"
