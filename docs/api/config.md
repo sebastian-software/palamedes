@@ -7,6 +7,7 @@
 
 - `defineConfig(config)`
 - `loadPalamedesConfig(options?)`
+- `loadPalamedesConfigSync(options?)`
 - `CONFIG_FILENAMES`
 - `expandFallbackLocales(locales, fallbackLocales?)`
 - `resolveCatalogPath(config, catalogPath, locale)`
@@ -77,3 +78,10 @@ config files.
 `plugins` is returned in declaration order. Each entry is a package specifier
 or `[specifier, options]`; the CLI plugin host resolves it relative to
 `configPath`.
+
+## `loadPalamedesConfigSync(options?)`
+
+Synchronous variant of `loadPalamedesConfig` with the same options, return
+shape, and file support (including legacy `palamedes.config.ts`/`.js`). Use it
+in hosts that cannot await, such as synchronous loader hooks — the Remix
+register hook loads its config this way.

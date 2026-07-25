@@ -13,6 +13,7 @@ macro output.
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
 - `I18nInstance`
+- `ClientI18nSnapshot`
 
 The server subpath `@palamedes/runtime/server` exports:
 
