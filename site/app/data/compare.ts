@@ -1,11 +1,24 @@
-/* Comparison content, verbatim from docs/site/structure/pages/ComparisonPage.jsx. */
+/*
+ * Comparison content. Benchmark cells are derived from bench.ts, which is
+ * asserted against benchmarks/e2e-workflow/results/latest.md by
+ * scripts/verify-site-bench-data.mjs — so these numbers cannot drift from
+ * the checked report.
+ */
+
+import { BENCH_REALISTIC } from "./bench"
+
+function realisticMedian(tool: string): string {
+  const row = BENCH_REALISTIC.rows.find((candidate) => candidate.tool === tool)
+  if (!row) throw new Error(`compare.ts: no realistic bench row for ${tool}`)
+  return `${Math.round(row.medianMs)} ms`
+}
 
 export const COMPARE_CRITERIA = [
   "Authoring",
   "Message identity",
   "Runtime access",
   "Catalog engine",
-  "Extract + update (small corpus)",
+  "Extract + update (realistic corpus)",
   "Framework coverage",
   "Maturity & ecosystem",
 ]
@@ -25,9 +38,9 @@ export const COMPARE_TOOLS: CompareTool[] = [
       "message + context, stable across refactors",
       "One model: getI18n() everywhere",
       "Native (Rust/ferrocat), semantic merge & audits",
-      "174 ms (checked report¹)",
-      "5 families browser-verified in CI",
-      "New — honest about it; 16 ADRs document the tradeoffs",
+      `${realisticMedian("Palamedes")} (checked report¹)`,
+      "5 families browser-verified in CI; Remix v3 smoke-verified",
+      "New — honest about it; a numbered ADR series documents the tradeoffs",
     ],
   },
   {
@@ -37,7 +50,7 @@ export const COMPARE_TOOLS: CompareTool[] = [
       "Configurable ID strategies",
       "Multiple entry points (i18n, hooks, macros)",
       "JS-based tooling with plugin ecosystem",
-      "2254 ms (same harness¹)",
+      `${realisticMedian("Lingui")} (same harness¹)`,
       "Broad, community-verified",
       "Mature, large community, years of production use",
     ],

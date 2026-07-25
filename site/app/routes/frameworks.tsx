@@ -46,9 +46,10 @@ export default function Frameworks() {
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
           All 24 apps are verified in CI: SSR output, locale switching, localized server actions or
           server handlers. Screenshots cover the established UI-adapter matrix and are versioned in
-          the repo. Cookie and route demos are publicly hosted for the established adapters today;
-          subdomain, TLD, and Remix v3 public hosting are being provisioned — until then those cells
-          link the verified source instead.
+          the repo. Cookie, route, subdomain, and TLD demos are publicly hosted for the five
+          browser-verified frameworks; Remix v3 is a local/CI proof surface without public hosting
+          yet, so its cells link the verified source instead. Hosting status is documented in the
+          repo's demo-deployments guide.
         </p>
       </Section>
 

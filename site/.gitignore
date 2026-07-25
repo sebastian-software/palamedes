@@ -4,4 +4,5 @@
 /app/routes/blog/*.md
 /app/routes/decisions/
 /app/routes/docs/
+/app/data/generated/
 /public/docs/

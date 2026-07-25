@@ -5,6 +5,7 @@ import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
 import { COMPARE_CRITERIA, COMPARE_FOOTNOTES, COMPARE_TOOLS } from "~/data/compare"
+import contentStats from "~/data/generated/content-stats.json"
 import { docsHref } from "~/data/links"
 
 export const handle = { layout: "bare" }
@@ -185,7 +186,7 @@ export default function Compare() {
 
       <StatementBand num="05 — The honest bit">
         Every tool on this page is good software. The question is which tradeoffs match your team —
-        ours are written down in 16 ADRs, so you can check before you commit.
+        ours are written down in {contentStats.adrCount} ADRs, so you can check before you commit.
       </StatementBand>
 
       <CtaBand

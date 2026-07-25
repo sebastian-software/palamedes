@@ -1,12 +1,13 @@
 import { repoHref } from "./links"
 
 /*
- * Typed port of FRAMEWORK_MATRIX_CELLS from docs/site/structure/components.jsx.
  * Cells carry EXPLICIT links and a per-cell hosting status — never a generated
- * URL pattern. URL shapes mirror examples/README.md: cookie (one host), route
- * (locale path), subdomain (locale host label, live under the per-example
- * wildcards), tld (palamedes-i18n.{com,de,es,fr} — domains still pending, so
- * these stay provisioning). Remaining tld hosting is tracked in issue #306.
+ * URL pattern. Hosting truth lives in docs/demo-deployments.md; keep this file
+ * in sync with it. URL shapes mirror examples/README.md: cookie (one host),
+ * route (locale path), subdomain (locale host label), tld
+ * (palamedes-i18n.{com,de,es,fr}). All four strategies are hosted for the five
+ * browser-verified frameworks; Remix v3 is a local/CI proof surface without
+ * public hosting yet, so its cells link the verified source instead.
  */
 
 export type MatrixStatus = "live" | "provisioning"
@@ -76,18 +77,28 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
     framework,
     strategy: "subdomain",
     verified: true as const,
-    status: "live" as const,
-    demoLinks: ["en", "de", "es"].map((locale) => ({
-      label: locale,
-      href: `https://${locale}.${framework}-subdomain.examples.palamedes.dev`,
-    })),
+    status: HOSTED_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
+    demoLinks: HOSTED_FRAMEWORKS.has(framework)
+      ? ["en", "de", "es"].map((locale) => ({
+          label: locale,
+          href: `https://${locale}.${framework}-subdomain.examples.palamedes.dev`,
+        }))
+      : undefined,
     sourceHref: repoHref(`examples/${framework}-subdomain`, "tree"),
   },
   {
     framework,
     strategy: "tld",
     verified: true as const,
-    status: "provisioning" as const,
+    status: HOSTED_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
+    demoLinks: HOSTED_FRAMEWORKS.has(framework)
+      ? [
+          { label: "en", href: `https://${framework}.examples.palamedes-i18n.com` },
+          { label: "de", href: `https://${framework}.examples.palamedes-i18n.de` },
+          { label: "es", href: `https://${framework}.examples.palamedes-i18n.es` },
+          { label: "fr", href: `https://${framework}.examples.palamedes-i18n.fr` },
+        ]
+      : undefined,
     sourceHref: repoHref(`examples/${framework}-tld`, "tree"),
   },
 ])

@@ -7,7 +7,7 @@ import { StackPicker } from "~/components/get-started/StackPicker"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { NEXT_STEP_CARDS } from "~/data/features"
-import { apiHref, docsHref } from "~/data/links"
+import { docsHref } from "~/data/links"
 
 export const handle = { layout: "bare" }
 
@@ -65,7 +65,7 @@ export default function GetStarted() {
           label: "Open an issue",
           href: "https://github.com/sebastian-software/palamedes/issues",
         }}
-        secondary={{ label: "Read the docs", href: apiHref() }}
+        secondary={{ label: "Read the docs", href: docsHref() }}
       />
     </Page>
   )
