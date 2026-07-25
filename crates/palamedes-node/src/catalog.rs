@@ -394,6 +394,7 @@ pub struct CatalogModuleResult {
     pub code: String,
     pub warnings: Vec<String>,
     pub watch_files: Vec<String>,
+    pub locale: String,
 }
 
 struct CatalogModuleRenderOptions {
@@ -1294,7 +1295,7 @@ pub fn compile_catalog_module(request: CatalogModuleRequest) -> Result<CatalogMo
     let render_options = CatalogModuleRenderOptions {
         locale,
         resource_path: resource_path.clone(),
-        pseudo_locale,
+        pseudo_locale: pseudo_locale.or_else(|| config.pseudo_locale.clone()),
         fail_on_missing: fail_on_missing.unwrap_or(false),
         fail_on_compile_error: fail_on_compile_error.unwrap_or(false),
         missing_failure_hint,
@@ -1332,12 +1333,26 @@ fn create_catalog_module_result(
     artifact: palamedes::CatalogArtifactResult,
     options: &CatalogModuleRenderOptions,
 ) -> Result<CatalogModuleResult> {
-    if options.pseudo_locale.as_deref() != Some(options.locale.as_str())
+    /*
+     * The caller-supplied locale is only a fallback: loaders historically
+     * derived it from the file basename, which is wrong for layouts like
+     * `{locale}/messages.po`. The artifact pipeline resolves the true locale
+     * from the catalog path pattern and reports it as the head of the
+     * fallback chain.
+     */
+    let locale = artifact
+        .resolved_locale_chain
+        .as_ref()
+        .and_then(|chain| chain.first())
+        .cloned()
+        .unwrap_or_else(|| options.locale.clone());
+
+    if options.pseudo_locale.as_deref() != Some(locale.as_str())
         && !artifact.missing.is_empty()
         && options.fail_on_missing
     {
         return Err(napi::Error::from_reason(append_hint(
-            create_missing_error_message(&options.locale, &artifact.missing),
+            create_missing_error_message(&locale, &artifact.missing),
             options.missing_failure_hint.as_deref(),
         )));
     }
@@ -1354,13 +1369,13 @@ fn create_catalog_module_result(
 
         if options.fail_on_compile_error && !error_diagnostics.is_empty() {
             return Err(napi::Error::from_reason(append_hint(
-                create_compile_error_message(&options.locale, &error_diagnostics),
+                create_compile_error_message(&locale, &error_diagnostics),
                 options.compile_failure_hint.as_deref(),
             )));
         }
 
         warnings.push(append_hint(
-            create_diagnostic_message(&options.locale, &artifact.diagnostics),
+            create_diagnostic_message(&locale, &artifact.diagnostics),
             if options.fail_on_compile_error {
                 None
             } else {
@@ -1370,9 +1385,10 @@ fn create_catalog_module_result(
     }
 
     Ok(CatalogModuleResult {
-        code: render_catalog_module(&artifact.messages, &options.locale, &options.resource_path)?,
+        code: render_catalog_module(&artifact.messages, &locale, &options.resource_path)?,
         warnings,
         watch_files: artifact.watch_files,
+        locale,
     })
 }
 
