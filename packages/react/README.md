@@ -51,14 +51,19 @@ automatically. The transform override is needed for inline `t` / `plural` macro
 calls. Because the reactive getter is a custom hook, those inline calls must run
 unconditionally during a function-component or custom-hook render.
 
-## License
-
-[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
-
-MIT © 2026 Sebastian Software
-
 Rich JSX children are transformed to numeric component slots in the message, for
 example `<0>Palamedes</0>`, while the React component is passed separately.
+
+## Runtime Components
+
+Besides the macro entry point, the package's main entry exports the runtime
+components `Trans`, `Plural`, `Select`, and `SelectOrdinal` (plus the
+`TransProps` type). These are what macro-transformed JSX renders through.
+`Trans` resolves messages through the active i18n instance; the hand-written
+(non-macro) use of the choice components currently formats the source-language
+props directly without catalog lookup — see
+[#417](https://github.com/sebastian-software/palamedes/issues/417) before
+using them outside macro output.
 
 ## Headless Frontend Helpers
 
@@ -110,3 +115,9 @@ function LocaleToolbar({
   )
 }
 ```
+
+## License
+
+[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
+
+MIT © 2026 Sebastian Software

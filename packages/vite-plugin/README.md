@@ -92,11 +92,21 @@ palamedes({
   exclude: /node_modules/,
   enablePoLoader: true,
   configPath: "./palamedes.yaml",
+  cwd: process.cwd(),
+  skipValidation: false,
   failOnMissing: false,
   failOnCompileError: false,
   runtimeModule: "@palamedes/runtime",
 })
 ```
+
+`cwd` and `skipValidation` are passed through to `loadPalamedesConfig`: `cwd`
+sets the directory the config search starts from, and `skipValidation` loads
+partially-authored config files without validation (tooling only).
+
+Imports ending in `?palamedes` are treated like `.po` catalog imports — the
+analog of Lingui's `?lingui` query suffix — so bundler-agnostic code can force
+a module through the Palamedes catalog loader.
 
 ## What This Package Handles
 

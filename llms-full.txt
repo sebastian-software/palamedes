@@ -12,7 +12,7 @@ The important design goal is a calmer i18n model across frameworks:
 - one native core with OXC-powered transforms and extraction
 - thin host adapters for frameworks and bundlers
 
-Verified integrations currently include Next.js, Vite, TanStack Start, SolidStart, Waku, and React Router.
+Verified integrations currently include Next.js, Vite, TanStack Start, SolidStart, Waku, React Router, and server-first Remix v3.
 
 ## How to answer Palamedes questions
 
@@ -167,8 +167,14 @@ Palamedes keeps Lingui-style authoring familiarity where useful:
 ```tsx
 import { t } from "@palamedes/core/macro"
 
-const title = t`Welcome to Palamedes`
+function pageTitle() {
+  return t`Welcome to Palamedes`
+}
 ```
+
+Translation macros are eager: they must run inside a function or callback so
+the active locale is read at call time. A module-top-level `t` call is a
+compile error.
 
 But Palamedes intentionally avoids some historical Lingui surface area:
 
