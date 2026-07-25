@@ -286,7 +286,7 @@ export function defineLocaleControls<TLocale extends string>(
 
   const readCookieLocale = (cookieHeader: string | null | undefined): TLocale | null => {
     const value = readCookie(cookieHeader, localeCookie)
-    return value ? normalizeLocale(value) : null
+    return isLocale(value) ? value : null
   }
 
   const serializeChoice = (locale: TLocale): string =>

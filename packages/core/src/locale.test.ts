@@ -41,6 +41,16 @@ describe("locale controls", () => {
     ).toStrictEqual({ locale: "es", source: "cookie" })
   })
 
+  it("falls through to accept-language when the cookie locale is unsupported", () => {
+    expect(
+      controls.resolve({
+        strategy: "cookie",
+        acceptLanguageHeader: "de",
+        cookieHeader: "locale=en-US",
+      })
+    ).toStrictEqual({ locale: "de", source: "accept-language" })
+  })
+
   it("resolves the route locale before accept-language", () => {
     expect(controls.resolve({ strategy: "route", routeLocale: "de" })).toStrictEqual({
       locale: "de",
