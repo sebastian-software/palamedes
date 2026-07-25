@@ -29,8 +29,11 @@ Unsupported styles on supported `number`, `date`, and `time` formatters are
 warnings because the runtime falls back to default `Intl` formatting.
 
 `compileCatalogModule(config, resourcePath, options)` renders the compiled
-catalog artifact as a JavaScript module for a selected locale. The first-party
-Vite and Next plugins use it for `.po` imports.
+catalog artifact as a JavaScript module. The locale is resolved from the
+configured catalog path pattern (so layouts like `{locale}/messages.po` work);
+the caller-supplied `options.locale` is only a fallback when resolution is
+unavailable, and the result reports the effective locale as `locale`. The
+first-party Vite and Next plugins use this function for `.po` imports.
 
 ## Stability
 

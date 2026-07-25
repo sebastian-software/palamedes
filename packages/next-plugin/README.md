@@ -123,9 +123,18 @@ module.exports = withPalamedes(
     failOnMissing: false,
     failOnCompileError: false,
     runtimeModule: "@palamedes/runtime",
+    workspaceRoot: undefined,
   }
 )
 ```
+
+`workspaceRoot` pins the monorepo root used for Turbopack and output file
+tracing. When omitted, `withPalamedes` walks upward from the working directory
+looking for workspace markers (`workspaces` in package.json,
+`pnpm-workspace.yaml`, `turbo.json`, or `.git`) and — when it finds one — sets
+`outputFileTracingRoot` and `turbopack.root` on the Next config as a side
+effect. Pass `workspaceRoot` explicitly if that detection picks the wrong
+directory.
 
 ## What This Package Handles
 

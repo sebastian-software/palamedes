@@ -253,6 +253,7 @@ export interface CatalogModuleResult {
   code: string;
   warnings: Array<string>;
   watchFiles: Array<string>;
+  locale: string;
 }
 export interface CatalogArtifactCatalogConfig {
   path: string;

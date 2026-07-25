@@ -27,6 +27,9 @@ catalogs:
 
 - `defineConfig(config)`
 - `loadPalamedesConfig(options?)`
+- `loadPalamedesConfigSync(options?)` — synchronous variant with the same
+  options and return shape, for hosts that cannot await (e.g. synchronous
+  loader hooks)
 - `CONFIG_FILENAMES`
 - `expandFallbackLocales(locales, fallbackLocales?)`
 - `resolveCatalogPath(config, catalogPath, locale)`

@@ -88,8 +88,13 @@ After:
 ```ts
 import { getI18n } from "@palamedes/runtime"
 
-const locale = getI18n().locale
+function currentLocale() {
+  return getI18n().locale
+}
 ```
+
+Call `getI18n()` inside a function or component, not at module top level — at
+import time there is no active i18n instance yet.
 
 ### 2. Explicit IDs
 

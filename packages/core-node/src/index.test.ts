@@ -121,6 +121,65 @@ msgstr "Hallo"
     expect(result.code).toContain("Hallo")
     expect(result.warnings).toStrictEqual([])
     expect(result.watchFiles).toContain(path.join(deCatalog, "messages.po"))
+    expect(result.locale).toBe("de")
+  })
+
+  it("resolves the module locale from the catalog path, not the caller-supplied locale", async () => {
+    const rootDir = await createTempDir()
+    const enCatalog = path.join(rootDir, "locales", "en")
+    const deCatalog = path.join(rootDir, "locales", "de")
+
+    await mkdir(enCatalog, { recursive: true })
+    await mkdir(deCatalog, { recursive: true })
+    await writeFile(
+      path.join(enCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: en\\n"
+
+msgid "Hello"
+msgstr "Hello"
+`
+    )
+    await writeFile(
+      path.join(deCatalog, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "Hello"
+msgstr ""
+`
+    )
+
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+    const resourcePath = path.join(deCatalog, "messages.po")
+
+    /*
+     * Loaders derive the caller locale from the file basename, which is
+     * "messages" in the {locale}/messages.po layout. The resolved locale
+     * must win for the result and for failure messages.
+     */
+    const result = compileCatalogModule(config, resourcePath, { locale: "messages" })
+    expect(result.locale).toBe("de")
+
+    expect(() =>
+      compileCatalogModule(config, resourcePath, { locale: "messages", failOnMissing: true })
+    ).toThrow(/locale de/)
+
+    /*
+     * A pseudo locale matching the resolved locale must bypass the
+     * missing-translation gate even when the caller locale is wrong.
+     */
+    const pseudoConfig = { ...config, locales: ["en", "de"], pseudoLocale: "de" }
+    expect(() =>
+      compileCatalogModule(pseudoConfig, resourcePath, { locale: "messages", failOnMissing: true })
+    ).not.toThrow()
   })
 
   it("renders catalog modules with the same message order as artifact objects", async () => {

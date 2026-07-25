@@ -19,6 +19,8 @@ export type CatalogCompileArtifactResult = {
   messages: Record<string, string>
   missing: MissingCatalogMessage[]
   diagnostics: CatalogDiagnostic[]
+  /** Fallback chain reported by the compiler; the head is the resolved locale. */
+  resolvedLocaleChain?: string[]
 }
 
 export type CatalogLoaderOptions = {
@@ -42,7 +44,6 @@ export function createCatalogLoaderResult(
 ): CatalogLoaderResult {
   const warnings: string[] = []
   const {
-    locale,
     pseudoLocale,
     failOnMissing = false,
     failOnCompileError = false,
@@ -50,6 +51,13 @@ export function createCatalogLoaderResult(
     compileFailureHint,
     diagnosticsWarningHint,
   } = options
+
+  /*
+   * The caller-supplied locale is often derived from the catalog file's
+   * basename, which is wrong for layouts like `{locale}/messages.po`. When
+   * the compiler reports the resolved chain, its head is authoritative.
+   */
+  const locale = result.resolvedLocaleChain?.[0] ?? options.locale
 
   if (locale !== pseudoLocale && result.missing.length > 0 && failOnMissing) {
     throw new Error(

@@ -76,7 +76,6 @@ function resolveWorkspaceRoot(explicitRoot?: string) {
     if (
       hasWorkspaces(packageJsonPath) ||
       existsSync(path.join(currentDir, "pnpm-workspace.yaml")) ||
-      existsSync(path.join(currentDir, "pnpm-workspace.yml")) ||
       existsSync(path.join(currentDir, "turbo.json")) ||
       existsSync(path.join(currentDir, ".git"))
     ) {
