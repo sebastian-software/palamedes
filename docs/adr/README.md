@@ -5,3 +5,4 @@ plans belong in [`docs/plans`](../plans) and should be removed once the decision
 is implemented or abandoned.
 
 - [001 — Host explicit CLI plugins in the npm wrapper](./001-cli-plugin-execution-boundary.md)
+- [002 — Binary plugin protocol for Rust-first extensions](./002-binary-plugin-protocol.md)
