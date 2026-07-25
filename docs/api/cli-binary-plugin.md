@@ -53,7 +53,12 @@ object to stdin, then closes it:
 `describe` must answer with exactly one manifest event on stdout:
 
 ```json
-{ "event": "manifest", "name": "acme", "protocolVersion": 1, "commands": { "inspect": { "description": "Inspect configured catalogs." } } }
+{
+  "event": "manifest",
+  "name": "acme",
+  "protocolVersion": 1,
+  "commands": { "inspect": { "description": "Inspect configured catalogs." } }
+}
 ```
 
 Manifests are validated like ESM plugin definitions: lowercase kebab-case
@@ -73,7 +78,15 @@ A `run` request carries the invocation and resolved project context:
   "json": false,
   "interactive": false,
   "config": { "…": "resolved LoadedPalamedesConfig" },
-  "catalogs": [{ "path": "…", "format": "po", "include": ["src"], "exclude": [], "locales": [{ "locale": "en", "path": "/abs/path" }] }]
+  "catalogs": [
+    {
+      "path": "…",
+      "format": "po",
+      "include": ["src"],
+      "exclude": [],
+      "locales": [{ "locale": "en", "path": "/abs/path" }]
+    }
+  ]
 }
 ```
 
