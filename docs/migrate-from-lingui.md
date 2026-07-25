@@ -103,8 +103,6 @@ defineMessage({ id: "checkout.cta", message: "Buy now" })
 After:
 
 ```ts
-t({ message: "Buy now" })
-
 function checkoutButtonLabel() {
   return t({ message: "Buy now", context: "checkout button" })
 }

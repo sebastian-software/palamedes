@@ -20,21 +20,23 @@ We are not asking you to trust a slogan. The repo shows the work.
 
 The current proof:
 
-- Five framework families, each with cookie, route, subdomain, and tld locale strategies, are
-  browser-verified through the same Playwright-based flow used in CI.
+- Six framework families, each with cookie, route, subdomain, and tld locale
+  strategies: five are browser-verified through the same Playwright-based flow
+  used in CI, and server-first Remix v3 is smoke-verified.
 - The image above is one demo in three locales: switch language and the copy,
   plural seat counts, currency, and dates all change together. Every framework
   and strategy renders the same design, so per-framework captures live in
   [docs/example-screenshots](docs/example-screenshots) instead of repeating the
   same picture here. All of it is versioned browser output, not a mockup.
-- Sixteen ADRs explain the runtime model, message identity, native boundary,
-  adapter architecture, and the work deliberately kept out of scope.
+- A numbered [ADR series](https://palamedes.dev/decisions) explains the
+  runtime model, message identity, native boundary, adapter architecture, and
+  the work deliberately kept out of scope.
 - Benchmark commands, fixtures, and machine-readable reports are checked in so
-  the numbers can be rerun locally. The checked end-to-end extract/update
-  workflow report measures Palamedes at `33.58 ms` on the small profile and
-  `47.77 ms` on the medium profile; the Lingui and i18next-parser comparison
-  numbers and recorded tool versions are documented in
-  [End-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md).
+  the numbers can be rerun locally. The current medians, comparison numbers,
+  and recorded tool versions live in one place: the
+  [end-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
+  and its checked report
+  [`benchmarks/e2e-workflow/results/latest.md`](https://github.com/sebastian-software/palamedes/blob/main/benchmarks/e2e-workflow/results/latest.md).
 
 **Try it live.** The live reference covers cookie, route, subdomain, and tld demos across the framework matrix. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
@@ -72,14 +74,17 @@ easier to review, and easier to carry from one framework to the next.
 ## Current Status
 
 - Recommended for new projects and teams that want cleaner i18n foundations
-- Verified today across Next.js, TanStack Start, SolidStart, Waku, React Router, and server-first Remix v3 on Node.js `>=22.22`
+- Verified today across Next.js, TanStack Start, SolidStart, Waku, and React
+  Router on Node.js `>=22.22`; server-first Remix v3 is smoke-verified and
+  requires Node.js `>=24.3`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 - 1.0 stability tiers and public API expectations are documented in [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
 
 ## What Exists Today
 
-- A browser-verified example matrix across six framework families
+- An example matrix across six framework families — five browser-verified,
+  Remix v3 smoke-verified
 - Versioned screenshots generated from the same Playwright-based verifier used in CI
 - Reproducible benchmark commands for transform, extract, catalog update, compile steps, and end-to-end extract/update workflows
 - Structured catalog audit and metadata validation APIs backed by `ferrocat`
@@ -256,34 +261,20 @@ The same foundation also matters for future translation workflows:
 
 ## Proof And Adoption Docs
 
-- [MDX-ready messaging source for homepage/docs](https://github.com/sebastian-software/palamedes/blob/main/docs/site/index.mdx)
-- [Catalog formats: PO and FCL](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
-- [Migrating to Palamedes 1.0](https://github.com/sebastian-software/palamedes/blob/main/docs/migrations/1.0.0.md)
-- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
-- [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
-- [Example matrix and local/CI verification story](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
-- [Troubleshooting common setup failures](https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md)
-- [Pseudo-localization and fallback locale config](https://github.com/sebastian-software/palamedes/blob/main/docs/pseudo-localization.md)
-- [Versioned example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
-- [Live demo deployments](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md)
-- [Benchmarking against Lingui v6](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
-- [End-to-end workflow benchmark against Lingui and i18next-parser](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
-- [Approach comparison across Lingui, next-intl, and GT](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
-- [Checked ICU semantics proof from source to runtime](https://github.com/sebastian-software/palamedes/blob/main/docs/icu-semantics-proof.md)
-- [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
-- [Translation workflow surface](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-workflow-surface.md)
-- [Translation module boundaries](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-module-boundaries.md)
-- [Backend servers with request-local runtime wiring](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
-- [ADR-012: Translation augmentation boundary](https://github.com/sebastian-software/palamedes/blob/main/adr/012-translation-augmentation-boundary.md)
-- [ADR-013: Defer CLI worker parallelism until benchmarked need](https://github.com/sebastian-software/palamedes/blob/main/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md)
-- [ADR-014: Native transform source maps](https://github.com/sebastian-software/palamedes/blob/main/adr/014-native-transform-source-maps.md)
-- [ADR-015: Runtime formatter subset diagnostics](https://github.com/sebastian-software/palamedes/blob/main/adr/015-runtime-formatter-subset-diagnostics.md)
-- [ADR-016: Native CLI and YAML-first configuration](https://github.com/sebastian-software/palamedes/blob/main/adr/016-native-cli-and-yaml-first-configuration.md)
-- [`llms.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms.txt) and [`llms-full.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms-full.txt) for AI coding assistants
-- [Comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
-- [Migration playbook from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
-- [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
-- [Internal storyline for a later deck](https://github.com/sebastian-software/palamedes/blob/main/docs/site/internal-storyline.md)
+Every guide, API reference, and ADR in this repository is published on the
+website — that is the recommended way to browse them:
+
+- [palamedes.dev/docs](https://palamedes.dev/docs) — all guides, comparisons, and references
+- [palamedes.dev/decisions](https://palamedes.dev/decisions) — the full ADR series
+- [palamedes.dev/proof](https://palamedes.dev/proof) — benchmarks and the verification story
+- [palamedes.dev/frameworks](https://palamedes.dev/frameworks) — the example matrix with live demos
+
+In the repository itself, start with:
+
+- [Proof, benchmarks, and current maturity](docs/proof-and-benchmarks.md)
+- [Example matrix and local/CI verification story](examples/README.md)
+- [Architecture decisions index](DECISIONS.md)
+- [`llms.txt`](llms.txt) and [`llms-full.txt`](llms-full.txt) for AI coding assistants
 
 ## Advanced Packages
 

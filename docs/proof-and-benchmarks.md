@@ -9,7 +9,7 @@ This page shows the work behind that claim. The goal is confidence, not hype.
 
 This repo can credibly prove five things:
 
-- Palamedes is verified across Next.js, TanStack Start, SolidStart, Waku, and React Router
+- Palamedes is browser-verified across Next.js, TanStack Start, SolidStart, Waku, and React Router, with server-first Remix v3 smoke-verified
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, catalog update, and catalog compile steps are measured locally and reproducibly
@@ -20,16 +20,16 @@ evidence easy to inspect.
 
 ## Current Maturity
 
-| Topic                 | Current state                                                                     |
-| --------------------- | --------------------------------------------------------------------------------- |
-| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring |
-| Supported frameworks  | Verified examples for Next.js, TanStack Start, SolidStart, Waku, and React Router |
-| Runtime model         | `@palamedes/runtime` with `getI18n()`                                             |
-| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in         |
-| Native core           | Rust + `napi-rs`                                                                  |
-| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                      |
-| Node requirement      | `>=22.22`                                                                         |
-| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                        |
+| Topic                 | Current state                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring                                  |
+| Supported frameworks  | Browser-verified examples for Next.js, TanStack Start, SolidStart, Waku, and React Router; Remix v3 smoke-verified |
+| Runtime model         | `@palamedes/runtime` with `getI18n()`                                                                              |
+| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in                                          |
+| Native core           | Rust + `napi-rs`                                                                                                   |
+| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                                                       |
+| Node requirement      | `>=22.22`                                                                                                          |
+| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                                                         |
 
 ## What Counts As Proof In This Repo
 
@@ -228,53 +228,25 @@ Median results from that run:
 - catalog artifact compile: `4.04 ms`
 
 This sample is a historical reference point. Current Palamedes builds use
-Ferrocat `2.1.1`; rerun the command above when you need fresh numbers for the
+Ferrocat `2.2.0`; rerun the command above when you need fresh numbers for the
 current release line. The benchmark script also prints the raw sample series and
 sampled peak RSS so the checked median and memory shape are easy to verify.
 
-For the Ferrocat 2.x / Palamedes 1.0 migration PR, record a fresh
-`pnpm benchmark:proof` run in the PR description so reviewers can compare it
-with this historical baseline without turning machine-local numbers into a
-portable performance claim.
-
 ## End-To-End Workflow Baseline
 
-Checked local sample, captured on July 6, 2026 with:
+The end-to-end extract/update comparison numbers are deliberately **not**
+repeated on this page. They live in exactly one place — the checked report
+[`benchmarks/e2e-workflow/results/latest.md`](../benchmarks/e2e-workflow/results/latest.md)
+(with machine-readable data in
+[`latest.json`](../benchmarks/e2e-workflow/results/latest.json)) — and the
+methodology is documented in
+[End-to-end workflow benchmark](./benchmark-e2e-workflow.md). The website
+charts quote the same report and a build-time guard
+(`scripts/verify-site-bench-data.mjs`) fails the site build if they drift.
 
-```bash
-pnpm benchmark:e2e-workflow
-```
-
-Environment:
-
-- Node `v24.18.0`
-- macOS `darwin/arm64`
-- Palamedes CLI `1.3.0`
-- Lingui CLI `6.4.0`
-- i18next-parser CLI `9.4.0`
-
-Median results from that run:
-
-| Profile   |   Palamedes |       Lingui | i18next-parser |
-| --------- | ----------: | -----------: | -------------: |
-| Small     |  `31.64 ms` |  `674.05 ms` |    `499.18 ms` |
-| Medium    |  `43.37 ms` |  `745.33 ms` |    `546.32 ms` |
-| Realistic | `173.50 ms` | `2254.38 ms` |   `1561.82 ms` |
-
-The `realistic` profile is modeled on a production web app's Lingui include
-roots: `~1,500` files across `~400,000` lines, only about half of which carry
-any i18n marker. Most of the source is ordinary, non-i18n code — the extractor
-still has to scan every line, which is the extract-time cost a real project
-pays. (Figures are rounded so they read as a shape, not false precision.)
-
-The harness validates that all three tools write the same active source-message
-set before publishing timings. It renders the same logical message inventory
-into each tool's idiomatic source shape, then measures scan, extract, catalog
-update, and file writes as one workflow.
-
-Treat these as machine-local workflow measurements, not universal claims. The
-raw report lives in
-[`benchmarks/e2e-workflow/results/latest.json`](../benchmarks/e2e-workflow/results/latest.json).
+The harness validates that all tools write the same active source-message set
+before publishing timings. Treat the results as machine-local workflow
+measurements, not universal claims.
 
 ## What This Page Does Not Claim
 

@@ -89,10 +89,9 @@ must be resolved before implementation:
   Subdomain/tld cells carry status `provisioning` and render no demo link
   until the hosting story is reconciled (#306). Never derive demo URLs from
   a single naming pattern.
-- E2E extraction workflow benchmark: 12.45× vs Lingui, 2.64× vs FormatJS,
-  9.12× vs i18next-parser, and 36.76× vs i18next-cli on the checked 1,500-file
-  machine-local run
-  — see `benchmarks/e2e-workflow/results/latest.md`.
-- 16 ADRs in `adr/`.
+- E2E extraction workflow benchmark: current medians and speedups live only in
+  `benchmarks/e2e-workflow/results/latest.md`; the site derives its quoted
+  numbers from `site/app/data/bench.ts`, which is guarded against that report.
+- ADRs in `adr/`; the site derives the count during prebuild.
 - CLI binary is `pmds`; recommended install is the scoped `@palamedes/*`
   packages.

@@ -170,7 +170,7 @@ deployment yet.
 
 The optional deployment workflow lives at:
 
-- [deploy-examples.yml](.github/workflows/deploy-examples.yml)
+- [deploy-examples.yml](../.github/workflows/deploy-examples.yml)
 
 It is `workflow_dispatch` only and intentionally excludes the Next.js examples.
 If used, it runs:

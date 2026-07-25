@@ -18,7 +18,7 @@ example needs local setup notes that do not belong in the shared matrix guide.
 
 ## What This Matrix Proves
 
-- one i18n mental model across Next.js, TanStack Start, SolidStart, Waku, and React Router
+- one i18n mental model across Next.js, TanStack Start, SolidStart, Waku, React Router, and server-first Remix v3
 - one runtime story with request-local server i18n plus client interaction
 - one message identity story through source-string-first `.po` workflows
 - one proof surface with browser verification, screenshots, and SSR checks
@@ -107,12 +107,12 @@ adapter story settles. They are pinned to the tested Remix beta and verified by
 
 ### Cookie-Derived Locale
 
-- [examples/nextjs-cookie](examples/nextjs-cookie)
-- [examples/tanstack-cookie](examples/tanstack-cookie)
-- [examples/solidstart-cookie](examples/solidstart-cookie)
-- [examples/waku-cookie](examples/waku-cookie)
-- [examples/react-router-cookie](examples/react-router-cookie)
-- [examples/remix-cookie](examples/remix-cookie)
+- [examples/nextjs-cookie](./nextjs-cookie)
+- [examples/tanstack-cookie](./tanstack-cookie)
+- [examples/solidstart-cookie](./solidstart-cookie)
+- [examples/waku-cookie](./waku-cookie)
+- [examples/react-router-cookie](./react-router-cookie)
+- [examples/remix-cookie](./remix-cookie)
 
 These examples prove:
 
@@ -124,12 +124,12 @@ These examples prove:
 
 ### Route-Derived Locale
 
-- [examples/nextjs-route](examples/nextjs-route)
-- [examples/tanstack-route](examples/tanstack-route)
-- [examples/solidstart-route](examples/solidstart-route)
-- [examples/waku-route](examples/waku-route)
-- [examples/react-router-route](examples/react-router-route)
-- [examples/remix-route](examples/remix-route)
+- [examples/nextjs-route](./nextjs-route)
+- [examples/tanstack-route](./tanstack-route)
+- [examples/solidstart-route](./solidstart-route)
+- [examples/waku-route](./waku-route)
+- [examples/react-router-route](./react-router-route)
+- [examples/remix-route](./remix-route)
 
 These examples prove:
 
@@ -141,12 +141,12 @@ These examples prove:
 
 ### Subdomain-Derived Locale
 
-- [examples/nextjs-subdomain](examples/nextjs-subdomain)
-- [examples/tanstack-subdomain](examples/tanstack-subdomain)
-- [examples/solidstart-subdomain](examples/solidstart-subdomain)
-- [examples/waku-subdomain](examples/waku-subdomain)
-- [examples/react-router-subdomain](examples/react-router-subdomain)
-- [examples/remix-subdomain](examples/remix-subdomain)
+- [examples/nextjs-subdomain](./nextjs-subdomain)
+- [examples/tanstack-subdomain](./tanstack-subdomain)
+- [examples/solidstart-subdomain](./solidstart-subdomain)
+- [examples/waku-subdomain](./waku-subdomain)
+- [examples/react-router-subdomain](./react-router-subdomain)
+- [examples/remix-subdomain](./remix-subdomain)
 
 These examples prove:
 
@@ -158,12 +158,12 @@ These examples prove:
 
 ### TLD-Derived Locale
 
-- [examples/nextjs-tld](examples/nextjs-tld)
-- [examples/tanstack-tld](examples/tanstack-tld)
-- [examples/solidstart-tld](examples/solidstart-tld)
-- [examples/waku-tld](examples/waku-tld)
-- [examples/react-router-tld](examples/react-router-tld)
-- [examples/remix-tld](examples/remix-tld)
+- [examples/nextjs-tld](./nextjs-tld)
+- [examples/tanstack-tld](./tanstack-tld)
+- [examples/solidstart-tld](./solidstart-tld)
+- [examples/waku-tld](./waku-tld)
+- [examples/react-router-tld](./react-router-tld)
+- [examples/remix-tld](./remix-tld)
 
 These examples prove:
 
@@ -259,7 +259,7 @@ pnpm capture:example-screenshots -- --id nextjs-cookie
 
 The verifier runs in two layers:
 
-- fast Node-based smoke checks from [scripts/verify-examples.mjs](scripts/verify-examples.mjs)
+- fast Node-based smoke checks from [scripts/verify-examples.mjs](../scripts/verify-examples.mjs)
 - browser interaction checks from `Vitest` using direct `Playwright` automation against the running apps
 
 Together they cover:
@@ -274,10 +274,10 @@ Together they cover:
 
 For the decision model behind cookie, route, subdomain, tld, and domain handling, see:
 
-- [docs/locale-strategies.md](docs/locale-strategies.md)
-- [docs/framework-example-notes.md](docs/framework-example-notes.md)
-- [docs/example-screenshots/README.md](docs/example-screenshots/README.md)
-- [docs/demo-deployments.md](docs/demo-deployments.md)
+- [docs/locale-strategies.md](../docs/locale-strategies.md)
+- [docs/framework-example-notes.md](../docs/framework-example-notes.md)
+- [docs/example-screenshots/README.md](../docs/example-screenshots/README.md)
+- [docs/demo-deployments.md](../docs/demo-deployments.md)
 
 ## Default Dev Ports
 
