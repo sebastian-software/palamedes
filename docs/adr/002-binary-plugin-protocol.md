@@ -1,6 +1,6 @@
 # 002 — Binary Plugin Protocol For Rust-First Extensions
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-07-25
 
 ## Context
