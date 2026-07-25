@@ -5,9 +5,10 @@ import { repoHref } from "./links"
  * URL pattern. Hosting truth lives in docs/demo-deployments.md; keep this file
  * in sync with it. URL shapes mirror examples/README.md: cookie (one host),
  * route (locale path), subdomain (locale host label), tld
- * (palamedes-i18n.{com,de,es,fr}). All four strategies are hosted for the five
- * browser-verified frameworks; Remix v3 is a local/CI proof surface without
- * public hosting yet, so its cells link the verified source instead.
+ * (palamedes-i18n.{com,de,es,fr}). Cookie, route, and subdomain are hosted for
+ * the five browser-verified frameworks; the tld domains are not provisioned
+ * yet, and Remix v3 is a local/CI proof surface without public hosting — those
+ * cells link the verified source instead.
  */
 
 export type MatrixStatus = "live" | "provisioning"
@@ -90,15 +91,7 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
     framework,
     strategy: "tld",
     verified: true as const,
-    status: HOSTED_FRAMEWORKS.has(framework) ? ("live" as const) : ("provisioning" as const),
-    demoLinks: HOSTED_FRAMEWORKS.has(framework)
-      ? [
-          { label: "en", href: `https://${framework}.examples.palamedes-i18n.com` },
-          { label: "de", href: `https://${framework}.examples.palamedes-i18n.de` },
-          { label: "es", href: `https://${framework}.examples.palamedes-i18n.es` },
-          { label: "fr", href: `https://${framework}.examples.palamedes-i18n.fr` },
-        ]
-      : undefined,
+    status: "provisioning" as const,
     sourceHref: repoHref(`examples/${framework}-tld`, "tree"),
   },
 ])

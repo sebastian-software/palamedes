@@ -7,6 +7,7 @@ import { FwPanels } from "~/components/frameworks/FwPanels"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { STRATEGY_CARDS } from "~/data/features"
+import contentStats from "~/data/generated/content-stats.json"
 import { DEMO_NEXTJS_COOKIE, docsHref, repoHref } from "~/data/links"
 
 export const handle = { layout: "bare" }
@@ -41,15 +42,19 @@ export default function Frameworks() {
         </div>
       </section>
 
-      <Section num="01 — Matrix" title="The 6 × 4 verified matrix.">
+      <Section
+        num="01 — Matrix"
+        title={`The ${contentStats.frameworkCount} × ${contentStats.strategyCount} verified matrix.`}
+      >
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
-          All 24 apps are verified in CI: SSR output, locale switching, localized server actions or
-          server handlers. Screenshots cover the established UI-adapter matrix and are versioned in
-          the repo. Cookie, route, subdomain, and TLD demos are publicly hosted for the five
-          browser-verified frameworks; Remix v3 is a local/CI proof surface without public hosting
-          yet, so its cells link the verified source instead. Hosting status is documented in the
-          repo's demo-deployments guide.
+          All {contentStats.exampleCount} apps are verified in CI: SSR output, locale switching,
+          localized server actions or server handlers. Screenshots cover the established UI-adapter
+          matrix and are versioned in the repo. Cookie, route, and subdomain demos are publicly
+          hosted for the five browser-verified frameworks; the TLD domains are still being
+          provisioned, and Remix v3 is a local/CI proof surface without public hosting yet — those
+          cells link the verified source instead. Hosting status is documented in the repo&apos;s
+          demo-deployments guide.
         </p>
       </Section>
 

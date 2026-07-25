@@ -38,7 +38,7 @@ The current proof:
   and its checked report
   [`benchmarks/e2e-workflow/results/latest.md`](https://github.com/sebastian-software/palamedes/blob/main/benchmarks/e2e-workflow/results/latest.md).
 
-**Try it live.** The live reference covers cookie, route, subdomain, and tld demos across the framework matrix. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
+**Try it live.** The live reference covers cookie, route, and subdomain demos across the framework matrix (tld domains are still being provisioned). Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,
