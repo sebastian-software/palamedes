@@ -43,6 +43,11 @@ Then read the product boundary, CLI, and diagnostics decisions:
 15. [ADR-015: Runtime Formatter Subset Diagnostics](./adr/015-runtime-formatter-subset-diagnostics.md)
 16. [ADR-016: Native CLI And YAML-First Configuration](./adr/016-native-cli-and-yaml-first-configuration.md)
 
+Then read the CLI extension decisions:
+
+17. [ADR-017: Host Explicit CLI Plugins in the npm Wrapper](./adr/017-cli-plugin-execution-boundary.md)
+18. [ADR-018: Binary Plugin Protocol for Rust-First Extensions](./adr/018-binary-plugin-protocol.md)
+
 ## ADR Policy
 
 Each ADR should explain:

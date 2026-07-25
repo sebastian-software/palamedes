@@ -105,6 +105,8 @@ export default [
   route("decisions/014-native-transform-source-maps", "routes/decisions/014-native-transform-source-maps.md"),
   route("decisions/015-runtime-formatter-subset-diagnostics", "routes/decisions/015-runtime-formatter-subset-diagnostics.md"),
   route("decisions/016-native-cli-and-yaml-first-configuration", "routes/decisions/016-native-cli-and-yaml-first-configuration.md"),
+  route("decisions/017-cli-plugin-execution-boundary", "routes/decisions/017-cli-plugin-execution-boundary.md"),
+  route("decisions/018-binary-plugin-protocol", "routes/decisions/018-binary-plugin-protocol.md"),
   route("docs/approach-comparison", "routes/docs/approach-comparison.md"),
   route("docs/backend-servers", "routes/docs/backend-servers.md"),
   route("docs/benchmark-e2e-workflow", "routes/docs/benchmark-e2e-workflow.md"),

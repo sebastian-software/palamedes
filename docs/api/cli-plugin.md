@@ -103,4 +103,4 @@ network permissions as the CLI. The API is a compatibility boundary, not a
 sandbox. Built-in commands bypass config and plugin loading, so a broken plugin
 does not change `pmds extract`, `audit`, `report`, `catalog`, or `version`.
 
-See [ADR 001](../adr/001-cli-plugin-execution-boundary.md) for the execution-boundary decision.
+See [ADR 017](../../adr/017-cli-plugin-execution-boundary.md) for the execution-boundary decision.

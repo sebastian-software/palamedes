@@ -1,11 +1,11 @@
-# 002 — Binary Plugin Protocol For Rust-First Extensions
+# 018 — Binary Plugin Protocol For Rust-First Extensions
 
 - Status: Accepted
 - Date: 2026-07-25
 
 ## Context
 
-ADR [001](./001-cli-plugin-execution-boundary.md) established explicit,
+ADR [017](./017-cli-plugin-execution-boundary.md) established explicit,
 config-listed CLI plugins hosted in the npm wrapper with a Node ESM/CJS plugin
 API. That API serves JavaScript-first workflow extensions well, but the next
 wave of planned extensions is Rust-first: commercial Palamedes Plus commands
@@ -19,7 +19,7 @@ unchanged, and gain new namespaced commands. Shipping a separate commercial CLI
 would fragment the user experience, force script migrations, and hide from
 open-source users that a commercial tier exists at all.
 
-ADR 001 already anticipated this direction and listed a language-neutral
+ADR 017 already anticipated this direction and listed a language-neutral
 subprocess protocol as "useful for a future multi-language ecosystem", deferred
 only until the first command API had stabilized.
 
@@ -55,14 +55,14 @@ host spawns per invocation and talks to over a versioned stdio protocol.
    - Protocol version `1` must match exactly, mirroring the ESM `apiVersion`
      rule, and is versioned independently of both the package version and the
      ESM plugin API.
-3. Cancellation and exit semantics match ADR 001: the host forwards `SIGINT`
+3. Cancellation and exit semantics match ADR 017: the host forwards `SIGINT`
    and `SIGTERM` to the child, cooperative shutdown maps to exit codes 130 and
    143, and a `result` without an explicit exit code derives it from error
    diagnostics. The process exit code is the authoritative fallback when no
    valid `result` event arrives.
 4. Instead of a bidirectional `runBuiltIn` channel, the host hands the plugin
    the resolved `pmds-native` executable path via an environment variable.
-   Binary plugins are trusted local code (see ADR 001's trust model), so they
+   Binary plugins are trusted local code (see ADR 017's trust model), so they
    may invoke documented built-in commands directly as subprocesses; the
    protocol stays unidirectional and simple.
 5. A `palamedes-plugin` SDK crate wraps the protocol — command registration,
@@ -79,7 +79,7 @@ host spawns per invocation and talks to over a versioned stdio protocol.
 
 ## Trust Model
 
-Unchanged from ADR 001. Configured binary plugins are trusted local code with
+Unchanged from ADR 017. Configured binary plugins are trusted local code with
 the same filesystem, environment, and network permissions as `pmds`. The
 protocol is a compatibility boundary, not a sandbox. Built-in commands still
 bypass configuration and plugin loading entirely, so a missing or broken binary
