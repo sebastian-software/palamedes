@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/react",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "React runtime components and macro entry points for Palamedes",
   "keywords": [
     "palamedes",
