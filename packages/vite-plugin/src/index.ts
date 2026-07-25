@@ -207,12 +207,27 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     plugins.push({
       name: "palamedes:po-loader",
 
+      /*
+       * Drop the cached config at the start of every build so edits to
+       * palamedes.yaml take effect without a dev-server restart.
+       */
+      buildStart() {
+        config = null
+      },
+
+      watchChange(id) {
+        if (config && path.resolve(id) === path.resolve(config.configPath)) {
+          config = null
+        }
+      },
+
       async transform(src, id) {
         if (!PO_FILE_REGEX.test(id)) {
           return null
         }
 
         const cfg = await getConfigLazy()
+        this.addWatchFile(cfg.configPath)
         const cleanId = stripQuery(id)
         const locale = path.basename(cleanId, ".po")
         const result = compileCatalogModule(

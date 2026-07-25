@@ -17,6 +17,7 @@ const compileCatalogModule = vi.fn()
 
 beforeEach(() => {
   loadPalamedesConfig.mockResolvedValue({
+    configPath: "/repo/palamedes.yaml",
     rootDir: "/repo",
     locales: ["en", "de", "pseudo"],
     sourceLocale: "en",
@@ -55,7 +56,7 @@ describe("palamedes-po-loader.cjs", () => {
     expect(result.code).toBe(
       'export const messages={"greeting":"Hallo"};export default { messages };'
     )
-    expect(result.dependencies).toStrictEqual(["/repo/src/locales/en.po"])
+    expect(result.dependencies).toStrictEqual(["/repo/palamedes.yaml", "/repo/src/locales/en.po"])
     expect(compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
       "/repo/src/locales/de.po",
