@@ -134,4 +134,11 @@ describe("formatMessagePattern", () => {
     expect(formatMessagePattern(message, { n: "0" }, "en")).toBe("none")
     expect(formatMessagePattern(message, { n: "4" }, "en")).toBe("4 items")
   })
+
+  it("renders Date values as ISO strings and degrades invalid Dates", () => {
+    const when = new Date(Date.UTC(2026, 6, 24, 2, 0, 0))
+
+    expect(formatMessagePattern("At {when}", { when })).toBe(`At ${when.toISOString()}`)
+    expect(formatMessagePattern("At {when}", { when: new Date("garbage") })).toBe("At Invalid Date")
+  })
 })

@@ -676,7 +676,9 @@ export function stringifyValue(value: unknown): string {
   }
 
   if (value instanceof Date) {
-    return value.toISOString()
+    // An invalid Date degrades to "Invalid Date" instead of letting
+    // toISOString() throw and abort adapter rendering.
+    return Number.isNaN(value.getTime()) ? String(value) : value.toISOString()
   }
 
   return String(value)
