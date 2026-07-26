@@ -639,8 +639,9 @@ fn run_watch_mode(initial_config: &LoadedConfig, options: &ExtractOptions) -> Re
 
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
-    for root in watch_roots(&config) {
-        watcher.watch(&root, RecursiveMode::Recursive)?;
+    let mut watched_roots = watch_roots(&config);
+    for root in &watched_roots {
+        watcher.watch(root, RecursiveMode::Recursive)?;
     }
     // The config file itself is a dependency: locale/fallback/pseudo edits
     // must take effect without restarting the watcher.
@@ -686,10 +687,29 @@ fn run_watch_mode(initial_config: &LoadedConfig, options: &ExtractOptions) -> Re
                         "Config changed; reloaded {}",
                         reloaded.config_path.display()
                     );
-                    for root in watch_roots(&reloaded) {
-                        // Re-watching an already-watched root is harmless.
-                        let _ = watcher.watch(&root, RecursiveMode::Recursive);
+                    let next_roots = watch_roots(&reloaded);
+                    for stale in watched_roots
+                        .iter()
+                        .filter(|root| !next_roots.contains(root))
+                    {
+                        // Dropping removed roots keeps the watcher from
+                        // accumulating obsolete registrations across reloads.
+                        let _ = watcher.unwatch(stale);
                     }
+                    for root in next_roots
+                        .iter()
+                        .filter(|root| !watched_roots.contains(root))
+                    {
+                        // A newly configured root that cannot be watched must
+                        // be visible, or its source edits are silently missed.
+                        if let Err(error) = watcher.watch(root, RecursiveMode::Recursive) {
+                            eprintln!(
+                                "Warning: Could not watch {}: {error}. Changes under this root will not trigger extraction until the watcher restarts.",
+                                root.display()
+                            );
+                        }
+                    }
+                    watched_roots = next_roots;
                     config = reloaded;
                     matchers = WatchMatchers::build(&config);
                 }
