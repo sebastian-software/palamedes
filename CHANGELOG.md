@@ -26,6 +26,15 @@
 - `<Trans>` variable values that are `Date` instances now render as
   deterministic ISO strings (matching `i18n._`), fixing SSR hydration
   mismatches across time zones.
+- `@palamedes/next-plugin` now declares `next ^16` as its peer range. The
+  previously declared `^13 || ^14 || ^15` never worked with the emitted
+  top-level `turbopack.rules`/`outputFileTracingRoot` config; on those
+  versions the Turbopack transform silently never ran.
+- The Next plugin's `include`/`exclude` options now also apply under
+  Turbopack (translated into the rule condition), user-supplied
+  `turbopack.rules` for the same glob are appended to instead of overwritten,
+  and the macro content pre-filter is derived from the canonical macro
+  package list (it previously missed `@palamedes/solid/macro`).
 
 ## [1.6.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.5.1...palamedes-v1.6.0) (2026-07-25)
 
