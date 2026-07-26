@@ -32,7 +32,7 @@ is sourced in the linked dossier).
 - [vue-i18n.md](vue-i18n.md) — the Vue-ecosystem monopolist with its own DSL
 - [intlayer.md](intlayer.md) — declaration instead of extraction, per-component co-located dictionaries
 - [fluent.md](fluent.md) — the case against ICU itself; asymmetric localization, Mozilla-proven, effectively stalled on npm
-- [typesafe-i18n.md](typesafe-i18n.md) — types as the product; ~1 kB, zero dependencies, no ICU or .po
+- [typesafe-i18n.md](typesafe-i18n.md) — types as the product; ~1 kB, zero dependencies, no ICU or .po. **Dormant, and excluded from comparison pages** — see the handling note in the dossier
 
 Note: the `intlayer`, `fluent` and `typesafe-i18n` dossiers were added 2026-07-26,
 so their `analyzed` date differs from the 2026-07-06 snapshot shared by the
