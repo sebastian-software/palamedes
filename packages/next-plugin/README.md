@@ -16,6 +16,9 @@ and catalog problems show up while the app is still easy to fix.
 - Recommended for Next.js applications using App Router and Palamedes macros
 - Supports `.po` imports and source-string-first catalog semantics
 - Reports missing translations and ICU compatibility diagnostics during builds
+- Requires Next.js 16 (`peerDependencies: next ^16`); the emitted top-level
+  `turbopack.rules` conditions and `outputFileTracingRoot` need the Next 16
+  config surface
 - Uses Turbopack as the verified default path on Next.js 16.2
 - The shipped example proves both server-rendered i18n and localized `"use server"` action output
 - Also supports webpack as an opt-out / fallback path

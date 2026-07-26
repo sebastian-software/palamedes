@@ -48,5 +48,13 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 module.exports = withPalamedes({})
 ```
 
-The plugin configures both Turbopack and webpack paths. `workspaceRoot` can be
-set explicitly in monorepos when automatic root detection is not correct.
+The plugin configures both Turbopack and webpack paths, and requires Next.js
+16 (`peerDependencies: next ^16` — the emitted top-level `turbopack.rules`
+conditions and `outputFileTracingRoot` need the Next 16 config surface).
+`include` and `exclude` apply under both bundlers: in the webpack branch as
+loader `test`/`exclude`, under Turbopack translated into the rule condition
+(`{ path: include }` plus `{ not: { path: exclude } }`). User-supplied
+`turbopack.rules` for the same glob are preserved — the Palamedes rules are
+appended to the glob's rule list instead of overwriting it. `workspaceRoot`
+can be set explicitly in monorepos when automatic root detection is not
+correct.

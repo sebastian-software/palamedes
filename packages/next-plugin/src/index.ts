@@ -10,7 +10,38 @@ import path from "node:path"
 import { createRequire } from "node:module"
 import type { NextConfig } from "next"
 
+import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
+
 const require = createRequire(import.meta.url)
+
+type TurbopackRules = NonNullable<NonNullable<NextConfig["turbopack"]>["rules"]>
+type TurbopackRuleConfigItem = Extract<TurbopackRules[string], { loaders?: unknown }>
+
+/*
+ * Derived from the canonical macro package list so the content pre-filter can
+ * never drift from the transform (it previously omitted @palamedes/solid/macro).
+ */
+const MACRO_CONTENT_PATTERN = new RegExp(
+  PALAMEDES_MACRO_PACKAGES.map((name) => name.replaceAll(/[.*+?^${}()|[\]\\/]/gu, "\\$&")).join("|")
+)
+
+/*
+ * Turbopack rules are keyed by glob; a glob can carry a list of rule configs.
+ * Appending keeps user-supplied rules for the same glob intact instead of
+ * silently overwriting them.
+ */
+function appendTurbopackRule(
+  rules: TurbopackRules,
+  glob: string,
+  rule: TurbopackRuleConfigItem
+): void {
+  const existing = rules[glob]
+  if (existing === undefined) {
+    rules[glob] = rule
+    return
+  }
+  rules[glob] = Array.isArray(existing) ? [...existing, rule] : [existing, rule]
+}
 
 export type WithPalamedesOptions = {
   /**
@@ -161,6 +192,44 @@ export function withPalamedes(
     ...(configPath ? { configPath } : {}),
   }
 
+  const rules: TurbopackRules = { ...baseConfig.turbopack?.rules }
+
+  // Transform local JS/TS files that actually import Palamedes macros. The
+  // include/exclude options translate into the rule condition so they behave
+  // the same under Turbopack as in the webpack branch below.
+  appendTurbopackRule(rules, "*", {
+    condition: {
+      all: [
+        { not: "foreign" },
+        { path: include },
+        { not: { path: exclude } },
+        { content: MACRO_CONTENT_PATTERN },
+      ],
+    },
+    loaders: [
+      {
+        loader: oxcLoaderPath,
+        options: { runtimeModule },
+      },
+    ],
+  })
+
+  // Compile local .po files
+  if (enablePoLoader) {
+    appendTurbopackRule(rules, "*.po", {
+      condition: {
+        not: "foreign",
+      },
+      loaders: [
+        {
+          loader: poLoaderPath,
+          options: poLoaderOptions,
+        },
+      ],
+      as: "*.js",
+    })
+  }
+
   return {
     ...baseConfig,
     ...(outputFileTracingRoot ? { outputFileTracingRoot } : {}),
@@ -169,40 +238,7 @@ export function withPalamedes(
     turbopack: {
       ...baseConfig.turbopack,
       ...(configuredTurbopackRoot ? { root: configuredTurbopackRoot } : {}),
-      rules: {
-        ...baseConfig.turbopack?.rules,
-        // Transform local JS/TS files that actually import Palamedes macros.
-        "*": {
-          condition: {
-            all: [
-              { not: "foreign" },
-              { path: /\.[jt]sx?$/ },
-              { content: /@palamedes\/(?:core|react)\/macro/ },
-            ],
-          },
-          loaders: [
-            {
-              loader: oxcLoaderPath,
-              options: { runtimeModule },
-            },
-          ],
-        },
-        // Compile local .po files
-        ...(enablePoLoader && {
-          "*.po": {
-            condition: {
-              not: "foreign",
-            },
-            loaders: [
-              {
-                loader: poLoaderPath,
-                options: poLoaderOptions,
-              },
-            ],
-            as: "*.js",
-          },
-        }),
-      },
+      rules,
     },
 
     // Webpack configuration

@@ -63,7 +63,7 @@
     "@palamedes/transform": "workspace:^"
   },
   "peerDependencies": {
-    "next": "^13 || ^14 || ^15 || ^16"
+    "next": "^16"
   },
   "devDependencies": {
     "next": "16.2.11",
