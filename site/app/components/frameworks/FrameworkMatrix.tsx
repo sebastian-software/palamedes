@@ -1,3 +1,4 @@
+import contentStats from "~/data/generated/content-stats.json"
 import { cellFor, FRAMEWORKS, STRATEGIES, type MatrixCell } from "~/data/matrix"
 
 function CellContent({ cell }: { cell: MatrixCell }) {
@@ -89,7 +90,7 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
       </div>
       <p className="mono-nums mt-3 text-[11px] text-gray-spec">
         <span className="text-accent">●</span> live demo · ◌ provisioning (#306) · ✓ CI
-        browser-verified — all 24 apps run the same verification flow
+        browser-verified — all {contentStats.exampleCount} apps run the same verification flow
       </p>
     </div>
   )
