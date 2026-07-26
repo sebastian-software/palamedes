@@ -32,3 +32,8 @@ is sourced in the linked dossier).
 - [lokalise.md](lokalise.md) — developer-oriented TMS with design-tool focus, now Adobe-owned
 - [transifex.md](transifex.md) — veteran TMS with fileless OTA architecture and OSS attrition
 - [weblate.md](weblate.md) — libre, git-native TMS; architecturally closest to Palamedes
+- [lingo-dev.md](lingo-dev.md) — ex-Replexica; a CI translation pipeline rather than a TMS, keeps git authoritative, PO first-class
+
+Note: the `lingo-dev` dossier was added 2026-07-26, so its `analyzed` date differs
+from the 2026-07-06 snapshot shared by the others, and the comparison table above
+has not been re-run against it.
