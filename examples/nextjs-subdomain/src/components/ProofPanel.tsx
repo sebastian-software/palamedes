@@ -91,7 +91,7 @@ export function ProofPanel({ locale }: ProofPanelProps) {
             <Fmt message="{when, date, medium}" values={{ when }} />
           </span>
         </div>
-        <code>{`{when, date, full}`}</code>
+        <code>{`{when, date, medium}`}</code>
       </div>
 
       <div className="feat">

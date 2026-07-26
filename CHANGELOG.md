@@ -26,6 +26,22 @@
 - `<Trans>` variable values that are `Date` instances now render as
   deterministic ISO strings (matching `i18n._`), fixing SSR hydration
   mismatches across time zones.
+- `pmds report` now counts PO entries flagged `fuzzy` as untranslated and
+  reports them in a separate `fuzzy` column, matching gettext conventions.
+  Completeness percentages can drop accordingly.
+- Palamedes data configs now reject camelCase spellings of known keys
+  (`sourceLocale`, `pseudoLocale`, `fallbackLocales`, `sourceReferenceRoot`)
+  with a kebab-case hint instead of silently ignoring them, and
+  fallback-locale entries must reference configured locales. The native CLI
+  reports `palamedes.config.ts`/`.js` files with a specific error instead of
+  a generic not-found.
+- `Accept-Language` entries with `q=0` are treated as "not acceptable" per
+  RFC 9110 and no longer participate in locale negotiation.
+- The Vite and Next `.po` loaders report catalog diagnostics through the
+  bundler's warning channel (`this.warn` / `emitWarning`) instead of
+  `console.warn`.
+- The per-package `CHANGELOG.md` files (stale since the 0.6.x per-package
+  release era) now point at this root changelog.
 - `@palamedes/next-plugin` now declares `next ^16` as its peer range. The
   previously declared `^13 || ^14 || ^15` never worked with the emitted
   top-level `turbopack.rules`/`outputFileTracingRoot` config; on those

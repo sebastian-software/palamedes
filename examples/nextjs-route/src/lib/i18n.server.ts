@@ -4,7 +4,7 @@ import { headers } from "next/headers"
 import { createServerI18nScope } from "@palamedes/runtime/server"
 import type { PalamedesI18n } from "@palamedes/core"
 import type { LocaleSource, LocaleSuggestion } from "@palamedes/core/locale"
-import { createExampleI18n, DEFAULT_LOCALE, type Locale, loadMessages, locales } from "./i18n"
+import { createExampleI18n, type Locale, loadMessages, locales } from "./i18n"
 
 export const serverI18nScope = createServerI18nScope<PalamedesI18n>()
 
@@ -18,8 +18,7 @@ export async function getRouteLocale(paramsLocale?: string): Promise<{
   source: LocaleSource
 }> {
   const headerStore = await headers()
-  const pathname =
-    paramsLocale && paramsLocale !== DEFAULT_LOCALE ? `/${paramsLocale}` : `/${paramsLocale ?? ""}`
+  const pathname = `/${paramsLocale ?? ""}`
   const resolved = locales.resolve({
     strategy: "route",
     acceptLanguageHeader: headerStore.get("accept-language"),
