@@ -58,6 +58,7 @@ const ROUTE_EXPECTATIONS = [
     h1: "Your translations should outlive your vendor.",
   },
   { path: "/compare/tolgee", h1: "Your catalogs, or their database." },
+  { path: "/compare/intlayer", h1: "Write the dictionary, or write the sentence." },
   { path: "/blog", h1: "Building i18n tooling in the" },
   { path: "/blog/measuring-palamedes-honestly", h1: "Measuring Palamedes Honestly" },
   { path: "/docs", h1: "Documentation" },

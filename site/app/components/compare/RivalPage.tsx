@@ -285,19 +285,23 @@ export function RivalPage({ rival }: { rival: Rival }) {
       <StatementBand num="07 — The honest bit">{rival.honest}</StatementBand>
 
       <Section num="08 — Also weighing" title="Comparing something else?">
+        {/* Capped at six so the grid always fills exactly two rows of three;
+            the CTA below carries anyone who wants the full list. */}
         <div className="hairline-grid grid-cols-3 max-grid:grid-cols-2 max-tight:grid-cols-1">
-          {RIVALS.filter((other) => other.slug !== rival.slug).map((other) => (
-            <Link
-              key={other.slug}
-              to={`/compare/${other.slug}`}
-              viewTransition
-              className="group bg-paper px-5 py-5 transition-colors hover:bg-hover-fill"
-            >
-              <p className="micro text-[10px] tracking-label text-gray-spec">Palamedes vs</p>
-              <p className="mt-2 text-[15px] font-bold group-hover:text-accent">{other.name}</p>
-              <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">{other.card}</p>
-            </Link>
-          ))}
+          {RIVALS.filter((other) => other.slug !== rival.slug)
+            .slice(0, 6)
+            .map((other) => (
+              <Link
+                key={other.slug}
+                to={`/compare/${other.slug}`}
+                viewTransition
+                className="group bg-paper px-5 py-5 transition-colors hover:bg-hover-fill"
+              >
+                <p className="micro text-[10px] tracking-label text-gray-spec">Palamedes vs</p>
+                <p className="mt-2 text-[15px] font-bold group-hover:text-accent">{other.name}</p>
+                <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">{other.card}</p>
+              </Link>
+            ))}
         </div>
       </Section>
 

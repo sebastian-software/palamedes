@@ -17,7 +17,7 @@ export const handle = { layout: "bare" }
 export function meta() {
   return pageMeta({
     title:
-      "Palamedes compared — Lingui, i18next, next-intl, react-intl, Paraglide, General Translation, Tolgee",
+      "Palamedes compared — Lingui, i18next, next-intl, react-intl, Paraglide, Intlayer, General Translation, Tolgee",
     description: `Side-by-side comparisons of Palamedes with the major JavaScript i18n libraries: ${BENCH_REALISTIC.ratios.formatjs} to ${BENCH_REALISTIC.ratios.i18nextCli} faster on a checked benchmark, with what each of them does better and when to pick them instead.`,
     path: "/compare",
   })
@@ -102,20 +102,20 @@ export default function Compare() {
               </span>
             </Link>
           ))}
-          {/* Five rivals in a two-column grid leaves an odd cell; this fills it
-              with the one thing a comparison hub cannot answer for you. */}
-          <div className="bg-paper px-6 py-6">
-            <p className="micro text-[10px] tracking-label text-gray-spec">Palamedes vs</p>
-            <h3 className="mt-3 text-[17px] font-bold">Something not listed here?</h3>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              These cover the libraries most teams actually shortlist. If you are weighing a
-              different one, open an issue with the comparison you need and we will research it
-              properly rather than guess.
-            </p>
-            <a href={`${REPO}/issues`} className="micro mt-4 inline-block text-[12px] text-accent">
-              Ask on GitHub →
-            </a>
-          </div>
+        </div>
+        {/* Outside the grid on purpose: the rival count is even, so this would
+            otherwise leave a half-empty row. As a full-width strip it also
+            reads as an invitation rather than as one more comparison. */}
+        <div className="mt-8 border-l-4 border-accent bg-hover-fill px-6 py-5">
+          <h3 className="text-[15px] font-bold">Weighing something not listed here?</h3>
+          <p className="mt-2 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">
+            These cover the libraries most teams actually shortlist. If yours is missing, open an
+            issue with the comparison you need — every page here is backed by a dated research note
+            in the repository, and we would rather write one than guess.
+          </p>
+          <a href={`${REPO}/issues`} className="micro mt-3 inline-block text-[12px] text-accent">
+            Ask on GitHub →
+          </a>
         </div>
       </Section>
 
@@ -202,7 +202,34 @@ export default function Compare() {
       </Section>
 
       <Section
-        num="04 — ICU semantics"
+        num="04 — Not a competitor"
+        title="Some tools plug in rather than compete."
+        lede="Not everything adjacent to Palamedes is an alternative to it. The clearest example is Lingo.dev: it is a translation pipeline, not a runtime, and it reads the same .po files we write."
+      >
+        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
+          <div className="bg-paper px-6 py-6">
+            <h3 className="text-[15px] font-bold">How the two fit together</h3>
+            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
+              Palamedes extracts your source strings and writes .po. Lingo.dev's CLI reads those
+              files, translates them, and commits the result back — in CI, as a pull request. No
+              hosted database ends up owning your catalogs, because both halves treat the repository
+              as the system of record.
+            </p>
+          </div>
+          <div className="bg-paper px-6 py-6">
+            <h3 className="text-[15px] font-bold">Why we point at it</h3>
+            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
+              Apache-2.0 tooling, PO as a first-class format, and named, swappable models — down to
+              running fully local against Ollama. If you want machine translation in your pipeline
+              without handing a vendor the catalogs, that combination is rare enough to be worth
+              naming. We have no commercial relationship with them.
+            </p>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        num="05 — ICU semantics"
         title="The durable claim is about the pipeline we control."
         lede="ICU support varies across libraries, TMS products, file formats and project settings, and any table claiming otherwise ages badly. Palamedes makes a narrower, executable claim instead: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation and runtime rendering."
       >
@@ -230,9 +257,36 @@ export default function Compare() {
         >
           Re-run the proof and inspect the sources →
         </a>
+
+        <div className="mt-10 max-w-[60em] border-l-4 border-gray-spec pl-5">
+          <p className="micro text-[10px] tracking-label text-gray-spec">
+            The best argument against us
+          </p>
+          <h3 className="mt-2 text-[15px] font-bold">
+            Mozilla&apos;s Project Fluent thinks ICU is the wrong shape.
+          </h3>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
+            Fluent&apos;s case is worth stating properly, because it is the strongest one anybody
+            makes. In ICU, the structure of a message is fixed by the source language: if English
+            needs no gender agreement, the message has no gender selector, and a translator into a
+            language that does need one cannot add it without a developer editing the source. Fluent
+            inverts that — a translation may introduce selectors and grammatical machinery the
+            original never had. It ships in Firefox, so this is proven at scale, not theoretical.
+          </p>
+          <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
+            We chose ICU anyway, for reasons we will defend: it is what the localization industry
+            already speaks, what every TMS and CAT tool already processes, and what makes a .po file
+            portable between vendors. Fluent&apos;s expressiveness is real, and it is paid for in a
+            format only its own ecosystem reads. Practically, the choice is also narrower than it
+            looks — <code>@fluent/react</code> has not been published since August 2023, and there
+            is no server-components story. If your constraint is morphologically rich target
+            languages and you have localization engineers to match, read their case rather than
+            ours.
+          </p>
+        </div>
       </Section>
 
-      <StatementBand num="05 — The honest bit">
+      <StatementBand num="06 — The honest bit">
         Every tool on these pages is good software, built by people who thought hard about the
         problem — and every one of them was designed against a JavaScript toolchain that has since
         been rebuilt underneath them. We started on the other side of that line. If our tradeoffs do

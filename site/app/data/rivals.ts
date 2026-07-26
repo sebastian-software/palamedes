@@ -901,6 +901,132 @@ function buyLabel(seats) {
     honest:
       "Tolgee's in-context editor is better than anything we offer, and we do not have a translator-facing UI at all — .po comments and context are what your translators get from us. If translator experience is the bottleneck you are solving, that gap is real and it matters more than anything on the rest of this page. Palamedes and a platform also stack perfectly well: keep the repository authoritative, export .po, and let a TMS handle the humans.",
   },
+  {
+    slug: "intlayer",
+    name: "Intlayer",
+    subject: "intlayer 9.0.1",
+    researched: "July 2026",
+    metaTitle: "Palamedes vs Intlayer — declared dictionaries or extracted source strings",
+    metaDescription:
+      "Intlayer asks you to declare a dictionary next to every component. Palamedes reads the sentence you already wrote. Both avoid the central JSON namespace; only one of them adds work per string.",
+    eyebrow: "Compare · Intlayer",
+    headline: "Write the dictionary, or write the sentence.",
+    lede: "Intlayer and Palamedes agree on something most of this field does not: the central JSON namespace was a mistake. Intlayer's answer is to declare a dictionary file beside each component. Ours is to read the string out of the component itself. That single difference decides how much work each new message costs you, and who has to name it.",
+    card: "The other anti-namespace project. It declares dictionaries; we read the sentence you wrote.",
+    facts: [
+      { label: "Adoption", value: "~76.8k downloads/week" },
+      { label: "Age", value: "~2 years, single author" },
+      { label: "Licence", value: "Apache-2.0" },
+      { label: "ICU", value: "Selectable, not default" },
+    ],
+    thesis:
+      "Intlayer removes the scanner, and that genuinely removes a class of problems — nothing can be in your code but missing from the catalog if the catalog is what you wrote. The cost is that every message is now two edits instead of one: the sentence in the component, and the entry in the declaration file, under a key you invented. Palamedes takes the opposite trade. We keep a scanner, and we make it a native compiler good enough that you stop thinking about it, so a new message stays exactly one edit: type the sentence.",
+    respectTitle: "What Intlayer earned",
+    respect: [
+      "No extraction step at all, which means no scanner to trust and no possibility of a string existing in code but not in the catalog. That class of bug simply cannot occur.",
+      "Co-location genuinely answers 'where does this string live' — the dictionary sits in the folder with the component it serves, not in a tree three directories away.",
+      "The widest first-party adapter matrix in this whole comparison: React, Vue, Angular, Svelte, Solid, Preact, Lit, Astro, Next, Nuxt, React Native and four backend frameworks, all Apache-2.0.",
+    ],
+    flipsideTitle: "What declaring by hand costs you",
+    flipside: [
+      "The naming layer is still there. Every dictionary carries an explicit key, so you still invent identifiers and still keep them straight — the work moved from a central JSON tree into per-component files rather than disappearing.",
+      "Declarations are locale-inline by default: t({ en, fr, es }) puts every language into a TypeScript file developers own. That reads well at three locales and becomes a merge-conflict surface at twelve, with translator content living in source files.",
+      "One primary author on a personal account, no organisation or funding found, and 383 npm releases across a 9.x major line in roughly two years — genuine throughput, but also churn you will be migrating across.",
+    ],
+    differences: [
+      {
+        title: "A new message is one edit, not two",
+        body: "With Intlayer, shipping a string means writing the sentence in the component and adding it to a declaration file under a key. With Palamedes you write the sentence and stop — extraction finds it, catalog merging places it, and the audit tells you if anything went wrong. The scanner is not a chore we failed to remove; it is the thing that keeps the work at one edit.",
+      },
+      {
+        title: "No key, not even a local one",
+        body: "Intlayer's dictionaries are keyed, so useIntlayer('multi_lang') still depends on somebody having named that dictionary well. Palamedes derives identity from the source string plus optional context. There is no name to invent, no name to misremember, and no name to argue about in review.",
+      },
+      {
+        title: "ICU is the default, not a setting",
+        body: "Intlayer can speak ICU — format: 'icu' is one of five options, alongside its own DSL, i18next, vue-i18n and PO. But the default is the house format, so portable ICU semantics depend on a project-level configuration choice. Palamedes is ICU throughout with a checked proof that nested select and plural survive the full pipeline.",
+      },
+      {
+        title: ".po is the handover, not an export mode",
+        body: "Palamedes writes gettext .po with the source string as msgid, because that is the artifact an agency, a CAT tool or a TMS can price and process without asking questions. Intlayer supports PO as a format value; whether it round-trips msgctxt, plural forms and comments losslessly we could not verify, and a handover format is only worth as much as its fidelity.",
+      },
+    ],
+    rows: [
+      {
+        criterion: "How messages get into catalogs",
+        rival: "You declare them in a per-component file",
+        palamedes: "Extracted from your source by a native compiler",
+      },
+      {
+        criterion: "Work per new message",
+        rival: "Sentence plus a keyed declaration entry",
+        palamedes: "The sentence",
+      },
+      {
+        criterion: "Message identity",
+        rival: "Explicit dictionary keys",
+        palamedes: "The source string plus optional context",
+      },
+      {
+        criterion: "ICU MessageFormat",
+        rival: "Selectable — default is Intlayer's own DSL",
+        palamedes: "Native throughout, with a checked proof",
+      },
+      {
+        criterion: "Locale layout",
+        rival: "Locale-inline by default, all languages in one file",
+        palamedes: "One .po per locale, the format translators expect",
+      },
+      {
+        criterion: "Framework coverage",
+        rival: "The widest here — ~19 first-party adapters",
+        palamedes: `React and Solid across ${contentStats.frameworkCount} meta-frameworks, ${contentStats.exampleCount} apps verified in CI`,
+      },
+      {
+        criterion: "Extract + update speed",
+        rival: "Not applicable — there is nothing to extract",
+        palamedes: "Checked report covers Lingui, FormatJS and i18next only",
+      },
+    ],
+    code: {
+      caption: "The same string, and the work each one asks for.",
+      rivalLabel: "Intlayer",
+      rivalCode: `// checkout.content.ts
+import { t, type Dictionary } from "intlayer"
+
+export default {
+  key: "checkout",
+  content: {
+    buy: t({ en: "Buy seats", fr: "Acheter des places" }),
+  },
+} satisfies Dictionary
+
+// Checkout.tsx
+const content = useIntlayer("checkout")
+content.buy`,
+      palamedesLabel: "Palamedes",
+      palamedesCode: `import { t } from "@palamedes/core/macro"
+
+function buyLabel(seats) {
+  return t\`Buy \${seats} seats\`
+}`,
+      note: "Intlayer's version is two files, one invented key and one locale map that grows sideways with every language you add. Neither project makes you maintain a central namespace — but only one of them makes you maintain anything at all.",
+    },
+    pickRival: [
+      "You need Vue, Angular, Svelte, Lit or React Native. Their adapter matrix is genuinely wider than ours.",
+      "You want no extraction step in your build under any circumstances.",
+      "Co-located, hand-written dictionaries match how your team already thinks about component ownership.",
+      "You want the hosted CMS and visual editor for remote or hybrid dictionaries.",
+    ],
+    pickPalamedes: [
+      "You would rather write a sentence than a sentence plus a dictionary entry plus a key.",
+      "ICU semantics should be the default and guaranteed end to end, not a configuration value.",
+      "Your translators want .po files per locale, not a TypeScript file with every language inside it.",
+      "You want catalog audits, ICU diagnostics and a benchmark you can re-run yourself.",
+    ],
+    honest:
+      "Intlayer covers far more UI frameworks than we do, and it is right that removing the scanner removes a category of failure — nothing can drift out of a catalog you wrote by hand. We think the price is too high, because it is paid on every single string forever while a scanner is paid for once. But that is a judgement about your team's habits, not a fact about the software, and if you disagree with it you should use theirs.",
+  },
 ]
 
 export function rivalBySlug(slug: string): Rival {
