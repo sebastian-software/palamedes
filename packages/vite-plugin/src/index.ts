@@ -255,7 +255,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         )
 
         result.watchFiles.forEach((file: string) => this.addWatchFile(file))
-        result.warnings.forEach((warning) => console.warn(warning))
+        // this.warn deduplicates and shows up in Vite's overlay/diagnostics.
+        result.warnings.forEach((warning) => this.warn(warning))
 
         return {
           code: result.code,

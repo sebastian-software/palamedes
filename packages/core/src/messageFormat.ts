@@ -44,6 +44,7 @@ export type MessageNode =
 
 const parseCache = new Map<string, MessageNode[]>()
 const numberFormatCache = new Map<string, Intl.NumberFormat>()
+const pluralRulesCache = new Map<string, Intl.PluralRules>()
 const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>()
 const FORMATTER_CACHE_LIMIT = 64
 
@@ -63,7 +64,9 @@ export function parseMessagePattern(pattern: string): MessageNode[] {
     index: 0,
   }
   const nodes = parseNodes(state, undefined, false)
-  parseCache.set(pattern, nodes)
+  // i18n._(rawPattern) accepts arbitrary strings, so this cache must be
+  // bounded like the formatter caches or dynamic patterns grow it forever.
+  rememberFormatter(parseCache, pattern, nodes)
   return nodes
 }
 
@@ -221,7 +224,9 @@ function readPluralOffset(state: ParserState): number | undefined {
     !Number.isSafeInteger(offset) ||
     !/\s/.test(state.input[state.index] ?? "")
   ) {
-    throw new Error("Expected a non-negative integer plural offset while parsing message pattern.")
+    throw new Error(
+      `Expected a non-negative integer plural offset at index ${state.index} while parsing message pattern: ${patternExcerpt(state)}`
+    )
   }
 
   return offset
@@ -391,9 +396,23 @@ function skipWhitespace(state: ParserState): void {
 
 function expectChar(state: ParserState, expected: string): void {
   if (state.input[state.index] !== expected) {
-    throw new Error(`Expected "${expected}" while parsing message pattern.`)
+    const found = state.input[state.index]
+    throw new Error(
+      `Expected "${expected}" but found ${
+        found === undefined ? "end of pattern" : `"${found}"`
+      } at index ${state.index} while parsing message pattern: ${patternExcerpt(state)}`
+    )
   }
   state.index += 1
+}
+
+/* A short window around the failure point so telemetry can locate it. */
+function patternExcerpt(state: ParserState): string {
+  const start = Math.max(0, state.index - 20)
+  const end = Math.min(state.input.length, state.index + 20)
+  const prefix = start > 0 ? "…" : ""
+  const suffix = end < state.input.length ? "…" : ""
+  return `${prefix}${state.input.slice(start, end)}${suffix}`
 }
 
 function mergeTextNodes(nodes: MessageNode[]): MessageNode[] {
@@ -597,10 +616,7 @@ export function resolveChoice(
     return { nodes: node.options[exactKey], pluralValue: operand }
   }
 
-  const pluralRules = new Intl.PluralRules(locale, {
-    type: node.kind === "selectordinal" ? "ordinal" : "cardinal",
-  })
-  const category = pluralRules.select(operand)
+  const category = getPluralRules(locale, node.kind).select(operand)
   return { nodes: node.options[category] ?? node.options.other ?? [], pluralValue: operand }
 }
 
@@ -646,6 +662,16 @@ function normalizeFormattedNumberValue(value: unknown): number | undefined {
   return undefined
 }
 
+function getPluralRules(locale: string | undefined, kind: string): Intl.PluralRules {
+  const type = kind === "selectordinal" ? "ordinal" : "cardinal"
+  const cacheKey = `${locale ?? ""}\0${type}`
+  const cached = pluralRulesCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+  return rememberFormatter(pluralRulesCache, cacheKey, new Intl.PluralRules(locale, { type }))
+}
+
 function rememberFormatter<TFormatter>(
   cache: Map<string, TFormatter>,
   key: string,
@@ -663,7 +689,7 @@ function rememberFormatter<TFormatter>(
 }
 
 function replacePound(value: string, numericValue: number, locale?: string): string {
-  return value.replaceAll("#", new Intl.NumberFormat(locale).format(numericValue))
+  return value.replaceAll("#", getNumberFormatter(locale, undefined).format(numericValue))
 }
 
 export function stringifyValue(value: unknown): string {

@@ -77,18 +77,22 @@ describe("palamedes-po-loader.cjs", () => {
     await expect(runLoader({ failOnMissing: true })).rejects.toThrow(/Missing 1 translation/)
   })
 
-  it("warns diagnostics when compile errors are not fatal", async () => {
+  it("routes diagnostics through webpack's emitWarning when not fatal", async () => {
     compileCatalogModule.mockReturnValue({
       code: "export const messages={};export default { messages };",
       warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
     })
+    const emitWarning = vi.fn()
 
-    await runLoader()
+    await runLoader({}, { emitWarning })
 
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Catalog diagnostics for locale de")
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("Catalog diagnostics for locale de"),
+      })
     )
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
   it("fails compile diagnostics when configured", async () => {
@@ -103,13 +107,17 @@ describe("palamedes-po-loader.cjs", () => {
   })
 })
 
-async function runLoader(options: Record<string, unknown> = {}) {
+async function runLoader(
+  options: Record<string, unknown> = {},
+  extraContext: Record<string, unknown> = {}
+) {
   delete require.cache[require.resolve(loaderPath)]
   const loader = require(loaderPath) as (this: unknown) => void
   const dependencies: string[] = []
 
   const code = await new Promise<string>((resolve, reject) => {
     const context = {
+      ...extraContext,
       resourcePath: "/repo/src/locales/de.po",
       async() {
         return (error: Error | null, output?: string) => {
