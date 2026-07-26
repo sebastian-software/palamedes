@@ -285,7 +285,7 @@ export function RivalPage({ rival }: { rival: Rival }) {
       <StatementBand num="07 — The honest bit">{rival.honest}</StatementBand>
 
       <Section num="08 — Also weighing" title="Comparing something else?">
-        <div className="hairline-grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1">
+        <div className="hairline-grid grid-cols-3 max-grid:grid-cols-2 max-tight:grid-cols-1">
           {RIVALS.filter((other) => other.slug !== rival.slug).map((other) => (
             <Link
               key={other.slug}

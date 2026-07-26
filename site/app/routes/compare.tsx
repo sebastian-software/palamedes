@@ -9,13 +9,15 @@ import { StatementBand } from "~/components/home/StatementBand"
 import contentStats from "~/data/generated/content-stats.json"
 import { BENCH_REALISTIC } from "~/data/bench"
 import { REPO, docsHref } from "~/data/links"
+import { PLATFORMS, PLATFORMS_RESEARCHED } from "~/data/platforms"
 import { NATIVE_SHIFT, RIVALS } from "~/data/rivals"
 
 export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
-    title: "Palamedes compared — Lingui, i18next, next-intl, react-intl, Paraglide",
+    title:
+      "Palamedes compared — Lingui, i18next, next-intl, react-intl, Paraglide, General Translation, Tolgee",
     description: `Side-by-side comparisons of Palamedes with the major JavaScript i18n libraries: ${BENCH_REALISTIC.ratios.formatjs} to ${BENCH_REALISTIC.ratios.i18nextCli} faster on a checked benchmark, with what each of them does better and when to pick them instead.`,
     path: "/compare",
   })
@@ -78,7 +80,7 @@ export default function Compare() {
       <Section
         num="01 — Head to head"
         title="Pick the one you are actually weighing."
-        lede="Five libraries, five separate arguments. Each page runs the same structure: credit and cost side by side, the decisions that genuinely differ, a code comparison, a measured table, and an explicit 'pick them instead when…' list. None of it needs you to take our word for anything."
+        lede={`${RIVALS.length} libraries, ${RIVALS.length} separate arguments. Each page runs the same structure: credit and cost side by side, the decisions that genuinely differ, a code comparison, a measured table, and an explicit 'pick them instead when…' list. None of it needs you to take our word for anything.`}
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           {RIVALS.map((rival) => (
@@ -106,7 +108,7 @@ export default function Compare() {
             <p className="micro text-[10px] tracking-label text-gray-spec">Palamedes vs</p>
             <h3 className="mt-3 text-[17px] font-bold">Something not listed here?</h3>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              These five cover the libraries most teams actually shortlist. If you are weighing a
+              These cover the libraries most teams actually shortlist. If you are weighing a
               different one, open an issue with the comparison you need and we will research it
               properly rather than guess.
             </p>
@@ -134,9 +136,70 @@ export default function Compare() {
 
       <Section
         num="03 — Different category"
-        title="Translation platforms are not the same question."
-        lede="General Translation, Crowdin, Lokalise, Phrase and the rest solve hosted workflows, vendor management and delivery. Palamedes is local-first tooling: your repository owns the catalogs, the QA and the history. The two layers stack rather than compete — Palamedes underneath, a platform on top, .po as the handover format both understand."
-      />
+        title="Translation platforms stack with us. They do not replace us."
+        lede="A TMS solves hosted workflow, vendor management and delivery — none of which Palamedes does or intends to. The one thing worth checking before you sign is where each platform thinks the authoritative copy of a string lives, because that decides whether it sits on top of a repository-first toolchain or wants to become the toolchain. All of these read .po, which is the whole reason we write it."
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse border border-hair">
+            <thead>
+              <tr>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-ink">
+                  Platform
+                </th>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                  Ownership
+                </th>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                  Source of truth
+                </th>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                  .po handover
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {PLATFORMS.map((platform) => (
+                <tr key={platform.name}>
+                  <th
+                    scope="row"
+                    className="border border-hair px-4 py-3 text-left align-top text-[12.5px] font-bold"
+                  >
+                    {platform.name}
+                    <span className="mt-1.5 block text-[12px] font-normal text-ink/85">
+                      {platform.note}
+                    </span>
+                  </th>
+                  <td className="border border-hair px-4 py-3 align-top text-[13px]">
+                    {platform.owner}
+                  </td>
+                  <td className="border border-hair px-4 py-3 align-top text-[13px]">
+                    {platform.truth}
+                  </td>
+                  <td className="border border-hair px-4 py-3 align-top text-[13px]">
+                    {platform.po}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mono-nums mt-3 text-[11px] text-gray-spec">
+          Researched {PLATFORMS_RESEARCHED}. Platforms change ownership and pricing often — re-check
+          before you sign anything.
+        </p>
+        <p className="mt-6 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">
+          Two of these ship a developer SDK rather than only a platform, so they get a full
+          comparison of their own:{" "}
+          <Link to="/compare/general-translation" viewTransition className="text-accent">
+            General Translation
+          </Link>{" "}
+          and{" "}
+          <Link to="/compare/tolgee" viewTransition className="text-accent">
+            Tolgee
+          </Link>
+          .
+        </p>
+      </Section>
 
       <Section
         num="04 — ICU semantics"
