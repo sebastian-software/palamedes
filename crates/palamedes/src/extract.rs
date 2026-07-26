@@ -359,7 +359,6 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     self.origin(it.span.start as usize),
                     self.current_scope(),
                     self.source,
-                    false,
                 ) {
                     Ok(Some(message)) => self.push(message),
                     Ok(None) => {
@@ -380,7 +379,6 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
                 self.source,
-                true,
             ) {
                 Ok(Some(message)) => self.push(message),
                 Ok(None) => {}
@@ -718,7 +716,6 @@ fn extract_from_tagged_template(
     origin: (String, usize, Option<usize>),
     scope: Option<String>,
     source: &str,
-    _runtime: bool,
 ) -> PalamedesResult<Option<ExtractedMessageRecord>> {
     let (message, placeholders) = template_to_message(template, source)?;
     if message.is_empty() {

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use config::{load_config, ConfigCatalog, ConfigError, LoadedConfig};
@@ -24,6 +24,7 @@ const TIMING_MARKER: &str = "__PALAMEDES_TIMINGS__";
 
 #[derive(Debug, Parser)]
 #[command(name = "pmds")]
+#[command(version)]
 #[command(about = "Palamedes CLI for extraction, audits, reports, and catalog workflows")]
 struct Cli {
     #[command(subcommand)]
@@ -52,7 +53,9 @@ struct ExtractOptions {
     /// Watch for file changes.
     #[arg(short, long)]
     watch: bool,
-    /// Remove obsolete messages from catalogs.
+    /// Remove obsolete messages whose obsolete-since marker is older than the
+    /// 30-day grace period; undated entries are kept (use --force-clean to
+    /// remove everything immediately).
     #[arg(long)]
     clean: bool,
     /// Remove obsolete messages immediately, including entries without obsolete-since.
@@ -229,7 +232,7 @@ enum CliError {
 #[derive(Debug)]
 struct CatalogExtractionResult {
     messages: Vec<CatalogUpdateMessage>,
-    file_count: usize,
+    files: Vec<PathBuf>,
     failed_file_count: usize,
     glob_ms: u128,
     extract_ms: u128,
@@ -258,6 +261,7 @@ struct LocaleCompletenessReport {
     total: usize,
     translated: usize,
     missing: usize,
+    fuzzy: usize,
     percent: f64,
 }
 
@@ -273,6 +277,7 @@ struct MutableLocaleStats {
     total: usize,
     translated: usize,
     missing: usize,
+    fuzzy: usize,
 }
 
 fn main() {
@@ -322,8 +327,9 @@ fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
     let mut total_glob_ms = 0;
     let mut total_extract_ms = 0;
     let mut total_messages = 0;
-    let mut total_files = 0;
     let mut total_failed_files = 0;
+    // Catalogs may match overlapping file sets; count each source file once.
+    let mut unique_files = BTreeSet::new();
     let mut results = Vec::with_capacity(config.catalogs.len());
 
     for catalog in &config.catalogs {
@@ -331,10 +337,11 @@ fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
         total_glob_ms += result.glob_ms;
         total_extract_ms += result.extract_ms;
         total_messages += result.messages.len();
-        total_files += result.file_count;
+        unique_files.extend(result.files.iter().cloned());
         total_failed_files += result.failed_file_count;
         results.push(result);
     }
+    let total_files = unique_files.len();
 
     if total_failed_files > 0 {
         return Err(CliError::ExtractionFailed {
@@ -407,7 +414,7 @@ fn extract_from_catalog(
 
     Ok(CatalogExtractionResult {
         messages: result.messages,
-        file_count: result.file_count,
+        files,
         failed_file_count: result.failed_files.len(),
         glob_ms,
         extract_ms,
@@ -568,65 +575,154 @@ fn build_exclude_set(catalog: &ConfigCatalog, config: &LoadedConfig) -> Result<G
     })
 }
 
-fn run_watch_mode(config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
+const WATCH_DEBOUNCE: Duration = Duration::from_millis(150);
+
+/// Per-catalog include/exclude matchers, built once per config generation so
+/// every filesystem event does not pay glob compilation again.
+struct WatchMatchers {
+    sets: Vec<(GlobSet, GlobSet)>,
+}
+
+impl WatchMatchers {
+    fn build(config: &LoadedConfig) -> Self {
+        let sets = config
+            .catalogs
+            .iter()
+            .filter_map(|catalog| {
+                match (
+                    build_include_set(catalog, config),
+                    build_exclude_set(catalog, config),
+                ) {
+                    (Ok(include), Ok(exclude)) => Some((include, exclude)),
+                    _ => None,
+                }
+            })
+            .collect();
+        Self { sets }
+    }
+
+    fn matches(&self, path: &Path) -> bool {
+        if path
+            .components()
+            .any(|component| component.as_os_str() == "node_modules")
+        {
+            return false;
+        }
+        if path.extension().and_then(|value| value.to_str()) == Some("po") {
+            return false;
+        }
+        self.sets
+            .iter()
+            .any(|(include, exclude)| include.is_match(path) && !exclude.is_match(path))
+    }
+}
+
+/// Roots the watcher must observe: the config root plus every include root
+/// that lies outside it (includes may point above or beside root_dir).
+fn watch_roots(config: &LoadedConfig) -> Vec<PathBuf> {
+    let mut roots = vec![config.root_dir.clone()];
+    for catalog in &config.catalogs {
+        let patterns = normalized_include_patterns(catalog, config);
+        for root in walk_roots_for_patterns(&patterns, &config.root_dir) {
+            if !root.starts_with(&config.root_dir) && !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+    }
+    roots
+}
+
+fn run_watch_mode(initial_config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
     println!("Watching for changes...");
-    run_watch_extraction(config, options)?;
+    let mut config = initial_config.clone();
+    run_watch_extraction(&config, options)?;
 
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
-    watcher.watch(&config.root_dir, RecursiveMode::Recursive)?;
+    for root in watch_roots(&config) {
+        watcher.watch(&root, RecursiveMode::Recursive)?;
+    }
+    // The config file itself is a dependency: locale/fallback/pseudo edits
+    // must take effect without restarting the watcher.
+    watcher.watch(&config.config_path, RecursiveMode::NonRecursive)?;
+
+    let mut matchers = WatchMatchers::build(&config);
 
     loop {
-        match rx.recv() {
-            Ok(Ok(event)) => {
-                if event
-                    .paths
-                    .iter()
-                    .any(|path| should_rerun_for_path(path, config))
-                {
-                    if options.verbose {
-                        eprintln!("Source changed; extracting catalogs");
-                    }
-                    run_watch_extraction(config, options)?;
-                }
-            }
+        let event = match rx.recv() {
+            Ok(Ok(event)) => event,
             Ok(Err(error)) => return Err(CliError::Watch(error)),
             Err(_) => return Ok(()),
+        };
+
+        let mut config_changed = touches_config(&event.paths, &config);
+        let mut relevant = config_changed || event.paths.iter().any(|path| matchers.matches(path));
+
+        // Debounce: editors and generators emit event bursts; keep draining
+        // until the stream is quiet before running a single extraction.
+        while let Ok(next) = rx.recv_timeout(WATCH_DEBOUNCE) {
+            match next {
+                Ok(event) => {
+                    config_changed = config_changed || touches_config(&event.paths, &config);
+                    relevant = relevant
+                        || config_changed
+                        || event.paths.iter().any(|path| matchers.matches(path));
+                }
+                Err(error) => return Err(CliError::Watch(error)),
+            }
         }
+
+        if !relevant {
+            continue;
+        }
+
+        if config_changed {
+            match load_config(
+                &std::env::current_dir().expect("current dir"),
+                options.config.as_deref(),
+            ) {
+                Ok(reloaded) => {
+                    eprintln!(
+                        "Config changed; reloaded {}",
+                        reloaded.config_path.display()
+                    );
+                    for root in watch_roots(&reloaded) {
+                        // Re-watching an already-watched root is harmless.
+                        let _ = watcher.watch(&root, RecursiveMode::Recursive);
+                    }
+                    config = reloaded;
+                    matchers = WatchMatchers::build(&config);
+                }
+                Err(error) => {
+                    eprintln!(
+                        "Warning: Could not reload config: {error}. Keeping the previous configuration and continuing to watch for changes."
+                    );
+                }
+            }
+        }
+
+        if options.verbose {
+            eprintln!("Source changed; extracting catalogs");
+        }
+        run_watch_extraction(&config, options)?;
     }
 }
 
+fn touches_config(paths: &[PathBuf], config: &LoadedConfig) -> bool {
+    paths.iter().any(|path| path == &config.config_path)
+}
+
+/// Watch mode must survive every extraction failure — including fatal
+/// authoring errors like a half-typed `t({ message })` — because the developer
+/// is mid-edit and the next save usually fixes the problem.
 fn run_watch_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
     match run_extraction(config, options) {
-        Err(CliError::ExtractionFailed { failures }) => {
-            eprintln!(
-                "Warning: Extraction failed for {failures} source file(s); catalogs were not updated. Continuing to watch for changes."
-            );
+        Ok(()) => Ok(()),
+        Err(error) => {
+            eprintln!("Warning: {error} Continuing to watch for changes.");
             Ok(())
         }
-        result => result,
     }
-}
-
-fn should_rerun_for_path(path: &Path, config: &LoadedConfig) -> bool {
-    if path
-        .components()
-        .any(|component| component.as_os_str() == "node_modules")
-    {
-        return false;
-    }
-    if path.extension().and_then(|value| value.to_str()) == Some("po") {
-        return false;
-    }
-    config.catalogs.iter().any(|catalog| {
-        match (
-            build_include_set(catalog, config),
-            build_exclude_set(catalog, config),
-        ) {
-            (Ok(include), Ok(exclude)) => include.is_match(path) && !exclude.is_match(path),
-            _ => false,
-        }
-    })
 }
 
 fn run_audit(options: AuditOptions) -> Result<CatalogAuditResult, CliError> {
@@ -751,6 +847,7 @@ fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<Completenes
                     total: 0,
                     translated: 0,
                     missing: 0,
+                    fuzzy: 0,
                 },
             )
         })
@@ -789,6 +886,26 @@ fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<Completenes
             let target_path = config
                 .resolve_catalog_path(&catalog.path, locale)
                 .with_extension(catalog.format.extension());
+            /*
+             * Fuzzy entries carry a translation that needs review; gettext
+             * tooling treats them as untranslated, and so does this report.
+             * The flag only exists in the PO storage format.
+             */
+            let fuzzy_keys = if catalog.format == palamedes::PalamedesCatalogFormat::Po
+                && target_path.exists()
+            {
+                read_po(&target_path)?
+                    .items
+                    .into_iter()
+                    .filter(|item| item.flags.get("fuzzy").copied().unwrap_or(false))
+                    .map(|item| MessageKey {
+                        message: item.msgid,
+                        context: item.msgctxt,
+                    })
+                    .collect::<BTreeSet<_>>()
+            } else {
+                BTreeSet::new()
+            };
             let target_messages = if target_path.exists() {
                 read_catalog_for_report(
                     &target_path,
@@ -817,7 +934,10 @@ fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<Completenes
                     locale_stats.missing += 1;
                     continue;
                 };
-                if *target {
+                if fuzzy_keys.contains(source_message) {
+                    locale_stats.fuzzy += 1;
+                    locale_stats.missing += 1;
+                } else if *target {
                     locale_stats.translated += 1;
                 } else {
                     locale_stats.missing += 1;
@@ -839,6 +959,7 @@ fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<Completenes
                 total: locale.total,
                 translated: locale.translated,
                 missing: locale.missing,
+                fuzzy: locale.fuzzy,
             })
             .collect(),
     })
@@ -909,16 +1030,17 @@ fn print_report(result: &CompletenessReport) {
         + 2;
 
     println!(
-        "{:<locale_column_width$}Translated  Missing  Complete",
+        "{:<locale_column_width$}Translated  Missing  Fuzzy  Complete",
         "Locale"
     );
     for locale in &result.locales {
         let translated = format!("{}/{}", locale.translated, locale.total);
         println!(
-            "{:<locale_column_width$}{:<11} {:<8} {}",
+            "{:<locale_column_width$}{:<11} {:<8} {:<6} {}",
             locale.locale,
             translated,
             locale.missing,
+            locale.fuzzy,
             format_percent(locale.percent)
         );
     }
@@ -1235,9 +1357,14 @@ catalogs:
         let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
         let report = build_report(&config, &["de".to_owned()]).expect("build report");
 
+        /*
+         * The de catalog translates "Hello" but flags it fuzzy: fuzzy entries
+         * need review and count as untranslated, matching gettext semantics.
+         */
         assert_eq!(report.locales[0].total, 2);
-        assert_eq!(report.locales[0].translated, 1);
-        assert_eq!(report.locales[0].missing, 1);
+        assert_eq!(report.locales[0].translated, 0);
+        assert_eq!(report.locales[0].missing, 2);
+        assert_eq!(report.locales[0].fuzzy, 1);
     }
 
     fn write_config(dir: &std::path::Path, source_reference_root: Option<&str>) {
