@@ -267,6 +267,17 @@ header a[href="/"] span {
   gap: 1px;
   background: var(--color-hair);
   border: 1px solid var(--color-hair);
+
+  /*
+   * Grid items default to `min-width: auto`, which refuses to shrink below
+   * their content's intrinsic width. A cell holding a code block or a wide
+   * table therefore stretched the whole grid — and with it the page — instead
+   * of letting its own `overflow-x-auto` scroll. Every cell in this system is
+   * a self-contained panel, so none of them should ever widen the page.
+   */
+  > * {
+    min-width: 0;
+  }
 }
 
 /* Eyebrow with the accent section glyph. */
@@ -283,9 +294,23 @@ header a[href="/"] span {
   }
 }
 
-/* The centered page frame with full-height side rules. */
+/*
+ * The centered page frame with full-height side rules.
+ *
+ * `width: 100%` is load-bearing, not cosmetic. The frame is a flex item of
+ * ARDO's column-direction <main>, where the horizontal size normally comes
+ * from `align-items: stretch` — but our own `margin-inline: auto` (needed for
+ * the centering) suppresses that stretch, leaving the frame sized to its
+ * content. Any wide descendant (a comparison table with a min-width, a
+ * benchmark chart) then widened the frame past the viewport instead of
+ * scrolling inside its own `overflow-x-auto` container, so every page holding
+ * a table scrolled horizontally on phones. Pinning the width to the container
+ * restores the intended behaviour; `min-width: 0` keeps it shrinkable.
+ */
 @utility frame {
+  width: 100%;
   max-width: 1320px;
+  min-width: 0;
   margin-inline: auto;
   border-inline: 1px solid var(--color-hair);
 }

@@ -15,7 +15,13 @@ export function StepFlow({ steps }: { steps: Step[] }) {
       {steps.map((step, index) => (
         <li
           key={step.title}
-          className={`grid grid-cols-[64px_1fr] max-tight:grid-cols-[44px_1fr] ${
+          /*
+           * minmax(0,1fr), not a bare 1fr: a bare `1fr` resolves to
+           * minmax(auto,1fr), so the content column refuses to shrink below
+           * the intrinsic width of the code block inside it and widens the
+           * page instead of letting the <pre> scroll.
+           */
+          className={`grid grid-cols-[64px_minmax(0,1fr)] max-tight:grid-cols-[44px_minmax(0,1fr)] ${
             index > 0 ? "border-t border-hair" : ""
           }`}
         >
