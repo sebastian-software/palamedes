@@ -203,26 +203,25 @@ export default function Compare() {
 
       <Section
         num="04 — Not a competitor"
-        title="Some tools plug in rather than compete."
-        lede="Not everything adjacent to Palamedes is an alternative to it. The clearest example is Lingo.dev: it is a translation pipeline, not a runtime, and it reads the same .po files we write."
+        title="A machine-translation step is not an alternative to this."
+        lede="A growing class of tools translates localization files in CI: point them at your catalogs, they call a model, they commit the result back as a pull request. They are worth knowing about, and they are not alternatives to Palamedes — they have no runtime, no message identity and no catalog semantics. They assume something upstream already produced well-formed catalogs."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">How the two fit together</h3>
+            <h3 className="text-[15px] font-bold">That upstream part is us</h3>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              Palamedes extracts your source strings and writes .po. Lingo.dev's CLI reads those
-              files, translates them, and commits the result back — in CI, as a pull request. No
-              hosted database ends up owning your catalogs, because both halves treat the repository
-              as the system of record.
+              Palamedes extracts your source strings, resolves identity across refactors, merges
+              semantically and validates the ICU. What a translation step receives is only as good
+              as what produced it — and if the catalog is wrong, translating it faithfully makes it
+              wrong in more languages.
             </p>
           </div>
           <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">Why we point at it</h3>
+            <h3 className="text-[15px] font-bold">.po is why they compose</h3>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              Apache-2.0 tooling, PO as a first-class format, and named, swappable models — down to
-              running fully local against Ollama. If you want machine translation in your pipeline
-              without handing a vendor the catalogs, that combination is rare enough to be worth
-              naming. We have no commercial relationship with them.
+              Most of these tools read gettext .po, which is exactly what Palamedes writes. Pick
+              whichever one you like, or none — the repository stays the system of record either
+              way, and nothing about your catalogs depends on that choice.
             </p>
           </div>
         </div>
