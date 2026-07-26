@@ -1,76 +1,48 @@
+import { Link } from "react-router"
+
 import { ButtonLink } from "~/components/chrome/Button"
 import { Page } from "~/components/chrome/Page"
 import { pageMeta } from "~/lib/meta"
 import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
-import { COMPARE_CRITERIA, COMPARE_FOOTNOTES, COMPARE_TOOLS } from "~/data/compare"
 import contentStats from "~/data/generated/content-stats.json"
-import { docsHref } from "~/data/links"
+import { REPO, docsHref } from "~/data/links"
+import { RIVALS } from "~/data/rivals"
 
 export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
-    title: "Palamedes vs Lingui, next-intl, and General Translation — an honest comparison",
+    title: "Palamedes compared — Lingui, i18next, next-intl, react-intl, Paraglide",
     description:
-      "How Palamedes compares with Lingui, next-intl, and General Translation — including when you should pick the other tool.",
+      "Honest, side-by-side comparisons of Palamedes with the major JavaScript i18n libraries — including what each of them does better and when you should pick them instead.",
     path: "/compare",
   })
 }
 
-function CompareTable() {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-collapse border border-hair">
-        <thead>
-          <tr>
-            <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
-              Criteria
-            </th>
-            {COMPARE_TOOLS.map((tool) => (
-              <th
-                key={tool.name}
-                className={`micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th ${
-                  tool.accent ? "border-l-2 border-l-accent bg-hover-fill text-accent" : "text-ink"
-                }`}
-              >
-                {tool.name}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {COMPARE_CRITERIA.map((criterion, rowIndex) => (
-            <tr key={criterion}>
-              <th
-                scope="row"
-                className="border border-hair px-4 py-3 text-left align-top text-[12.5px] font-bold"
-              >
-                {criterion}
-              </th>
-              {COMPARE_TOOLS.map((tool) => (
-                <td
-                  key={tool.name}
-                  className={`border border-hair px-4 py-3 align-top text-[13px] ${
-                    tool.accent ? "border-l-2 border-l-accent bg-hover-fill" : ""
-                  }`}
-                >
-                  {tool.cells[rowIndex]}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {COMPARE_FOOTNOTES.map((footnote) => (
-        <p key={footnote} className="mono-nums mt-3 text-[11px] text-gray-spec">
-          {footnote}
-        </p>
-      ))}
-    </div>
-  )
-}
+/* The cases where the answer is "use something else", stated plainly. */
+const NOT_FOR_YOU = [
+  {
+    case: "You build with Vue, Angular, or Svelte",
+    answer:
+      "Palamedes ships React and Solid packages only. Lingui covers Vue, i18next covers nearly everything, and vue-i18n is the idiomatic choice inside the Vue ecosystem.",
+  },
+  {
+    case: "You ship React Native",
+    answer: "There is no React Native adapter here. Lingui and i18next both support it today.",
+  },
+  {
+    case: "Kilobytes are your hard constraint",
+    answer:
+      "Paraglide's zero-runtime compilation beats a small runtime on bundle size by construction. If that is the number you are judged on, start there.",
+  },
+  {
+    case: "You want the i18n library to own routing",
+    answer:
+      "next-intl treats localized pathnames and domain routing as core product. Palamedes leaves URLs to your router on purpose.",
+  },
+]
 
 export default function Compare() {
   return (
@@ -80,13 +52,13 @@ export default function Compare() {
         <h1 className="mt-6 max-w-[12em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
           Narrower than the alternatives. On&nbsp;purpose.
         </h1>
-        <p className="mt-6 max-w-[38em]">
+        <p className="mt-6 max-w-[40em]">
           Palamedes is for teams that like compile-time authoring and want the stack under it to
-          feel smaller, steadier, and easier to trust. Here is how that compares — including when
-          you should pick something else.
+          feel smaller, steadier, and easier to trust. Every page below opens with what the other
+          project does better, because a comparison that cannot say that is just an ad.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href="#lingui">Compare with Lingui</ButtonLink>
+          <ButtonLink href="/compare/lingui">Start with Lingui</ButtonLink>
           <ButtonLink variant="outline" href="/proof">
             See the proof
           </ButtonLink>
@@ -94,70 +66,72 @@ export default function Compare() {
       </section>
 
       <Section
-        num="01 — Lingui"
-        title="Palamedes vs Lingui"
-        id="lingui"
-        lede="Lingui is the closest neighbor — same authoring instinct, same source-string-first heart. Palamedes is the stricter end state of that idea: one runtime model instead of several entry points, one native engine for catalogs instead of plugin layers, and adapters that stay thin."
-      >
-        <CompareTable />
-        <div className="mt-8 max-w-[56em] border-l-4 border-accent pl-4">
-          <p className="micro text-[10px] text-gray-spec">Honest note</p>
-          <p className="mt-1 text-[13.5px]">
-            Pick Lingui if you need its ecosystem breadth or plugins Palamedes doesn't have yet.
-            Migrating anyway? Existing source-string-first .po catalogs are often reusable after an
-            extraction pass; explicit-ID-heavy projects need cleanup — the playbook covers both
-            paths.
-          </p>
-        </div>
-        <div className="mt-6 space-y-2">
-          <a
-            href={docsHref("comparison-with-lingui")}
-            className="mono-nums block text-[13px] text-accent"
-          >
-            Detailed comparison →
-          </a>
-          <a
-            href={docsHref("migrate-from-lingui")}
-            className="mono-nums block text-[13px] text-accent"
-          >
-            Migration playbook →
-          </a>
-        </div>
-      </Section>
-
-      <Section
-        num="02 — next-intl"
-        title="Palamedes vs next-intl"
-        lede="Different mental model, both valid. next-intl centers on message files with keys and is deeply Next.js-native. Palamedes centers on source strings in your components and stays framework-portable."
+        num="01 — Head to head"
+        title="Pick the one you are actually weighing."
+        lede="Five libraries, five separate arguments. Each page names the other side's strengths first, then the handful of decisions that genuinely differ, with a code comparison and a 'pick them instead when…' list."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
+          {RIVALS.map((rival) => (
+            <Link
+              key={rival.slug}
+              to={`/compare/${rival.slug}`}
+              viewTransition
+              className="group bg-paper px-6 py-6 transition-colors hover:bg-hover-fill"
+            >
+              <p className="micro text-[10px] tracking-label text-gray-spec">
+                Palamedes vs {rival.name}
+              </p>
+              <h3 className="mt-3 text-[17px] font-bold group-hover:text-accent">
+                {rival.headline}
+              </h3>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{rival.card}</p>
+              <span className="micro mt-4 inline-block text-[12px] text-accent">
+                Read the comparison →
+              </span>
+            </Link>
+          ))}
+          {/* Five rivals in a two-column grid leaves an odd cell; this fills it
+              with the one thing a comparison hub cannot answer for you. */}
           <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">Pick next-intl when…</h3>
+            <p className="micro text-[10px] tracking-label text-gray-spec">Palamedes vs</p>
+            <h3 className="mt-3 text-[17px] font-bold">Something not listed here?</h3>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              You are all-in on Next.js, prefer key-based message files as the source of truth, and
-              want the most Next-idiomatic API.
+              These five cover the libraries most teams actually shortlist. If you are weighing a
+              different one, open an issue with the comparison you need and we will research it
+              properly rather than guess.
             </p>
-          </div>
-          <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">Pick Palamedes when…</h3>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              You write messages in code, want .po catalogs translators already know, or expect to
-              outlive your current framework choice.
-            </p>
+            <a href={`${REPO}/issues`} className="micro mt-4 inline-block text-[12px] text-accent">
+              Ask on GitHub →
+            </a>
           </div>
         </div>
       </Section>
 
       <Section
-        num="03 — General Translation"
-        title="Palamedes vs General Translation"
-        lede="A category difference, not a feature race. GT is a translation platform — hosted workflows, AI translation, delivery. Palamedes is local-first tooling: your repo owns the catalogs, the QA, and the history. The two concerns can even stack: Palamedes as the local foundation, a service layer on top."
+        num="02 — Not for you"
+        title="When the honest answer is 'use something else'."
+        lede="These are not edge cases we are hedging against. They are the situations where another tool is simply the better call, and you should not have to read four sections to find that out."
+      >
+        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
+          {NOT_FOR_YOU.map((entry) => (
+            <div key={entry.case} className="bg-paper px-6 py-6">
+              <h3 className="text-[15px] font-bold">{entry.case}</h3>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{entry.answer}</p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section
+        num="03 — Different category"
+        title="Translation platforms are not the same question."
+        lede="General Translation, Crowdin, Lokalise, Phrase and the rest solve hosted workflows, vendor management and delivery. Palamedes is local-first tooling: your repository owns the catalogs, the QA and the history. The two layers stack rather than compete — Palamedes underneath, a platform on top, .po as the handover format both understand."
       />
 
       <Section
         num="04 — ICU semantics"
         title="The durable claim is about the pipeline we control."
-        lede="ICU support changes across libraries, TMS products, file formats, and project settings. Palamedes makes a narrower, executable claim: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation, and runtime rendering."
+        lede="ICU support varies across libraries, TMS products, file formats and project settings, and any table claiming otherwise ages badly. Palamedes makes a narrower, executable claim instead: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation and runtime rendering."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           <div className="bg-paper px-6 py-6">
@@ -165,14 +139,15 @@ export default function Compare() {
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
               One checked fixture exercises nested select and plural branches across extraction,
               transformation, catalog update, compilation, and six executions of the transformed
-              runtime function.
+              runtime function. You can re-run it yourself.
             </p>
           </div>
           <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">What we snapshot</h3>
+            <h3 className="text-[15px] font-bold">What we only snapshot</h3>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              Statements about other tools are dated observations from their public docs, not
-              permanent claims about their internals or roadmap.
+              Statements about other tools on these pages are dated observations from their public
+              documentation and repositories — not permanent claims about their internals or where
+              they are heading.
             </p>
           </div>
         </div>
@@ -185,8 +160,9 @@ export default function Compare() {
       </Section>
 
       <StatementBand num="05 — The honest bit">
-        Every tool on this page is good software. The question is which tradeoffs match your team —
-        ours are written down in {contentStats.adrCount} ADRs, so you can check before you commit.
+        Every tool on these pages is good software, maintained by people who thought hard about the
+        problem. The question is which set of tradeoffs matches your team — ours are written down in{" "}
+        {contentStats.adrCount} ADRs, so you can check the reasoning before you commit to anything.
       </StatementBand>
 
       <CtaBand
