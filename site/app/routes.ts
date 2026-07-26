@@ -91,6 +91,7 @@ export default [
   route("compare", "routes/compare.tsx"),
   route("compare/general-translation", "routes/compare/general-translation.tsx"),
   route("compare/i18next", "routes/compare/i18next.tsx"),
+  route("compare/intlayer", "routes/compare/intlayer.tsx"),
   route("compare/lingui", "routes/compare/lingui.tsx"),
   route("compare/next-intl", "routes/compare/next-intl.tsx"),
   route("compare/paraglide", "routes/compare/paraglide.tsx"),
