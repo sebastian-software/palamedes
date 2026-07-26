@@ -18,6 +18,20 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
 const PORT = 4102
 
+/*
+ * The ProofStrip speedup figure is read out of bench.ts rather than repeated
+ * here. Hardcoding it meant this assertion silently drifted from the guarded
+ * benchmark data (it was still asserting an old ratio long after the numbers
+ * were refreshed), which is exactly the failure this script exists to catch.
+ */
+const linguiRatio = (() => {
+  const benchTs = readFileSync(join(repoRoot, "site/app/data/bench.ts"), "utf8")
+  const realistic = benchTs.slice(benchTs.indexOf("export const BENCH_REALISTIC"))
+  const match = realistic.match(/lingui: "([\d.]+×)"/u)
+  if (!match) throw new Error("verify-site-routes: cannot read BENCH_REALISTIC lingui ratio")
+  return match[1]
+})()
+
 const MIME = {
   ".css": "text/css",
   ".html": "text/html",
@@ -33,7 +47,12 @@ const ROUTE_EXPECTATIONS = [
   { path: "/frameworks", h1: "Six frameworks." },
   { path: "/proof", h1: "Claims you can re-run." },
   { path: "/get-started", h1: "First working translation" },
-  { path: "/compare", h1: "Narrower than the alternatives." },
+  { path: "/compare", h1: "Compare it properly." },
+  { path: "/compare/lingui", h1: "The same idea, on an engine" },
+  { path: "/compare/i18next", h1: "You already know what the string says." },
+  { path: "/compare/next-intl", h1: "frameworks wide." },
+  { path: "/compare/react-intl", h1: "Keep the ICU rigor. Lose the provider." },
+  { path: "/compare/paraglide", h1: "Smaller bundles. Bigger constraints." },
   { path: "/blog", h1: "Building i18n tooling in the" },
   { path: "/blog/measuring-palamedes-honestly", h1: "Measuring Palamedes Honestly" },
   { path: "/docs", h1: "Documentation" },
@@ -203,7 +222,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     currentPath = "/"
     await gotoAndSettle(page, "/", { settleMs: 100 })
     const statText = await page.getByText("verified example apps").isVisible()
-    const stat = await page.getByText("12.99", { exact: false }).first().isVisible()
+    const stat = await page.getByText(linguiRatio, { exact: false }).first().isVisible()
     if (!statText || !stat) {
       fail("no-JS: proof-strip stats missing from prerendered HTML")
     }
