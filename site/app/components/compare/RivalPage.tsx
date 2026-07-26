@@ -5,15 +5,25 @@ import { Page } from "~/components/chrome/Page"
 import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
-import { BENCH_FOOTNOTE, RIVALS, type Rival, type RivalCode, type RivalRow } from "~/data/rivals"
+import {
+  BENCH_FOOTNOTE,
+  NATIVE_SHIFT,
+  RIVALS,
+  type Rival,
+  type RivalCode,
+  type RivalRow,
+} from "~/data/rivals"
 
 /*
  * One layout for every /compare/* page, driven by data/rivals.ts.
  *
- * The section order is the argument: acknowledge what the other project is
- * good at first, then the differences, then code, then the table, then the
- * "pick the other one when…" list. A comparison that leads with its own
- * feature list reads like a pitch; this one earns the claims first.
+ * The section order is the argument. The thesis lands immediately under the
+ * hero, because a comparison page that buries its position is not selling
+ * anything. Section 01 then does the thing that makes the rest credible: it
+ * states what the other project earned, and what that strength costs the
+ * people using it, side by side. Both columns are sourced; neither is a
+ * courtesy. Everything after that — differences, code, table, pick-lists —
+ * is downstream of those two columns.
  */
 
 function toLines(code: string): { no: number; text: string }[] {
@@ -100,6 +110,40 @@ function RivalMatrix({ rival, rows }: { rival: string; rows: RivalRow[] }) {
   )
 }
 
+/*
+ * The credit / cost pair. Same visual weight on both columns on purpose — the
+ * page loses its nerve if the strengths look like a disclaimer, and loses its
+ * credibility if the costs look like the main event.
+ */
+function LedgerColumn({
+  label,
+  title,
+  items,
+  accent,
+}: {
+  label: string
+  title: string
+  items: string[]
+  accent?: boolean
+}) {
+  return (
+    <div className="bg-paper px-6 py-6">
+      <p className="micro text-[10px] tracking-label text-gray-spec">{label}</p>
+      <h3 className={`mt-2 text-[15px] font-bold ${accent ? "text-accent" : ""}`}>{title}</h3>
+      <ul className="mt-4 space-y-3">
+        {items.map((item) => (
+          <li key={item} className="flex gap-2.5 text-[13.5px] leading-relaxed text-ink/85">
+            <span aria-hidden className={`mono-nums ${accent ? "text-accent" : "text-gray-spec"}`}>
+              ·
+            </span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function PickList({ title, items, accent }: { title: string; items: string[]; accent?: boolean }) {
   return (
     <div className="bg-paper px-6 py-6">
@@ -154,26 +198,38 @@ export function RivalPage({ rival }: { rival: Rival }) {
             Which should you pick?
           </ButtonLink>
         </div>
+        <div className="mt-12 border-l-4 border-accent bg-hover-fill py-6 pr-6 pl-6">
+          <p className="micro text-[10px] tracking-label text-gray-spec">Our position</p>
+          <p className="mt-3 max-w-[46em] text-[16px] leading-relaxed">{rival.thesis}</p>
+        </div>
       </section>
 
       <Section
         num={`01 — ${rival.name}`}
-        title={rival.respectTitle}
-        lede={`No comparison is worth reading if it cannot say what the other side is good at. Here is ${rival.name} at its strongest, in its own terms.`}
+        title="Credit where it is due, and what it costs."
+        lede={`Every strength is a decision, and every decision has a price someone pays. Here is ${rival.name} at its strongest — and the bill that comes with it. Both columns are sourced from the research notes, not from our marketing department.`}
       >
-        <ul className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
-          {rival.respect.map((item) => (
-            <li key={item} className="bg-paper px-6 py-5 text-[13.5px] leading-relaxed text-ink/85">
-              {item}
-            </li>
-          ))}
-        </ul>
+        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
+          <LedgerColumn label="Credit" title={rival.respectTitle} items={rival.respect} />
+          <LedgerColumn
+            label="The flipside"
+            title={rival.flipsideTitle}
+            items={rival.flipside}
+            accent
+          />
+        </div>
+      </Section>
+
+      <Section num="02 — The shift" title={NATIVE_SHIFT.title}>
+        <p className="max-w-[52em] text-[14.5px] leading-relaxed text-ink/85">
+          {NATIVE_SHIFT.body}
+        </p>
       </Section>
 
       <Section
-        num="02 — Difference"
-        title="Where Palamedes takes a different position"
-        lede="Not a feature list — the handful of decisions that actually change how the two feel in daily work."
+        num="03 — Difference"
+        title="Why Palamedes is built the way it is"
+        lede="Not a feature list — the handful of decisions that actually change how the two feel in daily work, and the reasoning behind each one."
       >
         <div
           className={`hairline-grid ${differenceCols} max-grid:grid-cols-2 max-tight:grid-cols-1`}
@@ -187,12 +243,12 @@ export function RivalPage({ rival }: { rival: Rival }) {
         </div>
       </Section>
 
-      <Section num="03 — Code" title={rival.code.caption}>
+      <Section num="04 — Code" title={rival.code.caption}>
         <CodeCompare code={rival.code} />
       </Section>
 
       <Section
-        num="04 — Side by side"
+        num="05 — Side by side"
         title="The comparison, without the adjectives."
         lede="Where a row cites a measurement, it comes from the checked benchmark report in the repository. Where nothing was measured, the row says so."
       >
@@ -203,14 +259,14 @@ export function RivalPage({ rival }: { rival: Rival }) {
       </Section>
 
       <Section
-        num="05 — Decide"
+        num="06 — Decide"
         id="decide"
         title="Which one should you actually pick?"
-        lede="If the left column describes your situation, use the other tool. We would rather you ship the right thing than pick ours."
+        lede={`We think most React and Solid teams are better off here, and the left column says why. The right column is not a disclaimer — if it describes your situation, use ${rival.name} and do not think twice about it.`}
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
-          <PickList title={`Pick ${rival.name} when…`} items={rival.pickRival} />
           <PickList title="Pick Palamedes when…" items={rival.pickPalamedes} accent />
+          <PickList title={`Pick ${rival.name} when…`} items={rival.pickRival} />
         </div>
         {rival.migration ? (
           <div className="mt-8 max-w-[56em] border-l-4 border-accent pl-4">
@@ -226,9 +282,9 @@ export function RivalPage({ rival }: { rival: Rival }) {
         ) : null}
       </Section>
 
-      <StatementBand num="06 — The honest bit">{rival.honest}</StatementBand>
+      <StatementBand num="07 — The honest bit">{rival.honest}</StatementBand>
 
-      <Section num="07 — Also weighing" title="Comparing something else?">
+      <Section num="08 — Also weighing" title="Comparing something else?">
         <div className="hairline-grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1">
           {RIVALS.filter((other) => other.slug !== rival.slug).map((other) => (
             <Link
