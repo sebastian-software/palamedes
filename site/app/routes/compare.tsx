@@ -7,16 +7,16 @@ import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
 import contentStats from "~/data/generated/content-stats.json"
+import { BENCH_REALISTIC } from "~/data/bench"
 import { REPO, docsHref } from "~/data/links"
-import { RIVALS } from "~/data/rivals"
+import { NATIVE_SHIFT, RIVALS } from "~/data/rivals"
 
 export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
     title: "Palamedes compared — Lingui, i18next, next-intl, react-intl, Paraglide",
-    description:
-      "Honest, side-by-side comparisons of Palamedes with the major JavaScript i18n libraries — including what each of them does better and when you should pick them instead.",
+    description: `Side-by-side comparisons of Palamedes with the major JavaScript i18n libraries: ${BENCH_REALISTIC.ratios.formatjs} to ${BENCH_REALISTIC.ratios.i18nextCli} faster on a checked benchmark, with what each of them does better and when to pick them instead.`,
     path: "/compare",
   })
 }
@@ -50,12 +50,14 @@ export default function Compare() {
       <section className="px-8 pt-16 pb-14 max-tight:px-5">
         <p className="eyebrow">Comparison</p>
         <h1 className="mt-6 max-w-[12em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          Narrower than the alternatives. On&nbsp;purpose.
+          Compare it properly. We&nbsp;will argue the other side for you.
         </h1>
-        <p className="mt-6 max-w-[40em]">
-          Palamedes is for teams that like compile-time authoring and want the stack under it to
-          feel smaller, steadier, and easier to trust. Every page below opens with what the other
-          project does better, because a comparison that cannot say that is just an ad.
+        <p className="mt-6 max-w-[42em]">
+          Palamedes is narrower than the alternatives and considerably faster than all of them —{" "}
+          {BENCH_REALISTIC.ratios.formatjs} to {BENCH_REALISTIC.ratios.i18nextCli} on the checked
+          benchmark, depending on which tool you put next to it. Both of those are deliberate, and
+          both are checkable. Every page below states what the other project earned, what that
+          strength costs its users, and where we would send you elsewhere.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href="/compare/lingui">Start with Lingui</ButtonLink>
@@ -63,12 +65,20 @@ export default function Compare() {
             See the proof
           </ButtonLink>
         </div>
+
+        <div className="mt-12 border-l-4 border-accent bg-hover-fill px-6 py-6">
+          <p className="micro text-[10px] tracking-label text-gray-spec">Why now</p>
+          <h2 className="mt-2 max-w-[24em] text-[19px] font-bold">{NATIVE_SHIFT.title}</h2>
+          <p className="mt-3 max-w-[46em] text-[15px] leading-relaxed text-ink/85">
+            {NATIVE_SHIFT.body}
+          </p>
+        </div>
       </section>
 
       <Section
         num="01 — Head to head"
         title="Pick the one you are actually weighing."
-        lede="Five libraries, five separate arguments. Each page names the other side's strengths first, then the handful of decisions that genuinely differ, with a code comparison and a 'pick them instead when…' list."
+        lede="Five libraries, five separate arguments. Each page runs the same structure: credit and cost side by side, the decisions that genuinely differ, a code comparison, a measured table, and an explicit 'pick them instead when…' list. None of it needs you to take our word for anything."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           {RIVALS.map((rival) => (
@@ -110,7 +120,7 @@ export default function Compare() {
       <Section
         num="02 — Not for you"
         title="When the honest answer is 'use something else'."
-        lede="These are not edge cases we are hedging against. They are the situations where another tool is simply the better call, and you should not have to read four sections to find that out."
+        lede="A narrow tool has edges, and pretending otherwise wastes your afternoon. In these four situations another library is simply the better call — you should not have to read four sections and a benchmark to find that out."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           {NOT_FOR_YOU.map((entry) => (
@@ -160,9 +170,11 @@ export default function Compare() {
       </Section>
 
       <StatementBand num="05 — The honest bit">
-        Every tool on these pages is good software, maintained by people who thought hard about the
-        problem. The question is which set of tradeoffs matches your team — ours are written down in{" "}
-        {contentStats.adrCount} ADRs, so you can check the reasoning before you commit to anything.
+        Every tool on these pages is good software, built by people who thought hard about the
+        problem — and every one of them was designed against a JavaScript toolchain that has since
+        been rebuilt underneath them. We started on the other side of that line. If our tradeoffs do
+        not match your team, all {contentStats.adrCount} of them are written down, so you can find
+        that out today rather than in month four.
       </StatementBand>
 
       <CtaBand
