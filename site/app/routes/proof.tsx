@@ -8,6 +8,7 @@ import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
 import { BENCH_REALISTIC } from "~/data/bench"
 import { CATALOG_QA_CARDS } from "~/data/features"
+import contentStats from "~/data/generated/content-stats.json"
 import { decisionHref, docsHref, repoHref } from "~/data/links"
 
 export const handle = { layout: "bare" }
@@ -15,8 +16,7 @@ export const handle = { layout: "bare" }
 export function meta() {
   return pageMeta({
     title: "Palamedes — benchmarks, verification, and the decision trail",
-    description:
-      "Claims you can re-run: checked-in extraction benchmarks, an executable ICU semantics proof, 24 browser-verified example apps, and 16 architecture decision records.",
+    description: `Claims you can re-run: checked-in extraction benchmarks, an executable ICU semantics proof, ${contentStats.exampleCount} browser-verified example apps, and ${contentStats.adrCount} architecture decision records.`,
     path: "/proof",
   })
 }
@@ -24,7 +24,7 @@ export function meta() {
 const VERIFICATION_STEPS = [
   {
     title: "Build",
-    body: "All 24 example apps build against the workspace packages — no mocked integrations.",
+    body: `All ${contentStats.exampleCount} example apps build against the workspace packages — no mocked integrations.`,
   },
   {
     title: "Drive",
@@ -83,7 +83,7 @@ export default function Proof() {
 
       <Section
         num="02 — Verification"
-        title="24 apps, verified in a real browser, on every change."
+        title={`${contentStats.exampleCount} apps, verified in a real browser, on every change.`}
       >
         <div className="hairline-grid mb-10 grid-cols-3 max-tight:grid-cols-1">
           {VERIFICATION_STEPS.map((step, index) => (
@@ -136,7 +136,7 @@ export default function Proof() {
 
       <Section
         num="05 — Decision trail"
-        title="16 decisions, written down before you depend on them."
+        title={`${contentStats.adrCount} decisions, written down before you depend on them.`}
         lede="The ADRs cover message identity, the native boundary, adapter architecture — and, just as deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if our tradeoffs match yours."
       >
         <div className="space-y-2">
