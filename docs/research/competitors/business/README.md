@@ -5,6 +5,15 @@ self-hosted). Relevant later for a commercial "Palamedes Plus" offering.
 Snapshot date: **2026-07-06** (see each dossier's frontmatter; every fact below
 is sourced in the linked dossier).
 
+> **Do not name these on public marketing surfaces without a reason.** Vendors in
+> this directory are prospective competitors to the commercial tier, not just to
+> the open-source core, so a mention on the website is free promotion for a future
+> rival. Where the site needs to make a point about this category — TMS platforms,
+> CI translation steps — it makes it generically. The exceptions are the two that
+> ship a developer SDK competing with the OSS core today and that users genuinely
+> shortlist against it, General Translation and Tolgee, which have `/compare`
+> pages for that reason.
+
 ## Comparison table
 
 | Fact                | [Crowdin](crowdin.md)                   | [locize](locize.md)                   | [General Translation](general-translation.md) | [Tolgee](tolgee.md)                    | [Phrase](phrase.md)                 | [Lokalise](lokalise.md)                       | [Transifex](transifex.md)           | [Weblate](weblate.md)                           |

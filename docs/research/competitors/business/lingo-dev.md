@@ -12,6 +12,17 @@ repository: https://github.com/lingodotdev/lingo.dev
 > Formerly **Replexica**. Filed under `business/` because the revenue product is a
 > hosted localization platform, but the open-source tooling is substantial enough
 > that it competes with library-layer projects too.
+>
+> **Strategic note — this is the closest analogue to Palamedes Plus.** Open tooling
+> under a permissive licence, a commercial layer above it, the repository staying
+> authoritative, delivery through CLI and CI rather than a dashboard, and a pull
+> request as the artifact. That is the same shape ADR-018 describes. They are
+> therefore a partner to the open-source core (PO on both sides) **and** a
+> competitor to the commercial tier, and the second half is what matters for
+> planning. Keep them out of public marketing surfaces: naming them on the website
+> would build up a future Plus competitor at our own expense. The `/compare` hub
+> makes the architectural point about CI translation steps generically and does
+> not name any vendor — keep it that way.
 
 ## Fact sheet
 
@@ -106,7 +117,7 @@ repository: https://github.com/lingodotdev/lingo.dev
 - **Named, pluggable, optionally local models.** Publishing the provider list and supporting Ollama inverts the usual AI-vendor posture, where the production model is undisclosed.
 - **Repository stays authoritative.** Files are edited in place and committed back, so the tool never becomes the system of record — closer to Weblate's philosophy than to Crowdin's.
 - **Agent-facing surface as a first-class product** (React MCP server), aimed at AI coding agents performing i18n work rather than at humans in a dashboard.
-- **Composes with Palamedes rather than replacing it**, because PO is a supported format on both sides. This is the rare entry in this research set that is more plausibly a partner than a competitor.
+- **Composes with the Palamedes open-source core rather than replacing it**, because PO is a supported format on both sides — while competing directly with the planned commercial tier. Partner below the line, competitor above it; see the strategic note at the top.
 
 ## Sources
 
