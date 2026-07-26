@@ -8,7 +8,8 @@ import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
 import contentStats from "~/data/generated/content-stats.json"
 import { BENCH_REALISTIC } from "~/data/bench"
-import { REPO, docsHref } from "~/data/links"
+import { REPO, decisionHref, docsHref } from "~/data/links"
+import { FUNDING } from "~/data/funding"
 import { PLATFORMS, PLATFORMS_RESEARCHED } from "~/data/platforms"
 import { NATIVE_SHIFT, RIVALS } from "~/data/rivals"
 
@@ -202,7 +203,91 @@ export default function Compare() {
       </Section>
 
       <Section
-        num="04 — Not a competitor"
+        num="04 — Follow the money"
+        title="Who is paying for your i18n library?"
+        lede="This is the least discussed thing about this field and one of the more useful. Nearly every actively-funded JavaScript i18n library is either sponsored by translation vendors or built by one. None of that is hidden — every figure below comes from a public funding page — and none of it makes those libraries bad. It does mean the people paying for the roadmap mostly sell translation platforms, and that is worth knowing before you assume the defaults were chosen with only your interests in mind."
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse border border-hair">
+            <thead>
+              <tr>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-ink">
+                  Project
+                </th>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                  Who pays for the work
+                </th>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                  What they sell
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {FUNDING.map((row) => {
+                const isUs = row.project === "Palamedes"
+                return (
+                  <tr key={row.project}>
+                    <th
+                      scope="row"
+                      className={`border border-hair px-4 py-3 text-left align-top text-[12.5px] font-bold ${
+                        isUs ? "border-l-2 border-l-accent bg-hover-fill text-accent" : ""
+                      }`}
+                    >
+                      {row.project}
+                    </th>
+                    <td
+                      className={`border border-hair px-4 py-3 align-top text-[13px] ${
+                        isUs ? "bg-hover-fill" : ""
+                      }`}
+                    >
+                      {row.funder}
+                    </td>
+                    <td
+                      className={`border border-hair px-4 py-3 align-top text-[13px] ${
+                        isUs ? "bg-hover-fill" : ""
+                      }`}
+                    >
+                      {row.sells}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="mono-nums mt-3 text-[11px] text-gray-spec">
+          From each project&apos;s own public funding pages — GitHub Sponsors, Open Collective,
+          company disclosures — checked July 2026. Sponsorships change; re-check before you quote
+          this.
+        </p>
+
+        <div className="mt-8 max-w-[60em] border-l-4 border-accent bg-hover-fill px-6 py-6">
+          <p className="micro text-[10px] tracking-label text-gray-spec">Our own disclosure</p>
+          <h3 className="mt-2 text-[15px] font-bold">
+            We are not neutral either, and here is exactly how.
+          </h3>
+          <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
+            Palamedes is built by Sebastian Software, a company, and a commercial tier is planned.
+            Making the argument above without saying that would be the kind of thing the rest of
+            these pages exist to avoid. So: the plan on record is extra commands inside the same
+            CLI, not a place to keep your catalogs — the decision and its reasoning are written up
+            in the architecture decision records before any of it ships.
+          </p>
+          <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
+            What you should hold us to is the architecture, not the promise. Your catalogs are .po
+            files in your repository. Nothing phones home, nothing needs an account, and no part of
+            the toolchain gets more useful to us the more locked in you are. If we ever build a
+            commercial tier that depends on you being unable to leave, that architecture would have
+            to change first — and you would see the commit.
+          </p>
+          <a href={decisionHref()} className="mono-nums mt-4 inline-block text-[13px] text-accent">
+            Read the decision records →
+          </a>
+        </div>
+      </Section>
+
+      <Section
+        num="05 — Not a competitor"
         title="A machine-translation step is not an alternative to this."
         lede="A growing class of tools translates localization files in CI: point them at your catalogs, they call a model, they commit the result back as a pull request. They are worth knowing about, and they are not alternatives to Palamedes — they have no runtime, no message identity and no catalog semantics. They assume something upstream already produced well-formed catalogs."
       >
@@ -228,7 +313,7 @@ export default function Compare() {
       </Section>
 
       <Section
-        num="05 — ICU semantics"
+        num="06 — ICU semantics"
         title="The durable claim is about the pipeline we control."
         lede="ICU support varies across libraries, TMS products, file formats and project settings, and any table claiming otherwise ages badly. Palamedes makes a narrower, executable claim instead: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation and runtime rendering."
       >
@@ -285,7 +370,7 @@ export default function Compare() {
         </div>
       </Section>
 
-      <StatementBand num="06 — The honest bit">
+      <StatementBand num="07 — The honest bit">
         Every tool on these pages is good software, built by people who thought hard about the
         problem — and every one of them was designed against a JavaScript toolchain that has since
         been rebuilt underneath them. We started on the other side of that line. If our tradeoffs do
