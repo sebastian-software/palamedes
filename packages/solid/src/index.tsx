@@ -262,8 +262,6 @@ function renderNode(
       return renderNodes(resolved.nodes, values, components, locale, nextPluralValue)
     }
   }
-
-  return []
 }
 
 function buildFormattedMessage(node: Extract<MessageNode, { type: "formatted" }>): string {

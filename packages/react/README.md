@@ -65,6 +65,10 @@ as `_0`/`_1`/… (normalized to ICU `=N`, mirroring the macro transform), and
 `offset`; invalid option props and option text with unbalanced braces are
 rejected with a descriptive error instead of silently misrendering.
 
+The package also re-exports React's `Fragment`: the macro transform emits
+fragment-wrapped output and resolves `Fragment` from this package so
+transformed modules need no extra `react` import.
+
 ## Headless Frontend Helpers
 
 This package also exposes small, style-agnostic React helpers that the example

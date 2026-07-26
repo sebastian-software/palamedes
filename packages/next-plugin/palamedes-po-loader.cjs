@@ -75,7 +75,15 @@ module.exports = function palamedesPoLoader() {
       })
     }
 
-    result.warnings.forEach((warning) => console.warn(warning))
+    result.warnings.forEach((warning) => {
+      // emitWarning reaches the Next overlay and webpack's deduplicated
+      // diagnostics; console.warn repeated on every rebuild instead.
+      if (typeof this.emitWarning === "function") {
+        this.emitWarning(new Error(warning))
+      } else {
+        console.warn(warning)
+      }
+    })
 
     callback(null, result.code, null)
   })().catch((error) => {

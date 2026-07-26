@@ -69,18 +69,17 @@ describe("palamedes vite plugin", () => {
     )
   })
 
-  it("warns diagnostics when compile errors are not fatal", async () => {
+  it("routes diagnostics through the plugin warning channel when not fatal", async () => {
     mocks.compileCatalogModule.mockReturnValue({
       code: "export const messages={};export default { messages };",
       warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
     })
+    const warn = vi.fn()
 
-    await runPoTransform()
+    await runPoTransform({ warn })
 
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Catalog diagnostics for locale de")
-    )
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Catalog diagnostics for locale de"))
   })
 })
 

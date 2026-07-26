@@ -122,23 +122,27 @@ export function parseAcceptLanguage(header: string | null | undefined): string[]
     return []
   }
 
-  return header
-    .split(",")
-    .map((entry) => {
-      const [tag, ...params] = entry.trim().split(";")
-      const qParam = params.find((param) => param.trim().startsWith("q="))
-      const quality = qParam ? Number(qParam.split("=")[1]) : 1
+  return (
+    header
+      .split(",")
+      .map((entry) => {
+        const [tag, ...params] = entry.trim().split(";")
+        const qParam = params.find((param) => param.trim().startsWith("q="))
+        const quality = qParam ? Number(qParam.split("=")[1]) : 1
 
-      return {
-        quality: Number.isFinite(quality) ? quality : 1,
-        tag: tag.toLowerCase(),
-      }
-    })
-    .sort((left, right) => right.quality - left.quality)
-    .flatMap(({ tag }) => {
-      const base = tag.split("-")[0]
-      return base && base !== tag ? [tag, base] : [tag]
-    })
+        return {
+          quality: Number.isFinite(quality) ? quality : 1,
+          tag: tag.toLowerCase(),
+        }
+      })
+      // RFC 9110: a quality of 0 marks the tag as "not acceptable".
+      .filter(({ quality }) => quality > 0)
+      .sort((left, right) => right.quality - left.quality)
+      .flatMap(({ tag }) => {
+        const base = tag.split("-")[0]
+        return base && base !== tag ? [tag, base] : [tag]
+      })
+  )
 }
 
 function stripPort(host: string | null | undefined): string | null {

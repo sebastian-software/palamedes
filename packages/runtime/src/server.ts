@@ -33,6 +33,9 @@ export function createServerI18nScope<T extends I18nInstance = I18nInstance>(): 
       return sharedState.active.run(i18n, () => storage.run(i18n, callback))
     },
     activate(i18n) {
+      // enterWith() binds to the CURRENT async context: call this inside a
+      // per-request context (middleware, loader, handler). Calling it at
+      // module scope leaks one request's i18n into every later request.
       sharedState.active.enterWith(i18n)
       storage.enterWith(i18n)
       return i18n

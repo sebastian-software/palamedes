@@ -39,13 +39,13 @@ pmds extract --verbose
 
 Options:
 
-| Option                | Description                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------- |
-| `-c, --config <path>` | Use a specific config file.                                                                        |
-| `-w, --watch`         | Re-run extraction on file changes.                                                                 |
-| `--clean`             | Remove obsolete entries with `obsolete-since` at least 30 days old; keep undated obsolete entries. |
-| `--force-clean`       | Remove all obsolete entries immediately, including undated entries.                                |
-| `-v, --verbose`       | Print verbose extraction details.                                                                  |
+| Option                | Description                                                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-c, --config <path>` | Use a specific config file.                                                                                                                                  |
+| `-w, --watch`         | Re-run extraction on file changes (debounced). Fatal authoring errors are printed and watching continues; the config file is watched and reloaded on change. |
+| `--clean`             | Remove obsolete entries with `obsolete-since` at least 30 days old; keep undated obsolete entries.                                                           |
+| `--force-clean`       | Remove all obsolete entries immediately, including undated entries.                                                                                          |
+| `-v, --verbose`       | Print verbose extraction details.                                                                                                                            |
 
 ## `pmds audit`
 
@@ -72,7 +72,9 @@ Options:
 
 Reports per-locale translation completeness from configured catalogs. Source
 locale entries count as translated; target locales are compared against the
-source catalog messages that are not obsolete.
+source catalog messages that are not obsolete. PO entries flagged `fuzzy`
+need review and count as untranslated (reported in a separate `fuzzy`
+column), matching gettext conventions.
 
 ```bash
 pmds report
@@ -152,8 +154,22 @@ Options:
 
 ## `pmds version`
 
-Prints the installed CLI version.
+Prints the installed CLI version. `pmds --version` / `pmds -V` print the same
+information.
 
 ```bash
 pmds version
+pmds --version
 ```
+
+## Configuration Errors
+
+The native CLI reads only data configs (`palamedes.yaml`, `.yml`, `.json`,
+`.toml`). When the upward search finds only a `palamedes.config.ts`/`.js`, the
+CLI reports that specifically instead of a generic not-found error — create a
+data config next to it for CLI use. Known keys written in camelCase
+(`sourceLocale`, `pseudoLocale`, `fallbackLocales`, `sourceReferenceRoot`) are
+rejected with a kebab-case hint instead of being silently ignored; other
+unknown top-level keys produce a warning. Fallback-locale entries must
+reference configured locales, and a `pseudo-locale` outside `locales` warns
+that it will be ignored.
