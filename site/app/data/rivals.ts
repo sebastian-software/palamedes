@@ -672,6 +672,235 @@ function buyLabel(seats) {
     honest:
       "Paraglide's bundle-size story is better than ours and we are not going to claim otherwise — zero runtime beats a small runtime on that axis by construction, and that is a fine reason to pick them. We spend those kilobytes on in-place locale switching and .po interoperability because we think most products get more back from those than from the bytes. Nothing in the checked benchmark harness measures Paraglide, so there is no speed claim on this page.",
   },
+  {
+    slug: "general-translation",
+    name: "General Translation",
+    subject: "gt-next 11.0.0 / gt-react 11.0.0",
+    researched: "July 2026",
+    metaTitle: "Palamedes vs General Translation — own your catalogs, or rent them",
+    metaDescription:
+      "General Translation bundles library, AI translation, review UI and CDN into one vendor, and gets you shipping fast. Palamedes is local-first tooling under an MIT licence, with .po catalogs your repository owns outright.",
+    eyebrow: "Compare · General Translation",
+    headline: "Your translations should outlive your vendor.",
+    lede: "General Translation is the most vertically integrated option on these pages: wrap JSX in <T>, let an AI agent open the migration PR, let their platform translate and their CDN deliver. It is genuinely fast to adopt. The question this page asks is what you are holding afterwards — and under which licence.",
+    card: "The vertically integrated AI vendor. The split is ownership: your repository, or their platform.",
+    facts: [
+      { label: "Adoption", value: "~50k downloads/week" },
+      { label: "Company age", value: "~2 years, seed-funded" },
+      { label: "SDK licence", value: "FSL-1.1-ALv2, not OSI" },
+      { label: "Catalogs", value: "Proprietary storage + CDN" },
+    ],
+    thesis:
+      "This is not really a library comparison, and pretending otherwise would waste your time. General Translation sells a pipeline: extraction, AI translation, hosted review and edge delivery from one vendor. Palamedes sells none of that — it makes your repository the system of record and leaves the translating to whoever you choose. If translation is a product you want to buy, buy it. If translation is an asset you want to own, the licence and the catalog format are the two things worth reading closely before you start.",
+    respectTitle: "What General Translation earned",
+    respect: [
+      "The lowest integration friction here by some distance: wrapping existing JSX in <T> skips the up-front extraction into a key dictionary that usually is the adoption cost.",
+      "Locadex automates the part nobody wants to do — an AI agent that scans the codebase, wraps translatable content and opens the migration PR itself.",
+      "One vendor covers extraction, AI translation, human review and CDN delivery, with a credible developer-tools customer list and a fast release cadence.",
+    ],
+    flipsideTitle: "What that integration costs you",
+    flipside: [
+      "The SDKs are FSL-1.1-ALv2 — source-available, with a Competing Use restriction and a two-year delayed conversion to Apache-2.0. Their own FAQ calls this open source; by OSI standards it is not, and that is a materially different legal position from MIT.",
+      "There is no standard catalog format. No .po or XLIFF export tooling is documented, so portability out of the ecosystem is unverified — the loadTranslations escape hatch changes where files are served from, not who owns the format.",
+      "ICU is not the format for JSX content: plurals and conditionals use GT's own components, and ICU appears only in the low-level formatMessage utility. Human review sits behind a paid plan, so the free tier ships AI output unchecked.",
+    ],
+    differences: [
+      {
+        title: "Your repository is the system of record",
+        body: "Palamedes writes .po into your repo. The catalogs are versioned with the code that produced them, reviewed in the same pull request, and readable without an account. With GT the JSX is the source and the translations live in their storage and CDN — which is why the escape hatch exists at all, and why it is worth checking what it actually returns.",
+      },
+      {
+        title: "MIT, from day one, permanently",
+        body: "Palamedes is MIT. Not source-available, not a delayed conversion, no competing-use clause to have your legal team read. For a dependency that will sit in the build of every product you ship for the next decade, the licence is not a footnote — it is one of the load-bearing decisions.",
+      },
+      {
+        title: "Vendor-neutral by construction",
+        body: "Because the handover format is .po, any agency, freelancer, CAT tool or TMS can quote on your catalogs without an integration project. Palamedes does not translate anything and has no opinion about who does — we would rather be the layer you keep than the pipeline you are inside.",
+      },
+      {
+        title: "ICU everywhere, not only in the escape hatch",
+        body: "Palamedes is ICU MessageFormat end to end, with a checked proof that nested select and plural semantics survive extraction, catalogs, compilation and rendering. GT reserves ICU for its low-level formatMessage utility and handles JSX plurals through bespoke components — portable vocabulary versus a vendor dialect.",
+      },
+    ],
+    rows: [
+      {
+        criterion: "What it is",
+        rival: "Library plus AI translation platform and CDN",
+        palamedes: "Local-first tooling; you choose who translates",
+      },
+      {
+        criterion: "SDK licence",
+        rival: "FSL-1.1-ALv2 — source-available, Apache-2.0 after 2 years",
+        palamedes: "MIT, from the first release",
+      },
+      {
+        criterion: "Source of truth",
+        rival: "JSX plus hosted storage and CDN",
+        palamedes: "The .po catalogs in your repository",
+      },
+      {
+        criterion: "Catalog portability",
+        rival: "No .po or XLIFF export tooling documented",
+        palamedes: "gettext .po — every CAT tool and TMS reads it",
+      },
+      {
+        criterion: "ICU MessageFormat",
+        rival: "Own components for JSX; ICU in formatMessage only",
+        palamedes: "Native end to end, with a checked proof",
+      },
+      {
+        criterion: "Translation itself",
+        rival: "The product — AI translation with optional human review",
+        palamedes: "Not our product. Bring any agency, TMS or MT engine",
+      },
+      {
+        criterion: "Extract + update speed",
+        rival: NO_BENCHMARK,
+        palamedes: "Checked report covers Lingui, FormatJS and i18next only",
+      },
+    ],
+    code: {
+      caption: "Both skip the key dictionary. They disagree about what happens next.",
+      rivalLabel: "General Translation",
+      rivalCode: `import { T } from "gt-next"
+
+<T>
+  <p>Buy {seats} seats</p>
+</T>`,
+      palamedesLabel: "Palamedes",
+      palamedesCode: `import { Trans } from "@palamedes/react"
+
+<Trans>Buy {seats} seats</Trans>`,
+      note: "The authoring ergonomics are close cousins — neither asks you to invent a key. What differs is the destination: GT's unit goes to their platform for AI translation, ours goes to a .po file in your repository for whoever you hire.",
+    },
+    pickRival: [
+      "You want translation itself bought, not managed — AI output, review UI and CDN from one vendor.",
+      "You want an agent to perform the initial i18n migration and open the PR for you.",
+      "Shipping 100+ languages this quarter matters more than owning the catalog format.",
+      "Your stack is React, Next.js, React Native or TanStack Start, which is what they cover.",
+    ],
+    pickPalamedes: [
+      "Your catalogs are an asset you intend to own, in a format any vendor can read.",
+      "An MIT licence with no competing-use clause is a requirement, not a preference.",
+      "You want ICU semantics guaranteed end to end rather than a vendor's component dialect.",
+      "You want to change translation supplier without changing your i18n library.",
+    ],
+    honest:
+      "General Translation solves a problem we deliberately do not touch: they will actually translate your product. We will not, ever — Palamedes hands you a .po file and stops. If what you want is one vendor from source string to delivered CDN asset, we are not that and are not becoming it. Their integration story is also genuinely smoother than ours on day one; ours is built to be better in year three.",
+  },
+  {
+    slug: "tolgee",
+    name: "Tolgee",
+    subject: "@tolgee/core 7.1.1 / tolgee-platform 3.209.1",
+    researched: "July 2026",
+    metaTitle: "Palamedes vs Tolgee — repository-first catalogs vs a platform database",
+    metaDescription:
+      "Tolgee pairs a slick in-context editor with an open-core translation platform. Palamedes keeps the catalogs in your repository, with no server in the authoring loop and source strings instead of keys.",
+    eyebrow: "Compare · Tolgee",
+    headline: "Your catalogs, or their database.",
+    lede: "Tolgee is a translation platform with a good SDK attached, and its in-context editing is the nicest implementation of that idea we found — ALT+click a string in your running app, edit it, and let it capture the screenshot for context automatically. The structural question is where the truth lives: in their database, with your files as an export target, or in your repository.",
+    card: "A polished platform with an SDK. The split is where the truth lives: their database, or your repo.",
+    facts: [
+      { label: "Adoption", value: "~123k downloads/week" },
+      { label: "Licence", value: "Open-core: Apache-2.0 + EE" },
+      { label: "Source of truth", value: "Platform key database" },
+      { label: "Identity", value: "Keys you maintain" },
+    ],
+    thesis:
+      "Tolgee and Palamedes disagree about which artifact is authoritative. In Tolgee, the platform's key database is the origin and your files are import and export targets — which is what makes the in-context editor and the screenshot capture possible in the first place. In Palamedes the .po file in your repository is the origin, full stop: no server participates in authoring, catalogs are reviewed in the pull request that changed the strings, and the whole toolchain runs offline. Both are coherent. Only one of them keeps working when the vendor does not.",
+    respectTitle: "What Tolgee earned",
+    respect: [
+      "ALT+click in-context editing with automatic screenshot capture, feeding real UI context to translators and to its AI — a genuinely better mechanic than manual screenshot upload.",
+      "Native ICU MessageFormat platform-wide, including a plural-aware editor UI that handles nested plural and select properly rather than as raw text.",
+      "Broad format interop across mobile, backend and web — JSON, i18next, XLIFF and .po from one platform — plus a free self-hosting tier with core features unlocked.",
+    ],
+    flipsideTitle: "What that architecture costs you",
+    flipside: [
+      "The platform database is the source of truth and your files are sync targets. Your repository holds a mirror, which means catalog history, review and blame live somewhere other than your git log.",
+      "Open-core has edges: the official Docker images always bundle the proprietary ee/ code, so a strictly Apache-2.0 build means stripping those directories and building it yourself.",
+      "The free tier caps at 500 keys and 3 seats, branching and the stronger AI features sit behind paid plans, and reviewers repeatedly describe the in-context browser extension as hard to configure.",
+    ],
+    differences: [
+      {
+        title: "No server in the authoring loop",
+        body: "Palamedes extraction, catalog merging, audits and compilation all run locally in a Rust core. There is no account, no API key and no network call between writing a string and having it in a catalog — which means CI, an offline train and a fresh clone all behave identically.",
+      },
+      {
+        title: "Catalogs review like code, because they are",
+        body: "A Palamedes catalog change arrives in the same pull request as the string that caused it. You see the diff, git blame works, and reverting a feature reverts its messages. When the truth lives in a platform database, that history lives there too, and your repository stops being the place you can answer questions from.",
+      },
+      {
+        title: "Source strings instead of keys",
+        body: "Tolgee is key-based: you invent identifiers and the platform maps them to translations. Palamedes derives identity from the source string plus optional context, so there is no namespace to design, nothing to keep in sync, and a missing translation degrades to readable English rather than an identifier.",
+      },
+    ],
+    rows: [
+      {
+        criterion: "Source of truth",
+        rival: "Platform key database; files are sync targets",
+        palamedes: "The .po catalogs in your repository",
+      },
+      {
+        criterion: "Message identity",
+        rival: "Keys you invent and maintain",
+        palamedes: "The source string plus optional context",
+      },
+      {
+        criterion: "Authoring loop",
+        rival: "SDK plus platform; in-context editing in the running app",
+        palamedes: "Fully local — no account, no API key, no network",
+      },
+      {
+        criterion: "ICU MessageFormat",
+        rival: "Native, with a plural-aware editor UI",
+        palamedes: "Native end to end, with a checked proof",
+      },
+      {
+        criterion: "Licence",
+        rival: "Open-core: Apache-2.0 platform, proprietary ee/, MIT SDKs",
+        palamedes: "MIT throughout",
+      },
+      {
+        criterion: "Translator context",
+        rival: "The strong suit — screenshots captured automatically",
+        palamedes: "Source comments and context in the .po file",
+      },
+      {
+        criterion: "Extract + update speed",
+        rival: NO_BENCHMARK,
+        palamedes: "Checked report covers Lingui, FormatJS and i18next only",
+      },
+    ],
+    code: {
+      caption: "A key resolved through a platform, or the sentence itself.",
+      rivalLabel: "Tolgee",
+      rivalCode: `import { useTranslate } from "@tolgee/react"
+
+const { t } = useTranslate()
+t("checkout_buy", { seats })`,
+      palamedesLabel: "Palamedes",
+      palamedesCode: `import { t } from "@palamedes/core/macro"
+
+function buyLabel(seats) {
+  return t\`Buy \${seats} seats\`
+}`,
+      note: "Tolgee's call site names a key that the platform resolves; the English text lives in the database. Palamedes' call site is the English text, and the catalog is generated from it.",
+    },
+    pickRival: [
+      "In-context editing with automatic screenshots would materially improve your translation quality.",
+      "You want a translation platform and an SDK from one vendor, with the option to self-host it.",
+      "Your translators need a polished web editor more than your developers need local tooling.",
+      "You need one platform across mobile, backend and web formats, not just React and Solid.",
+    ],
+    pickPalamedes: [
+      "Catalogs belong in git, reviewed alongside the code change that caused them.",
+      "You want the whole toolchain to run offline, with no account and no API key.",
+      "You would rather not design and maintain a key namespace.",
+      "You want to add a platform later without having built your workflow around one.",
+    ],
+    honest:
+      "Tolgee's in-context editor is better than anything we offer, and we do not have a translator-facing UI at all — .po comments and context are what your translators get from us. If translator experience is the bottleneck you are solving, that gap is real and it matters more than anything on the rest of this page. Palamedes and a platform also stack perfectly well: keep the repository authoritative, export .po, and let a TMS handle the humans.",
+  },
 ]
 
 export function rivalBySlug(slug: string): Rival {
