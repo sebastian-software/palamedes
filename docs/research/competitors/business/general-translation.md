@@ -34,6 +34,11 @@ repository: https://github.com/generaltranslation/gt
 - Adoption: gt-next 20,213 weekly downloads, gt-react 29,728 weekly downloads (both npm, week of 2026-06-29–2026-07-05). GitHub repo generaltranslation/gt: 964 stars, 29 forks, 80 open issues, TypeScript 93.6%, created 2024-11-19, last push 2026-07-04 (actively maintained). Named customers per docs/marketing: Cursor, Cognition, ClickHouse, Ramp, Profound, Partiful, Mintlify, T3Chat (Theo).
 - Founded / age: company founded ~2023-2024 (GitHub org created 2024-11-19; seed round Nov 2024); roughly 2 years old as of analysis date — a young/early-stage company relative to established i18n tooling.
 
+## Ecosystem funding (verified 2026-07-26)
+
+- General Translation appears as one of the eight current GitHub Sponsors of **next-intl** (github.com/sponsors/amannn, accessed 2026-07-26) — a library vendor funding a directly competing library whose maintainer it does not employ. Alongside Crowdin and i18nexus on the same list, this makes next-intl's funding predominantly localization-vendor money.
+- Read it as distribution rather than altruism: next-intl is the default Next.js i18n choice, and sponsorship buys visibility with exactly the audience GT sells to. Nothing improper — it is public and disclosed — but it belongs in any assessment of whose interests shape that roadmap.
+
 ## Positioning & target audience
 
 - Positions as "an entire localization and internationalization (i18n) stack, built to ship multilingual apps from end-to-end" — a full-stack, AI-first alternative to assembling i18n library + TMS + MT provider separately.
