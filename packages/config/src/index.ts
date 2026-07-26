@@ -99,17 +99,24 @@ export function loadPalamedesConfigSync(
 
 async function loadConfigFile(configPath: string): Promise<unknown> {
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
-    return normalizeDataConfig(parseYaml(await readFile(configPath, "utf8")) as PalamedesDataConfig)
+    return normalizeDataConfig(
+      parseYaml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
+      configPath
+    )
   }
 
   if (configPath.endsWith(".json")) {
     return normalizeDataConfig(
-      JSON.parse(await readFile(configPath, "utf8")) as PalamedesDataConfig
+      JSON.parse(await readFile(configPath, "utf8")) as PalamedesDataConfig,
+      configPath
     )
   }
 
   if (configPath.endsWith(".toml")) {
-    return normalizeDataConfig(parseToml(await readFile(configPath, "utf8")) as PalamedesDataConfig)
+    return normalizeDataConfig(
+      parseToml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
+      configPath
+    )
   }
 
   const jiti = createJiti(import.meta.url, {
@@ -120,15 +127,24 @@ async function loadConfigFile(configPath: string): Promise<unknown> {
 
 function loadConfigFileSync(configPath: string): unknown {
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
-    return normalizeDataConfig(parseYaml(readFileSync(configPath, "utf8")) as PalamedesDataConfig)
+    return normalizeDataConfig(
+      parseYaml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
+      configPath
+    )
   }
 
   if (configPath.endsWith(".json")) {
-    return normalizeDataConfig(JSON.parse(readFileSync(configPath, "utf8")) as PalamedesDataConfig)
+    return normalizeDataConfig(
+      JSON.parse(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
+      configPath
+    )
   }
 
   if (configPath.endsWith(".toml")) {
-    return normalizeDataConfig(parseToml(readFileSync(configPath, "utf8")) as PalamedesDataConfig)
+    return normalizeDataConfig(
+      parseToml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
+      configPath
+    )
   }
 
   const jiti = createJiti(import.meta.url, {
@@ -137,7 +153,31 @@ function loadConfigFileSync(configPath: string): unknown {
   return unwrapModule(jiti(configPath) as unknown)
 }
 
-function normalizeDataConfig(config: PalamedesDataConfig): PalamedesConfig {
+const CAMEL_CASE_DATA_KEYS: [string, string][] = [
+  ["sourceLocale", "source-locale"],
+  ["fallbackLocales", "fallback-locales"],
+  ["pseudoLocale", "pseudo-locale"],
+  ["sourceReferenceRoot", "source-reference-root"],
+]
+
+/*
+ * Data configs are kebab-case (with snake_case aliases). Lingui-style
+ * camelCase spellings of known keys used to be dropped silently — changing
+ * pseudo-locale exclusion, fallback chains, and origin-path style without a
+ * trace. Reject them with a hint instead.
+ */
+function rejectCamelCaseDataKeys(config: PalamedesDataConfig, configPath: string): void {
+  for (const [camel, kebab] of CAMEL_CASE_DATA_KEYS) {
+    if (camel in config) {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: unknown key "${camel}". Data configs use kebab-case: "${kebab}".`
+      )
+    }
+  }
+}
+
+function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): PalamedesConfig {
+  rejectCamelCaseDataKeys(config, configPath)
   const fallbackLocales = getConfigValue(config, "fallback-locales", "fallback_locales")
   const pseudoLocale = getConfigValue(config, "pseudo-locale", "pseudo_locale")
   const sourceReferenceRoot = getConfigValue(
@@ -432,6 +472,14 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
     )
   }
 
+  // Documented behavior: a pseudo-locale outside `locales` is ignored. Make
+  // the ignore visible instead of silent.
+  if (typeof record.pseudoLocale === "string" && !record.locales.includes(record.pseudoLocale)) {
+    console.warn(
+      `Palamedes config ${configPath}: "pseudoLocale" (${record.pseudoLocale}) is not included in "locales" and will be ignored.`
+    )
+  }
+
   if (
     record.sourceReferenceRoot !== undefined &&
     (typeof record.sourceReferenceRoot !== "string" || record.sourceReferenceRoot.length === 0)
@@ -441,7 +489,7 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
     )
   }
 
-  validateFallbackLocales(record.fallbackLocales, configPath)
+  validateFallbackLocales(record.fallbackLocales, configPath, record.locales as string[])
   validatePlugins(record.plugins, configPath)
 
   for (const [index, catalog] of record.catalogs.entries()) {
@@ -476,7 +524,7 @@ function validatePlugins(value: unknown, configPath: string): void {
   }
 }
 
-function validateFallbackLocales(value: unknown, configPath: string): void {
+function validateFallbackLocales(value: unknown, configPath: string, locales: string[]): void {
   if (value === undefined) {
     return
   }
@@ -487,6 +535,13 @@ function validateFallbackLocales(value: unknown, configPath: string): void {
         `Invalid Palamedes config in ${configPath}: "fallbackLocales" arrays must only contain strings.`
       )
     }
+    for (const fallback of value as string[]) {
+      if (!locales.includes(fallback)) {
+        throw new Error(
+          `Invalid Palamedes config in ${configPath}: "fallbackLocales" entry "${fallback}" must be included in "locales".`
+        )
+      }
+    }
     return
   }
 
@@ -496,6 +551,18 @@ function validateFallbackLocales(value: unknown, configPath: string): void {
         throw new Error(
           `Invalid Palamedes config in ${configPath}: "fallbackLocales.${locale}" must be an array of strings.`
         )
+      }
+      if (locale !== "default" && !locales.includes(locale)) {
+        throw new Error(
+          `Invalid Palamedes config in ${configPath}: "fallbackLocales" key "${locale}" must be "default" or included in "locales".`
+        )
+      }
+      for (const fallback of fallbacks as string[]) {
+        if (!locales.includes(fallback)) {
+          throw new Error(
+            `Invalid Palamedes config in ${configPath}: "fallbackLocales.${locale}" entry "${fallback}" must be included in "locales".`
+          )
+        }
       }
     }
     return
@@ -564,16 +631,14 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 function assertFileExistsSync(filePath: string): void {
-  try {
-    accessSync(filePath, constants.R_OK)
-  } catch {
-    throw new Error(`Palamedes config not found at ${filePath}`)
+  if (!fileExistsSync(filePath)) {
+    throw new Error(`Could not find Palamedes config at ${filePath}.`)
   }
 }
 
 function fileExistsSync(filePath: string): boolean {
   try {
-    accessSync(filePath, constants.R_OK)
+    accessSync(filePath, constants.F_OK)
     return true
   } catch {
     return false

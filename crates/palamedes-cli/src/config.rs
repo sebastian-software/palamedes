@@ -14,10 +14,22 @@ pub const CONFIG_FILENAMES: &[&str] = &[
     "palamedes.toml",
 ];
 
+/// JS/TS config files the JS plugin loaders can read but the native CLI
+/// cannot. Detected only to produce a specific error instead of the generic
+/// "could not find a config".
+const JS_CONFIG_FILENAMES: &[&str] = &[
+    "palamedes.config.ts",
+    "palamedes.config.js",
+    "palamedes.config.mjs",
+    "palamedes.config.cjs",
+];
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("Could not find a Palamedes config. Expected one of palamedes.yaml, palamedes.yml, palamedes.json, palamedes.toml.")]
     NotFound,
+    #[error("Found {path}, but the native pmds CLI cannot load JavaScript/TypeScript configs. Create a palamedes.yaml (or .yml/.json/.toml) config for the CLI; the JS plugin loaders keep reading the existing file.")]
+    JsConfigUnsupported { path: PathBuf },
     #[error("Palamedes config does not exist: {path}")]
     MissingExplicit { path: PathBuf },
     #[error("Could not parse Palamedes config {path}: {source}")]
@@ -77,15 +89,69 @@ struct RawConfig {
 
 pub fn load_config(cwd: &Path, explicit_path: Option<&Path>) -> Result<LoadedConfig, ConfigError> {
     let config_path = resolve_config_path(cwd, explicit_path)?;
-    let raw = config_rs::Config::builder()
+    let value = config_rs::Config::builder()
         .add_source(config_rs::File::from(config_path.as_path()))
         .build()
-        .and_then(config_rs::Config::try_deserialize::<RawConfig>)
+        .and_then(config_rs::Config::try_deserialize::<serde_json::Value>)
         .map_err(|source| ConfigError::Parse {
             path: config_path.clone(),
             source: Box::new(source),
         })?;
+    check_top_level_keys(&value, &config_path)?;
+    let raw: RawConfig = serde_json::from_value(value).map_err(|source| ConfigError::Invalid {
+        path: config_path.clone(),
+        message: source.to_string(),
+    })?;
     normalize_config(raw, config_path)
+}
+
+/// Data configs are kebab-case (with snake_case aliases). Lingui-style
+/// camelCase spellings of known keys used to be dropped silently — changing
+/// pseudo-locale exclusion, fallback chains, and origin-path style without a
+/// trace. Reject them loudly; merely unknown keys only warn.
+fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), ConfigError> {
+    const CAMEL_CASE_KEYS: &[(&str, &str)] = &[
+        ("sourceLocale", "source-locale"),
+        ("fallbackLocales", "fallback-locales"),
+        ("pseudoLocale", "pseudo-locale"),
+        ("sourceReferenceRoot", "source-reference-root"),
+    ];
+    const KNOWN_KEYS: &[&str] = &[
+        "locales",
+        "source-locale",
+        "source_locale",
+        "fallback-locales",
+        "fallback_locales",
+        "pseudo-locale",
+        "pseudo_locale",
+        "source-reference-root",
+        "source_reference_root",
+        "catalogs",
+        "plugins",
+    ];
+
+    let Some(map) = value.as_object() else {
+        return Ok(());
+    };
+    for (camel, kebab) in CAMEL_CASE_KEYS {
+        if map.contains_key(*camel) {
+            return invalid(
+                path,
+                &format!(
+                    "Unknown key \"{camel}\". Palamedes data configs use kebab-case: \"{kebab}\"."
+                ),
+            );
+        }
+    }
+    for key in map.keys() {
+        if !KNOWN_KEYS.contains(&key.as_str()) {
+            eprintln!(
+                "Warning: Ignoring unknown config key \"{key}\" in {}.",
+                path.display()
+            );
+        }
+    }
+    Ok(())
 }
 
 impl LoadedConfig {
@@ -139,6 +205,7 @@ fn resolve_config_path(cwd: &Path, explicit_path: Option<&Path>) -> Result<PathB
     }
 
     let mut current = cwd;
+    let mut js_config: Option<PathBuf> = None;
     loop {
         for name in CONFIG_FILENAMES {
             let candidate = current.join(name);
@@ -146,14 +213,30 @@ fn resolve_config_path(cwd: &Path, explicit_path: Option<&Path>) -> Result<PathB
                 return Ok(candidate);
             }
         }
+        if js_config.is_none() {
+            for name in JS_CONFIG_FILENAMES {
+                let candidate = current.join(name);
+                if candidate.is_file() {
+                    js_config = Some(candidate);
+                    break;
+                }
+            }
+        }
 
         let Some(parent) = current.parent() else {
-            return Err(ConfigError::NotFound);
+            return Err(not_found(js_config));
         };
         if parent == current {
-            return Err(ConfigError::NotFound);
+            return Err(not_found(js_config));
         }
         current = parent.to_path_buf();
+    }
+}
+
+fn not_found(js_config: Option<PathBuf>) -> ConfigError {
+    match js_config {
+        Some(path) => ConfigError::JsConfigUnsupported { path },
+        None => ConfigError::NotFound,
     }
 }
 
@@ -197,6 +280,53 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
     }
     if raw.catalogs.is_empty() {
         return invalid(path, "\"catalogs\" must contain at least one catalog.");
+    }
+    if let Some(pseudo_locale) = &raw.pseudo_locale {
+        // Documented behavior: a pseudo-locale outside `locales` is ignored.
+        // Make the ignore visible instead of silent.
+        if !raw.locales.iter().any(|locale| locale == pseudo_locale) {
+            eprintln!(
+                "Warning: \"pseudo-locale\" ({pseudo_locale}) is not listed in \"locales\" and will be ignored ({}).",
+                path.display()
+            );
+        }
+    }
+    match &raw.fallback_locales {
+        Some(ConfigFallbackLocales::Shared(fallbacks)) => {
+            for fallback in fallbacks {
+                if !raw.locales.iter().any(|locale| locale == fallback) {
+                    return invalid(
+                        path,
+                        &format!(
+                            "\"fallback-locales\" entry \"{fallback}\" must be listed in \"locales\"."
+                        ),
+                    );
+                }
+            }
+        }
+        Some(ConfigFallbackLocales::PerLocale(map)) => {
+            for (key, fallbacks) in map {
+                if key != "default" && !raw.locales.iter().any(|locale| locale == key) {
+                    return invalid(
+                        path,
+                        &format!(
+                            "\"fallback-locales\" key \"{key}\" must be \"default\" or listed in \"locales\"."
+                        ),
+                    );
+                }
+                for fallback in fallbacks {
+                    if !raw.locales.iter().any(|locale| locale == fallback) {
+                        return invalid(
+                            path,
+                            &format!(
+                                "\"fallback-locales.{key}\" entry \"{fallback}\" must be listed in \"locales\"."
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+        None => {}
     }
     for (index, catalog) in raw.catalogs.iter().enumerate() {
         if catalog.path.trim().is_empty() {
@@ -361,6 +491,80 @@ plugins:
 
         assert_eq!(config.locales, ["en", "de"]);
         assert_eq!(config.catalogs.len(), 1);
+    }
+
+    #[test]
+    fn reports_js_configs_with_a_specific_error() {
+        let app = temp_dir("js-config");
+        fs::write(app.join("palamedes.config.ts"), "export default {}\n").expect("write config");
+
+        let error = load_config(&app, None).expect_err("js config must not load");
+
+        let message = error.to_string();
+        assert!(message.contains("palamedes.config.ts"), "got: {message}");
+        assert!(message.contains("cannot load JavaScript"), "got: {message}");
+    }
+
+    #[test]
+    fn rejects_camel_case_keys_with_a_kebab_case_hint() {
+        let app = temp_dir("camel-config");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de]
+source-locale: en
+pseudoLocale: de
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let error = load_config(&app, None).expect_err("camelCase key must be rejected");
+
+        let message = error.to_string();
+        assert!(message.contains("pseudoLocale"), "got: {message}");
+        assert!(message.contains("pseudo-locale"), "got: {message}");
+    }
+
+    #[test]
+    fn validates_pseudo_locale_and_fallback_chains_against_locales() {
+        let app = temp_dir("pseudo-config");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de]
+source-locale: en
+pseudo-locale: xx
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        // Documented behavior: an unlisted pseudo-locale is ignored (with a
+        // warning), so loading must still succeed.
+        load_config(&app, None).expect("unlisted pseudo locale loads with a warning");
+
+        let app = temp_dir("fallback-config");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de]
+source-locale: en
+fallback-locales:
+  de: [fr]
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let error = load_config(&app, None).expect_err("unknown fallback locale must be rejected");
+        assert!(error.to_string().contains("\"fr\""), "got: {error}");
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
