@@ -74,14 +74,24 @@ impl Plugin {
     }
 
     /// Registers a namespaced command with a description and handler.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `name` is already registered — the manifest and dispatch
+    /// must never disagree about which handler a command name executes.
     pub fn command(
         mut self,
         name: impl Into<String>,
         description: impl Into<String>,
         handler: impl Fn(&mut CommandContext) -> CommandResult + 'static,
     ) -> Self {
+        let name = name.into();
+        assert!(
+            !self.commands.iter().any(|command| command.name == name),
+            "palamedes-plugin: command \"{name}\" is already registered"
+        );
         self.commands.push(Command {
-            name: name.into(),
+            name,
             description: description.into(),
             handler: Box::new(handler),
         });
@@ -136,7 +146,34 @@ impl Plugin {
                 }
                 0
             }
-            RequestKind::Run => self.dispatch_run(&request, &mut output),
+            RequestKind::Run => {
+                // A describe request is answered regardless of version — the
+                // manifest's protocolVersion is how the host detects a
+                // mismatch. A run request past that negotiation must match.
+                if request.protocol_version != PROTOCOL_VERSION {
+                    let diagnostic = Event::Diagnostic {
+                        severity: Severity::Error,
+                        message: format!(
+                            "Request speaks binary plugin protocol {}; this plugin supports {PROTOCOL_VERSION}.",
+                            request.protocol_version
+                        ),
+                        code: Some("PLUGIN_PROTOCOL_INCOMPATIBLE".to_owned()),
+                        details: None,
+                    };
+                    let result = Event::Result {
+                        text: None,
+                        data: None,
+                        exit_code: 1,
+                    };
+                    if write_event(&mut output, &diagnostic).is_err()
+                        || write_event(&mut output, &result).is_err()
+                    {
+                        return 1;
+                    }
+                    return 1;
+                }
+                self.dispatch_run(&request, &mut output)
+            }
         }
     }
 
@@ -483,6 +520,39 @@ mod tests {
         assert_eq!(events[0]["event"], "diagnostic");
         assert_eq!(events[0]["code"], "PLUGIN_COMMAND_UNKNOWN");
         assert_eq!(events[1], json!({ "event": "result", "exitCode": 2 }));
+    }
+
+    #[test]
+    #[should_panic(expected = "command \"inspect\" is already registered")]
+    fn duplicate_command_names_are_rejected_at_registration() {
+        let _ =
+            fixture_plugin().command("inspect", "Duplicate.", |_context| CommandResult::default());
+    }
+
+    #[test]
+    fn run_requests_with_a_foreign_protocol_version_are_rejected() {
+        let mut request = run_request("inspect");
+        request["palamedesBinaryPluginProtocol"] = json!(2);
+        let (exit_code, events) = dispatch(&fixture_plugin(), &request);
+
+        assert_eq!(exit_code, 1);
+        assert_eq!(events[0]["event"], "diagnostic");
+        assert_eq!(events[0]["code"], "PLUGIN_PROTOCOL_INCOMPATIBLE");
+        assert_eq!(events[1], json!({ "event": "result", "exitCode": 1 }));
+    }
+
+    #[test]
+    fn describe_answers_regardless_of_the_requested_protocol_version() {
+        let request = json!({
+            "palamedesBinaryPluginProtocol": 2,
+            "hostVersion": "9.0.0",
+            "kind": "describe"
+        });
+        let (exit_code, events) = dispatch(&fixture_plugin(), &request);
+
+        assert_eq!(exit_code, 0);
+        assert_eq!(events[0]["event"], "manifest");
+        assert_eq!(events[0]["protocolVersion"], 1);
     }
 
     #[test]
