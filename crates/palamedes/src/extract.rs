@@ -11,7 +11,8 @@ use crate::descriptor::{
     descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
 };
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::extract_cache::{ExtractCache, FileFingerprint};
+use crate::extract_cache::{ExtractCache, ReadStartFingerprint};
+use crate::icu_text::escape_icu_literal;
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
@@ -636,7 +637,9 @@ fn extract_choice_options_from_object(
             return Err(invalid_choice_option(macro_name, location, &key));
         };
         let (value, option_placeholders) = match property.value.without_parentheses() {
-            Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
+            Expression::StringLiteral(literal) => {
+                (escape_icu_literal(literal.value.as_str()), BTreeMap::new())
+            }
             Expression::TemplateLiteral(template) => template_to_message_with_state(
                 template,
                 source,
@@ -1009,10 +1012,12 @@ fn template_to_message_with_state(
     let mut placeholders = BTreeMap::new();
 
     for (index, quasi) in template.quasis.iter().enumerate() {
+        // Authored literal text: escape before appending so an apostrophe at a
+        // segment boundary cannot quote the placeholder that follows.
         if let Some(value) = quasi.value.cooked {
-            message.push_str(value.as_str());
+            message.push_str(&escape_icu_literal(value.as_str()));
         } else {
-            message.push_str(quasi.value.raw.as_str());
+            message.push_str(&escape_icu_literal(quasi.value.raw.as_str()));
         }
 
         if let Some(expr) = template.expressions.get(index) {
@@ -1157,7 +1162,7 @@ fn extract_jsx_children_as_message_with_state(
     for child in children {
         match child {
             JSXChild::Text(text) => {
-                let value = clean_jsx_text(text.value.as_str());
+                let value = escape_icu_literal(&clean_jsx_text(text.value.as_str()));
                 if !value.is_empty() {
                     parts.push(JsxMessagePart::Text(value));
                 }
@@ -1165,7 +1170,9 @@ fn extract_jsx_children_as_message_with_state(
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::EmptyExpression(_) => {}
                 JSXExpression::StringLiteral(literal) => {
-                    parts.push(JsxMessagePart::Text(literal.value.to_string()));
+                    parts.push(JsxMessagePart::Text(escape_icu_literal(
+                        literal.value.as_str(),
+                    )));
                 }
                 expr => {
                     let Some(name) = jsx_expression_name(expr) else {
@@ -1253,12 +1260,13 @@ fn extract_choice_options_from_jsx(
             continue;
         };
         let (value, option_placeholders) = match attr_value {
-            JSXAttributeValue::StringLiteral(literal) => {
-                (decode_jsx_entities(literal.value.as_str()), BTreeMap::new())
-            }
+            JSXAttributeValue::StringLiteral(literal) => (
+                escape_icu_literal(&decode_jsx_entities(literal.value.as_str())),
+                BTreeMap::new(),
+            ),
             JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => {
-                    (literal.value.to_string(), BTreeMap::new())
+                    (escape_icu_literal(literal.value.as_str()), BTreeMap::new())
                 }
                 JSXExpression::TemplateLiteral(template) => template_to_message_with_state(
                     template,
@@ -1439,6 +1447,14 @@ pub fn extract_catalog_messages_cached(
     let mut failed_files = Vec::new();
     let file_count = request.files.len();
     let reference_scopes = options.reference_scopes;
+
+    /*
+     * A cache handed to us may have been loaded for a different request — watch
+     * mode keeps one instance alive across config reloads, so a changed
+     * reference root or scope setting would otherwise serve entries whose
+     * origins and records belong to the previous configuration.
+     */
+    cache.reset_if_request_differs(&request.root_dir, reference_scopes);
 
     /*
      * Reading and parsing each file is independent work and dominates extraction
@@ -1636,7 +1652,7 @@ enum FileExtraction {
         /// False when the result came from the cache and need not be stored again.
         fresh: bool,
         /// File identity observed before reading, used to reject mid-run edits.
-        fingerprint: Option<FileFingerprint>,
+        fingerprint: Option<ReadStartFingerprint>,
     },
     Failed(ExtractCatalogFileFailure),
     Fatal(PalamedesError),
@@ -1800,12 +1816,13 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::{
-        extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
-        extract_messages as extract_messages_raw, resolve_extract_threads,
-        ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractedMessageRecord,
-        DEFAULT_EXTRACT_THREADS,
+        extract_catalog_messages_cached, extract_catalog_messages_from_files,
+        extract_catalog_messages_from_files_with_options, extract_messages as extract_messages_raw,
+        resolve_extract_threads, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
+        ExtractedMessageRecord, DEFAULT_EXTRACT_THREADS,
     };
     use crate::error::PalamedesResult;
+    use crate::extract_cache::ExtractCache;
     use crate::test_support::scope_macro_test_source;
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -2478,7 +2495,9 @@ const message = t({ message })
             vec![
                 "Allocate energy usage to business units for {locationName} ({periodLabel}). Total: {totalMwh} MWh",
                 "Match Score: {matchPercentage}%",
-                "We just need a few details to connect you with {clientCompanyName}'s sustainability program.",
+                // The authored apostrophe is escaped so the runtime renders it
+                // literally instead of opening an ICU quote.
+                "We just need a few details to connect you with {clientCompanyName}''s sustainability program.",
             ]
         );
     }
@@ -3021,6 +3040,76 @@ const message = t({ message })
         .expect_err("unsupported macro syntax should fail");
 
         assert!(error.to_string().contains("Unsupported `t` macro usage"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /*
+     * A reused cache outlives the request it was loaded for — watch mode holds
+     * one across config reloads. Entries stamped for another reference root
+     * carry that root's origins, so they must not be served after the request
+     * changes.
+     */
+    #[test]
+    fn cached_extraction_bypasses_entries_stamped_for_another_request() {
+        let root = temp_root("cached-stamp-change");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("src dir");
+        let app = src.join("App.tsx");
+        fs::write(
+            &app,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              function messages() {
+                return t`Cached origin`
+              }
+            "#,
+        )
+        .expect("source");
+        // Backdated out of the cache's racy window so the entry is really
+        // stored and the second run would be a hit.
+        let aged = std::time::SystemTime::now() - std::time::Duration::from_secs(10);
+        fs::File::options()
+            .write(true)
+            .open(&app)
+            .expect("open source")
+            .set_modified(aged)
+            .expect("age source");
+
+        let mut cache = ExtractCache::load(&root.join("cache.json"), "unused", true);
+        let files = vec![app.to_string_lossy().into_owned()];
+        let request = |root_dir: &std::path::Path| ExtractCatalogMessagesRequest {
+            root_dir: root_dir.to_string_lossy().into_owned(),
+            files: files.clone(),
+            max_threads: None,
+        };
+
+        let first = extract_catalog_messages_cached(
+            request(&root),
+            ExtractCatalogMessagesOptions::default(),
+            &mut cache,
+        )
+        .expect("first extraction");
+        assert_eq!(first.messages[0].origins[0].file, "src/App.tsx");
+
+        // Same file, new reference root: the origin has to follow the request
+        // instead of being served from the entry stored for the old root.
+        let second = extract_catalog_messages_cached(
+            request(&src),
+            ExtractCatalogMessagesOptions::default(),
+            &mut cache,
+        )
+        .expect("second extraction");
+        assert_eq!(second.messages[0].origins[0].file, "App.tsx");
+
+        // And the re-stamped cache still serves the new request.
+        let third = extract_catalog_messages_cached(
+            request(&src),
+            ExtractCatalogMessagesOptions::default(),
+            &mut cache,
+        )
+        .expect("third extraction");
+        assert_eq!(third.messages[0].origins[0].file, "App.tsx");
+
         fs::remove_dir_all(root).expect("cleanup");
     }
 

@@ -15,7 +15,7 @@ use palamedes::{
     audit_catalogs, combine_catalog_files, extract_catalog_messages_cached, parse_catalog,
     parse_po, update_catalog_file, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
     CatalogConflictStrategy, CatalogFileCombineRequest, CatalogFileFormat, CatalogParseRequest,
-    CatalogUpdateMessage, CatalogUpdateRequest, ExtractCache,
+    CatalogUpdateMessage, CatalogUpdateRequest, ExtractCache, ExtractCatalogFileFailure,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -240,7 +240,7 @@ enum CliError {
 struct CatalogExtractionResult {
     messages: Vec<CatalogUpdateMessage>,
     files: Vec<PathBuf>,
-    failed_file_count: usize,
+    failed_files: Vec<ExtractCatalogFileFailure>,
     glob_ms: u128,
     extract_ms: u128,
 }
@@ -351,6 +351,40 @@ fn extract_cache_path(config: &LoadedConfig) -> PathBuf {
     palamedes::default_cache_path(&config.root_dir)
 }
 
+/// Everything about a configuration that decides what a cached entry means or
+/// where the cache file lives. A change to any of it invalidates a cache
+/// instance that is being reused across config reloads.
+fn extract_cache_identity(config: &LoadedConfig) -> (&Path, &Path, bool, bool) {
+    (
+        config.root_dir.as_path(),
+        config.source_reference_root.as_path(),
+        config.reference_scopes,
+        config.extract_cache,
+    )
+}
+
+/*
+ * Watch mode keeps one cache alive across rebuilds, but its entries only mean
+ * anything under the configuration that produced them: origins follow
+ * source-reference-root, records follow reference-scopes, and the file itself
+ * lives under root_dir. When a reload changes any of that — including turning
+ * `extract-cache` off — the cache is rebuilt through the startup path, after
+ * flushing what the previous configuration produced to its own location.
+ */
+fn rebuild_extract_cache_for_reload(
+    previous: &LoadedConfig,
+    next: &LoadedConfig,
+    options: &ExtractOptions,
+    cache: &mut ExtractCache,
+) {
+    if extract_cache_identity(previous) == extract_cache_identity(next) {
+        return;
+    }
+
+    persist_extract_cache(previous, options, cache);
+    *cache = load_extract_cache(next, options);
+}
+
 /*
  * A cache that cannot be written is not a failure: the next run just starts
  * cold. Report it once so a permanently unwritable directory is not silently
@@ -381,9 +415,11 @@ fn run_extraction_with_cache(
     let mut total_glob_ms = 0;
     let mut total_extract_ms = 0;
     let mut total_messages = 0;
-    let mut total_failed_files = 0;
     // Catalogs may match overlapping file sets; count each source file once.
     let mut unique_files = BTreeSet::new();
+    // Same for failures: an overlapping file must be reported and counted once,
+    // not once per catalog that matched it.
+    let mut unique_failures = BTreeMap::<String, String>::new();
     let mut results = Vec::with_capacity(config.catalogs.len());
 
     for catalog in &config.catalogs {
@@ -392,10 +428,19 @@ fn run_extraction_with_cache(
         total_extract_ms += result.extract_ms;
         total_messages += result.messages.len();
         unique_files.extend(result.files.iter().cloned());
-        total_failed_files += result.failed_file_count;
+        for failure in &result.failed_files {
+            unique_failures
+                .entry(failure.path.clone())
+                .or_insert_with(|| failure.message.clone());
+        }
         results.push(result);
     }
     let total_files = unique_files.len();
+
+    for (path, message) in &unique_failures {
+        eprintln!("Warning: Failed to extract from {path}: {message}");
+    }
+    let total_failed_files = unique_failures.len();
 
     /*
      * Retention runs once over every catalog's files. Doing it per catalog would
@@ -484,17 +529,12 @@ fn extract_from_catalog(
     )?;
     let extract_ms = extract_started_at.elapsed().as_millis();
 
-    for failure in &result.failed_files {
-        eprintln!(
-            "Warning: Failed to extract from {}: {}",
-            failure.path, failure.message
-        );
-    }
-
+    // Failures are reported by the caller, which sees every catalog and can
+    // therefore report a file shared by overlapping catalogs exactly once.
     Ok(CatalogExtractionResult {
         messages: result.messages,
         files,
-        failed_file_count: result.failed_files.len(),
+        failed_files: result.failed_files,
         glob_ms,
         extract_ms,
     })
@@ -656,6 +696,11 @@ fn build_exclude_set(catalog: &ConfigCatalog, config: &LoadedConfig) -> Result<G
 
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(150);
 
+/// Upper bound on the debounce drain. A generator that keeps emitting events
+/// (a dev server writing into the watched tree, say) never leaves a quiet
+/// window, and waiting for one would postpone extraction forever.
+const WATCH_DEBOUNCE_MAX: Duration = Duration::from_secs(2);
+
 /// Per-catalog include/exclude matchers, built once per config generation so
 /// every filesystem event does not pay glob compilation again.
 struct WatchMatchers {
@@ -673,7 +718,22 @@ impl WatchMatchers {
                     build_exclude_set(catalog, config),
                 ) {
                     (Ok(include), Ok(exclude)) => Some((include, exclude)),
-                    _ => None,
+                    /*
+                     * A catalog whose globs do not compile can never match an
+                     * event, so watch mode would silently stop rebuilding it.
+                     * Name the catalog and the offending pattern instead.
+                     */
+                    (include, exclude) => {
+                        let error = include.err().or(exclude.err());
+                        eprintln!(
+                            "Warning: Could not build watch patterns for catalog '{}'{}. Changes to its source files will not trigger extraction until the watcher restarts.",
+                            catalog.path,
+                            error
+                                .map(|error| format!(": {error}"))
+                                .unwrap_or_default()
+                        );
+                        None
+                    }
                 }
             })
             .collect();
@@ -745,16 +805,25 @@ fn run_watch_mode(initial_config: &LoadedConfig, options: &ExtractOptions) -> Re
         let mut relevant = config_changed || event.paths.iter().any(|path| matchers.matches(path));
 
         // Debounce: editors and generators emit event bursts; keep draining
-        // until the stream is quiet before running a single extraction.
-        while let Ok(next) = rx.recv_timeout(WATCH_DEBOUNCE) {
-            match next {
-                Ok(event) => {
+        // until the stream is quiet before running a single extraction, but
+        // never longer than WATCH_DEBOUNCE_MAX so a continuous event stream
+        // cannot starve extraction.
+        let drain_deadline = Instant::now() + WATCH_DEBOUNCE_MAX;
+        loop {
+            let remaining = drain_deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            match rx.recv_timeout(WATCH_DEBOUNCE.min(remaining)) {
+                Ok(Ok(event)) => {
                     config_changed = config_changed || touches_config(&event.paths, &config);
                     relevant = relevant
                         || config_changed
                         || event.paths.iter().any(|path| matchers.matches(path));
                 }
-                Err(error) => return Err(CliError::Watch(error)),
+                Ok(Err(error)) => return Err(CliError::Watch(error)),
+                Err(_) => break,
             }
         }
 
@@ -795,6 +864,8 @@ fn run_watch_mode(initial_config: &LoadedConfig, options: &ExtractOptions) -> Re
                         }
                     }
                     watched_roots = next_roots;
+
+                    rebuild_extract_cache_for_reload(&config, &reloaded, options, &mut cache);
                     config = reloaded;
                     matchers = WatchMatchers::build(&config);
                 }
@@ -1329,8 +1400,9 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        build_report, load_config, run_extraction, run_watch_extraction, CliError, ExtractCache,
-        ExtractOptions,
+        build_report, extract_cache_path, load_config, load_extract_cache,
+        rebuild_extract_cache_for_reload, run_extraction, run_extraction_with_cache,
+        run_watch_extraction, CliError, ExtractCache, ExtractOptions,
     };
 
     #[test]
@@ -1492,6 +1564,212 @@ catalogs:
         assert!(output.contains("msgid \"Recovered\""));
     }
 
+    /*
+     * A cache that survives a config reload must not answer with entries that
+     * were produced under the previous configuration: editing
+     * source-reference-root mid-watch changed the origins of every unchanged
+     * file, and the rebuilt catalogs kept showing the old ones.
+     */
+    #[test]
+    fn watch_rebuilds_the_cache_after_a_stamp_relevant_config_reload() {
+        let repo = temp_dir("watch-reload-cache");
+        fs::create_dir(repo.join(".git")).expect("create git marker");
+        let app = repo.join("apps/web");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        let config_path = app.join("palamedes.yaml");
+        let write_watch_config = |reference_root: &str, extract_cache: bool| {
+            fs::write(
+                &config_path,
+                format!(
+                    r#"locales: [en]
+source-locale: en
+source-reference-root: {reference_root}
+extract-cache: {extract_cache}
+catalogs:
+  - path: locales/{{locale}}/messages
+    include: [app]
+"#
+                ),
+            )
+            .expect("write config");
+        };
+        fs::write(
+            app.join("app/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Dashboard`; }\n",
+        )
+        .expect("write source");
+
+        let options = cached_extract_options();
+        write_watch_config("config", true);
+        let config = load_config(&app, Some(&config_path)).expect("load config");
+        let mut cache = load_extract_cache(&config, &options);
+        run_watch_extraction(&config, &options, &mut cache).expect("first extraction");
+
+        let catalog_path = app.join("locales/en/messages.po");
+        assert!(fs::read_to_string(&catalog_path)
+            .expect("read catalog")
+            .contains("#: app/page.tsx"));
+
+        // Origins move to the git root; every source file is unchanged, so
+        // without a rebuilt cache the catalog would keep the old origins.
+        write_watch_config("git", true);
+        let reloaded = load_config(&app, Some(&config_path)).expect("reload config");
+        rebuild_extract_cache_for_reload(&config, &reloaded, &options, &mut cache);
+        assert!(
+            cache.is_empty(),
+            "a stamp-relevant reload must start from an empty cache"
+        );
+        run_watch_extraction(&reloaded, &options, &mut cache).expect("extraction after reload");
+
+        assert!(fs::read_to_string(&catalog_path)
+            .expect("read catalog")
+            .contains("#: apps/web/app/page.tsx"));
+
+        // Turning the cache off mid-watch has to take effect immediately.
+        let previous = reloaded;
+        write_watch_config("git", false);
+        let disabled = load_config(&app, Some(&config_path)).expect("reload config");
+        rebuild_extract_cache_for_reload(&previous, &disabled, &options, &mut cache);
+        run_watch_extraction(&disabled, &options, &mut cache).expect("extraction without cache");
+        assert!(cache.is_empty(), "a disabled cache must not store entries");
+        assert!(!cache.is_dirty());
+    }
+
+    /*
+     * Overlapping catalogs match the same file, and a failing file used to be
+     * counted and reported once per catalog that matched it.
+     */
+    #[test]
+    fn overlapping_catalogs_count_a_failing_file_once() {
+        let app = temp_dir("extract-overlap-failure");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en]
+source-locale: en
+source-reference-root: config
+catalogs:
+  - path: locales/{locale}/messages
+    include: [app]
+  - path: locales/{locale}/other
+    include: [app]
+"#,
+        )
+        .expect("write config");
+        fs::write(app.join("app/page.tsx"), "const broken =").expect("write invalid source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let error = run_extraction(&config, &extract_options()).expect_err("extract should fail");
+
+        assert!(
+            matches!(error, CliError::ExtractionFailed { failures: 1 }),
+            "the shared failing file must be counted once, got: {error:?}"
+        );
+    }
+
+    /*
+     * Retention sees the union of every catalog's files. Running it per catalog
+     * made each catalog evict its siblings' entries, so a multi-catalog project
+     * re-extracted almost everything on every run.
+     */
+    #[test]
+    fn multi_catalog_extraction_keeps_every_catalog_cached() {
+        let app = temp_dir("extract-multi-catalog-cache");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        fs::create_dir_all(app.join("admin")).expect("create admin");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en]
+source-locale: en
+source-reference-root: config
+catalogs:
+  - path: locales/{locale}/app
+    include: [app]
+  - path: locales/{locale}/admin
+    include: [admin]
+"#,
+        )
+        .expect("write config");
+        for (dir, message) in [("app", "Dashboard"), ("admin", "Settings")] {
+            let path = app.join(dir).join("page.tsx");
+            fs::write(
+                &path,
+                format!(
+                    "import {{ t }} from \"@palamedes/core/macro\";\nexport function title() {{ return t`{message}`; }}\n"
+                ),
+            )
+            .expect("write source");
+            age_file(&path);
+        }
+
+        let options = cached_extract_options();
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let mut cache = load_extract_cache(&config, &options);
+        run_extraction_with_cache(&config, &options, &mut cache).expect("extract");
+
+        assert_eq!(
+            cache.len(),
+            2,
+            "retention must keep the entries of every catalog"
+        );
+        assert!(fs::read_to_string(app.join("locales/en/app.po"))
+            .expect("read app catalog")
+            .contains("msgid \"Dashboard\""));
+        assert!(fs::read_to_string(app.join("locales/en/admin.po"))
+            .expect("read admin catalog")
+            .contains("msgid \"Settings\""));
+    }
+
+    /*
+     * The cache must never change what is written. This runs a cold run, a
+     * mixed hit/miss run after touching one file, and an uncached run, and
+     * requires all three catalogs to be byte-identical.
+     */
+    #[test]
+    fn cached_extraction_matches_uncached_output() {
+        let app = temp_dir("extract-cache-parity");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        write_config(&app, None);
+        fs::write(
+            app.join("app/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Dashboard`; }\n",
+        )
+        .expect("write source");
+        fs::write(
+            app.join("app/other.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function label() { return t`Reports`; }\n",
+        )
+        .expect("write source");
+
+        let options = cached_extract_options();
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let catalog_path = app.join("locales/en/messages.po");
+
+        let mut cache = load_extract_cache(&config, &options);
+        run_extraction_with_cache(&config, &options, &mut cache).expect("cold cached run");
+        let cold = fs::read_to_string(&catalog_path).expect("read catalog");
+
+        // One file changes, the other is served from the cache.
+        fs::write(
+            app.join("app/other.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function label() { return t`Reports overview`; }\n",
+        )
+        .expect("rewrite source");
+        run_extraction_with_cache(&config, &options, &mut cache).expect("mixed hit/miss run");
+        let mixed = fs::read_to_string(&catalog_path).expect("read catalog");
+
+        let mut uncached = ExtractCache::disabled();
+        run_extraction_with_cache(&config, &extract_options(), &mut uncached)
+            .expect("uncached run");
+        let plain = fs::read_to_string(&catalog_path).expect("read catalog");
+
+        assert_eq!(mixed, plain, "cached output must match --no-cache output");
+        assert_ne!(cold, mixed, "the edited message must reach the catalog");
+        assert!(mixed.contains("msgid \"Reports overview\""));
+        assert!(mixed.contains("msgid \"Dashboard\""));
+        assert!(extract_cache_path(&config).exists() || cache.is_empty());
+    }
+
     #[test]
     fn report_counts_translated_and_missing_messages() {
         let app = temp_dir("report");
@@ -1550,6 +1828,25 @@ source-locale: en
             threads: None,
             no_cache: true,
             verbose: false,
+        }
+    }
+
+    /// Backdates a file out of the cache's racy window so it can be cached.
+    fn age_file(path: &std::path::Path) {
+        let aged = SystemTime::now() - std::time::Duration::from_secs(10);
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .expect("open source")
+            .set_modified(aged)
+            .expect("age source");
+    }
+
+    /// Extraction options with the on-disk cache enabled.
+    fn cached_extract_options() -> ExtractOptions {
+        ExtractOptions {
+            no_cache: false,
+            ..extract_options()
         }
     }
 

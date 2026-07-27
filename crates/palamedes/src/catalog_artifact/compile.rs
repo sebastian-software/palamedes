@@ -12,9 +12,24 @@ use super::types::{
     CatalogArtifactDiagnostic, CatalogArtifactMissingMessage, CatalogArtifactResult,
 };
 
+/// ICU options that model the JS runtime parser
+/// (`packages/core/src/messageFormat.ts`).
+///
+/// Catalog texts are canonicalized into strict ICU quoting when they are loaded
+/// (see the `icu_text` module), so [`IcuSyntaxPolicy::Strict`] reads `''`,
+/// `'{`/`'}`, and a plural `'#'` exactly the way the runtime does.
+/// `RuntimeLiteralApostrophes` doubles every apostrophe before parsing instead,
+/// which models `L'{title}` as a live argument, `''` as two apostrophes, and
+/// `'#'` as an active pound — all cases where validation stayed green while the
+/// runtime rendered something else.
+///
+/// Residual divergence: Ferrocat has no lenient-quoting policy, so the parity
+/// comes from the canonicalization pass. Message texts that reach Ferrocat
+/// without going through it (should any future call site skip it) are read with
+/// strict rules, where a bare `don't` is an unterminated quote.
 pub(super) fn runtime_icu_options() -> CompileCatalogArtifactIcuOptions {
     CompileCatalogArtifactIcuOptions::new()
-        .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes)
+        .with_syntax_policy(IcuSyntaxPolicy::Strict)
         .with_formatter_support(runtime_icu_formatter_support)
 }
 
@@ -28,7 +43,7 @@ pub(super) fn build_artifact_result(
     let artifact = if pseudo_locale == Some(locale) {
         let options = CompiledCatalogPseudolocalizationOptions::new()
             .with_icu_options(IcuPseudolocalizationOptions::new())
-            .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes);
+            .with_syntax_policy(IcuSyntaxPolicy::Strict);
         pseudolocalize_compiled_catalog_artifact(&artifact, &options)
             .map_err(PalamedesError::PseudolocalizeCatalogArtifact)?
     } else {

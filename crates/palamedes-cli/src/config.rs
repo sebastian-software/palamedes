@@ -126,13 +126,53 @@ pub fn load_config(cwd: &Path, explicit_path: Option<&Path>) -> Result<LoadedCon
 /// pseudo-locale exclusion, fallback chains, and origin-path style without a
 /// trace. Reject them loudly; merely unknown keys only warn.
 fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), ConfigError> {
+    let Some(map) = value.as_object() else {
+        return Ok(());
+    };
+    for key in map.keys() {
+        if let Some(kebab) = camel_case_key_hint(key) {
+            return invalid(
+                path,
+                &format!(
+                    "Unknown key \"{key}\". Palamedes data configs use kebab-case: \"{kebab}\"."
+                ),
+            );
+        }
+    }
+    for key in unknown_top_level_keys(value) {
+        eprintln!(
+            "Warning: Ignoring unknown config key \"{key}\" in {}.",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+/// The kebab-case spelling a camelCase key should have used, when the key is a
+/// known option under a Lingui-style name.
+fn camel_case_key_hint(key: &str) -> Option<&'static str> {
     const CAMEL_CASE_KEYS: &[(&str, &str)] = &[
         ("sourceLocale", "source-locale"),
         ("fallbackLocales", "fallback-locales"),
         ("pseudoLocale", "pseudo-locale"),
         ("sourceReferenceRoot", "source-reference-root"),
         ("referenceScopes", "reference-scopes"),
+        ("extractThreads", "extract-threads"),
+        ("extractCache", "extract-cache"),
     ];
+
+    CAMEL_CASE_KEYS
+        .iter()
+        .find(|(camel, _)| *camel == key)
+        .map(|(_, kebab)| *kebab)
+}
+
+/// Top-level keys the loader does not deserialize, in config order.
+///
+/// Every key that is read anywhere — including `extract-threads` and
+/// `extract-cache` — must be listed, or documented options warn as if they were
+/// typos.
+fn unknown_top_level_keys(value: &serde_json::Value) -> Vec<String> {
     const KNOWN_KEYS: &[&str] = &[
         "locales",
         "source-locale",
@@ -145,32 +185,22 @@ fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), Co
         "source_reference_root",
         "reference-scopes",
         "reference_scopes",
+        "extract-threads",
+        "extract_threads",
+        "extract-cache",
+        "extract_cache",
         "catalogs",
         "plugins",
     ];
 
     let Some(map) = value.as_object() else {
-        return Ok(());
+        return Vec::new();
     };
-    for (camel, kebab) in CAMEL_CASE_KEYS {
-        if map.contains_key(*camel) {
-            return invalid(
-                path,
-                &format!(
-                    "Unknown key \"{camel}\". Palamedes data configs use kebab-case: \"{kebab}\"."
-                ),
-            );
-        }
-    }
-    for key in map.keys() {
-        if !KNOWN_KEYS.contains(&key.as_str()) {
-            eprintln!(
-                "Warning: Ignoring unknown config key \"{key}\" in {}.",
-                path.display()
-            );
-        }
-    }
-    Ok(())
+
+    map.keys()
+        .filter(|key| !KNOWN_KEYS.contains(&key.as_str()))
+        .cloned()
+        .collect()
 }
 
 impl LoadedConfig {
@@ -423,7 +453,7 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{load_config, CONFIG_FILENAME};
+    use super::{load_config, unknown_top_level_keys, CONFIG_FILENAME};
 
     #[test]
     fn loads_yaml_config_and_defaults_references_to_git_root() {
@@ -576,6 +606,60 @@ catalogs:
         let message = error.to_string();
         assert!(message.contains("pseudoLocale"), "got: {message}");
         assert!(message.contains("pseudo-locale"), "got: {message}");
+    }
+
+    #[test]
+    fn accepts_documented_extraction_keys_without_warning() {
+        for (threads_key, cache_key) in [
+            ("extract-threads", "extract-cache"),
+            ("extract_threads", "extract_cache"),
+        ] {
+            let value = serde_json::json!({
+                "locales": ["en", "de"],
+                "source-locale": "en",
+                threads_key: 2,
+                cache_key: false,
+                "catalogs": [{ "path": "src/locales/{locale}", "include": ["src"] }],
+            });
+
+            assert!(
+                unknown_top_level_keys(&value).is_empty(),
+                "documented keys must not warn: {:?}",
+                unknown_top_level_keys(&value)
+            );
+        }
+
+        let value = serde_json::json!({ "locales": ["en"], "mystery": 1 });
+        assert_eq!(unknown_top_level_keys(&value), vec!["mystery".to_owned()]);
+    }
+
+    #[test]
+    fn rejects_camel_case_extraction_keys_with_a_kebab_case_hint() {
+        for (camel, kebab, value) in [
+            ("extractThreads", "extract-threads", "2"),
+            ("extractCache", "extract-cache", "false"),
+        ] {
+            let app = temp_dir(&format!("camel-{camel}"));
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    r#"
+locales: [en, de]
+source-locale: en
+{camel}: {value}
+catalogs:
+  - path: src/locales/{{locale}}
+    include: [src]
+"#
+                ),
+            )
+            .expect("write config");
+
+            let error = load_config(&app, None).expect_err("camelCase key must be rejected");
+            let message = error.to_string();
+            assert!(message.contains(camel), "got: {message}");
+            assert!(message.contains(kebab), "got: {message}");
+        }
     }
 
     #[test]

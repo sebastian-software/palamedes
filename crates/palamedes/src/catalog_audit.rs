@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::canonicalize_catalog_quoting;
 use crate::message_metadata::MessageMetadataInput;
 
 use super::catalog_artifact::{CatalogArtifactConfig, CatalogConfig};
@@ -138,8 +139,12 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
-        let icu_options = CatalogAuditIcuOptions::new()
-            .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes);
+        // Catalog texts are canonicalized into strict ICU quoting at load time
+        // (see `icu_text`), so the strict parser reads them exactly the way the
+        // JS runtime does. `RuntimeLiteralApostrophes` would instead double
+        // every apostrophe and model `L'{title}` as a live argument that the
+        // runtime actually swallows.
+        let icu_options = CatalogAuditIcuOptions::new().with_syntax_policy(IcuSyntaxPolicy::Strict);
         let options = CatalogAuditOptions::new(&request.config.source_locale)
             .with_locales(&locale_refs)
             .with_metadata(&metadata)
@@ -253,10 +258,11 @@ fn load_audit_catalogs(
             .with_locale(locale.as_str())
             .with_mode(catalog.format.ferrocat_mode());
 
-        let parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
+        let mut parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
             path: path.clone(),
             source,
         })?;
+        canonicalize_catalog_quoting(&mut parsed);
         let catalog =
             parsed
                 .into_normalized_view()
@@ -410,6 +416,51 @@ msgstr "Wir haben {count, plural, one {einen freien Termin} other {# freie Termi
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.code == "icu.invalid_syntax"));
+    }
+
+    #[test]
+    fn flags_translations_whose_quote_swallows_a_placeholder() {
+        let fixture = create_fixture_dir("catalog-audit-quoted-placeholder");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+        fs::write(
+            locale_dir.join("en.po"),
+            r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "{title} is ready"
+msgstr ""
+"#,
+        )
+        .expect("write en");
+        // `L'{title}` is a quoted literal for the runtime parser, so the
+        // translation renders `L{title} est prêt` and no longer uses `title`.
+        fs::write(
+            locale_dir.join("de.po"),
+            r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "{title} is ready"
+msgstr "L'{title} est bereit"
+"#,
+        )
+        .expect("write de");
+
+        let result = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec!["de".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit");
+
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.missing_argument"
+                && diagnostic.locale.as_deref() == Some("de")));
     }
 
     #[test]

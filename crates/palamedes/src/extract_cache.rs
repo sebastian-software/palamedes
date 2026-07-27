@@ -50,12 +50,26 @@ impl FileFingerprint {
         })
     }
 
-    fn is_racy(&self, now: SystemTime) -> bool {
-        let Ok(now_ns) = now.duration_since(UNIX_EPOCH) else {
+    fn is_racy(&self, read_started_at: SystemTime) -> bool {
+        let Ok(now_ns) = read_started_at.duration_since(UNIX_EPOCH) else {
             return true;
         };
         now_ns.as_nanos().saturating_sub(self.mtime_ns) < RACY_WINDOW.as_nanos()
     }
+}
+
+/// Identity of a file plus the instant the read that produced the cached
+/// messages started.
+///
+/// The racy-window guard has to be evaluated against the read-start time, not
+/// against the time of the insert: on a coarse-mtime filesystem an edit that
+/// lands after the read but inside the same mtime granule is indistinguishable
+/// from the state that was read, and by insert time that granule may already
+/// have elapsed.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ReadStartFingerprint {
+    fingerprint: FileFingerprint,
+    read_started_at: SystemTime,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -163,11 +177,37 @@ impl ExtractCache {
 
     /// Identity of `path` before its contents are read, or `None` when the cache
     /// is disabled and the `stat` would be wasted.
-    pub(crate) fn fingerprint_before_read(&self, path: &str) -> Option<FileFingerprint> {
+    pub(crate) fn fingerprint_before_read(&self, path: &str) -> Option<ReadStartFingerprint> {
         if !self.enabled {
             return None;
         }
-        FileFingerprint::read(Path::new(path))
+        Some(ReadStartFingerprint {
+            fingerprint: FileFingerprint::read(Path::new(path))?,
+            read_started_at: SystemTime::now(),
+        })
+    }
+
+    /// Discards every entry when the request no longer matches the stamp the
+    /// cache was loaded with, then re-stamps it for the new request.
+    ///
+    /// The stamp fields decide what an entry means: `root_dir` decides the
+    /// stored origin paths and `reference_scopes` decides the records
+    /// themselves. A long-lived cache — watch mode holds one across config
+    /// reloads — must therefore be re-validated on every request instead of
+    /// only at load time.
+    pub(crate) fn reset_if_request_differs(&mut self, root_dir: &str, reference_scopes: bool) {
+        if !self.enabled
+            || (self.stamp.root_dir == root_dir && self.stamp.reference_scopes == reference_scopes)
+        {
+            return;
+        }
+
+        self.stamp.root_dir = root_dir.to_owned();
+        self.stamp.reference_scopes = reference_scopes;
+        if !self.entries.is_empty() {
+            self.entries.clear();
+            self.dirty = true;
+        }
     }
 
     /// Records a freshly extracted result.
@@ -183,7 +223,7 @@ impl ExtractCache {
         path: String,
         relative_file: String,
         messages: &[ExtractedMessageRecord],
-        before: Option<FileFingerprint>,
+        before: Option<ReadStartFingerprint>,
     ) where
         ExtractedMessageRecord: Clone,
     {
@@ -194,10 +234,13 @@ impl ExtractCache {
         else {
             return;
         };
-        if fingerprint != before {
+        if fingerprint != before.fingerprint {
             return;
         }
-        if fingerprint.is_racy(SystemTime::now()) {
+        // Measured against the start of the read: an edit inside the same mtime
+        // granule as the read is indistinguishable from what was read, even
+        // when the insert happens after that granule has passed.
+        if fingerprint.is_racy(before.read_started_at) {
             return;
         }
         self.entries.insert(
@@ -420,6 +463,118 @@ mod tests {
         assert!(cache.get(&key).is_none());
 
         std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /*
+     * The fingerprint is captured before the read, so the racy window has to be
+     * measured from that moment too. Evaluating it at insert time lets a
+     * same-size edit inside the file's mtime granule be stored as valid as soon
+     * as the granule has elapsed.
+     */
+    #[test]
+    fn measures_the_racy_window_from_the_read_start() {
+        let root = temp_root("racy-read-start");
+        std::fs::create_dir_all(&root).expect("root");
+        let source = root.join("a.tsx");
+        std::fs::write(&source, "const a = 1\n").expect("write");
+        let key = source.to_string_lossy().into_owned();
+
+        let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
+        // Captured while the file is still young: an edit landing right after
+        // the read cannot be told apart from what was read.
+        let before = cache.fingerprint_before_read(&key);
+
+        // Extraction takes long enough for the window to pass before the insert.
+        std::thread::sleep(RACY_WINDOW + Duration::from_millis(100));
+
+        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        assert!(
+            cache.is_empty(),
+            "a file that was young when it was read must not be cached"
+        );
+
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn resets_entries_when_the_request_no_longer_matches_the_stamp() {
+        let root = temp_root("request-stamp");
+        std::fs::create_dir_all(&root).expect("root");
+        let source = root.join("a.tsx");
+        write_aged(&source, "const a = 1\n");
+        let key = source.to_string_lossy().into_owned();
+
+        let mut cache = ExtractCache::load(&root.join("cache.json"), "root-one", true);
+        let before = cache.fingerprint_before_read(&key);
+        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        assert_eq!(cache.len(), 1);
+
+        // Same stamp: entries survive.
+        cache.reset_if_request_differs("root-one", true);
+        assert_eq!(cache.len(), 1);
+
+        // A different reference root changes stored origins, so nothing may be
+        // reused, and later inserts must be stamped for the new request.
+        cache.reset_if_request_differs("root-two", true);
+        assert!(cache.is_empty());
+        assert!(cache.get(&key).is_none());
+
+        let before = cache.fingerprint_before_read(&key);
+        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        cache.reset_if_request_differs("root-two", true);
+        assert_eq!(cache.len(), 1, "matching requests keep their entries");
+        cache.reset_if_request_differs("root-two", false);
+        assert!(cache.is_empty(), "flipped reference scopes discard entries");
+
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /*
+     * Retention runs once with the union of every catalog's files. This guards
+     * the multi-catalog case: entries belonging to a sibling catalog must not
+     * be evicted, or each run re-extracts what the other catalog cached.
+     */
+    #[test]
+    fn retain_paths_keeps_entries_of_every_catalog() {
+        let root = temp_root("retain");
+        std::fs::create_dir_all(&root).expect("root");
+        let first = root.join("a.tsx");
+        let second = root.join("b.tsx");
+        let dropped = root.join("c.tsx");
+        for path in [&first, &second, &dropped] {
+            write_aged(path, "const a = 1\n");
+        }
+
+        let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
+        for path in [&first, &second, &dropped] {
+            let key = path.to_string_lossy().into_owned();
+            let before = cache.fingerprint_before_read(&key);
+            cache.insert(key, "file.tsx".to_owned(), &[record("Hello")], before);
+        }
+        assert_eq!(cache.len(), 3);
+
+        let first_key = first.to_string_lossy().into_owned();
+        let second_key = second.to_string_lossy().into_owned();
+        let keep = [first_key.as_str(), second_key.as_str()]
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
+        cache.retain_paths(&keep);
+
+        assert_eq!(cache.len(), 2);
+        assert!(cache.get(&first_key).is_some());
+        assert!(cache.get(&second_key).is_some());
+        assert!(cache.get(&dropped.to_string_lossy()).is_none());
+        assert!(cache.is_dirty());
+
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn retain_paths_on_a_disabled_cache_is_a_no_op() {
+        let mut cache = ExtractCache::disabled();
+        cache.retain_paths(&std::collections::HashSet::new());
+        assert!(cache.is_empty());
+        assert!(!cache.is_dirty());
     }
 
     #[test]

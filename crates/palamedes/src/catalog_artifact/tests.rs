@@ -281,13 +281,16 @@ msgstr ""
     let result = compile_catalog_artifact(&request).expect("catalog artifact");
     let message = result
         .messages
-        .get(&compiled_key("You're {name}", None))
+        .get(&compiled_key("You''re {name}", None))
         .expect("pseudolocalized message");
 
     assert!(message.starts_with("[!! "));
     assert!(message.ends_with(" !!]"));
     assert!(message.contains("{name}"));
-    assert_ne!(message, "You're {name}");
+    assert_ne!(message, "You''re {name}");
+    // The escaped apostrophe stays a single literal apostrophe for the runtime
+    // parser instead of being doubled into two.
+    assert_eq!(message.matches('\'').count(), 2);
     assert!(result.diagnostics.is_empty());
 }
 
@@ -334,19 +337,19 @@ msgstr ""
             }],
         },
         resource_path: locale_dir.join("pseudo.po").to_string_lossy().into_owned(),
-        compiled_ids: vec![compiled_key("You're {name}", None)],
+        compiled_ids: vec![compiled_key("You''re {name}", None)],
     };
     let result = compile_catalog_artifact_selected(&request).expect("selected catalog artifact");
     let message = result
         .messages
-        .get(&compiled_key("You're {name}", None))
+        .get(&compiled_key("You''re {name}", None))
         .expect("pseudolocalized message");
 
     assert_eq!(result.messages.len(), 1);
     assert!(message.starts_with("[!! "));
     assert!(message.ends_with(" !!]"));
     assert!(message.contains("{name}"));
-    assert_ne!(message, "You're {name}");
+    assert_ne!(message, "You''re {name}");
     assert!(result.diagnostics.is_empty());
 }
 
@@ -404,7 +407,7 @@ msgstr "Konnte {firstName}'s Daten nicht laden"
         .diagnostics
         .iter()
         .any(|diagnostic| diagnostic.code == "icu.missing_argument"
-            && diagnostic.source_key.message == "Couldn't load {name}"
+            && diagnostic.source_key.message == "Couldn''t load {name}"
             && diagnostic.locale == "de"));
     assert!(result
         .diagnostics
@@ -903,7 +906,7 @@ msgstr "Impossible d'ouvrir les regles"
             }],
         },
         resource_path: locale_dir.join("fr.po").to_string_lossy().into_owned(),
-        compiled_ids: vec![compiled_key("Couldn't load applied rules", None)],
+        compiled_ids: vec![compiled_key("Couldn''t load applied rules", None)],
     };
     let result = compile_catalog_artifact_selected(&request).expect("selected catalog artifact");
 
@@ -911,9 +914,11 @@ msgstr "Impossible d'ouvrir les regles"
     assert_eq!(
         result
             .messages
-            .get(&compiled_key("Couldn't load applied rules", None))
+            .get(&compiled_key("Couldn''t load applied rules", None))
             .map(String::as_str),
-        Some("Impossible d'ouvrir les regles")
+        // Literal apostrophes are emitted in escaped form, which the runtime
+        // parser renders as a single apostrophe.
+        Some("Impossible d''ouvrir les regles")
     );
     assert!(result.diagnostics.is_empty());
 }
