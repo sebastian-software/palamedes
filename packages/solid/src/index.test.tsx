@@ -153,6 +153,91 @@ describe("@palamedes/solid", () => {
     expect(html).toBe("a pair")
   })
 
+  it("falls back to the source message when a catalog plural cannot resolve", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+    // A translator introduced a plural the source never had, and nothing
+    // supplies `count`: resolving it throws mid-render.
+    i18n.load("de", {
+      inbox: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
+    })
+    i18n.activate("de")
+    setServerI18nGetter(() => i18n)
+
+    const render = Trans({ id: "inbox", message: "You have mail" }) as unknown as () => unknown
+
+    expect([render()].flat().join("")).toBe("You have mail")
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0]).toMatchObject({
+      id: "inbox",
+      locale: "de",
+      pattern: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
+      fallback: "You have mail",
+    })
+  })
+
+  it("reports missing plural values instead of matching zero branches", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+    i18n.activate("en")
+    setServerI18nGetter(() => i18n)
+
+    // Same contract as `i18n._()`: report, then degrade to the raw source
+    // message rather than throwing out of the render.
+    const render = Trans({
+      id: "items",
+      message: "{n, plural, =0 {none} other {# items}}",
+      values: {},
+    }) as unknown as () => unknown
+
+    expect([render()].flat().join("")).toBe("{n, plural, =0 {none} other {# items}}")
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0].error.message).toMatch(/Missing or non-numeric value/)
+  })
+
+  it("keeps direct choice components rendering when a catalog override cannot resolve", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+    i18n.load("de", {
+      "{value, select, female {She} other {They}}":
+        "{missing, plural, one {Sie} other {# Personen}}",
+    })
+    i18n.activate("de")
+    setServerI18nGetter(() => i18n)
+
+    const html = renderToString(() => <Select value="female" female="She" other="They" />)
+
+    expect(html).toBe("She")
+    expect(onError).toHaveBeenCalledOnce()
+  })
+
+  it("never resolves select values to Object.prototype members", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setServerI18nGetter(() => i18n)
+
+    const html = renderToString(() => (
+      <>
+        <Select value="valueOf" other="fallback" />
+        <Select value="toString" other="fallback" />
+      </>
+    ))
+
+    expect(html).toBe("fallbackfallback")
+  })
+
+  it("rejects choice components without any usable option instead of rendering nothing", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setServerI18nGetter(() => i18n)
+
+    expect(() =>
+      renderToString(() => (
+        <Plural value={2} {...({ other: undefined } as unknown as { other: string })} />
+      ))
+    ).toThrow(/plural component requires at least one string option/)
+  })
+
   it("renders ICU-quoted syntax literally through Trans", () => {
     const i18n = createI18n()
     i18n.activate("en")

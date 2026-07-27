@@ -46,7 +46,15 @@ const parseCache = new Map<string, MessageNode[]>()
 const numberFormatCache = new Map<string, Intl.NumberFormat>()
 const pluralRulesCache = new Map<string, Intl.PluralRules>()
 const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>()
+
+// Intl instances are keyed by (locale, style): a handful per app, so a small
+// bound is plenty and keeps the retained memory of these heavy objects low.
 const FORMATTER_CACHE_LIMIT = 64
+
+// Parsed patterns are keyed by the full message text, so the working set is the
+// app's message count — sharing the formatter bound made any catalog with more
+// than 64 messages evict continuously and re-parse everything on every render.
+const PARSE_CACHE_LIMIT = 1024
 
 type ParserState = {
   input: string
@@ -56,6 +64,11 @@ type ParserState = {
 export function parseMessagePattern(pattern: string): MessageNode[] {
   const cached = parseCache.get(pattern)
   if (cached) {
+    // Refresh insert order on every hit so eviction is least-recently-used
+    // instead of first-in: messages rendered on every frame then outlive the
+    // one-off dynamic patterns that pass through the cache.
+    parseCache.delete(pattern)
+    parseCache.set(pattern, cached)
     return cached
   }
 
@@ -64,9 +77,9 @@ export function parseMessagePattern(pattern: string): MessageNode[] {
     index: 0,
   }
   const nodes = parseNodes(state, undefined, false)
-  // i18n._(rawPattern) accepts arbitrary strings, so this cache must be
-  // bounded like the formatter caches or dynamic patterns grow it forever.
-  rememberFormatter(parseCache, pattern, nodes)
+  // i18n._(rawPattern) accepts arbitrary strings, so this cache must stay
+  // bounded or dynamic patterns grow it forever.
+  rememberInCache(parseCache, pattern, nodes, PARSE_CACHE_LIMIT)
   return nodes
 }
 
@@ -180,7 +193,11 @@ function parseBraceExpression(state: ParserState, poundIsSyntax: boolean): Messa
   expectChar(state, ",")
   const offset = kind === "plural" || kind === "selectordinal" ? readPluralOffset(state) : undefined
 
-  const options: Record<string, MessageNode[]> = {}
+  // A null prototype keeps message-supplied option keys off Object.prototype:
+  // `{n, select, other {…}}` looked up with the value "toString" must not
+  // resolve to a function, and an option literally named "__proto__" must be a
+  // plain entry rather than a prototype assignment.
+  const options = Object.create(null) as Record<string, MessageNode[]>
   while (state.index < state.input.length) {
     skipWhitespace(state)
     if (state.input[state.index] === "}") {
@@ -450,7 +467,9 @@ function renderNodeToString(
 ): string {
   switch (node.type) {
     case "text": {
-      return pluralValue === undefined ? node.value : replacePound(node.value, pluralValue, locale)
+      return pluralValue === undefined
+        ? node.value
+        : replacePoundPlaceholders(node.value, pluralValue, locale)
     }
     case "literal": {
       return node.value
@@ -605,19 +624,32 @@ export function resolveChoice(
   locale?: string
 ): ResolvedChoice {
   if (node.kind === "select") {
-    const exact = value == null ? undefined : node.options[String(value)]
-    return { nodes: exact ?? node.options.other ?? [] }
+    const exact = value == null ? undefined : getChoiceOption(node, String(value))
+    return { nodes: exact ?? getChoiceOption(node, "other") ?? [] }
   }
 
   const numericValue = requireChoiceNumericValue(node, value)
   const operand = numericValue - (node.offset ?? 0)
-  const exactKey = `=${numericValue}`
-  if (node.options[exactKey]) {
-    return { nodes: node.options[exactKey], pluralValue: operand }
+  const exactMatch = getChoiceOption(node, `=${numericValue}`)
+  if (exactMatch) {
+    return { nodes: exactMatch, pluralValue: operand }
   }
 
   const category = getPluralRules(locale, node.kind).select(operand)
-  return { nodes: node.options[category] ?? node.options.other ?? [], pluralValue: operand }
+  return {
+    nodes: getChoiceOption(node, category) ?? getChoiceOption(node, "other") ?? [],
+    pluralValue: operand,
+  }
+}
+
+/*
+ * Option keys can come from a message pattern and select values from user
+ * input, so every lookup is own-property only. The parser already builds
+ * options with a null prototype; this also covers nodes handed to us from
+ * elsewhere (hand-written nodes, older parse output, structured clones).
+ */
+function getChoiceOption(node: MessageChoiceNode, key: string): MessageNode[] | undefined {
+  return Object.hasOwn(node.options, key) ? node.options[key] : undefined
 }
 
 function requireChoiceNumericValue(node: MessageChoiceNode, value: unknown): number {
@@ -677,18 +709,38 @@ function rememberFormatter<TFormatter>(
   key: string,
   formatter: TFormatter
 ): TFormatter {
-  if (!cache.has(key) && cache.size >= FORMATTER_CACHE_LIMIT) {
+  return rememberInCache(cache, key, formatter, FORMATTER_CACHE_LIMIT)
+}
+
+function rememberInCache<TValue>(
+  cache: Map<string, TValue>,
+  key: string,
+  value: TValue,
+  limit: number
+): TValue {
+  if (!cache.has(key) && cache.size >= limit) {
     const oldestKey = cache.keys().next().value
     if (oldestKey !== undefined) {
       cache.delete(oldestKey)
     }
   }
 
-  cache.set(key, formatter)
-  return formatter
+  cache.set(key, value)
+  return value
 }
 
-function replacePound(value: string, numericValue: number, locale?: string): string {
+/**
+ * Substitute `#` in plural branch text with the locale-formatted operand.
+ *
+ * Exported for the host adapters (React/Solid), which walk message nodes
+ * themselves: without it they allocate an `Intl.NumberFormat` per text node per
+ * render instead of reusing core's cached formatters.
+ */
+export function replacePoundPlaceholders(
+  value: string,
+  numericValue: number,
+  locale?: string
+): string {
   return value.replaceAll("#", getNumberFormatter(locale, undefined).format(numericValue))
 }
 

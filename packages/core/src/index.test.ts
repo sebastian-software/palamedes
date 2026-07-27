@@ -224,6 +224,30 @@ describe("createI18n", () => {
     expect(i18n.getMessageNodes("{name")).toStrictEqual([{ type: "text", value: "{name" }])
   })
 
+  it("routes adapter render failures through onError with the active locale", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+    i18n.activate("de")
+
+    i18n.reportError({
+      id: "items",
+      error: "not an Error instance",
+      pattern: "{n, plural, other {# Dateien}}",
+      fallback: "{n} files",
+      metadata: { message: "{n} files" },
+    })
+
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0]).toMatchObject({
+      id: "items",
+      locale: "de",
+      pattern: "{n, plural, other {# Dateien}}",
+      fallback: "{n} files",
+    })
+    expect(onError.mock.calls[0]?.[0].error).toBeInstanceOf(Error)
+    expect(onError.mock.calls[0]?.[0].error.message).toBe("not an Error instance")
+  })
+
   it("keeps rendering resilient when hooks throw", () => {
     const i18n = createI18n({
       onMissing() {

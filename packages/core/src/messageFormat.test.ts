@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest"
 
-import { formatMessagePattern, parseMessagePattern } from "./messageFormat"
+import {
+  formatMessagePattern,
+  parseMessagePattern,
+  resolveChoice,
+  type MessageNode,
+} from "./messageFormat"
+
+// Parsed choice options carry a null prototype so message-supplied keys can
+// never reach Object.prototype members; expectations must match that shape for
+// toStrictEqual, which compares constructors.
+function choiceOptions(options: Record<string, MessageNode[]>): Record<string, MessageNode[]> {
+  return Object.assign(Object.create(null) as Record<string, MessageNode[]>, options)
+}
 
 describe("parseMessagePattern", () => {
   it("keeps quoted ICU syntax in literal nodes", () => {
@@ -32,13 +44,13 @@ describe("parseMessagePattern", () => {
         type: "choice",
         variable: "count",
         kind: "plural",
-        options: {
+        options: choiceOptions({
           other: [
             { type: "text", value: "Line" },
             { type: "tag", name: "0", children: [] },
             { type: "text", value: "break" },
           ],
-        },
+        }),
       },
     ])
   })
@@ -54,12 +66,45 @@ describe("parseMessagePattern", () => {
         variable: "count",
         kind: "plural",
         offset: 1,
-        options: {
+        options: choiceOptions({
           one: [{ type: "text", value: "you and one other" }],
           other: [{ type: "text", value: "you and # others" }],
-        },
+        }),
       },
     ])
+  })
+
+  it("builds choice options without a prototype chain", () => {
+    const [node] = parseMessagePattern("{n, select, other {O}}")
+
+    expect(node?.type).toBe("choice")
+    expect(Object.getPrototypeOf((node as { options: object }).options)).toBeNull()
+  })
+
+  it("keeps hot patterns cached past the formatter cache limit", () => {
+    const hot = "hot pattern {value}"
+    const nodes = parseMessagePattern(hot)
+
+    for (let index = 0; index < 200; index += 1) {
+      parseMessagePattern(`filler ${index} {value}`)
+    }
+
+    // A 64-entry bound shared with the Intl caches evicted this immediately.
+    expect(parseMessagePattern(hot)).toBe(nodes)
+  })
+
+  it("refreshes cached patterns on hit so hot entries survive eviction", () => {
+    const hot = "recently used pattern {value}"
+    const nodes = parseMessagePattern(hot)
+
+    for (let index = 0; index < 1200; index += 1) {
+      parseMessagePattern(`lru filler ${index} {value}`)
+      if (index % 100 === 0) {
+        parseMessagePattern(hot)
+      }
+    }
+
+    expect(parseMessagePattern(hot)).toBe(nodes)
   })
 })
 
@@ -133,6 +178,32 @@ describe("formatMessagePattern", () => {
 
     expect(formatMessagePattern(message, { n: "0" }, "en")).toBe("none")
     expect(formatMessagePattern(message, { n: "4" }, "en")).toBe("4 items")
+  })
+
+  it("never resolves select values to Object.prototype members", () => {
+    const message = "{n, select, toString {C} other {O}}"
+
+    expect(formatMessagePattern(message, { n: "valueOf" })).toBe("O")
+    expect(formatMessagePattern(message, { n: "hasOwnProperty" })).toBe("O")
+    expect(formatMessagePattern(message, { n: "constructor" })).toBe("O")
+    expect(formatMessagePattern(message, { n: "toString" })).toBe("C")
+    expect(formatMessagePattern("{n, select, other {O}}", { n: "__proto__" })).toBe("O")
+  })
+
+  it("ignores inherited option keys on externally built choice nodes", () => {
+    // Nodes can arrive from outside the parser (hand-written, deserialized), so
+    // the lookup itself must be own-property only.
+    const resolved = resolveChoice(
+      {
+        type: "choice",
+        variable: "n",
+        kind: "select",
+        options: { other: [{ type: "text", value: "O" }] },
+      },
+      "toString"
+    )
+
+    expect(resolved.nodes).toStrictEqual([{ type: "text", value: "O" }])
   })
 
   it("renders Date values as ISO strings and degrades invalid Dates", () => {
