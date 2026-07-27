@@ -1,7 +1,8 @@
-# Internal Messaging Storyline
+# Product Storyline
 
-This page exists to turn the public messaging spine into a later internal deck
-without reinventing the narrative.
+This page records the narrative behind the public site so future presentations
+and contributor discussions can reuse it without reinventing the story. Like
+the rest of the repository, the reasoning is open for anyone to inspect.
 
 ## Ten-Slide Executive Story
 
