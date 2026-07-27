@@ -266,7 +266,9 @@ One deliberate exception: a descriptor whose `message` is a **string literal**
 Placeholders are written literally, the quoting rules above apply verbatim
 (`It''s {name}`, `L'{title}` quotes the brace), and nothing is auto-escaped.
 A descriptor whose `message` is a template literal is authored text like a
-tagged template and is auto-escaped.
+tagged template and is auto-escaped. The JSX `message` attribute —
+`<Trans message="Hello {name}" />` — is the same raw-ICU surface and is left
+unescaped as well, unlike `<Trans>` children, which are authored text.
 
 Two helpers back the host-adapter renderers and are public for custom
 adapters: `resolveChoice(node, value, locale?)` selects the branch of a parsed

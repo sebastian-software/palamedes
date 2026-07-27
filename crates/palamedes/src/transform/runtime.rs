@@ -1,4 +1,3 @@
-use ferrocat::compiled_key;
 use std::collections::BTreeSet;
 
 use oxc_ast::ast::{
@@ -11,6 +10,7 @@ use crate::descriptor::{
     descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
 };
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::compiled_message_key;
 
 use super::messages::{
     append_unique_bindings, build_icu_message, choice_expression_binding, escape_string,
@@ -30,7 +30,7 @@ pub(super) fn transform_tagged_template(
         return Ok(None);
     }
 
-    let lookup_key = compiled_key(&message, None);
+    let lookup_key = compiled_message_key(&message, None);
     Ok(Some((
         build_runtime_call(
             &lookup_key,
@@ -82,6 +82,9 @@ fn transform_descriptor_object(
         ));
     };
 
+    // Descriptor string literals are the raw-ICU authoring surface: the author
+    // owns the quoting, so the text is embedded verbatim. Only the lookup key
+    // is derived from its canonical form, to match the compiled catalog.
     let (message, implicit_values) = match message_expression.without_parentheses() {
         Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
         Expression::TemplateLiteral(template) => {
@@ -99,7 +102,7 @@ fn transform_descriptor_object(
     let context = descriptor_static_property(object, "context", macro_name, location)?;
     let comment = descriptor_static_property(object, "comment", macro_name, location)?;
 
-    let lookup_key = compiled_key(&message, context.as_deref());
+    let lookup_key = compiled_message_key(&message, context.as_deref());
     let values_text = descriptor_values_argument(
         call,
         source,
@@ -343,7 +346,7 @@ pub(super) fn transform_choice_call(
         &extracted_options.options,
         extracted_options.offset.as_deref(),
     );
-    let lookup_key = compiled_key(&message, None);
+    let lookup_key = compiled_message_key(&message, None);
     let mut values = vec![value_binding];
     append_unique_bindings(&mut values, extracted_options.values);
     Ok(Some((
@@ -381,7 +384,7 @@ pub(super) fn transform_trans_element(
     let Some(message) = message else {
         return Ok(None);
     };
-    let lookup_key = compiled_key(&message, context.as_deref());
+    let lookup_key = compiled_message_key(&message, context.as_deref());
 
     let mut attrs = vec![
         format!("id=\"{}\"", escape_string(&lookup_key)),
@@ -448,7 +451,7 @@ pub(super) fn transform_choice_jsx_element(
         &extracted_options.options,
         extracted_options.offset.as_deref(),
     );
-    let lookup_key = compiled_key(&message, context.as_deref());
+    let lookup_key = compiled_message_key(&message, context.as_deref());
     let mut values = vec![value_binding];
     append_unique_bindings(&mut values, extracted_options.values);
     Ok(Some((

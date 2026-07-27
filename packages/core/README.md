@@ -150,7 +150,9 @@ escape them on the way into the catalog, so `t` messages such as `Ada's file`
 and `don't panic` simply work. The one exception is a descriptor with a
 string-literal `message` — `t({ message: "Hello {name}" })` — which is the
 raw-ICU authoring surface: placeholders and ICU quoting are written literally
-and nothing is auto-escaped there.
+and nothing is auto-escaped there. The JSX `message` attribute
+(`<Trans message="Hello {name}" />`) is that same raw-ICU surface, while
+`<Trans>` children are authored text and are escaped.
 
 The rules matter when a translator edits a `.po` file by hand, when a catalog
 comes back from a TMS, or when a pattern is passed straight to

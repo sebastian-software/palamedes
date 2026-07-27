@@ -2,6 +2,7 @@ use super::{
     transform_macros as transform_macros_raw, NativeTransformOptions, NativeTransformResult,
 };
 use crate::error::PalamedesResult;
+use crate::icu_text::compiled_message_key;
 use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
 
@@ -108,7 +109,7 @@ fn transforms_tagged_templates() {
         .contains("import { getI18n } from \"@palamedes/runtime\";"));
     assert_eq!(
         result.compiled_ids,
-        vec![compiled_key("Hello {name}", None)]
+        vec![compiled_message_key("Hello {name}", None)]
     );
 
     let map = result
@@ -184,7 +185,10 @@ const message = t({
     assert!(!result.code.contains("t({"));
     assert_eq!(
         result.compiled_ids,
-        vec![compiled_key("Descriptor {name}", Some("probe context"))]
+        vec![compiled_message_key(
+            "Descriptor {name}",
+            Some("probe context")
+        )]
     );
 }
 
@@ -328,7 +332,7 @@ const richChoice = <Plural value={props.quantity()} one="# task" other="# tasks"
         .expect("zero-argument accessors should transform");
     let extracted_ids = extracted
         .iter()
-        .map(|message| compiled_key(&message.message, message.context.as_deref()))
+        .map(|message| compiled_message_key(&message.message, message.context.as_deref()))
         .collect::<Vec<_>>();
 
     assert_eq!(transformed.compiled_ids, extracted_ids);
@@ -368,7 +372,7 @@ const plain = t`don't`;
     // Byte-identical message text on both sides keeps the compiled ids aligned.
     let extracted_ids = extracted
         .iter()
-        .map(|message| compiled_key(&message.message, message.context.as_deref()))
+        .map(|message| compiled_message_key(&message.message, message.context.as_deref()))
         .collect::<Vec<_>>();
     assert_eq!(transformed.compiled_ids, extracted_ids);
     for message in &extracted {
@@ -406,11 +410,42 @@ const authored = t({ message: `l'${item}` });
         vec!["L'{title} est prêt", "It''s {name}", "l''{item}"]
     );
 
+    // The embedded runtime message stays byte-identical to the authored text.
+    for message in &extracted {
+        assert!(
+            transformed
+                .code
+                .contains(&format!("message: \"{}\"", message.message)),
+            "transform output should embed {:?} verbatim",
+            message.message
+        );
+    }
+
     let extracted_ids = extracted
         .iter()
-        .map(|message| compiled_key(&message.message, message.context.as_deref()))
+        .map(|message| compiled_message_key(&message.message, message.context.as_deref()))
         .collect::<Vec<_>>();
     assert_eq!(transformed.compiled_ids, extracted_ids);
+
+    // Raw and canonical spellings of the same message have to reach the same
+    // lookup key, because catalog compilation canonicalizes before it hashes.
+    assert_eq!(
+        transformed.compiled_ids[0],
+        compiled_key("L'{title} est prêt'", None),
+        "the raw descriptor key must be the canonical-form hash"
+    );
+    assert_ne!(
+        transformed.compiled_ids[0],
+        compiled_key("L'{title} est prêt", None),
+        "hashing the raw text is what made descriptor lookups unreachable"
+    );
+    // Already-escaped authored text is a canonicalization fixed point, so those
+    // ids are unchanged.
+    assert_eq!(
+        transformed.compiled_ids[1],
+        compiled_key("It''s {name}", None)
+    );
+    assert_eq!(transformed.compiled_ids[2], compiled_key("l''{item}", None));
 }
 
 #[test]
@@ -745,8 +780,11 @@ fn trans_jsx_macro_decodes_entities_before_deriving_message_id() {
         .contains("message={\"Green-e® applies to US & Canada only\"}"));
     assert!(result
         .code
-        .contains(&format!("id=\"{}\"", compiled_key(message, None))));
-    assert_eq!(result.compiled_ids, vec![compiled_key(message, None)]);
+        .contains(&format!("id=\"{}\"", compiled_message_key(message, None))));
+    assert_eq!(
+        result.compiled_ids,
+        vec![compiled_message_key(message, None)]
+    );
 }
 
 #[test]
@@ -762,7 +800,10 @@ fn trans_jsx_macro_decodes_message_attribute_entities() {
     assert!(result
         .code
         .contains("message={\"Decision \\\"Model\\\" & review\"}"));
-    assert_eq!(result.compiled_ids, vec![compiled_key(message, None)]);
+    assert_eq!(
+        result.compiled_ids,
+        vec![compiled_message_key(message, None)]
+    );
 }
 
 #[test]
@@ -781,8 +822,8 @@ fn trans_jsx_macro_keeps_expression_string_entities_raw() {
     assert_eq!(
         result.compiled_ids,
         vec![
-            compiled_key(child_message, None),
-            compiled_key(attr_message, None)
+            compiled_message_key(child_message, None),
+            compiled_message_key(attr_message, None)
         ]
     );
 }

@@ -3,6 +3,8 @@ use super::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
     CatalogConfig, PalamedesCatalogFormat,
 };
+use crate::icu_text::canonicalize_runtime_quoting;
+use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
 use std::collections::BTreeSet;
 use std::fs;
@@ -921,6 +923,131 @@ msgstr "Impossible d'ouvrir les regles"
         Some("Impossible d''ouvrir les regles")
     );
     assert!(result.diagnostics.is_empty());
+}
+
+/// Cross-locks the two id derivations that have to agree for a runtime lookup
+/// to resolve: the id the transform embeds in `getI18n()._("…")` and the key
+/// [`compile_catalog_artifact`] derives from the extracted `msgid`.
+///
+/// Catalog texts are canonicalized into strict ICU quoting when they are
+/// loaded, so the compiled key is always the hash of the canonicalized text.
+/// The raw-ICU authoring surfaces (descriptor string literals and the
+/// `<Trans message>` attribute) therefore only resolve when the transform
+/// hashes the canonicalized text as well, while already-escaped authored text
+/// has to keep the exact id it had before, because canonicalization is
+/// idempotent.
+#[test]
+fn transform_lookup_ids_match_compiled_catalog_keys() {
+    let source = r##"import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+
+const descriptor = t({ message: "Don't greet {name}" }, { name });
+const rich = <Trans message="Don't wave at {name}" />;
+const authored = t`L'${title} est prêt`;
+"##;
+    let scoped_source = scope_macro_test_source(source, "test.tsx");
+    let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
+        .expect("apostrophe messages should extract");
+    let transformed = crate::transform::transform_macros(&scoped_source, "test.tsx", None)
+        .expect("apostrophe messages should transform");
+
+    // Raw-ICU surfaces stay raw in the catalog, authored text stays escaped.
+    assert_eq!(
+        extracted
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "Don't greet {name}",
+            "Don't wave at {name}",
+            "L''{title} est prêt",
+        ]
+    );
+
+    let fixture = create_fixture_dir("catalog-artifact-transform-parity");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    let source_entries = extracted
+        .iter()
+        .map(|message| (message.message.as_str(), ""))
+        .collect::<Vec<_>>();
+    let translations = extracted
+        .iter()
+        .map(|message| format!("DE {}", message.message))
+        .collect::<Vec<_>>();
+    let target_entries = extracted
+        .iter()
+        .zip(&translations)
+        .map(|(message, translation)| (message.message.as_str(), translation.as_str()))
+        .collect::<Vec<_>>();
+    write_test_catalog(&locale_dir, "en", &source_entries);
+    write_test_catalog(&locale_dir, "de", &target_entries);
+
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+    };
+    let result = compile_catalog_artifact(&request).expect("catalog artifact");
+
+    assert_eq!(transformed.compiled_ids.len(), extracted.len());
+    let available = result.messages.keys().cloned().collect::<BTreeSet<_>>();
+    let unreachable = transformed
+        .compiled_ids
+        .iter()
+        .zip(&extracted)
+        .filter(|(id, _)| !available.contains(*id))
+        .map(|(id, message)| format!("{:?} -> {id}", message.message))
+        .collect::<Vec<_>>();
+    assert!(
+        unreachable.is_empty(),
+        "transform lookup ids missing from the compiled catalog {:?}: {unreachable:?}",
+        available
+    );
+
+    // Each translation is actually reachable, not just present as some key.
+    // The compiled value is the canonical form of the catalog text, which the
+    // runtime parser reads back as the translator wrote it.
+    for (id, translation) in transformed.compiled_ids.iter().zip(&translations) {
+        assert_eq!(
+            result.messages.get(id).map(String::as_str),
+            Some(canonicalize_runtime_quoting(translation).as_str())
+        );
+    }
+
+    // The raw-ICU surfaces resolve through the canonical form of their text ...
+    assert_eq!(
+        transformed.compiled_ids[0],
+        compiled_key("Don''t greet {name}", None)
+    );
+    assert_eq!(
+        transformed.compiled_ids[1],
+        compiled_key("Don''t wave at {name}", None)
+    );
+    // ... while the escaped authored path keeps the id it already had, because
+    // canonicalization is a fixed point there.
+    assert_eq!(
+        transformed.compiled_ids[2],
+        compiled_key("L''{title} est prêt", None)
+    );
+
+    // The embedded runtime message text is untouched: only the key is derived
+    // from the canonical form.
+    assert!(transformed
+        .code
+        .contains(r#"message: "Don't greet {name}""#));
+    assert!(transformed
+        .code
+        .contains(r#"message={"Don't wave at {name}"}"#));
 }
 
 fn create_fixture_dir(prefix: &str) -> PathBuf {

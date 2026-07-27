@@ -124,6 +124,32 @@ pub(crate) fn canonicalize_catalog_quoting(catalog: &mut ferrocat::ParsedCatalog
     }
 }
 
+/// Derives the compiled lookup id for a message text.
+///
+/// Catalog compilation canonicalizes every catalog text on load (see
+/// [`canonicalize_catalog_quoting`]) and only then hands the `msgid` to
+/// Ferrocat's key derivation, so a compiled artifact is always keyed by the
+/// hash of the *canonical* text. Every other derivation of the same id — the
+/// lookup key the transform embeds in `getI18n()._("…")`, the ids it reports as
+/// `compiled_ids`, extractor-side parity checks — has to go through this helper
+/// so it hashes the same string.
+///
+/// Without it the raw-ICU authoring surfaces (descriptor string literals and
+/// the `<Trans message>` attribute, where authors write ICU quoting themselves
+/// and neither extractor nor transform escapes anything) hash a text the
+/// compiled catalog never contains, and the runtime silently falls back to the
+/// source message.
+///
+/// Only the message text is canonicalized: `context` is a plain disambiguation
+/// string, not ICU, and catalog loading leaves it untouched as well.
+///
+/// Because [`canonicalize_runtime_quoting`] is a fixed point, already-escaped
+/// authored text (`don''t`) keeps exactly the id it had before, so ids for the
+/// escaping paths are unchanged.
+pub(crate) fn compiled_message_key(message: &str, context: Option<&str>) -> String {
+    ferrocat::compiled_key(&canonicalize_runtime_quoting(message), context)
+}
+
 fn canonicalize_in_place(value: &mut String) {
     if value.contains('\'') {
         *value = canonicalize_runtime_quoting(value);
@@ -220,7 +246,7 @@ fn split_argument_part(input: &str) -> Option<(&str, &str)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{canonicalize_runtime_quoting, escape_icu_literal};
+    use super::{canonicalize_runtime_quoting, compiled_message_key, escape_icu_literal};
 
     #[test]
     fn doubles_authored_apostrophes() {
@@ -267,6 +293,32 @@ mod tests {
         assert_eq!(
             canonicalize_runtime_quoting("{count, select, other {'#' items}}"),
             "{count, select, other {''#'' items}}"
+        );
+    }
+
+    #[test]
+    fn compiled_message_key_hashes_the_canonical_text() {
+        // The raw and the canonical spelling of the same message collapse onto
+        // one id, which is what makes a raw-ICU descriptor reachable in a
+        // compiled catalog.
+        assert_eq!(
+            compiled_message_key("Don't greet {name}", None),
+            ferrocat::compiled_key("Don''t greet {name}", None)
+        );
+
+        // Escaped authored text is a fixed point, so its id never moves.
+        for message in ["don''t", "L''{title} est prêt", "Hello {name}"] {
+            assert_eq!(
+                compiled_message_key(message, None),
+                ferrocat::compiled_key(message, None),
+                "message: {message}"
+            );
+        }
+
+        // Context is a plain disambiguation string and stays untouched.
+        assert_eq!(
+            compiled_message_key("Hello", Some("don't touch")),
+            ferrocat::compiled_key("Hello", Some("don't touch"))
         );
     }
 
