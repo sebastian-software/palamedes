@@ -28,7 +28,7 @@ export interface BenchCorpus {
 }
 
 export const BENCH_META = {
-  generated: "2026-07-22",
+  generated: "2026-07-27",
   node: "v24.18.0",
   platform: "darwin/arm64",
   runs: 7,
@@ -47,17 +47,17 @@ export const BENCH_SMALL: BenchCorpus = {
   title: "Small corpus — 80 files, 640 messages (median of 7 runs)",
   corpus: "80 files, 640 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 43.88, accent: true },
-    { tool: "Lingui", medianMs: 1143.37 },
-    { tool: "FormatJS", medianMs: 291.08 },
-    { tool: "i18next-parser", medianMs: 512.98 },
-    { tool: "i18next-cli", medianMs: 378.21 },
+    { tool: "Palamedes", medianMs: 35.98, accent: true },
+    { tool: "Lingui", medianMs: 658.17 },
+    { tool: "FormatJS", medianMs: 275.79 },
+    { tool: "i18next-parser", medianMs: 506.04 },
+    { tool: "i18next-cli", medianMs: 382.87 },
   ],
   ratios: {
-    lingui: "26.06×",
-    formatjs: "6.63×",
-    i18nextParser: "11.69×",
-    i18nextCli: "8.62×",
+    lingui: "18.29×",
+    formatjs: "7.66×",
+    i18nextParser: "14.06×",
+    i18nextCli: "10.64×",
   },
 }
 
@@ -66,17 +66,17 @@ export const BENCH_MEDIUM: BenchCorpus = {
   title: "Medium corpus — 240 files, 1920 messages (median of 7 runs)",
   corpus: "240 files, 1920 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 46.93, accent: true },
-    { tool: "Lingui", medianMs: 760.77 },
-    { tool: "FormatJS", medianMs: 299.82 },
-    { tool: "i18next-parser", medianMs: 569.17 },
-    { tool: "i18next-cli", medianMs: 584.74 },
+    { tool: "Palamedes", medianMs: 47.68, accent: true },
+    { tool: "Lingui", medianMs: 732.81 },
+    { tool: "FormatJS", medianMs: 293.86 },
+    { tool: "i18next-parser", medianMs: 565.67 },
+    { tool: "i18next-cli", medianMs: 568.56 },
   ],
   ratios: {
-    lingui: "16.21×",
-    formatjs: "6.39×",
-    i18nextParser: "12.13×",
-    i18nextCli: "12.46×",
+    lingui: "15.37×",
+    formatjs: "6.16×",
+    i18nextParser: "11.86×",
+    i18nextCli: "11.93×",
   },
 }
 
@@ -85,16 +85,16 @@ export const BENCH_REALISTIC: BenchCorpus = {
   title: "Realistic corpus — 1,500 files across ~400k lines, 6,000 messages (median of 7 runs)",
   corpus: "1,500 files (750 with i18n), ~400k lines, 6,000 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 179.87, accent: true },
-    { tool: "Lingui", medianMs: 2238.75 },
-    { tool: "FormatJS", medianMs: 474.62 },
-    { tool: "i18next-parser", medianMs: 1641.15 },
-    { tool: "i18next-cli", medianMs: 6612.71 },
+    { tool: "Palamedes", medianMs: 192.94, accent: true },
+    { tool: "Lingui", medianMs: 2342.49 },
+    { tool: "FormatJS", medianMs: 472.18 },
+    { tool: "i18next-parser", medianMs: 1540.72 },
+    { tool: "i18next-cli", medianMs: 5804.35 },
   ],
   ratios: {
-    lingui: "12.45×",
-    formatjs: "2.64×",
-    i18nextParser: "9.12×",
-    i18nextCli: "36.76×",
+    lingui: "12.14×",
+    formatjs: "2.45×",
+    i18nextParser: "7.99×",
+    i18nextCli: "30.08×",
   },
 }

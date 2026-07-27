@@ -95,7 +95,7 @@ const NO_BENCHMARK =
  */
 export const NATIVE_SHIFT = {
   title: "The toolchain already moved. i18n tooling mostly hasn't.",
-  body: "Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation, which is why the checked benchmark comes back between 2.64× and 36.76× faster depending on which tool you put next to it.",
+  body: "Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation, which is why the checked benchmark comes back between 2.45× and 30.08× faster depending on which tool you put next to it.",
 }
 
 export const RIVALS: Rival[] = [
@@ -224,7 +224,7 @@ function checkoutLabel(seats) {
     researched: "July 2026",
     metaTitle: "Palamedes vs i18next — stop maintaining a naming layer",
     metaDescription:
-      "i18next is the most widely deployed i18n stack in JavaScript, and it asks every developer to invent and maintain keys. Palamedes uses the sentence you already wrote — and extracts it up to 36.76× faster on the checked benchmark.",
+      "i18next is the most widely deployed i18n stack in JavaScript, and it asks every developer to invent and maintain keys. Palamedes uses the sentence you already wrote — and extracts it up to 30.08× faster on the checked benchmark.",
     eyebrow: "Compare · i18next",
     headline: "You already know what the string says.",
     lede: "i18next identifies messages by keys you invent, namespace, remember and keep in sync with a JSON tree. Palamedes identifies them by the source text you already typed. That single decision deletes a whole category of weekly work, changes what a missing translation looks like in production, and changes what lands in your translators' inbox.",

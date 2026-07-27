@@ -206,31 +206,35 @@ routine local checks.
 
 ## Local Baseline
 
-Checked local sample, captured on March 18, 2026 with:
+Checked local sample, captured on July 27, 2026 with:
 
 ```bash
-node ./scripts/benchmark-proof.mjs --warmup 1 --runs 3
+node ./scripts/benchmark-proof.mjs --warmup 3 --runs 7
 ```
 
 Environment:
 
-- Node `v24.14.0`
+- Node `v24.18.0`
 - macOS `darwin/arm64`
-- Palamedes core `0.1.0`
-- Ferrocat `0.8.0`
-- fixture corpus: 5 files / 7002 source bytes / 9 catalog messages
+- Palamedes core `1.7.0`
+- Ferrocat `2.2.0`
+- fixture corpus: 5 files / 1628 source bytes / 7 catalog messages
 
 Median results from that run:
 
-- transform: `0.97 ms`
-- extract: `0.89 ms`
-- catalog update: `0.64 ms`
-- catalog artifact compile: `4.04 ms`
+- transform: `0.51 ms`
+- extract: `0.33 ms`
+- catalog update: `0.45 ms`
+- catalog artifact compile: `5.17 ms`
 
-This sample is a historical reference point. Current Palamedes builds use
-Ferrocat `2.2.0`; rerun the command above when you need fresh numbers for the
-current release line. The benchmark script also prints the raw sample series and
-sampled peak RSS so the checked median and memory shape are easy to verify.
+Sampled peak RSS stayed between `53 MiB` and `56 MiB` across the four steps.
+
+These numbers are not comparable with the previously checked March 2026 sample:
+that one ran against a different fixture corpus (5 files / 7002 source bytes /
+9 catalog messages) on Palamedes core `0.1.0`. Treat each sample as a snapshot
+of its own corpus and release line, not as a trend line. The benchmark script
+prints the raw sample series and sampled peak RSS so the checked median and
+memory shape are easy to verify.
 
 ## End-To-End Workflow Baseline
 

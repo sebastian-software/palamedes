@@ -1,6 +1,6 @@
 # End-to-End Extraction Workflow Benchmark
 
-Generated: 2026-07-22T14:44:41.328Z
+Generated: 2026-07-27T09:48:40.633Z
 Node: v24.18.0
 Platform: darwin/arm64
 Seed: 20260703
@@ -10,21 +10,11 @@ Machine-local: yes
 
 ## Versions
 
-- Palamedes CLI: pmds (Palamedes) v1.3.0
-- Lingui CLI: 6.4.0
+- Palamedes CLI: pmds (Palamedes) v1.7.0
+- Lingui CLI: 6.5.0
 - FormatJS CLI: 6.16.14
 - i18next-parser CLI: 9.4.0
 - i18next-cli: 1.66.2
-
-> **Stale corpus provenance — regenerate before quoting these as reproducible.**
-> This report was recorded before the Palamedes corpus lane was corrected in
-> #445. It was generated with CLI v1.3.0, against a corpus that authored the
-> Palamedes lane with `defineMessage` — a macro 1.5.0 removed. The measured
-> inventory and the ratios are internally consistent and still match what
-> `site/app/data/bench.ts` quotes, so nothing published is wrong; but
-> re-running the harness today produces a slightly different Palamedes source
-> shape than the one measured here. A fresh run on the reference machine
-> (darwin/arm64, warmup 3, runs 7) replaces this note.
 
 ## Methodology
 
@@ -41,20 +31,20 @@ Machine-local: yes
 - Inventory mix: 48 changed, 64 new, 48 removed
 - Semantic validation: 640 active messages per catalog target and tool
 
-| Tool           |     Median | Samples                                                                           |
-| -------------- | ---------: | --------------------------------------------------------------------------------- |
-| Palamedes      |   43.88 ms | 39.98 ms, 40.15 ms, 43.82 ms, 43.88 ms, 45.08 ms, 47.80 ms, 50.33 ms              |
-| Lingui         | 1143.37 ms | 864.30 ms, 1098.27 ms, 1113.05 ms, 1143.37 ms, 1225.46 ms, 1254.53 ms, 1268.35 ms |
-| FormatJS       |  291.08 ms | 278.86 ms, 281.13 ms, 283.52 ms, 291.08 ms, 323.31 ms, 330.74 ms, 340.55 ms       |
-| i18next-parser |  512.98 ms | 502.51 ms, 505.54 ms, 512.70 ms, 512.98 ms, 513.50 ms, 522.16 ms, 537.70 ms       |
-| i18next-cli    |  378.21 ms | 376.86 ms, 377.03 ms, 377.58 ms, 378.21 ms, 378.31 ms, 381.74 ms, 382.74 ms       |
+| Tool | Median | Samples |
+| --- | ---: | --- |
+| Palamedes | 35.98 ms | 34.60 ms, 34.79 ms, 35.73 ms, 35.98 ms, 36.45 ms, 37.33 ms, 37.96 ms |
+| Lingui | 658.17 ms | 646.76 ms, 648.99 ms, 652.84 ms, 658.17 ms, 660.73 ms, 671.60 ms, 682.76 ms |
+| FormatJS | 275.79 ms | 264.56 ms, 267.45 ms, 273.65 ms, 275.79 ms, 278.56 ms, 299.34 ms, 324.20 ms |
+| i18next-parser | 506.04 ms | 495.94 ms, 501.15 ms, 504.33 ms, 506.04 ms, 506.60 ms, 511.36 ms, 522.90 ms |
+| i18next-cli | 382.87 ms | 376.08 ms, 380.10 ms, 380.57 ms, 382.87 ms, 388.44 ms, 390.98 ms, 391.44 ms |
 
-| Comparison                  | Faster    | Speedup |
-| --------------------------- | --------- | ------: |
-| Palamedes vs Lingui         | Palamedes |  26.06x |
-| Palamedes vs FormatJS       | Palamedes |   6.63x |
-| Palamedes vs i18next-parser | Palamedes |  11.69x |
-| Palamedes vs i18next-cli    | Palamedes |   8.62x |
+| Comparison | Faster | Speedup |
+| --- | --- | ---: |
+| Palamedes vs Lingui | Palamedes | 18.29x |
+| Palamedes vs FormatJS | Palamedes | 7.66x |
+| Palamedes vs i18next-parser | Palamedes | 14.06x |
+| Palamedes vs i18next-cli | Palamedes | 10.64x |
 
 ## Medium
 
@@ -62,20 +52,20 @@ Machine-local: yes
 - Inventory mix: 144 changed, 192 new, 144 removed
 - Semantic validation: 1920 active messages per catalog target and tool
 
-| Tool           |    Median | Samples                                                                     |
-| -------------- | --------: | --------------------------------------------------------------------------- |
-| Palamedes      |  46.93 ms | 42.26 ms, 43.58 ms, 44.31 ms, 46.93 ms, 48.39 ms, 56.75 ms, 57.60 ms        |
-| Lingui         | 760.77 ms | 748.78 ms, 752.51 ms, 758.58 ms, 760.77 ms, 765.75 ms, 770.89 ms, 772.07 ms |
-| FormatJS       | 299.82 ms | 298.12 ms, 298.66 ms, 299.58 ms, 299.82 ms, 303.18 ms, 303.84 ms, 312.11 ms |
-| i18next-parser | 569.17 ms | 566.73 ms, 566.73 ms, 568.88 ms, 569.17 ms, 570.75 ms, 575.36 ms, 687.84 ms |
-| i18next-cli    | 584.74 ms | 579.61 ms, 581.16 ms, 583.12 ms, 584.74 ms, 585.77 ms, 598.35 ms, 602.98 ms |
+| Tool | Median | Samples |
+| --- | ---: | --- |
+| Palamedes | 47.68 ms | 46.96 ms, 47.00 ms, 47.61 ms, 47.68 ms, 48.01 ms, 48.02 ms, 48.86 ms |
+| Lingui | 732.81 ms | 726.86 ms, 727.18 ms, 727.72 ms, 732.81 ms, 738.14 ms, 741.18 ms, 750.68 ms |
+| FormatJS | 293.86 ms | 290.91 ms, 291.85 ms, 293.18 ms, 293.86 ms, 294.13 ms, 296.86 ms, 303.92 ms |
+| i18next-parser | 565.67 ms | 554.56 ms, 558.14 ms, 560.73 ms, 565.67 ms, 568.95 ms, 568.98 ms, 581.87 ms |
+| i18next-cli | 568.56 ms | 561.39 ms, 562.11 ms, 563.43 ms, 568.56 ms, 581.75 ms, 593.30 ms, 654.56 ms |
 
-| Comparison                  | Faster    | Speedup |
-| --------------------------- | --------- | ------: |
-| Palamedes vs Lingui         | Palamedes |  16.21x |
-| Palamedes vs FormatJS       | Palamedes |   6.39x |
-| Palamedes vs i18next-parser | Palamedes |  12.13x |
-| Palamedes vs i18next-cli    | Palamedes |  12.46x |
+| Comparison | Faster | Speedup |
+| --- | --- | ---: |
+| Palamedes vs Lingui | Palamedes | 15.37x |
+| Palamedes vs FormatJS | Palamedes | 6.16x |
+| Palamedes vs i18next-parser | Palamedes | 11.86x |
+| Palamedes vs i18next-cli | Palamedes | 11.93x |
 
 ## Realistic
 
@@ -83,20 +73,20 @@ Machine-local: yes
 - Inventory mix: 450 changed, 600 new, 450 removed
 - Semantic validation: 6000 active messages per catalog target and tool
 
-| Tool           |     Median | Samples                                                                            |
-| -------------- | ---------: | ---------------------------------------------------------------------------------- |
-| Palamedes      |  179.87 ms | 176.73 ms, 177.83 ms, 179.73 ms, 179.87 ms, 181.29 ms, 185.30 ms, 192.29 ms        |
-| Lingui         | 2238.75 ms | 2164.59 ms, 2174.04 ms, 2218.36 ms, 2238.75 ms, 2272.05 ms, 2284.02 ms, 2304.35 ms |
-| FormatJS       |  474.62 ms | 465.18 ms, 470.41 ms, 472.90 ms, 474.62 ms, 476.29 ms, 476.48 ms, 489.97 ms        |
-| i18next-parser | 1641.15 ms | 1620.19 ms, 1629.23 ms, 1638.13 ms, 1641.15 ms, 1663.70 ms, 1673.02 ms, 2026.60 ms |
-| i18next-cli    | 6612.71 ms | 6520.21 ms, 6576.08 ms, 6596.76 ms, 6612.71 ms, 6615.31 ms, 6638.48 ms, 7558.43 ms |
+| Tool | Median | Samples |
+| --- | ---: | --- |
+| Palamedes | 192.94 ms | 188.89 ms, 188.97 ms, 191.08 ms, 192.94 ms, 193.07 ms, 194.87 ms, 208.09 ms |
+| Lingui | 2342.49 ms | 2263.75 ms, 2272.46 ms, 2279.21 ms, 2342.49 ms, 2359.24 ms, 2512.46 ms, 2522.21 ms |
+| FormatJS | 472.18 ms | 466.56 ms, 470.61 ms, 472.06 ms, 472.18 ms, 474.37 ms, 477.28 ms, 484.39 ms |
+| i18next-parser | 1540.72 ms | 1515.38 ms, 1531.99 ms, 1535.44 ms, 1540.72 ms, 1544.97 ms, 1569.04 ms, 1582.41 ms |
+| i18next-cli | 5804.35 ms | 5775.11 ms, 5782.31 ms, 5800.13 ms, 5804.35 ms, 5892.86 ms, 6127.09 ms, 6212.82 ms |
 
-| Comparison                  | Faster    | Speedup |
-| --------------------------- | --------- | ------: |
-| Palamedes vs Lingui         | Palamedes |  12.45x |
-| Palamedes vs FormatJS       | Palamedes |   2.64x |
-| Palamedes vs i18next-parser | Palamedes |   9.12x |
-| Palamedes vs i18next-cli    | Palamedes |  36.76x |
+| Comparison | Faster | Speedup |
+| --- | --- | ---: |
+| Palamedes vs Lingui | Palamedes | 12.14x |
+| Palamedes vs FormatJS | Palamedes | 2.45x |
+| Palamedes vs i18next-parser | Palamedes | 7.99x |
+| Palamedes vs i18next-cli | Palamedes | 30.08x |
 
 ## Notes
 

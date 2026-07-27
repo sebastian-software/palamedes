@@ -113,7 +113,7 @@ function createTsxFixture(fileIndex, relativePath, seed) {
   const text = createFixtureText(fileIndex, seed)
   const positionLabel = fileIndex % 2 === 0 ? "SelectOrdinal" : "Select"
   const imports = [
-    'import { defineMessage, msg, plural, select, selectOrdinal, t } from "@lingui/core/macro"',
+    'import { plural, select, selectOrdinal, t } from "@lingui/core/macro"',
     `import { Plural, ${positionLabel}, Trans } from "@lingui/react/macro"`,
   ]
   const entries = [
@@ -125,12 +125,12 @@ function createTsxFixture(fileIndex, relativePath, seed) {
     makeEntry(
       `Batch {taskCount} hit ${text.action} ${tokenFor(fileIndex, 2)}`,
       undefined,
-      `const message02 = msg\`Batch \${taskCount} hit ${text.action} ${tokenFor(fileIndex, 2)}\``
+      `const message02 = t\`Batch \${taskCount} hit ${text.action} ${tokenFor(fileIndex, 2)}\``
     ),
     makeEntry(
       `Open ${text.surface} ${tokenFor(fileIndex, 3)}`,
       undefined,
-      `const message03 = defineMessage({ message: "Open ${text.surface} ${tokenFor(fileIndex, 3)}" })`
+      `const message03 = t({ message: "Open ${text.surface} ${tokenFor(fileIndex, 3)}" })`
     ),
     makeEntry(
       `Save ${text.area} ${tokenFor(fileIndex, 4)}`,
@@ -228,12 +228,12 @@ function createTsFixture(fileIndex, relativePath, seed) {
     makeEntry(
       `Sync {taskCount} ${text.areaPlural} in ${text.surface} ${tokenFor(fileIndex, 2)}`,
       undefined,
-      `const message02 = msg\`Sync \${taskCount} ${text.areaPlural} in ${text.surface} ${tokenFor(fileIndex, 2)}\``
+      `const message02 = t\`Sync \${taskCount} ${text.areaPlural} in ${text.surface} ${tokenFor(fileIndex, 2)}\``
     ),
     makeEntry(
       `Archive ${text.area} ${tokenFor(fileIndex, 3)}`,
       undefined,
-      `const message03 = defineMessage({ message: "Archive ${text.area} ${tokenFor(fileIndex, 3)}" })`
+      `const message03 = t({ message: "Archive ${text.area} ${tokenFor(fileIndex, 3)}" })`
     ),
     makeEntry(
       `Confirm ${text.surface} ${tokenFor(fileIndex, 4)}`,
@@ -263,17 +263,17 @@ function createTsFixture(fileIndex, relativePath, seed) {
     makeEntry(
       `Open ${text.area} ${tokenFor(fileIndex, 9)}`,
       "sidebar",
-      `const message09 = defineMessage({ message: "Open ${text.area} ${tokenFor(fileIndex, 9)}", context: "sidebar" })`
+      `const message09 = t({ message: "Open ${text.area} ${tokenFor(fileIndex, 9)}", context: "sidebar" })`
     ),
     makeEntry(
       `Stage {taskCount} ${text.areaPlural} for ${text.action} ${tokenFor(fileIndex, 10)}`,
       undefined,
-      `const message10 = msg\`Stage \${taskCount} ${text.areaPlural} for ${text.action} ${tokenFor(fileIndex, 10)}\``
+      `const message10 = t\`Stage \${taskCount} ${text.areaPlural} for ${text.action} ${tokenFor(fileIndex, 10)}\``
     ),
   ]
 
   const source = [
-    'import { defineMessage, msg, plural, select, selectOrdinal, t } from "@lingui/core/macro"',
+    'import { plural, select, selectOrdinal, t } from "@lingui/core/macro"',
     "",
     `export function buildFixture${padNumber(fileIndex, 4)}() {`,
     `  const accountName = "account-${padNumber(fileIndex, 4)}"`,

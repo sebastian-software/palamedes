@@ -340,6 +340,27 @@ fn read_existing_catalog(
     }
 
     let mut po = ferrocat_parse_po(&original)?;
+
+    /*
+     * Most catalogs carry no translator comments or gettext flags at all. For
+     * those the strip/restore dance below preserves nothing, so skip it: hand
+     * ferrocat the original text and let it render normally. That saves one
+     * serialize here plus a full parse/serialize pair in restore_po_metadata —
+     * two PO round trips per catalog file, which is ~11 ms per `pmds extract`
+     * on a 6k-message en/de pair.
+     */
+    if po
+        .items
+        .iter()
+        .all(|item| item.comments.is_empty() && item.flags.is_empty())
+    {
+        return Ok(Some(ExistingCatalog {
+            update_input: original.clone(),
+            original,
+            po_metadata: None,
+        }));
+    }
+
     let metadata = po
         .items
         .iter_mut()
@@ -702,6 +723,123 @@ mod tests {
             std::fs::read_to_string(&path).expect("read repeated output"),
             output
         );
+    }
+
+    /*
+     * read_existing_catalog skips the strip/restore round trip when no item
+     * carries translator comments or flags. The predicate is all-or-nothing per
+     * file, so the case that would break is a catalog where only one item among
+     * many has metadata: a per-item early-out would drop it.
+     */
+    #[test]
+    fn preserves_metadata_when_only_one_item_of_many_carries_it() {
+        let path = temp_file("po-metadata-sparse");
+        std::fs::write(
+            &path,
+            concat!(
+                "msgid \"First\"\n",
+                "msgstr \"Erste\"\n",
+                "\n",
+                "# translator note\n",
+                "#, fuzzy\n",
+                "msgid \"Second\"\n",
+                "msgstr \"Zweite\"\n",
+                "\n",
+                "msgid \"Third\"\n",
+                "msgstr \"Dritte\"\n",
+            ),
+        )
+        .expect("write existing");
+
+        let message = |text: &str| CatalogUpdateMessage {
+            message: text.to_owned(),
+            context: None,
+            placeholders: BTreeMap::new(),
+            extracted_comments: Vec::new(),
+            origins: vec![CatalogUpdateOrigin {
+                file: "src/App.tsx".to_owned(),
+                line: 1,
+                scope: None,
+            }],
+        };
+
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            messages: vec![message("First"), message("Second"), message("Third")],
+        })
+        .expect("update");
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        let po = parse_po(&output).expect("parse output");
+        let second = po
+            .items
+            .iter()
+            .find(|item| item.msgid == "Second")
+            .expect("second item");
+        assert_eq!(second.comments.as_slice(), ["translator note"]);
+        assert_eq!(second.flags, BTreeMap::from([("fuzzy".to_owned(), true)]));
+
+        for msgid in ["First", "Third"] {
+            let item = po
+                .items
+                .iter()
+                .find(|item| item.msgid == msgid)
+                .expect("item");
+            assert!(item.comments.as_slice().is_empty());
+            assert!(item.flags.is_empty());
+        }
+    }
+
+    /*
+     * Guards the fast path itself: a catalog without any translator comments or
+     * flags skips the round trip, and must still get fresh source references
+     * and keep existing translations.
+     */
+    #[test]
+    fn refreshes_source_metadata_for_catalogs_without_preserved_metadata() {
+        let path = temp_file("po-no-metadata");
+        std::fs::write(
+            &path,
+            concat!(
+                "#: src/Old.tsx\n",
+                "msgid \"Hello\"\n",
+                "msgstr \"Hallo\"\n",
+            ),
+        )
+        .expect("write existing");
+
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            messages: vec![CatalogUpdateMessage {
+                message: "Hello".to_owned(),
+                context: None,
+                placeholders: BTreeMap::new(),
+                extracted_comments: Vec::new(),
+                origins: vec![CatalogUpdateOrigin {
+                    file: "src/New.tsx".to_owned(),
+                    line: 4,
+                    scope: None,
+                }],
+            }],
+        })
+        .expect("update");
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        let po = parse_po(&output).expect("parse output");
+        let item = &po.items[0];
+        assert_eq!(item.msgstr.first().map(String::as_str), Some("Hallo"));
+        assert_eq!(item.references.as_slice(), ["src/New.tsx"]);
+        assert!(item.comments.as_slice().is_empty());
     }
 
     #[test]
