@@ -94,7 +94,7 @@ easier to review, and easier to carry from one framework to the next.
 - Versioned screenshots generated from the same Playwright-based verifier used in CI
 - Reproducible benchmark commands for transform, extract, catalog update, compile steps, and end-to-end extract/update workflows
 - Structured catalog audit and metadata validation APIs backed by `ferrocat`
-- ADRs and architecture docs that explain the decisions behind the product
+- Decision records and architecture docs that explain the choices behind the product
 - Public headless frontend primitives in `@palamedes/react` and `@palamedes/solid` that the matrix uses directly
 
 ## Who Builds This
@@ -284,7 +284,7 @@ In the repository itself, start with:
 
 - [Proof, benchmarks, and current maturity](docs/proof-and-benchmarks.md)
 - [Example matrix and local/CI verification story](examples/README.md)
-- [Architecture decisions index](DECISIONS.md)
+- [Decision records index](DECISIONS.md)
 - [`llms.txt`](llms.txt) and [`llms-full.txt`](llms-full.txt) for AI coding assistants
 
 ## Advanced Packages

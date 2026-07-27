@@ -65,8 +65,8 @@ the package unit tests.
 ## Documentation
 
 User-facing behavior should be discoverable from the README, package READMEs,
-or `docs/`. Architecture decisions that constrain future work belong in
-`adr/`.
+or `docs/`. Durable product, architecture, communication, and operational
+decisions that constrain future work belong in `adr/`.
 
 When adding a feature, include:
 

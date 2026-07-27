@@ -72,7 +72,7 @@ const ROUTE_EXPECTATIONS = [
   { path: "/docs", h1: "Documentation" },
   { path: "/docs/cli", h1: "CLI Reference" },
   { path: "/docs/example-screenshots", h1: "Example Screenshots" },
-  { path: "/decisions", h1: "Architecture Decisions" },
+  { path: "/decisions", h1: "Decision Records" },
   {
     path: "/decisions/003-source-string-first-message-identity",
     h1: "ADR-003: Source-String-First Message Identity",

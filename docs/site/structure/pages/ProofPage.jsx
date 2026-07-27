@@ -2,7 +2,7 @@
  * Route: /proof
  * Job: the evidence page. For the visitor who liked the promise but wants
  * receipts: benchmarks with methodology, the CI verification story, and the
- * architectural decision trail. Tone: disciplined, zero hype.
+ * project decision trail. Tone: disciplined, zero hype.
  */
 
 export function ProofPage() {
@@ -117,7 +117,7 @@ export function ProofPage() {
 
       {/* --------------------------------------------------- decision trail */}
       <Section id="adrs">
-        <h2>16 decisions, written down before you depend on them.</h2>
+        <h2>19 decisions, written down before you depend on them.</h2>
         <p>
           The ADRs cover message identity, the native boundary, adapter architecture — and, just as
           deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if

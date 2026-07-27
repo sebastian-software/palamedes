@@ -18,7 +18,7 @@ export const handle = { layout: "bare" }
 export function meta() {
   return pageMeta({
     title: "Palamedes — benchmarks, verification, and the decision trail",
-    description: `Claims you can re-run: checked-in extraction benchmarks, an executable ICU semantics proof, ${contentStats.exampleCount} browser-verified example apps, and ${contentStats.adrCount} architecture decision records.`,
+    description: `Claims you can re-run: checked-in extraction benchmarks, an executable ICU semantics proof, ${contentStats.exampleCount} browser-verified example apps, and ${contentStats.adrCount} decision records.`,
     path: "/proof",
   })
 }

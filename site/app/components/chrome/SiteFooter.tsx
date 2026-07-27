@@ -37,7 +37,7 @@ const COLUMNS: { title: string; links: FootLink[] }[] = [
   {
     title: "Project",
     links: [
-      { label: "Architecture decisions", href: decisionHref() },
+      { label: "Decision records", href: decisionHref() },
       { label: "Stability & versioning", href: docsHref("stability") },
       { label: "Changelog", href: repoHref("CHANGELOG.md") },
       { label: "Security", href: repoHref("SECURITY.md") },
