@@ -104,11 +104,40 @@ message semantics.
 - **General Translation** performs network/AI translation in its CLI workflow,
   which is not comparable to these deterministic local extraction commands.
 
+## Cold And Warm
+
+The report has two lanes per profile, and they answer different questions.
+
+**Cold** clears every tool cache along with the catalogs before each run. It is
+the like-for-like comparison — the same work for every tool — and it is the only
+lane that feeds the speedup table, `site/app/data/bench.ts`, and the figures
+quoted on the website.
+
+**Warm** keeps tool caches, resets the catalogs, and touches a few source files
+to model an edit before each run. It answers "what does the next run cost?",
+which is what a developer actually experiences. It is not a like-for-like
+comparison: Palamedes reuses its extraction cache
+([ADR-019](../adr/019-extraction-cache.md)), while the other tools have no
+comparable local cache and re-extract in full, so their warm and cold numbers
+are the same by design. Those numbers are deliberately kept out of every
+speedup ratio.
+
+The cold reset is a correctness requirement, not a detail. The corpus is
+generated once per profile and never changes, so a cache surviving between runs
+would be hit by every run after the first and the cold medians would silently
+become warm ones.
+
 ## Latest Checked Run
+
+> **Recorded on an unreleased build.** The version line below reports `1.7.0`
+> because that is the released CLI version string, but the measured binary also
+> contains the bounded parallel extraction of ADR-013 and the extraction cache
+> of ADR-019, neither of which has shipped. Re-record after the next release so
+> the provenance line and the binary agree.
 
 Latest checked full run:
 
-- timestamp: `2026-07-27T09:48:40.633Z`
+- timestamp: `2026-07-27T14:55:31.521Z`
 - Node: `v24.18.0`
 - platform: `darwin/arm64`
 - warmup: `3`
@@ -132,14 +161,14 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `35.98 ms` |
-| Lingui         | `658.17 ms` |
-| FormatJS       | `275.79 ms` |
-| i18next-parser | `506.04 ms` |
-| i18next-cli    | `382.87 ms` |
+| Palamedes      |  `32.69 ms` |
+| Lingui         | `668.88 ms` |
+| FormatJS       | `272.57 ms` |
+| i18next-parser | `516.72 ms` |
+| i18next-cli    | `392.97 ms` |
 
-On this run, Palamedes measured `18.29x` faster than Lingui, `7.66x` faster
-than FormatJS, `14.06x` faster than i18next-parser, and `10.64x` faster than
+On this run, Palamedes measured `20.46x` faster than Lingui, `8.34x` faster
+than FormatJS, `15.81x` faster than i18next-parser, and `12.02x` faster than
 i18next-cli.
 
 ### Medium
@@ -155,14 +184,14 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `47.68 ms` |
-| Lingui         | `732.81 ms` |
-| FormatJS       | `293.86 ms` |
-| i18next-parser | `565.67 ms` |
-| i18next-cli    | `568.56 ms` |
+| Palamedes      |  `47.74 ms` |
+| Lingui         | `736.15 ms` |
+| FormatJS       | `298.06 ms` |
+| i18next-parser | `571.65 ms` |
+| i18next-cli    | `572.93 ms` |
 
-On this run, Palamedes measured `15.37x` faster than Lingui, `6.16x` faster
-than FormatJS, `11.86x` faster than i18next-parser, and `11.93x` faster than
+On this run, Palamedes measured `15.42x` faster than Lingui, `6.24x` faster
+than FormatJS, `11.97x` faster than i18next-parser, and `12.00x` faster than
 i18next-cli.
 
 ### Realistic
@@ -181,14 +210,14 @@ Median results:
 
 | Tool           |       Median |
 | -------------- | -----------: |
-| Palamedes      |  `192.94 ms` |
-| Lingui         | `2342.49 ms` |
-| FormatJS       |  `472.18 ms` |
-| i18next-parser | `1540.72 ms` |
-| i18next-cli    | `5804.35 ms` |
+| Palamedes      |  `125.88 ms` |
+| Lingui         | `2279.13 ms` |
+| FormatJS       |  `464.63 ms` |
+| i18next-parser | `1578.61 ms` |
+| i18next-cli    | `5668.44 ms` |
 
-On this run, Palamedes measured `12.14x` faster than Lingui, `2.45x` faster
-than FormatJS, `7.99x` faster than i18next-parser, and `30.08x` faster than
+On this run, Palamedes measured `18.11x` faster than Lingui, `3.69x` faster
+than FormatJS, `12.54x` faster than i18next-parser, and `45.03x` faster than
 i18next-cli.
 
 ## Reading The Numbers

@@ -11,6 +11,7 @@ use crate::descriptor::{
     descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
 };
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::extract_cache::ExtractCache;
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
@@ -28,7 +29,7 @@ use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType};
 use rayon::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
     "@palamedes/core/macro",
@@ -50,7 +51,7 @@ struct ImportedMacro {
 }
 
 /// Extracted source-first message record emitted by the JS/TS extractor.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExtractedMessageRecord {
     /// Extracted source message.
     pub message: String,
@@ -1415,6 +1416,24 @@ pub fn extract_catalog_messages_from_files_with_options(
     request: ExtractCatalogMessagesRequest,
     options: ExtractCatalogMessagesOptions,
 ) -> PalamedesResult<ExtractCatalogMessagesResult> {
+    extract_catalog_messages_cached(request, options, &mut ExtractCache::disabled())
+}
+
+/// Extracts catalog messages, reusing and updating `cache`.
+///
+/// Unchanged files skip both the read and the parse. Hold the same
+/// [`ExtractCache`] across calls — watch mode does — so later runs never touch
+/// disk for files nobody edited.
+///
+/// # Errors
+///
+/// Same as [`extract_catalog_messages_from_files`]. Cache problems are never
+/// errors: they degrade to a normal extraction.
+pub fn extract_catalog_messages_cached(
+    request: ExtractCatalogMessagesRequest,
+    options: ExtractCatalogMessagesOptions,
+    cache: &mut ExtractCache,
+) -> PalamedesResult<ExtractCatalogMessagesResult> {
     let root_dir = PathBuf::from(&request.root_dir);
     let mut catalog = BTreeMap::<String, AggregatedCatalogEntry>::new();
     let mut failed_files = Vec::new();
@@ -1439,7 +1458,7 @@ pub fn extract_catalog_messages_from_files_with_options(
         request
             .files
             .iter()
-            .map(|file| extract_one_file(file, &root_dir, reference_scopes))
+            .map(|file| extract_one_file(file, &root_dir, reference_scopes, cache))
             .collect()
     } else {
         rayon::ThreadPoolBuilder::new()
@@ -1452,7 +1471,7 @@ pub fn extract_catalog_messages_from_files_with_options(
                 request
                     .files
                     .par_iter()
-                    .map(|file| extract_one_file(file, &root_dir, reference_scopes))
+                    .map(|file| extract_one_file(file, &root_dir, reference_scopes, cache))
                     .collect()
             })
     };
@@ -1472,9 +1491,22 @@ pub fn extract_catalog_messages_from_files_with_options(
         }
     }
 
+    /*
+     * Only files that were actually extracted this run are written back. Cache
+     * hits are already stored, and failures must not be, so a file that stops
+     * parsing is retried on the next run instead of being remembered as broken.
+     */
     for outcome in outcomes {
         match outcome {
-            FileExtraction::Extracted(relative_file, messages) => {
+            FileExtraction::Extracted {
+                path,
+                relative_file,
+                messages,
+                fresh,
+            } => {
+                if fresh {
+                    cache.insert(path, relative_file.clone(), &messages);
+                }
                 for message in messages {
                     add_extracted_message(&mut catalog, message, &relative_file);
                 }
@@ -1484,6 +1516,9 @@ pub fn extract_catalog_messages_from_files_with_options(
             FileExtraction::Fatal(error) => return Err(error),
         }
     }
+
+    // Keep a long-lived watch-mode cache from accumulating deleted files.
+    cache.retain_paths(&request.files.iter().map(String::as_str).collect());
 
     Ok(ExtractCatalogMessagesResult {
         messages: catalog
@@ -1502,7 +1537,24 @@ thread_local! {
 }
 
 /// Reads and extracts one file, classifying the outcome for ordered merging.
-fn extract_one_file(file: &String, root_dir: &Path, reference_scopes: bool) -> FileExtraction {
+///
+/// A cache hit skips both the read and the parse; validating the entry costs
+/// one `stat`.
+fn extract_one_file(
+    file: &String,
+    root_dir: &Path,
+    reference_scopes: bool,
+    cache: &ExtractCache,
+) -> FileExtraction {
+    if let Some((relative_file, messages)) = cache.get(file) {
+        return FileExtraction::Extracted {
+            path: file.clone(),
+            relative_file,
+            messages,
+            fresh: false,
+        };
+    }
+
     let source = match std::fs::read_to_string(file) {
         Ok(source) => source,
         Err(source) => {
@@ -1529,7 +1581,12 @@ fn extract_one_file(file: &String, root_dir: &Path, reference_scopes: bool) -> F
     });
 
     match extracted {
-        Ok(messages) => FileExtraction::Extracted(relative_origin_file(root_dir, file), messages),
+        Ok(messages) => FileExtraction::Extracted {
+            path: file.clone(),
+            relative_file: relative_origin_file(root_dir, file),
+            messages,
+            fresh: true,
+        },
         Err(
             error @ (PalamedesError::ExplicitMessageIdsUnsupported
             | PalamedesError::NestedMessageMacro { .. }
@@ -1569,7 +1626,14 @@ fn resolve_extract_threads(requested: Option<usize>, file_count: usize) -> usize
 
 /// Per-file result of the parallel extraction pass, merged in input order.
 enum FileExtraction {
-    Extracted(String, Vec<ExtractedMessageRecord>),
+    Extracted {
+        /// Source path, used as the cache key.
+        path: String,
+        relative_file: String,
+        messages: Vec<ExtractedMessageRecord>,
+        /// False when the result came from the cache and need not be stored again.
+        fresh: bool,
+    },
     Failed(ExtractCatalogFileFailure),
     Fatal(PalamedesError),
 }

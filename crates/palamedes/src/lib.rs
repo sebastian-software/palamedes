@@ -27,6 +27,7 @@ mod descriptor;
 mod diagnostic;
 mod error;
 mod extract;
+mod extract_cache;
 mod jsx_entities;
 mod jsx_message;
 mod message_metadata;
@@ -62,10 +63,12 @@ pub use catalog_update::{
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
 pub use extract::{
-    extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
-    extract_messages, ExtractCatalogFileFailure, ExtractCatalogMessagesOptions,
-    ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult, ExtractedMessageRecord,
+    extract_catalog_messages_cached, extract_catalog_messages_from_files,
+    extract_catalog_messages_from_files_with_options, extract_messages,
+    ExtractCatalogFileFailure, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
+    ExtractCatalogMessagesResult, ExtractedMessageRecord,
 };
+pub use extract_cache::{default_cache_path, ExtractCache};
 pub use message_metadata::{
     derive_message_metadata, normalize_message_metadata, validate_message_metadata,
     MessageArgumentFormatMetadata, MessageArgumentKind, MessageArgumentMetadata,

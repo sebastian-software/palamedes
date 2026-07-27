@@ -1,9 +1,12 @@
 /*
  * Guards site/app/data/bench.ts against silent drift from the checked-in
- * benchmark report. Parses the Small/Medium median tables and the speedup
- * tables in benchmarks/e2e-workflow/results/latest.md and fails the site
- * build when the hardcoded constants no longer match, so updating the
- * report forces a conscious copy edit on the site.
+ * benchmark report. Parses the cold median tables and the speedup tables in
+ * benchmarks/e2e-workflow/results/latest.md and fails the site build when the
+ * hardcoded constants no longer match, so updating the report forces a
+ * conscious copy edit on the site.
+ *
+ * The site quotes cold numbers only. Warm numbers describe a capability the
+ * compared tools do not have and must never reach the speedup ratios.
  */
 
 import { readFileSync } from "node:fs"
@@ -30,7 +33,20 @@ function parseSection(name) {
   if (!section) {
     fail(`could not find section "## ${name}" in ${reportPath}`)
   }
-  const body = section.split(/^## /m)[0]
+  /*
+   * Only the cold lane feeds the site. The warm table repeats the same row
+   * shape, so without this the last match would win and bench.ts would be
+   * validated against warm medians — silently publishing cache-hit numbers as
+   * the cross-tool comparison. See ADR-019.
+   */
+  const profileBody = section.split(/^## /m)[0]
+  const coldStart = profileBody.indexOf("### Cold")
+  if (coldStart === -1) {
+    fail(`could not find a "### Cold" table in section "${name}" of ${reportPath}`)
+  }
+  const afterCold = profileBody.slice(coldStart + "### Cold".length)
+  const warmStart = afterCold.indexOf("### Warm")
+  const body = warmStart === -1 ? afterCold : afterCold.slice(0, warmStart)
   const medians = {}
   for (const match of body.matchAll(
     /^\|\s+(Palamedes|Lingui|FormatJS|i18next-parser|i18next-cli)\s+\|\s+([\d.]+) ms\s+\|/gm

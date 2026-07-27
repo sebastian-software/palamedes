@@ -115,6 +115,7 @@ export default [
   route("decisions/016-native-cli-and-yaml-first-configuration", "routes/decisions/016-native-cli-and-yaml-first-configuration.md"),
   route("decisions/017-cli-plugin-execution-boundary", "routes/decisions/017-cli-plugin-execution-boundary.md"),
   route("decisions/018-binary-plugin-protocol", "routes/decisions/018-binary-plugin-protocol.md"),
+  route("decisions/019-extraction-cache", "routes/decisions/019-extraction-cache.md"),
   route("docs/approach-comparison", "routes/docs/approach-comparison.md"),
   route("docs/backend-servers", "routes/docs/backend-servers.md"),
   route("docs/benchmark-e2e-workflow", "routes/docs/benchmark-e2e-workflow.md"),

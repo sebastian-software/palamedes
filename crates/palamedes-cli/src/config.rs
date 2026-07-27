@@ -56,6 +56,8 @@ pub struct LoadedConfig {
     /// Worker threads for the parallel extraction pass; `None` uses the
     /// measured default in the core.
     pub extract_threads: Option<usize>,
+    /// Whether extraction may reuse the on-disk cache.
+    pub extract_cache: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -92,7 +94,13 @@ struct RawConfig {
     extract_threads: Option<usize>,
     #[serde(default = "default_reference_scopes", alias = "reference_scopes")]
     reference_scopes: bool,
+    #[serde(default = "default_true", alias = "extract_cache")]
+    extract_cache: bool,
     catalogs: Vec<ConfigCatalog>,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 pub fn load_config(cwd: &Path, explicit_path: Option<&Path>) -> Result<LoadedConfig, ConfigError> {
@@ -271,6 +279,7 @@ fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig
         pseudo_locale: raw.pseudo_locale,
         catalogs: raw.catalogs,
         extract_threads: raw.extract_threads,
+        extract_cache: raw.extract_cache,
     })
 }
 
