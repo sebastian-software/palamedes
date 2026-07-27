@@ -1,7 +1,7 @@
 {
   "name": "palamedes",
   "private": true,
-  "description": "Rust-powered i18n tooling for JavaScript and TypeScript with a cleaner Lingui-style architecture",
+  "description": "Rust-powered i18n tooling for TypeScript with one coherent source-to-runtime architecture",
   "homepage": "https://palamedes.dev",
   "repository": {
     "type": "git",

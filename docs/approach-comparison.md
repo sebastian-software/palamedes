@@ -1,6 +1,6 @@
 # Comparing Modern i18n Approaches
 
-Not every modern JavaScript i18n library should be compared in the same way.
+Not every modern TypeScript i18n library should be compared in the same way.
 
 Some tools share the same authoring model and the same build-time work.
 Others solve more of the translation workflow, stay closer to runtime
@@ -26,9 +26,9 @@ they overlap on the same core layers:
 - a separate step that turns catalogs into runtime-ready data
 
 That does not mean the two systems are identical. Lingui carries a broader
-historical surface and more legacy accommodation. Palamedes is narrower on
-purpose. But they are still close enough that a direct benchmark says
-something real.
+historical surface and more legacy accommodation. Palamedes chooses one
+supported path for each core concern. But they are still close enough that a
+direct benchmark says something real.
 
 That is why this repo keeps a machine-local benchmark harness against Lingui v6
 and does not pretend that every other i18n tool belongs in the same
@@ -36,8 +36,8 @@ timing chart.
 
 ## Palamedes
 
-Palamedes is built around a simple claim: the more important translation work
-becomes, the less it should be scattered across unrelated layers.
+Palamedes is built around an opinionated claim: the more important translation
+work becomes, the less it should be scattered across unrelated layers.
 
 In practice, that means most of the semantic heavy lifting lives in a native
 Rust core. Macro rewrite, extraction, and catalog artifact work are centered
@@ -45,9 +45,9 @@ there, while host adapters stay deliberately thin. Publicly, Palamedes also
 stays opinionated on identity: `message + context` is the model, not a pile of
 manually maintained IDs.
 
-That gives Palamedes a narrower product shape than some alternatives, but it
-also makes the system easier to reason about. There is less ambiguity about
-which layer owns which decision.
+That gives Palamedes a broad toolchain with clear ownership rather than several
+overlapping ways to solve the same concern. There is less ambiguity about which
+layer owns which decision.
 
 That is also why the framework matrix matters. Palamedes is unusual not because
 it has more than one adapter, but because the same runtime and identity model
@@ -78,7 +78,7 @@ belong in the benchmark results directory before they are summarized here.
 
 The practical difference is less "Lingui is old, Palamedes is new" and more
 this: Lingui has broader compatibility pressure, while Palamedes is willing to
-be narrower so the core can stay cleaner.
+retire overlapping paths so the core can stay coherent.
 
 ## next-intl
 
@@ -150,10 +150,11 @@ conveniences layered in, `next-intl` is a better mental model.
 If a team wants i18n runtime behavior plus a broader translation-generation
 workflow, GT is solving a bigger and more service-oriented problem.
 
-Palamedes sits in a more specific place than all three:
+Palamedes combines broad local workflow coverage with a specific, opinionated
+model:
 
 it is for teams that like compile-time authoring, want source-string-first
-catalogs, and prefer a narrower system that stays easier to trust.
+catalogs, and prefer one clear path from source to runtime.
 
 Its first-party adapters keep supported host integrations from redefining that
 local model as the application evolves.
@@ -164,10 +165,10 @@ ICU support is not a useful yes/no checkbox by itself. A library may use ICU
 natively or through a plugin; a translation platform may edit the raw message,
 split it into forms, convert it into another model, or only validate it.
 
-Palamedes therefore makes a narrower claim about the stages it owns: nested ICU
+Palamedes therefore makes a bounded claim about the stages it owns: nested ICU
 selectors remain intact from source through extraction, macro transformation,
-PO catalog update, catalog compilation, and runtime rendering. That claim has a
-checked fixture and command instead of relying on a vendor comparison:
+PO catalog update, catalog compilation, and runtime rendering. That claim has
+a checked fixture and command instead of relying on a vendor comparison:
 
 ```bash
 pnpm proof:icu

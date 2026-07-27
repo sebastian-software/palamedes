@@ -13,11 +13,11 @@ export function ComparisonPage() {
 
       <Hero
         eyebrow="Comparison"
-        headline="Narrower than the alternatives. On purpose."
+        headline="Broad coverage. One opinionated model."
         subline="Palamedes is for teams that like compile-time authoring and
-          want the stack under it to feel smaller, steadier, and easier to
-          trust. Here is how that compares — including when you should pick
-          something else."
+          want the stack under it to stay coherent, steady, and easier to
+          trust across the full local workflow. Here is how that compares —
+          including when you should pick something else."
         primary={{ label: "Compare with Lingui", href: "#lingui" }}
         secondary={{ label: "See the proof", href: "/proof" }}
       />

@@ -7,8 +7,8 @@ cleaner, faster, and easier to trust.
 
 ## Core Positioning Line
 
-**Palamedes is i18n tooling for JavaScript teams that want a familiar authoring
-flow and a calmer system underneath.**
+**Palamedes is i18n tooling for TypeScript teams that want a familiar authoring
+flow, broad workflow coverage, and one clear system underneath.**
 
 ## First 5 Assets
 
@@ -21,7 +21,7 @@ flow and a calmer system underneath.**
 ### 2. Case study
 
 - **Title**: What we delegated to Ferrocat and why
-- **Goal**: show that Palamedes got smaller and cleaner by giving catalog semantics a clear owner
+- **Goal**: show how Palamedes gained deeper catalog capabilities by giving catalog semantics a clear owner
 - **Key message**: delegation beat bespoke glue for correctness, maintainability, and trust
 
 ### 3. Benchmark post
@@ -34,7 +34,7 @@ flow and a calmer system underneath.**
 
 - **Title**: From Lingui to Palamedes without changing how authoring feels
 - **Goal**: reduce migration fear
-- **Key message**: the visible macro model stays familiar while the tooling stack gets much cleaner
+- **Key message**: the visible macro model stays familiar while the tooling stack gets more coherent
 
 ### 5. Principles page
 

@@ -194,8 +194,8 @@ React-based and Remix's UI adapter is not implemented. They prove the same
 server-side locale strategies, checked-in `.po` catalogs, and request-local i18n
 through Remix's default Node loader path.
 
-The matrix does not only prove core/runtime behavior. It also proves small
-public frontend primitives from the UI packages themselves:
+The matrix does not only prove core/runtime behavior. It also proves public
+frontend primitives from the first-party UI packages:
 
 - `useClientLocale()` in `@palamedes/react/client`
 - `createClientLocaleEffect()` in `@palamedes/solid/client`

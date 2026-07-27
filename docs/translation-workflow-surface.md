@@ -13,8 +13,8 @@ rebuild repo-local catalog semantics, QA primitives, and metadata handling in
 parallel stacks.
 
 The goal is not to make Palamedes itself a hosted translation product.
-Palamedes remains the open-source local foundation; an optional managed product
-can build on that foundation without replacing it.
+Palamedes remains the full open-source local toolchain; an optional managed
+product can build on that toolchain without replacing it.
 
 ## What belongs in Palamedes
 
@@ -101,8 +101,9 @@ Those concerns are product-layer responsibilities.
 
 The target split is:
 
-- **Palamedes**: open-source local foundation for authoring, extraction,
-  catalogs, QA, and runtime integration
+- **Palamedes**: full open-source local toolchain for authoring,
+  transformation, extraction, catalogs, QA, semantic merging, compilation, and
+  runtime integration
 - **Palamedes+**: optional managed layer for translation automation and
   collaboration
 

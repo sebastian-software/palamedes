@@ -210,7 +210,7 @@ function checkoutLabel(seats) {
       "You are on React or Solid and expect to change meta-framework at some point.",
     ],
     honest:
-      "Lingui got here first and has the production mileage to show for it. Ours is the newer project, with a smaller ecosystem and fewer UI frameworks — and that is the deliberate shape of it, not a gap we are hurrying to close. What we put on the table instead is a narrower model, a native engine, and every tradeoff written down in the ADRs before you depend on any of it.",
+      "Lingui got here first and has the production mileage to show for it. Ours is the newer project, with a younger ecosystem and fewer UI packages. What we put on the table is broad, verified host coverage around one opinionated model, a native engine, and every tradeoff written down in the ADRs before you depend on any of it.",
     migration: {
       body: "Source-string-first .po catalogs usually survive a migration after one extraction pass. Explicit-ID-heavy projects need a cleanup pass first — the playbook covers both routes, including the runtime wiring and the macro scope rules that differ.",
       label: "Migration playbook",
@@ -345,7 +345,7 @@ plural(seats, {
       "next-intl is the most Next.js-idiomatic i18n library there is, routing included. Palamedes trades that depth for one runtime and message model across supported hosts — and ships source-string extraction as the stable path, not an experiment.",
     eyebrow: "Compare · next-intl",
     headline: `One framework deep, or ${contentStats.frameworkCount} frameworks wide.`,
-    lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes owns less on purpose: your framework keeps routing, and the translation model stays identical when the framework underneath it changes.",
+    lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes draws the boundary differently: your framework keeps routing, while Palamedes carries the same authoring, catalog, validation, and runtime model across supported hosts.",
     card: "Next-native depth including routing, against one shared model across supported hosts.",
     facts: [
       { label: "Adoption", value: "~4.0M downloads/week" },
@@ -415,7 +415,7 @@ plural(seats, {
       {
         criterion: "Maintenance",
         rival: "Single maintainer, very large adoption",
-        palamedes: "Company-maintained, small and new",
+        palamedes: "Company-maintained, newer ecosystem",
       },
     ],
     code: {
@@ -446,7 +446,7 @@ function buyLabel(seats) {
       "You want compile-time source-string extraction on a stable API rather than behind an unstable_ prefix.",
     ],
     honest:
-      "If Next.js is your only target and you want routing to come from your i18n library, next-intl is the better fit and this page will not pretend otherwise. We cover less of that surface deliberately — and our own Next.js support requires Next 16, where next-intl reaches further back. That is the cost of a small, current support matrix, and we would rather charge it than carry compatibility code for versions we cannot verify.",
+      "If Next.js is your only target and you want routing to come from your i18n library, next-intl is the better fit and this page will not pretend otherwise. Palamedes leaves routing to the framework, and our own Next.js support requires Next 16, where next-intl reaches further back. That is the cost of a current, verified support matrix, and we would rather charge it than carry compatibility code for versions we cannot verify.",
   },
   {
     slug: "react-intl",
@@ -564,7 +564,7 @@ function buyLabel(seats) {
     researched: "July 2026",
     metaTitle: "Palamedes vs Paraglide — smaller bundles, bigger constraints",
     metaDescription:
-      "Paraglide compiles messages into tree-shakable functions with no runtime library, and wins on bundle size. Palamedes keeps a small runtime and gets in-place locale switching, .po catalogs and source-string identity for it.",
+      "Paraglide compiles messages into tree-shakable functions with no runtime library, and wins on bundle size. Palamedes keeps a runtime layer and gets in-place locale switching, .po catalogs and source-string identity for it.",
     eyebrow: "Compare · Paraglide",
     headline: "Smaller bundles. Bigger constraints.",
     lede: "Paraglide compiles each message into its own tree-shakable function and ships no i18n runtime at all. The bundle-size win is real and we will not argue with it. What we will argue with is the price: a full page reload every time a user changes language, a catalog format only its own ecosystem speaks, and a key namespace you still have to design.",
@@ -607,7 +607,7 @@ function buyLabel(seats) {
       {
         criterion: "Client runtime",
         rival: "None — compiled message functions",
-        palamedes: "Small runtime for lookup and activation",
+        palamedes: "Runtime lookup and in-place activation",
       },
       {
         criterion: "Bundle size",
@@ -670,7 +670,7 @@ function buyLabel(seats) {
       "You want catalog audits and ICU diagnostics as part of the toolchain, not as a separate product.",
     ],
     honest:
-      "Paraglide's bundle-size story is better than ours and we are not going to claim otherwise — zero runtime beats a small runtime on that axis by construction, and that is a fine reason to pick them. We spend those kilobytes on in-place locale switching and .po interoperability because we think most products get more back from those than from the bytes. Nothing in the checked benchmark harness measures Paraglide, so there is no speed claim on this page.",
+      "Paraglide's bundle-size story is better than ours and we are not going to claim otherwise — zero runtime beats a runtime layer on that axis by construction, and that is a fine reason to pick them. We spend those kilobytes on in-place locale switching and .po interoperability because we think most products get more back from those than from the bytes. Nothing in the checked benchmark harness measures Paraglide, so there is no speed claim on this page.",
   },
   {
     slug: "general-translation",

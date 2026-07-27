@@ -228,7 +228,7 @@ export default async function CheckoutHeading({ seats }) {
       },
       {
         q: "Does faster extraction mean a smaller bundle?",
-        a: "No, and the two should not be conflated. This is build-time performance. On runtime bundle size a zero-runtime compiler like Paraglide beats a small runtime by construction, and we say so on the page comparing the two.",
+        a: "No, and the two should not be conflated. This is build-time performance. On runtime bundle size a zero-runtime compiler like Paraglide beats a runtime layer by construction, and we say so on the page comparing the two.",
       },
     ],
     related: [

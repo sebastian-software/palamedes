@@ -2,7 +2,7 @@
 
 Palamedes is not trying to be a universal rebuttal to Lingui. It is a focused
 path for teams that already like macro-based i18n and want the stack underneath
-to feel smaller, steadier, and easier to trust.
+to feel more coherent, steadier, and easier to trust.
 
 If you want the broader architectural comparison, including `next-intl` and
 General Translation, read [Comparing Modern i18n Approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md).
@@ -11,7 +11,7 @@ The real difference is not "Rust vs. JavaScript." It is the end state:
 
 - one runtime model
 - one message identity model
-- small host adapters
+- thin host adapters
 - catalog and ICU semantics owned in one place
 
 ## Short Answer
@@ -23,7 +23,7 @@ Choose Palamedes if you want:
 - source-string-first catalogs with `message + context`
 - a stack that is easier to reason about over time
 - one runtime model that stays stable across verified framework integrations
-- a local foundation that stays useful without an account or managed service
+- a full local toolchain that stays useful without an account or managed service
 
 Stay on Lingui if you want:
 
@@ -36,12 +36,12 @@ Stay on Lingui if you want:
 | Topic                       | Lingui                               | Palamedes                               |
 | --------------------------- | ------------------------------------ | --------------------------------------- |
 | Authoring feel              | Familiar macro-based i18n            | Intentionally familiar macro-based i18n |
-| Dev/build work              | Historically more JS/Babel-shaped    | Rust core + OXC + small adapters        |
+| Dev/build work              | Historically more JS/Babel-shaped    | Rust core + OXC + thin adapters         |
 | Message identity            | Broader historical surface           | Strictly `message + context`            |
 | Runtime model               | More than one historical access path | One public model: `getI18n()`           |
 | Catalog semantics           | Mixed legacy and ecosystem pressure  | Source-first with `ferrocat` underneath |
 | Future translation layering | Usually solved outside the core      | Local catalog and QA foundation         |
-| Long-term shape             | Broad compatibility pressure         | Opinionated, narrower, easier to trust  |
+| Long-term shape             | Broad compatibility pressure         | Opinionated, coherent, easier to trust  |
 
 ## Why The End State Gets Cleaner
 
@@ -49,7 +49,7 @@ Stay on Lingui if you want:
 
 Palamedes standardizes on `getI18n()` across the framework surfaces it verifies.
 
-That sounds small, but it removes a lot of ambiguity:
+That sounds like one API decision, but it removes a lot of ambiguity:
 
 - fewer special cases between environments
 - clearer transform output
@@ -96,7 +96,7 @@ That matters because:
 
 - teams do not want framework-specific i18n glue to own semantics
 - architecture cleanup gets easier when the runtime and identity model stay stable
-- a cleaner local foundation is easier to extend into future translation workflows
+- a coherent local toolchain is easier to extend into future translation workflows
 
 ## What Gets Faster
 
@@ -138,17 +138,17 @@ Stay on Lingui for now if:
 Lingui got the core instinct right early: macros, extracted catalogs, and
 pragmatic framework integration are better than ad hoc translation sprawl.
 
-Palamedes keeps that instinct and makes the underlying system smaller and
+Palamedes keeps that instinct and makes the underlying system more coherent and
 easier to understand.
 
 It also creates a cleaner base for optional higher-level products that need
 local catalog and QA semantics without re-implementing them in a parallel
 stack. Palamedes+ is the planned managed layer; Palamedes remains the
-open-source local foundation.
+full open-source local toolchain.
 
 That is the best way to think about the project:
 
-**Palamedes brings the discipline of a native catalog engine to JavaScript
+**Palamedes brings the discipline of a native catalog engine to TypeScript
 i18n: fewer legacy branches, clearer ownership, faster daily workflows, and a
 translation model that stays coherent from source to runtime.**
 

@@ -23,9 +23,9 @@ export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
-    title: "Palamedes — open-source i18n tooling for JavaScript and TypeScript",
+    title: "Palamedes — open-source i18n tooling for TypeScript",
     description:
-      "Open-source i18n tooling with source-string-first authoring, repository-owned catalogs, one runtime model, and first-party integrations for modern JavaScript and TypeScript applications.",
+      "Open-source TypeScript i18n tooling with source-string-first authoring, repository-owned catalogs, a native toolchain, one runtime model, and first-party integrations across modern frontend and server frameworks.",
     path: "/",
   })
 }
@@ -43,16 +43,17 @@ export default function Home() {
             height={104}
             className="mb-8 size-26 max-tight:size-20"
           />
-          <p className="eyebrow">Open-source i18n tooling for JavaScript &amp; TypeScript</p>
+          <p className="eyebrow">Open-source i18n tooling for TypeScript</p>
           <h1 className="display-serif mt-6 text-display leading-[1.12] uppercase">
             <span className="block">One translation model.</span>
             <span className="block">From source to runtime.</span>
           </h1>
           <p className="mt-6 max-w-[38em] text-[16px]">
             Write messages where your UI happens, keep source-string-first <code>.po</code> catalogs
-            in your repository, and use one small runtime model. First-party integrations cover
-            Next.js, TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite. Backend
-            servers use the same runtime model.
+            in your repository, and run transformation, extraction, validation, merging, and
+            compilation through one native toolchain. First-party integrations cover Next.js,
+            TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite. Backend servers use
+            the same runtime model.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <ButtonLink href="/get-started">Get started in 5 minutes</ButtonLink>
@@ -79,7 +80,11 @@ export default function Home() {
       </Section>
 
       {/* -------------------------------------------------- 02 — workflow */}
-      <Section num="02 — Workflow" title="The whole workflow, honestly small.">
+      <Section
+        num="02 — Workflow"
+        title="The whole workflow. One clear path."
+        lede="Author in TypeScript, extract and update catalogs with one native command, translate in standard .po files, then render through the same runtime model. Audits, semantic merges, and CI completeness gates use the same catalog engine."
+      >
         <div className="space-y-8">
           <WorkflowFlow />
           <CodeShowcase />
@@ -103,10 +108,10 @@ export default function Home() {
 
       {/* ------------------------------------------------ 04 — positioning */}
       <StatementBand num="04 — Scope" diagram>
-        Palamedes is the open-source local foundation for authoring, extraction, catalogs,
-        validation, and runtime integration. First-party adapters connect that model to each
-        supported host. Palamedes+ is the planned optional managed layer for translation automation
-        and collaboration.
+        Palamedes covers the complete local workflow: authoring, transformation, extraction,
+        catalogs, validation, semantic merging, compilation, and runtime integration. First-party
+        adapters connect that model to each supported host. Palamedes+ is the planned optional
+        managed layer for translation automation and collaboration.
       </StatementBand>
 
       {/* ------------------------------------------------ 05 — maintainer */}
@@ -114,10 +119,10 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-12 max-grid:grid-cols-1">
           <p className="max-w-[44em] text-[15px] leading-relaxed">
             Palamedes is maintained by Sebastian Software GmbH. It is the third generation of
-            source-string-first JavaScript i18n tooling from the same author — from gettext-style
-            macro systems in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by
-            Salesforce in 2025). The lessons are written down as {contentStats.adrCount} ADRs before
-            you depend on the tool.
+            source-string-first i18n tooling from the same author — from gettext-style macro systems
+            in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by Salesforce in
+            2025). The lessons are written down as {contentStats.adrCount} ADRs before you depend on
+            the tool.
           </p>
           <div className="space-y-2">
             <a href={decisionHref()} className="mono-nums block text-[13px] text-accent">
@@ -133,7 +138,7 @@ export default function Home() {
       {/* -------------------------------------------------- 06 — packages */}
       <Section
         num="06 — Packages"
-        title="Small packages, one model."
+        title="Focused packages, one model."
         lede="You own the code. You run the commands. Every piece is a scoped npm package your repo controls."
       >
         <PackageCards />
