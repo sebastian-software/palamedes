@@ -47,6 +47,7 @@ Then read the CLI extension decisions:
 
 17. [ADR-017: Host Explicit CLI Plugins in the npm Wrapper](./adr/017-cli-plugin-execution-boundary.md)
 18. [ADR-018: Binary Plugin Protocol for Rust-First Extensions](./adr/018-binary-plugin-protocol.md)
+19. [ADR-019: Extraction Cache](./adr/019-extraction-cache.md)
 
 ## ADR Policy
 

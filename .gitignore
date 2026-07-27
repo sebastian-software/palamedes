@@ -47,3 +47,6 @@ benchmarks/*/.swc/
 .sf-plugin/*
 !.sf-plugin/config.json
 docs/plan/
+
+# Local extraction cache (ADR-019)
+.palamedes/

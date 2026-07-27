@@ -1,4 +1,14 @@
-import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
@@ -22,6 +32,14 @@ const TOOL_LABELS = {
 }
 
 const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "i18nextParser", "i18nextCli"]
+/*
+ * Directories any measured tool may leave behind as reusable state. Only
+ * Palamedes writes one today; the others are listed so a future cache in one of
+ * them cannot quietly turn cold runs warm.
+ */
+const TOOL_CACHE_DIRS = [".palamedes", ".lingui", "node_modules/.cache"]
+// Files touched before each warm run, modelling a small edit.
+const WARM_TOUCHED_FILES = 5
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
@@ -59,6 +77,21 @@ async function main() {
             runs: args.runs,
           })
           const result = toResultEntry({ tool, corpus, measurement, versions, args })
+
+          const warmMeasurement = await benchmarkToolWarm({
+            tool,
+            corpus,
+            toolPaths,
+            warmup: args.warmup,
+            runs: args.runs,
+          })
+          result.warm = {
+            medianMs: warmMeasurement.medianMs,
+            samplesMs: warmMeasurement.samplesMs,
+            touchedFiles: warmMeasurement.touchedFiles,
+            palamedesTiming: warmMeasurement.toolTimings.at(-1) ?? null,
+          }
+
           profileResults.push(result)
           results.push(result)
         }
@@ -90,7 +123,7 @@ async function main() {
         corpus:
           "same generated logical message inventory rendered into each tool's idiomatic source shape",
         reset:
-          "catalog files are reset to the same baseline state before every warmup and measured run",
+          "catalog files and tool caches are reset to the same baseline state before every cold warmup and measured run",
         semanticCheck:
           "active catalog messages are normalized after each tool run and compared with the generated current inventory",
         toolScopes: {
@@ -218,7 +251,7 @@ async function readVersions(toolPaths) {
 async function validateCorpus(corpus, toolPaths) {
   const tools = {}
   for (const tool of TOOL_ORDER) {
-    await resetCatalogs(corpus.roots[tool])
+    await resetWorkspace(corpus.roots[tool])
     await runTool(tool, corpus.roots[tool], toolPaths)
     const activeMessagesByTarget = {}
     for (const target of validationTargets(tool)) {
@@ -241,9 +274,59 @@ async function validateCorpus(corpus, toolPaths) {
   }
 }
 
+/*
+ * Warm lane: what a repeat run costs after a small edit.
+ *
+ * The workspace is cleared once, then one run populates whatever reusable state
+ * the tool keeps. Every run after that resets only the catalogs and touches a
+ * few source files, so each measured run re-does the same small amount of work.
+ * Tools without any reusable state simply measure their normal full run here,
+ * which is the honest answer for them — this lane reports a capability
+ * difference, not a like-for-like speed difference, and its numbers are
+ * deliberately kept out of the speedup table.
+ */
+async function benchmarkToolWarm({ tool, corpus, toolPaths, warmup, runs }) {
+  const root = corpus.roots[tool]
+  await resetWorkspace(root)
+  await runTool(tool, root, toolPaths)
+
+  let touchedFiles = 0
+  for (let index = 0; index < warmup; index += 1) {
+    await resetCatalogs(root)
+    touchedFiles = await touchSources(root, WARM_TOUCHED_FILES)
+    await runTool(tool, root, toolPaths)
+  }
+
+  const samplesMs = []
+  const toolTimings = []
+  let lastOutcome = null
+
+  for (let index = 0; index < runs; index += 1) {
+    await resetCatalogs(root)
+    touchedFiles = await touchSources(root, WARM_TOUCHED_FILES)
+    const startedAt = process.hrtime.bigint()
+    lastOutcome = await runTool(tool, root, toolPaths)
+    const finishedAt = process.hrtime.bigint()
+    samplesMs.push(Number(finishedAt - startedAt) / 1_000_000)
+    if (lastOutcome.palamedesTiming) {
+      toolTimings.push(lastOutcome.palamedesTiming)
+    }
+  }
+
+  samplesMs.sort((left, right) => left - right)
+
+  return {
+    medianMs: samplesMs[Math.floor(samplesMs.length / 2)],
+    samplesMs,
+    lastOutcome,
+    toolTimings,
+    touchedFiles,
+  }
+}
+
 async function benchmarkTool({ tool, corpus, toolPaths, warmup, runs }) {
   for (let index = 0; index < warmup; index += 1) {
-    await resetCatalogs(corpus.roots[tool])
+    await resetWorkspace(corpus.roots[tool])
     await runTool(tool, corpus.roots[tool], toolPaths)
   }
 
@@ -252,7 +335,7 @@ async function benchmarkTool({ tool, corpus, toolPaths, warmup, runs }) {
   let lastOutcome = null
 
   for (let index = 0; index < runs; index += 1) {
-    await resetCatalogs(corpus.roots[tool])
+    await resetWorkspace(corpus.roots[tool])
     const startedAt = process.hrtime.bigint()
     lastOutcome = await runTool(tool, corpus.roots[tool], toolPaths)
     const finishedAt = process.hrtime.bigint()
@@ -277,6 +360,39 @@ async function resetCatalogs(rootDir) {
   const baselineDir = path.join(rootDir, ".baseline-locales")
   await rm(localeDir, { recursive: true, force: true })
   await cp(baselineDir, localeDir, { recursive: true })
+}
+
+/*
+ * Cold runs must start with no reusable state at all. The source corpus is
+ * generated once per profile and never changes between runs, so any tool cache
+ * left in the workspace would be hit by every run after the first and the
+ * reported cold medians would silently become warm ones.
+ */
+async function resetWorkspace(rootDir) {
+  await resetCatalogs(rootDir)
+  for (const cacheDir of TOOL_CACHE_DIRS) {
+    await rm(path.join(rootDir, cacheDir), { recursive: true, force: true })
+  }
+}
+
+/*
+ * Models a developer saving files: mtime moves, content does not. That keeps
+ * the expected message inventory identical — so the semantic validation still
+ * applies — while invalidating exactly the cache entries a real edit would.
+ */
+async function touchSources(rootDir, count) {
+  const generatedDir = path.join(rootDir, "src", "generated")
+  const entries = await readdir(generatedDir, { recursive: true, withFileTypes: true })
+  const files = entries
+    .filter((entry) => entry.isFile() && /\.(ts|tsx|js|jsx)$/.test(entry.name))
+    .map((entry) => path.join(entry.parentPath ?? entry.path, entry.name))
+    .sort()
+  const now = new Date()
+  const touched = files.slice(0, count)
+  for (const file of touched) {
+    await utimes(file, now, now)
+  }
+  return touched.length
 }
 
 async function runTool(tool, cwd, toolPaths) {
@@ -576,6 +692,8 @@ function renderMarkdown(report) {
     }
 
     lines.push("")
+    lines.push("### Cold")
+    lines.push("")
     lines.push("| Tool | Median | Samples |")
     lines.push("| --- | ---: | --- |")
     for (const result of profile.results) {
@@ -597,12 +715,40 @@ function renderMarkdown(report) {
         `| Palamedes vs ${TOOL_LABELS[comparison.comparedTool]} | ${TOOL_LABELS[comparison.fasterTool]} | ${comparison.speedupFactor.toFixed(2)}x |`
       )
     }
+
+    const warmResults = profile.results.filter((result) => result.warm)
+    if (warmResults.length > 0) {
+      const touched = warmResults[0].warm.touchedFiles
+      lines.push("")
+      lines.push("### Warm")
+      lines.push("")
+      lines.push(
+        `Repeat run after touching ${touched} source files, with catalogs reset but tool caches kept.`
+      )
+      lines.push("")
+      lines.push(
+        "This lane is **not** a like-for-like speed comparison and is deliberately excluded from the speedup table above. Palamedes reuses an extraction cache here; the other tools re-extract in full because they have no comparable local cache, so their warm and cold numbers are the same by design. Read it as a capability difference, not as a claim that the same work is done faster."
+      )
+      lines.push("")
+      lines.push("| Tool | Median | Samples |")
+      lines.push("| --- | ---: | --- |")
+      for (const result of warmResults) {
+        lines.push(
+          `| ${TOOL_LABELS[result.tool]} | ${formatMs(result.warm.medianMs)} | ${result.warm.samplesMs
+            .map(formatMs)
+            .join(", ")} |`
+        )
+      }
+    }
   }
 
   lines.push("")
   lines.push("## Notes")
   lines.push("")
   lines.push("- These are machine-local CLI workflow timings, not universal cross-machine claims.")
+  lines.push(
+    "- Cold runs clear every tool cache alongside the catalogs. The source corpus is generated once per profile and never changes, so a retained cache would be hit by every run after the first and would silently turn the cold medians into warm ones."
+  )
   lines.push(
     "- The i18next-parser and i18next-cli corpora use natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes."
   )

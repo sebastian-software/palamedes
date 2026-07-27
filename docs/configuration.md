@@ -42,10 +42,12 @@ catalogs:
 | `reference-scopes`      | No       | `boolean`                              | Adds stable source scopes to catalog references. Defaults to `true`.                |
 | `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                |
 | `extract-threads`       | No       | `number`                               | Worker threads for the parallel extraction pass. Defaults to `4`; `1` runs serial.  |
+| `extract-cache`         | No       | `boolean`                              | Reuse the on-disk extraction cache. Defaults to `true`.                             |
 
 The native CLI and JS config loader also accept snake_case aliases for
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
-`source_reference_root`, `reference_scopes`, and `extract_threads`.
+`source_reference_root`, `reference_scopes`, `extract_threads`, and
+`extract_cache`.
 
 `extract-threads` bounds the parallel read/parse pass. The default of `4` is a
 measured floor rather than a core count: extraction gets slower again above it,
@@ -54,6 +56,17 @@ never amortizes it. Raise it only with a measurement on your own corpus and
 hardware; see
 [ADR-013](https://github.com/sebastian-software/palamedes/blob/main/adr/013-bounded-parallel-extraction.md)
 for the numbers. `--threads` on the command line overrides this value.
+
+`extract-cache` controls whether extraction reuses its own results for files
+that have not changed. The cache lives at `.palamedes/extract-cache.json` under
+the project root — add `.palamedes/` to your `.gitignore`. Entries are validated
+with a `stat` (size and modification time), so a repeat run skips both reading
+and parsing unchanged files; watch mode holds the cache for the life of the
+process. It is discarded automatically whenever the extractor version or the
+source reference root changes. Use `--no-cache` for a one-off cold run, or set
+this to `false` if a tool in your pipeline rewrites files without changing their
+size or modification time. See
+[ADR-019](https://github.com/sebastian-software/palamedes/blob/main/adr/019-extraction-cache.md).
 
 ## Catalogs
 

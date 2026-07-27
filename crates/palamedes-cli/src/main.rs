@@ -12,10 +12,10 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
 use notify::{RecursiveMode, Watcher};
 use palamedes::{
-    audit_catalogs, combine_catalog_files, parse_catalog, parse_po, update_catalog_file,
-    CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult, CatalogConflictStrategy,
-    CatalogFileCombineRequest, CatalogFileFormat, CatalogParseRequest, CatalogUpdateMessage,
-    CatalogUpdateRequest,
+    audit_catalogs, combine_catalog_files, extract_catalog_messages_cached, parse_catalog,
+    parse_po, update_catalog_file, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
+    CatalogConflictStrategy, CatalogFileCombineRequest, CatalogFileFormat, CatalogParseRequest,
+    CatalogUpdateMessage, CatalogUpdateRequest, ExtractCache,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -65,6 +65,9 @@ struct ExtractOptions {
     /// `extract-threads` in the config file; 1 forces serial extraction.
     #[arg(long, value_name = "COUNT")]
     threads: Option<usize>,
+    /// Ignore and do not write the extraction cache.
+    #[arg(long)]
+    no_cache: bool,
     /// Show verbose output.
     #[arg(short, long)]
     verbose: bool,
@@ -326,6 +329,53 @@ fn run_extract(options: ExtractOptions) -> Result<(), CliError> {
 }
 
 fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
+    let mut cache = load_extract_cache(config, options);
+    let result = run_extraction_with_cache(config, options, &mut cache);
+    persist_extract_cache(config, options, &mut cache);
+    result
+}
+
+/// Resolves and loads the cache, or a disabled one when it is turned off.
+fn load_extract_cache(config: &LoadedConfig, options: &ExtractOptions) -> ExtractCache {
+    if options.no_cache || !config.extract_cache {
+        return ExtractCache::disabled();
+    }
+    ExtractCache::load(
+        &extract_cache_path(config),
+        &config.source_reference_root.to_string_lossy(),
+        config.reference_scopes,
+    )
+}
+
+fn extract_cache_path(config: &LoadedConfig) -> PathBuf {
+    palamedes::default_cache_path(&config.root_dir)
+}
+
+/*
+ * A cache that cannot be written is not a failure: the next run just starts
+ * cold. Report it once so a permanently unwritable directory is not silently
+ * costing every invocation.
+ */
+fn persist_extract_cache(
+    config: &LoadedConfig,
+    options: &ExtractOptions,
+    cache: &mut ExtractCache,
+) {
+    if let Err(error) = cache.save(&extract_cache_path(config)) {
+        if options.verbose {
+            eprintln!(
+                "Warning: could not write the extraction cache to {}: {error}",
+                extract_cache_path(config).display()
+            );
+        }
+    }
+}
+
+fn run_extraction_with_cache(
+    config: &LoadedConfig,
+    options: &ExtractOptions,
+    cache: &mut ExtractCache,
+) -> Result<(), CliError> {
     let started_at = Instant::now();
     let mut total_write_ms = 0;
     let mut total_glob_ms = 0;
@@ -337,7 +387,7 @@ fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
     let mut results = Vec::with_capacity(config.catalogs.len());
 
     for catalog in &config.catalogs {
-        let result = extract_from_catalog(catalog, config, options)?;
+        let result = extract_from_catalog(catalog, config, options, cache)?;
         total_glob_ms += result.glob_ms;
         total_extract_ms += result.extract_ms;
         total_messages += result.messages.len();
@@ -346,6 +396,21 @@ fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
         results.push(result);
     }
     let total_files = unique_files.len();
+
+    /*
+     * Retention runs once over every catalog's files. Doing it per catalog would
+     * make each catalog evict the entries belonging to its siblings, so a
+     * multi-catalog project would re-extract almost everything on every run.
+     */
+    cache.retain_paths(
+        &unique_files
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .iter()
+            .map(String::as_str)
+            .collect(),
+    );
 
     if total_failed_files > 0 {
         return Err(CliError::ExtractionFailed {
@@ -382,6 +447,7 @@ fn extract_from_catalog(
     catalog: &ConfigCatalog,
     config: &LoadedConfig,
     options: &ExtractOptions,
+    cache: &mut ExtractCache,
 ) -> Result<CatalogExtractionResult, CliError> {
     let verbose = options.verbose;
     let glob_started_at = Instant::now();
@@ -401,7 +467,7 @@ fn extract_from_catalog(
     }
 
     let extract_started_at = Instant::now();
-    let result = palamedes::extract_catalog_messages_from_files_with_options(
+    let result = extract_catalog_messages_cached(
         palamedes::ExtractCatalogMessagesRequest {
             root_dir: config.source_reference_root.to_string_lossy().into_owned(),
             files: files
@@ -414,6 +480,7 @@ fn extract_from_catalog(
         palamedes::ExtractCatalogMessagesOptions {
             reference_scopes: config.reference_scopes,
         },
+        cache,
     )?;
     let extract_ms = extract_started_at.elapsed().as_millis();
 
@@ -647,7 +714,13 @@ fn watch_roots(config: &LoadedConfig) -> Vec<PathBuf> {
 fn run_watch_mode(initial_config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
     println!("Watching for changes...");
     let mut config = initial_config.clone();
-    run_watch_extraction(&config, options)?;
+    /*
+     * One cache for the life of the watcher. Every rebuild after the first
+     * therefore skips the read and parse of files nobody touched, which is the
+     * whole point of watch mode.
+     */
+    let mut cache = load_extract_cache(&config, options);
+    run_watch_extraction(&config, options, &mut cache)?;
 
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
@@ -736,7 +809,7 @@ fn run_watch_mode(initial_config: &LoadedConfig, options: &ExtractOptions) -> Re
         if options.verbose {
             eprintln!("Source changed; extracting catalogs");
         }
-        run_watch_extraction(&config, options)?;
+        run_watch_extraction(&config, options, &mut cache)?;
     }
 }
 
@@ -747,8 +820,14 @@ fn touches_config(paths: &[PathBuf], config: &LoadedConfig) -> bool {
 /// Watch mode must survive every extraction failure — including fatal
 /// authoring errors like a half-typed `t({ message })` — because the developer
 /// is mid-edit and the next save usually fixes the problem.
-fn run_watch_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
-    match run_extraction(config, options) {
+fn run_watch_extraction(
+    config: &LoadedConfig,
+    options: &ExtractOptions,
+    cache: &mut ExtractCache,
+) -> Result<(), CliError> {
+    let result = run_extraction_with_cache(config, options, cache);
+    persist_extract_cache(config, options, cache);
+    match result {
         Ok(()) => Ok(()),
         Err(error) => {
             eprintln!("Warning: {error} Continuing to watch for changes.");
@@ -1250,7 +1329,8 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        build_report, load_config, run_extraction, run_watch_extraction, CliError, ExtractOptions,
+        build_report, load_config, run_extraction, run_watch_extraction, CliError, ExtractCache,
+        ExtractOptions,
     };
 
     #[test]
@@ -1395,7 +1475,8 @@ catalogs:
         fs::write(&source_path, "const broken =").expect("write invalid source");
 
         let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
-        run_watch_extraction(&config, &extract_options()).expect("watch should remain active");
+        run_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
+            .expect("watch should remain active");
         assert!(!app.join("locales/en/messages.po").exists());
 
         fs::write(
@@ -1403,7 +1484,8 @@ catalogs:
             "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Recovered`; }\n",
         )
         .expect("repair source");
-        run_watch_extraction(&config, &extract_options()).expect("watch should recover");
+        run_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
+            .expect("watch should recover");
 
         let output =
             fs::read_to_string(app.join("locales/en/messages.po")).expect("read recovered catalog");
@@ -1466,6 +1548,7 @@ source-locale: en
             clean: false,
             force_clean: false,
             threads: None,
+            no_cache: true,
             verbose: false,
         }
     }
