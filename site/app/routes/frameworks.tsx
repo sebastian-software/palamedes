@@ -32,11 +32,11 @@ export default function Frameworks() {
           Six frameworks. Four locale strategies. One mental model.
         </h1>
         <p className="mt-6 max-w-[38em]">
-          Every cell below is a real application — the same booking UI, the same catalogs, the same
-          runtime calls — browser-verified in CI. Where public hosting is ready, open the demo,
-          switch the language, and watch copy, plurals, currency, and dates change together. Then
-          open the framework guide for its exact server boundary, TypeScript setup, and current
-          limitations.
+          Every cell below is a real application verified in CI. The five established UI adapters
+          run browser flows against the same booking UI, catalogs, and runtime calls; Remix v3 runs
+          server smoke proofs against its new non-React stack. Where public hosting is ready, open
+          the demo and switch the language. Then open the framework guide for its exact server
+          boundary, TypeScript setup, and current limitations.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href={DEMO_NEXTJS_COOKIE}>Open a live demo</ButtonLink>
@@ -52,13 +52,14 @@ export default function Frameworks() {
       >
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
-          All {contentStats.exampleCount} apps are verified in CI: SSR output, locale switching,
-          localized server actions or server handlers. Screenshots cover the established UI-adapter
-          matrix and are versioned in the repo. Cookie, route, and subdomain demos are publicly
-          hosted for the five browser-verified frameworks; the TLD domains are still being
-          provisioned, and Remix v3 is a local/CI proof surface without public hosting yet — those
-          cells link the verified source instead. Hosting status is documented in the repo&apos;s
-          demo-deployments guide.
+          All {contentStats.exampleCount} apps are verified in CI. The{" "}
+          {contentStats.exampleCount - contentStats.strategyCount} established UI-adapter apps cover
+          SSR output, locale switching, and localized server actions or functions in the browser;
+          the {contentStats.strategyCount} Remix v3 apps cover server responses and locale handling
+          through smoke checks. Screenshots cover the UI-adapter matrix and are versioned in the
+          repo. Cookie, route, and subdomain demos are publicly hosted for the five browser-verified
+          frameworks; the TLD domains are still being provisioned, and Remix v3 has no public
+          hosting yet. Hosting status is documented in the repo&apos;s demo-deployments guide.
         </p>
       </Section>
 
