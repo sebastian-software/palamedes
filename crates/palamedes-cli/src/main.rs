@@ -397,6 +397,21 @@ fn run_extraction_with_cache(
     }
     let total_files = unique_files.len();
 
+    /*
+     * Retention runs once over every catalog's files. Doing it per catalog would
+     * make each catalog evict the entries belonging to its siblings, so a
+     * multi-catalog project would re-extract almost everything on every run.
+     */
+    cache.retain_paths(
+        &unique_files
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .iter()
+            .map(String::as_str)
+            .collect(),
+    );
+
     if total_failed_files > 0 {
         return Err(CliError::ExtractionFailed {
             failures: total_failed_files,

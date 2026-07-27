@@ -34,7 +34,7 @@ const RACY_WINDOW: Duration = Duration::from_secs(1);
 
 /// Identity of a source file as observed without reading it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-struct FileFingerprint {
+pub(crate) struct FileFingerprint {
     size: u64,
     /// Modification time in nanoseconds since the Unix epoch.
     mtime_ns: u128,
@@ -161,21 +161,42 @@ impl ExtractCache {
         Some((entry.relative_file.clone(), entry.messages.clone()))
     }
 
+    /// Identity of `path` before its contents are read, or `None` when the cache
+    /// is disabled and the `stat` would be wasted.
+    pub(crate) fn fingerprint_before_read(&self, path: &str) -> Option<FileFingerprint> {
+        if !self.enabled {
+            return None;
+        }
+        FileFingerprint::read(Path::new(path))
+    }
+
     /// Records a freshly extracted result.
+    ///
+    /// `before` is the identity observed before the file was read. Storing the
+    /// identity observed *after* extraction would pair the contents that were
+    /// read with the metadata of an edit that landed in between, and the next
+    /// run would accept that as a hit and write stale messages. Re-reading the
+    /// identity here and requiring both to agree means a file edited mid-run is
+    /// simply not cached.
     pub(crate) fn insert(
         &mut self,
         path: String,
         relative_file: String,
         messages: &[ExtractedMessageRecord],
+        before: Option<FileFingerprint>,
     ) where
         ExtractedMessageRecord: Clone,
     {
         if !self.enabled {
             return;
         }
-        let Some(fingerprint) = FileFingerprint::read(Path::new(&path)) else {
+        let (Some(before), Some(fingerprint)) = (before, FileFingerprint::read(Path::new(&path)))
+        else {
             return;
         };
+        if fingerprint != before {
+            return;
+        }
         if fingerprint.is_racy(SystemTime::now()) {
             return;
         }
@@ -192,7 +213,10 @@ impl ExtractCache {
 
     /// Drops entries for files that are no longer part of the extraction set,
     /// so a long-lived watch process does not grow without bound.
-    pub(crate) fn retain_paths(&mut self, keep: &std::collections::HashSet<&str>) {
+    ///
+    /// Call this once with the complete file set. Calling it per catalog would
+    /// make each catalog evict the entries of its siblings.
+    pub fn retain_paths(&mut self, keep: &std::collections::HashSet<&str>) {
         if !self.enabled {
             return;
         }
@@ -304,7 +328,8 @@ mod tests {
         let key = source.to_string_lossy().into_owned();
 
         let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")]);
+        let before = cache.fingerprint_before_read(&key);
+        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
 
         let hit = cache.get(&key).expect("cache hit");
         assert_eq!(hit.0, "a.tsx");
@@ -327,7 +352,8 @@ mod tests {
         let cache_path = root.join("cache.json");
 
         let mut cache = ExtractCache::load(&cache_path, "root-one", true);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")]);
+        let before = cache.fingerprint_before_read(&key);
+        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
         cache.save(&cache_path).expect("save");
 
         // Same file, different reference root: origins would differ, so the
@@ -357,8 +383,40 @@ mod tests {
         let key = source.to_string_lossy().into_owned();
 
         let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")]);
+        let before = cache.fingerprint_before_read(&key);
+        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
         assert!(cache.is_empty(), "young files must not be cached");
+        assert!(cache.get(&key).is_none());
+
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /*
+     * Guards the P1 case: content is read, the file changes, and only then is
+     * the identity observed. Storing that pairing would make the next run serve
+     * the old messages under the new file's fingerprint.
+     */
+    #[test]
+    fn refuses_to_store_a_file_that_changed_between_read_and_insert() {
+        let root = temp_root("mid-run-edit");
+        std::fs::create_dir_all(&root).expect("root");
+        let source = root.join("a.tsx");
+        write_aged(&source, "const a = 1\n");
+        let key = source.to_string_lossy().into_owned();
+
+        let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
+        // Identity as seen before the contents were read.
+        let before = cache.fingerprint_before_read(&key);
+
+        // The file is rewritten after the read, and backdated so the racy-window
+        // guard alone would not catch it.
+        write_aged(&source, "const a = 999999\n");
+
+        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Stale")], before);
+        assert!(
+            cache.is_empty(),
+            "a file edited between read and insert must not be cached"
+        );
         assert!(cache.get(&key).is_none());
 
         std::fs::remove_dir_all(root).expect("cleanup");
@@ -387,7 +445,8 @@ mod tests {
         let key = source.to_string_lossy().into_owned();
 
         let mut cache = ExtractCache::disabled();
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")]);
+        let before = cache.fingerprint_before_read(&key);
+        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
         assert!(cache.get(&key).is_none());
         assert!(!cache.is_dirty());
 

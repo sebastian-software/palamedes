@@ -11,7 +11,7 @@ use crate::descriptor::{
     descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
 };
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::extract_cache::ExtractCache;
+use crate::extract_cache::{ExtractCache, FileFingerprint};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
@@ -1503,9 +1503,10 @@ pub fn extract_catalog_messages_cached(
                 relative_file,
                 messages,
                 fresh,
+                fingerprint,
             } => {
                 if fresh {
-                    cache.insert(path, relative_file.clone(), &messages);
+                    cache.insert(path, relative_file.clone(), &messages, fingerprint);
                 }
                 for message in messages {
                     add_extracted_message(&mut catalog, message, &relative_file);
@@ -1516,9 +1517,6 @@ pub fn extract_catalog_messages_cached(
             FileExtraction::Fatal(error) => return Err(error),
         }
     }
-
-    // Keep a long-lived watch-mode cache from accumulating deleted files.
-    cache.retain_paths(&request.files.iter().map(String::as_str).collect());
 
     Ok(ExtractCatalogMessagesResult {
         messages: catalog
@@ -1552,9 +1550,12 @@ fn extract_one_file(
             relative_file,
             messages,
             fresh: false,
+            fingerprint: None,
         };
     }
 
+    // Observed before the read so insert() can reject a file edited mid-run.
+    let fingerprint = cache.fingerprint_before_read(file);
     let source = match std::fs::read_to_string(file) {
         Ok(source) => source,
         Err(source) => {
@@ -1586,6 +1587,7 @@ fn extract_one_file(
             relative_file: relative_origin_file(root_dir, file),
             messages,
             fresh: true,
+            fingerprint,
         },
         Err(
             error @ (PalamedesError::ExplicitMessageIdsUnsupported
@@ -1633,6 +1635,8 @@ enum FileExtraction {
         messages: Vec<ExtractedMessageRecord>,
         /// False when the result came from the cache and need not be stored again.
         fresh: bool,
+        /// File identity observed before reading, used to reject mid-run edits.
+        fingerprint: Option<FileFingerprint>,
     },
     Failed(ExtractCatalogFileFailure),
     Fatal(PalamedesError),

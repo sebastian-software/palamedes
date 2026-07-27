@@ -60,6 +60,12 @@ Correctness rests on discarding aggressively rather than reasoning cleverly:
   extractor version matters because a release can legitimately change what a
   given file extracts to; the reference root matters because it determines the
   stored origin paths.
+- The file identity is captured before the contents are read and re-checked
+  before the entry is stored; if it moved in between, the file is not cached.
+  Storing the identity observed only after extraction would pair the contents
+  that were read with the metadata of an edit that landed during the run, and
+  the next run would accept that as a hit and write stale messages. This costs a
+  second `stat` per freshly extracted file.
 - Files modified within one second of being cached are never stored. Their
   modification time cannot be distinguished from an edit landing immediately
   afterwards — the hazard Git documents as racy timestamps. Nanosecond
@@ -67,7 +73,10 @@ Correctness rests on discarding aggressively rather than reasoning cleverly:
 - Failed files are never cached, so a file that stops parsing is retried on the
   next run rather than remembered as broken.
 - Entries for files no longer in the extraction set are dropped, so a long-lived
-  watch process does not grow without bound.
+  watch process does not grow without bound. Retention runs once over the union
+  of every catalog's files; doing it per catalog would make each catalog evict
+  the entries of its siblings, so a multi-catalog project would re-extract
+  almost everything on every run.
 
 It can be turned off with `--no-cache` or `extract-cache: false`.
 
@@ -102,9 +111,11 @@ faster". The report states this in place.
   `5 ms` — including loading the cache and stat-ing every file — and the
   end-to-end median from `125.88 ms` to `70.08 ms`.
 - Cold runs pay for it. The same corpus went from `112 ms` before the cache to
-  `125.88 ms` with it: roughly `+14 ms`, split between one extra `stat` per
-  file, copying the extracted records into the cache map, and serializing and
-  writing a ~1.8 MB payload. That is a deliberate trade — every repeat run is
+  `125.88 ms` with it: roughly `+14 ms`, split between the two `stat` calls per
+  file described above, copying the extracted records into the cache map, and
+  serializing and writing a ~1.8 MB payload. Directly measured, the second
+  `stat` accounts for about `5 ms` of that — cold extraction moves from `60 ms`
+  to `65-73 ms`. That is a deliberate trade — every repeat run is
   worth about `-56 ms` — but it is a real regression in the number the website
   quotes, and it is recorded here rather than absorbed quietly. Reducing it
   means avoiding the record copy and using a more compact payload; neither is
