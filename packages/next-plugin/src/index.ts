@@ -16,6 +16,8 @@ const require = createRequire(import.meta.url)
 
 type TurbopackRules = NonNullable<NonNullable<NextConfig["turbopack"]>["rules"]>
 type TurbopackRuleConfigItem = Extract<TurbopackRules[string], { loaders?: unknown }>
+type TurbopackRuleCollectionEntry = Extract<TurbopackRules[string], unknown[]>[number]
+type TurbopackLoaderItem = Exclude<TurbopackRuleConfigItem["loaders"], undefined>[number]
 
 /*
  * Derived from the canonical macro package list so the content pre-filter can
@@ -24,6 +26,47 @@ type TurbopackRuleConfigItem = Extract<TurbopackRules[string], { loaders?: unkno
 const MACRO_CONTENT_PATTERN = new RegExp(
   PALAMEDES_MACRO_PACKAGES.map((name) => name.replaceAll(/[.*+?^${}()|[\]\\/]/gu, "\\$&")).join("|")
 )
+
+/*
+ * A Turbopack rule array is either the loader "shorthand" (a flat list of
+ * loader specifiers, all applied to the glob) or a list of rule configs (each
+ * with its own `condition`). The two look alike but mean different things, so
+ * appending a rule config onto a shorthand list would produce a mixed array
+ * with no defined semantics. Loader items are normalized into an equivalent
+ * rule config first.
+ */
+function isTurbopackLoaderItem(entry: TurbopackRuleCollectionEntry): entry is TurbopackLoaderItem {
+  return (
+    typeof entry === "string" || (typeof entry === "object" && entry !== null && "loader" in entry)
+  )
+}
+
+function normalizeTurbopackRuleCollection(
+  entries: readonly TurbopackRuleCollectionEntry[]
+): TurbopackRuleConfigItem[] {
+  const normalized: TurbopackRuleConfigItem[] = []
+  let pendingLoaders: TurbopackLoaderItem[] = []
+
+  const flushLoaders = (): void => {
+    if (pendingLoaders.length > 0) {
+      normalized.push({ loaders: pendingLoaders })
+      pendingLoaders = []
+    }
+  }
+
+  for (const entry of entries) {
+    if (isTurbopackLoaderItem(entry)) {
+      // Loader order within a shorthand run is significant; keep the run intact.
+      pendingLoaders.push(entry)
+      continue
+    }
+    flushLoaders()
+    normalized.push(entry)
+  }
+  flushLoaders()
+
+  return normalized
+}
 
 /*
  * Turbopack rules are keyed by glob; a glob can carry a list of rule configs.
@@ -40,7 +83,9 @@ function appendTurbopackRule(
     rules[glob] = rule
     return
   }
-  rules[glob] = Array.isArray(existing) ? [...existing, rule] : [existing, rule]
+  rules[glob] = Array.isArray(existing)
+    ? [...normalizeTurbopackRuleCollection(existing), rule]
+    : [existing, rule]
 }
 
 export type WithPalamedesOptions = {
@@ -256,10 +301,14 @@ export function withPalamedes(
         ],
       })
 
-      // Add .po loader
+      // Add .po loader. Scoped to first-party catalogs, mirroring the
+      // Turbopack rule's `{ not: "foreign" }`: a dependency shipping importable
+      // .po files is not a Palamedes catalog, and running it through the
+      // catalog loader would fail the whole build.
       if (enablePoLoader) {
         config.module.rules.push({
           test: /\.po$/,
+          exclude: /node_modules/,
           type: "javascript/auto",
           use: [
             {
