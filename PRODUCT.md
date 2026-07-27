@@ -28,6 +28,15 @@ checked-in benchmarks, and ADRs — rather than telling slogans. Success: a
 visitor trusts the engineering within one scroll and reaches the 5-minute
 quickstart.
 
+## Open Product Narrative
+
+Palamedes documents its product and marketing reasoning in the open. The
+positioning notes under `docs/site/` explain how public claims connect to
+product boundaries, proof assets, and the experience we want to create. They
+are open working material for maintainers and contributors. The rendered
+website is the concise expression of that reasoning; the repository keeps the
+thinking behind it inspectable.
+
 ## Brand Personality
 
 Precise, verifiable, calm. The visual voice is a **"Swiss Spec Grid"**: a

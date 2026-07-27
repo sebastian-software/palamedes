@@ -23,7 +23,7 @@
  *   repo path — today `https://github.com/sebastian-software/palamedes/blob/main/<path>`
  *   (or `/tree/main/<path>` for directories); later the docs-site route once
  *   docs are published on the site itself.
- * - Site-internal routes stay literal ("/proof", "/get-started").
+ * - Same-site routes stay literal ("/proof", "/get-started").
  * - Fully external URLs stay literal ("https://...").
  *
  * The implementation is one function; swapping GitHub URLs for docs-site

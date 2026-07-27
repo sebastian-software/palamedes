@@ -19,7 +19,7 @@ links they carry.
   [#290](https://github.com/sebastian-software/palamedes/issues/290) is made;
   until then implementers must treat it as draft, not locked.
 - **Link contract.** `href` values come in exactly three forms:
-  1. site-relative routes for internal pages (`/proof`, `/frameworks`),
+  1. site-relative routes for same-site pages (`/proof`, `/frameworks`),
   2. `repoHref("docs/...")` for anything living in the repository — a
      placeholder function defined in [`components.jsx`](components.jsx) that
      resolves a repo path to its canonical public URL (GitHub `blob/main`
