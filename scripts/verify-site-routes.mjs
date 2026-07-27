@@ -59,6 +59,7 @@ const ROUTE_EXPECTATIONS = [
   },
   { path: "/compare/tolgee", h1: "Your catalogs, or their database." },
   { path: "/compare/intlayer", h1: "Write the dictionary, or write the sentence." },
+  { path: "/guides", h1: "The decisions that actually cost you time." },
   {
     path: "/react-server-components-i18n",
     h1: "i18n for React Server Components, without the workaround.",

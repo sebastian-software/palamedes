@@ -16,15 +16,11 @@ const COLUMNS: { title: string; links: FootLink[] }[] = [
       { label: "Benchmarks & proof", href: "/proof" },
       { label: "Comparison", href: "/compare" },
       /*
-       * Topic pages are search-entry points, so they need a crawlable link
-       * from every page rather than only from pages that happen to mention
-       * them. Kept in this column rather than a fifth one, which would leave
-       * the four-column footer grid with a half-empty row.
+       * One link to the hub rather than one per guide: the topic pages are
+       * search-entry points that need a crawlable path from every page, but
+       * listing each of them here does not survive the list growing.
        */
-      { label: "Server components i18n", href: "/react-server-components-i18n" },
-      { label: "ICU MessageFormat", href: "/icu-messageformat" },
-      { label: "Locale routing", href: "/locale-routing" },
-      { label: "i18n performance", href: "/i18n-performance" },
+      { label: "Guides", href: "/guides" },
     ],
   },
   {
