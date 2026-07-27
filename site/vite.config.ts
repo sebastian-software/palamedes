@@ -52,8 +52,7 @@ export default defineConfig({
     markdownRouteMeta(),
     ardo({
       title: "Palamedes",
-      description:
-        "Rust-powered i18n tooling for JavaScript and TypeScript with source-string-first catalogs.",
+      description: "Rust-powered i18n tooling for TypeScript with source-string-first catalogs.",
       siteUrl: "https://palamedes.dev",
       githubPages: false,
       icons: false,

@@ -68,3 +68,21 @@ export interface FrameworkLanding {
     secondary: FrameworkLandingLink
   }
 }
+
+const FRAMEWORK_LANDING_PATHS: Record<string, string> = {
+  nextjs: "/frameworks/nextjs",
+  tanstack: "/frameworks/tanstack-start",
+  solidstart: "/frameworks/solidstart",
+  waku: "/frameworks/waku",
+  "react-router": "/frameworks/react-router",
+  remix: "/frameworks/remix-v3",
+  vite: "/frameworks/vite",
+}
+
+export function frameworkLandingHref(slug: string): string {
+  const href = FRAMEWORK_LANDING_PATHS[slug]
+  if (!href) {
+    throw new Error(`No framework landing page for ${slug}`)
+  }
+  return href
+}

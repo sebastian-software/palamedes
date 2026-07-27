@@ -1,4 +1,7 @@
+import { Link } from "react-router"
+
 import contentStats from "~/data/generated/content-stats.json"
+import { frameworkLandingHref } from "~/data/framework-landing"
 import { cellFor, FRAMEWORKS, STRATEGIES, type MatrixCell } from "~/data/matrix"
 
 function CellContent({ cell }: { cell: MatrixCell }) {
@@ -73,7 +76,13 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
                   scope="row"
                   className="border border-hair px-4 py-4 text-left align-top text-[14px] font-bold"
                 >
-                  {framework.name}
+                  <Link
+                    to={frameworkLandingHref(framework.slug)}
+                    viewTransition
+                    className="hover:text-accent"
+                  >
+                    {framework.name}
+                  </Link>
                   <span className="mono-nums mt-1 block text-[10px] font-normal text-gray-spec">
                     {framework.slug}
                   </span>
