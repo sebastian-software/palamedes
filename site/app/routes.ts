@@ -143,6 +143,7 @@ export default [
   route("frameworks/remix-v3", "routes/frameworks/remix-v3.tsx"),
   route("frameworks/solidstart", "routes/frameworks/solidstart.tsx"),
   route("frameworks/tanstack-start", "routes/frameworks/tanstack-start.tsx"),
+  route("frameworks/vite", "routes/frameworks/vite.tsx"),
   route("frameworks/waku", "routes/frameworks/waku.tsx"),
   route("get-started", "routes/get-started.tsx"),
   route("guides", "routes/guides.tsx"),
