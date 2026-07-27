@@ -52,6 +52,13 @@ export default defineConfig({
 })
 ```
 
+`referenceScopes` controls whether catalog source references carry a stable
+component or function suffix. It defaults to `true`, producing references such
+as `src/App.tsx#CheckoutButton`; the `false` above opts into file-only
+references such as `src/App.tsx`. The example sets it explicitly only to show
+the field — omit it to keep the default. See
+[Source references](../configuration.md#source-references).
+
 PO is the default catalog storage. Opt into FCL by adding `format: "fcl"`:
 
 ```ts

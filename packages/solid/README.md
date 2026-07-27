@@ -47,6 +47,28 @@ imports from `@palamedes/solid`. Rich JSX children are transformed to numeric
 component slots in the message, for example `<0>Palamedes</0>`, while the Solid
 wrapper is passed separately.
 
+## Runtime Components
+
+Besides the macro entry point, the package's main entry exports the runtime
+components `Trans`, `Plural`, `Select`, and `SelectOrdinal`. These are what
+macro-transformed JSX renders through, and all of them resolve messages through
+the active i18n instance. The choice components accept plural categories
+(`zero` … `other`), exact matches written as `_0`/`_1`/… (normalized to ICU
+`=N`, mirroring the macro transform), and `offset`; invalid option props and
+option text with unbalanced braces are rejected with a descriptive error
+instead of silently misrendering.
+
+`offset` maps to ICU `offset:N` and covers "and N others" sentences, where the
+number shown is smaller than the number counted:
+
+```tsx
+<Plural value={attendees()} offset={1} _0="nobody else" one="# other" other="# others" />
+```
+
+Exact `_N` keys match the raw value; plural categories select on
+`value - offset`, and `#` renders `value - offset`. It must be a non-negative
+safe integer. `Select` has no numeric operand and takes no `offset`.
+
 ## Headless Frontend Helpers
 
 This package also exposes small Solid-native helpers that stay deliberately

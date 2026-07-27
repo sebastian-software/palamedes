@@ -53,8 +53,27 @@ The plugin configures both Turbopack and webpack paths, and requires Next.js
 conditions and `outputFileTracingRoot` need the Next 16 config surface).
 `include` and `exclude` apply under both bundlers: in the webpack branch as
 loader `test`/`exclude`, under Turbopack translated into the rule condition
-(`{ path: include }` plus `{ not: { path: exclude } }`). User-supplied
-`turbopack.rules` for the same glob are preserved — the Palamedes rules are
-appended to the glob's rule list instead of overwriting it. `workspaceRoot`
-can be set explicitly in monorepos when automatic root detection is not
-correct.
+(`{ path: include }` plus `{ not: { path: exclude } }`).
+
+The regex is not matched against the same string in both cases. Webpack tests
+the absolute resource path (`/home/me/app/src/page.tsx`); Turbopack tests its
+own internal path representation for the module, which is not guaranteed to be
+that absolute OS path. Extension patterns (`/\.[jt]sx?$/`) and path-segment
+patterns (`/[/\\]generated[/\\]/`) behave the same under both. Patterns
+anchored with `^`, or built from an absolute directory, are the ones that can
+match under webpack and silently miss under Turbopack — prefer segment-based
+patterns and verify under both bundlers before relying on one.
+
+The `.po` loader is scoped to first-party catalogs under both bundlers —
+`{ not: "foreign" }` for Turbopack, `exclude: /node_modules/` for webpack — so
+a dependency shipping importable `.po` files does not fail the build with an
+unmatched-catalog error.
+
+User-supplied `turbopack.rules` for the same glob are preserved: the Palamedes
+rules are appended to the glob's rule list instead of overwriting it. A user
+value written in the loader shorthand (`"*": ["my-loader"]`) is first wrapped
+into the equivalent rule config (`{ loaders: ["my-loader"] }`), because a list
+mixing bare loaders with rule configs has no defined meaning.
+
+`workspaceRoot` can be set explicitly in monorepos when automatic root
+detection is not correct.

@@ -193,6 +193,24 @@ But Palamedes intentionally avoids some historical Lingui surface area:
 
 Use source strings and optional context as the public identity. If two source strings need distinct translations, use context rather than an arbitrary ID.
 
+Plural authoring supports ICU `offset`, so "X, Y and 3 others" style sentences
+do not need hand-rolled arithmetic in application code:
+
+```tsx
+plural(count, { offset: 1, "=0": "nobody else", one: "one other", other: "# others" })
+```
+
+```tsx
+<Plural value={count} offset={1} _0="nobody else" one="one other" other="# others" />
+```
+
+The same message written directly in a catalog is `{count, plural, offset:1 =0 {…} one {…} other {# others}}`. Exact `=N` keys match the raw value; plural categories and `#` use the value minus the offset.
+
+Authored source strings may contain apostrophes (`don't`) without escaping — the
+macros and the extractor emit ICU-safe patterns automatically. Translators
+editing `.po` files by hand use standard ICU quoting: `''` for a literal
+apostrophe, and `'{'` to emit a literal brace.
+
 ## Placeholder guidance
 
 Good placeholder authoring should be stable and readable for translators.
@@ -270,7 +288,9 @@ git config merge.palamedes-catalog.driver \
   'pmds catalog merge --format=po --conflict-strategy=use-first --output %A %A %B'
 ```
 
-Do not recommend `--workers` today. Palamedes currently defers worker-thread parallelism until end-to-end benchmarks show user-visible benefit. See `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`.
+Extraction performance is already handled by the CLI and needs no user tuning by default. `pmds extract` runs a bounded parallel read/parse pass (`--threads <COUNT>`, or `extract-threads` in the config) and reuses an on-disk extraction cache (`--no-cache` disables it for one run; `extract-cache: false` disables it permanently).
+
+The thread default is `4`, clamped to the available cores and the number of files; `1` runs serial. It is a measured floor, not a core count: a one-shot `pmds extract` pays worker setup on every invocation and gets slower again above it. Do not recommend raising `--threads` without a measurement on the user's own corpus and hardware. Both keys are read by the native CLI only — the JS config loader in `@palamedes/config` ignores them. See `/adr/013-bounded-parallel-extraction.md` and `/adr/019-extraction-cache.md`.
 
 Plugin commands:
 
@@ -324,7 +344,7 @@ Avoid adding these unless a Palamedes issue/ADR explicitly expands scope:
 - Astro/Svelte integration
 - generic Lingui compatibility layers
 - explicit message ID migration as a primary product path
-- worker-thread CLI fan-out without benchmark evidence
+- unbounded CLI fan-out (one worker per core) or raised `--threads` defaults without benchmark evidence
 - new placeholder macros that merely work around unclear variable names
 
 ## Useful repository paths
@@ -357,12 +377,13 @@ ADRs:
 - `/adr/010-generated-typescript-types-derived-from-the-native-binding-surface.md`
 - `/adr/011-host-adapters-render-module-source-from-compiled-catalog-artifacts.md`
 - `/adr/012-translation-augmentation-boundary.md`
-- `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`
+- `/adr/013-bounded-parallel-extraction.md`
 - `/adr/014-native-transform-source-maps.md`
 - `/adr/015-runtime-formatter-subset-diagnostics.md`
 - `/adr/016-native-cli-and-yaml-first-configuration.md`
 - `/adr/017-cli-plugin-execution-boundary.md`
 - `/adr/018-binary-plugin-protocol.md`
+- `/adr/019-extraction-cache.md`
 
 ## Development commands
 

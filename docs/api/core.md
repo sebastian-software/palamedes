@@ -10,6 +10,7 @@ package names.
 - `formatMessagePattern(pattern, values, locale?)`
 - `parseMessagePattern(pattern)`
 - `resolveChoice(node, value, locale?)` and `ResolvedChoice`
+- `replacePoundPlaceholders(value, numericValue, locale?)`
 - `stringifyValue(value)`
 - `parseAcceptLanguage(header)` from `@palamedes/core/locale`
 - `buildLocaleSwitchItems(options)` from `@palamedes/core/locale`
@@ -20,6 +21,7 @@ package names.
 - `CreateI18nOptions`
 - `MissingMessageInfo`
 - `MessageFormatErrorInfo`
+- `ReportedMessageError`
 - `MessageNode`
 - `MessageChoiceNode`
 - `MessageFormattedArgumentNode`
@@ -65,12 +67,39 @@ interface PalamedesI18n {
   activate(locale: string): void
   getMessage(id: string, metadata?: MessageMetadata): string
   getMessageNodes(id: string, metadata?: MessageMetadata): MessageNode[]
+  reportError(info: ReportedMessageError): void
 }
 ```
+
+`reportError()` routes a rendering failure that happened outside the instance
+(for example inside a framework adapter's node renderer) through the same
+`onError` telemetry hook as internal formatting failures, filling in the active
+locale. `replacePoundPlaceholders(value, numericValue, locale?)` replaces `#`
+markers in already-resolved choice text using the instance-independent cached
+`Intl.NumberFormat`; the framework adapters use it so pound formatting shares
+core's formatter cache.
 
 `getMessageNodes()` returns the parsed message as a `MessageNode[]` tree. The
 `<Trans>`-style components in `@palamedes/react` and `@palamedes/solid` render
 from this structure; custom `PalamedesI18n` implementations must provide it.
+
+A custom renderer must handle every `MessageNode` variant, including
+`MessageLiteralNode`:
+
+```ts
+type MessageLiteralNode = {
+  type: "literal"
+  value: string
+}
+```
+
+Literal nodes carry text that ICU quoting escaped — the `{` in `'{'`, the `'`
+in `''`, the `#` in `'#'`. They render exactly like `MessageTextNode`; they are
+a separate variant only so the parse tree records that the text was quoted. A
+renderer that switches on `"text"`, `"variable"`, `"formatted"`, `"choice"`,
+and `"tag"` alone silently drops every escaped character. See
+[Quoting and literal text](#quoting-and-literal-text) for the quoting rules
+that produce these nodes.
 
 `load()` merges messages into the locale catalog. The locale passed to
 `createI18n({ locale })`, or `DEFAULT_LOCALE` when omitted, is active
@@ -166,6 +195,71 @@ Plural and selectordinal arguments require a present, numeric value (numeric
 strings are accepted). A missing or non-numeric value throws instead of
 silently coercing to `0` — inside `_()`/`getMessage()` that error is reported
 through `onError` and rendering falls back to the source message.
+
+### Plural Offset
+
+`plural` and `selectordinal` arguments accept ICU `offset:N`, where `N` is a
+non-negative integer. It exists for "and N others" sentences, where the number
+shown is smaller than the number counted:
+
+```text
+{count, plural, offset:1 =0 {nobody else} one {# other person} other {# other people}}
+```
+
+Three rules, applied in this order:
+
+1. Exact `=N` keys match the **raw** value, before the offset is subtracted.
+   With `offset:1` and `count = 1`, the `=1` branch matches.
+2. Plural categories (`zero` … `other`) select on `value - offset`. With
+   `offset:1` and `count = 2`, the category comes from `1`, so English picks
+   `one`.
+3. `#` inside the selected branch renders `value - offset`.
+
+A negative or non-integer offset is rejected while the pattern is parsed, so a
+bad offset surfaces as a format error rather than a wrong count. `select` has
+no numeric operand and does not support `offset`: an `offset:` written into a
+`select` argument is read as an option key, never matches, and renders empty.
+
+The same argument is written `plural(count, { offset: 1, … })` with the macro
+and `<Plural offset={1}>` with the React and Solid components; both compile to
+the ICU form above, so the offset lives in the catalog and translators can rely
+on it.
+
+### Quoting and Literal Text
+
+The runtime parser implements ICU's apostrophe quoting in its lenient form, so
+ordinary prose stays readable while `{`, `}`, and `#` remain escapable:
+
+- `''` is always a literal apostrophe: `Ada''s` renders `Ada's`.
+- A single `'` opens a quoted literal **only** when the next character is `{`,
+  `}`, or — inside a plural or selectordinal branch, where `#` is syntax — `#`.
+  Everything up to the closing `'` is literal text.
+- Anywhere else, `'` is just an apostrophe. `don't`, `it's`, and `l'été` need
+  no escaping and render unchanged.
+- An unterminated quote auto-closes at the end of the pattern rather than
+  throwing: `Use '{name` renders `Use {name`.
+
+That makes `'{'` the way to emit a literal brace, and `'{'`/`'}'` the way to
+show placeholder syntax to the reader:
+
+| Pattern                         | Renders       |
+| ------------------------------- | ------------- |
+| `Ada''s file`                   | `Ada's file`  |
+| `don't panic`                   | `don't panic` |
+| `'{'name'}'`                    | `{name}`      |
+| `'{name}'`                      | `{name}`      |
+| `Sale: 50'%'`                   | `Sale: 50'%'` |
+| `{n, plural, other {'#' rank}}` | `# rank`      |
+| `Use '{name`                    | `Use {name`   |
+
+Quoted runs become `MessageLiteralNode` entries in `getMessageNodes()` output.
+
+Application authors do not need to think about any of this: the macros and the
+extractor escape authored apostrophes on the way into the catalog, so a source
+message written as `Ada's file` is stored as a pattern that renders it back
+unchanged. The rules above matter for translators hand-editing `.po` files, for
+catalogs imported from a TMS, and for patterns passed directly to
+`formatMessagePattern()` — all of which use standard ICU quoting.
 
 Two helpers back the host-adapter renderers and are public for custom
 adapters: `resolveChoice(node, value, locale?)` selects the branch of a parsed

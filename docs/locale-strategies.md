@@ -67,6 +67,12 @@ Subdomain examples follow this rule set:
 - switching locale loads a different host (the control swaps the leftmost label
   via `canonicalUrl`), so it is always a full document load — the live switching
   mechanism below does not apply
+- `canonicalUrl` and `suggest` return protocol-relative URLs (`//de.example.com/…`)
+  unless the config sets `protocol` (for example `protocol: "https"`). The
+  default keeps the same configuration correct on http locally and https in
+  production; set it when the URLs must be absolute, as in canonical link tags,
+  `hreflang` alternates, or sitemaps. See
+  [`defineLocaleControls`](api/core.md#locale-controls).
 
 This is distinct from the host mapping above. Host mapping is a _validation
 signal on top of_ the route strategy, matched against fully configured per-locale
@@ -104,6 +110,9 @@ TLD examples follow this rule set:
   locale `en` switches to `defaultTld`
   (`hosts: { mode: "tld", defaultTld: "com" }`, so `en` -> `.com`), which the
   `.com` -> `en` override above also serves authoritatively
+- as with the subdomain strategy, the emitted URLs are protocol-relative unless
+  the config sets `protocol` (for example `protocol: "https"`). See
+  [`defineLocaleControls`](api/core.md#locale-controls).
 
 ### Why real TLDs need an explicit policy
 

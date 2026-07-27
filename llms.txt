@@ -132,6 +132,7 @@ binary plugin protocol instead. See `/docs/api/cli-plugin.md` and
 - `/examples/README.md`: verified example matrix
 - `/adr/003-source-string-first-message-identity.md`: source-string-first identity
 - `/adr/005-universal-geti18n-runtime-model.md`: runtime access model
-- `/adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md`: why CLI workers are deferred until benchmarks justify them
+- `/adr/013-bounded-parallel-extraction.md`: why extraction parallelism is bounded rather than one worker per core
 - `/adr/017-cli-plugin-execution-boundary.md`: explicit CLI plugin execution boundary
 - `/adr/018-binary-plugin-protocol.md`: binary plugin protocol for Rust-first extensions
+- `/adr/019-extraction-cache.md`: the on-disk extraction cache and how it is validated
