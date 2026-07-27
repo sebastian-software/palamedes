@@ -1,5 +1,10 @@
 [workspace]
-members = ["crates/palamedes", "crates/palamedes-cli", "crates/palamedes-node"]
+members = [
+  "crates/palamedes",
+  "crates/palamedes-cli",
+  "crates/palamedes-node",
+  "crates/palamedes-plugin",
+]
 resolver = "2"
 
 [workspace.package]

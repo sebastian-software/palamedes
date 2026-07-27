@@ -41,6 +41,11 @@ const requiredTomlExtraFiles = [
   },
   {
     type: "toml",
+    path: "crates/palamedes-plugin/Cargo.toml",
+    jsonpath: "$.package.version",
+  },
+  {
+    type: "toml",
     path: "Cargo.lock",
     jsonpath: '$.package[?(@.name.value=="palamedes")].version',
   },
@@ -53,6 +58,11 @@ const requiredTomlExtraFiles = [
     type: "toml",
     path: "Cargo.lock",
     jsonpath: '$.package[?(@.name.value=="palamedes-cli")].version',
+  },
+  {
+    type: "toml",
+    path: "Cargo.lock",
+    jsonpath: '$.package[?(@.name.value=="palamedes-plugin")].version',
   },
 ]
 
@@ -154,9 +164,11 @@ for (const [name, version] of [
   ["palamedes", cargoManifestVersion("crates/palamedes/Cargo.toml")],
   ["palamedes-node", cargoManifestVersion("crates/palamedes-node/Cargo.toml")],
   ["palamedes-cli", cargoManifestVersion("crates/palamedes-cli/Cargo.toml")],
+  ["palamedes-plugin", cargoManifestVersion("crates/palamedes-plugin/Cargo.toml")],
   ["Cargo.lock palamedes", cargoLockVersion("palamedes")],
   ["Cargo.lock palamedes-node", cargoLockVersion("palamedes-node")],
   ["Cargo.lock palamedes-cli", cargoLockVersion("palamedes-cli")],
+  ["Cargo.lock palamedes-plugin", cargoLockVersion("palamedes-plugin")],
 ]) {
   if (version !== expectedVersion) {
     fail(`${name} has version ${version}, expected ${expectedVersion}`)
