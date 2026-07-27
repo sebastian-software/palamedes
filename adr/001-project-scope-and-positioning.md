@@ -91,8 +91,6 @@ Artifact ownership is explicit:
   principles.
 - This ADR records the durable decision, its rationale, its tradeoffs, and the
   conditions that should reopen it.
-- Page-specific notes under `docs/site/` may guide individual surfaces, but
-  there is no second general product narrative.
 
 ## Alternatives Considered
 

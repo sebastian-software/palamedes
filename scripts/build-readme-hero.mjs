@@ -4,7 +4,7 @@
 //
 // Usage: serve any example, then run with its port. Example:
 //   pnpm --filter @palamedes/example-tanstack-cookie preview &
-//   node scripts/build-readme-hero.mjs --port 4020 --out docs/site/assets/palamedes-localized-matrix.png
+//   node scripts/build-readme-hero.mjs --port 4020 --out docs/assets/palamedes-localized-matrix.png
 import { chromium } from "@playwright/test"
 import { writeFileSync } from "node:fs"
 import path from "node:path"
@@ -15,7 +15,7 @@ const arg = (name, fallback) => {
   return i === -1 ? fallback : args[i + 1]
 }
 const PORT = arg("port", "4020")
-const OUT = path.resolve(arg("out", "docs/site/assets/palamedes-localized-matrix.png"))
+const OUT = path.resolve(arg("out", "docs/assets/palamedes-localized-matrix.png"))
 const EXE = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 const BASE = `http://127.0.0.1:${PORT}/`
 

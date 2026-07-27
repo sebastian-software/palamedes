@@ -38,8 +38,8 @@ usually hide i18n bugs:
 
 The screenshots are versioned in the repo:
 
-- [example screenshots](../../example-screenshots/README.md)
-- [matrix visual](../assets/palamedes-localized-matrix.png)
+- [example screenshots](../../../docs/example-screenshots/README.md)
+- [matrix visual](../../../docs/assets/palamedes-localized-matrix.png)
 
 The useful detail is that the screenshots are not hand-picked marketing
 images. They come from the same Playwright-based verification flow that checks
@@ -82,5 +82,5 @@ Not "trust us."
 Start here:
 
 - [example matrix](../../../examples/README.md)
-- [versioned screenshots](../../example-screenshots/README.md)
-- [framework example notes](../../framework-example-notes.md)
+- [versioned screenshots](../../../docs/example-screenshots/README.md)
+- [framework example notes](../../../docs/framework-example-notes.md)

@@ -1,9 +1,8 @@
 # @palamedes/site
 
-The public Palamedes website, live at <https://palamedes.dev> — React Router 8 (framework mode) with ARDO route generation, full
-prerendering, Tailwind v4, and the Swiss-spec-grid design system from
-[`docs/site/structure/`](../docs/site/structure/README.md). Private
-workspace, never published to npm.
+The public Palamedes website, live at <https://palamedes.dev> — React Router 8
+(framework mode) with ARDO route generation, full prerendering, Tailwind v4,
+and a Swiss-spec-grid design system. Private workspace, never published to npm.
 
 ## Commands
 
@@ -22,7 +21,7 @@ pnpm typecheck    # react-router typegen + tsc
 ```
 
 `site/scripts/prebuild-content.mjs` runs before dev, build, and typecheck. It
-keeps `docs/`, `adr/`, and `docs/site/posts/` as the canonical sources while
+keeps `docs/`, `adr/`, and `site/content/blog/` as the canonical sources while
 generating ARDO routes under `app/routes/docs`, `app/routes/decisions`, and
 `app/routes/blog`. It also generates the `/api-reference` section with TypeDoc
 from the package sources. Those generated route files and copied doc assets are

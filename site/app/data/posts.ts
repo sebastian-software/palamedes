@@ -1,7 +1,5 @@
 import { blogHref } from "./links"
 
-/* Verbatim from docs/site/structure/pages/BlogIndexPage.jsx. */
-
 export interface Post {
   title: string
   excerpt: string

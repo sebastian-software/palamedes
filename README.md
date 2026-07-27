@@ -21,7 +21,7 @@ product uses all of them.
 
 We are not asking you to trust a slogan. The repo shows the work.
 
-![The same booking rendered in English, German, and Spanish across the verified framework matrix](docs/site/assets/palamedes-localized-matrix.png)
+![The same booking rendered in English, German, and Spanish across the verified framework matrix](docs/assets/palamedes-localized-matrix.png)
 
 The current proof:
 

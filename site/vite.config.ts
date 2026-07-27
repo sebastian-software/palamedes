@@ -73,7 +73,7 @@ export default defineConfig({
           "/llms-full.txt",
           "/favicon.svg",
           "/docs/example-screenshots/*",
-          "/docs/site/assets/*",
+          "/docs/assets/palamedes-localized-matrix.png",
         ],
       },
       metadata: {

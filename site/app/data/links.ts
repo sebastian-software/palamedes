@@ -2,11 +2,7 @@ export const SITE_ORIGIN = "https://palamedes.dev"
 
 export const REPO = "https://github.com/sebastian-software/palamedes"
 
-/*
- * Link contract (docs/site/structure/README.md): everything living in the
- * repository resolves through this single function — GitHub today, docs-site
- * routes later, one place to change.
- */
+/* Keep repository URL construction in one place. */
 export function repoHref(path: string, kind: "blob" | "tree" = "blob"): string {
   return `${REPO}/${kind}/main/${path}`
 }

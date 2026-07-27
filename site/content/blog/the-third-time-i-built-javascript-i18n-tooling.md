@@ -78,10 +78,10 @@ Evidence:
 - [qooxdoo](https://qooxdoo.org/)
 - [Salesforce announcement for Regrello](https://www.salesforce.com/news/stories/salesforce-signs-definitive-agreement-to-acquire-regrello/)
 - [Palamedes ADRs](../../../adr/001-project-scope-and-positioning.md)
-- [proof and benchmark page](../../proof-and-benchmarks.md)
+- [proof and benchmark page](../../../docs/proof-and-benchmarks.md)
 
 The next step is not a grand claim. It is a small one:
 
-Try the [5-minute quickstart](../../first-working-translation.md), then inspect
+Try the [5-minute quickstart](../../../docs/first-working-translation.md), then inspect
 the [example matrix](../../../examples/README.md). If the model feels boring in
 the right way, Palamedes is doing its job.

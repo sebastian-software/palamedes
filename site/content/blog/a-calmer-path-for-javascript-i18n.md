@@ -46,11 +46,11 @@ The proof is visible in the repo:
 - the [example matrix](../../../examples/README.md) covers Next.js, TanStack
   Start, SolidStart, Waku, and React Router
 - each framework family has cookie, route, subdomain, and tld locale strategies
-- [browser screenshots](../../example-screenshots/README.md) are generated
+- [browser screenshots](../../../docs/example-screenshots/README.md) are generated
   from the same Playwright verification flow used in CI
 - [ADRs](../../../adr/001-project-scope-and-positioning.md) explain the runtime
   model, message identity, adapter architecture, and native boundary
-- [benchmark commands](../../proof-and-benchmarks.md) are checked in so local
+- [benchmark commands](../../../docs/proof-and-benchmarks.md) are checked in so local
   measurements can be rerun
 
 The point is not that Palamedes already does everything. It does not. There is
@@ -70,5 +70,5 @@ changes?"
 
 That is the lane Palamedes is built for.
 
-Start with the [5-minute quickstart](../../first-working-translation.md), then
-read the [proof and benchmark page](../../proof-and-benchmarks.md).
+Start with the [5-minute quickstart](../../../docs/first-working-translation.md), then
+read the [proof and benchmark page](../../../docs/proof-and-benchmarks.md).
