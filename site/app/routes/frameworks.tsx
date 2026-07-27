@@ -16,9 +16,9 @@ export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
-    title: "Palamedes — one i18n model across six framework families",
+    title: "Framework i18n guides for TypeScript | Palamedes",
     description:
-      "Six frameworks, four locale strategies, one mental model: the browser-verified Palamedes example matrix across Next.js, TanStack Start, SolidStart, Waku, React Router, and Remix v3.",
+      "Framework-specific i18n guides and verified examples for Next.js, TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite.",
     path: "/frameworks",
   })
 }
@@ -34,7 +34,9 @@ export default function Frameworks() {
         <p className="mt-6 max-w-[38em]">
           Every cell below is a real application — the same booking UI, the same catalogs, the same
           runtime calls — browser-verified in CI. Where public hosting is ready, open the demo,
-          switch the language, and watch copy, plurals, currency, and dates change together.
+          switch the language, and watch copy, plurals, currency, and dates change together. Then
+          open the framework guide for its exact server boundary, TypeScript setup, and current
+          limitations.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href={DEMO_NEXTJS_COOKIE}>Open a live demo</ButtonLink>
