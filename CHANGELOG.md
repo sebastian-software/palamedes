@@ -52,6 +52,30 @@
   and the macro content pre-filter is derived from the canonical macro
   package list (it previously missed `@palamedes/solid/macro`).
 
+## [1.8.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.7.0...palamedes-v1.8.0) (2026-07-27)
+
+
+### Features
+
+* **cli:** add configurable reference scopes ([a6f6519](https://github.com/sebastian-software/palamedes/commit/a6f65192cbde4226789908d794b4366fff779522))
+* **cli:** add configurable reference scopes ([45f7522](https://github.com/sebastian-software/palamedes/commit/45f75220cfdf05b87508c52f3bab6b11a9ca3479))
+
+
+### Bug Fixes
+
+* **benchmarks:** author the lingui-v6 Palamedes lane with the post-1.5.0 macro surface ([079351c](https://github.com/sebastian-software/palamedes/commit/079351c1b2a20e208b610a4f6973827ba8443635))
+* **benchmarks:** author the Palamedes lane with the post-1.5.0 macro surface ([3aa1331](https://github.com/sebastian-software/palamedes/commit/3aa1331e129dc94b75b2f91f46bbe3168ee5d819))
+* **core:** close two cache correctness gaps found in review ([d646e63](https://github.com/sebastian-software/palamedes/commit/d646e63b192fd41296a11ce85d6579a963f8b249))
+* resolve vite plugin declarations ([545094a](https://github.com/sebastian-software/palamedes/commit/545094a77beacc8db639334243c90a102363b8ac))
+* resolve vite plugin declarations for TypeScript 6/7 ([c17b131](https://github.com/sebastian-software/palamedes/commit/c17b131bc850f14693987bbd51826995baa6b643))
+
+
+### Performance Improvements
+
+* **core:** cache extraction results per source file ([7147c30](https://github.com/sebastian-software/palamedes/commit/7147c300b0fbf8eaa49817a34947c8a6fdcf126d))
+* **core:** extract source files across a bounded worker pool ([2065bca](https://github.com/sebastian-software/palamedes/commit/2065bca6aecb3059275e93dc5ce41e0faaa422f2))
+* **core:** skip the PO metadata round trip when there is nothing to preserve ([00c1b11](https://github.com/sebastian-software/palamedes/commit/00c1b11110550b3a87f9a77b91c8588cbbd8c392))
+
 ## [1.7.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.6.0...palamedes-v1.7.0) (2026-07-27)
 
 
