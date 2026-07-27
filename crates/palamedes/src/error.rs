@@ -26,6 +26,12 @@ pub enum PalamedesError {
         /// Underlying filesystem error.
         source: std::io::Error,
     },
+    /// The worker pool for parallel extraction could not be created.
+    #[error("Could not create the extraction worker pool: {message}")]
+    ExtractionPool {
+        /// Underlying thread pool build error.
+        message: String,
+    },
     /// A catalog file-combine request must include at least two inputs.
     #[error("Catalog file combine requires at least two input files, received {count}.")]
     InvalidCatalogFileCombineInputCount {

@@ -61,6 +61,10 @@ struct ExtractOptions {
     /// Remove obsolete messages immediately, including entries without obsolete-since.
     #[arg(long)]
     force_clean: bool,
+    /// Worker threads for the parallel extraction pass. Overrides
+    /// `extract-threads` in the config file; 1 forces serial extraction.
+    #[arg(long, value_name = "COUNT")]
+    threads: Option<usize>,
     /// Show verbose output.
     #[arg(short, long)]
     verbose: bool,
@@ -333,7 +337,7 @@ fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
     let mut results = Vec::with_capacity(config.catalogs.len());
 
     for catalog in &config.catalogs {
-        let result = extract_from_catalog(catalog, config, options.verbose)?;
+        let result = extract_from_catalog(catalog, config, options)?;
         total_glob_ms += result.glob_ms;
         total_extract_ms += result.extract_ms;
         total_messages += result.messages.len();
@@ -377,8 +381,9 @@ fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(),
 fn extract_from_catalog(
     catalog: &ConfigCatalog,
     config: &LoadedConfig,
-    verbose: bool,
+    options: &ExtractOptions,
 ) -> Result<CatalogExtractionResult, CliError> {
+    let verbose = options.verbose;
     let glob_started_at = Instant::now();
     let files = collect_source_files(catalog, config)?;
     let glob_ms = glob_started_at.elapsed().as_millis();
@@ -402,6 +407,8 @@ fn extract_from_catalog(
             .iter()
             .map(|path| path.to_string_lossy().into_owned())
             .collect(),
+        // --threads wins over the config file; both fall back to the core default.
+        max_threads: options.threads.or(config.extract_threads),
     })?;
     let extract_ms = extract_started_at.elapsed().as_millis();
 
@@ -1412,6 +1419,7 @@ source-locale: en
             watch: false,
             clean: false,
             force_clean: false,
+            threads: None,
             verbose: false,
         }
     }

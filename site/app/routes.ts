@@ -109,7 +109,7 @@ export default [
   route("decisions/010-generated-typescript-types-derived-from-the-native-binding-surface", "routes/decisions/010-generated-typescript-types-derived-from-the-native-binding-surface.md"),
   route("decisions/011-host-adapters-render-module-source-from-compiled-catalog-artifacts", "routes/decisions/011-host-adapters-render-module-source-from-compiled-catalog-artifacts.md"),
   route("decisions/012-translation-augmentation-boundary", "routes/decisions/012-translation-augmentation-boundary.md"),
-  route("decisions/013-defer-cli-worker-parallelism-until-benchmarked-need", "routes/decisions/013-defer-cli-worker-parallelism-until-benchmarked-need.md"),
+  route("decisions/013-bounded-parallel-extraction", "routes/decisions/013-bounded-parallel-extraction.md"),
   route("decisions/014-native-transform-source-maps", "routes/decisions/014-native-transform-source-maps.md"),
   route("decisions/015-runtime-formatter-subset-diagnostics", "routes/decisions/015-runtime-formatter-subset-diagnostics.md"),
   route("decisions/016-native-cli-and-yaml-first-configuration", "routes/decisions/016-native-cli-and-yaml-first-configuration.md"),

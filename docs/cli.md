@@ -45,6 +45,7 @@ Options:
 | `-w, --watch`         | Re-run extraction on file changes (debounced). Fatal authoring errors are printed and watching continues; the config file is watched and reloaded on change. |
 | `--clean`             | Remove obsolete entries with `obsolete-since` at least 30 days old; keep undated obsolete entries.                                                           |
 | `--force-clean`       | Remove all obsolete entries immediately, including undated entries.                                                                                          |
+| `--threads <COUNT>`   | Worker threads for the parallel extraction pass. Overrides `extract-threads` in the config; defaults to `4`; `1` runs serial.                                |
 | `-v, --verbose`       | Print verbose extraction details.                                                                                                                            |
 
 ## `pmds audit`

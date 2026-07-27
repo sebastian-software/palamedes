@@ -27,6 +27,9 @@ pub struct NativeExtractedMessage {
 pub struct ExtractCatalogMessagesRequest {
     pub root_dir: String,
     pub files: Vec<String>,
+    /// Worker threads for the parallel extraction pass. Omit to use the
+    /// measured default; 1 forces serial extraction.
+    pub max_threads: Option<u32>,
 }
 
 #[napi(object)]
@@ -68,6 +71,7 @@ impl From<ExtractCatalogMessagesRequest> for palamedes::ExtractCatalogMessagesRe
         Self {
             root_dir: value.root_dir,
             files: value.files,
+            max_threads: value.max_threads.map(|threads| threads as usize),
         }
     }
 }

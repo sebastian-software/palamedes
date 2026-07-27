@@ -38,7 +38,7 @@ Finally read the host integration decisions:
 Then read the product boundary, CLI, and diagnostics decisions:
 
 12. [ADR-012: Translation Augmentation Boundary](./adr/012-translation-augmentation-boundary.md)
-13. [ADR-013: Defer CLI Worker Parallelism Until Benchmarked Need](./adr/013-defer-cli-worker-parallelism-until-benchmarked-need.md)
+13. [ADR-013: Bounded Parallel Extraction](./adr/013-bounded-parallel-extraction.md)
 14. [ADR-014: Native Transform Source Maps](./adr/014-native-transform-source-maps.md)
 15. [ADR-015: Runtime Formatter Subset Diagnostics](./adr/015-runtime-formatter-subset-diagnostics.md)
 16. [ADR-016: Native CLI And YAML-First Configuration](./adr/016-native-cli-and-yaml-first-configuration.md)

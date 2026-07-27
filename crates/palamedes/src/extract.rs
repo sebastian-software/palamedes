@@ -27,6 +27,7 @@ use oxc_ast::ast::{
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType};
+use rayon::prelude::*;
 use serde::Serialize;
 
 const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
@@ -76,6 +77,12 @@ pub struct ExtractCatalogMessagesRequest {
     pub root_dir: String,
     /// Source files to read and extract in caller-provided order.
     pub files: Vec<String>,
+    /// Worker threads for the parallel read/parse pass.
+    ///
+    /// Defaults to [`DEFAULT_EXTRACT_THREADS`] when `None`, and is clamped to
+    /// the file count and to the machine's available parallelism. `Some(1)`
+    /// forces the serial path.
+    pub max_threads: Option<usize>,
 }
 
 /// Non-fatal source file extraction failure.
@@ -1281,8 +1288,23 @@ pub fn extract_messages(
     filename: &str,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
     let allocator = Allocator::default();
+    extract_messages_in(&allocator, source, filename)
+}
+
+/*
+ * Extraction against a caller-owned arena. A fresh Allocator per file means a
+ * fresh set of bump chunks from the system allocator per file, and on a 1500
+ * file tree that allocation churn is what limits parallel extraction — it
+ * contends far earlier than the parsing itself does. The batch path reuses one
+ * arena per worker thread and resets it between files instead.
+ */
+fn extract_messages_in(
+    allocator: &Allocator,
+    source: &str,
+    filename: &str,
+) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
-    let parsed = Parser::new(&allocator, source, source_type).parse();
+    let parsed = Parser::new(allocator, source, source_type).parse();
 
     if !parsed.diagnostics.is_empty() {
         let messages = parsed
@@ -1341,44 +1363,67 @@ pub fn extract_catalog_messages_from_files(
     let mut failed_files = Vec::new();
     let file_count = request.files.len();
 
-    for file in &request.files {
-        let source = match std::fs::read_to_string(file) {
-            Ok(source) => source,
-            Err(source) => {
-                failed_files.push(ExtractCatalogFileFailure {
-                    path: file.clone(),
-                    message: PalamedesError::ReadFile {
-                        path: PathBuf::from(file),
-                        source,
-                    }
-                    .to_string(),
-                });
-                continue;
-            }
-        };
+    /*
+     * Reading and parsing each file is independent work and dominates extraction
+     * on real trees, so it runs in parallel. Aggregation deliberately does not:
+     * add_extracted_message appends to origins, extracted_comments, and
+     * placeholder value lists, so the merge order decides the output order.
+     * par_iter().collect() preserves input order, and the fold below walks that
+     * ordered Vec, which keeps the written catalog byte-identical to the serial
+     * implementation regardless of how work got scheduled.
+     *
+     * The pool is built here rather than taken from rayon's global pool: this is
+     * a library, and installing a global pool would decide thread policy for
+     * every embedder, including the Node binding.
+     */
+    let threads = resolve_extract_threads(request.max_threads, file_count);
+    let mut outcomes: Vec<FileExtraction> = if threads <= 1 {
+        request
+            .files
+            .iter()
+            .map(|file| extract_one_file(file, &root_dir))
+            .collect()
+    } else {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .map_err(|source| PalamedesError::ExtractionPool {
+                message: source.to_string(),
+            })?
+            .install(|| {
+                request
+                    .files
+                    .par_iter()
+                    .map(|file| extract_one_file(file, &root_dir))
+                    .collect()
+            })
+    };
 
-        let extracted = match extract_messages(&source, file) {
-            Ok(messages) => messages,
-            Err(
-                error @ (PalamedesError::ExplicitMessageIdsUnsupported
-                | PalamedesError::NestedMessageMacro { .. }
-                | PalamedesError::UnsupportedMacroSyntax { .. }
-                | PalamedesError::TranslationMacroOutsideFunction { .. }),
-            ) => {
-                return Err(error);
-            }
-            Err(error) => {
-                failed_files.push(ExtractCatalogFileFailure {
-                    path: file.clone(),
-                    message: error.to_string(),
-                });
-                continue;
-            }
-        };
+    /*
+     * The serial path returned on the first fatal file it reached, so report the
+     * first one in file order rather than whichever thread happened to finish
+     * first. Later files are already parsed at this point; that is wasted work
+     * on a failing run only, and it keeps the reported error deterministic.
+     */
+    if let Some(index) = outcomes
+        .iter()
+        .position(|outcome| matches!(outcome, FileExtraction::Fatal(_)))
+    {
+        if let FileExtraction::Fatal(error) = outcomes.swap_remove(index) {
+            return Err(error);
+        }
+    }
 
-        let relative_file = relative_origin_file(&root_dir, file);
-        for message in extracted {
-            add_extracted_message(&mut catalog, message, &relative_file);
+    for outcome in outcomes {
+        match outcome {
+            FileExtraction::Extracted(relative_file, messages) => {
+                for message in messages {
+                    add_extracted_message(&mut catalog, message, &relative_file);
+                }
+            }
+            FileExtraction::Failed(failure) => failed_files.push(failure),
+            // Unreachable: the first fatal outcome returned above.
+            FileExtraction::Fatal(error) => return Err(error),
         }
     }
 
@@ -1390,6 +1435,85 @@ pub fn extract_catalog_messages_from_files(
         file_count,
         failed_files,
     })
+}
+
+thread_local! {
+    /// Arena reused across every file a worker thread handles, reset in between.
+    static EXTRACT_ARENA: std::cell::RefCell<Allocator> =
+        std::cell::RefCell::new(Allocator::default());
+}
+
+/// Reads and extracts one file, classifying the outcome for ordered merging.
+fn extract_one_file(file: &String, root_dir: &Path) -> FileExtraction {
+    let source = match std::fs::read_to_string(file) {
+        Ok(source) => source,
+        Err(source) => {
+            return FileExtraction::Failed(ExtractCatalogFileFailure {
+                path: file.clone(),
+                message: PalamedesError::ReadFile {
+                    path: PathBuf::from(file),
+                    source,
+                }
+                .to_string(),
+            });
+        }
+    };
+
+    let extracted = EXTRACT_ARENA.with(|arena| {
+        let mut arena = arena.borrow_mut();
+        let extracted = extract_messages_in(&arena, &source, file);
+        /*
+         * Safe to reset here: ExtractedMessageRecord owns its strings, so
+         * nothing returned above borrows from the arena.
+         */
+        arena.reset();
+        extracted
+    });
+
+    match extracted {
+        Ok(messages) => FileExtraction::Extracted(relative_origin_file(root_dir, file), messages),
+        Err(
+            error @ (PalamedesError::ExplicitMessageIdsUnsupported
+            | PalamedesError::NestedMessageMacro { .. }
+            | PalamedesError::UnsupportedMacroSyntax { .. }
+            | PalamedesError::TranslationMacroOutsideFunction { .. }),
+        ) => FileExtraction::Fatal(error),
+        Err(error) => FileExtraction::Failed(ExtractCatalogFileFailure {
+            path: file.clone(),
+            message: error.to_string(),
+        }),
+    }
+}
+
+/*
+ * `pmds extract` is a one-shot process, so it never amortizes pool setup: the
+ * first extraction in a process pays a per-thread cost that is dominated by
+ * kernel VM work serialized on the process-wide vm_map lock. Measured on the
+ * realistic benchmark corpus (1500 files, 6000 messages, M1 Ultra), extraction
+ * is 119 ms serial, bottoms out around 45 ms at four threads, and climbs back
+ * to 197 ms at twenty — worse than serial. Four is the measured floor, not a
+ * core count, which is why it is a constant and not `available_parallelism()`.
+ *
+ * See ADR-013 for the full measurement and the reasoning behind the bound.
+ */
+pub const DEFAULT_EXTRACT_THREADS: usize = 4;
+
+fn resolve_extract_threads(requested: Option<usize>, file_count: usize) -> usize {
+    let available = std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1);
+    requested
+        .unwrap_or(DEFAULT_EXTRACT_THREADS)
+        .max(1)
+        .min(available)
+        .min(file_count.max(1))
+}
+
+/// Per-file result of the parallel extraction pass, merged in input order.
+enum FileExtraction {
+    Extracted(String, Vec<ExtractedMessageRecord>),
+    Failed(ExtractCatalogFileFailure),
+    Fatal(PalamedesError),
 }
 
 fn relative_origin_file(root_dir: &Path, file: &str) -> String {
@@ -1551,7 +1675,8 @@ mod tests {
 
     use super::{
         extract_catalog_messages_from_files, extract_messages as extract_messages_raw,
-        ExtractCatalogMessagesRequest, ExtractedMessageRecord,
+        resolve_extract_threads, ExtractCatalogMessagesRequest, ExtractedMessageRecord,
+        DEFAULT_EXTRACT_THREADS,
     };
     use crate::error::PalamedesResult;
     use crate::test_support::scope_macro_test_source;
@@ -1563,6 +1688,79 @@ mod tests {
         filename: &str,
     ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
         extract_messages_raw(&scope_macro_test_source(source, filename), filename)
+    }
+
+    #[test]
+    fn resolves_extract_threads_within_measured_bounds() {
+        let available = std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(1);
+
+        // Default is the measured bound, not the core count.
+        assert_eq!(
+            resolve_extract_threads(None, 10_000),
+            DEFAULT_EXTRACT_THREADS.min(available)
+        );
+
+        // An explicit request is honored, still clamped to the machine.
+        assert_eq!(resolve_extract_threads(Some(2), 10_000), 2.min(available));
+
+        // Never spawn more workers than there are files to hand out.
+        assert_eq!(resolve_extract_threads(None, 2), 2.min(available));
+
+        // 1 forces the serial path; 0 is treated as 1 rather than panicking in
+        // ThreadPoolBuilder.
+        assert_eq!(resolve_extract_threads(Some(1), 10_000), 1);
+        assert_eq!(resolve_extract_threads(Some(0), 10_000), 1);
+
+        // An empty file list must still resolve to a buildable pool size.
+        assert!(resolve_extract_threads(None, 0) >= 1);
+    }
+
+    #[test]
+    fn batch_extraction_is_independent_of_thread_count() {
+        let root = temp_root("thread-count-parity");
+        std::fs::create_dir_all(&root).expect("create root");
+        let mut files = Vec::new();
+        for index in 0..24 {
+            let path = root.join(format!("fixture-{index:02}.tsx"));
+            std::fs::write(
+                &path,
+                format!(
+                    "import {{ t }} from \"@palamedes/core/macro\"\n\
+                     export function Fixture{index}() {{\n\
+                       return [t({{ message: \"Message {index}\" }}), t({{ message: \"Shared\" }})]\n\
+                     }}\n"
+                ),
+            )
+            .expect("write fixture");
+            files.push(path.to_string_lossy().into_owned());
+        }
+
+        let run = |threads: usize| {
+            extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+                root_dir: root.to_string_lossy().into_owned(),
+                files: files.clone(),
+                max_threads: Some(threads),
+            })
+            .expect("batch extraction")
+            .messages
+        };
+
+        /*
+         * "Shared" appears in every file, so its aggregated origins are exactly
+         * where a racy merge would show up: same set, different order.
+         */
+        let serial = run(1);
+        for threads in [2, 4, 8] {
+            assert_eq!(
+                serial,
+                run(threads),
+                "thread count {threads} changed the extracted catalog"
+            );
+        }
+
+        fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[test]
@@ -2350,6 +2548,7 @@ const message = t({ message })
                 first.to_string_lossy().into_owned(),
                 second.to_string_lossy().into_owned(),
             ],
+            max_threads: None,
         })
         .expect("batch extraction");
 
@@ -2404,6 +2603,7 @@ const message = t({ message })
         let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
             root_dir: app.to_string_lossy().into_owned(),
             files: vec![shared.to_string_lossy().into_owned()],
+            max_threads: None,
         })
         .expect("batch extraction");
 
@@ -2454,6 +2654,7 @@ const message = t({ message })
         let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
             root_dir: root.to_string_lossy().into_owned(),
             files: vec![app.to_string_lossy().into_owned()],
+            max_threads: None,
         })
         .expect("batch extraction");
 
@@ -2528,6 +2729,7 @@ const message = t({ message })
                 second.to_string_lossy().into_owned(),
                 first.to_string_lossy().into_owned(),
             ],
+            max_threads: None,
         })
         .expect("batch extraction");
 
@@ -2559,6 +2761,7 @@ const message = t({ message })
         let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
             root_dir: root.to_string_lossy().into_owned(),
             files: vec![invalid.to_string_lossy().into_owned()],
+            max_threads: None,
         })
         .expect("batch extraction should continue");
 
@@ -2588,6 +2791,7 @@ const message = t({ message })
         let error = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
             root_dir: root.to_string_lossy().into_owned(),
             files: vec![source.to_string_lossy().into_owned()],
+            max_threads: None,
         })
         .expect_err("explicit IDs should fail");
 
@@ -2612,6 +2816,7 @@ const message = t({ message })
         let error = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
             root_dir: root.to_string_lossy().into_owned(),
             files: vec![source.to_string_lossy().into_owned()],
+            max_threads: None,
         })
         .expect_err("top-level translation macros should fail");
 
@@ -2640,6 +2845,7 @@ const message = t({ message })
         let error = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
             root_dir: root.to_string_lossy().into_owned(),
             files: vec![source.to_string_lossy().into_owned()],
+            max_threads: None,
         })
         .expect_err("nested message macros should fail");
 
@@ -2666,6 +2872,7 @@ const message = t({ message })
         let error = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
             root_dir: root.to_string_lossy().into_owned(),
             files: vec![source.to_string_lossy().into_owned()],
+            max_threads: None,
         })
         .expect_err("unsupported macro syntax should fail");
 
