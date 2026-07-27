@@ -91,3 +91,80 @@ export function topicMeta({
     },
   ]
 }
+
+/*
+ * Framework landing pages use the same visible FAQ / structured-data
+ * contract as topic pages, plus a breadcrumb back to the framework hub.
+ * The shared OG image is deliberate: framework pages do not pretend that a
+ * logo or screenshot exists until one is generated from a checked-in proof.
+ */
+export function frameworkMeta({
+  title,
+  description,
+  path,
+  framework,
+  faq,
+}: {
+  title: string
+  description: string
+  path: string
+  framework: string
+  faq: { q: string; a: string }[]
+}) {
+  const url = `${SITE_ORIGIN}${path}`
+  return [
+    ...pageMeta({ title, description, path }),
+    {
+      "script:ld+json": {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        headline: title,
+        description,
+        url,
+        inLanguage: "en",
+        isAccessibleForFree: true,
+        about: {
+          "@type": "SoftwareApplication",
+          name: framework,
+          applicationCategory: "DeveloperApplication",
+        },
+        publisher: {
+          "@type": "Organization",
+          name: "Sebastian Software GmbH",
+          url: SITE_ORIGIN,
+        },
+      },
+    },
+    {
+      "script:ld+json": {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: faq.map((entry) => ({
+          "@type": "Question",
+          name: entry.q,
+          acceptedAnswer: { "@type": "Answer", text: entry.a },
+        })),
+      },
+    },
+    {
+      "script:ld+json": {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Frameworks",
+            item: `${SITE_ORIGIN}/frameworks`,
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: framework,
+            item: url,
+          },
+        ],
+      },
+    },
+  ]
+}
