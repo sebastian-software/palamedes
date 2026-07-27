@@ -147,7 +147,10 @@ the runtime falls back to the default `Intl` formatter for that argument type.
 
 Apostrophes in source messages need no escaping. The macros and the extractor
 escape them on the way into the catalog, so `t` messages such as `Ada's file`
-and `don't panic` simply work.
+and `don't panic` simply work. The one exception is a descriptor with a
+string-literal `message` — `t({ message: "Hello {name}" })` — which is the
+raw-ICU authoring surface: placeholders and ICU quoting are written literally
+and nothing is auto-escaped there.
 
 The rules matter when a translator edits a `.po` file by hand, when a catalog
 comes back from a TMS, or when a pattern is passed straight to
