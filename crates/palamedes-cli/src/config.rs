@@ -47,6 +47,7 @@ pub struct LoadedConfig {
     pub config_path: PathBuf,
     pub root_dir: PathBuf,
     pub source_reference_root: PathBuf,
+    pub reference_scopes: bool,
     pub locales: Vec<String>,
     pub source_locale: String,
     pub fallback_locales: Option<ConfigFallbackLocales>,
@@ -89,6 +90,8 @@ struct RawConfig {
     source_reference_root: Option<String>,
     #[serde(default, alias = "extract_threads")]
     extract_threads: Option<usize>,
+    #[serde(default = "default_reference_scopes", alias = "reference_scopes")]
+    reference_scopes: bool,
     catalogs: Vec<ConfigCatalog>,
 }
 
@@ -120,6 +123,7 @@ fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), Co
         ("fallbackLocales", "fallback-locales"),
         ("pseudoLocale", "pseudo-locale"),
         ("sourceReferenceRoot", "source-reference-root"),
+        ("referenceScopes", "reference-scopes"),
     ];
     const KNOWN_KEYS: &[&str] = &[
         "locales",
@@ -131,6 +135,8 @@ fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), Co
         "pseudo_locale",
         "source-reference-root",
         "source_reference_root",
+        "reference-scopes",
+        "reference_scopes",
         "catalogs",
         "plugins",
     ];
@@ -258,6 +264,7 @@ fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig
         config_path,
         root_dir,
         source_reference_root,
+        reference_scopes: raw.reference_scopes,
         locales: raw.locales,
         source_locale: raw.source_locale,
         fallback_locales: raw.fallback_locales,
@@ -265,6 +272,10 @@ fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig
         catalogs: raw.catalogs,
         extract_threads: raw.extract_threads,
     })
+}
+
+const fn default_reference_scopes() -> bool {
+    true
 }
 
 fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
@@ -427,7 +438,29 @@ catalogs:
 
         assert_eq!(config.root_dir, app);
         assert_eq!(config.source_reference_root, repo);
+        assert!(config.reference_scopes);
         assert_eq!(config.catalogs[0].path, "src/locales/{locale}");
+    }
+
+    #[test]
+    fn disables_reference_scopes_from_yaml_config() {
+        let app = temp_dir("reference-scopes");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de]
+source-locale: en
+reference-scopes: false
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("load config");
+
+        assert!(!config.reference_scopes);
     }
 
     #[test]
@@ -460,6 +493,7 @@ catalogs:
 locales = ["en", "de"]
 source-locale = "en"
 source-reference-root = "config"
+reference_scopes = false
 
 [[catalogs]]
 path = "src/locales/{locale}"
@@ -473,6 +507,7 @@ include = ["src"]
         assert_eq!(config.config_path, app.join("palamedes.toml"));
         assert_eq!(config.source_locale, "en");
         assert_eq!(config.source_reference_root, app);
+        assert!(!config.reference_scopes);
     }
 
     #[test]

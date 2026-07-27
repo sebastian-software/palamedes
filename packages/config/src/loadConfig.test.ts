@@ -28,6 +28,7 @@ describe("loadPalamedesConfig", () => {
         export default {
           locales: ["en", "de"],
           sourceLocale: "en",
+          referenceScopes: false,
           catalogs: [
             {
               path: "src/locales/{locale}",
@@ -42,6 +43,7 @@ describe("loadPalamedesConfig", () => {
 
     expect(config.rootDir).toBe(fixtureDir)
     expect(config.sourceLocale).toBe("en")
+    expect(config.referenceScopes).toBe(false)
     expect(config.catalogs[0]?.path).toBe("src/locales/{locale}")
   })
 
@@ -54,6 +56,7 @@ describe("loadPalamedesConfig", () => {
         locales: [en, de]
         source-locale: en
         source-reference-root: config
+        reference-scopes: false
         catalogs:
           - path: src/locales/{locale}
             format: fcl
@@ -70,6 +73,7 @@ describe("loadPalamedesConfig", () => {
     expect(config.rootDir).toBe(fixtureDir)
     expect(config.sourceLocale).toBe("en")
     expect(config.sourceReferenceRoot).toBe(fixtureDir)
+    expect(config.referenceScopes).toBe(false)
     expect(config.catalogs[0]).toStrictEqual({
       path: "src/locales/{locale}",
       format: "fcl",
@@ -102,6 +106,7 @@ describe("loadPalamedesConfig", () => {
     expect(config.rootDir).toBe(fixtureDir)
     expect(config.sourceLocale).toBe("en")
     expect(config.sourceReferenceRoot).toBe(fixtureDir)
+    expect(config.referenceScopes).toBe(true)
     expect(config.catalogs[0]).toStrictEqual({
       path: "src/locales/{locale}",
       include: ["src"],
@@ -137,6 +142,7 @@ describe("loadPalamedesConfig", () => {
         locales = ["en", "de"]
         source-locale = "en"
         source-reference-root = "config"
+        reference_scopes = false
 
         [[catalogs]]
         path = "src/locales/{locale}"
@@ -149,6 +155,7 @@ describe("loadPalamedesConfig", () => {
     expect(config.configPath).toBe(path.join(fixtureDir, "palamedes.toml"))
     expect(config.sourceLocale).toBe("en")
     expect(config.sourceReferenceRoot).toBe(fixtureDir)
+    expect(config.referenceScopes).toBe(false)
   })
 
   it("loads palamedes.json as a secondary config format", async () => {
@@ -174,6 +181,7 @@ describe("loadPalamedesConfig", () => {
     expect(config.configPath).toBe(path.join(fixtureDir, "palamedes.json"))
     expect(config.sourceLocale).toBe("en")
     expect(config.sourceReferenceRoot).toBe(fixtureDir)
+    expect(config.referenceScopes).toBe(true)
   })
 
   it("loads an explicitly provided config path synchronously", async () => {
@@ -312,6 +320,25 @@ describe("loadPalamedesConfig", () => {
 
     await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
       /"sourceLocale" must be included in "locales"/
+    )
+  })
+
+  it("rejects a non-boolean referenceScopes value", async () => {
+    const fixtureDir = await createTempDir()
+    await writeFile(
+      path.join(fixtureDir, "palamedes.config.js"),
+      `
+        module.exports = {
+          locales: ["en"],
+          sourceLocale: "en",
+          referenceScopes: "false",
+          catalogs: [],
+        }
+      `
+    )
+
+    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+      /"referenceScopes" must be a boolean/
     )
   })
 

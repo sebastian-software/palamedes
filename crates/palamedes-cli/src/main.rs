@@ -12,10 +12,10 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
 use notify::{RecursiveMode, Watcher};
 use palamedes::{
-    audit_catalogs, combine_catalog_files, extract_catalog_messages_from_files, parse_catalog,
-    parse_po, update_catalog_file, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
-    CatalogConflictStrategy, CatalogFileCombineRequest, CatalogFileFormat, CatalogParseRequest,
-    CatalogUpdateMessage, CatalogUpdateRequest,
+    audit_catalogs, combine_catalog_files, parse_catalog, parse_po, update_catalog_file,
+    CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult, CatalogConflictStrategy,
+    CatalogFileCombineRequest, CatalogFileFormat, CatalogParseRequest, CatalogUpdateMessage,
+    CatalogUpdateRequest,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -401,15 +401,20 @@ fn extract_from_catalog(
     }
 
     let extract_started_at = Instant::now();
-    let result = extract_catalog_messages_from_files(palamedes::ExtractCatalogMessagesRequest {
-        root_dir: config.source_reference_root.to_string_lossy().into_owned(),
-        files: files
-            .iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect(),
-        // --threads wins over the config file; both fall back to the core default.
-        max_threads: options.threads.or(config.extract_threads),
-    })?;
+    let result = palamedes::extract_catalog_messages_from_files_with_options(
+        palamedes::ExtractCatalogMessagesRequest {
+            root_dir: config.source_reference_root.to_string_lossy().into_owned(),
+            files: files
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+            // --threads wins over the config file; both fall back to the core default.
+            max_threads: options.threads.or(config.extract_threads),
+        },
+        palamedes::ExtractCatalogMessagesOptions {
+            reference_scopes: config.reference_scopes,
+        },
+    )?;
     let extract_ms = extract_started_at.elapsed().as_millis();
 
     for failure in &result.failed_files {
@@ -1266,7 +1271,7 @@ mod tests {
 
         let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
         assert!(output.contains("msgid \"Dashboard\""));
-        assert!(output.contains("#: apps/web/app/page.tsx"));
+        assert!(output.contains("#: apps/web/app/page.tsx#title"));
     }
 
     #[test]
@@ -1285,6 +1290,47 @@ mod tests {
 
         let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
         assert!(output.contains("#: app/page.tsx"));
+    }
+
+    #[test]
+    fn extract_can_disable_reference_scopes() {
+        let app = temp_dir("extract-without-reference-scopes");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en, de]
+source-locale: en
+source-reference-root: config
+reference-scopes: false
+catalogs:
+  - path: locales/{locale}/messages
+    include: [app]
+"#,
+        )
+        .expect("write config");
+        fs::write(
+            app.join("app/page.tsx"),
+            concat!(
+                "import { t } from \"@palamedes/core/macro\";\n",
+                "export function title() { return t`Dashboard`; }\n",
+                "export function repeatedTitle() { return t`Dashboard`; }\n",
+            ),
+        )
+        .expect("write source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        run_extraction(&config, &extract_options()).expect("extract");
+
+        let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
+        assert!(output.contains("#: app/page.tsx\n"));
+        assert!(!output.contains("#title"));
+        assert_eq!(output.matches("#: app/page.tsx\n").count(), 1);
+
+        run_extraction(&config, &extract_options()).expect("repeat extraction");
+        assert_eq!(
+            fs::read_to_string(app.join("locales/en/messages.po")).expect("read repeated po"),
+            output
+        );
     }
 
     #[test]

@@ -43,19 +43,21 @@ catalogs:
 - `pseudo-locale` marks a generated pseudo-locale used for layout and hardcoded
   string checks. Plugin integrations skip `failOnMissing` failures for that
   locale while keeping strict checks for real locales.
-- `source-reference-root` controls the root used for PO `#:` source references.
+- `source-reference-root` controls the root used for catalog source references.
   The default is `"git"`, which emits paths relative to the nearest Git
   repository root and falls back to the config directory when no Git root is
   available. Use `"lingui"` or `"config"` for Lingui-compatible references
   relative to the config directory, or pass a custom path.
+- `reference-scopes` defaults to `true`. Set it to `false` to skip stable
+  component/function scope extraction and emit file-only PO and FCL references.
 - `catalogs[].format` defaults to `"po"`. Set it to `"fcl"` to use Ferrocat
   Catalog Lines for canonical, merge-friendly generated catalog storage.
 - `plugins` explicitly lists CLI plugin package specifiers or
   `[specifier, options]` pairs. Packages are never auto-discovered, and built-in
   CLI commands do not load them.
-- `loadPalamedesConfig()` returns `sourceReferenceRoot` in addition to
-  `configPath` and `rootDir`; pass `skipValidation` only when inspecting a
-  partially-authored config file.
+- `loadPalamedesConfig()` returns `sourceReferenceRoot` and the resolved
+  `referenceScopes` boolean in addition to `configPath` and `rootDir`; pass
+  `skipValidation` only when inspecting a partially-authored config file.
 
 See [Catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 for the PO/FCL storage boundary.

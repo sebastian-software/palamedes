@@ -85,6 +85,21 @@ pub struct ExtractCatalogMessagesRequest {
     pub max_threads: Option<usize>,
 }
 
+/// Optional behavior for aggregated catalog extraction.
+#[derive(Clone, Copy, Debug)]
+pub struct ExtractCatalogMessagesOptions {
+    /// Whether stable source scopes should be extracted for catalog references.
+    pub reference_scopes: bool,
+}
+
+impl Default for ExtractCatalogMessagesOptions {
+    fn default() -> Self {
+        Self {
+            reference_scopes: true,
+        }
+    }
+}
+
 /// Non-fatal source file extraction failure.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -199,6 +214,7 @@ struct ExtractionVisitor<'a> {
     messages: Vec<ExtractedMessageRecord>,
     error: Option<PalamedesError>,
     scope_stack: Vec<String>,
+    reference_scopes: bool,
 }
 
 impl<'a> ExtractionVisitor<'a> {
@@ -207,6 +223,7 @@ impl<'a> ExtractionVisitor<'a> {
         source: &'a str,
         line_locator: &'a LineLocator,
         imported_macros: &'a HashMap<String, ImportedMacro>,
+        reference_scopes: bool,
     ) -> Self {
         Self {
             filename: filename.to_string(),
@@ -216,6 +233,7 @@ impl<'a> ExtractionVisitor<'a> {
             messages: Vec::new(),
             error: None,
             scope_stack: Vec::new(),
+            reference_scopes,
         }
     }
 
@@ -274,11 +292,15 @@ impl<'a> ExtractionVisitor<'a> {
 
 impl<'a> Visit<'a> for ExtractionVisitor<'a> {
     fn visit_declaration(&mut self, it: &Declaration<'a>) {
-        let scope = match it {
-            Declaration::FunctionDeclaration(function) => {
-                function.id.as_ref().map(|id| id.name.as_str().to_string())
+        let scope = if self.reference_scopes {
+            match it {
+                Declaration::FunctionDeclaration(function) => {
+                    function.id.as_ref().map(|id| id.name.as_str().to_string())
+                }
+                _ => None,
             }
-            _ => None,
+        } else {
+            None
         };
 
         if let Some(scope) = scope {
@@ -291,7 +313,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        let scope = function_like_initializer_name(it);
+        let scope = if self.reference_scopes {
+            function_like_initializer_name(it)
+        } else {
+            None
+        };
 
         if let Some(scope) = scope {
             self.push_scope(&scope);
@@ -1287,8 +1313,16 @@ pub fn extract_messages(
     source: &str,
     filename: &str,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
+    extract_messages_with_scopes(source, filename, true)
+}
+
+fn extract_messages_with_scopes(
+    source: &str,
+    filename: &str,
+    reference_scopes: bool,
+) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
     let allocator = Allocator::default();
-    extract_messages_in(&allocator, source, filename)
+    extract_messages_in(&allocator, source, filename, reference_scopes)
 }
 
 /*
@@ -1302,6 +1336,7 @@ fn extract_messages_in(
     allocator: &Allocator,
     source: &str,
     filename: &str,
+    reference_scopes: bool,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
     let parsed = Parser::new(allocator, source, source_type).parse();
@@ -1336,8 +1371,13 @@ fn extract_messages_in(
             .map(|macro_info| macro_info.imported_name.clone())
     })?;
 
-    let mut extractor =
-        ExtractionVisitor::new(filename, source, &line_locator, &collector.imported_macros);
+    let mut extractor = ExtractionVisitor::new(
+        filename,
+        source,
+        &line_locator,
+        &collector.imported_macros,
+        reference_scopes,
+    );
     extractor.visit_program(&parsed.program);
 
     if let Some(error) = extractor.error {
@@ -1358,10 +1398,28 @@ fn extract_messages_in(
 pub fn extract_catalog_messages_from_files(
     request: ExtractCatalogMessagesRequest,
 ) -> PalamedesResult<ExtractCatalogMessagesResult> {
+    extract_catalog_messages_from_files_with_options(
+        request,
+        ExtractCatalogMessagesOptions::default(),
+    )
+}
+
+/// Extracts and aggregates source-first catalog update messages with explicit
+/// reference behavior.
+///
+/// # Errors
+///
+/// Returns the same fatal authoring errors and non-fatal file failures as
+/// [`extract_catalog_messages_from_files`].
+pub fn extract_catalog_messages_from_files_with_options(
+    request: ExtractCatalogMessagesRequest,
+    options: ExtractCatalogMessagesOptions,
+) -> PalamedesResult<ExtractCatalogMessagesResult> {
     let root_dir = PathBuf::from(&request.root_dir);
     let mut catalog = BTreeMap::<String, AggregatedCatalogEntry>::new();
     let mut failed_files = Vec::new();
     let file_count = request.files.len();
+    let reference_scopes = options.reference_scopes;
 
     /*
      * Reading and parsing each file is independent work and dominates extraction
@@ -1381,7 +1439,7 @@ pub fn extract_catalog_messages_from_files(
         request
             .files
             .iter()
-            .map(|file| extract_one_file(file, &root_dir))
+            .map(|file| extract_one_file(file, &root_dir, reference_scopes))
             .collect()
     } else {
         rayon::ThreadPoolBuilder::new()
@@ -1394,7 +1452,7 @@ pub fn extract_catalog_messages_from_files(
                 request
                     .files
                     .par_iter()
-                    .map(|file| extract_one_file(file, &root_dir))
+                    .map(|file| extract_one_file(file, &root_dir, reference_scopes))
                     .collect()
             })
     };
@@ -1444,7 +1502,7 @@ thread_local! {
 }
 
 /// Reads and extracts one file, classifying the outcome for ordered merging.
-fn extract_one_file(file: &String, root_dir: &Path) -> FileExtraction {
+fn extract_one_file(file: &String, root_dir: &Path, reference_scopes: bool) -> FileExtraction {
     let source = match std::fs::read_to_string(file) {
         Ok(source) => source,
         Err(source) => {
@@ -1461,7 +1519,7 @@ fn extract_one_file(file: &String, root_dir: &Path) -> FileExtraction {
 
     let extracted = EXTRACT_ARENA.with(|arena| {
         let mut arena = arena.borrow_mut();
-        let extracted = extract_messages_in(&arena, &source, file);
+        let extracted = extract_messages_in(&arena, &source, file, reference_scopes);
         /*
          * Safe to reset here: ExtractedMessageRecord owns its strings, so
          * nothing returned above borrows from the arena.
@@ -1674,8 +1732,9 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::{
-        extract_catalog_messages_from_files, extract_messages as extract_messages_raw,
-        resolve_extract_threads, ExtractCatalogMessagesRequest, ExtractedMessageRecord,
+        extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
+        extract_messages as extract_messages_raw, resolve_extract_threads,
+        ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractedMessageRecord,
         DEFAULT_EXTRACT_THREADS,
     };
     use crate::error::PalamedesResult;
@@ -2693,6 +2752,23 @@ const message = t({ message })
         assert_eq!(deferred.origins.len(), 1);
         assert_eq!(deferred.origins[0].file, "src/App.tsx");
         assert_eq!(deferred.origins[0].scope.as_deref(), Some("deferredLabel"));
+
+        let without_scopes = extract_catalog_messages_from_files_with_options(
+            ExtractCatalogMessagesRequest {
+                root_dir: root.to_string_lossy().into_owned(),
+                files: vec![app.to_string_lossy().into_owned()],
+                max_threads: None,
+            },
+            ExtractCatalogMessagesOptions {
+                reference_scopes: false,
+            },
+        )
+        .expect("batch extraction without scopes");
+        assert!(without_scopes
+            .messages
+            .iter()
+            .flat_map(|message| &message.origins)
+            .all(|origin| origin.scope.is_none()));
 
         fs::remove_dir_all(root).expect("cleanup");
     }

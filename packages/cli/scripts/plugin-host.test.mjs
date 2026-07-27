@@ -369,6 +369,7 @@ function loadedConfig(plugins) {
     configPath: fixtureConfigPath,
     rootDir: fixtureRoot,
     sourceReferenceRoot: fixtureRoot,
+    referenceScopes: true,
     locales: ["en", "de"],
     sourceLocale: "en",
     catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],

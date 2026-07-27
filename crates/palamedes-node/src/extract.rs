@@ -30,6 +30,7 @@ pub struct ExtractCatalogMessagesRequest {
     /// Worker threads for the parallel extraction pass. Omit to use the
     /// measured default; 1 forces serial extraction.
     pub max_threads: Option<u32>,
+    pub reference_scopes: Option<bool>,
 }
 
 #[napi(object)]
@@ -63,16 +64,6 @@ impl TryFrom<palamedes::ExtractedMessageRecord> for NativeExtractedMessage {
                 scope: value.scope,
             },
         })
-    }
-}
-
-impl From<ExtractCatalogMessagesRequest> for palamedes::ExtractCatalogMessagesRequest {
-    fn from(value: ExtractCatalogMessagesRequest) -> Self {
-        Self {
-            root_dir: value.root_dir,
-            files: value.files,
-            max_threads: value.max_threads.map(|threads| threads as usize),
-        }
     }
 }
 
@@ -139,7 +130,15 @@ pub fn extract_messages(source: String, filename: String) -> Result<Vec<NativeEx
 pub fn extract_catalog_messages_from_files(
     request: ExtractCatalogMessagesRequest,
 ) -> Result<ExtractCatalogMessagesResult> {
-    palamedes::extract_catalog_messages_from_files(request.into())
+    let options = palamedes::ExtractCatalogMessagesOptions {
+        reference_scopes: request.reference_scopes.unwrap_or(true),
+    };
+    let request = palamedes::ExtractCatalogMessagesRequest {
+        root_dir: request.root_dir,
+        files: request.files,
+        max_threads: request.max_threads.map(|threads| threads as usize),
+    };
+    palamedes::extract_catalog_messages_from_files_with_options(request, options)
         .map_err(to_napi_error)
         .and_then(ExtractCatalogMessagesResult::try_from)
 }

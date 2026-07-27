@@ -46,6 +46,7 @@ import { defineConfig } from "@palamedes/config"
 export default defineConfig({
   locales: ["en", "de"],
   sourceLocale: "en",
+  referenceScopes: false,
   catalogs: [{ path: "src/locales/{locale}", include: ["src"] }],
   plugins: [["@acme/palamedes-workflows", { policy: "strict" }]],
 })
@@ -64,8 +65,8 @@ export default defineConfig({
 ## `loadPalamedesConfig(options?)`
 
 Searches from `cwd` for a supported config file unless `configPath` is passed.
-The returned object includes `configPath`, `rootDir`, and
-`sourceReferenceRoot`.
+The returned object includes `configPath`, `rootDir`, `sourceReferenceRoot`,
+and the resolved `referenceScopes` boolean.
 
 ```ts
 const config = await loadPalamedesConfig({ cwd: process.cwd() })

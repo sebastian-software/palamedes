@@ -176,15 +176,18 @@ the configured Palamedes config when available, then `en`.
 locales: [en, de]
 source-locale: en
 source-reference-root: git
+reference-scopes: false
 catalogs:
   - path: src/locales/{locale}
     include: [src]
 ```
 
-`source-reference-root` controls PO `#:` references written by `pmds extract`.
+`source-reference-root` controls catalog references written by `pmds extract`.
 The default is `"git"`, so monorepo references are emitted relative to the
 nearest Git repository root. Use `"lingui"` or `"config"` to keep references
 relative to the config directory, matching Lingui's default behavior.
+`reference-scopes` defaults to `true`; set it to `false` to skip scope
+extraction and emit file-only PO `#:` and FCL `r=` references.
 
 ## Related Packages
 
