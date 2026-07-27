@@ -20,17 +20,19 @@ export interface DemoLink {
 
 export interface MatrixCell {
   framework: string
-  strategy: string
+  strategy: StrategySlug
   verified: true
   status: MatrixStatus
   demoLinks?: DemoLink[]
   sourceHref: string
 }
 
-export interface MatrixAxis {
+export interface MatrixAxis<TSlug extends string = string> {
   name: string
-  slug: string
+  slug: TSlug
 }
+
+export type StrategySlug = "cookie" | "route" | "subdomain" | "tld"
 
 export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Next.js", slug: "nextjs" },
@@ -41,7 +43,7 @@ export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Remix v3", slug: "remix" },
 ]
 
-export const STRATEGIES: MatrixAxis[] = [
+export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
   { name: "Cookie", slug: "cookie" },
   { name: "Route", slug: "route" },
   { name: "Subdomain", slug: "subdomain" },
@@ -96,7 +98,7 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
   },
 ])
 
-export function cellFor(framework: string, strategy: string): MatrixCell {
+export function cellFor(framework: string, strategy: StrategySlug): MatrixCell {
   const cell = MATRIX_CELLS.find((c) => c.framework === framework && c.strategy === strategy)
   if (!cell) {
     throw new Error(`No matrix cell for ${framework}/${strategy}`)

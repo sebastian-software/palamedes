@@ -45,6 +45,34 @@ const MIME = {
 const ROUTE_EXPECTATIONS = [
   { path: "/", h1: "One translation model." },
   { path: "/frameworks", h1: "Six frameworks." },
+  {
+    path: "/frameworks/nextjs",
+    h1: "Next.js i18n for the App Router, from server to client.",
+  },
+  {
+    path: "/frameworks/tanstack-start",
+    h1: "TanStack Start i18n for routes, server functions, and the client.",
+  },
+  {
+    path: "/frameworks/solidstart",
+    h1: "SolidStart i18n that stays native to Solid.",
+  },
+  {
+    path: "/frameworks/waku",
+    h1: "Waku i18n across React Server and Client Components.",
+  },
+  {
+    path: "/frameworks/react-router",
+    h1: "React Router i18n for Framework Mode.",
+  },
+  {
+    path: "/frameworks/remix-v3",
+    h1: "Remix v3 i18n for its new server-first stack.",
+  },
+  {
+    path: "/frameworks/vite",
+    h1: "Vite i18n for React and Solid, in one plugin.",
+  },
   { path: "/proof", h1: "Claims you can re-run." },
   { path: "/get-started", h1: "First working translation" },
   { path: "/compare", h1: "Compare it properly." },
