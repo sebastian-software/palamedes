@@ -381,6 +381,39 @@ const plain = t`don't`;
 }
 
 #[test]
+fn descriptor_string_literals_stay_raw_icu_on_both_sides() {
+    // Descriptor string literals are the raw-ICU authoring surface: authors
+    // write placeholders and ICU quoting themselves, so neither side may
+    // escape apostrophes there. Template-literal descriptors are authored
+    // text and go through the shared escaping instead.
+    let source = r##"import { t } from "@palamedes/core/macro";
+
+const quoted = t({ message: "L'{title} est prêt" }, { title });
+const doubled = t({ message: "It''s {name}" }, { name });
+const authored = t({ message: `l'${item}` });
+"##;
+    let scoped_source = scope_macro_test_source(source, "test.ts");
+    let extracted = crate::extract::extract_messages(&scoped_source, "test.ts")
+        .expect("descriptor messages should extract");
+    let transformed =
+        transform_macros(source, "test.ts", None).expect("descriptor messages should transform");
+
+    assert_eq!(
+        extracted
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>(),
+        vec!["L'{title} est prêt", "It''s {name}", "l''{item}"]
+    );
+
+    let extracted_ids = extracted
+        .iter()
+        .map(|message| compiled_key(&message.message, message.context.as_deref()))
+        .collect::<Vec<_>>();
+    assert_eq!(transformed.compiled_ids, extracted_ids);
+}
+
+#[test]
 fn transforms_select_ordinal_choice_macros() {
     let result = transform_macros(
         "import { selectOrdinal } from \"@palamedes/core/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",

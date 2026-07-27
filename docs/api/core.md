@@ -261,6 +261,13 @@ unchanged. The rules above matter for translators hand-editing `.po` files, for
 catalogs imported from a TMS, and for patterns passed directly to
 `formatMessagePattern()` — all of which use standard ICU quoting.
 
+One deliberate exception: a descriptor whose `message` is a **string literal**
+— `t({ message: "Hello {name}" })` — is the raw-ICU authoring surface.
+Placeholders are written literally, the quoting rules above apply verbatim
+(`It''s {name}`, `L'{title}` quotes the brace), and nothing is auto-escaped.
+A descriptor whose `message` is a template literal is authored text like a
+tagged template and is auto-escaped.
+
 Two helpers back the host-adapter renderers and are public for custom
 adapters: `resolveChoice(node, value, locale?)` selects the branch of a parsed
 plural/select/selectordinal node (returning the branch nodes plus the operand
