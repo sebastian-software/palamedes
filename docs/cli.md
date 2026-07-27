@@ -169,8 +169,8 @@ The native CLI reads only data configs (`palamedes.yaml`, `.yml`, `.json`,
 `.toml`). When the upward search finds only a `palamedes.config.ts`/`.js`, the
 CLI reports that specifically instead of a generic not-found error — create a
 data config next to it for CLI use. Known keys written in camelCase
-(`sourceLocale`, `pseudoLocale`, `fallbackLocales`, `sourceReferenceRoot`) are
-rejected with a kebab-case hint instead of being silently ignored; other
-unknown top-level keys produce a warning. Fallback-locale entries must
-reference configured locales, and a `pseudo-locale` outside `locales` warns
-that it will be ignored.
+(`sourceLocale`, `pseudoLocale`, `fallbackLocales`, `sourceReferenceRoot`,
+`referenceScopes`) are rejected with a kebab-case hint instead of being
+silently ignored; other unknown top-level keys produce a warning.
+Fallback-locale entries must reference configured locales, and a
+`pseudo-locale` outside `locales` warns that it will be ignored.

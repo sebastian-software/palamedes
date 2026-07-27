@@ -57,6 +57,7 @@ The documented schema uses kebab-case field names:
 - `fallback-locales`
 - `pseudo-locale`
 - `source-reference-root`
+- `reference-scopes`
 - `catalogs`
 
 Snake-case field names remain accepted aliases at the loader boundary for

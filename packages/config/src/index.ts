@@ -35,6 +35,7 @@ export type PalamedesConfig = {
   fallbackLocales?: PalamedesFallbackLocales
   pseudoLocale?: string
   sourceReferenceRoot?: PalamedesSourceReferenceRoot
+  referenceScopes?: boolean
   catalogs: PalamedesCatalogConfig[]
   plugins?: PalamedesPluginDeclaration[]
 }
@@ -49,6 +50,8 @@ type PalamedesDataConfig = {
   pseudo_locale?: unknown
   "source-reference-root"?: unknown
   source_reference_root?: unknown
+  "reference-scopes"?: unknown
+  reference_scopes?: unknown
   catalogs?: unknown
   plugins?: unknown
 }
@@ -57,7 +60,8 @@ export type LoadedPalamedesConfig = {
   configPath: string
   rootDir: string
   sourceReferenceRoot: string
-} & Omit<PalamedesConfig, "sourceReferenceRoot">
+  referenceScopes: boolean
+} & Omit<PalamedesConfig, "sourceReferenceRoot" | "referenceScopes">
 
 export type LoadPalamedesConfigOptions = {
   cwd?: string
@@ -158,6 +162,7 @@ const CAMEL_CASE_DATA_KEYS: [string, string][] = [
   ["fallbackLocales", "fallback-locales"],
   ["pseudoLocale", "pseudo-locale"],
   ["sourceReferenceRoot", "source-reference-root"],
+  ["referenceScopes", "reference-scopes"],
 ]
 
 /*
@@ -185,6 +190,7 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
     "source-reference-root",
     "source_reference_root"
   )
+  const referenceScopes = getConfigValue(config, "reference-scopes", "reference_scopes")
 
   return {
     locales: config.locales as string[],
@@ -196,6 +202,7 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
     ...(sourceReferenceRoot !== undefined
       ? { sourceReferenceRoot: sourceReferenceRoot as PalamedesSourceReferenceRoot }
       : {}),
+    ...(referenceScopes !== undefined ? { referenceScopes: referenceScopes as boolean } : {}),
     catalogs: config.catalogs as PalamedesCatalogConfig[],
     ...(config.plugins !== undefined
       ? { plugins: config.plugins as PalamedesPluginDeclaration[] }
@@ -336,6 +343,7 @@ async function normalizeConfig(
     ...(config.fallbackLocales !== undefined ? { fallbackLocales: config.fallbackLocales } : {}),
     ...(config.pseudoLocale !== undefined ? { pseudoLocale: config.pseudoLocale } : {}),
     sourceReferenceRoot: await resolveSourceReferenceRoot(config.sourceReferenceRoot, rootDir),
+    referenceScopes: config.referenceScopes ?? true,
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       ...(catalog.format !== undefined ? { format: catalog.format } : {}),
@@ -356,6 +364,7 @@ function normalizeConfigSync(config: PalamedesConfig, configPath: string): Loade
     ...(config.fallbackLocales !== undefined ? { fallbackLocales: config.fallbackLocales } : {}),
     ...(config.pseudoLocale !== undefined ? { pseudoLocale: config.pseudoLocale } : {}),
     sourceReferenceRoot: resolveSourceReferenceRootSync(config.sourceReferenceRoot, rootDir),
+    referenceScopes: config.referenceScopes ?? true,
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       ...(catalog.format !== undefined ? { format: catalog.format } : {}),
@@ -486,6 +495,12 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
   ) {
     throw new TypeError(
       `Invalid Palamedes config in ${configPath}: "sourceReferenceRoot" must be a non-empty string when provided.`
+    )
+  }
+
+  if (record.referenceScopes !== undefined && typeof record.referenceScopes !== "boolean") {
+    throw new TypeError(
+      `Invalid Palamedes config in ${configPath}: "referenceScopes" must be a boolean when provided.`
     )
   }
 

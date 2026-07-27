@@ -39,12 +39,13 @@ catalogs:
 | `fallback-locales`      | No       | `string[] \| Record<string, string[]>` | Shared or per-locale fallback chain.                                                |
 | `pseudo-locale`         | No       | `string`                               | Locale code used for pseudo-localized UI testing.                                   |
 | `source-reference-root` | No       | `git \| config \| lingui \| path`      | Root used for catalog source references. Defaults to nearest Git root, then config. |
+| `reference-scopes`      | No       | `boolean`                              | Adds stable source scopes to catalog references. Defaults to `true`.                |
 | `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                |
 | `extract-threads`       | No       | `number`                               | Worker threads for the parallel extraction pass. Defaults to `4`; `1` runs serial.  |
 
 The native CLI and JS config loader also accept snake_case aliases for
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
-`source_reference_root`, and `extract_threads`.
+`source_reference_root`, `reference_scopes`, and `extract_threads`.
 
 `extract-threads` bounds the parallel read/parse pass. The default of `4` is a
 measured floor rather than a core count: extraction gets slower again above it,
@@ -82,11 +83,13 @@ When `exclude` is empty, the native CLI implicitly excludes
 
 ## Source References
 
-`source-reference-root` controls the root used for PO `#:` references written by
-`pmds extract`.
+`source-reference-root` controls the root used for catalog references written by
+`pmds extract`. `reference-scopes` controls whether those references include a
+stable component or function suffix.
 
 ```yaml
 source-reference-root: git
+reference-scopes: true
 ```
 
 Values:
@@ -94,6 +97,12 @@ Values:
 - `git`: nearest Git repository root, falling back to the config directory.
 - `config` or `lingui`: config-directory relative references.
 - Any other string: path resolved relative to the config directory.
+
+`reference-scopes` defaults to `true`, producing references such as
+`src/App.tsx#CheckoutButton`. Set it to `false` for file-only references such as
+`src/App.tsx`. When disabled, Palamedes skips source-scope extraction while
+retaining file references. The setting applies to both PO `#:` references and
+FCL `r=` tags.
 
 ## Fallback Locales
 

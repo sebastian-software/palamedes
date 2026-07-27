@@ -300,6 +300,7 @@ export interface ExtractCatalogMessagesRequest {
  * measured default; 1 forces serial extraction.
  */
 maxThreads?: number;
+  referenceScopes?: boolean;
 }
 export interface ExtractCatalogFileFailure {
   path: string;
