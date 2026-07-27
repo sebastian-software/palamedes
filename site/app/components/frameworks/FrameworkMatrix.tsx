@@ -98,8 +98,8 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
         </table>
       </div>
       <p className="mono-nums mt-3 text-[11px] text-gray-spec">
-        <span className="text-accent">●</span> live demo · ◌ provisioning (#306) · ✓ CI
-        browser-verified — all {contentStats.exampleCount} apps run the same verification flow
+        <span className="text-accent">●</span> live demo · ◌ local / provisioning · ✓ verified in CI
+        — browser flows for the five UI adapters, server smoke proofs for Remix v3
       </p>
     </div>
   )

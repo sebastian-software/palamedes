@@ -73,6 +73,7 @@ export function FwPanels() {
         const route = panel.matrixSlug ? cellFor(panel.matrixSlug, "route") : undefined
         const subdomain = panel.matrixSlug ? cellFor(panel.matrixSlug, "subdomain") : undefined
         const tld = panel.matrixSlug ? cellFor(panel.matrixSlug, "tld") : undefined
+        const hasLiveDemos = Boolean(cookie?.demoLinks?.length)
         return (
           <div
             key={panel.slug}
@@ -102,6 +103,9 @@ export function FwPanels() {
                     <span aria-hidden>● </span>cookie
                   </a>
                 ))}
+                {panel.matrixSlug && !hasLiveDemos ? (
+                  <span className="text-gray-spec">◌ local / CI</span>
+                ) : null}
                 {route?.demoLinks?.[0] ? (
                   <a href={route.demoLinks[0].href} className="text-accent hover:text-ink">
                     <span aria-hidden>● </span>route
@@ -111,14 +115,14 @@ export function FwPanels() {
                   <a href={subdomain.demoLinks[0].href} className="text-accent hover:text-ink">
                     <span aria-hidden>● </span>subdomain
                   </a>
-                ) : panel.matrixSlug ? (
+                ) : hasLiveDemos ? (
                   <span className="text-gray-spec">◌ subdomain</span>
                 ) : null}
                 {tld?.demoLinks?.[0] ? (
                   <a href={tld.demoLinks[0].href} className="text-accent hover:text-ink">
                     <span aria-hidden>● </span>tld
                   </a>
-                ) : panel.matrixSlug ? (
+                ) : hasLiveDemos ? (
                   <span className="text-gray-spec">◌ tld</span>
                 ) : null}
                 <Link
