@@ -131,6 +131,31 @@ module.exports = withPalamedes(
 )
 ```
 
+`include` and `exclude` select which sources are macro-transformed, and apply
+under both bundlers: webpack uses them as the loader's `test`/`exclude`, and
+Turbopack receives them as `{ path: include }` plus `{ not: { path: exclude } }`
+in the rule condition.
+
+The two bundlers do not match the same string, so a regex that is anchored to a
+directory layout can behave differently:
+
+- webpack tests the **absolute resource path** (`/home/me/app/src/page.tsx`)
+- Turbopack tests **its own internal path representation** for the module,
+  which is not guaranteed to be that absolute OS path
+
+Patterns matching a file extension (`/\.[jt]sx?$/`) or a path segment
+(`/[/\\]generated[/\\]/`) work the same under both. Patterns anchored with `^`,
+or built from an absolute directory, are the ones that can match under webpack
+and silently miss under Turbopack — prefer segment-based patterns and verify
+under both bundlers before relying on one. Both bundlers skip dependencies by
+default: `exclude` defaults to `/node_modules/`, and the Turbopack rule also
+carries `{ not: "foreign" }`.
+
+The `.po` loader is scoped the same way. It is registered with
+`{ not: "foreign" }` under Turbopack and `exclude: /node_modules/` under
+webpack, so a dependency that ships importable `.po` files is left alone
+instead of failing the build as an unmatched catalog.
+
 `workspaceRoot` pins the monorepo root used for Turbopack and output file
 tracing. When omitted, `withPalamedes` walks upward from the working directory
 looking for workspace markers (`workspaces` in package.json,
