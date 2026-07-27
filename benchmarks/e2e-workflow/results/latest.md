@@ -16,6 +16,16 @@ Machine-local: yes
 - i18next-parser CLI: 9.4.0
 - i18next-cli: 1.66.2
 
+> **Stale corpus provenance — regenerate before quoting these as reproducible.**
+> This report was recorded before the Palamedes corpus lane was corrected in
+> #445. It was generated with CLI v1.3.0, against a corpus that authored the
+> Palamedes lane with `defineMessage` — a macro 1.5.0 removed. The measured
+> inventory and the ratios are internally consistent and still match what
+> `site/app/data/bench.ts` quotes, so nothing published is wrong; but
+> re-running the harness today produces a slightly different Palamedes source
+> shape than the one measured here. A fresh run on the reference machine
+> (darwin/arm64, warmup 3, runs 7) replaces this note.
+
 ## Methodology
 
 - Scope: scan sources, extract messages, update catalogs, and write catalog files
