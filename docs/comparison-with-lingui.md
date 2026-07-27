@@ -23,7 +23,7 @@ Choose Palamedes if you want:
 - source-string-first catalogs with `message + context`
 - a stack that is easier to reason about over time
 - one runtime model that stays stable across verified framework integrations
-- a local foundation that can support managed translation layers later without giving up repo ownership
+- a local foundation that stays useful without an account or managed service
 
 Stay on Lingui if you want:
 
@@ -141,14 +141,16 @@ pragmatic framework integration are better than ad hoc translation sprawl.
 Palamedes keeps that instinct and makes the underlying system smaller and
 easier to understand.
 
-It also creates a cleaner base for future translation products that need local
-catalog and QA semantics without re-implementing them in a parallel stack.
+It also creates a cleaner base for optional higher-level products that need
+local catalog and QA semantics without re-implementing them in a parallel
+stack. Palamedes+ is the planned managed layer; Palamedes remains the
+open-source local foundation.
 
 That is the best way to think about the project:
 
 **Palamedes brings the discipline of a native catalog engine to JavaScript
 i18n: fewer legacy branches, clearer ownership, faster daily workflows, and a
-translation model that keeps working across frameworks.**
+translation model that stays coherent from source to runtime.**
 
 ## Continue Here
 

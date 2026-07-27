@@ -31,14 +31,14 @@ links they carry.
 
 ## Sitemap
 
-| Route          | File                                                   | Job of the page                                                    |
-| -------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
-| `/`            | [`pages/HomePage.jsx`](pages/HomePage.jsx)             | Convert: one model across frameworks, proof-first, clear next step |
-| `/frameworks`  | [`pages/FrameworksPage.jsx`](pages/FrameworksPage.jsx) | Show the 5×4 verified matrix and live demos per framework          |
-| `/proof`       | [`pages/ProofPage.jsx`](pages/ProofPage.jsx)           | Benchmarks, verification story, screenshots — the evidence page    |
-| `/get-started` | [`pages/GetStartedPage.jsx`](pages/GetStartedPage.jsx) | The 5-minute path from install to first rendered translation       |
-| `/compare`     | [`pages/ComparisonPage.jsx`](pages/ComparisonPage.jsx) | Honest positioning vs Lingui, next-intl, and GT                    |
-| `/blog`        | [`pages/BlogIndexPage.jsx`](pages/BlogIndexPage.jsx)   | Founder-led posts; reuses `docs/site/posts/`                       |
+| Route          | File                                                   | Job of the page                                                 |
+| -------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| `/`            | [`pages/HomePage.jsx`](pages/HomePage.jsx)             | Convert: one coherent local model, proof-first, clear next step |
+| `/frameworks`  | [`pages/FrameworksPage.jsx`](pages/FrameworksPage.jsx) | Show the 6×4 verified matrix and live demos per framework       |
+| `/proof`       | [`pages/ProofPage.jsx`](pages/ProofPage.jsx)           | Benchmarks, verification story, screenshots — the evidence page |
+| `/get-started` | [`pages/GetStartedPage.jsx`](pages/GetStartedPage.jsx) | The 5-minute path from install to first rendered translation    |
+| `/compare`     | [`pages/ComparisonPage.jsx`](pages/ComparisonPage.jsx) | Honest positioning vs Lingui, next-intl, and GT                 |
+| `/blog`        | [`pages/BlogIndexPage.jsx`](pages/BlogIndexPage.jsx)   | Founder-led posts; reuses `docs/site/posts/`                    |
 
 Every page shares `<SiteNav>` and `<SiteFooter>` from `components.jsx`.
 
@@ -72,11 +72,10 @@ must be resolved before implementation:
    (open-source proof first) — per maintainer review this is the safer public
    default today. If Plus leads instead, the hero and one section swap, but
    subpages stay valid.
-2. **Palamedes+ page.** Plus is expected to enter later as a bridge/route or
-   waitlist CTA (e.g. a `/plus` route: managed AI translation,
-   glossary/protected terms, QA, writeback) rather than being folded into the
-   OSS homepage claims — kept out of this pass because the copy must not
-   overstate what exists today.
+2. **Palamedes+ page.** The Core-led homepage names Palamedes+ once as the
+   planned optional managed layer, without presenting it as available today or
+   required by Palamedes. A later `/plus` route can cover managed translation,
+   glossary/protected terms, QA, and writeback when that product is ready.
 
 ## Facts the copy relies on (verify before shipping)
 

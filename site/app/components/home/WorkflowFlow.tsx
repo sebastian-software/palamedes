@@ -19,7 +19,7 @@ const STAGES: FlowStage[] = [
   { label: "Write", artifact: "src/*.tsx", note: "t`…` macro in the component" },
   { label: "Extract", artifact: "pmds", note: "one native command", accent: true },
   { label: "Translate", artifact: ".po catalog", note: "source-string-first" },
-  { label: "Render", artifact: "every framework", note: "same runtime model" },
+  { label: "Render", artifact: "supported hosts", note: "same runtime model" },
 ]
 
 export function WorkflowFlow() {
@@ -27,7 +27,7 @@ export function WorkflowFlow() {
     <div
       className="grid grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] items-stretch gap-0 max-grid:grid-cols-1"
       role="img"
-      aria-label="Workflow: write messages in source, extract with pmds, translate the .po catalog, render in every framework."
+      aria-label="Workflow: write messages in source, extract with pmds, translate the .po catalog, and render through the same runtime model in supported hosts."
     >
       {STAGES.map((stage, index) => (
         <Fragment key={stage.label}>

@@ -1,7 +1,8 @@
 # Translation Workflow Surface
 
 This document describes the local translation-support surface Palamedes should
-provide as a reusable foundation for higher-level products such as Palamedes+.
+provide as a reusable foundation for optional higher-level products such as
+Palamedes+.
 
 For the first concrete module split, see [Translation Module Boundaries](./translation-module-boundaries.md).
 
@@ -11,8 +12,9 @@ Palamedes should make it unnecessary for downstream translation products to
 rebuild repo-local catalog semantics, QA primitives, and metadata handling in
 parallel stacks.
 
-The goal is not to make Palamedes itself a hosted translation product. The goal
-is to give that product layer a calm, reliable local base.
+The goal is not to make Palamedes itself a hosted translation product.
+Palamedes remains the open-source local foundation; an optional managed product
+can build on that foundation without replacing it.
 
 ## What belongs in Palamedes
 
@@ -99,7 +101,11 @@ Those concerns are product-layer responsibilities.
 
 The target split is:
 
-- **Palamedes**: local native-core foundation
-- **Palamedes+**: remote translation product
+- **Palamedes**: open-source local foundation for authoring, extraction,
+  catalogs, QA, and runtime integration
+- **Palamedes+**: optional managed layer for translation automation and
+  collaboration
 
-Palamedes+ should be able to use this workflow surface without re-implementing the underlying local semantics in a separate stack.
+Palamedes does not require Palamedes+. Palamedes+ should use this workflow
+surface without re-implementing the underlying local semantics or moving
+repository-owned catalogs behind a required service boundary.

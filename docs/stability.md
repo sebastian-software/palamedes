@@ -81,7 +81,7 @@ adoption:
 - package layout for new native platform targets
 - benchmark fixture shape and reporting fields
 - internal package boundaries between plugins and transform/core-node helpers
-- future managed translation workflow bridges
+- optional Palamedes+ workflow bridges
 - CLI plugin host capabilities beyond API v1
 
 ## Deprecation Policy

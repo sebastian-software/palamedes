@@ -37,13 +37,13 @@ export const HOME_MODEL_CARDS: FeatureCard[] = [
   {
     icon: "fingerprint",
     title: "One identity model",
-    body: "Messages are identified by message + context — stable across refactors, frameworks, and years of catalog history.",
+    body: "Messages are identified by message + context — stable across refactors, supported hosts, and years of catalog history.",
     href: decisionHref("003-source-string-first-message-identity.md"),
   },
   {
     icon: "plug",
     title: "One runtime call",
-    body: "getI18n() resolves the active instance everywhere: server components, client islands, backend request handlers.",
+    body: "getI18n() resolves the active instance across supported render environments: server components, client islands, and backend request handlers.",
     href: decisionHref("005-universal-geti18n-runtime-model.md"),
   },
 ]

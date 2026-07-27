@@ -12,7 +12,8 @@ Palamedes actually sits.
 The shortest answer is this:
 
 Palamedes is for teams that want compile-time authoring, source-string-first
-catalogs, and one i18n model that stays steady across framework boundaries.
+catalogs, and one coherent i18n model from source to runtime. First-party
+adapters connect that model to supported hosts.
 
 ## Why Lingui Gets The Head-to-Head Benchmark
 
@@ -48,10 +49,11 @@ That gives Palamedes a narrower product shape than some alternatives, but it
 also makes the system easier to reason about. There is less ambiguity about
 which layer owns which decision.
 
-That is also why the cross-framework story matters. Palamedes is unusual not
-because it has more than one adapter. It is unusual because the same runtime
-and identity model survive across verified integrations for Next.js, TanStack
-Start, SolidStart, Waku, and React Router.
+That is also why the framework matrix matters. Palamedes is unusual not because
+it has more than one adapter, but because the same runtime and identity model
+are verified across Next.js, TanStack Start, SolidStart, Waku, and React
+Router. The matrix is evidence of the architecture, not a requirement that one
+team use several frameworks.
 
 The performance story follows from that discipline more than from "Rust" as a
 branding point.
@@ -153,8 +155,8 @@ Palamedes sits in a more specific place than all three:
 it is for teams that like compile-time authoring, want source-string-first
 catalogs, and prefer a narrower system that stays easier to trust.
 
-It is also for teams that care about not having their i18n strategy become
-framework-fragmented as the application evolves.
+Its first-party adapters keep supported host integrations from redefining that
+local model as the application evolves.
 
 ## ICU As A Pipeline Contract
 

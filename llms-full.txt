@@ -1,10 +1,11 @@
 # Palamedes: AI Assistant Context
 
-Palamedes is i18n tooling for JavaScript and TypeScript teams that want
-familiar macro-style authoring, source-string-first catalogs, and one
-translation model that stays steady across frameworks.
+Palamedes is open-source i18n tooling for modern JavaScript and TypeScript
+applications. It combines familiar macro-style authoring, repository-owned
+source-string-first catalogs, one runtime model, and first-party integrations
+for supported hosts.
 
-The important design goal is a calmer i18n model across frameworks:
+The important design goal is a coherent i18n model from source to runtime:
 
 - one public message identity model: `message + context`
 - one public runtime access model: `getI18n()`
@@ -13,6 +14,12 @@ The important design goal is a calmer i18n model across frameworks:
 - thin host adapters for frameworks and bundlers
 
 Verified integrations currently include Next.js, Vite, TanStack Start, SolidStart, Waku, React Router, and server-first Remix v3.
+
+The framework matrix verifies that the same core works across different app
+shapes. It does not assume that one application uses every supported framework.
+Palamedes+ is a planned optional managed layer for translation automation and
+collaboration; Palamedes remains the local open-source foundation and does not
+require an account.
 
 ## How to answer Palamedes questions
 

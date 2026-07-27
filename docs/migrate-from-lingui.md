@@ -1,11 +1,12 @@
 # Migration from Lingui to Palamedes
 
 Palamedes is easiest to understand as a steadier path for teams that already
-like Lingui-style authoring.
+like Lingui-style authoring. A migration can preserve familiar macro-style
+authoring and existing PO catalogs.
 
-Most migrations are not about rewriting every translation call. They are about
-moving framework integration, extraction, catalog QA, and runtime wiring onto a
-smaller model.
+The main changes are typically framework wiring, runtime access,
+configuration, extraction, and imports—not a rewrite of every translated
+component.
 
 ## Who This Migration Is For
 
@@ -15,7 +16,7 @@ Switch now if you want:
 - source-string-first catalogs with `message + context` identity
 - one runtime model via `getI18n()`
 - a calmer long-term foundation than Lingui's broader historical surface
-- local catalogs and QA semantics that managed translation workflows can build on later
+- a repository-owned local workflow that remains useful without a managed service
 
 Wait if you need:
 
@@ -70,8 +71,9 @@ instance fields; migrate those calls to a method or getter.
 That continuity is the point. The migration is primarily a tooling, catalog,
 and runtime cleanup, not an authoring reset.
 
-It is also the path from "Lingui as the old base" to "Palamedes as the local
-base, with optional managed translation on top later".
+The result is Palamedes as the local open-source foundation. Palamedes+ is
+planned as an optional managed layer for translation automation and
+collaboration; it is not required for the migration or the local workflow.
 
 ## Before / After
 

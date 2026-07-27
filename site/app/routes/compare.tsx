@@ -56,11 +56,11 @@ export default function Compare() {
           Compare it properly. We&nbsp;will argue the other side for you.
         </h1>
         <p className="mt-6 max-w-[42em]">
-          Palamedes is narrower than the alternatives and considerably faster than all of them —{" "}
-          {BENCH_REALISTIC.ratios.formatjs} to {BENCH_REALISTIC.ratios.i18nextCli} on the checked
-          benchmark, depending on which tool you put next to it. Both of those are deliberate, and
-          both are checkable. Every page below states what the other project earned, what that
-          strength costs its users, and where we would send you elsewhere.
+          Palamedes is narrower than many alternatives and measured faster than the four workflows
+          covered by the checked benchmark — {BENCH_REALISTIC.ratios.formatjs} to{" "}
+          {BENCH_REALISTIC.ratios.i18nextCli}, depending on the measured tool. Both the product
+          boundary and the benchmark scope are explicit. Every page below states what the other
+          project earned, what that strength costs its users, and where we would send you elsewhere.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href="/compare/lingui">Start with Lingui</ButtonLink>
@@ -267,18 +267,18 @@ export default function Compare() {
             We are not neutral either, and here is exactly how.
           </h3>
           <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
-            Palamedes is built by Sebastian Software, a company, and a commercial tier is planned.
-            Making the argument above without saying that would be the kind of thing the rest of
-            these pages exist to avoid. So: the plan on record is extra commands inside the same
-            CLI, not a place to keep your catalogs — the decision and its reasoning are written up
-            in the architecture decision records before any of it ships.
+            Palamedes is built by Sebastian Software, a company. Palamedes+ is planned as an
+            optional managed layer for translation automation and collaboration. Making the argument
+            above without saying that would be the kind of thing the rest of these pages exist to
+            avoid. The open-source Palamedes toolchain remains the local foundation for authoring,
+            extraction, catalogs, validation, and runtime integration.
           </p>
           <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
-            What you should hold us to is the architecture, not the promise. Your catalogs are .po
-            files in your repository. Nothing phones home, nothing needs an account, and no part of
-            the toolchain gets more useful to us the more locked in you are. If we ever build a
-            commercial tier that depends on you being unable to leave, that architecture would have
-            to change first — and you would see the commit.
+            What you should hold us to is the architecture, not the plan. Palamedes does not require
+            Palamedes+: your catalogs stay in your repository, the local toolchain needs no account,
+            and the core remains MIT-licensed. If a commercial product ever depended on making that
+            local foundation less useful on its own, the architecture would have to change first —
+            and you would see the commit.
           </p>
           <a href={decisionHref()} className="mono-nums mt-4 inline-block text-[13px] text-accent">
             Read the decision records →

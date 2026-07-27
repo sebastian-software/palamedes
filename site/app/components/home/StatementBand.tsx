@@ -3,9 +3,8 @@ import type { ReactNode } from "react"
 /*
  * The dark positioning band — Home's single deliberate style break. The
  * ScopeDiagram renders, in developer-facing terms, the part Palamedes owns
- * (stable across frameworks) vs. the part your framework owns (differs per
- * stack) — and the payoff line: switching frameworks only touches the bottom
- * row. Labels are intentionally plain, not the internal architecture names.
+ * (stable across supported hosts) vs. the part each host owns (differs per
+ * stack). Labels are intentionally plain, not the internal architecture names.
  */
 export function StatementBand({
   num,
@@ -34,10 +33,10 @@ function ScopeDiagram() {
     <div
       className="mt-12 max-w-[44em]"
       role="img"
-      aria-label="Palamedes owns the part that stays the same on every framework: writing messages, extract and update, the .po catalog, and the runtime lookup, all on one Rust core. Your framework owns the part that differs per stack: routing and URLs, locale detection, rendering, and hosting. Switching frameworks only changes that bottom row."
+      aria-label="Palamedes owns the part that stays the same across supported hosts: writing messages, extract and update, the .po catalog, and the runtime lookup, all on one Rust core. Each host owns routing and URLs, locale detection, rendering, and hosting."
     >
       <p className="micro text-[10px] tracking-label text-accent-soft">
-        Palamedes owns it — same on every framework
+        Palamedes owns it — shared across supported hosts
       </p>
       <div className="mt-2 grid grid-cols-4 gap-px border border-accent-soft/40 bg-accent-soft/40 max-tight:grid-cols-2">
         {OWNED.map((label) => (
@@ -54,7 +53,7 @@ function ScopeDiagram() {
       </p>
       <div className="mx-auto my-3 h-6 w-px bg-accent-soft/40" aria-hidden />
       <p className="micro text-[10px] tracking-label text-gray-spec">
-        Your framework owns it — different on every stack
+        Each host owns it — specific to that stack
       </p>
       <div className="mt-2 grid grid-cols-4 gap-px border border-paper/20 bg-paper/20 max-tight:grid-cols-2">
         {HOST.map((label) => (
@@ -67,8 +66,9 @@ function ScopeDiagram() {
         ))}
       </div>
       <p className="mt-6 text-[15px] text-paper">
-        Switch frameworks, and only the bottom row changes.{" "}
-        <span className="text-accent-soft">The top row is the same code you already wrote.</span>
+        Adopt another supported host, and the integration changes without redefining your messages
+        or catalogs.{" "}
+        <span className="text-accent-soft">The local i18n foundation stays familiar.</span>
       </p>
     </div>
   )

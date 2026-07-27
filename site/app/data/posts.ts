@@ -20,7 +20,7 @@ export const POSTS: Post[] = [
   {
     title: "A calmer path for JavaScript i18n",
     excerpt:
-      "Why 'calm' is a feature: one runtime model, one identity model, and a catalog workflow that doesn't reopen with every framework decision.",
+      "Why 'calm' is a feature: one runtime model, one identity model, and a catalog workflow that stays coherent as the application changes.",
     href: blogHref("a-calmer-path-for-javascript-i18n"),
     readMinutes: 6,
   },
