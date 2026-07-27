@@ -138,5 +138,9 @@ export default [
   route("docs/troubleshooting", "routes/docs/troubleshooting.md"),
   route("frameworks", "routes/frameworks.tsx"),
   route("get-started", "routes/get-started.tsx"),
+  route("i18n-performance", "routes/i18n-performance.tsx"),
+  route("icu-messageformat", "routes/icu-messageformat.tsx"),
+  route("locale-routing", "routes/locale-routing.tsx"),
   route("proof", "routes/proof.tsx"),
+  route("react-server-components-i18n", "routes/react-server-components-i18n.tsx"),
 ] satisfies RouteConfig

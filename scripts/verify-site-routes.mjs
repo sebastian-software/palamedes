@@ -59,6 +59,13 @@ const ROUTE_EXPECTATIONS = [
   },
   { path: "/compare/tolgee", h1: "Your catalogs, or their database." },
   { path: "/compare/intlayer", h1: "Write the dictionary, or write the sentence." },
+  {
+    path: "/react-server-components-i18n",
+    h1: "i18n for React Server Components, without the workaround.",
+  },
+  { path: "/i18n-performance", h1: "Extraction should not be the slow part of your build." },
+  { path: "/icu-messageformat", h1: "'Supports ICU' is not a yes-or-no answer." },
+  { path: "/locale-routing", h1: "Four ways to carry a locale." },
   { path: "/blog", h1: "Building i18n tooling in the" },
   { path: "/blog/measuring-palamedes-honestly", h1: "Measuring Palamedes Honestly" },
   { path: "/docs", h1: "Documentation" },

@@ -1,3 +1,5 @@
+import { Link } from "react-router"
+
 import { ButtonLink } from "~/components/chrome/Button"
 import { Page } from "~/components/chrome/Page"
 import { pageMeta } from "~/lib/meta"
@@ -63,12 +65,21 @@ export default function Frameworks() {
         title="Pick the locale strategy your product needs — not the one your framework dictates."
       >
         <FeatureGrid cards={STRATEGY_CARDS} columns={4} />
-        <a
-          href={docsHref("locale-strategies")}
-          className="mono-nums mt-6 inline-block text-[13px] text-accent"
-        >
-          Locale strategies in depth →
-        </a>
+        <div className="mt-6 space-y-2">
+          <Link
+            to="/locale-routing"
+            viewTransition
+            className="mono-nums block text-[13px] text-accent"
+          >
+            Which strategy to pick, and what each one costs →
+          </Link>
+          <a
+            href={docsHref("locale-strategies")}
+            className="mono-nums block text-[13px] text-accent"
+          >
+            Locale strategies in depth →
+          </a>
+        </div>
       </Section>
 
       <Section num="03 — Per framework" title="Your stack, specifically.">
