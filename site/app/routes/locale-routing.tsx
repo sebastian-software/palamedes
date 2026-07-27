@@ -12,6 +12,7 @@ export function meta() {
     description: topic.metaDescription,
     path: "/locale-routing",
     faq: topic.faq,
+    slug: topic.slug,
   })
 }
 

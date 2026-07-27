@@ -12,6 +12,7 @@ export function meta() {
     description: topic.metaDescription,
     path: "/i18n-performance",
     faq: topic.faq,
+    slug: topic.slug,
   })
 }
 

@@ -12,6 +12,7 @@ export function meta() {
     description: topic.metaDescription,
     path: "/react-server-components-i18n",
     faq: topic.faq,
+    slug: topic.slug,
   })
 }
 

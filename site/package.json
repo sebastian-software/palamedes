@@ -5,7 +5,7 @@
   "scripts": {
     "prebuild": "node ./scripts/prebuild-content.mjs",
     "dev": "node ./scripts/prebuild-content.mjs && react-router dev --port 4100",
-    "build": "node ../scripts/verify-site-bench-data.mjs && node ./scripts/prebuild-content.mjs && react-router build && node ../scripts/copy-llms-to-site.mjs",
+    "build": "node ../scripts/verify-site-bench-data.mjs && node ./scripts/generate-og-images.mjs --check && node ./scripts/prebuild-content.mjs && react-router build && node ../scripts/copy-llms-to-site.mjs",
     "preview": "sirv build/client --single --port 4101",
     "typecheck": "node ./scripts/prebuild-content.mjs && react-router typegen && tsc"
   },

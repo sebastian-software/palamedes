@@ -12,6 +12,7 @@ export function meta() {
     description: topic.metaDescription,
     path: "/icu-messageformat",
     faq: topic.faq,
+    slug: topic.slug,
   })
 }
 

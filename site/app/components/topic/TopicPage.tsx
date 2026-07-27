@@ -135,7 +135,9 @@ export function TopicPage({ topic }: { topic: Topic }) {
 
       <Section num={topic.code ? "06 — Keep reading" : "05 — Keep reading"} title="Related pages">
         <div className="hairline-grid grid-cols-3 max-tight:grid-cols-1">
-          {topic.related.map((link) => (
+          {/* Two topical links plus the hub: keeps the row full at three and
+              guarantees every guide has a path back to the index. */}
+          {[...topic.related.slice(0, 2), { label: "All guides", href: "/guides" }].map((link) => (
             <Link
               key={link.href}
               to={link.href}
