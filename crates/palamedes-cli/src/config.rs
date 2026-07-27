@@ -52,6 +52,9 @@ pub struct LoadedConfig {
     pub fallback_locales: Option<ConfigFallbackLocales>,
     pub pseudo_locale: Option<String>,
     pub catalogs: Vec<ConfigCatalog>,
+    /// Worker threads for the parallel extraction pass; `None` uses the
+    /// measured default in the core.
+    pub extract_threads: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -84,6 +87,8 @@ struct RawConfig {
     pseudo_locale: Option<String>,
     #[serde(default, alias = "source_reference_root")]
     source_reference_root: Option<String>,
+    #[serde(default, alias = "extract_threads")]
+    extract_threads: Option<usize>,
     catalogs: Vec<ConfigCatalog>,
 }
 
@@ -258,6 +263,7 @@ fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig
         fallback_locales: raw.fallback_locales,
         pseudo_locale: raw.pseudo_locale,
         catalogs: raw.catalogs,
+        extract_threads: raw.extract_threads,
     })
 }
 

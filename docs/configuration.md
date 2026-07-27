@@ -40,10 +40,19 @@ catalogs:
 | `pseudo-locale`         | No       | `string`                               | Locale code used for pseudo-localized UI testing.                                   |
 | `source-reference-root` | No       | `git \| config \| lingui \| path`      | Root used for catalog source references. Defaults to nearest Git root, then config. |
 | `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                |
+| `extract-threads`       | No       | `number`                               | Worker threads for the parallel extraction pass. Defaults to `4`; `1` runs serial.  |
 
 The native CLI and JS config loader also accept snake_case aliases for
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
-and `source_reference_root`.
+`source_reference_root`, and `extract_threads`.
+
+`extract-threads` bounds the parallel read/parse pass. The default of `4` is a
+measured floor rather than a core count: extraction gets slower again above it,
+because a one-shot `pmds extract` pays worker setup on every invocation and
+never amortizes it. Raise it only with a measurement on your own corpus and
+hardware; see
+[ADR-013](https://github.com/sebastian-software/palamedes/blob/main/adr/013-bounded-parallel-extraction.md)
+for the numbers. `--threads` on the command line overrides this value.
 
 ## Catalogs
 
