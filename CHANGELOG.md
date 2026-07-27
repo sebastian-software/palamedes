@@ -52,6 +52,40 @@
   and the macro content pre-filter is derived from the canonical macro
   package list (it previously missed `@palamedes/solid/macro`).
 
+## [1.7.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.6.0...palamedes-v1.7.0) (2026-07-27)
+
+
+### Features
+
+* **site:** add a landing page per major competing i18n library ([28b3098](https://github.com/sebastian-software/palamedes/commit/28b3098b98e81da16e412b52dec500a6d81c7f6d))
+* **site:** add four topic landing pages with structured data ([b89ee08](https://github.com/sebastian-software/palamedes/commit/b89ee085dd391b7948249ab25b976f5143bd12ab))
+* **site:** add the /guides hub and per-topic Open Graph cards ([b664dfd](https://github.com/sebastian-software/palamedes/commit/b664dfdb0fcb4c34e3f74266be6dcd6bfdca894b))
+* **site:** add the Intlayer comparison, plus Lingo.dev and Fluent sections ([542f536](https://github.com/sebastian-software/palamedes/commit/542f536c5e859ea76514829e8eb77d25f251fa18))
+* **site:** argue the comparison pages with conviction ([c0ea33d](https://github.com/sebastian-software/palamedes/commit/c0ea33d5d3ebdd0aee6a7f2478de6957b39ed713))
+* **site:** compare General Translation and Tolgee, and map the platforms ([27994d4](https://github.com/sebastian-software/palamedes/commit/27994d4cf0b0e1c4c135a573f0cb3a15e0a5d1a2))
+* **site:** explain who funds the i18n libraries, and disclose our own position ([aa26239](https://github.com/sebastian-software/palamedes/commit/aa26239e47bafe4edff24b774f74463898062733))
+
+
+### Bug Fixes
+
+* **cli:** harden watch mode and polish the command surface ([818643e](https://github.com/sebastian-software/palamedes/commit/818643e2d690eddea09c98f688b8733c5a06bc4a)), closes [#422](https://github.com/sebastian-software/palamedes/issues/422) [#425](https://github.com/sebastian-software/palamedes/issues/425)
+* **cli:** report new-root watch failures and unwatch removed roots on reload ([4153d47](https://github.com/sebastian-software/palamedes/commit/4153d47c233a168d2c23e911f67d97a204397c2e))
+* **config:** align CLI and JS loaders and validate locale references ([077ab19](https://github.com/sebastian-software/palamedes/commit/077ab1934225b151425ec5488a61f90899196cd1)), closes [#421](https://github.com/sebastian-software/palamedes/issues/421)
+* **core-node:** resolve catalog module locale from the path pattern, not the caller ([ae158d6](https://github.com/sebastian-software/palamedes/commit/ae158d6d9fe6dc015ffbcf402338b08ad736c40f)), closes [#409](https://github.com/sebastian-software/palamedes/issues/409)
+* **core,plugins:** formatter caching, parser diagnostics, and warning channels ([a2d07bc](https://github.com/sebastian-software/palamedes/commit/a2d07bc2295963a26a80e48ffdfc6c70ff586351)), closes [#426](https://github.com/sebastian-software/palamedes/issues/426)
+* **core:** degrade invalid Date values instead of throwing in stringifyValue ([29549b3](https://github.com/sebastian-software/palamedes/commit/29549b3cf6926e8982e7db482158a8ca5a5abc7f))
+* **core:** emit protocol-relative canonical URLs instead of hardcoding http ([b94a23a](https://github.com/sebastian-software/palamedes/commit/b94a23a71b2d4f526e7ef35a8b32f9ee4dad9edc)), closes [#418](https://github.com/sebastian-software/palamedes/issues/418)
+* **core:** fall through to accept-language on invalid locale cookie ([c73c7e5](https://github.com/sebastian-software/palamedes/commit/c73c7e536246c6f3c7eaede568e52796aba11181)), closes [#413](https://github.com/sebastian-software/palamedes/issues/413)
+* **core:** reject absent or non-numeric plural values instead of coercing to 0 ([172059b](https://github.com/sebastian-software/palamedes/commit/172059b260af3b39073c1e0f490a8259c5ba79af)), closes [#414](https://github.com/sebastian-software/palamedes/issues/414)
+* **examples:** route 404s, html lang, honest captions, changelog pointers ([eadef57](https://github.com/sebastian-software/palamedes/commit/eadef5744b0dc4addf28416625e423cdb54d4d3b)), closes [#427](https://github.com/sebastian-software/palamedes/issues/427)
+* **next-plugin:** apply include/exclude under Turbopack and merge user rules ([5d46aef](https://github.com/sebastian-software/palamedes/commit/5d46aef8810af0a28fa81e6277bbbe0f04ef813d)), closes [#411](https://github.com/sebastian-software/palamedes/issues/411)
+* **next-plugin:** declare next ^16 as the supported peer range ([746eec6](https://github.com/sebastian-software/palamedes/commit/746eec602eaab3cd059cd8c7fcf8913851799a46)), closes [#412](https://github.com/sebastian-software/palamedes/issues/412)
+* **plugins:** register the Palamedes config as a watch and cache dependency ([696d8aa](https://github.com/sebastian-software/palamedes/commit/696d8aa769507fbc817fb634c8ac0589b42100ec)), closes [#410](https://github.com/sebastian-software/palamedes/issues/410)
+* **react,solid:** resolve runtime choice components through the i18n instance ([72ab2a0](https://github.com/sebastian-software/palamedes/commit/72ab2a0a34e950e62789493fcfe81326d6a8780d)), closes [#416](https://github.com/sebastian-software/palamedes/issues/416) [#417](https://github.com/sebastian-software/palamedes/issues/417)
+* **scripts:** cover the comparison routes and stop the ratio drifting ([50a4ea3](https://github.com/sebastian-software/palamedes/commit/50a4ea3a969e848fdda46ade293d3f88f73b550d))
+* **site:** derive ADR and example counts from the generated stats ([7833294](https://github.com/sebastian-software/palamedes/commit/78332948583b7031709e1a1e09b03edb33c9a366))
+* **site:** stop the frame from sizing to content on narrow viewports ([0ba4a69](https://github.com/sebastian-software/palamedes/commit/0ba4a69eef21abc96db92de47bffe17b050650ba))
+
 ## [1.6.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.5.1...palamedes-v1.6.0) (2026-07-25)
 
 ### Features
