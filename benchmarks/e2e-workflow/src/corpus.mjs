@@ -339,8 +339,8 @@ function renderFillerModule(fileIndex, lineCount) {
   return `${fillerLines(fileIndex, lineCount).join("\n")}\n`
 }
 
-function renderPalamedesSource(fileIndex, messages, extension, targetLines) {
-  const imports = ['import { defineMessage, t } from "@palamedes/core/macro"']
+export function renderPalamedesSource(fileIndex, messages, extension, targetLines) {
+  const imports = ['import { t } from "@palamedes/core/macro"']
   if (extension === "tsx") {
     imports.push('import { Trans } from "@palamedes/react/macro"')
   }
@@ -352,10 +352,11 @@ function renderPalamedesSource(fileIndex, messages, extension, targetLines) {
     extension,
     fileIndex,
     targetLines,
+    authorMessage: authorPalamedesMessage,
   })
 }
 
-function renderLinguiSource(fileIndex, messages, extension, targetLines) {
+export function renderLinguiSource(fileIndex, messages, extension, targetLines) {
   const imports = ['import { defineMessage, t } from "@lingui/core/macro"']
   if (extension === "tsx") {
     imports.push('import { Trans } from "@lingui/react/macro"')
@@ -371,20 +372,45 @@ function renderLinguiSource(fileIndex, messages, extension, targetLines) {
   })
 }
 
-/* Variable messages ({name}) are authored with defineMessage — t({ message })
- * would drop the interpolation. Plain messages keep the t/defineMessage mix. */
-function authorMacroMessage(message, index) {
+/* Lingui lane: variable messages ({name}) are authored with defineMessage —
+ * t({ message }) would drop the interpolation there. Plain messages keep the
+ * t/defineMessage mix. */
+function authorLinguiMessage(message, index) {
   if (message.includes("{name}") || index % 3 !== 0) {
     return `    defineMessage({ message: ${JSON.stringify(message)} }).message,`
   }
   return `    t({ message: ${JSON.stringify(message)} }),`
 }
 
-function renderMacroSource({ functionName, imports, messages, extension, fileIndex, targetLines }) {
+/*
+ * Palamedes lane: eager t({ message }) throughout, which is the post-1.5.0
+ * authoring model — deferred message descriptors were removed, so
+ * `defineMessage` no longer exists in @palamedes/core/macro and the extractor
+ * rejects it outright.
+ *
+ * Interpolation is not a reason to reach for a deferred macro here: the
+ * placeholder is part of the message text, and `t({ message: "Hello {name}" })`
+ * lands in the catalog as `msgid "Hello {name}"` unchanged. The two lanes
+ * therefore still produce an identical logical message inventory, which is
+ * what the harness's semantic validation compares.
+ */
+function authorPalamedesMessage(message) {
+  return `    t({ message: ${JSON.stringify(message)} }),`
+}
+
+function renderMacroSource({
+  functionName,
+  imports,
+  messages,
+  extension,
+  fileIndex,
+  targetLines,
+  authorMessage = authorLinguiMessage,
+}) {
   const body = [`export function ${functionName}() {`, "  const values = ["]
 
   for (let index = 0; index < messages.length; index += 1) {
-    body.push(authorMacroMessage(messages[index].current, index))
+    body.push(authorMessage(messages[index].current, index))
   }
 
   body.push("  ]")
