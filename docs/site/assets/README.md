@@ -6,7 +6,7 @@ The README hero. It shows one example demo rendered in three locales side by
 side, so the localization story is visible at a glance: switch language and the
 copy, plural seat counts, currency, and dates all change together.
 
-It intentionally shows a single framework. Every framework and locale strategy
+It intentionally shows a single framework. Each verified framework and locale strategy
 renders the same design, so repeating ten near-identical screenshots would add
 noise, not proof. The per-framework, per-strategy captures live in
 [`docs/example-screenshots`](../../example-screenshots) and are what CI

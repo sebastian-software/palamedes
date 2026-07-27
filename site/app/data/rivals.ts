@@ -342,11 +342,11 @@ plural(seats, {
     researched: "July 2026",
     metaTitle: "Palamedes vs next-intl — one framework deep, or six frameworks wide",
     metaDescription:
-      "next-intl is the most Next.js-idiomatic i18n library there is, routing included. Palamedes trades that depth for a translation model that survives a framework change — and ships source-string extraction as the stable path, not an experiment.",
+      "next-intl is the most Next.js-idiomatic i18n library there is, routing included. Palamedes trades that depth for one runtime and message model across supported hosts — and ships source-string extraction as the stable path, not an experiment.",
     eyebrow: "Compare · next-intl",
     headline: `One framework deep, or ${contentStats.frameworkCount} frameworks wide.`,
     lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes owns less on purpose: your framework keeps routing, and the translation model stays identical when the framework underneath it changes.",
-    card: "Next-native depth including routing, against a model that survives a framework change.",
+    card: "Next-native depth including routing, against one shared model across supported hosts.",
     facts: [
       { label: "Adoption", value: "~4.0M downloads/week" },
       { label: "Scope", value: "Next.js (use-intl for plain React)" },

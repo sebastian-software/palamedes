@@ -3,16 +3,18 @@
 > Internal messaging note. The published site lives in `site/`; this document
 > records homepage positioning language for maintainers.
 
-**Modern i18n tooling that keeps the translation model steady as your app changes.**
+**Open-source i18n tooling with one coherent model from source to runtime.**
 
-Palamedes is for JavaScript teams that like writing messages close to the code,
-want source-string-first catalogs, and do not want their i18n setup to splinter
-every time the framework changes.
+Palamedes is for JavaScript and TypeScript teams that like writing messages
+close to the code, want repository-owned source-string-first catalogs, and
+prefer a small, explicit runtime model.
 
-It gives you one runtime model, one message identity model, and one catalog
-workflow across verified integrations for Next.js, TanStack Start, SolidStart,
-Waku, React Router, Remix v3, and Vite. Backend servers use the same runtime
-model but are documented as a guide rather than a verified matrix family.
+First-party adapters carry that model across verified integrations for Next.js,
+TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite. Backend
+servers use the same runtime model but are documented as a guide rather than a
+verified matrix family. The matrix proves architectural coherence across
+different app shapes; it does not define the product as a tool only for
+multi-framework codebases.
 
 We are not asking you to trust a slogan. The repo shows the work.
 
@@ -80,8 +82,8 @@ app-level experience calm.
 
 ## Why Teams Care
 
-Cross-framework consistency matters because teams do not want to relearn i18n
-every time the application shape changes.
+A coherent local model matters because teams should not have to reopen message
+identity, catalogs, and runtime access whenever the application shape changes.
 
 When the runtime model, message identity, and catalog workflow stay stable:
 
@@ -89,6 +91,15 @@ When the runtime model, message identity, and catalog workflow stay stable:
 - migrations carry less conceptual overhead
 - performance work lands in one native core instead of several adapter layers
 - future translation workflows can build on local catalogs your team still owns
+
+## Palamedes And Palamedes+
+
+Palamedes is the open-source local foundation for authoring, extraction,
+catalogs, validation, and runtime integration. Palamedes+ is planned as an
+optional managed layer for translation automation and collaboration.
+
+Palamedes does not require Palamedes+. The local toolchain remains useful on
+its own, needs no account, and keeps catalogs in the repository.
 
 ## Evidence Behind The Positioning
 
@@ -125,8 +136,8 @@ The broader market picture matters too:
 - General Translation solves a broader translation-system problem
 
 Palamedes sits in a narrower place on purpose: compile-time authoring,
-source-string-first semantics, and a local catalog workflow that stays usable
-across frameworks.
+source-string-first semantics, and a local catalog workflow connected to
+supported hosts through first-party adapters.
 
 ## Start Here
 

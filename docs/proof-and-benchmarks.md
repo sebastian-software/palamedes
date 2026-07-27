@@ -1,9 +1,11 @@
 # Proof, Benchmarks, and Current Maturity
 
-Palamedes makes a simple public claim: the same i18n model should keep working
-as an app moves across modern frameworks.
+Palamedes makes a simple public claim: authoring, message identity, catalogs,
+and runtime access should form one coherent model.
 
-This page shows the work behind that claim. The goal is confidence, not hype.
+This page shows the work behind that claim. The framework matrix verifies the
+same model across different app shapes; it does not assume that one product
+uses all of them. The goal is confidence, not hype.
 
 ## What This Repo Can Prove
 
@@ -40,8 +42,8 @@ evidence easy to inspect.
 - reproducible local benchmark commands
 - versioned browser screenshots generated from the same CI browser flows
 
-Together, these assets make the cross-framework story visible instead of
-leaving it as a slogan.
+Together, these assets make the shared-model claim visible instead of leaving
+it as a slogan.
 
 ## Benchmark Scope
 

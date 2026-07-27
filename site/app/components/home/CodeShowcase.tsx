@@ -111,7 +111,7 @@ export function CodeShowcase() {
       <div className="border-t border-hair px-5 py-5">
         <p className="micro text-[10px] tracking-label text-gray-spec">Rendered</p>
         <p className="mt-1 mb-4 text-[13.5px]">
-          The same component, in every locale, in every framework.
+          The same component in every loaded locale, with the same model across supported hosts.
         </p>
         <LocaleBookingCards />
       </div>

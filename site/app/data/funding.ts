@@ -8,9 +8,10 @@
  * disclosed on public pages. But it points incentives somewhere, and a reader
  * choosing a dependency deserves to know where.
  *
- * Non-negotiable: this section ships alongside our own disclosure. Palamedes
- * plans a commercial tier (ADR-018), so making this argument without saying so
- * would be exactly the kind of thing the rest of these pages refuse to do.
+ * Non-negotiable: this section ships alongside our own disclosure. Palamedes+
+ * is planned as an optional commercial layer, with ADR-018 defining how its
+ * commands integrate with the shared CLI. Making this argument without saying
+ * so would be exactly the kind of thing the rest of these pages refuse to do.
  *
  * Sources are the projects' own public funding pages, dated per row.
  */
@@ -72,7 +73,7 @@ export const FUNDING: FundingRow[] = [
     project: "Palamedes",
     funder: "Sebastian Software GmbH — the company that builds it",
     sells:
-      "Nothing today. A commercial tier is planned as extra CLI commands, not as a place to keep your catalogs. Our disclosure is below.",
+      "Nothing today. Palamedes+ is planned as an optional managed layer for translation automation and collaboration; the local catalogs remain repository-owned.",
     checked: "July 2026",
   },
 ]

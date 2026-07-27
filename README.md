@@ -7,16 +7,20 @@
 
 **Website: [palamedes.dev](https://palamedes.dev)**
 
-Palamedes is i18n tooling for JavaScript and TypeScript teams that want one
-translation model to survive framework changes.
+Palamedes is open-source i18n tooling for modern JavaScript and TypeScript
+applications. It combines macro-style authoring close to the code,
+source-string-first catalogs owned by your repository, a small runtime model,
+and first-party integrations for supported hosts.
 
-You write messages close to the code, keep source-string-first `.po` catalogs,
-and use the same runtime model across Next.js, TanStack Start, SolidStart,
-Waku, React Router, Vite, and backend servers.
+The same core and authoring model work across Next.js, TanStack Start,
+SolidStart, Waku, React Router, Vite, and backend servers; server-first Remix v3
+is smoke-verified. The framework matrix is evidence that the architecture stays
+coherent across different app shapes; using Palamedes does not assume that one
+product uses all of them.
 
 We are not asking you to trust a slogan. The repo shows the work.
 
-![The same booking rendered in English, German, and Spanish, identical across every framework](docs/site/assets/palamedes-localized-matrix.png)
+![The same booking rendered in English, German, and Spanish across the verified framework matrix](docs/site/assets/palamedes-localized-matrix.png)
 
 The current proof:
 
@@ -24,8 +28,8 @@ The current proof:
   strategies: five are browser-verified through the same Playwright-based flow
   used in CI, and server-first Remix v3 is smoke-verified.
 - The image above is one demo in three locales: switch language and the copy,
-  plural seat counts, currency, and dates all change together. Every framework
-  and strategy renders the same design, so per-framework captures live in
+  plural seat counts, currency, and dates all change together. Each verified
+  framework and strategy renders the same design, so per-framework captures live in
   [docs/example-screenshots](docs/example-screenshots) instead of repeating the
   same picture here. All of it is versioned browser output, not a mockup.
 - A numbered [ADR series](https://palamedes.dev/decisions) explains the
@@ -48,12 +52,13 @@ generated catalogs with cleaner machine-owned metadata.
 
 ## Why Teams Pick Palamedes
 
-- One i18n mental model across modern frameworks
+- One coherent model from authoring through runtime
 - Familiar macro-style authoring without carrying older compatibility paths forward
+- First-party integrations that keep host-specific wiring out of catalog semantics
 - Fast transforms, extraction, catalog updates, audits, and compile steps
 - Source-string-first catalogs that translators can inspect and teams can trust
 - Semantic PO/FCL catalog merging for Git merge-driver workflows
-- A local foundation for future managed translation workflows without giving up repo ownership
+- A local foundation that remains useful on its own, with Palamedes+ planned as an optional managed layer
 
 ## What Makes It Feel Better
 
@@ -253,11 +258,15 @@ That gives teams more than a benchmark number:
 - less runtime API sprawl
 - a toolchain that is easier to trust during migrations and reviews
 
-The same foundation also matters for future translation workflows:
+## Palamedes And Palamedes+
 
-- Palamedes owns the local catalog, context, and QA semantics
-- higher-level products can add remote execution, account controls, and review policies
-- the repo keeps its catalogs either way
+Palamedes is the open-source local foundation for authoring, extraction,
+catalogs, validation, and runtime integration. Palamedes+ is planned as an
+optional managed layer for translation automation and collaboration.
+
+Palamedes does not require Palamedes+. The local toolchain needs no account,
+catalogs remain in the repository, and higher-level products can build on the
+same catalog and QA semantics without replacing them.
 
 ## Proof And Adoption Docs
 

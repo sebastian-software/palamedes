@@ -7,6 +7,10 @@ They prove the current Palamedes story across six framework families and four
 locale strategies while preserving the same underlying runtime and identity
 model.
 
+The matrix is a verification surface, not an assumption that one application
+uses all six frameworks. Each example is independently useful as a reference
+for its own host and locale strategy.
+
 The matrix is intended to be run locally and validated in CI — that remains the
 canonical verification path. Public demo URLs are documented as the live
 reference surface, but reachability depends on the hosting and DNS rows in
@@ -29,7 +33,7 @@ evidence behind the claim that Palamedes stays coherent across frameworks.
 ## Live Reference URLs
 
 The URLs below are the intended public reference shape for the same design
-across every framework. Switch language in a reachable demo and watch copy,
+across each verified framework. Switch language in a reachable demo and watch copy,
 plural seat counts, currency, and dates change together. See
 [docs/demo-deployments.md](../docs/demo-deployments.md) for current hosting
 status before treating a row as publicly reachable.

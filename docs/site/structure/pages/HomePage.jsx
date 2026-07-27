@@ -6,22 +6,21 @@
 
 export function HomePage() {
   return (
-    <Page title="Palamedes — i18n that survives your next framework migration">
+    <Page title="Palamedes — open-source i18n tooling for JavaScript and TypeScript">
       <SiteNav />
 
       <Hero
         eyebrow="Open-source i18n tooling for JavaScript & TypeScript"
-        headline="One translation model. Every framework."
-        subline="Write messages where your UI happens. Keep source-string-first
-          .po catalogs your translators can actually read. Ship the same
-          runtime model across Next.js, TanStack Start, SolidStart, Waku,
-          React Router, and Remix v3 — with a Rust core that ran a checked
-          extract/update benchmark across a real-app-shaped 1,500-file corpus
-          12.45× faster than Lingui on the recorded machine-local run."
+        headline="One translation model. From source to runtime."
+        subline="Write messages where your UI happens, keep source-string-first
+          .po catalogs in your repository, and use one small runtime model.
+          First-party integrations cover Next.js, TanStack Start, SolidStart,
+          Waku, React Router, Remix v3, and Vite. Backend servers use the same
+          runtime model."
         primary={{ label: "Get started in 5 minutes", href: "/get-started" }}
         secondary={{
-          label: "See it live",
-          href: "https://nextjs-cookie.examples.palamedes.dev",
+          label: "Explore integrations",
+          href: "/frameworks",
         }}
         visual={
           <LocaleMatrixAnimation
@@ -58,11 +57,11 @@ export function HomePage() {
 
       {/* ------------------------------------------------ the core promise */}
       <Section id="model">
-        <h2>Your i18n setup should not splinter when your framework changes.</h2>
+        <h2>Your i18n setup should stay coherent as your application changes.</h2>
         <p>
-          Most teams relearn internationalization with every migration: new runtime, new message
-          IDs, new catalog quirks. Palamedes keeps the parts you touch every day stable — and lets
-          the framework be the only thing that changes.
+          New render environments and framework integrations should not reopen how your app
+          identifies, extracts, and loads messages. Palamedes keeps authoring, catalogs, and runtime
+          access coherent while each adapter handles its host-specific wiring.
         </p>
         <FeatureGrid
           columns={3}
@@ -140,7 +139,8 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
           ]}
           result={{
             title: "Rendered",
-            content: "The same component, in every locale, in every framework.",
+            content:
+              "The same component in every loaded locale, with the same model across supported hosts.",
           }}
         />
       </Section>
@@ -149,9 +149,9 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
       <Section id="proof">
         <h2>We don't ask you to trust a slogan. The repo shows the work.</h2>
         <p>
-          Every framework/strategy combination is a real app, re-verified in CI through the same
-          Playwright flow — with public demos where the hosting is ready. Every benchmark number
-          links to a checked-in, re-runnable report.
+          Every combination in the verified framework matrix is a real app, re-checked in CI through
+          the same Playwright flow — with public demos where the hosting is ready. Every benchmark
+          number links to a checked-in, re-runnable report.
         </p>
         {/* Explicit per-cell links + status shared with /frameworks — see
             FRAMEWORK_MATRIX_CELLS in components.jsx. No generated URLs. */}
@@ -187,9 +187,11 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
 
       {/* ------------------------------------------------------ positioning */}
       <StatementBand
-        text="Palamedes is narrower than some alternatives on purpose:
-          compile-time authoring, source-string-first catalogs, and a local
-          workflow your repo owns — with a Rust core doing the careful work."
+        text="Palamedes is the open-source local foundation for authoring,
+          extraction, catalogs, validation, and runtime integration.
+          First-party adapters connect that model to each supported host.
+          Palamedes+ is the planned optional managed layer for translation
+          automation and collaboration."
       />
 
       {/* ------------------------------------------------------- who builds */}

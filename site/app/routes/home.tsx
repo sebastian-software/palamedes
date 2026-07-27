@@ -17,15 +17,15 @@ import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
 import { BENCH_REALISTIC } from "~/data/bench"
 import contentStats from "~/data/generated/content-stats.json"
 import { HOME_MODEL_CARDS } from "~/data/features"
-import { decisionHref, DEMO_NEXTJS_COOKIE, REPO } from "~/data/links"
+import { decisionHref, REPO } from "~/data/links"
 
 export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
-    title: "Palamedes — i18n that survives your next framework migration",
+    title: "Palamedes — open-source i18n tooling for JavaScript and TypeScript",
     description:
-      "Open-source i18n tooling for JavaScript & TypeScript: one translation model across Next.js, TanStack Start, SolidStart, Waku, React Router, and Remix v3, with a Rust core and source-string-first .po catalogs.",
+      "Open-source i18n tooling with source-string-first authoring, repository-owned catalogs, one runtime model, and first-party integrations for modern JavaScript and TypeScript applications.",
     path: "/",
   })
 }
@@ -46,19 +46,18 @@ export default function Home() {
           <p className="eyebrow">Open-source i18n tooling for JavaScript &amp; TypeScript</p>
           <h1 className="display-serif mt-6 text-display leading-[1.12] uppercase">
             <span className="block">One translation model.</span>
-            <span className="block">Every framework.</span>
+            <span className="block">From source to runtime.</span>
           </h1>
           <p className="mt-6 max-w-[38em] text-[16px]">
-            Write messages where your UI happens. Keep source-string-first <code>.po</code> catalogs
-            your translators can actually read. Ship the same runtime model across Next.js, TanStack
-            Start, SolidStart, Waku, React Router, and Remix v3 — with a Rust core that ran a
-            checked extract/update benchmark across a real-app-shaped 1,500-file corpus{" "}
-            {BENCH_REALISTIC.ratios.lingui} faster than Lingui on the recorded machine-local run.
+            Write messages where your UI happens, keep source-string-first <code>.po</code> catalogs
+            in your repository, and use one small runtime model. First-party integrations cover
+            Next.js, TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite. Backend
+            servers use the same runtime model.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <ButtonLink href="/get-started">Get started in 5 minutes</ButtonLink>
-            <ButtonLink variant="outline" href={DEMO_NEXTJS_COOKIE}>
-              See it live
+            <ButtonLink variant="outline" href="/frameworks">
+              Explore integrations
             </ButtonLink>
           </div>
           <QuickInstall />
@@ -73,8 +72,8 @@ export default function Home() {
       {/* ----------------------------------------------------- 01 — model */}
       <Section
         num="01 — Model"
-        title="Your i18n setup should not splinter when your framework changes."
-        lede="Most teams relearn internationalization with every migration: new runtime, new message IDs, new catalog quirks. Palamedes keeps the parts you touch every day stable — and lets the framework be the only thing that changes."
+        title="Your i18n setup should stay coherent as your application changes."
+        lede="New render environments and framework integrations should not reopen how your app identifies, extracts, and loads messages. Palamedes keeps authoring, catalogs, and runtime access coherent while each adapter handles its host-specific wiring."
       >
         <FeatureGrid cards={HOME_MODEL_CARDS} />
       </Section>
@@ -91,7 +90,7 @@ export default function Home() {
       <Section
         num="03 — Proof"
         title="We don't ask you to trust a slogan. The repo shows the work."
-        lede="Every framework/strategy combination is a real app, re-verified in CI through the same Playwright flow — with public demos where the hosting is ready. Every benchmark number links to a checked-in, re-runnable report."
+        lede="Every combination in the verified framework matrix is a real app, re-checked in CI through the same Playwright flow — with public demos where the hosting is ready. Every benchmark number links to a checked-in, re-runnable report."
       >
         <div className="space-y-10">
           <FrameworkMatrix />
@@ -104,9 +103,10 @@ export default function Home() {
 
       {/* ------------------------------------------------ 04 — positioning */}
       <StatementBand num="04 — Scope" diagram>
-        Palamedes deliberately owns less. It keeps the part of i18n you touch every day — your
-        messages, your catalog, the runtime lookup — and hands everything framework-specific back to
-        your framework.
+        Palamedes is the open-source local foundation for authoring, extraction, catalogs,
+        validation, and runtime integration. First-party adapters connect that model to each
+        supported host. Palamedes+ is the planned optional managed layer for translation automation
+        and collaboration.
       </StatementBand>
 
       {/* ------------------------------------------------ 05 — maintainer */}

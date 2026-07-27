@@ -13,7 +13,7 @@ const PANELS: FwPanel[] = [
   {
     name: "Next.js",
     slug: "nextjs",
-    body: "App Router with server components and server actions. The @palamedes/next-plugin wires the transform into the Next build; everything else is the shared model.",
+    body: "App Router with server components and server actions. The @palamedes/next-plugin handles the host-specific build wiring; authoring, catalogs, and runtime access stay on the shared model.",
   },
   {
     name: "TanStack Start",
@@ -28,12 +28,17 @@ const PANELS: FwPanel[] = [
   {
     name: "Waku",
     slug: "waku",
-    body: "Minimal RSC framework. If the model holds here, it holds in your custom setup too — that's why Waku is in the matrix.",
+    body: "Minimal RSC framework. Waku exercises the request-local runtime model through a different server integration, which is why it belongs in the matrix.",
   },
   {
     name: "React Router",
     slug: "react-router",
     body: "Framework-mode React Router with loaders and actions. The classic SPA-plus-SSR shape, same catalogs, same runtime.",
+  },
+  {
+    name: "Remix v3",
+    slug: "remix",
+    body: "Server-first Remix v3 integration, currently verified as a local and CI smoke-proof surface. It uses the same catalogs and runtime contract while the adapter and hosting story mature.",
   },
 ]
 
