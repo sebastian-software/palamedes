@@ -335,6 +335,52 @@ const richChoice = <Plural value={props.quantity()} one="# task" other="# tasks"
 }
 
 #[test]
+fn extractor_and_transform_share_escaped_apostrophes() {
+    let source = r##"import { plural, t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+
+const tagged = t`L'${title} est prêt`;
+const rich = <Trans>l'{item}</Trans>;
+const choice = plural(count, { one: "'#' don't item", other: "# don't items" });
+const plain = t`don't`;
+"##;
+    let scoped_source = scope_macro_test_source(source, "test.tsx");
+    let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
+        .expect("apostrophe messages should extract");
+    let transformed =
+        transform_macros(source, "test.tsx", None).expect("apostrophe messages should transform");
+
+    // Authored apostrophes are doubled so the runtime parser renders them
+    // literally instead of quoting the placeholder that follows.
+    assert_eq!(
+        extracted
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "L''{title} est prêt",
+            "l''{item}",
+            "{count, plural, one {''#'' don''t item} other {# don''t items}}",
+            "don''t",
+        ]
+    );
+
+    // Byte-identical message text on both sides keeps the compiled ids aligned.
+    let extracted_ids = extracted
+        .iter()
+        .map(|message| compiled_key(&message.message, message.context.as_deref()))
+        .collect::<Vec<_>>();
+    assert_eq!(transformed.compiled_ids, extracted_ids);
+    for message in &extracted {
+        assert!(
+            transformed.code.contains(message.message.as_str()),
+            "transform output should embed {:?}",
+            message.message
+        );
+    }
+}
+
+#[test]
 fn transforms_select_ordinal_choice_macros() {
     let result = transform_macros(
         "import { selectOrdinal } from \"@palamedes/core/macro\";\nconst msg = selectOrdinal(count, { one: \"#st\", other: \"#th\" });\n",

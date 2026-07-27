@@ -28,6 +28,7 @@ mod diagnostic;
 mod error;
 mod extract;
 mod extract_cache;
+mod icu_text;
 mod jsx_entities;
 mod jsx_message;
 mod message_metadata;

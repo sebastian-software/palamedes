@@ -11,6 +11,7 @@ use crate::choice::{
     jsx_offset_value, normalize_choice_option_key,
 };
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::escape_icu_literal;
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
@@ -71,7 +72,9 @@ pub(super) fn extract_choice_options(
             return Err(invalid_choice_option(macro_name, location, &key));
         };
         let (value, option_values) = match property.value.without_parentheses() {
-            Expression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
+            Expression::StringLiteral(literal) => {
+                (escape_icu_literal(literal.value.as_str()), Vec::new())
+            }
             Expression::TemplateLiteral(template) => template_to_message_with_state(
                 template,
                 source,
@@ -196,11 +199,14 @@ pub(super) fn extract_choice_options_from_jsx(
             continue;
         };
         let (value, option_values) = match attr_value {
-            JSXAttributeValue::StringLiteral(literal) => {
-                (decode_jsx_entities(literal.value.as_str()), Vec::new())
-            }
+            JSXAttributeValue::StringLiteral(literal) => (
+                escape_icu_literal(&decode_jsx_entities(literal.value.as_str())),
+                Vec::new(),
+            ),
             JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::StringLiteral(literal) => (literal.value.to_string(), Vec::new()),
+                JSXExpression::StringLiteral(literal) => {
+                    (escape_icu_literal(literal.value.as_str()), Vec::new())
+                }
                 JSXExpression::TemplateLiteral(template) => template_to_message_with_state(
                     template,
                     source,
@@ -332,7 +338,7 @@ fn extract_jsx_children_parts_with_state(
     for child in children {
         match child {
             JSXChild::Text(text) => {
-                let value = clean_jsx_text(text.value.as_str());
+                let value = escape_icu_literal(&clean_jsx_text(text.value.as_str()));
                 if !value.is_empty() {
                     parts.push(JsxMessagePart::Text(value));
                 }
@@ -340,7 +346,9 @@ fn extract_jsx_children_parts_with_state(
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::EmptyExpression(_) => {}
                 JSXExpression::StringLiteral(literal) => {
-                    parts.push(JsxMessagePart::Text(literal.value.to_string()));
+                    parts.push(JsxMessagePart::Text(escape_icu_literal(
+                        literal.value.as_str(),
+                    )));
                 }
                 expr => {
                     let binding =
@@ -573,10 +581,12 @@ fn template_to_message_with_state(
     let mut values = Vec::new();
 
     for (index, quasi) in template.quasis.iter().enumerate() {
+        // Authored literal text: escape before appending so an apostrophe at a
+        // segment boundary cannot quote the placeholder that follows.
         if let Some(value) = quasi.value.cooked {
-            message.push_str(value.as_str());
+            message.push_str(&escape_icu_literal(value.as_str()));
         } else {
-            message.push_str(quasi.value.raw.as_str());
+            message.push_str(&escape_icu_literal(quasi.value.raw.as_str()));
         }
 
         if let Some(expr) = template.expressions.get(index) {
