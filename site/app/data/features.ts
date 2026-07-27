@@ -1,4 +1,5 @@
 import { decisionHref, docsHref } from "./links"
+import type { StrategySlug } from "./matrix"
 
 /* Feature-cell copy, verbatim from the page specs. */
 
@@ -27,6 +28,10 @@ export interface FeatureCard {
   href?: string
 }
 
+export interface StrategyCard extends FeatureCard {
+  slug: StrategySlug
+}
+
 export const HOME_MODEL_CARDS: FeatureCard[] = [
   {
     icon: "pen",
@@ -48,23 +53,27 @@ export const HOME_MODEL_CARDS: FeatureCard[] = [
   },
 ]
 
-export const STRATEGY_CARDS: FeatureCard[] = [
+export const STRATEGY_CARDS: StrategyCard[] = [
   {
+    slug: "cookie",
     icon: "cookie",
     title: "Cookie",
     body: "One URL for all locales. Best for apps behind login where SEO is irrelevant and switching should be instant.",
   },
   {
+    slug: "route",
     icon: "route",
     title: "Route segment",
     body: "/de/checkout-style paths. The SEO-friendly default for public content with indexable localized pages.",
   },
   {
+    slug: "subdomain",
     icon: "globe",
     title: "Subdomain",
     body: "de.example.com. Clean separation per market, works well with regional CDNs and analytics splits.",
   },
   {
+    slug: "tld",
     icon: "flag",
     title: "Top-level domain",
     body: "example.de vs example.com. Maximum market trust; Palamedes maps each domain to its locale.",
