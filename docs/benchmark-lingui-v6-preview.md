@@ -13,10 +13,10 @@ It is intentionally separate from the smaller Palamedes-only benchmark:
 
 The benchmark workspace currently pins:
 
-- `@lingui/cli@6.4.0`
-- `@lingui/babel-plugin-lingui-macro@6.4.0`
-- `@lingui/swc-plugin@6.4.0`
-- `@lingui/format-po@6.4.0`
+- `@lingui/cli@6.5.0`
+- `@lingui/babel-plugin-lingui-macro@6.5.0`
+- `@lingui/swc-plugin@6.5.1`
+- `@lingui/format-po@6.5.0`
 
 Those pins live in [`benchmarks/lingui-v6/package.json`](https://github.com/sebastian-software/palamedes/blob/main/benchmarks/lingui-v6/package.json).
 

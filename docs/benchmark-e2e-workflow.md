@@ -108,13 +108,13 @@ message semantics.
 
 Latest checked full run:
 
-- timestamp: `2026-07-22T14:44:41.328Z`
+- timestamp: `2026-07-27T09:48:40.633Z`
 - Node: `v24.18.0`
 - platform: `darwin/arm64`
 - warmup: `3`
 - measured runs: `7`
-- Palamedes CLI: `1.3.0`
-- Lingui CLI: `6.4.0`
+- Palamedes CLI: `1.7.0`
+- Lingui CLI: `6.5.0`
 - FormatJS CLI: `6.16.14`
 - i18next-parser CLI: `9.4.0`
 - i18next-cli: `1.66.2`
@@ -130,16 +130,16 @@ Corpus:
 
 Median results:
 
-| Tool           |       Median |
-| -------------- | -----------: |
-| Palamedes      |   `43.88 ms` |
-| Lingui         | `1143.37 ms` |
-| FormatJS       |  `291.08 ms` |
-| i18next-parser |  `512.98 ms` |
-| i18next-cli    |  `378.21 ms` |
+| Tool           |      Median |
+| -------------- | ----------: |
+| Palamedes      |  `35.98 ms` |
+| Lingui         | `658.17 ms` |
+| FormatJS       | `275.79 ms` |
+| i18next-parser | `506.04 ms` |
+| i18next-cli    | `382.87 ms` |
 
-On this run, Palamedes measured `26.06x` faster than Lingui, `6.63x` faster
-than FormatJS, `11.69x` faster than i18next-parser, and `8.62x` faster than
+On this run, Palamedes measured `18.29x` faster than Lingui, `7.66x` faster
+than FormatJS, `14.06x` faster than i18next-parser, and `10.64x` faster than
 i18next-cli.
 
 ### Medium
@@ -155,14 +155,14 @@ Median results:
 
 | Tool           |      Median |
 | -------------- | ----------: |
-| Palamedes      |  `46.93 ms` |
-| Lingui         | `760.77 ms` |
-| FormatJS       | `299.82 ms` |
-| i18next-parser | `569.17 ms` |
-| i18next-cli    | `584.74 ms` |
+| Palamedes      |  `47.68 ms` |
+| Lingui         | `732.81 ms` |
+| FormatJS       | `293.86 ms` |
+| i18next-parser | `565.67 ms` |
+| i18next-cli    | `568.56 ms` |
 
-On this run, Palamedes measured `16.21x` faster than Lingui, `6.39x` faster
-than FormatJS, `12.13x` faster than i18next-parser, and `12.46x` faster than
+On this run, Palamedes measured `15.37x` faster than Lingui, `6.16x` faster
+than FormatJS, `11.86x` faster than i18next-parser, and `11.93x` faster than
 i18next-cli.
 
 ### Realistic
@@ -181,14 +181,14 @@ Median results:
 
 | Tool           |       Median |
 | -------------- | -----------: |
-| Palamedes      |  `179.87 ms` |
-| Lingui         | `2238.75 ms` |
-| FormatJS       |  `474.62 ms` |
-| i18next-parser | `1641.15 ms` |
-| i18next-cli    | `6612.71 ms` |
+| Palamedes      |  `192.94 ms` |
+| Lingui         | `2342.49 ms` |
+| FormatJS       |  `472.18 ms` |
+| i18next-parser | `1540.72 ms` |
+| i18next-cli    | `5804.35 ms` |
 
-On this run, Palamedes measured `12.45x` faster than Lingui, `2.64x` faster
-than FormatJS, `9.12x` faster than i18next-parser, and `36.76x` faster than
+On this run, Palamedes measured `12.14x` faster than Lingui, `2.45x` faster
+than FormatJS, `7.99x` faster than i18next-parser, and `30.08x` faster than
 i18next-cli.
 
 ## Reading The Numbers
