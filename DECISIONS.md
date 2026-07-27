@@ -1,19 +1,22 @@
-# Palamedes Architecture Decisions
+# Palamedes Decision Records
 
-This file indexes the current canonical architecture decisions for Palamedes.
-The ADRs themselves live in [`adr/`](./adr/).
+This file indexes the current canonical product, architecture, communication,
+and operational decisions for Palamedes. The records themselves live in
+[`adr/`](./adr/); the `ADR` filename prefix remains for continuity and does not
+limit the corpus to implementation architecture.
 
-The ADR set is intentionally small and present-tense:
+The ADR set is intentionally small, living, and present-tense:
 
 - only decisions that still define the current product and implementation model belong here
 - historical migration steps, rollout notes, and abandoned intermediate states do not stay in the ADR set
-- Git history is the source of truth for chronology; ADRs are the source of truth for the current architecture
+- semantic updates happen in place when a current decision evolves
+- Git history is the source of truth for chronology; ADRs are the source of truth for current decisions
 
 ## Recommended Reading Order
 
 Read these first:
 
-1. [ADR-001: Project Scope and Positioning](./adr/001-project-scope-and-positioning.md)
+1. [ADR-001: Project Scope and Open Positioning](./adr/001-project-scope-and-positioning.md)
 2. [ADR-002: Rust-First Core with Thin Host Adapters](./adr/002-rust-first-core-with-thin-host-adapters.md)
 3. [ADR-003: Source-String-First Message Identity](./adr/003-source-string-first-message-identity.md)
 
@@ -58,4 +61,7 @@ Each ADR should explain:
 - the decision itself
 - the consequences for maintainers and users
 
-If a decision stops being true, replace or remove the ADR instead of keeping stale historical layers around it.
+Product, communication, and operational choices belong here when they are as
+durable and cross-cutting as an architectural choice. If a decision stops being
+true, update, replace, or remove the ADR instead of keeping stale historical
+layers around it.

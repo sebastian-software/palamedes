@@ -49,7 +49,7 @@ export function HomePage() {
             href: "/proof",
           },
           {
-            value: "16",
+            value: "19",
             label: "ADRs documenting every tradeoff",
             href: repoHref("adr"),
           },
@@ -207,7 +207,7 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
           Palamedes is maintained by Sebastian Software GmbH. It is the third generation of
           source-string-first i18n tooling from the same author — from gettext-style macro systems
           in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by Salesforce in
-          2025). The lessons are written down as 16 ADRs before you depend on the tool.
+          2025). The lessons are written down as 19 ADRs before you depend on the tool.
         </p>
         <LinkList
           links={[

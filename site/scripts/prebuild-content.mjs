@@ -210,12 +210,12 @@ async function writeDocsIndex(docs) {
 async function writeDecisionsIndex(adrs) {
   const lines = [
     "---",
-    'title: "Architecture Decisions"',
-    'description: "Generated index of the Palamedes architecture decision records."',
+    'title: "Decision Records"',
+    'description: "Generated index of the Palamedes product, architecture, communication, and operational decision records."',
     "order: 0",
     "---",
     "",
-    "# Architecture Decisions",
+    "# Decision Records",
     "",
     "The ADR files remain canonical in `adr/`. This index is generated from the current filenames during the site prebuild.",
     "",

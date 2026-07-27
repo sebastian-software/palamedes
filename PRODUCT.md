@@ -28,14 +28,29 @@ checked-in benchmarks, and ADRs — rather than telling slogans. Success: a
 visitor trusts the engineering within one scroll and reaches the 5-minute
 quickstart.
 
-## Open Product Narrative
+## Product And Marketing Narrative
 
-Palamedes documents its product and marketing reasoning in the open. The
-positioning notes under `docs/site/` explain how public claims connect to
-product boundaries, proof assets, and the experience we want to create. They
-are open working material for maintainers and contributors. The rendered
-website is the concise expression of that reasoning; the repository keeps the
-thinking behind it inspectable.
+This file is the concise, current context for product and marketing work. The
+durable scope and positioning decision, including its rationale and review
+triggers, lives in
+[ADR-001](adr/001-project-scope-and-positioning.md).
+
+Palamedes documents that reasoning in the open. Page-specific positioning notes
+under `docs/site/` connect individual surfaces to product boundaries and proof
+assets; they do not define a second general storyline.
+
+The public narrative follows one spine:
+
+1. i18n semantics often fragment across authoring, catalogs, runtime, and host
+   wiring.
+2. Palamedes keeps one opinionated model coherent from TypeScript source to
+   runtime.
+3. A native toolchain and first-party adapters cover the full local workflow
+   without giving every concern several competing APIs.
+4. The framework matrix, CI flows, benchmarks, and ADRs make those claims
+   inspectable.
+5. Palamedes+ may add managed automation and collaboration later; Palamedes
+   remains useful without it.
 
 ## Brand Personality
 

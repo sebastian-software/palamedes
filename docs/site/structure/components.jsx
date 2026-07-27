@@ -80,7 +80,7 @@ export function SiteFooter() {
         <a href={repoHref("docs/troubleshooting.md")}>Troubleshooting</a>
       </FooterColumn>
       <FooterColumn title="Project">
-        <a href={repoHref("adr")}>Architecture decisions</a>
+        <a href={repoHref("adr")}>Decision records</a>
         <a href={repoHref("docs/stability.md")}>Stability & versioning</a>
         <a href={repoHref("CHANGELOG.md")}>Changelog</a>
         <a href={repoHref("SECURITY.md")}>Security</a>

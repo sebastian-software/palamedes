@@ -51,7 +51,7 @@ export function ComparisonPage() {
                 "Native (Rust/ferrocat), semantic merge & audits",
                 "33.58 ms (checked report¹)",
                 "5 families browser-verified in CI",
-                "New — honest about it; 16 ADRs document the tradeoffs",
+                "New — honest about it; 19 ADRs document the tradeoffs",
               ],
             },
             {
@@ -123,7 +123,7 @@ export function ComparisonPage() {
       {/* -------------------------------------------------- the honest bit */}
       <StatementBand
         text="Every tool on this page is good software. The question is which
-          tradeoffs match your team — ours are written down in 16 ADRs, so
+          tradeoffs match your team — ours are written down in 19 ADRs, so
           you can check before you commit."
       />
 
