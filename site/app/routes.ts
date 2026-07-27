@@ -138,6 +138,7 @@ export default [
   route("docs/translation-workflow-surface", "routes/docs/translation-workflow-surface.md"),
   route("docs/troubleshooting", "routes/docs/troubleshooting.md"),
   route("frameworks", "routes/frameworks.tsx"),
+  route("frameworks/nextjs", "routes/frameworks/nextjs.tsx"),
   route("get-started", "routes/get-started.tsx"),
   route("guides", "routes/guides.tsx"),
   route("i18n-performance", "routes/i18n-performance.tsx"),
