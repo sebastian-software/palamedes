@@ -1,3 +1,5 @@
+import { Link } from "react-router"
+
 import { ButtonLink } from "~/components/chrome/Button"
 import { Page } from "~/components/chrome/Page"
 import { pageMeta } from "~/lib/meta"
@@ -75,7 +77,12 @@ export default function Proof() {
             <p className="mt-1 text-[13.5px]">
               These are machine-local numbers from the checked-in report, not a marketing average.
               Your hardware will differ; the ratios are the signal. Commands to reproduce:{" "}
-              <code>pnpm benchmark:e2e-workflow</code>.
+              <code>pnpm benchmark:e2e-workflow</code>. For why extraction is slow in the first
+              place, see{" "}
+              <Link to="/i18n-performance" viewTransition className="text-accent">
+                i18n performance
+              </Link>
+              .
             </p>
           </div>
         </div>
@@ -119,6 +126,13 @@ export default function Proof() {
           </p>
         </div>
         <div className="mt-6 space-y-2">
+          <Link
+            to="/icu-messageformat"
+            viewTransition
+            className="mono-nums block text-[13px] text-accent"
+          >
+            What ICU MessageFormat is, and what survives the pipeline →
+          </Link>
           <a
             href={docsHref("icu-semantics-proof")}
             className="mono-nums block text-[13px] text-accent"

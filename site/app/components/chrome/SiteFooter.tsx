@@ -15,6 +15,16 @@ const COLUMNS: { title: string; links: FootLink[] }[] = [
       { label: "Framework matrix", href: "/frameworks" },
       { label: "Benchmarks & proof", href: "/proof" },
       { label: "Comparison", href: "/compare" },
+      /*
+       * Topic pages are search-entry points, so they need a crawlable link
+       * from every page rather than only from pages that happen to mention
+       * them. Kept in this column rather than a fifth one, which would leave
+       * the four-column footer grid with a half-empty row.
+       */
+      { label: "Server components i18n", href: "/react-server-components-i18n" },
+      { label: "ICU MessageFormat", href: "/icu-messageformat" },
+      { label: "Locale routing", href: "/locale-routing" },
+      { label: "i18n performance", href: "/i18n-performance" },
     ],
   },
   {
