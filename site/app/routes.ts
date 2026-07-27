@@ -140,6 +140,7 @@ export default [
   route("frameworks", "routes/frameworks.tsx"),
   route("frameworks/nextjs", "routes/frameworks/nextjs.tsx"),
   route("frameworks/react-router", "routes/frameworks/react-router.tsx"),
+  route("frameworks/remix-v3", "routes/frameworks/remix-v3.tsx"),
   route("frameworks/solidstart", "routes/frameworks/solidstart.tsx"),
   route("frameworks/tanstack-start", "routes/frameworks/tanstack-start.tsx"),
   route("frameworks/waku", "routes/frameworks/waku.tsx"),
