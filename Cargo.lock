@@ -1185,6 +1185,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "palamedes-plugin"
+version = "1.8.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "pathdiff"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

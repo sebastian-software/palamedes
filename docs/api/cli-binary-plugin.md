@@ -125,3 +125,15 @@ envelope on its own stdout.
 Built-in commands bypass configuration and plugin loading entirely, so a
 missing, incompatible, or crashing binary plugin never affects `pmds extract`,
 `audit`, `report`, `catalog`, or `version`.
+
+## Rust SDK
+
+The `palamedes-plugin` crate in `crates/palamedes-plugin` wraps the protocol so
+a Rust plugin does not implement the wire format by hand: register namespaced
+commands with descriptions and handlers, read typed request context (arguments,
+options, resolved configuration, catalogs), emit diagnostics and output, and
+return a result with optional text, data, and exit code. `Plugin::run()` handles
+stdin/stdout; `Plugin::dispatch()` exposes the same path for in-process tests.
+`CommandContext::built_in_command()` prepares a `pmds-native` subprocess from
+the `PALAMEDES_NATIVE` handoff. See the crate documentation and
+`crates/palamedes-plugin/examples/inspect.rs` for a complete plugin.
