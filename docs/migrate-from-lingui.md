@@ -257,6 +257,14 @@ pnpm exec pmds extract
 That moves catalogs onto the source-first path and aligns updates, audits, and
 ICU diagnostics with the current native core and `ferrocat`.
 
+Existing translations carried over from Lingui or a TMS keep their ICU quoting.
+Doubled apostrophes (`Ada''s`) render as a single `'`, and `'{'` still emits a
+literal brace — this used to be a documented divergence in the Palamedes
+runtime and is no longer one. Plain apostrophes in prose (`don't`) are left
+alone rather than treated as quote openers, so catalogs that mix both
+conventions migrate without a rewrite. See
+[Quoting and literal text](api/core.md#quoting-and-literal-text).
+
 ## Common Migration Errors
 
 ### "No active client i18n instance"

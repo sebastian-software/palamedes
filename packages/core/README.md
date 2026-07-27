@@ -96,6 +96,27 @@ The subpath also exports `parseAcceptLanguage()`, `buildLocaleSwitchItems()`,
 and their related types. React and Solid re-export the switch-item helper for
 component packages.
 
+`defineLocaleControls` also binds deliberate-choice cookies, canonical URLs, and
+suggestion decisions for the cookie, route, subdomain, and tld strategies. Under
+the host strategies a locale switch changes the host, so `canonicalUrl()` and
+`suggest()` return host-carrying URLs. Those are protocol-relative
+(`//host/path`) by default — correct on http locally and https in production —
+until the config pins a scheme:
+
+```ts
+const localeControls = defineLocaleControls({
+  locales: ["en", "de"],
+  defaultLocale: "en",
+  hosts: { mode: "subdomain" },
+  protocol: "https",
+})
+```
+
+Set `protocol` when the emitted URLs must be absolute, for example in canonical
+link tags, `hreflang` alternates, or sitemaps. See
+[Locale strategies](https://github.com/sebastian-software/palamedes/blob/main/docs/locale-strategies.md)
+and the [core API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/core.md#locale-controls).
+
 ## Runtime Formatting
 
 Palamedes supports the common ICU argument types that product UIs usually need
@@ -121,6 +142,51 @@ Catalog artifact compilation reports unsupported formatter kinds such as `list`,
 `duration`, `ago`, and `name` as errors because the runtime does not render
 those kinds. Unsupported styles on `number`, `date`, and `time` are warnings:
 the runtime falls back to the default `Intl` formatter for that argument type.
+
+### Quoting And Literal Text
+
+Apostrophes in source messages need no escaping. The macros and the extractor
+escape them on the way into the catalog, so `t` messages such as `Ada's file`
+and `don't panic` simply work.
+
+The rules matter when a translator edits a `.po` file by hand, when a catalog
+comes back from a TMS, or when a pattern is passed straight to
+`formatMessagePattern()`. Palamedes implements ICU apostrophe quoting in its
+lenient form:
+
+- `''` is always a literal apostrophe — `Ada''s` renders `Ada's`.
+- A single `'` opens a quoted literal **only** before `{`, `}`, or (inside a
+  plural or selectordinal branch, where `#` is syntax) `#`. Text up to the
+  closing `'` is literal.
+- Everywhere else `'` is just an apostrophe, so `don't` and `l'été` render
+  unchanged instead of swallowing the rest of the sentence.
+- An unterminated quote auto-closes at the end of the pattern instead of
+  throwing.
+
+`'{'` is therefore how a message emits a literal brace:
+
+```ts
+i18n._("Write '{'name'}' to insert the user name", {})
+// -> "Write {name} to insert the user name"
+```
+
+Quoted text is exposed as `MessageLiteralNode` in `getMessageNodes()`, so
+custom renderers must handle that node type alongside `text`.
+
+### Plural Offset
+
+`plural` and `selectordinal` support ICU `offset:N` for "and N others"
+sentences:
+
+```ts
+i18n._("{count, plural, offset:1 =0 {nobody else} one {# other} other {# others}}", { count: 3 })
+// -> "2 others"
+```
+
+Exact `=N` keys match the raw value; plural categories select on
+`value - offset`, and `#` renders `value - offset`. The macro spelling is
+`plural(count, { offset: 1, … })`, and the React/Solid components take
+`offset={1}`; all three compile to the ICU form above.
 
 ## License
 

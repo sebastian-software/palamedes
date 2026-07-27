@@ -47,6 +47,31 @@ import { Trans } from "@palamedes/solid"
 
 For source authoring, prefer macro imports from `@palamedes/solid/macro`.
 
+## Choice Components
+
+`Plural`, `Select`, and `SelectOrdinal` take the branch text as props: plural
+categories (`zero`, `one`, `two`, `few`, `many`, `other`) and exact matches
+spelled `_0`, `_1`, … because a JSX attribute cannot start with `=`. Exact
+matches are normalized to ICU `=N`, mirroring the macro transform. `other` is
+required.
+
+`Plural` and `SelectOrdinal` also accept `offset`, the ICU `offset:N` of the
+synthesized pattern, for "and N others" sentences where the number shown is
+smaller than the number counted:
+
+```tsx
+<Plural value={attendees()} offset={1} _0="nobody else" one="# other" other="# others" />
+```
+
+- exact `_N` / `=N` keys match the **raw** value, before the offset is
+  subtracted
+- plural categories select on `value - offset`
+- `#` inside a branch renders `value - offset`
+
+`offset` must be a non-negative safe integer; anything else throws a
+`RangeError` rather than rendering a wrong count. `Select` has no numeric
+operand and takes no `offset`.
+
 ## Client Locale Effect
 
 ```ts

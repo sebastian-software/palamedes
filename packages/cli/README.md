@@ -53,6 +53,8 @@ pnpm exec pmds extract --watch
 pnpm exec pmds extract --clean
 pnpm exec pmds extract --force-clean
 pnpm exec pmds extract --config ./palamedes.yaml
+pnpm exec pmds extract --threads 1
+pnpm exec pmds extract --no-cache
 pnpm exec pmds extract --verbose
 pnpm exec pmds audit
 pnpm exec pmds audit --json
@@ -67,6 +69,11 @@ pnpm exec pmds catalog convert src/locales/de.po --to fcl --output src/locales/d
 `pmds audit` reports missing translations, extra catalog entries, obsolete
 messages, and ICU compatibility issues through the same `ferrocat`
 catalog engine that powers Palamedes builds.
+
+`--threads <COUNT>` sets the worker threads for the parallel extraction pass,
+overriding `extract-threads` in the config; it defaults to `4` and `1` runs
+serial. `--no-cache` ignores and does not write the extraction cache in
+`.palamedes/` — use it for a cold run; the cache is on by default.
 
 For local performance checks, set `PALAMEDES_TIMING_JSON=1` on `pmds extract`.
 The command prints a machine-readable timing line with total, glob, extract,

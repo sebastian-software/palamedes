@@ -44,10 +44,14 @@ catalogs:
 | `extract-threads`       | No       | `number`                               | Worker threads for the parallel extraction pass. Defaults to `4`; `1` runs serial.  |
 | `extract-cache`         | No       | `boolean`                              | Reuse the on-disk extraction cache. Defaults to `true`.                             |
 
-The native CLI and JS config loader also accept snake_case aliases for
+The native CLI and JS config loader both accept snake_case aliases for these
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
-`source_reference_root`, `reference_scopes`, `extract_threads`, and
-`extract_cache`.
+`source_reference_root`, and `reference_scopes`.
+
+`extract-threads` and `extract-cache` (and their `extract_threads` /
+`extract_cache` aliases) are read by the native `pmds` CLI only. They tune
+extraction, which the CLI owns; the JS config loader in `@palamedes/config`
+ignores them, and no bundler plugin reads them.
 
 `extract-threads` bounds the parallel read/parse pass. The default of `4` is a
 measured floor rather than a core count: extraction gets slower again above it,
