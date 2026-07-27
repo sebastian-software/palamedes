@@ -76,9 +76,9 @@ the method is boring and reproducible.
 
 Palamedes can say "the native core helps" because the work is inspectable:
 
-- [proof and benchmark methodology](../../proof-and-benchmarks.md)
-- [end-to-end workflow benchmark](../../benchmark-e2e-workflow.md)
-- [Lingui v6 benchmark notes](../../benchmark-lingui-v6-preview.md)
+- [proof and benchmark methodology](../../../docs/proof-and-benchmarks.md)
+- [end-to-end workflow benchmark](../../../docs/benchmark-e2e-workflow.md)
+- [Lingui v6 benchmark notes](../../../docs/benchmark-lingui-v6-preview.md)
 - [benchmark fixtures](../../../benchmarks/proof-fixtures/src/client-app.tsx)
 - [the script that runs the proof benchmark](../../../scripts/benchmark-proof.mjs)
 

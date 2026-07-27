@@ -35,10 +35,6 @@ durable scope and positioning decision, including its rationale and review
 triggers, lives in
 [ADR-001](adr/001-project-scope-and-positioning.md).
 
-Palamedes documents that reasoning in the open. Page-specific positioning notes
-under `docs/site/` connect individual surfaces to product boundaries and proof
-assets; they do not define a second general storyline.
-
 The public narrative follows one spine:
 
 1. i18n semantics often fragment across authoring, catalogs, runtime, and host

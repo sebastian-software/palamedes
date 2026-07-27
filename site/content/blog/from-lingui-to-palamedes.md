@@ -55,9 +55,9 @@ Start with one app path, not the whole codebase:
 6. Load one translated `.po` catalog and verify the rendered result.
 
 The full checklist lives in
-[`docs/migrate-from-lingui.md`](../../migrate-from-lingui.md), and the shortest
+[`docs/migrate-from-lingui.md`](../../../docs/migrate-from-lingui.md), and the shortest
 copy-paste baseline is
-[`docs/first-working-translation.md`](../../first-working-translation.md).
+[`docs/first-working-translation.md`](../../../docs/first-working-translation.md).
 
 The migration pitch is intentionally modest: keep the authoring habit, remove
 the layers that made the system harder to explain.

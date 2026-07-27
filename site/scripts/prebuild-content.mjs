@@ -85,7 +85,6 @@ async function writeContentStats(adrEntries) {
 async function collectDocs() {
   const entries = []
   const topLevel = await readMarkdownFiles("docs")
-  const excludedTopLevel = new Set(["founder-led-content.md"])
   const order = new Map([
     ["first-working-translation.md", 10],
     ["configuration.md", 20],
@@ -107,7 +106,6 @@ async function collectDocs() {
   ])
 
   for (const fileName of topLevel) {
-    if (excludedTopLevel.has(fileName)) continue
     entries.push({
       source: `docs/${fileName}`,
       route: `/docs/${stripMarkdownExtension(fileName)}`,
@@ -140,7 +138,7 @@ async function collectNestedDocs(entries, sourceDir, routePrefix, orderBase) {
 }
 
 async function collectPosts() {
-  const sourceDir = "docs/site/posts"
+  const sourceDir = "site/content/blog"
   const files = (await readMarkdownFiles(sourceDir)).filter((fileName) => fileName !== "README.md")
   const posts = []
 

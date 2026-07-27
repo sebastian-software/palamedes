@@ -8,9 +8,8 @@
  * week and converts never.
  *
  * Deliberately absent: a page claiming Palamedes does automatic translation.
- * It does not translate anything. The honest version of that page is about
- * running machine translation over catalogs you keep, and it is not written
- * yet — see the note in docs/site/structure if that changes.
+ * It does not translate anything. The honest version of that page would be
+ * about running machine translation over catalogs you keep.
  */
 
 import { BENCH_REALISTIC } from "./bench"

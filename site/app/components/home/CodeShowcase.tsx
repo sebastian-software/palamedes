@@ -10,7 +10,6 @@ interface CodeTab {
 }
 
 /*
- * Code content verbatim from docs/site/structure/pages/HomePage.jsx.
  * Highlighting is done with hand-marked spans at render time via simple
  * line-level tones — faithful and dependency-free.
  */

@@ -52,9 +52,9 @@ Palamedes, but the careful parsing and update semantics live in one engine.
 
 The useful evidence is in the repo:
 
-- [`docs/catalog-formats.md`](../../catalog-formats.md)
-- [`docs/stability.md`](../../stability.md)
-- [`docs/cli.md`](../../cli.md)
+- [`docs/catalog-formats.md`](../../../docs/catalog-formats.md)
+- [`docs/stability.md`](../../../docs/stability.md)
+- [`docs/cli.md`](../../../docs/cli.md)
 - [`adr/006-ferrocat-as-catalog-and-icu-foundation.md`](../../../adr/006-ferrocat-as-catalog-and-icu-foundation.md)
 
 The lesson is not "use Rust for everything." The lesson is narrower: give the

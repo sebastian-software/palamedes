@@ -1,5 +1,3 @@
-/* Get-started step flow, verbatim from docs/site/structure/pages/GetStartedPage.jsx. */
-
 export interface Step {
   title: string
   body: string
