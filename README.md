@@ -7,10 +7,11 @@
 
 **Website: [palamedes.dev](https://palamedes.dev)**
 
-Palamedes is open-source i18n tooling for modern JavaScript and TypeScript
-applications. It combines macro-style authoring close to the code,
-source-string-first catalogs owned by your repository, a small runtime model,
-and first-party integrations for supported hosts.
+Palamedes is open-source i18n tooling for TypeScript applications. It combines
+macro-style authoring close to the code, repository-owned source-string-first
+catalogs, a native toolchain for transformation, extraction, validation,
+merging, and compilation, one runtime model, and first-party integrations for
+supported hosts.
 
 The same core and authoring model work across Next.js, TanStack Start,
 SolidStart, Waku, React Router, Vite, and backend servers; server-first Remix v3
@@ -58,7 +59,7 @@ generated catalogs with cleaner machine-owned metadata.
 - Fast transforms, extraction, catalog updates, audits, and compile steps
 - Source-string-first catalogs that translators can inspect and teams can trust
 - Semantic PO/FCL catalog merging for Git merge-driver workflows
-- A local foundation that remains useful on its own, with Palamedes+ planned as an optional managed layer
+- A full local toolchain that remains useful on its own, with Palamedes+ planned as an optional managed layer
 
 ## What Makes It Feel Better
 
@@ -71,7 +72,7 @@ Palamedes is built around a calmer default:
 - identify messages by `message + context`
 - access the active runtime through `getI18n()`
 - keep catalog and ICU semantics in one dedicated engine
-- let framework adapters stay small
+- keep framework adapters thin
 
 In daily work, that means a translation workflow that is easier to explain,
 easier to review, and easier to carry from one framework to the next.
@@ -105,9 +106,9 @@ to September 2025. Salesforce later announced the Regrello acquisition and
 noted that it completed on October 1, 2025.
 
 That matters because Palamedes is not coming from a generic "i18n is hard"
-take. It comes from repeated work on source-string-first JavaScript i18n:
-older gettext-style macro systems, recent enterprise Lingui migrations, and the
-same hard questions this repo documents in ADRs.
+take. It comes from repeated work on source-string-first i18n: older
+gettext-style macro systems, recent enterprise Lingui migrations, and the same
+hard questions this repo documents in ADRs.
 
 Evidence:
 
@@ -144,9 +145,9 @@ Palamedes today, start with the scoped packages above.
 | [`@palamedes/solid`](https://www.npmjs.com/package/@palamedes/solid)             | Solid translation components        | Solid app teams  |
 | [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)         | Runtime bridge for transformed code | App teams        |
 
-Both UI packages now also expose small headless frontend helpers for locale
-sync and locale-switch modelling. The example matrix uses those public helpers
-directly instead of hiding everything in example-local code.
+Both UI packages also expose headless frontend helpers for locale sync and
+locale-switch modelling. The example matrix uses those public helpers directly
+instead of hiding everything in example-local code.
 
 ## Quick Start With Vite
 
@@ -260,9 +261,10 @@ That gives teams more than a benchmark number:
 
 ## Palamedes And Palamedes+
 
-Palamedes is the open-source local foundation for authoring, extraction,
-catalogs, validation, and runtime integration. Palamedes+ is planned as an
-optional managed layer for translation automation and collaboration.
+Palamedes covers the open-source local workflow for authoring, transformation,
+extraction, catalogs, validation, semantic merging, compilation, and runtime
+integration. Palamedes+ is planned as an optional managed layer for translation
+automation and collaboration.
 
 Palamedes does not require Palamedes+. The local toolchain needs no account,
 catalogs remain in the repository, and higher-level products can build on the

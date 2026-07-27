@@ -1,6 +1,6 @@
 # Palamedes
 
-> Palamedes is open-source i18n tooling for modern JavaScript and TypeScript applications, with familiar macro-style authoring, repository-owned source-string-first catalogs, one runtime model, and first-party integrations for supported hosts.
+> Palamedes is open-source i18n tooling for TypeScript applications, with familiar macro-style authoring, repository-owned source-string-first catalogs, a native toolchain for the full local workflow, one runtime model, and first-party integrations for supported hosts.
 
 Use this file when an AI coding assistant needs a compact overview of Palamedes. For a larger context bundle, use `/llms-full.txt`.
 
@@ -14,7 +14,7 @@ Use this file when an AI coding assistant needs a compact overview of Palamedes.
 - Keep framework adapters thin; host-specific packages should wire Palamedes, not duplicate catalog semantics.
 - Treat the framework matrix as verification of the shared model, not as an assumption that one application uses every supported framework.
 - Use `.po` catalogs through Palamedes/ferrocat semantics. FCL is an opt-in catalog format for canonical, merge-friendly generated catalogs.
-- Palamedes+ is a planned optional managed layer for translation automation and collaboration. Palamedes itself remains the local open-source foundation and does not require an account.
+- Palamedes+ is a planned optional managed layer for translation automation and collaboration. Palamedes itself covers the full local open-source workflow and does not require an account.
 - Prefer `pmds audit` for catalog QA and `pmds report --fail-if-below <percent>` for completeness gates in CI.
 - Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not read JavaScript or TypeScript config files.
 - Use Node.js `>=22.22` (`@palamedes/remix` requires `>=24.3`).

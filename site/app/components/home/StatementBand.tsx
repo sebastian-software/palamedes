@@ -25,7 +25,12 @@ export function StatementBand({
   )
 }
 
-const OWNED = ["write messages", "extract & update", "catalog (.po)", "runtime lookup"]
+const OWNED = [
+  "author & transform",
+  "extract & update",
+  "audit, merge & compile",
+  "runtime integration",
+]
 const HOST = ["routing & URLs", "locale detection", "rendering", "hosting"]
 
 function ScopeDiagram() {
@@ -33,7 +38,7 @@ function ScopeDiagram() {
     <div
       className="mt-12 max-w-[44em]"
       role="img"
-      aria-label="Palamedes owns the part that stays the same across supported hosts: writing messages, extract and update, the .po catalog, and the runtime lookup, all on one Rust core. Each host owns routing and URLs, locale detection, rendering, and hosting."
+      aria-label="Palamedes owns the part that stays the same across supported hosts: authoring and transformation, extraction and catalog updates, audits, semantic merges and compilation, and runtime integration, all on one Rust core. Each host owns routing and URLs, locale detection, rendering, and hosting."
     >
       <p className="micro text-[10px] tracking-label text-accent-soft">
         Palamedes owns it — shared across supported hosts
@@ -68,7 +73,7 @@ function ScopeDiagram() {
       <p className="mt-6 text-[15px] text-paper">
         Adopt another supported host, and the integration changes without redefining your messages
         or catalogs.{" "}
-        <span className="text-accent-soft">The local i18n foundation stays familiar.</span>
+        <span className="text-accent-soft">The full local workflow stays coherent.</span>
       </p>
     </div>
   )

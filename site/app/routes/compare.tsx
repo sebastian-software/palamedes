@@ -19,7 +19,7 @@ export function meta() {
   return pageMeta({
     title:
       "Palamedes compared — Lingui, i18next, next-intl, react-intl, Paraglide, Intlayer, General Translation, Tolgee",
-    description: `Side-by-side comparisons of Palamedes with the major JavaScript i18n libraries: ${BENCH_REALISTIC.ratios.formatjs} to ${BENCH_REALISTIC.ratios.i18nextCli} faster on a checked benchmark, with what each of them does better and when to pick them instead.`,
+    description: `Side-by-side comparisons of Palamedes with the major TypeScript i18n libraries: ${BENCH_REALISTIC.ratios.formatjs} to ${BENCH_REALISTIC.ratios.i18nextCli} faster on a checked benchmark, with what each of them does better and when to pick them instead.`,
     path: "/compare",
   })
 }
@@ -38,7 +38,7 @@ const NOT_FOR_YOU = [
   {
     case: "Kilobytes are your hard constraint",
     answer:
-      "Paraglide's zero-runtime compilation beats a small runtime on bundle size by construction. If that is the number you are judged on, start there.",
+      "Paraglide's zero-runtime compilation beats a runtime layer on bundle size by construction. If that is the number you are judged on, start there.",
   },
   {
     case: "You want the i18n library to own routing",
@@ -56,11 +56,12 @@ export default function Compare() {
           Compare it properly. We&nbsp;will argue the other side for you.
         </h1>
         <p className="mt-6 max-w-[42em]">
-          Palamedes is narrower than many alternatives and measured faster than the four workflows
-          covered by the checked benchmark — {BENCH_REALISTIC.ratios.formatjs} to{" "}
-          {BENCH_REALISTIC.ratios.i18nextCli}, depending on the measured tool. Both the product
-          boundary and the benchmark scope are explicit. Every page below states what the other
-          project earned, what that strength costs its users, and where we would send you elsewhere.
+          Palamedes combines broad framework and workflow coverage with fewer competing concepts. It
+          is also measured faster than the four workflows covered by the checked benchmark —{" "}
+          {BENCH_REALISTIC.ratios.formatjs} to {BENCH_REALISTIC.ratios.i18nextCli}, depending on the
+          measured tool. Both the product boundary and the benchmark scope are explicit. Every page
+          below states what the other project earned, what that strength costs its users, and where
+          we would send you elsewhere.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href="/compare/lingui">Start with Lingui</ButtonLink>
@@ -123,7 +124,7 @@ export default function Compare() {
       <Section
         num="02 — Not for you"
         title="When the honest answer is 'use something else'."
-        lede="A narrow tool has edges, and pretending otherwise wastes your afternoon. In these four situations another library is simply the better call — you should not have to read four sections and a benchmark to find that out."
+        lede="Every tool has edges, and pretending otherwise wastes your afternoon. In these four situations another library is simply the better call — you should not have to read four sections and a benchmark to find that out."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           {NOT_FOR_YOU.map((entry) => (
@@ -270,14 +271,14 @@ export default function Compare() {
             Palamedes is built by Sebastian Software, a company. Palamedes+ is planned as an
             optional managed layer for translation automation and collaboration. Making the argument
             above without saying that would be the kind of thing the rest of these pages exist to
-            avoid. The open-source Palamedes toolchain remains the local foundation for authoring,
-            extraction, catalogs, validation, and runtime integration.
+            avoid. The open-source Palamedes toolchain covers authoring, transformation, extraction,
+            catalogs, validation, semantic merging, compilation, and runtime integration.
           </p>
           <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
             What you should hold us to is the architecture, not the plan. Palamedes does not require
             Palamedes+: your catalogs stay in your repository, the local toolchain needs no account,
             and the core remains MIT-licensed. If a commercial product ever depended on making that
-            local foundation less useful on its own, the architecture would have to change first —
+            local toolchain less useful on its own, the architecture would have to change first —
             and you would see the commit.
           </p>
           <a href={decisionHref()} className="mono-nums mt-4 inline-block text-[13px] text-accent">
@@ -315,7 +316,7 @@ export default function Compare() {
       <Section
         num="06 — ICU semantics"
         title="The durable claim is about the pipeline we control."
-        lede="ICU support varies across libraries, TMS products, file formats and project settings, and any table claiming otherwise ages badly. Palamedes makes a narrower, executable claim instead: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation and runtime rendering."
+        lede="ICU support varies across libraries, TMS products, file formats and project settings, and any table claiming otherwise ages badly. Palamedes makes a bounded, executable claim instead: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation and runtime rendering."
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           <div className="bg-paper px-6 py-6">

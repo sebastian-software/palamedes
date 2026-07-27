@@ -6,8 +6,8 @@ brand
 
 ## Users
 
-JavaScript/TypeScript developers and tech leads evaluating maintainable i18n
-tooling for modern applications. Palamedes is especially relevant for
+TypeScript developers and tech leads evaluating maintainable i18n tooling for
+modern applications. Palamedes is especially relevant for
 server-rendered apps, long-lived codebases, and teams that want to avoid
 framework-specific lock-in, but it does not assume that one product uses
 multiple frameworks. These readers are skeptical of marketing claims, read
@@ -19,13 +19,14 @@ navigating the docs, ADRs, and API reference.
 
 Palamedes is open-source i18n tooling built around one coherent model from
 source to runtime: macro-style authoring next to the code, source-string-first
-`.po`/FCL catalogs, a small `getI18n()` runtime contract, and a Rust core for
-extraction, audit, and compile work. First-party adapters connect that model to
-supported hosts without making any one framework the product center. The site
-(palamedes.dev) must convert skeptical developers by _showing_ proof —
-browser-verified example matrices, checked-in benchmarks, and ADRs — rather
-than telling slogans. Success: a visitor trusts the engineering within one
-scroll and reaches the 5-minute quickstart.
+`.po`/FCL catalogs, one `getI18n()` runtime contract, and a Rust core for
+transformation, extraction, catalog updates, audits, merging, and compilation.
+First-party adapters connect that model to supported hosts without making any
+one framework the product center. The site (palamedes.dev) must convert
+skeptical developers by _showing_ proof — browser-verified example matrices,
+checked-in benchmarks, and ADRs — rather than telling slogans. Success: a
+visitor trusts the engineering within one scroll and reaches the 5-minute
+quickstart.
 
 ## Brand Personality
 

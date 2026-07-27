@@ -71,7 +71,7 @@ instance fields; migrate those calls to a method or getter.
 That continuity is the point. The migration is primarily a tooling, catalog,
 and runtime cleanup, not an authoring reset.
 
-The result is Palamedes as the local open-source foundation. Palamedes+ is
+The result is Palamedes as the full local open-source toolchain. Palamedes+ is
 planned as an optional managed layer for translation automation and
 collaboration; it is not required for the migration or the local workflow.
 

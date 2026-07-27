@@ -52,13 +52,13 @@ It prefers:
 - fewer compatibility shims
 - fewer historical API branches
 
-That makes the product narrower, but easier to trust.
+That keeps the mental model clear even as the product covers more workflows.
 
 ## 7. Rust Is Evidence, Not The Headline
 
 The point is not "this is written in Rust."
 
-The point is that Palamedes uses the Rust core to make JavaScript i18n feel
+The point is that Palamedes uses the Rust core to make TypeScript i18n feel
 more dependable:
 
 - clear boundaries

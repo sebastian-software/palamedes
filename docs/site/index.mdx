@@ -5,9 +5,9 @@
 
 **Open-source i18n tooling with one coherent model from source to runtime.**
 
-Palamedes is for JavaScript and TypeScript teams that like writing messages
-close to the code, want repository-owned source-string-first catalogs, and
-prefer a small, explicit runtime model.
+Palamedes is for TypeScript teams that like writing messages close to the code,
+want repository-owned source-string-first catalogs, and prefer one explicit
+runtime model.
 
 First-party adapters carry that model across verified integrations for Next.js,
 TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite. Backend
@@ -48,10 +48,10 @@ September 2025. Salesforce later announced the Regrello acquisition and noted
 that it completed on October 1, 2025.
 
 The useful signal is continuity: Palamedes comes from repeated work on
-JavaScript i18n systems, from older gettext-style macro
-models to recent enterprise Lingui migrations. The same lessons show up here
-as source-string-first catalogs, `message + context` identity, and ADRs that
-make tradeoffs readable before a team depends on the tool.
+source-string-first i18n systems, from older gettext-style macro models to
+recent enterprise Lingui migrations. The same lessons show up here as
+source-string-first catalogs, `message + context` identity, and ADRs that make
+tradeoffs readable before a team depends on the tool.
 
 Evidence:
 
@@ -75,7 +75,7 @@ Palamedes keeps the day-to-day model simpler:
 - resolve the active runtime through `getI18n()`
 - let `ferrocat` own catalog parsing, updates, audits, and ICU diagnostics
 - choose PO by default or opt into FCL when a repo needs canonical generated catalog storage
-- keep framework adapters small
+- keep framework adapters thin
 
 Rust matters here because the careful work has one clear home. That keeps the
 app-level experience calm.
@@ -94,9 +94,10 @@ When the runtime model, message identity, and catalog workflow stay stable:
 
 ## Palamedes And Palamedes+
 
-Palamedes is the open-source local foundation for authoring, extraction,
-catalogs, validation, and runtime integration. Palamedes+ is planned as an
-optional managed layer for translation automation and collaboration.
+Palamedes covers the open-source local workflow for authoring, transformation,
+extraction, catalogs, validation, semantic merging, compilation, and runtime
+integration. Palamedes+ is planned as an optional managed layer for translation
+automation and collaboration.
 
 Palamedes does not require Palamedes+. The local toolchain remains useful on
 its own, needs no account, and keeps catalogs in the repository.
@@ -135,9 +136,10 @@ The broader market picture matters too:
 - `next-intl` is stronger when a team wants a Next.js-native message-file center
 - General Translation solves a broader translation-system problem
 
-Palamedes sits in a narrower place on purpose: compile-time authoring,
-source-string-first semantics, and a local catalog workflow connected to
-supported hosts through first-party adapters.
+Palamedes combines broad local workflow coverage with an opinionated model:
+compile-time authoring, source-string-first semantics, catalog validation and
+merging, and runtime integration connected to supported hosts through
+first-party adapters.
 
 ## Start Here
 

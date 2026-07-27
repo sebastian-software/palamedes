@@ -1,19 +1,20 @@
 /**
  * Route: /
- * Job: convert a skeptical JavaScript developer in under 60 seconds of
+ * Job: convert a skeptical TypeScript developer in under 60 seconds of
  * scrolling — promise, proof, code, path. Every number links to evidence.
  */
 
 export function HomePage() {
   return (
-    <Page title="Palamedes — open-source i18n tooling for JavaScript and TypeScript">
+    <Page title="Palamedes — open-source i18n tooling for TypeScript">
       <SiteNav />
 
       <Hero
-        eyebrow="Open-source i18n tooling for JavaScript & TypeScript"
+        eyebrow="Open-source i18n tooling for TypeScript"
         headline="One translation model. From source to runtime."
         subline="Write messages where your UI happens, keep source-string-first
-          .po catalogs in your repository, and use one small runtime model.
+          .po catalogs in your repository, and run transformation, extraction,
+          validation, merging, and compilation through one native toolchain.
           First-party integrations cover Next.js, TanStack Start, SolidStart,
           Waku, React Router, Remix v3, and Vite. Backend servers use the same
           runtime model."
@@ -90,7 +91,12 @@ export function HomePage() {
 
       {/* --------------------------------------------------- code showcase */}
       <Section id="code" theme="dark">
-        <h2>The whole workflow, honestly small.</h2>
+        <h2>The whole workflow. One clear path.</h2>
+        <p>
+          Author in TypeScript, extract and update catalogs with one native command, translate in
+          standard .po files, then render through the same runtime model. Audits, semantic merges,
+          and CI completeness gates use the same catalog engine.
+        </p>
         <CodeShowcase
           tabs={[
             {
@@ -187,11 +193,11 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
 
       {/* ------------------------------------------------------ positioning */}
       <StatementBand
-        text="Palamedes is the open-source local foundation for authoring,
-          extraction, catalogs, validation, and runtime integration.
-          First-party adapters connect that model to each supported host.
-          Palamedes+ is the planned optional managed layer for translation
-          automation and collaboration."
+        text="Palamedes covers the complete local workflow: authoring,
+          transformation, extraction, catalogs, validation, semantic merging,
+          compilation, and runtime integration. First-party adapters connect
+          that model to each supported host. Palamedes+ is the planned optional
+          managed layer for translation automation and collaboration."
       />
 
       {/* ------------------------------------------------------- who builds */}
@@ -199,10 +205,9 @@ msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`,
         <h2>Built from repeat experience, not a weekend take.</h2>
         <p>
           Palamedes is maintained by Sebastian Software GmbH. It is the third generation of
-          source-string-first JavaScript i18n tooling from the same author — from gettext-style
-          macro systems in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by
-          Salesforce in 2025). The lessons are written down as 16 ADRs before you depend on the
-          tool.
+          source-string-first i18n tooling from the same author — from gettext-style macro systems
+          in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by Salesforce in
+          2025). The lessons are written down as 16 ADRs before you depend on the tool.
         </p>
         <LinkList
           links={[

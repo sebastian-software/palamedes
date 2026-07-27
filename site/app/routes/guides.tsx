@@ -14,7 +14,7 @@ export function meta() {
   return pageMeta({
     title: "Palamedes guides — server components, ICU, locale routing and performance",
     description:
-      "Guides to the decisions that actually cost you time in a JavaScript i18n project: server-component rendering, ICU MessageFormat, locale routing strategies, and extraction performance. Each one is backed by something checked into the repository.",
+      "Guides to the decisions that actually cost you time in a TypeScript i18n project: server-component rendering, ICU MessageFormat, locale routing strategies, and extraction performance. Each one is backed by something checked into the repository.",
     path: "/guides",
   })
 }
@@ -34,7 +34,7 @@ export default function Guides() {
         </h1>
         <p className="mt-6 max-w-[42em]">
           Not a tutorial index. These are the four questions that get expensive when answered late
-          in a JavaScript i18n project — and each answer here is anchored to something you can
+          in a TypeScript i18n project — and each answer here is anchored to something you can
           re-run from the repository rather than to an opinion.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
