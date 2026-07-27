@@ -41,12 +41,14 @@ try {
   mkdirSync(scopeDirectory, { recursive: true })
   linkPackage("core")
   linkPackage("next-plugin")
+  linkPackage("vite-plugin")
 
   const esmFixture = path.join(fixtureRoot, "consumer.mts")
   writeFileSync(
     esmFixture,
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
 import withPalamedes from "@palamedes/next-plugin"
+import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
 
 export const lengths = [
   t\`Hello\`.length,
@@ -56,6 +58,7 @@ export const lengths = [
 ]
 
 export default withPalamedes({})
+export const vitePlugins = [vitePalamedes(), palamedes()]
 `
   )
   checkProgram(esmFixture, {
@@ -67,8 +70,10 @@ export default withPalamedes({})
   writeFileSync(
     commonJsFixture,
     `import nextPlugin = require("@palamedes/next-plugin")
+import vitePlugin = require("@palamedes/vite-plugin")
 
 export const config = nextPlugin.withPalamedes({})
+export const vitePlugins = vitePlugin.palamedes()
 `
   )
   checkProgram(commonJsFixture, {
@@ -80,8 +85,10 @@ export const config = nextPlugin.withPalamedes({})
   writeFileSync(
     legacyCommonJsFixture,
     `import nextPlugin = require("@palamedes/next-plugin")
+import vitePlugin = require("@palamedes/vite-plugin")
 
 export const config = nextPlugin.withPalamedes({})
+export const vitePlugins = vitePlugin.palamedes()
 `
   )
   checkProgram(legacyCommonJsFixture, {
