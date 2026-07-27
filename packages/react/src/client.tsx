@@ -1,24 +1,16 @@
 import { useEffect, useSyncExternalStore } from "react"
-import {
-  getClientI18nSnapshot,
-  subscribeClientI18n,
-  type ClientI18nSnapshot,
-} from "@palamedes/runtime"
 
-const SERVER_CLIENT_I18N_SNAPSHOT: ClientI18nSnapshot = {
-  i18n: undefined,
-  revision: 0,
-}
+import {
+  getReactiveI18nSnapshot,
+  getServerI18nSnapshot,
+  subscribeReactiveI18n,
+} from "./clientStore"
 
 export function useClientLocale<TLocale>(
   locale: TLocale,
   sync: (locale: TLocale) => unknown
 ): void {
-  useSyncExternalStore(
-    subscribeClientI18n,
-    getClientI18nSnapshot,
-    () => SERVER_CLIENT_I18N_SNAPSHOT
-  )
+  useSyncExternalStore(subscribeReactiveI18n, getReactiveI18nSnapshot, getServerI18nSnapshot)
 
   useEffect(() => {
     void sync(locale)

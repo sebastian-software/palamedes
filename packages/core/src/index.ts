@@ -31,6 +31,20 @@ export type MessageFormatErrorInfo = {
   metadata?: MessageMetadata
 }
 
+/**
+ * A rendering failure raised outside core, reported back through the instance.
+ *
+ * The active locale is filled in by the instance and non-`Error` throws are
+ * normalized, so callers only supply what they know.
+ */
+export type ReportedMessageError = {
+  id?: string
+  error: unknown
+  pattern: string
+  fallback: string
+  metadata?: MessageMetadata
+}
+
 export type CreateI18nOptions = {
   locale?: string
   onMissing?: (info: MissingMessageInfo) => void
@@ -44,6 +58,13 @@ export type PalamedesI18n = {
   activate: (locale: string) => void
   getMessage: (id: string, metadata?: MessageMetadata) => string
   getMessageNodes: (id: string, metadata?: MessageMetadata) => MessageNode[]
+  /**
+   * Route a rendering failure raised outside core through this instance's
+   * `onError` hook. The host adapters (React/Solid) render message nodes
+   * themselves, so their failures would otherwise bypass the telemetry that
+   * `_()` reports for the very same message.
+   */
+  reportError: (info: ReportedMessageError) => void
 }
 
 type ResolvedMessage = {
@@ -182,6 +203,17 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
       return parseMessage(resolveMessage(id, metadata), id, metadata)
     },
 
+    reportError(info) {
+      notifyError({
+        id: info.id,
+        locale: activeLocale,
+        error: normalizeError(info.error),
+        pattern: info.pattern,
+        fallback: info.fallback,
+        metadata: info.metadata,
+      })
+    },
+
     _(id, values = {}, metadata) {
       return renderMessage(resolveMessage(id, metadata), values, id, metadata)
     },
@@ -193,7 +225,12 @@ function normalizeError(error: unknown): Error {
 }
 
 export { formatMessagePattern, parseMessagePattern }
-export { resolveChoice, stringifyValue, type ResolvedChoice } from "./messageFormat"
+export {
+  replacePoundPlaceholders,
+  resolveChoice,
+  stringifyValue,
+  type ResolvedChoice,
+} from "./messageFormat"
 export type {
   MessageNode,
   MessageChoiceNode,

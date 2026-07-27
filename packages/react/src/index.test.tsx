@@ -143,6 +143,34 @@ describe("@palamedes/react", () => {
     ).toThrow(/Invalid plural option "_pair"/)
   })
 
+  it("rejects choice components without any usable option instead of rendering nothing", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    expect(() =>
+      renderToStaticMarkup(
+        <Plural value={2} {...({ other: undefined } as unknown as { other: string })} />
+      )
+    ).toThrow(/plural component requires at least one string option/)
+  })
+
+  it("never resolves select values to Object.prototype members", () => {
+    const i18n = createI18n()
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <>
+        <Select value="valueOf" other="fallback" />
+        <Select value="toString" other="fallback" />
+        <Select value="hasOwnProperty" other="fallback" />
+      </>
+    )
+
+    expect(html).toBe("fallbackfallbackfallback")
+  })
+
   it("rejects choice option text with unbalanced braces instead of corrupting the pattern", () => {
     const i18n = createI18n()
     i18n.activate("en")
@@ -164,16 +192,62 @@ describe("@palamedes/react", () => {
     expect(html).toBe(`At ${when.toISOString()}`)
   })
 
-  it("throws on missing plural values instead of matching zero branches", () => {
-    const i18n = createI18n()
+  it("reports missing plural values instead of matching zero branches", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
     i18n.activate("en")
     setClientI18n(i18n)
 
-    expect(() =>
-      renderToStaticMarkup(
-        <Trans id="items" message="{n, plural, =0 {none} other {# items}}" values={{}} />
-      )
-    ).toThrow(/Missing or non-numeric value/)
+    // Same contract as `i18n._()`: report, then degrade to the raw source
+    // message rather than throwing out of the render.
+    const html = renderToStaticMarkup(
+      <Trans id="items" message="{n, plural, =0 {none} other {# items}}" values={{}} />
+    )
+
+    expect(html).toBe("{n, plural, =0 {none} other {# items}}")
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0].error.message).toMatch(/Missing or non-numeric value/)
+  })
+
+  it("falls back to the source message when a catalog plural cannot resolve", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+    // A translator introduced a plural the source never had, and nothing
+    // supplies `count`: resolving it throws mid-render.
+    i18n.load("de", {
+      inbox: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
+    })
+    i18n.activate("de")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <Trans id="inbox" message="You have <0>mail</0>" components={{ 0: <strong /> }} />
+    )
+
+    expect(html).toBe("You have <strong>mail</strong>")
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0]).toMatchObject({
+      id: "inbox",
+      locale: "de",
+      pattern: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
+      fallback: "You have <0>mail</0>",
+    })
+  })
+
+  it("keeps direct choice components rendering when a catalog override cannot resolve", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+    i18n.load("de", {
+      "{value, select, female {She} other {They}}":
+        "{missing, plural, one {Sie} other {# Personen}}",
+    })
+    i18n.activate("de")
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(<Select value="female" female="She" other="They" />)
+
+    expect(html).toBe("She")
+    expect(onError).toHaveBeenCalledOnce()
   })
 
   it("renders formatted ICU arguments through Trans", () => {
@@ -303,6 +377,39 @@ describe("@palamedes/react", () => {
 
     const view = render(<MemoizedTrans />)
     expect(view.container.textContent).toBe("Hello")
+
+    act(() => {
+      i18n.activate("de")
+      setClientI18n(i18n)
+    })
+
+    expect(view.container.textContent).toBe("Hallo")
+  })
+
+  it("reconnects Trans reactivity after resetI18nRuntime discards shared listeners", () => {
+    const i18n = createI18n()
+    i18n.load("en", { greeting: "Hello" })
+    i18n.load("de", { greeting: "Hallo" })
+    i18n.activate("en")
+    setClientI18n(i18n)
+
+    function Probe({ label }: { label: string }) {
+      return (
+        <span data-label={label}>
+          <Trans id="greeting" message="Greeting" />
+        </span>
+      )
+    }
+
+    const view = render(<Probe label="first" />)
+    expect(view.container.textContent).toBe("Hello")
+
+    // The reset throws away the listener Set this tree subscribed into.
+    // `useSyncExternalStore` never re-subscribes on its own, so the binding has
+    // to reattach on its next read instead of staying orphaned forever.
+    resetI18nRuntime()
+    setClientI18n(i18n)
+    view.rerender(<Probe label="second" />)
 
     act(() => {
       i18n.activate("de")
