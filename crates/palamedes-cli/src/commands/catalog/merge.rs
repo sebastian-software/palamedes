@@ -70,8 +70,10 @@ impl Command for MergeOptions {
              */
             None => match context.load_config(self.config.as_deref()) {
                 Ok(config) => config.source_locale,
-                Err(ConfigError::NotFound) if self.config.is_none() => "en".to_owned(),
-                Err(error) => return Err(CliError::Config(error)),
+                Err(CliError::Config(ConfigError::NotFound)) if self.config.is_none() => {
+                    "en".to_owned()
+                }
+                Err(error) => return Err(error),
             },
         };
 

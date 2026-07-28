@@ -20,3 +20,18 @@ impl Command for VersionCommand {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Command, Context, VersionCommand};
+
+    /// Build identity must be answerable with no project and no reachable
+    /// directory around it.
+    #[test]
+    fn version_needs_neither_config_nor_a_usable_directory() {
+        let context = Context::with_cwd("/palamedes/does/not/exist");
+        VersionCommand
+            .run(&context)
+            .expect("version must not consult the environment");
+    }
+}

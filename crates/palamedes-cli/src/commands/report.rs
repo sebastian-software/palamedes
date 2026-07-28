@@ -306,9 +306,11 @@ fn format_percent(value: f64) -> String {
 mod tests {
     use std::fs;
 
-    use super::build_report;
+    use super::{build_report, ReportOptions};
+    use crate::command::{Command, Context};
     use crate::commands::test_support::{temp_dir, write_config};
     use crate::config::load_config;
+    use crate::error::CliError;
 
     #[test]
     fn report_counts_translated_and_missing_messages() {
@@ -338,5 +340,69 @@ mod tests {
         assert_eq!(report.locales[0].translated, 0);
         assert_eq!(report.locales[0].missing, 2);
         assert_eq!(report.locales[0].fuzzy, 1);
+    }
+
+    /*
+     * The whole point of splitting the verdict out of the run: a threshold
+     * decides the exit code, but only after the report that explains it has
+     * been produced and rendered. Driving the command through its contract
+     * also covers config discovery from the context's directory.
+     */
+    #[test]
+    fn threshold_failures_come_after_the_report_is_rendered() {
+        let app = temp_dir("report-threshold");
+        write_config(&app, None);
+        fs::create_dir_all(app.join("locales/en")).expect("create source locale");
+        fs::create_dir_all(app.join("locales/de")).expect("create target locale");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"Hello\"\nmsgstr \"Hello\"\n\nmsgid \"Bye\"\nmsgstr \"Bye\"\n",
+        )
+        .expect("write source po");
+        fs::write(
+            app.join("locales/de/messages.po"),
+            "msgid \"Hello\"\nmsgstr \"Hallo\"\n\nmsgid \"Bye\"\nmsgstr \"\"\n",
+        )
+        .expect("write target po");
+
+        let options = ReportOptions {
+            config: None,
+            locale: Vec::new(),
+            json: false,
+            fail_if_below: Some(90.0),
+        };
+        // No --config: the catalog is found through the context's directory.
+        let context = Context::with_cwd(&app);
+
+        let report = options.run(&context).expect("run produces a report");
+        assert_eq!(report.locales[0].translated, 1);
+        assert_eq!(report.locales[0].total, 2);
+
+        options
+            .render(&report)
+            .expect("render precedes the verdict");
+
+        let error = options.verdict(&report).expect_err("50% is below 90%");
+        assert!(
+            matches!(error, CliError::CompletenessBelowThreshold { .. }),
+            "expected a threshold failure, got: {error:?}"
+        );
+    }
+
+    /// An out-of-range threshold is rejected before any catalog is read, so it
+    /// cannot produce a report that no verdict could ever accept.
+    #[test]
+    fn out_of_range_thresholds_fail_before_running() {
+        let options = ReportOptions {
+            config: None,
+            locale: Vec::new(),
+            json: false,
+            fail_if_below: Some(150.0),
+        };
+        let error = options
+            .run(&Context::with_cwd("/palamedes/does/not/exist"))
+            .expect_err("150% is not a percentage");
+
+        assert!(matches!(error, CliError::InvalidThreshold));
     }
 }

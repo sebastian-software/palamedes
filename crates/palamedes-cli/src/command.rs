@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::config::{load_config, ConfigError, LoadedConfig};
+use crate::config::{load_config, LoadedConfig};
 use crate::error::CliError;
 
 /// The environment a command runs in.
@@ -29,21 +29,46 @@ use crate::error::CliError;
 /// and `version` answers before any project is set up. So the context carries
 /// the directory that resolution starts from, not the result of it.
 pub struct Context {
-    cwd: PathBuf,
+    /// Where path resolution starts. `None` defers to the process, and the
+    /// lookup happens only when a command actually loads configuration.
+    cwd: Option<PathBuf>,
 }
 
 impl Context {
+    /*
+     * Resolving the working directory here rather than on demand would make
+     * every command pay for it, including the two that deliberately do not
+     * read configuration: `version` answers before any project exists, and
+     * `catalog merge --source-locale` runs as a Git merge driver wherever the
+     * conflicted worktree happens to be. Both must still answer when the
+     * process has no usable cwd.
+     */
     /// Builds the context for the current process.
     pub fn from_env() -> Self {
+        Self { cwd: None }
+    }
+
+    /// Builds a context rooted at an explicit directory, so a command can be
+    /// driven through its full contract without changing the process cwd.
+    #[cfg(test)]
+    pub fn with_cwd(cwd: impl Into<PathBuf>) -> Self {
         Self {
-            cwd: std::env::current_dir().expect("current dir"),
+            cwd: Some(cwd.into()),
         }
     }
 
     /// Loads the Palamedes configuration, honoring an explicit `--config` path.
-    pub fn load_config(&self, explicit_path: Option<&Path>) -> Result<LoadedConfig, ConfigError> {
-        load_config(&self.cwd, explicit_path)
+    pub fn load_config(&self, explicit_path: Option<&Path>) -> Result<LoadedConfig, CliError> {
+        let config = match &self.cwd {
+            Some(cwd) => load_config(cwd, explicit_path),
+            None => load_config(&current_dir()?, explicit_path),
+        };
+        Ok(config?)
     }
+}
+
+fn current_dir() -> Result<PathBuf, CliError> {
+    std::env::current_dir().map_err(CliError::CurrentDir)
 }
 
 /// One built-in `pmds` command.
@@ -80,4 +105,20 @@ pub fn execute<C: Command>(command: &C, context: &Context) -> Result<(), CliErro
 pub fn render_json<T: Serialize>(value: &T) -> Result<(), CliError> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Context;
+
+    /*
+     * Dispatch builds one context up front, before it knows which command was
+     * invoked. Resolving the working directory eagerly there made `pmds
+     * version` and `catalog merge --source-locale` panic in a worktree whose
+     * cwd had been removed, even though neither reads configuration.
+     */
+    #[test]
+    fn from_env_defers_resolving_the_working_directory() {
+        assert!(Context::from_env().cwd.is_none());
+    }
 }
