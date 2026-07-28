@@ -30,7 +30,7 @@ The strongest checked comparison is the end-to-end extract/update workflow:
 pnpm benchmark:e2e-workflow
 ```
 
-That harness compares Palamedes, Lingui, and i18next-parser on the same
+That harness compares Palamedes, Lingui, FormatJS, and i18next-cli on the same
 generated source/catalog update workflow and writes machine-readable results
 under `benchmarks/e2e-workflow/results/`.
 

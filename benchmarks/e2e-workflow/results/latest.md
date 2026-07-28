@@ -1,6 +1,6 @@
 # End-to-End Extraction Workflow Benchmark
 
-Generated: 2026-07-27T14:55:31.521Z
+Generated: 2026-07-28T07:33:39.942Z
 Node: v24.18.0
 Platform: darwin/arm64
 Seed: 20260703
@@ -10,10 +10,9 @@ Machine-local: yes
 
 ## Versions
 
-- Palamedes CLI: pmds (Palamedes) v1.7.0
+- Palamedes CLI: pmds (Palamedes) v1.8.0
 - Lingui CLI: 6.5.0
 - FormatJS CLI: 6.16.14
-- i18next-parser CLI: 9.4.0
 - i18next-cli: 1.66.2
 
 ## Methodology
@@ -35,18 +34,16 @@ Machine-local: yes
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 32.69 ms | 30.16 ms, 31.34 ms, 32.32 ms, 32.69 ms, 34.04 ms, 34.22 ms, 34.41 ms |
-| Lingui | 668.88 ms | 651.94 ms, 656.68 ms, 658.59 ms, 668.88 ms, 669.17 ms, 672.01 ms, 675.54 ms |
-| FormatJS | 272.57 ms | 268.92 ms, 270.84 ms, 271.50 ms, 272.57 ms, 272.63 ms, 273.96 ms, 274.50 ms |
-| i18next-parser | 516.72 ms | 511.94 ms, 513.43 ms, 516.30 ms, 516.72 ms, 524.97 ms, 528.86 ms, 531.44 ms |
-| i18next-cli | 392.97 ms | 375.48 ms, 377.71 ms, 385.52 ms, 392.97 ms, 397.32 ms, 406.43 ms, 425.39 ms |
+| Palamedes | 33.99 ms | 33.13 ms, 33.52 ms, 33.71 ms, 33.99 ms, 34.51 ms, 35.80 ms, 37.77 ms |
+| Lingui | 631.05 ms | 623.29 ms, 627.90 ms, 631.04 ms, 631.05 ms, 632.40 ms, 646.87 ms, 653.65 ms |
+| FormatJS | 273.88 ms | 270.53 ms, 270.53 ms, 271.25 ms, 273.88 ms, 274.81 ms, 275.32 ms, 276.63 ms |
+| i18next-cli | 441.45 ms | 425.74 ms, 427.64 ms, 432.07 ms, 441.45 ms, 445.06 ms, 450.73 ms, 464.85 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 20.46x |
-| Palamedes vs FormatJS | Palamedes | 8.34x |
-| Palamedes vs i18next-parser | Palamedes | 15.81x |
-| Palamedes vs i18next-cli | Palamedes | 12.02x |
+| Palamedes vs Lingui | Palamedes | 18.57x |
+| Palamedes vs FormatJS | Palamedes | 8.06x |
+| Palamedes vs i18next-cli | Palamedes | 12.99x |
 
 ### Warm
 
@@ -56,11 +53,10 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 30.86 ms | 26.15 ms, 30.29 ms, 30.58 ms, 30.86 ms, 32.73 ms, 32.99 ms, 33.75 ms |
-| Lingui | 650.31 ms | 644.88 ms, 646.20 ms, 650.05 ms, 650.31 ms, 651.07 ms, 654.38 ms, 655.01 ms |
-| FormatJS | 272.51 ms | 268.86 ms, 270.63 ms, 271.40 ms, 272.51 ms, 273.68 ms, 274.73 ms, 275.61 ms |
-| i18next-parser | 509.72 ms | 506.16 ms, 507.98 ms, 509.21 ms, 509.72 ms, 513.51 ms, 517.61 ms, 550.28 ms |
-| i18next-cli | 388.35 ms | 383.39 ms, 383.71 ms, 387.07 ms, 388.35 ms, 389.03 ms, 391.20 ms, 398.91 ms |
+| Palamedes | 31.29 ms | 28.97 ms, 30.37 ms, 30.38 ms, 31.29 ms, 31.55 ms, 32.50 ms, 32.92 ms |
+| Lingui | 633.03 ms | 627.58 ms, 630.83 ms, 632.95 ms, 633.03 ms, 638.75 ms, 641.36 ms, 641.38 ms |
+| FormatJS | 276.92 ms | 273.89 ms, 275.02 ms, 275.04 ms, 276.92 ms, 277.03 ms, 278.38 ms, 279.55 ms |
+| i18next-cli | 368.76 ms | 363.46 ms, 366.81 ms, 368.49 ms, 368.76 ms, 369.14 ms, 372.14 ms, 373.10 ms |
 
 ## Medium
 
@@ -72,18 +68,16 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 47.74 ms | 45.45 ms, 45.69 ms, 47.50 ms, 47.74 ms, 48.43 ms, 50.05 ms, 59.45 ms |
-| Lingui | 736.15 ms | 722.56 ms, 727.20 ms, 730.28 ms, 736.15 ms, 739.12 ms, 741.97 ms, 758.60 ms |
-| FormatJS | 298.06 ms | 296.57 ms, 296.72 ms, 297.14 ms, 298.06 ms, 299.17 ms, 299.75 ms, 300.57 ms |
-| i18next-parser | 571.65 ms | 560.72 ms, 562.61 ms, 567.98 ms, 571.65 ms, 572.55 ms, 573.13 ms, 575.06 ms |
-| i18next-cli | 572.93 ms | 571.53 ms, 572.06 ms, 572.09 ms, 572.93 ms, 575.89 ms, 578.91 ms, 582.93 ms |
+| Palamedes | 47.54 ms | 44.13 ms, 44.66 ms, 45.62 ms, 47.54 ms, 47.64 ms, 47.94 ms, 48.04 ms |
+| Lingui | 708.78 ms | 701.68 ms, 706.94 ms, 707.13 ms, 708.78 ms, 710.86 ms, 714.28 ms, 725.42 ms |
+| FormatJS | 291.40 ms | 290.68 ms, 291.08 ms, 291.34 ms, 291.40 ms, 291.60 ms, 292.27 ms, 294.48 ms |
+| i18next-cli | 555.34 ms | 553.90 ms, 554.38 ms, 555.08 ms, 555.34 ms, 562.89 ms, 575.00 ms, 752.74 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 15.42x |
-| Palamedes vs FormatJS | Palamedes | 6.24x |
-| Palamedes vs i18next-parser | Palamedes | 11.97x |
-| Palamedes vs i18next-cli | Palamedes | 12.00x |
+| Palamedes vs Lingui | Palamedes | 14.91x |
+| Palamedes vs FormatJS | Palamedes | 6.13x |
+| Palamedes vs i18next-cli | Palamedes | 11.68x |
 
 ### Warm
 
@@ -93,11 +87,10 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 39.87 ms | 36.91 ms, 38.72 ms, 39.69 ms, 39.87 ms, 40.21 ms, 41.02 ms, 41.15 ms |
-| Lingui | 734.95 ms | 731.73 ms, 732.34 ms, 734.19 ms, 734.95 ms, 736.51 ms, 740.37 ms, 749.86 ms |
-| FormatJS | 296.64 ms | 293.11 ms, 294.27 ms, 294.54 ms, 296.64 ms, 297.76 ms, 299.95 ms, 302.21 ms |
-| i18next-parser | 565.38 ms | 559.55 ms, 560.62 ms, 563.58 ms, 565.38 ms, 568.83 ms, 572.58 ms, 574.12 ms |
-| i18next-cli | 574.30 ms | 571.83 ms, 572.25 ms, 573.12 ms, 574.30 ms, 576.47 ms, 577.06 ms, 579.04 ms |
+| Palamedes | 39.99 ms | 37.47 ms, 38.87 ms, 39.85 ms, 39.99 ms, 40.01 ms, 40.43 ms, 41.99 ms |
+| Lingui | 724.70 ms | 718.78 ms, 722.01 ms, 722.56 ms, 724.70 ms, 729.44 ms, 739.43 ms, 742.07 ms |
+| FormatJS | 291.41 ms | 288.73 ms, 289.26 ms, 290.25 ms, 291.41 ms, 293.72 ms, 297.42 ms, 298.69 ms |
+| i18next-cli | 661.51 ms | 654.04 ms, 658.61 ms, 659.63 ms, 661.51 ms, 670.12 ms, 671.09 ms, 683.48 ms |
 
 ## Realistic
 
@@ -109,18 +102,16 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 125.88 ms | 121.44 ms, 123.60 ms, 123.98 ms, 125.88 ms, 126.09 ms, 127.35 ms, 137.22 ms |
-| Lingui | 2279.13 ms | 2203.25 ms, 2205.46 ms, 2216.86 ms, 2279.13 ms, 2283.82 ms, 2284.80 ms, 2413.79 ms |
-| FormatJS | 464.63 ms | 455.93 ms, 461.22 ms, 463.70 ms, 464.63 ms, 465.87 ms, 466.22 ms, 468.35 ms |
-| i18next-parser | 1578.61 ms | 1567.01 ms, 1569.44 ms, 1573.75 ms, 1578.61 ms, 1588.05 ms, 1625.89 ms, 1683.12 ms |
-| i18next-cli | 5668.44 ms | 5623.07 ms, 5644.78 ms, 5658.25 ms, 5668.44 ms, 5671.64 ms, 5773.21 ms, 5820.89 ms |
+| Palamedes | 122.33 ms | 116.28 ms, 118.47 ms, 120.99 ms, 122.33 ms, 126.37 ms, 127.84 ms, 144.52 ms |
+| Lingui | 2280.56 ms | 2159.91 ms, 2254.86 ms, 2258.18 ms, 2280.56 ms, 2287.20 ms, 2341.46 ms, 2345.18 ms |
+| FormatJS | 463.65 ms | 458.18 ms, 462.40 ms, 463.02 ms, 463.65 ms, 463.86 ms, 465.70 ms, 467.59 ms |
+| i18next-cli | 5815.11 ms | 5764.27 ms, 5787.08 ms, 5809.80 ms, 5815.11 ms, 5825.85 ms, 5839.87 ms, 7943.46 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 18.11x |
-| Palamedes vs FormatJS | Palamedes | 3.69x |
-| Palamedes vs i18next-parser | Palamedes | 12.54x |
-| Palamedes vs i18next-cli | Palamedes | 45.03x |
+| Palamedes vs Lingui | Palamedes | 18.64x |
+| Palamedes vs FormatJS | Palamedes | 3.79x |
+| Palamedes vs i18next-cli | Palamedes | 47.54x |
 
 ### Warm
 
@@ -130,17 +121,16 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 70.08 ms | 67.78 ms, 68.26 ms, 68.63 ms, 70.08 ms, 71.57 ms, 72.00 ms, 72.53 ms |
-| Lingui | 2211.67 ms | 2195.89 ms, 2198.18 ms, 2208.38 ms, 2211.67 ms, 2255.73 ms, 2259.66 ms, 2283.43 ms |
-| FormatJS | 468.96 ms | 464.05 ms, 464.85 ms, 466.47 ms, 468.96 ms, 472.53 ms, 475.09 ms, 475.11 ms |
-| i18next-parser | 1551.61 ms | 1522.12 ms, 1525.54 ms, 1536.32 ms, 1551.61 ms, 1557.04 ms, 1558.82 ms, 1566.88 ms |
-| i18next-cli | 6048.73 ms | 5584.67 ms, 5594.72 ms, 5649.78 ms, 6048.73 ms, 6068.20 ms, 6448.04 ms, 6599.99 ms |
+| Palamedes | 68.92 ms | 67.96 ms, 68.16 ms, 68.43 ms, 68.92 ms, 69.66 ms, 70.40 ms, 72.29 ms |
+| Lingui | 2197.84 ms | 2137.12 ms, 2182.77 ms, 2195.68 ms, 2197.84 ms, 2229.47 ms, 2245.15 ms, 2277.38 ms |
+| FormatJS | 462.46 ms | 459.00 ms, 459.24 ms, 460.69 ms, 462.46 ms, 462.98 ms, 466.96 ms, 470.69 ms |
+| i18next-cli | 6104.09 ms | 5854.81 ms, 5874.48 ms, 5889.68 ms, 6104.09 ms, 6512.22 ms, 6897.23 ms, 7175.89 ms |
 
 ## Notes
 
 - These are machine-local CLI workflow timings, not universal cross-machine claims.
 - Cold runs clear every tool cache alongside the catalogs. The source corpus is generated once per profile and never changes, so a retained cache would be hit by every run after the first and would silently turn the cold medians into warm ones.
-- The i18next-parser and i18next-cli corpora use natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes.
+- The i18next-cli corpus uses natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes.
 - FormatJS writes one extracted-message JSON artifact and does not update locale translation catalogs; its result is reported with that narrower scope instead of being presented as a catalog-merge equivalent.
 - The harness reports source-message equivalence after each run instead of assuming every parser extracts the same result.
 - Raw samples and Palamedes timing breakdowns are stored in the accompanying JSON output.

@@ -65,7 +65,6 @@ export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAUL
     palamedes: path.join(profileRoot, "palamedes"),
     lingui: path.join(profileRoot, "lingui"),
     formatjs: path.join(profileRoot, "formatjs"),
-    i18nextParser: path.join(profileRoot, "i18next-parser"),
     i18nextCli: path.join(profileRoot, "i18next-cli"),
   }
 
@@ -79,7 +78,6 @@ export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAUL
     writePalamedesWorkspace(toolRoots.palamedes, generated, profile),
     writeLinguiWorkspace(toolRoots.lingui, generated, profile),
     writeFormatJsWorkspace(toolRoots.formatjs, generated, profile),
-    writeI18nextParserWorkspace(toolRoots.i18nextParser, generated, profile),
     writeI18nextCliWorkspace(toolRoots.i18nextCli, generated, profile),
   ])
 
@@ -183,31 +181,6 @@ async function writeLinguiWorkspace(rootDir, inventory, profile) {
 async function writeFormatJsWorkspace(rootDir, inventory, profile) {
   await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderFormatJsSource)
   await writeFormatJsCatalog(rootDir, inventory.baselineMessages)
-}
-
-async function writeI18nextParserWorkspace(rootDir, inventory, profile) {
-  await writeFile(
-    path.join(rootDir, "i18next-parser.config.cjs"),
-    [
-      "module.exports = {",
-      '  input: ["src/generated/**/*.{ts,tsx}"],',
-      '  output: "src/locales/$LOCALE/translation.json",',
-      '  locales: ["en", "de"],',
-      '  defaultNamespace: "translation",',
-      "  createOldCatalogs: false,",
-      "  keySeparator: false,",
-      "  namespaceSeparator: false,",
-      "  pluralSeparator: false,",
-      "  contextSeparator: false,",
-      "  sort: true,",
-      '  lexers: { ts: ["JavascriptLexer"], tsx: ["JsxLexer"] },',
-      "}",
-      "",
-    ].join("\n"),
-    "utf8"
-  )
-  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderI18nextSource)
-  await writeJsonCatalogs(rootDir, inventory.baselineMessages)
 }
 
 async function writeI18nextCliWorkspace(rootDir, inventory, profile) {

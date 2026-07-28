@@ -120,7 +120,7 @@ For the broader architectural picture, including `next-intl` and General Transla
 That separate harness measures Lingui macro rewrite through distinct Babel and
 SWC lanes instead of folding them into one number.
 
-For the end-to-end workflow comparison against Lingui and i18next-parser:
+For the end-to-end workflow comparison against Lingui, FormatJS, and i18next-cli:
 
 ```bash
 pnpm benchmark:e2e-workflow
