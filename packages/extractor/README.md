@@ -8,8 +8,8 @@
 Fast message extraction for teams that want a lower-level API alongside the CLI.
 
 `@palamedes/extractor` uses Palamedes' native core first to pull messages out of
-JavaScript, TypeScript, and React codebases without sending the workflow through
-a Babel-heavy path.
+JavaScript, TypeScript, JSX, and MDX codebases without sending the workflow
+through a Babel-heavy path.
 
 ## When To Use This Package
 
@@ -49,6 +49,7 @@ console.log(messages)
 - `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
 - `i18n._(...)` and `i18n.t\`...\`` style runtime calls
 - JavaScript, TypeScript, JSX, and TSX sources
+- MDX semantic units, inline rich text, expressions, images, and JSX
 
 The extractor rejects eager `t`, `plural`, `select`, and `selectOrdinal`
 macros, plus `<Plural>`, `<Select>`, and `<SelectOrdinal>`, when they appear
@@ -74,7 +75,9 @@ Rich JSX children inside `<Trans>` are extracted with numeric component slots. F
 
 ## Limitations
 
-The extractor currently does not support `lingui-extract-ignore` comments.
+MDX uses the explicit `palamedes-ignore` directive rather than
+`lingui-extract-ignore`. Configurable attributes and frontmatter fields are
+available through `palamedes.yaml` and the CLI workflow.
 
 ## License
 

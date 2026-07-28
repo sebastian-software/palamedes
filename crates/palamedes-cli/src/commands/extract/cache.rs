@@ -13,10 +13,11 @@ pub(super) fn load_extract_cache(config: &LoadedConfig, options: &ExtractOptions
     if options.no_cache || !config.extract_cache {
         return ExtractCache::disabled();
     }
-    ExtractCache::load(
+    ExtractCache::load_with_mdx_stamp(
         &extract_cache_path(config),
         &config.source_reference_root.to_string_lossy(),
         config.reference_scopes,
+        &config.mdx.extraction_stamp(),
     )
 }
 
@@ -27,12 +28,15 @@ pub(super) fn extract_cache_path(config: &LoadedConfig) -> PathBuf {
 /// Everything about a configuration that decides what a cached entry means or
 /// where the cache file lives. A change to any of it invalidates a cache
 /// instance that is being reused across config reloads.
-fn extract_cache_identity(config: &LoadedConfig) -> (&Path, &Path, bool, bool) {
+fn extract_cache_identity(
+    config: &LoadedConfig,
+) -> (&Path, &Path, bool, bool, &palamedes::MdxOptions) {
     (
         config.root_dir.as_path(),
         config.source_reference_root.as_path(),
         config.reference_scopes,
         config.extract_cache,
+        &config.mdx,
     )
 }
 

@@ -11,6 +11,7 @@ description = "Rust core for Palamedes."
 ferrocat = "=2.2.0"
 ferrocat-icu = "=2.2.0"
 ferrocat-po = "=2.2.0"
+ferromark = { version = "=0.7.0", features = ["mdx"] }
 oxc_allocator = "0.141.0"
 oxc_ast = "0.141.0"
 oxc_ast_visit = "0.141.0"

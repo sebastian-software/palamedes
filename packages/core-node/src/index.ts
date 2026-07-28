@@ -47,6 +47,11 @@ import type {
   NativeBindings as GeneratedNativeBindings,
   NativeExtractedMessage as GeneratedNativeExtractedMessage,
   NativeInfo as GeneratedNativeInfo,
+  NativeMdxAnalysisResult as GeneratedNativeMdxAnalysisResult,
+  NativeMdxDiagnostic as GeneratedNativeMdxDiagnostic,
+  NativeMdxFramework as GeneratedNativeMdxFramework,
+  NativeMdxOptions as GeneratedNativeMdxOptions,
+  NativeMdxSourceRange as GeneratedNativeMdxSourceRange,
   NativeTransformEdit as GeneratedNativeTransformEdit,
   NativeTransformOptions as GeneratedNativeTransformOptions,
   NativeTransformResult as GeneratedNativeTransformResult,
@@ -63,7 +68,9 @@ export type CatalogOrigin = GeneratedCatalogOrigin
 export type CatalogUpdateMessage = GeneratedCatalogUpdateMessage
 export type CatalogUpdateStats = GeneratedCatalogUpdateStats
 export type ExtractCatalogFileFailure = GeneratedExtractCatalogFileFailure
-export type ExtractCatalogMessagesRequest = GeneratedExtractCatalogMessagesRequest
+export type ExtractCatalogMessagesRequest = Omit<GeneratedExtractCatalogMessagesRequest, "mdx"> & {
+  mdx?: MdxOptions
+}
 export type ExtractCatalogMessagesResult = GeneratedExtractCatalogMessagesResult
 export type ParsedCatalogMessage = GeneratedParsedCatalogMessage
 export type MachineMetadata = GeneratedMachineMetadata
@@ -155,6 +162,16 @@ export type NativeExtractedMessageOrigin = [filename: string, line: number, colu
 
 export type NativeExtractedMessage = Omit<GeneratedNativeExtractedMessage, "origin"> & {
   origin: NativeExtractedMessageOrigin
+}
+
+export type MdxFramework = "react" | "solid"
+export type MdxOptions = Omit<GeneratedNativeMdxOptions, "framework"> & {
+  framework?: MdxFramework
+}
+export type MdxSourceRange = GeneratedNativeMdxSourceRange
+export type MdxDiagnostic = GeneratedNativeMdxDiagnostic
+export type MdxAnalysisResult = Omit<GeneratedNativeMdxAnalysisResult, "messages"> & {
+  messages: NativeExtractedMessage[]
 }
 
 export type NativeTransformOptions = GeneratedNativeTransformOptions
@@ -571,8 +588,10 @@ export function compileCatalogModule(
   return native.compileCatalogModule(request)
 }
 
-export function extractMessagesNative(source: string, filename: string): NativeExtractedMessage[] {
-  return native.extractMessages(source, filename).map((message) => {
+function mapExtractedMessages(
+  messages: GeneratedNativeExtractedMessage[]
+): NativeExtractedMessage[] {
+  return messages.map((message) => {
     const origin: NativeExtractedMessageOrigin = [
       message.origin.filename,
       message.origin.line,
@@ -587,10 +606,41 @@ export function extractMessagesNative(source: string, filename: string): NativeE
   })
 }
 
+export function extractMessagesNative(source: string, filename: string): NativeExtractedMessage[] {
+  return mapExtractedMessages(native.extractMessages(source, filename))
+}
+
+export function analyzeMdxNative(
+  source: string,
+  filename: string,
+  options?: MdxOptions
+): MdxAnalysisResult {
+  const result = native.analyzeMdx(source, filename, toNativeMdxOptions(options))
+  return {
+    ...result,
+    messages: mapExtractedMessages(result.messages),
+  }
+}
+
+function toNativeMdxOptions(options?: MdxOptions): GeneratedNativeMdxOptions | undefined {
+  if (!options) {
+    return undefined
+  }
+  const framework: GeneratedNativeMdxFramework | undefined =
+    options?.framework === "solid" ? "Solid" : options?.framework === "react" ? "React" : undefined
+  return {
+    ...options,
+    framework,
+  }
+}
+
 export function extractCatalogMessagesFromFiles(
   request: ExtractCatalogMessagesRequest
 ): ExtractCatalogMessagesResult {
-  return native.extractCatalogMessagesFromFiles(request)
+  return native.extractCatalogMessagesFromFiles({
+    ...request,
+    mdx: toNativeMdxOptions(request.mdx),
+  })
 }
 
 export function transformMacrosNative(

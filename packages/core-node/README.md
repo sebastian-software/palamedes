@@ -9,7 +9,7 @@ The Node.js wrapper around Palamedes' native core.
 
 Use this package when you are building tooling on top of Palamedes and want
 direct access to the careful parts of the system: PO/FCL catalog updates,
-audits, metadata validation, `.po` parsing, extraction, and macro
+audits, metadata validation, `.po` parsing, MDX analysis, extraction, and macro
 transformation.
 
 The public catalog model is source-string-first: `message + context` is the
@@ -103,6 +103,7 @@ console.log(po.headers.Language)
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`
 - `extractMessagesNative(source, filename)`
+- `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
 
@@ -113,6 +114,10 @@ framework plugins.
 
 The wrapper exposes lowercase public format values (`"po"` and `"fcl"`) while
 mapping to the native Ferrocat-backed API internally.
+
+`analyzeMdxNative` uses the same FerroMark-backed semantic workflow as native
+catalog extraction. It returns extracted messages, structured source-ranged
+diagnostics, React or Solid JSX, compiled message IDs, and a source map.
 
 `compileCatalogModule(config, resourcePath, options)` is the direct module
 rendering API used by the first-party `.po` loaders. Pass the artifact config,

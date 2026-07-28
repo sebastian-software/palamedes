@@ -27,6 +27,15 @@ export type PalamedesCatalogConfig = {
   exclude?: string[]
 }
 
+export type PalamedesMdxConfig = {
+  framework?: "react" | "solid"
+  translatableAttributes?: string[]
+  frontMatterFields?: string[]
+  transModule?: string
+  runtimeModule?: string
+  ignoreDirective?: string
+}
+
 export type PalamedesPluginDeclaration = string | readonly [specifier: string, options: unknown]
 
 export type PalamedesConfig = {
@@ -36,6 +45,7 @@ export type PalamedesConfig = {
   pseudoLocale?: string
   sourceReferenceRoot?: PalamedesSourceReferenceRoot
   referenceScopes?: boolean
+  mdx?: PalamedesMdxConfig
   catalogs: PalamedesCatalogConfig[]
   plugins?: PalamedesPluginDeclaration[]
 }
@@ -52,6 +62,7 @@ type PalamedesDataConfig = {
   source_reference_root?: unknown
   "reference-scopes"?: unknown
   reference_scopes?: unknown
+  mdx?: unknown
   catalogs?: unknown
   plugins?: unknown
 }
@@ -191,6 +202,7 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
     "source_reference_root"
   )
   const referenceScopes = getConfigValue(config, "reference-scopes", "reference_scopes")
+  const mdx = config.mdx === undefined ? undefined : normalizeMdxDataConfig(config.mdx, configPath)
 
   return {
     locales: config.locales as string[],
@@ -203,10 +215,51 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
       ? { sourceReferenceRoot: sourceReferenceRoot as PalamedesSourceReferenceRoot }
       : {}),
     ...(referenceScopes !== undefined ? { referenceScopes: referenceScopes as boolean } : {}),
+    ...(mdx !== undefined ? { mdx } : {}),
     catalogs: config.catalogs as PalamedesCatalogConfig[],
     ...(config.plugins !== undefined
       ? { plugins: config.plugins as PalamedesPluginDeclaration[] }
       : {}),
+  }
+}
+
+function normalizeMdxDataConfig(value: unknown, configPath: string): PalamedesMdxConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`)
+  }
+  const record = value as Record<string, unknown>
+  for (const [camel, kebab] of [
+    ["translatableAttributes", "translatable-attributes"],
+    ["frontMatterFields", "front-matter-fields"],
+    ["transModule", "trans-module"],
+    ["runtimeModule", "runtime-module"],
+    ["ignoreDirective", "ignore-directive"],
+  ]) {
+    if (camel in record) {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: unknown key "mdx.${camel}". Data configs use kebab-case: "mdx.${kebab}".`
+      )
+    }
+  }
+  const read = (kebab: string, snake: string) => record[kebab] ?? record[snake]
+  const framework = record.framework
+  const translatableAttributes = read("translatable-attributes", "translatable_attributes")
+  const frontMatterFields = read("front-matter-fields", "front_matter_fields")
+  const transModule = read("trans-module", "trans_module")
+  const runtimeModule = read("runtime-module", "runtime_module")
+  const ignoreDirective = read("ignore-directive", "ignore_directive")
+
+  return {
+    ...(framework !== undefined ? { framework: framework as "react" | "solid" } : {}),
+    ...(translatableAttributes !== undefined
+      ? { translatableAttributes: translatableAttributes as string[] }
+      : {}),
+    ...(frontMatterFields !== undefined
+      ? { frontMatterFields: frontMatterFields as string[] }
+      : {}),
+    ...(transModule !== undefined ? { transModule: transModule as string } : {}),
+    ...(runtimeModule !== undefined ? { runtimeModule: runtimeModule as string } : {}),
+    ...(ignoreDirective !== undefined ? { ignoreDirective: ignoreDirective as string } : {}),
   }
 }
 
@@ -344,6 +397,7 @@ async function normalizeConfig(
     ...(config.pseudoLocale !== undefined ? { pseudoLocale: config.pseudoLocale } : {}),
     sourceReferenceRoot: await resolveSourceReferenceRoot(config.sourceReferenceRoot, rootDir),
     referenceScopes: config.referenceScopes ?? true,
+    ...(config.mdx ? { mdx: cloneMdxConfig(config.mdx) } : {}),
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       ...(catalog.format !== undefined ? { format: catalog.format } : {}),
@@ -365,6 +419,7 @@ function normalizeConfigSync(config: PalamedesConfig, configPath: string): Loade
     ...(config.pseudoLocale !== undefined ? { pseudoLocale: config.pseudoLocale } : {}),
     sourceReferenceRoot: resolveSourceReferenceRootSync(config.sourceReferenceRoot, rootDir),
     referenceScopes: config.referenceScopes ?? true,
+    ...(config.mdx ? { mdx: cloneMdxConfig(config.mdx) } : {}),
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       ...(catalog.format !== undefined ? { format: catalog.format } : {}),
@@ -372,6 +427,16 @@ function normalizeConfigSync(config: PalamedesConfig, configPath: string): Loade
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
     ...(config.plugins ? { plugins: clonePluginDeclarations(config.plugins) } : {}),
+  }
+}
+
+function cloneMdxConfig(config: PalamedesMdxConfig): PalamedesMdxConfig {
+  return {
+    ...config,
+    ...(config.translatableAttributes
+      ? { translatableAttributes: [...config.translatableAttributes] }
+      : {}),
+    ...(config.frontMatterFields ? { frontMatterFields: [...config.frontMatterFields] } : {}),
   }
 }
 
@@ -504,11 +569,54 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
     )
   }
 
+  validateMdx(record.mdx, configPath)
   validateFallbackLocales(record.fallbackLocales, configPath, record.locales as string[])
   validatePlugins(record.plugins, configPath)
 
   for (const [index, catalog] of record.catalogs.entries()) {
     validateCatalog(catalog, configPath, index)
+  }
+}
+
+function validateMdx(value: unknown, configPath: string): void {
+  if (value === undefined) {
+    return
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`)
+  }
+  const record = value as Record<string, unknown>
+  if (
+    record.framework !== undefined &&
+    record.framework !== "react" &&
+    record.framework !== "solid"
+  ) {
+    throw new TypeError(
+      `Invalid Palamedes config in ${configPath}: "mdx.framework" must be "react" or "solid".`
+    )
+  }
+  for (const field of ["translatableAttributes", "frontMatterFields"] as const) {
+    const values = record[field]
+    if (
+      values !== undefined &&
+      (!Array.isArray(values) ||
+        values.some((entry) => typeof entry !== "string" || entry.trim().length === 0))
+    ) {
+      throw new TypeError(
+        `Invalid Palamedes config in ${configPath}: "mdx.${field}" must be an array of non-empty strings.`
+      )
+    }
+  }
+  for (const field of ["transModule", "runtimeModule", "ignoreDirective"] as const) {
+    const fieldValue = record[field]
+    if (
+      fieldValue !== undefined &&
+      (typeof fieldValue !== "string" || fieldValue.trim().length === 0)
+    ) {
+      throw new TypeError(
+        `Invalid Palamedes config in ${configPath}: "mdx.${field}" must be a non-empty string.`
+      )
+    }
   }
 }
 

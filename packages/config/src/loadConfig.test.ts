@@ -86,6 +86,35 @@ describe("loadPalamedesConfig", () => {
     ])
   })
 
+  it("normalizes and validates MDX data-config options", async () => {
+    const fixtureDir = await createTempDir()
+
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        locales: [en, de]
+        source-locale: en
+        mdx:
+          framework: solid
+          translatable-attributes: [alt, title]
+          front-matter-fields: [title, description]
+          ignore-directive: no-translate
+        catalogs:
+          - path: src/locales/{locale}
+            include: [src]
+      `
+    )
+
+    const config = await loadPalamedesConfig({ cwd: fixtureDir })
+
+    expect(config.mdx).toStrictEqual({
+      framework: "solid",
+      translatableAttributes: ["alt", "title"],
+      frontMatterFields: ["title", "description"],
+      ignoreDirective: "no-translate",
+    })
+  })
+
   it("loads a palamedes.yaml file synchronously with the same normalization", async () => {
     const fixtureDir = await createTempDir()
 

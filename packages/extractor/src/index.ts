@@ -10,12 +10,12 @@
 
 import { extractMessagesNative, type NativeExtractedMessage } from "@palamedes/core-node"
 
-const SUPPORTED_EXTENSIONS = /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx)$/i
+const SUPPORTED_EXTENSIONS = /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx|mdx)$/i
 
 export type ExtractedMessageInfo = NativeExtractedMessage
 
 /**
- * Extract source-first messages from a JavaScript or TypeScript module.
+ * Extract source-first messages from a JavaScript, TypeScript, or MDX module.
  */
 export function extractMessages(source: string, filename: string): ExtractedMessageInfo[] {
   return extractMessagesNative(source, filename)
@@ -27,6 +27,7 @@ export function extractMessages(source: string, filename: string): ExtractedMess
  * Supports:
  * - JSX: <Trans>, <Plural>, <Select>, <SelectOrdinal>
  * - JS: t`...`, t({...}), plural(), select(), selectOrdinal()
+ * - MDX: semantic Markdown blocks, rich inline markup, expressions, and JSX
  *
  * @example
  * ```ts

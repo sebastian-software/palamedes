@@ -228,6 +228,7 @@ fn extract_from_catalog(
         },
         palamedes::ExtractCatalogMessagesOptions {
             reference_scopes: config.reference_scopes,
+            mdx: config.mdx.clone(),
         },
         cache,
     )?;
@@ -314,6 +315,53 @@ mod tests {
         let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
         assert!(output.contains("msgid \"Dashboard\""));
         assert!(output.contains("#: apps/web/app/page.tsx#title"));
+    }
+
+    #[test]
+    fn extract_discovers_mdx_and_uses_shared_configured_semantics() {
+        let app = temp_dir("extract-mdx");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en, de]
+source-locale: en
+source-reference-root: config
+mdx:
+  translatable-attributes: [alt, title]
+  front-matter-fields: [title]
+catalogs:
+  - path: locales/{locale}/messages
+    include: [app]
+"#,
+        )
+        .expect("write config");
+        fs::write(
+            app.join("app/guide.mdx"),
+            r#"---
+title: Getting started
+slug: getting-started
+---
+
+# Welcome {name}
+
+<Card title="Open settings">Read the **guide**.</Card>
+"#,
+        )
+        .expect("write MDX source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        run_extraction(&config, &extract_options()).expect("extract");
+
+        let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
+        assert!(output.contains("msgid \"Getting started\""), "{output}");
+        assert!(output.contains("msgid \"Welcome {name}\""), "{output}");
+        assert!(output.contains("msgid \"Open settings\""), "{output}");
+        assert!(
+            output.contains("msgid \"<0>Read the <1>guide</1>.</0>\""),
+            "{output}"
+        );
+        assert!(output.contains("#: app/guide.mdx"), "{output}");
+        assert!(!output.contains("getting-started"), "{output}");
     }
 
     #[test]

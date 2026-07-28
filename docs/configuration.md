@@ -40,6 +40,7 @@ catalogs:
 | `pseudo-locale`         | No       | `string`                               | Locale code used for pseudo-localized UI testing.                                   |
 | `source-reference-root` | No       | `git \| config \| lingui \| path`      | Root used for catalog source references. Defaults to nearest Git root, then config. |
 | `reference-scopes`      | No       | `boolean`                              | Adds stable source scopes to catalog references. Defaults to `true`.                |
+| `mdx`                   | No       | MDX options                            | Shared native MDX extraction and Vite compilation behavior.                         |
 | `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                |
 | `extract-threads`       | No       | `number`                               | Worker threads for the parallel extraction pass. Defaults to `4`; `1` runs serial.  |
 | `extract-cache`         | No       | `boolean`                              | Reuse the on-disk extraction cache. Defaults to `true`.                             |
@@ -66,8 +67,8 @@ that have not changed. The cache lives at `.palamedes/extract-cache.json` under
 the project root — add `.palamedes/` to your `.gitignore`. Entries are validated
 with a `stat` (size and modification time), so a repeat run skips both reading
 and parsing unchanged files; watch mode holds the cache for the life of the
-process. It is discarded automatically whenever the extractor version or the
-source reference root changes. Use `--no-cache` for a one-off cold run, or set
+process. It is discarded automatically whenever the extractor version, source
+reference root, or extraction-relevant MDX options change. Use `--no-cache` for a one-off cold run, or set
 this to `false` if a tool in your pipeline rewrites files without changing their
 size or modification time. See
 [ADR-019](https://github.com/sebastian-software/palamedes/blob/main/adr/019-extraction-cache.md).
@@ -92,11 +93,27 @@ See [Catalog formats](./catalog-formats.md) for the product boundary between
 PO storage, FCL storage, and the current framework `.po` import loaders.
 
 `include` and `exclude` are resolved relative to the config file directory.
-When an include entry is a directory-like path, extraction scans JavaScript and
-TypeScript files below it.
+When an include entry is a directory-like path, extraction scans JavaScript,
+TypeScript, and MDX files below it.
 
 When `exclude` is empty, the native CLI implicitly excludes
 `**/node_modules/**`.
+
+## MDX
+
+The optional `mdx` object is shared by native catalog extraction and Vite
+compilation:
+
+```yaml
+mdx:
+  framework: react
+  translatable-attributes: [alt, title]
+  front-matter-fields: [title, description]
+  ignore-directive: palamedes-ignore
+```
+
+See [MDX messages](./mdx.md) for authoring semantics, framework setup, all
+options, diagnostics, and the native architecture boundary.
 
 ## Source References
 

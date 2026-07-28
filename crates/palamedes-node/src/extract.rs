@@ -4,6 +4,7 @@ use napi::bindgen_prelude::Result;
 use napi_derive::napi;
 
 use crate::catalog::CatalogUpdateMessage;
+use crate::mdx::NativeMdxOptions;
 use crate::shared::{checked_optional_u32, checked_u32, to_napi_error};
 
 #[napi(object)]
@@ -31,6 +32,7 @@ pub struct ExtractCatalogMessagesRequest {
     /// measured default; 1 forces serial extraction.
     pub max_threads: Option<u32>,
     pub reference_scopes: Option<bool>,
+    pub mdx: Option<NativeMdxOptions>,
 }
 
 #[napi(object)]
@@ -102,7 +104,7 @@ impl TryFrom<palamedes::ExtractCatalogMessagesResult> for ExtractCatalogMessages
 
 #[napi]
 #[allow(clippy::needless_pass_by_value)]
-/// Extracts source-first messages from a JavaScript or TypeScript module.
+/// Extracts source-first messages from a JavaScript, TypeScript, or MDX module.
 ///
 /// # Errors
 ///
@@ -132,6 +134,7 @@ pub fn extract_catalog_messages_from_files(
 ) -> Result<ExtractCatalogMessagesResult> {
     let options = palamedes::ExtractCatalogMessagesOptions {
         reference_scopes: request.reference_scopes.unwrap_or(true),
+        mdx: request.mdx.map(Into::into).unwrap_or_default(),
     };
     let request = palamedes::ExtractCatalogMessagesRequest {
         root_dir: request.root_dir,

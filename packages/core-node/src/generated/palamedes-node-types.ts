@@ -301,6 +301,7 @@ export interface ExtractCatalogMessagesRequest {
  */
 maxThreads?: number;
   referenceScopes?: boolean;
+  mdx?: NativeMdxOptions;
 }
 export interface ExtractCatalogFileFailure {
   path: string;
@@ -310,6 +311,34 @@ export interface ExtractCatalogMessagesResult {
   messages: Array<CatalogUpdateMessage>;
   fileCount: number;
   failedFiles: Array<ExtractCatalogFileFailure>;
+}
+export type NativeMdxFramework = "React" | "Solid"
+export interface NativeMdxOptions {
+  framework?: NativeMdxFramework;
+  translatableAttributes?: Array<string>;
+  frontMatterFields?: Array<string>;
+  transModule?: string;
+  runtimeModule?: string;
+  ignoreDirective?: string;
+}
+export interface NativeMdxSourceRange {
+  start: number;
+  end: number;
+  line: number;
+  column: number;
+}
+export interface NativeMdxDiagnostic {
+  code: string;
+  message: string;
+  primary: NativeMdxSourceRange;
+  related?: NativeMdxSourceRange;
+}
+export interface NativeMdxAnalysisResult {
+  messages: Array<NativeExtractedMessage>;
+  diagnostics: Array<NativeMdxDiagnostic>;
+  code?: string;
+  compiledIds: Array<string>;
+  map?: NativeTransformSourceMap;
 }
 export interface NativeInfo {
   palamedesVersion: string;
@@ -377,6 +406,7 @@ export interface NativeBindings {
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
   extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;
   extractCatalogMessagesFromFiles(request: ExtractCatalogMessagesRequest): ExtractCatalogMessagesResult;
+  analyzeMdx(source: string, filename: string, options?: NativeMdxOptions | undefined | null): NativeMdxAnalysisResult;
   getNativeInfo(): NativeInfo;
   parsePo(source: string): ParsedPoFile;
   transformMacros(source: string, filename: string, options?: NativeTransformOptions | undefined | null): NativeTransformResult;
