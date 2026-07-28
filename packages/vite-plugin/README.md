@@ -65,7 +65,7 @@ import solid from "vite-plugin-solid"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
+  plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })],
 })
 ```
 
@@ -97,9 +97,8 @@ palamedes({
   skipValidation: false,
   failOnMissing: false,
   failOnCompileError: false,
-  runtimeModule: "@palamedes/react/runtime",
+  framework: "react",
   mdx: {
-    framework: "react",
     translatableAttributes: ["alt", "title"],
     frontMatterFields: ["title", "description"],
   },
@@ -110,11 +109,15 @@ palamedes({
 sets the directory the config search starts from, and `skipValidation` loads
 partially-authored config files without validation (tooling only).
 
-The top-level `runtimeModule` configures the macro transform only — it is the
-opt-in that makes inline `t` / `plural` follow a live locale switch. Generated
-MDX modules are independent and already default to the framework's reactive
-runtime subpath; configure them with `mdx.runtimeModule` if you need a different
-target.
+`framework` says which UI framework the app compiles for. It selects the
+reactive runtime for macros, so inline `t` / `plural` follow a live locale
+switch, and the component contract for compiled `.mdx`. It defaults to
+`"react"`, so **Solid apps must set `framework: "solid"`**; use `"none"` for a
+project that is neither.
+
+The separate `runtimeModule` option overrides only the macro transform's module
+path. Generated MDX modules are independent; configure those through
+`mdx.runtimeModule`.
 
 When `failOnMissing` is enabled, MDX compiled IDs are validated against every
 target locale in the catalogs that include the source file, even before a

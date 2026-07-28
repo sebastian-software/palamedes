@@ -25,6 +25,7 @@ interface PalamedesPluginOptions {
   skipValidation?: boolean
   failOnMissing?: boolean
   failOnCompileError?: boolean
+  framework?: "react" | "solid" | "none"
   runtimeModule?: string
   mdx?: PalamedesMdxConfig | false
 }
@@ -37,12 +38,17 @@ Defaults:
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
 - `failOnCompileError`: `false`
-- `runtimeModule`: `"@palamedes/runtime"`
+- `framework`: `"react"`
+- `runtimeModule`: derived from `framework`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 
-`runtimeModule` configures the macro transform only. It is the opt-in described
-in [Locale strategies](../locale-strategies.md) that makes inline `t` / `plural`
-follow a live locale switch.
+`framework` states which UI framework the app compiles for. It selects the
+reactive runtime for the macro transform — so inline `t` / `plural` follow a
+live locale switch, see [Locale strategies](../locale-strategies.md) — and the
+component contract for generated MDX modules. Solid apps must set
+`framework: "solid"`; `"none"` restores the framework-agnostic runtime.
+
+`runtimeModule` overrides only the macro transform's module path.
 
 Generated MDX modules are independent: they already default to the framework's
 reactive runtime subpath, because their frontmatter, image alt text, and

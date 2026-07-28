@@ -180,11 +180,12 @@ Live switching in React has two pieces:
 
 - `useClientLocale(locale, syncClientI18n)` pushes committed locale changes into
   the client runtime
-- point the macro transform at React's external-store bridge so memoized
-  `t` / `plural` output follows every activation:
+- nothing else: the Vite and Next plugins compile for React by default, so the
+  macro transform already points at React's external-store bridge and memoized
+  `t` / `plural` output follows every activation
 
   ```ts
-  palamedes({ runtimeModule: "@palamedes/react/runtime" })
+  palamedes()
   ```
 
 The runtime subpath selects a hook-free implementation under the `react-server`
@@ -192,10 +193,15 @@ condition, so the same transform target remains valid for React Server
 Components and server actions.
 
 `<Trans>` / `<Plural>` / `<Select>` / `<SelectOrdinal>` subscribe on their own
-and follow a live switch even with the default `runtimeModule`. Only inline
-`t` / `plural` calls need the reactive transform target. Those calls are
-hook-backed and therefore must execute unconditionally during a React
-function-component or custom-hook render.
+and follow a live switch under any setting. Only inline `t` / `plural` calls
+need the reactive transform target. Those calls are hook-backed and therefore
+must execute unconditionally during a React function-component or custom-hook
+render.
+
+A project that is neither React nor Solid opts out with
+`palamedes({ framework: "none" })`, which restores the framework-agnostic
+`@palamedes/runtime`. `@palamedes/remix` defaults to `"none"` already, because
+Remix 3 ships its own UI layer and does not depend on React.
 
 ### Enabling live switching (Solid)
 
@@ -204,18 +210,23 @@ two opt-in pieces:
 
 - `createClientLocaleEffect(localeAccessor, syncClientI18n)` pushes locale changes
   into the client runtime
-- point the macro transform at Solid's reactive runtime so `t` / `plural` output
-  follows the switch:
+- tell the plugin it compiles for Solid, which points the macro transform at
+  Solid's reactive runtime so `t` / `plural` output follows the switch:
 
   ```ts
   // app.config.ts
-  palamedes({ runtimeModule: "@palamedes/solid/runtime" })
+  palamedes({ framework: "solid" })
   ```
 
+Setting `framework` is required for Solid apps: the plugin compiles for React
+unless told otherwise, and that would pull React's runtime into a Solid build.
+The same option also selects Solid's component contract for compiled `.mdx`
+modules.
+
 `<Trans>` / `<Plural>` / `<Select>` / `<SelectOrdinal>` track the active instance
-on their own and follow a live switch even with the default `runtimeModule`. Only
-the macro `t` / `plural` calls depend on the reactive `runtimeModule` — so wire
-both, or use reload.
+on their own and follow a live switch under any setting. Only the macro
+`t` / `plural` calls depend on the reactive runtime — so wire both, or use
+reload.
 
 ## Why The Matrix Is Split Per Framework
 

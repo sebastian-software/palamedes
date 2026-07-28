@@ -125,7 +125,7 @@ module.exports = withPalamedes(
     configPath: "./palamedes.yaml",
     failOnMissing: false,
     failOnCompileError: false,
-    runtimeModule: "@palamedes/runtime",
+    framework: "react",
     workspaceRoot: undefined,
   }
 )

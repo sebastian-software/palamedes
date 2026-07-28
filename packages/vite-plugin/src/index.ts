@@ -22,7 +22,12 @@ import {
   type CatalogArtifactConfig,
 } from "@palamedes/core-node"
 import { createMissingErrorMessage, transformPalamedesMacros } from "@palamedes/transform"
-import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
+import {
+  PALAMEDES_MACRO_PACKAGES,
+  mdxFrameworkFor,
+  resolveMacroRuntimeModule,
+  type PalamedesFramework,
+} from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
 const MDX_FILE_REGEX = /\.mdx$/i
@@ -149,11 +154,20 @@ export type PalamedesPluginOptions = {
   failOnCompileError?: boolean
 
   /**
-   * Module the macro transform imports the runtime getter from. Set it to a
-   * framework runtime subpath to make inline `t` / `plural` follow a live
-   * locale switch. Generated MDX modules are not affected; they default to the
-   * framework's reactive runtime and are configured through `mdx.runtimeModule`.
-   * @default "@palamedes/runtime"
+   * UI framework this app compiles for. Selects the reactive runtime for the
+   * macro transform and the component contract for generated MDX modules, so
+   * inline `t` / `plural` and MDX follow a live locale switch without naming
+   * module paths by hand. Use `"none"` for a project that is neither React nor
+   * Solid; inline macros then stop following a live switch.
+   * @default "react"
+   */
+  framework?: PalamedesFramework
+
+  /**
+   * Module the macro transform imports the runtime getter from. Overrides the
+   * module derived from `framework`. Generated MDX modules are not affected;
+   * configure those through `mdx.runtimeModule`.
+   * @default derived from `framework`
    */
   runtimeModule?: string
 
@@ -174,11 +188,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enablePoLoader = true,
     failOnMissing = false,
     failOnCompileError = false,
+    framework = "react",
     runtimeModule,
     mdx: mdxOverride,
     ...configLoaderOptions
   } = options
-  const macroRuntimeModule = runtimeModule ?? "@palamedes/runtime"
+  const macroRuntimeModule = resolveMacroRuntimeModule(framework, runtimeModule)
 
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null
@@ -219,12 +234,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   function resolveMdxOptions(cfg: LoadedPalamedesConfig): PalamedesMdxConfig {
     /*
      * The macro `runtimeModule` is deliberately not a fallback here. It is an
-     * opt-in that trades the framework-agnostic default for a reactive one,
-     * while generated MDX modules already default to the framework's reactive
-     * runtime subpath. Letting the macro option leak in would silently
-     * downgrade MDX whenever a project pins the macro target.
+     * override for one specific module path, while generated MDX modules
+     * already default to the framework's reactive runtime subpath. Letting the
+     * macro option leak in would silently downgrade MDX whenever a project
+     * pins the macro target.
+     *
+     * `framework` is different: it states which framework the app compiles
+     * for, which is exactly what MDX needs, so it seeds the MDX options and
+     * stays overridable per config and per call.
      */
     return {
+      ...(mdxFrameworkFor(framework) ? { framework: mdxFrameworkFor(framework) } : {}),
       ...cfg.mdx,
       ...mdxOverride,
     }

@@ -26,6 +26,7 @@ interface WithPalamedesOptions {
   configPath?: string
   failOnMissing?: boolean
   failOnCompileError?: boolean
+  framework?: "react" | "solid" | "none"
   runtimeModule?: string
   workspaceRoot?: string
 }
@@ -38,7 +39,8 @@ Defaults:
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
 - `failOnCompileError`: `false`
-- `runtimeModule`: `"@palamedes/runtime"`
+- `framework`: `"react"`
+- `runtimeModule`: derived from `framework`
 
 ## Usage
 

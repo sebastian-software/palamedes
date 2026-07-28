@@ -17,6 +17,26 @@ function conditionList(rule: RuleItem): unknown[] {
 }
 
 describe("withPalamedes turbopack config", () => {
+  it.each([
+    ["react", undefined, "@palamedes/react/runtime"],
+    ["solid", "solid", "@palamedes/solid/runtime"],
+    ["none", "none", "@palamedes/runtime"],
+  ] as const)("derives the macro runtime module for %s", (_label, framework, expected) => {
+    const config = withPalamedes({}, framework === undefined ? {} : { framework })
+
+    const rule = getRules(config)["*"] as RuleItem
+    expect(rule.loaders?.[0]?.options).toMatchObject({ runtimeModule: expected })
+  })
+
+  it("lets an explicit runtime module win over the framework default", () => {
+    const config = withPalamedes({}, { runtimeModule: "@acme/custom-runtime" })
+
+    const rule = getRules(config)["*"] as RuleItem
+    expect(rule.loaders?.[0]?.options).toMatchObject({
+      runtimeModule: "@acme/custom-runtime",
+    })
+  })
+
   it("translates include/exclude options into the turbopack rule condition", () => {
     const include = /\.custom\.tsx?$/
     const exclude = /[/\\]vendored[/\\]/

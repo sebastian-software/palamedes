@@ -108,12 +108,13 @@ not own loading UI or routing policy.
 
 ## Reactive Macro Runtime
 
-Macro `t` / `plural` calls use the transform's configured `runtimeModule`.
+Macro `t` / `plural` calls use the runtime module derived from the plugin's
+`framework` option, which defaults to React.
 Point it at the React runtime when a client-side locale switch must update
 memoized translated components:
 
 ```ts
-palamedes({ runtimeModule: "@palamedes/react/runtime" })
+palamedes()
 ```
 
 The bridge observes the activation revision rather than only object identity, so

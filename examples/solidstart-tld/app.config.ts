@@ -5,7 +5,7 @@ export default defineConfig({
   vite: {
     // Point the macro transform at Solid's reactive `getI18n` so `t`/`plural`
     // output follows client-side locale switches, matching the `<Trans>` runtime.
-    plugins: [palamedes({ runtimeModule: "@palamedes/solid/runtime" })],
+    plugins: [palamedes({ framework: "solid" })],
     // The TLD strategy serves each locale from its own top-level domain
     // (`example.de`, `example.fr`, …). Allow those hosts plus the deployed
     // preview domain for the dev/preview servers, and pin the demo port.

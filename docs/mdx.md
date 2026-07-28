@@ -22,8 +22,8 @@ export default defineConfig({
 
 For React, Palamedes marks generated `.mdx` modules as JSX automatically.
 
-For Solid, opt `.mdx` into `vite-plugin-solid` explicitly and set the framework
-in `palamedes.yaml`:
+For Solid, set `framework: "solid"` on the plugin and opt `.mdx` into
+`vite-plugin-solid` explicitly:
 
 ```ts
 import solid from "vite-plugin-solid"
@@ -31,19 +31,15 @@ import { palamedes } from "@palamedes/vite-plugin"
 import { defineConfig } from "vite"
 
 export default defineConfig({
-  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
+  plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })],
 })
 ```
 
-```yaml
-locales: [en, de]
-source-locale: en
-mdx:
-  framework: solid
-catalogs:
-  - path: src/locales/{locale}
-    include: [src]
-```
+The plugin compiles for React unless told otherwise, so this option is required
+for Solid. It also selects the reactive runtime for macro `t` / `plural` calls,
+which is why it lives on the plugin rather than in `palamedes.yaml`: extraction
+produces identical messages for both frameworks, so the catalog config has no
+reason to know.
 
 Do not add React's JSX module type for Solid. Rolldown would otherwise lower
 the module with React's automatic runtime before Solid's Babel preset sees it.
@@ -125,8 +121,10 @@ TypeScript configs use the camelCase equivalents:
 `translatable-attributes` replaces the default list rather than extending it.
 Include `alt` explicitly when adding fields such as `title` or `aria-label`.
 `href` and `src` remain structural attributes and are never extracted.
-In Vite, the plugin's top-level `runtimeModule` option is the shared fallback
-for macros and MDX; `mdx.runtime-module` is the more specific MDX override.
+In Vite, the plugin's `framework` option selects the component contract for
+compiled MDX; `mdx.framework` overrides it per config. The plugin's
+`runtimeModule` option applies to macros only — use `mdx.runtime-module` to
+point MDX at a different runtime.
 
 Translated frontmatter remains explicit. The compiler exports the original
 scalar object as `frontmatter`; when configured fields are present it also

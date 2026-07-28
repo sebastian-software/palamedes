@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type * as PalamedesTransformModule from "@palamedes/transform"
+
 const mocks = vi.hoisted(() => ({
   loadPalamedesConfig: vi.fn(),
   analyzeMdxNative: vi.fn(),
@@ -19,11 +21,18 @@ vi.mock("@palamedes/core-node", () => ({
   compileCatalogModule: mocks.compileCatalogModule,
 }))
 
-vi.mock("@palamedes/transform", () => ({
-  PALAMEDES_MACRO_PACKAGES: ["@palamedes/core/macro", "@palamedes/react/macro"],
-  createMissingErrorMessage: mocks.createMissingErrorMessage,
-  transformPalamedesMacros: mocks.transformPalamedesMacros,
-}))
+vi.mock("@palamedes/transform", async (importOriginal) => {
+  // Framework resolution is pure and shared across plugins — exercise the real
+  // implementation so these tests pin the derived defaults, not a stub.
+  const actual = await importOriginal<typeof PalamedesTransformModule>()
+  return {
+    PALAMEDES_MACRO_PACKAGES: ["@palamedes/core/macro", "@palamedes/react/macro"],
+    createMissingErrorMessage: mocks.createMissingErrorMessage,
+    transformPalamedesMacros: mocks.transformPalamedesMacros,
+    resolveMacroRuntimeModule: actual.resolveMacroRuntimeModule,
+    mdxFrameworkFor: actual.mdxFrameworkFor,
+  }
+})
 
 import { palamedes } from "./index"
 
@@ -339,7 +348,78 @@ describe("palamedes vite plugin", () => {
     )
     expect(result).toMatchObject({ code: expect.stringContaining("translated") })
   })
+
+  it.each([
+    ["react", undefined, "@palamedes/react/runtime"],
+    ["solid", "solid", "@palamedes/solid/runtime"],
+    ["none", "none", "@palamedes/runtime"],
+  ] as const)(
+    "derives the macro runtime module for %s",
+    (_label, framework, expectedRuntimeModule) => {
+      runMacroTransform(framework === undefined ? {} : { framework })
+
+      expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.objectContaining({ runtimeModule: expectedRuntimeModule })
+      )
+    }
+  )
+
+  it("lets an explicit runtime module override the framework default", () => {
+    runMacroTransform({ framework: "react", runtimeModule: "@acme/custom-runtime" })
+
+    expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ runtimeModule: "@acme/custom-runtime" })
+    )
+  })
+
+  it("seeds MDX options from the framework option", async () => {
+    mocks.analyzeMdxNative.mockClear()
+    await runMdxTransform({}, { framework: "solid" })
+
+    expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
+      "# Welcome",
+      "/repo/src/guide.mdx",
+      expect.objectContaining({ framework: "solid" })
+    )
+  })
+
+  it("lets MDX configuration override the framework option", async () => {
+    mocks.analyzeMdxNative.mockClear()
+    await runMdxTransform({}, { framework: "solid", mdx: { framework: "react" } })
+
+    expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
+      "# Welcome",
+      "/repo/src/guide.mdx",
+      expect.objectContaining({ framework: "react" })
+    )
+  })
 })
+
+function runMacroTransform(options: Parameters<typeof palamedes>[0] = {}) {
+  mocks.transformPalamedesMacros.mockClear()
+  mocks.transformPalamedesMacros.mockReturnValue({
+    code: "transformed",
+    hasChanged: true,
+    compiledIds: [],
+    map: null,
+  })
+  const macroPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:transform")
+  const transform = macroPlugin?.transform
+
+  if (typeof transform !== "function") {
+    throw new TypeError("Expected macro transform hook")
+  }
+
+  return transform.call(
+    { error: vi.fn() } as never,
+    'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
+    "/repo/src/label.ts"
+  )
+}
 
 async function runPoTransform(
   context: Record<string, unknown> = {},

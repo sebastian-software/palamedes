@@ -4,6 +4,6 @@ import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
   vite: {
-    plugins: [palamedes({ runtimeModule: "@palamedes/react/runtime" }), react()],
+    plugins: [palamedes(), react()],
   },
 })

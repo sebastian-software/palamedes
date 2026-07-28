@@ -37,7 +37,7 @@ For live client-side locale switches, point the macro transform at React's
 external-store bridge:
 
 ```ts
-palamedes({ runtimeModule: "@palamedes/react/runtime" })
+palamedes()
 ```
 
 The `@palamedes/react/runtime` subpath exports a React-aware `getI18n()` that
