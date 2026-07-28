@@ -18,6 +18,25 @@ afterEach(async () => {
 })
 
 describe("Palamedes MDX Vite integration", () => {
+  it("builds a configless project that does not import MDX", async () => {
+    const root = await createFixture({ config: false })
+
+    await expect(
+      build({
+        configFile: false,
+        logLevel: "silent",
+        plugins: [palamedes()],
+        root,
+        build: {
+          write: false,
+          rollupOptions: {
+            input: path.join(root, "entry.js"),
+          },
+        },
+      })
+    ).resolves.toBeDefined()
+  })
+
   it.each(["react", "solid"] as const)(
     "builds a real %s MDX entry through the framework pipeline",
     async (framework) => {
@@ -49,13 +68,16 @@ describe("Palamedes MDX Vite integration", () => {
   )
 })
 
-async function createFixture() {
+async function createFixture(options: { config?: boolean } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-mdx-"))
   fixtureDirectories.push(root)
-  await writeFile(
-    path.join(root, "palamedes.yaml"),
-    "locales: [en]\nsource-locale: en\ncatalogs: []\n"
-  )
+  if (options.config !== false) {
+    await writeFile(
+      path.join(root, "palamedes.yaml"),
+      "locales: [en]\nsource-locale: en\ncatalogs: []\n"
+    )
+  }
+  await writeFile(path.join(root, "entry.js"), "export const value = 1\n")
   await writeFile(path.join(root, "page.mdx"), "# Hello **world**.\n")
   return root
 }

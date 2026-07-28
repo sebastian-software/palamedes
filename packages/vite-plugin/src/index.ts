@@ -20,6 +20,7 @@ import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
 const MDX_FILE_REGEX = /\.mdx$/i
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:"
+const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config."
 const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
 
 function stripQuery(id: string): string {
@@ -144,6 +145,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     }
   }
 
+  function isMissingAutoConfig(error: unknown): boolean {
+    return (
+      configLoaderOptions.configPath === undefined &&
+      error instanceof Error &&
+      error.message.startsWith(MISSING_CONFIG_ERROR_PREFIX)
+    )
+  }
+
   const plugins: Plugin[] = []
 
   // Plugin 1: Report macro resolution errors
@@ -189,7 +198,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       enforce: "pre" as const,
 
       async config() {
-        const cfg = await getConfigLazy()
+        let cfg: LoadedPalamedesConfig
+        try {
+          cfg = await getConfigLazy()
+        } catch (error) {
+          if (isMissingAutoConfig(error)) {
+            return
+          }
+          throw error
+        }
         const mdx = resolveMdxOptions(cfg)
         if ((mdx.framework ?? "react") === "solid") {
           return
