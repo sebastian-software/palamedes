@@ -5,6 +5,7 @@ import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
+  analyzeMdxNative,
   compileCatalogArtifact,
   compileCatalogModule,
   getNativeInfo,
@@ -76,6 +77,53 @@ function message(name) {
       sourcesContent: [source],
     })
     expect(map.mappings).not.toBe("")
+  })
+
+  it.each(["react", "solid"] as const)(
+    "analyzes and compiles MDX for the %s framework",
+    (framework) => {
+      const source = `---
+title: Welcome
+---
+
+# Hello {name}
+
+Read the **guide**.
+`
+      const result = analyzeMdxNative(source, "guide.mdx", {
+        framework,
+        frontMatterFields: ["title"],
+      })
+
+      expect(result.diagnostics).toStrictEqual([])
+      expect(result.messages.map((message) => message.message)).toStrictEqual([
+        "Welcome",
+        "Hello {name}",
+        "Read the <0>guide</0>.",
+      ])
+      expect(result.messages[1]?.origin).toMatchObject({
+        0: "guide.mdx",
+        1: 5,
+      })
+      expect(result.code).toContain(
+        framework === "solid" ? 'from "@palamedes/solid"' : 'from "@palamedes/react"'
+      )
+      expect(result.compiledIds).toHaveLength(3)
+      expect(normalizeSourceMap(result.map)).toMatchObject({
+        version: 3,
+        sources: ["guide.mdx"],
+        sourcesContent: [source],
+      })
+    }
+  )
+
+  it("returns structured diagnostics for invalid MDX", () => {
+    const result = analyzeMdxNative("# Good\n\n<Component\n", "broken.mdx")
+
+    expect(result.code).toBeUndefined()
+    expect(result.diagnostics[0]).toMatchObject({
+      primary: { line: 3, column: 1 },
+    })
   })
 
   it("compiles catalog modules across the NAPI boundary", async () => {

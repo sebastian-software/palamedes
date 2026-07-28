@@ -13,8 +13,8 @@ syntax.
 
 ## `extractMessages(source, filename)`
 
-Returns extracted source-string-first messages from a JavaScript or TypeScript
-module.
+Returns extracted source-string-first messages from a JavaScript, TypeScript,
+or MDX module.
 
 ```ts
 import { extractMessages } from "@palamedes/extractor"

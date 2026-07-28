@@ -1,5 +1,10 @@
 import { extractMessages, extractor, type ExtractedMessageInfo } from "./index"
 
+it("matches MDX modules as first-class extraction inputs", () => {
+  expect(extractor.match("content/guide.mdx")).toBe(true)
+  expect(extractor.match("content/guide.md")).toBe(false)
+})
+
 function extract(code: string) {
   return extractMessages(code, "test.tsx")
 }

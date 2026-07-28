@@ -31,6 +31,7 @@ mod extract_cache;
 mod icu_text;
 mod jsx_entities;
 mod jsx_message;
+mod mdx;
 mod message_metadata;
 mod placeholder_name;
 #[cfg(test)]
@@ -70,6 +71,10 @@ pub use extract::{
     ExtractedMessageRecord,
 };
 pub use extract_cache::{default_cache_path, ExtractCache};
+pub use mdx::{
+    analyze_mdx, extract_mdx_messages, MdxAnalysisResult, MdxDiagnosticRecord, MdxFramework,
+    MdxOptions, MdxSourceRange,
+};
 pub use message_metadata::{
     derive_message_metadata, normalize_message_metadata, validate_message_metadata,
     MessageArgumentFormatMetadata, MessageArgumentKind, MessageArgumentMetadata,

@@ -17,6 +17,7 @@ use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
 };
+use crate::mdx::{extract_mdx_messages, MdxOptions};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
@@ -51,7 +52,7 @@ struct ImportedMacro {
     imported_name: String,
 }
 
-/// Extracted source-first message record emitted by the JS/TS extractor.
+/// Extracted source-first message record emitted by the JS/TS/MDX extractor.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExtractedMessageRecord {
     /// Extracted source message.
@@ -88,16 +89,19 @@ pub struct ExtractCatalogMessagesRequest {
 }
 
 /// Optional behavior for aggregated catalog extraction.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ExtractCatalogMessagesOptions {
     /// Whether stable source scopes should be extracted for catalog references.
     pub reference_scopes: bool,
+    /// MDX translation-unit and configured-field behavior.
+    pub mdx: MdxOptions,
 }
 
 impl Default for ExtractCatalogMessagesOptions {
     fn default() -> Self {
         Self {
             reference_scopes: true,
+            mdx: MdxOptions::default(),
         }
     }
 }
@@ -1312,7 +1316,7 @@ fn argument_expression_name(arg: &Argument<'_>) -> Option<String> {
     arg.as_expression().and_then(expression_name)
 }
 
-/// Extracts source-string-first messages from a JavaScript or TypeScript module.
+/// Extracts source-string-first messages from a JavaScript, TypeScript, or MDX module.
 ///
 /// # Errors
 ///
@@ -1331,7 +1335,13 @@ fn extract_messages_with_scopes(
     reference_scopes: bool,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
     let allocator = Allocator::default();
-    extract_messages_in(&allocator, source, filename, reference_scopes)
+    extract_messages_in(
+        &allocator,
+        source,
+        filename,
+        reference_scopes,
+        &MdxOptions::default(),
+    )
 }
 
 /*
@@ -1346,7 +1356,21 @@ fn extract_messages_in(
     source: &str,
     filename: &str,
     reference_scopes: bool,
+    mdx_options: &MdxOptions,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
+    if Path::new(filename)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mdx"))
+    {
+        return extract_mdx_messages(source, filename, mdx_options.clone()).map_err(|messages| {
+            PalamedesError::ParseModuleSource {
+                filename: filename.to_owned(),
+                messages,
+            }
+        });
+    }
+
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
     let parsed = Parser::new(allocator, source, source_type).parse();
 
@@ -1447,6 +1471,7 @@ pub fn extract_catalog_messages_cached(
     let mut failed_files = Vec::new();
     let file_count = request.files.len();
     let reference_scopes = options.reference_scopes;
+    let mdx_options = options.mdx;
 
     /*
      * A cache handed to us may have been loaded for a different request — watch
@@ -1454,7 +1479,11 @@ pub fn extract_catalog_messages_cached(
      * reference root or scope setting would otherwise serve entries whose
      * origins and records belong to the previous configuration.
      */
-    cache.reset_if_request_differs(&request.root_dir, reference_scopes);
+    cache.reset_if_request_differs_with_mdx(
+        &request.root_dir,
+        reference_scopes,
+        &mdx_options.extraction_stamp(),
+    );
 
     /*
      * Reading and parsing each file is independent work and dominates extraction
@@ -1474,7 +1503,7 @@ pub fn extract_catalog_messages_cached(
         request
             .files
             .iter()
-            .map(|file| extract_one_file(file, &root_dir, reference_scopes, cache))
+            .map(|file| extract_one_file(file, &root_dir, reference_scopes, &mdx_options, cache))
             .collect()
     } else {
         rayon::ThreadPoolBuilder::new()
@@ -1487,7 +1516,9 @@ pub fn extract_catalog_messages_cached(
                 request
                     .files
                     .par_iter()
-                    .map(|file| extract_one_file(file, &root_dir, reference_scopes, cache))
+                    .map(|file| {
+                        extract_one_file(file, &root_dir, reference_scopes, &mdx_options, cache)
+                    })
                     .collect()
             })
     };
@@ -1558,6 +1589,7 @@ fn extract_one_file(
     file: &String,
     root_dir: &Path,
     reference_scopes: bool,
+    mdx_options: &MdxOptions,
     cache: &ExtractCache,
 ) -> FileExtraction {
     if let Some((relative_file, messages)) = cache.get(file) {
@@ -1588,7 +1620,7 @@ fn extract_one_file(
 
     let extracted = EXTRACT_ARENA.with(|arena| {
         let mut arena = arena.borrow_mut();
-        let extracted = extract_messages_in(&arena, &source, file, reference_scopes);
+        let extracted = extract_messages_in(&arena, &source, file, reference_scopes, mdx_options);
         /*
          * Safe to reset here: ExtractedMessageRecord owns its strings, so
          * nothing returned above borrows from the arena.
@@ -2848,6 +2880,7 @@ const message = t({ message })
             },
             ExtractCatalogMessagesOptions {
                 reference_scopes: false,
+                ..ExtractCatalogMessagesOptions::default()
             },
         )
         .expect("batch extraction without scopes");

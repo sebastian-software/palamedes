@@ -19,8 +19,13 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`
 - `extractMessagesNative(source, filename)`
+- `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
+
+`analyzeMdxNative` returns messages, structured diagnostics, generated
+framework JSX, compiled message IDs, and a native source map from one semantic
+analysis pass. See [MDX messages](../mdx.md).
 
 `compileCatalogArtifact()` and `compileCatalogArtifactSelected()` include
 runtime formatter diagnostics in their `diagnostics` arrays. Unsupported

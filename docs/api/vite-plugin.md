@@ -1,7 +1,7 @@
 # `@palamedes/vite-plugin`
 
-`@palamedes/vite-plugin` transforms Palamedes macro imports and compiles `.po`
-imports inside Vite builds.
+`@palamedes/vite-plugin` transforms Palamedes macro imports, compiles `.mdx`
+modules, and compiles `.po` imports inside Vite builds.
 
 Catalog storage can be PO or FCL in `palamedes.yaml`, but this API is still a
 `.po` import loader. See [Catalog formats](../catalog-formats.md) for the
@@ -26,6 +26,7 @@ interface PalamedesPluginOptions {
   failOnMissing?: boolean
   failOnCompileError?: boolean
   runtimeModule?: string
+  mdx?: PalamedesMdxConfig | false
 }
 ```
 
@@ -37,6 +38,7 @@ Defaults:
 - `failOnMissing`: `false`
 - `failOnCompileError`: `false`
 - `runtimeModule`: `"@palamedes/runtime"`
+- `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 
 ## Usage
 
@@ -48,3 +50,7 @@ export default defineConfig({
   plugins: [palamedes()],
 })
 ```
+
+Keep `palamedes()` before the React or Solid Vite plugin so the native MDX
+compiler emits JSX before the framework transform runs. See
+[MDX messages](../mdx.md) for authoring and configuration.

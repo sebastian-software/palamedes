@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use ::config as config_rs;
-use palamedes::{CatalogArtifactConfig, CatalogConfig, FallbackLocales, PalamedesCatalogFormat};
+use palamedes::{
+    CatalogArtifactConfig, CatalogConfig, FallbackLocales, MdxOptions, PalamedesCatalogFormat,
+};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -53,6 +55,8 @@ pub struct LoadedConfig {
     pub fallback_locales: Option<ConfigFallbackLocales>,
     pub pseudo_locale: Option<String>,
     pub catalogs: Vec<ConfigCatalog>,
+    /// Shared MDX extraction and compilation semantics.
+    pub mdx: MdxOptions,
     /// Worker threads for the parallel extraction pass; `None` uses the
     /// measured default in the core.
     pub extract_threads: Option<usize>,
@@ -96,6 +100,8 @@ struct RawConfig {
     reference_scopes: bool,
     #[serde(default = "default_true", alias = "extract_cache")]
     extract_cache: bool,
+    #[serde(default)]
+    mdx: MdxOptions,
     catalogs: Vec<ConfigCatalog>,
 }
 
@@ -189,6 +195,7 @@ fn unknown_top_level_keys(value: &serde_json::Value) -> Vec<String> {
         "extract_threads",
         "extract-cache",
         "extract_cache",
+        "mdx",
         "catalogs",
         "plugins",
     ];
@@ -308,6 +315,7 @@ fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig
         fallback_locales: raw.fallback_locales,
         pseudo_locale: raw.pseudo_locale,
         catalogs: raw.catalogs,
+        mdx: raw.mdx,
         extract_threads: raw.extract_threads,
         extract_cache: raw.extract_cache,
     })
@@ -396,6 +404,29 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
                 path,
                 &format!("\"catalogs[{index}].include\" must contain at least one pattern."),
             );
+        }
+    }
+    if raw
+        .mdx
+        .translatable_attributes
+        .iter()
+        .chain(&raw.mdx.front_matter_fields)
+        .any(|name| name.trim().is_empty())
+    {
+        return invalid(
+            path,
+            "\"mdx\" attribute and front-matter field names must be non-empty strings.",
+        );
+    }
+    if raw.mdx.ignore_directive.trim().is_empty() {
+        return invalid(path, "\"mdx.ignore-directive\" must be non-empty.");
+    }
+    for (field, value) in [
+        ("trans-module", raw.mdx.trans_module.as_deref()),
+        ("runtime-module", raw.mdx.runtime_module.as_deref()),
+    ] {
+        if value.is_some_and(|value| value.trim().is_empty()) {
+            return invalid(path, &format!("\"mdx.{field}\" must be non-empty."));
         }
     }
     Ok(())

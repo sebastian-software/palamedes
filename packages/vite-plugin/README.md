@@ -7,14 +7,15 @@
 
 The recommended Palamedes entry point for Vite applications.
 
-`@palamedes/vite-plugin` gives Vite projects fast macro transforms, `.po`
-loading, and a translation workflow that feels native to modern frontend
+`@palamedes/vite-plugin` gives Vite projects fast macro transforms, first-class
+`.mdx` compilation, `.po` loading, and a translation workflow that feels native to modern frontend
 tooling instead of bolted on from an older Babel path.
 
 ## Status
 
 - Recommended for Vite projects using React or Solid and Palamedes macros
 - Supports `.po` imports and source-string-first catalog semantics
+- Extracts and compiles semantic MDX messages through the same native analysis
 - Reports missing translations and ICU compatibility diagnostics during builds
 - Best paired with `@palamedes/runtime` and `@palamedes/cli`
 - Not a framework generator or top-level app scaffold
@@ -97,6 +98,11 @@ palamedes({
   failOnMissing: false,
   failOnCompileError: false,
   runtimeModule: "@palamedes/runtime",
+  mdx: {
+    framework: "react",
+    translatableAttributes: ["alt", "title"],
+    frontMatterFields: ["title", "description"],
+  },
 })
 ```
 
@@ -107,6 +113,11 @@ partially-authored config files without validation (tooling only).
 Imports ending in `?palamedes` are treated like `.po` catalog imports — the
 analog of Lingui's `?lingui` query suffix — so bundler-agnostic code can force
 a module through the Palamedes catalog loader.
+
+`.mdx` modules are compiled before the React or Solid JSX plugin. Catalog
+extraction discovers the same files automatically, and both paths share the
+native semantic analyzer. Set `mdx: false` to disable the Vite MDX transform.
+See the [MDX guide](https://github.com/sebastian-software/palamedes/blob/main/docs/mdx.md).
 
 ## What This Package Handles
 

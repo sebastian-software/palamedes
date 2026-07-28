@@ -21,7 +21,7 @@ use crate::extract::ExtractedMessageRecord;
 
 /// Bumped whenever the cached payload shape or the extractor's output changes
 /// in a way that makes previously stored entries wrong.
-const CACHE_SCHEMA: u32 = 1;
+const CACHE_SCHEMA: u32 = 2;
 
 /*
  * A file modified in the same instant it was cached cannot be distinguished
@@ -93,6 +93,8 @@ struct CacheStamp {
     /// Reference-scope extraction changes the records themselves, so entries
     /// produced under the other setting must not be reused.
     reference_scopes: bool,
+    /// Configured MDX fields and opt-out semantics also change records.
+    mdx_stamp: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -124,6 +126,7 @@ impl ExtractCache {
                 extractor_version: String::new(),
                 root_dir: String::new(),
                 reference_scopes: false,
+                mdx_stamp: String::new(),
             },
             entries: HashMap::new(),
             dirty: false,
@@ -137,11 +140,23 @@ impl ExtractCache {
     /// error: extraction simply runs cold and rewrites the cache afterwards.
     #[must_use]
     pub fn load(path: &Path, root_dir: &str, reference_scopes: bool) -> Self {
+        Self::load_with_mdx_stamp(path, root_dir, reference_scopes, "")
+    }
+
+    /// Loads the cache with the complete MDX extraction-semantics stamp.
+    #[must_use]
+    pub fn load_with_mdx_stamp(
+        path: &Path,
+        root_dir: &str,
+        reference_scopes: bool,
+        mdx_stamp: &str,
+    ) -> Self {
         let stamp = CacheStamp {
             schema: CACHE_SCHEMA,
             extractor_version: env!("CARGO_PKG_VERSION").to_owned(),
             root_dir: root_dir.to_owned(),
             reference_scopes,
+            mdx_stamp: mdx_stamp.to_owned(),
         };
 
         let entries = std::fs::read(path)
@@ -195,15 +210,30 @@ impl ExtractCache {
     /// themselves. A long-lived cache — watch mode holds one across config
     /// reloads — must therefore be re-validated on every request instead of
     /// only at load time.
+    #[cfg(test)]
     pub(crate) fn reset_if_request_differs(&mut self, root_dir: &str, reference_scopes: bool) {
+        let mdx_stamp = self.stamp.mdx_stamp.clone();
+        self.reset_if_request_differs_with_mdx(root_dir, reference_scopes, &mdx_stamp);
+    }
+
+    /// Revalidates cache identity including configured MDX extraction semantics.
+    pub(crate) fn reset_if_request_differs_with_mdx(
+        &mut self,
+        root_dir: &str,
+        reference_scopes: bool,
+        mdx_stamp: &str,
+    ) {
         if !self.enabled
-            || (self.stamp.root_dir == root_dir && self.stamp.reference_scopes == reference_scopes)
+            || (self.stamp.root_dir == root_dir
+                && self.stamp.reference_scopes == reference_scopes
+                && self.stamp.mdx_stamp == mdx_stamp)
         {
             return;
         }
 
         self.stamp.root_dir = root_dir.to_owned();
         self.stamp.reference_scopes = reference_scopes;
+        self.stamp.mdx_stamp = mdx_stamp.to_owned();
         if !self.entries.is_empty() {
             self.entries.clear();
             self.dirty = true;
@@ -411,6 +441,13 @@ mod tests {
         // must discard the cache exactly like a changed reference root does.
         let flipped = ExtractCache::load(&cache_path, "root-one", false);
         assert!(flipped.is_empty());
+
+        let mdx_changed =
+            ExtractCache::load_with_mdx_stamp(&cache_path, "root-one", true, "attrs=alt,title");
+        assert!(
+            mdx_changed.is_empty(),
+            "changed MDX extraction semantics must discard entries"
+        );
 
         std::fs::remove_dir_all(root).expect("cleanup");
     }

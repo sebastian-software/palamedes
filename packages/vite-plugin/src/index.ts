@@ -8,12 +8,21 @@
 import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter } from "vite"
-import { loadPalamedesConfig, type LoadedPalamedesConfig } from "@palamedes/config"
-import { compileCatalogModule } from "@palamedes/core-node"
+import {
+  loadPalamedesConfig,
+  type LoadedPalamedesConfig,
+  type PalamedesMdxConfig,
+} from "@palamedes/config"
+import {
+  analyzeMdxNative,
+  compileCatalogModule,
+  type MdxAnalysisResult,
+} from "@palamedes/core-node"
 import { transformPalamedesMacros } from "@palamedes/transform"
 import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
+const MDX_FILE_REGEX = /\.mdx$/i
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:"
 
 function stripQuery(id: string): string {
@@ -72,6 +81,12 @@ export type PalamedesPluginOptions = {
    * @default "@palamedes/runtime"
    */
   runtimeModule?: string
+
+  /**
+   * Override MDX analysis options from the Palamedes config, or disable MDX.
+   * @default configuration `mdx` values with React framework defaults
+   */
+  mdx?: PalamedesMdxConfig | false
 }
 
 /**
@@ -85,6 +100,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     failOnMissing = false,
     failOnCompileError = false,
     runtimeModule = "@palamedes/runtime",
+    mdx: mdxOverride,
     ...configLoaderOptions
   } = options
 
@@ -92,6 +108,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   let config: LoadedPalamedesConfig | null = null
   let filter: ReturnType<typeof createFilter> | null = null
   let macroIds: Set<string> | null = null
+  const mdxCache = new Map<
+    string,
+    { source: string; signature: string; result: MdxAnalysisResult }
+  >()
+  const mdxModuleIds = new Set<string>()
 
   async function getConfigLazy() {
     if (!config) {
@@ -106,6 +127,16 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       filter = createFilter(include, exclude)
     }
     return filter
+  }
+
+  function matchesTransformFilter(id: string): boolean {
+    const includeFilter = getFilterLazy()
+    return (
+      includeFilter(id) ||
+      (mdxOverride !== false &&
+        MDX_FILE_REGEX.test(id) &&
+        includeFilter(id.replace(/\.mdx$/i, ".tsx")))
+    )
   }
 
   const plugins: Plugin[] = []
@@ -146,7 +177,111 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
   })
 
-  // Plugin 2: Transform macros
+  // Plugin 2: Compile MDX before framework JSX transforms.
+  if (mdxOverride !== false) {
+    plugins.push({
+      name: "palamedes:mdx",
+      enforce: "pre" as const,
+
+      buildStart() {
+        config = null
+        mdxCache.clear()
+        mdxModuleIds.clear()
+      },
+
+      watchChange(id) {
+        const cleanId = stripQuery(id)
+        if (config && path.resolve(cleanId) === path.resolve(config.configPath)) {
+          config = null
+          mdxCache.clear()
+        }
+      },
+
+      async transform(source, id) {
+        const cleanId = stripQuery(id)
+        if (!MDX_FILE_REGEX.test(cleanId) || !matchesTransformFilter(cleanId)) {
+          return null
+        }
+
+        const cfg = await getConfigLazy()
+        const mdx = {
+          framework: "react" as const,
+          translatableAttributes: ["alt"],
+          frontMatterFields: [],
+          ...cfg.mdx,
+          ...mdxOverride,
+        }
+        const signature = JSON.stringify(mdx)
+        const cached = mdxCache.get(cleanId)
+        const result =
+          cached?.source === source && cached.signature === signature
+            ? cached.result
+            : analyzeMdxNative(source, cleanId, mdx)
+        mdxCache.set(cleanId, { source, signature, result })
+        mdxModuleIds.add(cleanId)
+        this.addWatchFile(cfg.configPath)
+        for (const catalog of cfg.catalogs) {
+          for (const locale of cfg.locales) {
+            const extension = catalog.format ?? "po"
+            this.addWatchFile(
+              path.resolve(cfg.rootDir, `${catalog.path.replace("{locale}", locale)}.${extension}`)
+            )
+          }
+        }
+
+        if (result.diagnostics.length > 0 || !result.code) {
+          const details = result.diagnostics
+            .map(
+              (diagnostic) =>
+                `${cleanId}:${diagnostic.primary.line}:${diagnostic.primary.column}: ${diagnostic.message} (${diagnostic.code})`
+            )
+            .join("\n")
+          const primary = result.diagnostics[0]?.primary
+          this.error({
+            name: "PalamedesMdxError",
+            code: "PALAMEDES_MDX",
+            id: cleanId,
+            message: `Palamedes MDX error:\n${details}`,
+            ...(primary
+              ? {
+                  loc: {
+                    file: cleanId,
+                    line: primary.line,
+                    column: Math.max(0, primary.column - 1),
+                  },
+                }
+              : {}),
+          })
+        }
+
+        return {
+          code: result.code,
+          map: result.map,
+        }
+      },
+
+      handleHotUpdate(context) {
+        const cleanId = stripQuery(context.file)
+        const isConfig =
+          config !== null && path.resolve(cleanId) === path.resolve(config.configPath)
+        const isCatalog = /\.(po|fcl)$/i.test(cleanId)
+        if (!isConfig && !isCatalog) {
+          return
+        }
+        if (isConfig) {
+          config = null
+          mdxCache.clear()
+        }
+        const modules = [...mdxModuleIds]
+          .map((id) => context.server.moduleGraph.getModuleById(id))
+          .filter((module): module is NonNullable<typeof module> => module !== undefined)
+        modules.forEach((module) => context.server.moduleGraph.invalidateModule(module))
+        return modules
+      },
+    })
+  }
+
+  // Plugin 3: Transform macros
   plugins.push({
     name: "palamedes:transform",
     enforce: "pre" as const,
@@ -171,7 +306,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       const cleanId = stripQuery(id)
 
       // Check file extension and filter
-      if (!getFilterLazy()(cleanId)) {
+      if (!matchesTransformFilter(cleanId)) {
         return null
       }
 
@@ -202,7 +337,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
   })
 
-  // Plugin 3: PO file loader
+  // Plugin 4: PO file loader
   if (enablePoLoader) {
     plugins.push({
       name: "palamedes:po-loader",
