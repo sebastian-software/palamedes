@@ -17,7 +17,7 @@
     "@lingui/cli": "6.5.0",
     "@lingui/conf": "6.5.0",
     "@lingui/format-po": "6.5.0",
-    "@lingui/swc-plugin": "6.5.1",
+    "@lingui/swc-plugin": "6.6.0",
     "@palamedes/core-node": "workspace:^",
     "@swc/core": "1.15.46"
   }
