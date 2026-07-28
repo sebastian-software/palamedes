@@ -162,11 +162,14 @@ import solid from "vite-plugin-solid"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [palamedes(), solid()],
+  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
 })
 ```
 
-The same `palamedes.yaml`, runtime model, `.po` loading, and extraction flow apply.
+The same `palamedes.yaml`, runtime model, `.po` loading, and extraction flow
+apply. First-class MDX compilation requires Vite 7 or newer. React module
+parsing is configured by Palamedes; Solid needs the explicit `.mdx` extension
+shown above.
 
 ## Authoring model
 

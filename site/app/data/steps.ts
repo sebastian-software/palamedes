@@ -108,7 +108,7 @@ catalogs:
       code: `// vite.config.ts
 import { palamedes } from "@palamedes/vite-plugin"
 import solid from "vite-plugin-solid"
-export default defineConfig({ plugins: [palamedes(), solid()] })
+export default defineConfig({ plugins: [palamedes(), solid({ extensions: [".mdx"] })] })
 
 // src/i18n.ts
 import { createI18n } from "@palamedes/core"

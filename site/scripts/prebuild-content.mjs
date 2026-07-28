@@ -90,6 +90,7 @@ async function collectDocs() {
     ["configuration.md", 20],
     ["cli.md", 30],
     ["catalog-formats.md", 40],
+    ["mdx.md", 45],
     ["locale-strategies.md", 50],
     ["backend-servers.md", 60],
     ["migrate-from-lingui.md", 70],

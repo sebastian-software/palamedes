@@ -7,23 +7,20 @@
 
 import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
-import { createFilter } from "vite"
+import { createFilter, version as viteVersion } from "vite"
 import {
   loadPalamedesConfig,
   type LoadedPalamedesConfig,
   type PalamedesMdxConfig,
 } from "@palamedes/config"
-import {
-  analyzeMdxNative,
-  compileCatalogModule,
-  type MdxAnalysisResult,
-} from "@palamedes/core-node"
+import { analyzeMdxNative, compileCatalogModule } from "@palamedes/core-node"
 import { transformPalamedesMacros } from "@palamedes/transform"
 import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
 const MDX_FILE_REGEX = /\.mdx$/i
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:"
+const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
 
 function stripQuery(id: string): string {
   return id.split("?")[0] ?? id
@@ -107,11 +104,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null
   let filter: ReturnType<typeof createFilter> | null = null
+  let mdxFilter: ReturnType<typeof createFilter> | null = null
   let macroIds: Set<string> | null = null
-  const mdxCache = new Map<
-    string,
-    { source: string; signature: string; result: MdxAnalysisResult }
-  >()
   const mdxModuleIds = new Set<string>()
 
   async function getConfigLazy() {
@@ -129,14 +123,25 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     return filter
   }
 
+  function getMdxFilterLazy() {
+    if (!mdxFilter) {
+      mdxFilter = createFilter(undefined, exclude)
+    }
+    return mdxFilter
+  }
+
   function matchesTransformFilter(id: string): boolean {
-    const includeFilter = getFilterLazy()
-    return (
-      includeFilter(id) ||
-      (mdxOverride !== false &&
-        MDX_FILE_REGEX.test(id) &&
-        includeFilter(id.replace(/\.mdx$/i, ".tsx")))
-    )
+    if (mdxOverride !== false && MDX_FILE_REGEX.test(id)) {
+      return getMdxFilterLazy()(id)
+    }
+    return getFilterLazy()(id)
+  }
+
+  function resolveMdxOptions(cfg: LoadedPalamedesConfig): PalamedesMdxConfig {
+    return {
+      ...cfg.mdx,
+      ...mdxOverride,
+    }
   }
 
   const plugins: Plugin[] = []
@@ -183,17 +188,35 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       name: "palamedes:mdx",
       enforce: "pre" as const,
 
+      async config() {
+        const cfg = await getConfigLazy()
+        const mdx = resolveMdxOptions(cfg)
+        if ((mdx.framework ?? "react") === "solid") {
+          return
+        }
+        return {
+          build: {
+            rollupOptions: {
+              moduleTypes: {
+                ".mdx": "jsx",
+              },
+            },
+          },
+        }
+      },
+
       buildStart() {
         config = null
-        mdxCache.clear()
         mdxModuleIds.clear()
       },
 
-      watchChange(id) {
+      watchChange(id, change) {
         const cleanId = stripQuery(id)
+        if (change.event === "delete") {
+          mdxModuleIds.delete(cleanId)
+        }
         if (config && path.resolve(cleanId) === path.resolve(config.configPath)) {
           config = null
-          mdxCache.clear()
         }
       },
 
@@ -202,32 +225,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         if (!MDX_FILE_REGEX.test(cleanId) || !matchesTransformFilter(cleanId)) {
           return null
         }
+        if (VITE_MAJOR < 7) {
+          this.error(
+            "Palamedes MDX compilation requires Vite 7 or newer. Disable it with `mdx: false` when using an older Vite release."
+          )
+        }
 
         const cfg = await getConfigLazy()
-        const mdx = {
-          framework: "react" as const,
-          translatableAttributes: ["alt"],
-          frontMatterFields: [],
-          ...cfg.mdx,
-          ...mdxOverride,
-        }
-        const signature = JSON.stringify(mdx)
-        const cached = mdxCache.get(cleanId)
-        const result =
-          cached?.source === source && cached.signature === signature
-            ? cached.result
-            : analyzeMdxNative(source, cleanId, mdx)
-        mdxCache.set(cleanId, { source, signature, result })
+        const mdx = resolveMdxOptions(cfg)
+        const result = analyzeMdxNative(source, cleanId, mdx)
         mdxModuleIds.add(cleanId)
         this.addWatchFile(cfg.configPath)
-        for (const catalog of cfg.catalogs) {
-          for (const locale of cfg.locales) {
-            const extension = catalog.format ?? "po"
-            this.addWatchFile(
-              path.resolve(cfg.rootDir, `${catalog.path.replace("{locale}", locale)}.${extension}`)
-            )
-          }
-        }
 
         if (result.diagnostics.length > 0 || !result.code) {
           const details = result.diagnostics
@@ -257,6 +265,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         return {
           code: result.code,
           map: result.map,
+          ...((mdx.framework ?? "react") === "react" ? { moduleType: "jsx" as const } : {}),
         }
       },
 
@@ -264,14 +273,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cleanId = stripQuery(context.file)
         const isConfig =
           config !== null && path.resolve(cleanId) === path.resolve(config.configPath)
-        const isCatalog = /\.(po|fcl)$/i.test(cleanId)
-        if (!isConfig && !isCatalog) {
+        if (!isConfig) {
           return
         }
-        if (isConfig) {
-          config = null
-          mdxCache.clear()
-        }
+        config = null
         const modules = [...mdxModuleIds]
           .map((id) => context.server.moduleGraph.getModuleById(id))
           .filter((module): module is NonNullable<typeof module> => module !== undefined)

@@ -115,6 +115,7 @@ describe("palamedes vite plugin", () => {
       expect(result).toStrictEqual({
         code: "export default function MDXContent() { return <p>Translated</p> }",
         map: expect.objectContaining({ mappings: "AAAA" }),
+        ...(framework === "react" ? { moduleType: "jsx" } : {}),
       })
       expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
         "# Welcome",
@@ -126,9 +127,27 @@ describe("palamedes vite plugin", () => {
         })
       )
       expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml")
-      expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/en.po")
     }
   )
+
+  it("configures JSX module parsing only for React MDX", async () => {
+    await expect(runMdxConfig()).resolves.toMatchObject({
+      build: {
+        rollupOptions: {
+          moduleTypes: {
+            ".mdx": "jsx",
+          },
+        },
+      },
+    })
+    await expect(runMdxConfig({ mdx: { framework: "solid" } })).resolves.toBeUndefined()
+  })
+
+  it("does not let the JavaScript include filter disable MDX", async () => {
+    await expect(runMdxTransform({}, { include: "src/**/*.ts" })).resolves.toMatchObject({
+      moduleType: "jsx",
+    })
+  })
 
   it("reports source-ranged MDX diagnostics through Vite", async () => {
     mocks.analyzeMdxNative.mockReturnValue({
@@ -178,7 +197,7 @@ describe("palamedes vite plugin", () => {
     ).toBeNull()
   })
 
-  it("invalidates compiled MDX modules when a catalog changes", async () => {
+  it("invalidates compiled MDX modules when the Palamedes config changes", async () => {
     const mdxPlugin = palamedes().find((plugin) => plugin.name === "palamedes:mdx")
     const transform = mdxPlugin?.transform
     const handleHotUpdate = mdxPlugin?.handleHotUpdate
@@ -192,7 +211,7 @@ describe("palamedes vite plugin", () => {
     const invalidated = await handleHotUpdate.call(
       {} as any,
       {
-        file: "/repo/src/locales/de.po",
+        file: "/repo/palamedes.yaml",
         server: {
           moduleGraph: {
             getModuleById: vi.fn().mockReturnValue(module),
@@ -272,5 +291,23 @@ async function runMdxTransform(
     } as any,
     "# Welcome",
     "/repo/src/guide.mdx"
+  )
+}
+
+async function runMdxConfig(options: Parameters<typeof palamedes>[0] = {}) {
+  const mdxPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:mdx")
+  const config = mdxPlugin?.config
+
+  if (typeof config !== "function") {
+    throw new TypeError("Expected palamedes:mdx config hook")
+  }
+
+  return config.call(
+    {} as any,
+    {} as any,
+    {
+      command: "build",
+      mode: "production",
+    } as any
   )
 }

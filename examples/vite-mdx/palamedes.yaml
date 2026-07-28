@@ -1,0 +1,9 @@
+locales: [en, de]
+source-locale: en
+mdx:
+  framework: react
+  translatable-attributes: [alt, title, aria-label]
+  front-matter-fields: [title, description]
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]

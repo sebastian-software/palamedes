@@ -1,0 +1,129 @@
+msgid ""
+msgstr ""
+"Content-Transfer-Encoding: 8bit\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"X-Generator: palamedes\n"
+
+#: examples/vite-mdx/src/content/welcome.mdx
+msgid "<0>Continue with extraction →</0>"
+msgstr "<0>Weiter zur Extraktion →</0>"
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "<0>rich text</0> keeps its structure as placeholders"
+msgstr "<0>Rich Text</0> behält seine Struktur als Platzhalter"
+
+#: examples/vite-mdx/src/content/runtime.mdx
+msgid "<0>← Back to extraction</0> · <1>Start again</1>"
+msgstr "<0>← Zurück zur Extraktion</0> · <1>Von vorn beginnen</1>"
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "<0>← Introduction</0> · <1>Continue with the runtime →</1>"
+msgstr "<0>← Einführung</0> · <1>Weiter zur Laufzeit →</1>"
+
+#: examples/vite-mdx/src/content/runtime.mdx
+msgid ""
+"All {pageCount} pages react to the active locale. Use the switcher above and "
+"the MDX content updates without rebuilding or reloading the application."
+msgstr ""
+"Alle {pageCount} Seiten reagieren auf die aktive Sprache. Nutze den Umschalter"
+" oben und der MDX-Inhalt aktualisiert sich, ohne die Anwendung neu zu bauen "
+"oder zu laden."
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "Code stays code"
+msgstr "Code bleibt Code"
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "Extract once, render everywhere"
+msgstr "Einmal extrahieren, überall rendern"
+
+#: examples/vite-mdx/src/content/welcome.mdx
+msgid ""
+"Extraction and compilation consume the same FerroMark events, so translators "
+"see the message that the application renders."
+msgstr ""
+"Extraktion und Kompilierung verwenden dieselben FerroMark-Ereignisse. Dadurch "
+"sehen Übersetzer genau die Nachricht, die die Anwendung rendert."
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid ""
+"Fenced blocks keep their language metadata and remain outside the translation "
+"catalog."
+msgstr ""
+"Abgegrenzte Codeblöcke behalten ihre Sprachmetadaten und bleiben außerhalb "
+"des Übersetzungskatalogs."
+
+#: examples/vite-mdx/src/content/welcome.mdx
+msgid "One semantic source"
+msgstr "Eine semantische Quelle"
+
+#: examples/vite-mdx/src/content/welcome.mdx
+msgid "Palamedes MDX handbook"
+msgstr "Palamedes-MDX-Handbuch"
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "Palamedes turns rendered semantics into stable translation units:"
+msgstr ""
+"Palamedes verwandelt gerenderte Semantik in stabile Übersetzungseinheiten:"
+
+#: examples/vite-mdx/src/content/runtime.mdx
+msgid "Switch languages at runtime"
+msgstr "Sprachen zur Laufzeit wechseln"
+
+#: examples/vite-mdx/src/content/runtime.mdx
+msgid ""
+"The plugin selects <0/>, asks the native compiler for JSX, and lets the "
+"framework own rendering and reactivity."
+msgstr ""
+"Das Plugin wählt <0/> aus, fordert JSX vom nativen Compiler an und "
+"überlässt Rendering und Reaktivität dem Framework."
+
+#: examples/vite-mdx/src/content/welcome.mdx
+msgid ""
+"The three pages are ordinary <0/> modules. Follow the links to see prose, rich"
+" text, expressions, attributes, and code blocks travel through one native "
+"pipeline."
+msgstr ""
+"Die drei Seiten sind gewöhnliche <0/>-Module. Folge den Links und sieh, wie "
+"Fließtext, Rich Text, Ausdrücke, Attribute und Codeblöcke eine gemeinsame "
+"native Pipeline durchlaufen."
+
+#: examples/vite-mdx/src/content/runtime.mdx
+msgid "Thin Vite integration"
+msgstr "Schlanke Vite-Integration"
+
+#: examples/vite-mdx/src/content/runtime.mdx
+msgid ""
+"This final page proves that linked MDX modules can share one catalog while "
+"remaining normal application modules."
+msgstr ""
+"Diese letzte Seite zeigt, dass verlinkte MDX-Module einen Katalog gemeinsam "
+"verwenden und trotzdem normale Anwendungsmodule bleiben können."
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "Three stages connected from MDX source to catalog and runtime"
+msgstr ""
+"Drei verbundene Stufen von der MDX-Quelle über den Katalog bis zur Laufzeit"
+
+#: examples/vite-mdx/src/content/welcome.mdx
+msgid ""
+"Welcome, {visitor}. This example compiles <0>real MDX</0> with Vite and "
+"translates the result through the same catalog used during extraction."
+msgstr ""
+"Willkommen, {visitor}. Dieses Beispiel kompiliert <0>echtes MDX</0> mit Vite "
+"und übersetzt das Ergebnis mit demselben Katalog, der bei der Extraktion "
+"verwendet wird."
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "expressions keep readable names"
+msgstr "Ausdrücke behalten lesbare Namen"
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "headings and paragraphs become focused messages"
+msgstr "Überschriften und Absätze werden zu fokussierten Nachrichten"
+
+#: examples/vite-mdx/src/content/extraction.mdx
+msgid "image descriptions are extracted separately"
+msgstr "Bildbeschreibungen werden separat extrahiert"

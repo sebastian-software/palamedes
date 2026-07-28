@@ -3,9 +3,10 @@
 These examples are the strongest visible proof that Palamedes is more than a
 single-framework integration.
 
-They prove the current Palamedes story across six framework families and four
-locale strategies while preserving the same underlying runtime and identity
-model.
+They prove the current Palamedes story across six server-capable framework
+families and four locale strategies while preserving the same underlying
+runtime and identity model. A focused Vite example separately proves the
+first-class MDX build pipeline.
 
 The matrix is a verification surface, not an assumption that one application
 uses all six frameworks. Each example is independently useful as a reference
@@ -26,6 +27,21 @@ example needs local setup notes that do not belong in the shared matrix guide.
 - one runtime story with request-local server i18n plus client interaction
 - one message identity story through source-string-first `.po` workflows
 - one proof surface with browser verification, screenshots, and SSR checks
+- one three-page Vite handbook proving linked, runtime-translated `.mdx` modules
+
+## Focused MDX Proof
+
+[examples/vite-mdx](./vite-mdx) is a standalone React/Vite documentation
+application rather than another locale-routing matrix row. Its three linked
+MDX pages exercise rich text, expressions, JSX components, translated
+attributes, image alt text, code metadata, catalog extraction, production
+compilation, and an in-place English/German switch.
+
+Run its full build and browser contract with:
+
+```bash
+pnpm verify:examples -- --id vite-mdx
+```
 
 That is the real point of the matrix. It is not a pile of demos. It is the
 evidence behind the claim that Palamedes stays coherent across frameworks.

@@ -1,0 +1,29 @@
+{
+  "name": "@palamedes/example-vite-mdx",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 4070",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4070",
+    "extract": "pmds extract"
+  },
+  "dependencies": {
+    "@palamedes/core": "workspace:^",
+    "@palamedes/react": "workspace:^",
+    "@palamedes/runtime": "workspace:^",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@palamedes/cli": "workspace:^",
+    "@palamedes/config": "workspace:^",
+    "@palamedes/vite-plugin": "workspace:^",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.5"
+  }
+}

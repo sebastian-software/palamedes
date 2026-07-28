@@ -55,7 +55,7 @@ import solid from "vite-plugin-solid"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [palamedes(), solid()],
+  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
 })
 ```
 
@@ -125,11 +125,13 @@ binary plugin protocol instead. See `/docs/api/cli-plugin.md` and
 - `/docs/configuration.md`: YAML-first config reference
 - `/docs/cli.md`: full CLI reference
 - `/docs/catalog-formats.md`: PO default and opt-in FCL
+- `/docs/mdx.md`: native MDX extraction, Vite compilation, limits, and verified setup
 - `/docs/principles.md`: architectural principles
 - `/docs/migrate-from-lingui.md`: migration guidance for Lingui-shaped projects
 - `/docs/comparison-with-lingui.md`: positioning against Lingui
 - `/docs/proof-and-benchmarks.md`: maturity, examples, and benchmark story
 - `/examples/README.md`: verified example matrix
+- `/examples/vite-mdx`: three-page React/Vite MDX translation proof
 - `/adr/003-source-string-first-message-identity.md`: source-string-first identity
 - `/adr/005-universal-geti18n-runtime-model.md`: runtime access model
 - `/adr/013-bounded-parallel-extraction.md`: why extraction parallelism is bounded rather than one worker per core

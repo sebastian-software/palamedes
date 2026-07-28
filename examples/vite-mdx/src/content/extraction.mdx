@@ -1,0 +1,22 @@
+import { FeatureCard } from "../components/FeatureCard"
+
+# Extract once, render everywhere
+
+Palamedes turns rendered semantics into stable translation units:
+
+- headings and paragraphs become focused messages
+- **rich text** keeps its structure as placeholders
+- expressions keep readable names
+- image descriptions are extracted separately
+
+![Three stages connected from MDX source to catalog and runtime](/pipeline.svg)
+
+<FeatureCard title="Code stays code">
+  Fenced blocks keep their language metadata and remain outside the translation catalog.
+</FeatureCard>
+
+```ts
+const greeting = t`Welcome to the handbook`
+```
+
+[← Introduction](#/welcome) · [Continue with the runtime →](#/runtime)

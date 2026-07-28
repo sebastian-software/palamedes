@@ -167,6 +167,21 @@ export const EXAMPLE_MATRIX = [
     ],
   },
   {
+    id: "vite-mdx",
+    framework: "vite",
+    strategy: "client",
+    port: 4070,
+    deployable: false,
+    vercelProject: "",
+    publicHost: "",
+    cwd: path.join(ROOT, "examples/vite-mdx"),
+    build: ["build"],
+    start: ["preview"],
+    // This is a client-only Vite application. The browser contract below
+    // verifies all three MDX pages and the reactive locale switch.
+    smokeChecks: [],
+  },
+  {
     id: "solidstart-cookie",
     framework: "solidstart",
     strategy: "cookie",
