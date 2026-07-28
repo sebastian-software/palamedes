@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 260" role="img" aria-labelledby="title desc">
+  <title id="title">MDX translation pipeline</title>
+  <desc id="desc">MDX source flows through native semantics into catalogs and the reactive runtime.</desc>
+  <defs>
+    <linearGradient id="surface" x1="0" x2="1">
+      <stop offset="0" stop-color="#15223d"/>
+      <stop offset="1" stop-color="#23355b"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="260" rx="28" fill="#0b1220"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" text-anchor="middle">
+    <rect x="48" y="64" width="232" height="132" rx="18" fill="url(#surface)" stroke="#7dd3fc"/>
+    <text x="164" y="120" fill="#e0f2fe">.mdx source</text>
+    <text x="164" y="158" fill="#94a3b8" font-size="18">prose · JSX · values</text>
+    <path d="M296 130h76" stroke="#38bdf8" stroke-width="8" stroke-linecap="round"/>
+    <path d="m358 112 24 18-24 18" fill="none" stroke="#38bdf8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="392" y="64" width="176" height="132" rx="18" fill="url(#surface)" stroke="#c4b5fd"/>
+    <text x="480" y="120" fill="#ede9fe">native</text>
+    <text x="480" y="158" fill="#94a3b8" font-size="18">semantics</text>
+    <path d="M584 130h76" stroke="#a78bfa" stroke-width="8" stroke-linecap="round"/>
+    <path d="m646 112 24 18-24 18" fill="none" stroke="#a78bfa" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="680" y="64" width="232" height="132" rx="18" fill="url(#surface)" stroke="#86efac"/>
+    <text x="796" y="120" fill="#dcfce7">catalog + UI</text>
+    <text x="796" y="158" fill="#94a3b8" font-size="18">extract · render</text>
+  </g>
+</svg>

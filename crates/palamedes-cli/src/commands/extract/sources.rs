@@ -66,10 +66,7 @@ pub(super) fn normalized_include_patterns(
             // that already points at a file or contains glob syntax.
             let resolved: PathBuf = config.resolve_pattern(pattern).components().collect();
             if resolved.is_dir() {
-                format!(
-                    "{}/**/*.{{js,jsx,mjs,cjs,ts,tsx,mts,cts,mdx}}",
-                    resolved.to_string_lossy()
-                )
+                format!("{}/**/*.{{js,jsx,ts,tsx,mdx}}", resolved.to_string_lossy())
             } else {
                 resolved.to_string_lossy().into_owned()
             }

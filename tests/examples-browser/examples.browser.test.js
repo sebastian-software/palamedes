@@ -129,6 +129,35 @@ test("matrix example browser contract", async () => {
           : `${example.baseUrl}/`
   await page.goto(initialUrl, { waitUntil: "domcontentloaded" })
 
+  if (example.strategy === "client") {
+    const mdxPage = page.getByTestId("mdx-page")
+    await expect
+      .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
+      .toContain("Palamedes MDX handbook")
+
+    await page.getByTestId("page-link-extraction").click()
+    await expect
+      .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
+      .toContain("Extract once, render everywhere")
+
+    await page.getByTestId("page-link-runtime").click()
+    await expect
+      .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
+      .toContain("Switch languages at runtime")
+
+    await page.getByTestId("locale-switch-de").click()
+    await expect
+      .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
+      .toContain("Sprachen zur Laufzeit wechseln")
+
+    await page.getByTestId("page-link-welcome").click()
+    await expect
+      .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
+      .toContain("Palamedes-MDX-Handbuch")
+    await captureScreenshot(page, example, "interactive")
+    return
+  }
+
   await expect.poll(() => currentServerLocale(page)).toContain("English")
   await captureScreenshot(page, example, "initial")
 

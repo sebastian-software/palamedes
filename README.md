@@ -192,7 +192,7 @@ import solid from "vite-plugin-solid"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [palamedes(), solid()],
+  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
 })
 ```
 

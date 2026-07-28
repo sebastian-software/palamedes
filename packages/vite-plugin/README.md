@@ -65,7 +65,7 @@ import solid from "vite-plugin-solid"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [palamedes(), solid()],
+  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
 })
 ```
 
@@ -116,7 +116,10 @@ a module through the Palamedes catalog loader.
 
 `.mdx` modules are compiled before the React or Solid JSX plugin. Catalog
 extraction discovers the same files automatically, and both paths share the
-native semantic analyzer. Set `mdx: false` to disable the Vite MDX transform.
+native semantic analyzer. MDX compilation requires Vite 7 or newer; older Vite
+projects can set `mdx: false` while continuing to use macros and catalog
+loading. React parsing is configured automatically, while Solid requires
+`solid({ extensions: [".mdx"] })`.
 See the [MDX guide](https://github.com/sebastian-software/palamedes/blob/main/docs/mdx.md).
 
 ## What This Package Handles

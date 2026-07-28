@@ -7,8 +7,8 @@ compiled module.
 
 ## Setup
 
-Install the framework package and use the Palamedes plugin before the framework
-Vite plugin:
+First-class MDX compilation requires Vite 7 or newer. Install the framework
+package and use the Palamedes plugin before the framework Vite plugin:
 
 ```ts
 import react from "@vitejs/plugin-react"
@@ -20,8 +20,20 @@ export default defineConfig({
 })
 ```
 
-For Solid, use `vite-plugin-solid` and set the framework in
-`palamedes.yaml`:
+For React, Palamedes marks generated `.mdx` modules as JSX automatically.
+
+For Solid, opt `.mdx` into `vite-plugin-solid` explicitly and set the framework
+in `palamedes.yaml`:
+
+```ts
+import solid from "vite-plugin-solid"
+import { palamedes } from "@palamedes/vite-plugin"
+import { defineConfig } from "vite"
+
+export default defineConfig({
+  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
+})
+```
 
 ```yaml
 locales: [en, de]
@@ -32,6 +44,15 @@ catalogs:
   - path: src/locales/{locale}
     include: [src]
 ```
+
+Do not add React's JSX module type for Solid. Rolldown would otherwise lower
+the module with React's automatic runtime before Solid's Babel preset sees it.
+Projects that must remain on Vite 6 or older can continue using the macro and
+catalog plugins with `palamedes({ mdx: false })`.
+
+Palamedes and `@mdx-js/rollup` both claim `.mdx` modules. Do not enable both for
+the same files; Palamedes runs as a pre-transform and intentionally owns the
+full MDX compilation path.
 
 Run normal catalog extraction after adding an MDX file:
 
@@ -60,19 +81,21 @@ For example:
 ```mdx
 # Hello {account.name}
 
-Read the **guide** or visit [support](/support).
+Read the **guide** or visit [configuration](/docs/configuration).
 ```
 
 extracts messages equivalent to:
 
 ```text
 Hello {name}
-Read the <0>guide</0> or visit <1>support</1>.
+Read the <0>guide</0> or visit <1>configuration</1>.
 ```
 
 The generated module preserves `account.name` as the runtime expression behind
-the `name` placeholder. URLs, image sources, fenced code blocks, and inline code
-are rendered but are not sent to translators.
+the `name` placeholder. Repeated expressions reuse the same placeholder. URLs,
+image sources, fenced code blocks, and inline code are rendered but are not sent
+to translators. Fenced code keeps a `language-*` class derived from its info
+string.
 
 ## Configuration
 
@@ -99,10 +122,15 @@ TypeScript configs use the camelCase equivalents:
 `translatableAttributes`, `frontMatterFields`, `transModule`,
 `runtimeModule`, and `ignoreDirective`.
 
+`translatable-attributes` replaces the default list rather than extending it.
+Include `alt` explicitly when adding fields such as `title` or `aria-label`.
+`href` and `src` remain structural attributes and are never extracted.
+
 Translated frontmatter remains explicit. The compiler exports the original
 scalar object as `frontmatter`; when configured fields are present it also
 exports `getTranslatedFrontmatter()`, which resolves those fields through the
-active i18n instance.
+active i18n instance. Collection-valued frontmatter is omitted rather than
+being stringified as a misleading scalar.
 
 ## Ignoring Content
 
@@ -115,14 +143,30 @@ This paragraph stays in the source language.
 ```
 
 The content still renders, but no catalog message is created for that unit.
+The directive covers the whole unit, including image alt text and configured
+JSX attributes. JSX comments are the canonical MDX form; HTML comments are also
+recognized and are omitted from rendered content.
 
 ## Diagnostics, Maps, and HMR
 
 Malformed MDX produces structured, source-ranged diagnostics from FerroMark.
-The Vite adapter reports those locations as build errors and returns the native
-v3 source map for valid modules. It watches the Palamedes config and configured
-catalog files; changing either invalidates affected MDX modules so development
-renders use the current configuration and translations.
+Footnotes currently produce an `UnsupportedFootnote` diagnostic instead of
+silently compiling incorrect links. The Vite adapter reports diagnostic
+locations as build errors and returns the native v3 source map for valid
+modules. It watches the Palamedes config; catalog modules remain owned by the
+normal PO loader and reactive runtime.
+
+Generated modules currently use the built-in HTML element mapping. They do not
+yet implement MDXProvider or a `components` prop, and extracted messages do not
+set `context`. Use imported JSX components directly when a page needs custom
+rendering.
+
+## Verified Example
+
+[`examples/vite-mdx`](../examples/vite-mdx) is a complete three-page React/Vite
+handbook with linked MDX modules, a shared English/German catalog, imported JSX
+components, expressions, translated attributes, image alt text, code blocks,
+and an in-place locale switch. It is part of `pnpm verify:examples`.
 
 ## Architecture Boundary
 

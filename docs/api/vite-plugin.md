@@ -52,5 +52,8 @@ export default defineConfig({
 ```
 
 Keep `palamedes()` before the React or Solid Vite plugin so the native MDX
-compiler emits JSX before the framework transform runs. See
-[MDX messages](../mdx.md) for authoring and configuration.
+compiler emits JSX before the framework transform runs. React MDX parsing is
+configured automatically. Solid must use
+`solid({ extensions: [".mdx"] })`. MDX compilation requires Vite 7 or newer;
+set `mdx: false` on older Vite releases. See [MDX messages](../mdx.md) for
+authoring and configuration.

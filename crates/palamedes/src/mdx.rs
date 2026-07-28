@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ferromark::block::ListKind;
+use ferromark::block::{CodeBlockKind, ListKind};
 use ferromark::mdx::{parse_events_strict, MdxDiagnostic, MdxEvent};
 use ferromark::{BlockEvent, InlineEvent, Range};
 use serde::{Deserialize, Serialize};
@@ -160,11 +160,12 @@ pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnal
     let stream = match parse_events_strict(source) {
         Ok(stream) => stream,
         Err(diagnostics) => {
+            let locator = SourceLocator::new(source);
             return MdxAnalysisResult {
                 messages: Vec::new(),
                 diagnostics: diagnostics
                     .into_iter()
-                    .map(|diagnostic| diagnostic_record(source, diagnostic))
+                    .map(|diagnostic| diagnostic_record(&locator, diagnostic))
                     .collect(),
                 code: None,
                 compiled_ids: Vec::new(),
@@ -172,6 +173,22 @@ pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnal
             };
         }
     };
+
+    if let Some(range) = unsupported_footnote_range(source, &stream.events) {
+        let locator = SourceLocator::new(source);
+        return MdxAnalysisResult {
+            messages: Vec::new(),
+            diagnostics: vec![MdxDiagnosticRecord {
+                code: "UnsupportedFootnote".to_owned(),
+                message: "footnotes are not supported by Palamedes MDX compilation yet".to_owned(),
+                primary: source_range(&locator, range),
+                related: None,
+            }],
+            code: None,
+            compiled_ids: Vec::new(),
+            map: None,
+        };
+    }
 
     let compiler = MdxCompiler::new(source, filename, options, &stream.link_references);
     compiler.compile(&stream.events)
@@ -204,23 +221,22 @@ pub fn extract_mdx_messages(
                 )
             })
             .collect::<Vec<_>>()
-            .join(", "))
+            .join("\n"))
     }
 }
 
-fn diagnostic_record(source: &str, diagnostic: MdxDiagnostic) -> MdxDiagnosticRecord {
+fn diagnostic_record(locator: &SourceLocator, diagnostic: MdxDiagnostic) -> MdxDiagnosticRecord {
     MdxDiagnosticRecord {
         code: format!("{:?}", diagnostic.code),
         message: diagnostic.message.to_owned(),
-        primary: source_range(source, diagnostic.primary_range),
+        primary: source_range(locator, diagnostic.primary_range),
         related: diagnostic
             .related_range
-            .map(|range| source_range(source, range)),
+            .map(|range| source_range(locator, range)),
     }
 }
 
-fn source_range(source: &str, range: Range) -> MdxSourceRange {
-    let locator = SourceLocator::new(source);
+fn source_range(locator: &SourceLocator, range: Range) -> MdxSourceRange {
     let (line, column) = locator.location(range.start_usize());
     MdxSourceRange {
         start: range.start_usize(),
@@ -308,7 +324,7 @@ impl<'a> MdxCompiler<'a> {
             ));
         }
         self.emit_front_matter(&mut writer);
-        writer.append("\nfunction MDXContent(props = {}) {\n");
+        writer.append("\nfunction MDXContent() {\n");
         writer.append("  return (\n    <>\n");
         writer.append_writer(&self.body, "      ");
         writer.append("    </>\n  );\n}\n\nexport default MDXContent;\n");
@@ -413,26 +429,40 @@ impl<'a> MdxCompiler<'a> {
         match event {
             BlockEvent::ParagraphStart => {
                 self.finish_unit();
-                self.body.append("<p>");
-                self.unit = Some(RichUnit::default());
+                self.start_unit("<p>");
             }
             BlockEvent::ParagraphEnd => {
-                self.finish_unit();
-                self.body.append("</p>\n");
+                if self.finish_unit() {
+                    self.body.append("</p>\n");
+                }
             }
             BlockEvent::HeadingStart { level } => {
                 self.finish_unit();
-                self.body.append(&format!("<h{level}>"));
-                self.unit = Some(RichUnit::default());
+                self.start_unit(&format!("<h{level}>"));
             }
             BlockEvent::HeadingEnd { level } => {
-                self.finish_unit();
-                self.body.append(&format!("</h{level}>\n"));
+                if self.finish_unit() {
+                    self.body.append(&format!("</h{level}>\n"));
+                }
             }
-            BlockEvent::CodeBlockStart { .. } => {
+            BlockEvent::CodeBlockStart { kind } => {
                 self.finish_unit();
                 self.code_block_depth += 1;
-                self.body.append("<pre><code>");
+                let class_name = match kind {
+                    CodeBlockKind::Fenced { info: Some(info) } => range_text(self.source, *info)
+                        .split_whitespace()
+                        .next()
+                        .filter(|language| !language.is_empty())
+                        .map(|language| format!("language-{language}")),
+                    CodeBlockKind::Fenced { info: None } | CodeBlockKind::Indented => None,
+                };
+                match class_name {
+                    Some(class_name) => self.body.append(&format!(
+                        "<pre><code className={{{}}}>",
+                        js_string(&class_name)
+                    )),
+                    None => self.body.append("<pre><code>"),
+                }
             }
             BlockEvent::CodeBlockEnd => {
                 self.code_block_depth = self.code_block_depth.saturating_sub(1);
@@ -475,15 +505,22 @@ impl<'a> MdxCompiler<'a> {
             BlockEvent::DefinitionListEnd => self.body.append("</dl>\n"),
             BlockEvent::DefinitionTermStart => {
                 self.finish_unit();
-                self.body.append("<dt>");
-                self.unit = Some(RichUnit::default());
+                self.start_unit("<dt>");
             }
             BlockEvent::DefinitionTermEnd => {
-                self.finish_unit();
-                self.body.append("</dt>\n");
+                if self.finish_unit() {
+                    self.body.append("</dt>\n");
+                }
             }
-            BlockEvent::DefinitionDescriptionStart { .. } => self.body.append("<dd>"),
-            BlockEvent::DefinitionDescriptionEnd => self.body.append("</dd>\n"),
+            BlockEvent::DefinitionDescriptionStart { .. } => {
+                self.finish_unit();
+                self.start_unit("<dd>");
+            }
+            BlockEvent::DefinitionDescriptionEnd => {
+                if self.finish_unit() {
+                    self.body.append("</dd>\n");
+                }
+            }
             BlockEvent::ThematicBreak(range) => {
                 self.finish_unit();
                 self.body.append_at("<hr />\n", range.start_usize());
@@ -491,11 +528,13 @@ impl<'a> MdxCompiler<'a> {
             BlockEvent::Comment(_) => {}
             BlockEvent::HtmlBlockStart | BlockEvent::HtmlBlockEnd => {}
             BlockEvent::HtmlBlockText(range) => {
+                let html = range_text(self.source, *range);
+                if is_html_comment(html) {
+                    return;
+                }
                 self.finish_unit();
-                self.body.append_at(
-                    &format!("{{{}}}", js_string(range_text(self.source, *range))),
-                    range.start_usize(),
-                );
+                self.body
+                    .append_at(&format!("{{{}}}", js_string(html)), range.start_usize());
             }
             BlockEvent::SoftBreak => {
                 if let Some(unit) = self.unit.as_mut() {
@@ -503,6 +542,7 @@ impl<'a> MdxCompiler<'a> {
                 }
             }
             BlockEvent::Text(range) => {
+                self.mark_unit_start(range.start_usize());
                 if let Some(unit) = self.unit.as_mut() {
                     unit.text(self.source, *range);
                 }
@@ -555,20 +595,42 @@ impl<'a> MdxCompiler<'a> {
                     ferromark::Alignment::Right => Some("right"),
                 };
                 if let Some(alignment) = alignment {
-                    attrs.push_str(&format!(" align={}", js_string(alignment)));
+                    attrs.push_str(&format!(" align={{{}}}", js_string(alignment)));
                 }
-                self.body.append(&format!("<{tag}{attrs}>"));
-                self.unit = Some(RichUnit::default());
+                self.start_unit(&format!("<{tag}{attrs}>"));
             }
             BlockEvent::TableCellEnd => {
-                self.finish_unit();
                 let tag = if self.table_head_depth > 0 {
                     "th"
                 } else {
                     "td"
                 };
-                self.body.append(&format!("</{tag}>"));
+                if self.finish_unit() {
+                    self.body.append(&format!("</{tag}>"));
+                }
             }
+        }
+    }
+
+    fn start_unit(&mut self, opening: &str) {
+        let checkpoint = self.body.checkpoint();
+        self.body.append(opening);
+        self.unit = Some(RichUnit::new(checkpoint));
+    }
+
+    fn mark_unit_start(&mut self, source_offset: usize) {
+        let Some(unit) = self.unit.as_mut() else {
+            return;
+        };
+        if unit.source_offset.is_none() {
+            unit.source_offset = Some(source_offset);
+        }
+        if unit.ignored.is_none() {
+            unit.ignored = Some(is_ignored_unit(
+                self.source,
+                source_offset,
+                &self.options.ignore_directive,
+            ));
         }
     }
 
@@ -578,12 +640,14 @@ impl<'a> MdxCompiler<'a> {
         }
         match event {
             InlineEvent::Text(range) => {
+                self.mark_unit_start(range.start_usize());
                 self.unit
                     .as_mut()
                     .expect("unit exists")
                     .text(self.source, *range);
             }
             InlineEvent::Code(range) => {
+                self.mark_unit_start(range.start_usize());
                 let code = range_text(self.source, *range);
                 let markup = format!("<code>{{{}}}</code>", js_string(code));
                 self.unit
@@ -604,8 +668,9 @@ impl<'a> MdxCompiler<'a> {
             InlineEvent::HighlightStart => self.open_markdown_component("<mark>", "</mark>"),
             InlineEvent::HighlightEnd => self.close_component(),
             InlineEvent::LinkStart { url, .. } => {
+                self.mark_unit_start(url.start_usize());
                 let href = range_text(self.source, *url);
-                self.open_markdown_component(&format!("<a href={}>", js_string(href)), "</a>");
+                self.open_markdown_component(&format!("<a href={{{}}}>", js_string(href)), "</a>");
             }
             InlineEvent::LinkStartRef { def_index } => {
                 let href = self
@@ -613,10 +678,11 @@ impl<'a> MdxCompiler<'a> {
                     .get(*def_index as usize)
                     .and_then(|definition| std::str::from_utf8(&definition.url).ok())
                     .unwrap_or_default();
-                self.open_markdown_component(&format!("<a href={}>", js_string(href)), "</a>");
+                self.open_markdown_component(&format!("<a href={{{}}}>", js_string(href)), "</a>");
             }
             InlineEvent::LinkEnd => self.close_component(),
             InlineEvent::ImageStart { url, .. } => {
+                self.mark_unit_start(url.start_usize());
                 let src = range_text(self.source, *url).to_owned();
                 self.unit
                     .as_mut()
@@ -634,19 +700,25 @@ impl<'a> MdxCompiler<'a> {
             }
             InlineEvent::ImageEnd => self.close_image(),
             InlineEvent::Autolink { url, .. } | InlineEvent::AutolinkLiteral { url, .. } => {
+                self.mark_unit_start(url.start_usize());
                 let href = range_text(self.source, *url);
-                let markup = format!("<a href={0}>{{{0}}}</a>", js_string(href));
+                let markup = format!("<a href={{{0}}}>{{{0}}}</a>", js_string(href));
                 self.unit
                     .as_mut()
                     .expect("unit exists")
                     .push(RichNode::fixed(markup, url.start_usize()));
             }
             InlineEvent::Html(range) => {
+                let html = range_text(self.source, *range);
+                if is_html_comment(html) {
+                    return;
+                }
+                self.mark_unit_start(range.start_usize());
                 self.unit
                     .as_mut()
                     .expect("unit exists")
                     .push(RichNode::fixed(
-                        format!("{{{}}}", js_string(range_text(self.source, *range))),
+                        format!("{{{}}}", js_string(html)),
                         range.start_usize(),
                     ));
             }
@@ -681,6 +753,7 @@ impl<'a> MdxCompiler<'a> {
                 if is_jsx_comment(raw) {
                     return;
                 }
+                self.mark_unit_start(range.start_usize());
                 let expression = raw
                     .strip_prefix('{')
                     .and_then(|value| value.strip_suffix('}'))
@@ -695,6 +768,7 @@ impl<'a> MdxCompiler<'a> {
                     .value(expression, range.start_usize());
             }
             InlineEvent::MdxJsxOpen(range) => {
+                self.mark_unit_start(range.start_usize());
                 let markup = self.rewrite_jsx_tag(*range);
                 let name = ferromark::mdx::jsx_tag::parse_jsx_tag(markup.as_bytes())
                     .map(|tag| tag.name.to_owned())
@@ -711,6 +785,7 @@ impl<'a> MdxCompiler<'a> {
             }
             InlineEvent::MdxJsxClose(_) => self.close_component(),
             InlineEvent::MdxJsxSelfClose(range) => {
+                self.mark_unit_start(range.start_usize());
                 let markup = self.rewrite_jsx_tag(*range);
                 self.unit
                     .as_mut()
@@ -749,10 +824,13 @@ impl<'a> MdxCompiler<'a> {
             .find_map(RichNode::source_offset)
             .unwrap_or(image.source_offset);
         let alt = plain_text(&image.children);
-        let alt_reference =
-            (!alt.is_empty()).then(|| self.push_message(alt, BTreeMap::new(), source_offset));
+        let ignored = unit.ignored.unwrap_or_else(|| {
+            is_ignored_unit(self.source, source_offset, &self.options.ignore_directive)
+        });
+        let alt_reference = (!ignored && !alt.is_empty())
+            .then(|| self.push_message(alt.clone(), BTreeMap::new(), source_offset));
         let alt_expression = alt_reference.as_ref().map_or_else(
-            || js_string(""),
+            || js_string(&alt),
             |reference| {
                 self.needs_i18n = true;
                 format!(
@@ -763,25 +841,30 @@ impl<'a> MdxCompiler<'a> {
             },
         );
         let markup = format!(
-            "<img src={} alt={{{alt_expression}}} />",
-            js_string(&image.src)
+            "<img src={{{}}} alt={{{alt_expression}}} />",
+            js_string(&image.src),
         );
         unit.push(RichNode::fixed(markup, source_offset));
         self.unit = Some(unit);
     }
 
-    fn finish_unit(&mut self) {
+    fn finish_unit(&mut self) -> bool {
         let Some(mut unit) = self.unit.take() else {
-            return;
+            return false;
         };
         unit.close_all();
+        if unit.roots.is_empty() {
+            self.body.restore(unit.body_checkpoint);
+            return false;
+        }
         let source_offset = unit.source_offset.unwrap_or(0);
-        let ignored = is_ignored_unit(self.source, source_offset, &self.options.ignore_directive)
-            || plain_text(&unit.roots).contains(&self.options.ignore_directive);
+        let ignored = unit.ignored.unwrap_or_else(|| {
+            is_ignored_unit(self.source, source_offset, &self.options.ignore_directive)
+        });
         if ignored {
             self.body
                 .append_at(&fallback_jsx(&unit.roots), source_offset);
-            return;
+            return true;
         }
 
         let mut components = Vec::new();
@@ -795,13 +878,13 @@ impl<'a> MdxCompiler<'a> {
         if joined.message.trim().is_empty() || plain_text(&unit.roots).trim().is_empty() {
             self.body
                 .append_at(&fallback_jsx(&unit.roots), source_offset);
-            return;
+            return true;
         }
 
         let reference = self.push_message(joined.message, unit.values.clone(), source_offset);
         self.needs_trans = true;
         let mut props = vec![
-            format!("id={}", js_string(&reference.id)),
+            format!("id={{{}}}", js_string(&reference.id)),
             format!("message={{{}}}", js_string(&reference.message)),
         ];
         if !unit.values.is_empty() {
@@ -825,6 +908,7 @@ impl<'a> MdxCompiler<'a> {
             &format!("<__PalamedesTrans {} />", props.join(" ")),
             source_offset,
         );
+        true
     }
 
     fn push_message(
@@ -853,7 +937,28 @@ impl<'a> MdxCompiler<'a> {
     fn rewrite_jsx_tag(&mut self, range: Range) -> String {
         let source = range_text(self.source, range);
         let mut replacements = Vec::new();
+        let ignored = self
+            .unit
+            .as_ref()
+            .and_then(|unit| unit.ignored)
+            .unwrap_or_else(|| {
+                is_ignored_unit(
+                    self.source,
+                    range.start_usize(),
+                    &self.options.ignore_directive,
+                )
+            });
         for attribute in static_jsx_attributes(source) {
+            if self.options.framework == MdxFramework::React && attribute.name == "class" {
+                replacements.push((
+                    attribute.name_start,
+                    attribute.name_end,
+                    "className".to_owned(),
+                ));
+            }
+            if ignored {
+                continue;
+            }
             if matches!(attribute.name.as_str(), "href" | "src")
                 || !self
                     .options
@@ -898,9 +1003,18 @@ struct RichUnit {
     values: BTreeMap<String, String>,
     used_names: BTreeSet<String>,
     source_offset: Option<usize>,
+    ignored: Option<bool>,
+    body_checkpoint: WriterCheckpoint,
 }
 
 impl RichUnit {
+    fn new(body_checkpoint: WriterCheckpoint) -> Self {
+        Self {
+            body_checkpoint,
+            ..Self::default()
+        }
+    }
+
     fn push(&mut self, node: RichNode) {
         if self.source_offset.is_none() {
             self.source_offset = node.source_offset();
@@ -914,13 +1028,30 @@ impl RichUnit {
     }
 
     fn text(&mut self, source: &str, range: Range) {
-        let text = clean_jsx_text(range_text(source, range));
+        let raw = range_text(source, range);
+        if is_html_comment(raw) {
+            return;
+        }
+        let text = clean_jsx_text(raw);
         if !text.is_empty() {
             self.push(RichNode::Text(text, Some(range.start_usize())));
         }
     }
 
     fn value(&mut self, expression: &str, source_offset: usize) {
+        if let Some(name) = self
+            .values
+            .iter()
+            .find(|(_, existing)| existing.as_str() == expression)
+            .map(|(name, _)| name.clone())
+        {
+            self.push(RichNode::Value {
+                name,
+                expression: expression.to_owned(),
+                source_offset,
+            });
+            return;
+        }
         let base = infer_expression_name(expression);
         let name = unique_name(&base, &mut self.used_names);
         self.values.insert(name.clone(), expression.to_owned());
@@ -994,7 +1125,7 @@ impl RichUnit {
                 let alt = plain_text(&image.children);
                 self.push(RichNode::fixed(
                     format!(
-                        "<img src={} alt={} />",
+                        "<img src={{{}}} alt={{{}}} />",
                         js_string(&image.src),
                         js_string(&alt)
                     ),
@@ -1234,40 +1365,125 @@ fn is_jsx_comment(value: &str) -> bool {
     trimmed.starts_with("{/*") && trimmed.ends_with("*/}")
 }
 
+fn is_html_comment(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.starts_with("<!--") && trimmed.ends_with("-->")
+}
+
 fn is_ignored_unit(source: &str, offset: usize, directive: &str) -> bool {
-    let prefix = &source[..offset.min(source.len())];
-    let mut lines = prefix.lines().rev();
-    for line in &mut lines {
-        let trimmed = line.trim();
-        if trimmed.is_empty()
-            || trimmed.chars().all(|character| {
-                matches!(
-                    character,
-                    '#' | '>' | '-' | '*' | '+' | '0'..='9' | '.' | ')' | ' ' | '\t'
-                )
-            })
-        {
-            continue;
-        }
-        return trimmed.contains(directive)
-            && (trimmed.starts_with("<!--")
-                || trimmed.starts_with("{/*")
-                || trimmed.starts_with("//"));
-    }
-    false
+    preceding_comment_payload(source, offset).is_some_and(|comment| comment.contains(directive))
 }
 
 fn preceding_comment(source: &str, offset: usize, directive: &str) -> Option<String> {
+    let comment = preceding_comment_payload(source, offset)?.trim();
+    (!comment.is_empty() && !comment.contains(directive)).then(|| comment.to_owned())
+}
+
+fn preceding_comment_payload(source: &str, offset: usize) -> Option<&str> {
     let prefix = &source[..offset.min(source.len())];
-    let trimmed = prefix.trim_end();
-    if let Some(start) = trimmed.rfind("<!--") {
-        let comment = &trimmed[start + 4..];
-        if let Some(comment) = comment.strip_suffix("-->") {
-            let comment = comment.trim();
-            if !comment.is_empty() && !comment.contains(directive) {
-                return Some(comment.to_owned());
-            }
+    let completed_lines = prefix.rsplit_once('\n').map_or("", |(lines, _)| lines);
+    let trimmed = completed_lines.trim_end();
+    if let Some(before_end) = trimmed.strip_suffix("*/}") {
+        if let Some(start) = before_end.rfind("{/*") {
+            return Some(&before_end[start + 3..]);
         }
+    }
+    if let Some(before_end) = trimmed.strip_suffix("-->") {
+        if let Some(start) = before_end.rfind("<!--") {
+            return Some(&before_end[start + 4..]);
+        }
+    }
+    trimmed
+        .lines()
+        .next_back()
+        .and_then(|line| line.trim().strip_prefix("//"))
+}
+
+fn unsupported_footnote_range(source: &str, events: &[MdxEvent]) -> Option<Range> {
+    let mut exact_range = None;
+    let mut has_reference = false;
+    for event in events {
+        match event {
+            MdxEvent::Inline(InlineEvent::FootnoteRef { .. }) => has_reference = true,
+            MdxEvent::Inline(InlineEvent::InlineFootnote(range)) => {
+                exact_range = Some(*range);
+                break;
+            }
+            _ => {}
+        }
+    }
+    exact_range.or_else(|| {
+        (has_reference || source.contains("[^"))
+            .then(|| find_footnote_reference(source))
+            .flatten()
+    })
+}
+
+fn find_footnote_reference(source: &str) -> Option<Range> {
+    let mut offset = 0usize;
+    let mut fence = None;
+    for line in source.split_inclusive('\n') {
+        let content = line.trim_end_matches(['\r', '\n']);
+        let trimmed = content.trim_start();
+        let indentation = content.len().saturating_sub(trimmed.len());
+        let marker = (indentation <= 3)
+            .then(|| trimmed.as_bytes().first().copied())
+            .flatten()
+            .filter(|_| trimmed.len() >= 3)
+            .filter(|byte| matches!(byte, b'`' | b'~'))
+            .filter(|byte| {
+                trimmed
+                    .as_bytes()
+                    .iter()
+                    .take(3)
+                    .all(|candidate| candidate == byte)
+            });
+        if let Some(marker) = marker {
+            if fence == Some(marker) {
+                fence = None;
+            } else if fence.is_none() {
+                fence = Some(marker);
+            }
+            offset += line.len();
+            continue;
+        }
+        if fence.is_some() {
+            offset += line.len();
+            continue;
+        }
+
+        let bytes = content.as_bytes();
+        let mut position = 0usize;
+        let mut inline_code = false;
+        while position + 2 < bytes.len() {
+            if bytes[position] == b'`' {
+                inline_code = !inline_code;
+                position += 1;
+                continue;
+            }
+            if inline_code || bytes[position] != b'[' || bytes[position + 1] != b'^' {
+                position += 1;
+                continue;
+            }
+            let escaped = bytes[..position]
+                .iter()
+                .rev()
+                .take_while(|byte| **byte == b'\\')
+                .count()
+                % 2
+                == 1;
+            if escaped {
+                position += 2;
+                continue;
+            }
+            let Some(relative_end) = bytes[position + 2..].iter().position(|byte| *byte == b']')
+            else {
+                break;
+            };
+            let end = position + 2 + relative_end;
+            return Some(Range::from_usize(offset + position, offset + end + 1));
+        }
+        offset += line.len();
     }
     None
 }
@@ -1291,15 +1507,24 @@ fn parse_front_matter_scalars(source: &str, content: Range) -> Vec<FrontMatterSc
         };
         let value_trimmed = value.trim();
         let leading = value.len() - value.trim_start().len();
-        let unquoted = value_trimmed
+        let quoted = value_trimmed
             .strip_prefix('"')
             .and_then(|value| value.strip_suffix('"'))
             .or_else(|| {
                 value_trimmed
                     .strip_prefix('\'')
                     .and_then(|value| value.strip_suffix('\''))
-            })
-            .unwrap_or(value_trimmed);
+            });
+        if quoted.is_none()
+            && matches!(
+                value_trimmed.as_bytes().first(),
+                Some(b'[' | b'{' | b'|' | b'>')
+            )
+        {
+            local_offset += line.len();
+            continue;
+        }
+        let unquoted = quoted.unwrap_or(value_trimmed);
         if !key.is_empty() && !unquoted.is_empty() {
             scalars.push(FrontMatterScalar {
                 key: key.to_owned(),
@@ -1328,6 +1553,8 @@ fn split_front_matter_scalar(line: &str) -> Option<(&str, &str, usize)> {
 
 struct StaticJsxAttribute<'a> {
     name: String,
+    name_start: usize,
+    name_end: usize,
     value: &'a str,
     value_start: usize,
     token_start: usize,
@@ -1371,6 +1598,7 @@ fn static_jsx_attributes(source: &str) -> Vec<StaticJsxAttribute<'_>> {
         if position == name_start {
             break;
         }
+        let name_end = position;
         let name = source[name_start..position].to_owned();
         while matches!(bytes.get(position), Some(byte) if byte.is_ascii_whitespace()) {
             position += 1;
@@ -1416,6 +1644,8 @@ fn static_jsx_attributes(source: &str) -> Vec<StaticJsxAttribute<'_>> {
         position += 1;
         attributes.push(StaticJsxAttribute {
             name,
+            name_start,
+            name_end,
             value: &source[value_start..value_end],
             value_start,
             token_start,
@@ -1432,6 +1662,12 @@ struct SourceAnchor {
     source_offset: usize,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct WriterCheckpoint {
+    code_len: usize,
+    anchor_len: usize,
+}
+
 #[derive(Default)]
 struct ModuleWriter {
     code: String,
@@ -1439,6 +1675,18 @@ struct ModuleWriter {
 }
 
 impl ModuleWriter {
+    fn checkpoint(&self) -> WriterCheckpoint {
+        WriterCheckpoint {
+            code_len: self.code.len(),
+            anchor_len: self.anchors.len(),
+        }
+    }
+
+    fn restore(&mut self, checkpoint: WriterCheckpoint) {
+        self.code.truncate(checkpoint.code_len);
+        self.anchors.truncate(checkpoint.anchor_len);
+    }
+
     fn append(&mut self, value: &str) {
         self.code.push_str(value);
     }
@@ -1589,11 +1837,22 @@ mod tests {
     use super::*;
 
     fn messages(source: &str) -> Vec<String> {
-        analyze_mdx(source, "guide.mdx", MdxOptions::default())
+        analyze_valid(source, MdxOptions::default())
             .messages
             .into_iter()
             .map(|message| message.message)
             .collect()
+    }
+
+    fn analyze_valid(source: &str, options: MdxOptions) -> MdxAnalysisResult {
+        let result = analyze_mdx(source, "guide.mdx", options);
+        assert!(
+            result.diagnostics.is_empty(),
+            "valid fixture produced diagnostics: {:?}",
+            result.diagnostics
+        );
+        assert_valid_tsx(result.code.as_deref().expect("valid MDX should compile"));
+        result
     }
 
     #[test]
@@ -1620,11 +1879,11 @@ const untranslated = "code";
                 "Second <0>important</0> item",
             ]
         );
-        let result = analyze_mdx(source, "guide.mdx", MdxOptions::default());
+        let result = analyze_valid(source, MdxOptions::default());
         let code = result.code.expect("valid MDX should compile");
         assert!(code.contains("import { Card } from \"./Card\""));
         assert!(code.contains("<__PalamedesTrans"));
-        assert!(code.contains("<pre><code>"));
+        assert!(code.contains(r#"<pre><code className={"language-ts"}>"#));
         assert!(result.map.is_some());
     }
 
@@ -1638,7 +1897,7 @@ const untranslated = "code";
 
 ![Diagram label](./diagram.png)
 "#;
-        let result = analyze_mdx(source, "guide.mdx", MdxOptions::default());
+        let result = analyze_valid(source, MdxOptions::default());
         assert_eq!(
             result
                 .messages
@@ -1661,6 +1920,7 @@ const untranslated = "code";
         let source = r#"---
 title: Welcome
 slug: welcome
+tags: [docs, mdx]
 ---
 
 ![An example](./example.png)
@@ -1671,9 +1931,8 @@ slug: welcome
 
 Do not translate this.
 "#;
-        let result = analyze_mdx(
+        let result = analyze_valid(
             source,
-            "guide.mdx",
             MdxOptions {
                 translatable_attributes: vec!["alt".to_owned(), "title".to_owned()],
                 front_matter_fields: vec!["title".to_owned()],
@@ -1690,10 +1949,9 @@ Do not translate this.
         assert!(extracted.contains(&"Open settings"));
         assert!(extracted.contains(&"<0>Read this</0>"));
         assert!(!extracted.contains(&"Do not translate this."));
-        assert!(result
-            .code
-            .expect("valid MDX should compile")
-            .contains("getTranslatedFrontmatter"));
+        let code = result.code.expect("valid MDX should compile");
+        assert!(code.contains("getTranslatedFrontmatter"));
+        assert!(!code.contains(r#""tags""#));
     }
 
     #[test]
@@ -1711,15 +1969,13 @@ Do not translate this.
     #[test]
     fn react_and_solid_use_their_runtime_component_contracts() {
         let source = "Hello **world**.";
-        let react = analyze_mdx(source, "guide.mdx", MdxOptions::default())
+        let react = analyze_valid(source, MdxOptions::default())
             .code
             .expect("React compile");
         assert!(react.contains("0: <strong />"));
-        assert_valid_tsx(&react);
 
-        let solid = analyze_mdx(
+        let solid = analyze_valid(
             source,
-            "guide.mdx",
             MdxOptions {
                 framework: MdxFramework::Solid,
                 ..MdxOptions::default()
@@ -1728,7 +1984,111 @@ Do not translate this.
         .code
         .expect("Solid compile");
         assert!(solid.contains("0: (children) => <strong>{children}</strong>"));
-        assert_valid_tsx(&solid);
+    }
+
+    #[test]
+    fn directive_text_is_translatable_and_ignore_covers_inline_records() {
+        let prose = "Use the palamedes-ignore comment to opt out.";
+        assert_eq!(messages(prose), [prose]);
+
+        let source = r#"{/* palamedes-ignore */}
+
+See ![Diagram label](./d.png) here.
+
+{/* palamedes-ignore */}
+
+<Card title="Open settings" />
+"#;
+        let result = analyze_valid(
+            source,
+            MdxOptions {
+                translatable_attributes: vec!["alt".to_owned(), "title".to_owned()],
+                ..MdxOptions::default()
+            },
+        );
+        assert!(result.messages.is_empty());
+        let code = result.code.expect("valid MDX should compile");
+        assert!(code.contains(r#"alt={"Diagram label"}"#));
+        assert!(code.contains(r#"title="Open settings""#));
+        assert!(!code.contains("__palamedesGetI18n"));
+    }
+
+    #[test]
+    fn string_attributes_use_expression_containers() {
+        let source =
+            "Read [the guide](<https://x.test/a\"b>).\n\n![A \"quoted\" label](./a\"b.png)";
+        let result = analyze_valid(source, MdxOptions::default());
+        let code = result.code.expect("valid MDX should compile");
+        assert!(code.contains(r#"href={"https://x.test/a\"b"}"#));
+        assert!(code.contains(r#"src={"./a\"b.png"}"#));
+    }
+
+    #[test]
+    fn comments_are_metadata_instead_of_visible_messages() {
+        let html_source = "<!-- Translator: keep short -->\n\nSave now.";
+        let html = analyze_valid(html_source, MdxOptions::default());
+        assert_eq!(
+            html.messages
+                .iter()
+                .map(|message| (message.message.as_str(), message.comment.as_deref()))
+                .collect::<Vec<_>>(),
+            [("Save now.", Some("Translator: keep short"))]
+        );
+        assert!(!html
+            .code
+            .expect("valid MDX should compile")
+            .contains("<!-- Translator"));
+
+        let jsx_source = "{/* Keep the product name */}\n\nWelcome to Palamedes.";
+        let jsx = analyze_valid(jsx_source, MdxOptions::default());
+        assert_eq!(
+            jsx.messages[0].comment.as_deref(),
+            Some("Keep the product name")
+        );
+    }
+
+    #[test]
+    fn rejects_footnotes_with_a_source_ranged_diagnostic() {
+        let result = analyze_mdx(
+            "Text with a note[^1].\n\n[^1]: The note body.",
+            "guide.mdx",
+            MdxOptions::default(),
+        );
+        assert!(result.code.is_none());
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "UnsupportedFootnote");
+        assert_eq!(result.diagnostics[0].primary.line, 1);
+        assert_eq!(result.diagnostics[0].primary.column, 17);
+
+        let definition_only =
+            analyze_mdx("[^1]: The note body.", "guide.mdx", MdxOptions::default());
+        assert_eq!(definition_only.diagnostics[0].code, "UnsupportedFootnote");
+
+        analyze_valid(
+            "Use `[^label]` in prose.\n\n```md\n[^label]: code sample\n```",
+            MdxOptions::default(),
+        );
+    }
+
+    #[test]
+    fn deduplicates_expressions_and_preserves_rendering_metadata() {
+        let source = "Hello {user.name} and again {user.name}.\n\n```ts\nconst value = 1\n```\n\n<div class=\"note\">Styled</div>";
+        let result = analyze_valid(source, MdxOptions::default());
+        assert_eq!(result.messages[0].message, "Hello {name} and again {name}.");
+        assert_eq!(
+            result.messages[0]
+                .placeholders
+                .as_ref()
+                .expect("expression placeholders")
+                .len(),
+            1
+        );
+        let code = result.code.expect("valid MDX should compile");
+        assert!(code.contains(r#"className={"language-ts"}"#));
+        assert!(
+            code.contains(r#"<div className="note" />"#),
+            "generated module should normalize React class attributes:\n{code}"
+        );
     }
 
     fn assert_valid_tsx(source: &str) {
