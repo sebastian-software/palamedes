@@ -4,7 +4,12 @@ import type { registerHooks } from "node:module"
 
 import { loadPalamedesConfigSync, type LoadedPalamedesConfig } from "@palamedes/config"
 import { compileCatalogModule } from "@palamedes/core-node"
-import { transformPalamedesMacros, type SourceMap } from "@palamedes/transform"
+import {
+  resolveMacroRuntimeModule,
+  transformPalamedesMacros,
+  type PalamedesFramework,
+  type SourceMap,
+} from "@palamedes/transform"
 
 export type PalamedesRemixRegisterOptions = {
   /**
@@ -20,8 +25,19 @@ export type PalamedesRemixRegisterOptions = {
   exclude?: RegExp
 
   /**
-   * Module imported for the runtime i18n getter.
-   * @default "@palamedes/runtime"
+   * UI framework this app compiles for. Unlike the Vite and Next plugins this
+   * defaults to `"none"`: Remix 3 ships its own UI layer and does not depend
+   * on React, so assuming React here would pull in a package the app may not
+   * have. Set it explicitly to make inline `t` / `plural` follow a live locale
+   * switch.
+   * @default "none"
+   */
+  framework?: PalamedesFramework
+
+  /**
+   * Module imported for the runtime i18n getter. Overrides the module derived
+   * from `framework`.
+   * @default derived from `framework`
    */
   runtimeModule?: string
 
@@ -60,7 +76,10 @@ export function createPalamedesRemixLoadHook(
 ): LoadHook {
   const include = options.include ?? DEFAULT_INCLUDE
   const exclude = options.exclude ?? DEFAULT_EXCLUDE
-  const runtimeModule = options.runtimeModule ?? "@palamedes/runtime"
+  const runtimeModule = resolveMacroRuntimeModule(
+    options.framework ?? "none",
+    options.runtimeModule
+  )
   const configCache = new Map<string, LoadedPalamedesConfig>()
 
   return (url, context, nextLoad) => {

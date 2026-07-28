@@ -27,6 +27,7 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 interface PalamedesRemixRegisterOptions {
   include?: RegExp
   exclude?: RegExp
+  framework?: "react" | "solid" | "none"
   runtimeModule?: string
   configPath?: string
   failOnMissing?: boolean
@@ -38,7 +39,8 @@ Defaults:
 
 - `include`: `/\.(tsx?|jsx?|mjs)$/`
 - `exclude`: `/[/\\]node_modules[/\\]/`
-- `runtimeModule`: `"@palamedes/runtime"`
+- `framework`: `"none"` — Remix 3 ships its own UI layer and does not depend on React
+- `runtimeModule`: derived from `framework`
 - `configPath`: unset — `.po` imports discover the Palamedes config from the
   imported catalog file's directory; relative paths resolve from there
 - `failOnMissing` / `failOnCompileError`: `false` — missing translations and

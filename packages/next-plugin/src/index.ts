@@ -10,7 +10,11 @@ import path from "node:path"
 import { createRequire } from "node:module"
 import type { NextConfig } from "next"
 
-import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
+import {
+  PALAMEDES_MACRO_PACKAGES,
+  resolveMacroRuntimeModule,
+  type PalamedesFramework,
+} from "@palamedes/transform"
 
 const require = createRequire(import.meta.url)
 
@@ -126,8 +130,17 @@ export type WithPalamedesOptions = {
   failOnCompileError?: boolean
 
   /**
-   * Module to import the runtime getter from.
-   * @default "@palamedes/runtime"
+   * UI framework this app compiles for. Next.js is always React, so this only
+   * exists to opt out with `"none"` — inline `t` / `plural` then stop
+   * following a live locale switch.
+   * @default "react"
+   */
+  framework?: PalamedesFramework
+
+  /**
+   * Module to import the runtime getter from. Overrides the module derived
+   * from `framework`.
+   * @default derived from `framework`
    */
   runtimeModule?: string
 
@@ -218,10 +231,12 @@ export function withPalamedes(
     configPath,
     failOnMissing = false,
     failOnCompileError = false,
-    runtimeModule = "@palamedes/runtime",
+    framework = "react",
+    runtimeModule: explicitRuntimeModule,
     workspaceRoot: explicitWorkspaceRoot,
   } = options
 
+  const runtimeModule = resolveMacroRuntimeModule(framework, explicitRuntimeModule)
   const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)
   const configuredTurbopackRoot = baseConfig.turbopack?.root ?? workspaceRoot
   const outputFileTracingRoot =

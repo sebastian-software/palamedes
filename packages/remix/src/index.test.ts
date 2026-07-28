@@ -67,6 +67,31 @@ describe("createPalamedesRemixLoadHook", () => {
     )
   })
 
+  it.each([
+    ["none by default", undefined, "@palamedes/runtime"],
+    ["react when asked", "react", "@palamedes/react/runtime"],
+    ["solid when asked", "solid", "@palamedes/solid/runtime"],
+  ] as const)("targets the %s runtime", (_label, framework, expected) => {
+    /*
+     * Unlike the Vite and Next plugins this defaults to "none": Remix 3 ships
+     * its own UI layer and does not depend on React, so defaulting to React
+     * would import a package the app may not have installed.
+     */
+    const load = createPalamedesRemixLoadHook(framework === undefined ? {} : { framework })
+    const loaded = load(new URL("file:///repo/app/routes/home.tsx").href, loadContext, () => ({
+      format: "module",
+      shortCircuit: true,
+      source: [
+        'import { t } from "@palamedes/core/macro"',
+        "export function label() {",
+        "  return t`Hello`",
+        "}",
+      ].join("\n"),
+    }))
+
+    expect(String(loaded.source)).toContain(`import { getI18n } from "${expected}"`)
+  })
+
   it("compiles PO catalog imports without delegating to the default loader", () => {
     const load = createPalamedesRemixLoadHook()
     const nextLoad = vi.fn()
