@@ -85,7 +85,7 @@ function speedup(tool: string): string {
 }
 
 const NO_BENCHMARK =
-  "Not measured. The checked harness covers Lingui, FormatJS, and i18next-cli; anything else would be a guess."
+  "Not measured. The checked harness covers Lingui, React Intl, and i18next-cli; anything else would be a guess."
 
 /*
  * The argument that applies to every page: extraction and catalog work is
@@ -409,7 +409,7 @@ plural(seats, {
       {
         criterion: "Extract + update speed",
         rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, FormatJS and i18next only",
+        palamedes: "Checked report covers Lingui, React Intl and i18next only",
       },
       {
         criterion: "Maintenance",
@@ -449,15 +449,15 @@ function buyLabel(seats) {
   },
   {
     slug: "react-intl",
-    name: "FormatJS / react-intl",
+    name: "React Intl",
     subject: "react-intl 10.1.14",
     researched: "July 2026",
-    metaTitle: "Palamedes vs react-intl — ICU rigor without the Context dead end",
+    metaTitle: "Palamedes vs React Intl — ICU rigor without the Context dead end",
     metaDescription:
-      "react-intl is the ICU standard-bearer in JavaScript. Palamedes keeps the ICU rigor and drops the React Context runtime — which is exactly what makes server components work without a bypass.",
-    eyebrow: "Compare · FormatJS",
+      "React Intl is the ICU standard-bearer in JavaScript. Palamedes keeps the ICU rigor and drops the React Context runtime — which is exactly what makes server components work without a bypass.",
+    eyebrow: "Compare · React Intl",
     headline: "Keep the ICU rigor. Lose the provider.",
-    lede: "react-intl set the standard for ICU MessageFormat in JavaScript and we have no argument with the format — we have an argument with the plumbing. Resolving messages through React Context was the right call in 2014 and it is the reason React Server Components are a workaround here rather than a supported path.",
+    lede: "React Intl set the standard for ICU MessageFormat in JavaScript and we have no argument with the format — we have an argument with the plumbing. Resolving messages through React Context was the right call in 2014 and it is the reason React Server Components are a workaround here rather than a supported path.",
     card: "The ICU standard-bearer. Same rigor here, minus the Context tree that blocks server components.",
     facts: [
       { label: "Adoption", value: "~3.1M downloads/week" },
@@ -466,8 +466,8 @@ function buyLabel(seats) {
       { label: "Checked benchmark", value: `${BENCH_REALISTIC.ratios.formatjs} slower` },
     ],
     thesis:
-      "This is the clearest architectural split on any of these pages. Context is a client-tree mechanism, and RSC removed the client tree from half your application. No amount of maintenance fixes that from inside — it is a design premise, and the open request to use react-intl without Context has been sitting there accordingly. Palamedes resolves through getI18n(), backed by request-local async context on the server, so there is no bypass to write because there is no boundary to cross.",
-    respectTitle: "What react-intl earned",
+      "This is the clearest architectural split on any of these pages. Context is a client-tree mechanism, and RSC removed the client tree from half your application. No amount of maintenance fixes that from inside — it is a design premise, and the open request to use React Intl without Context has been sitting there accordingly. Palamedes resolves through getI18n(), backed by request-local async context on the server, so there is no bypass to write because there is no boundary to cross.",
+    respectTitle: "What React Intl earned",
     respect: [
       "The reference implementation for ICU MessageFormat in JavaScript — plurals, select, selectordinal, rich text and full number and date skeletons, done properly.",
       "Standards-based to the core: ICU and ECMA-402 are cross-platform, which keeps your translation vocabulary portable well beyond JavaScript.",
@@ -482,11 +482,11 @@ function buyLabel(seats) {
     differences: [
       {
         title: "No Context means server components just work",
-        body: "react-intl resolves messages through React Context, which RSC cannot cross — App Router setups need a bypass. Palamedes resolves through getI18n(), backed by request-local async context on the server. The same component code runs in an RSC, a client island, or an Express route, and none of those cases is the special one.",
+        body: "React Intl resolves messages through React Context, which RSC cannot cross — App Router setups need a bypass. Palamedes resolves through getI18n(), backed by request-local async context on the server. The same component code runs in an RSC, a client island, or an Express route, and none of those cases is the special one.",
       },
       {
         title: "Editing a string does not orphan its translations",
-        body: "FormatJS derives message IDs from a content hash of the default message, so fixing a typo changes the ID and can orphan existing translations unless your tooling diffs for it. Palamedes uses the source string plus context as identity and resolves updates through semantic catalog merging, which is built for exactly this — because typos get fixed.",
+        body: "In React Intl's generated-ID workflow, the extraction tooling derives message IDs from a content hash of the default message. Fixing a typo then changes the ID and can orphan existing translations unless your tooling diffs for it. Palamedes uses the source string plus context as identity and resolves updates through semantic catalog merging, which is built for exactly this — because typos get fixed.",
       },
       {
         title: "Macros instead of component boilerplate",
@@ -506,7 +506,7 @@ function buyLabel(seats) {
       },
       {
         criterion: "Message identity",
-        rival: "Content hash of the default message",
+        rival: "Explicit IDs; generated hash IDs optional",
         palamedes: "message + context",
       },
       {
@@ -521,7 +521,7 @@ function buyLabel(seats) {
       },
       {
         criterion: "Extract + update, realistic corpus",
-        rival: speedup("FormatJS"),
+        rival: speedup("React Intl"),
         palamedes: `${BENCH_REALISTIC.ratios.formatjs} faster on the checked run¹`,
       },
       {
@@ -532,7 +532,7 @@ function buyLabel(seats) {
     ],
     code: {
       caption: "Same ICU semantics, different amount of scaffolding.",
-      rivalLabel: "react-intl",
+      rivalLabel: "React Intl",
       rivalCode: `<FormattedMessage
   id="checkout.buy"
   defaultMessage="Buy {seats} seats"
@@ -540,12 +540,12 @@ function buyLabel(seats) {
 />`,
       palamedesLabel: "Palamedes",
       palamedesCode: `<Trans>Buy {seats} seats</Trans>`,
-      note: "One benchmark caveat worth stating plainly: FormatJS extracts and writes a single aggregated message file, while the other tools also merge and update per-locale catalogs. It is doing less work in that row, and it is still slower.",
+      note: "One benchmark caveat worth stating plainly: the React Intl extraction workflow writes a single aggregated message file, while the other tools also merge and update per-locale catalogs. It is doing less work in that row, and it is still slower.",
     },
     pickRival: [
       "You need Intl.* polyfills for runtimes without full ECMA-402 support. This one is not close.",
       "Your app is client-components-only and the Context model causes you no friction.",
-      "You rely on an established FormatJS formatter adapter for your TMS.",
+      "You rely on an established React Intl integration for your TMS.",
     ],
     pickPalamedes: [
       "You are on the App Router or another RSC-first framework and want i18n without a bypass.",
@@ -554,7 +554,7 @@ function buyLabel(seats) {
       "You want less per-string boilerplate without giving up a single thing about ICU.",
     ],
     honest:
-      "react-intl has the deeper ICU pedigree and a polyfill story we simply do not have; if your runtime targets need those polyfills, stop reading here. Palamedes also supports fewer formatter kinds at runtime than full ICU — the compiler reports the unsupported ones as errors rather than failing quietly at 3am, but it is a smaller surface and you should check it against your catalog before switching.",
+      "React Intl has the deeper ICU pedigree and a polyfill story we simply do not have; if your runtime targets need those polyfills, stop reading here. Palamedes also supports fewer formatter kinds at runtime than full ICU — the compiler reports the unsupported ones as errors rather than failing quietly at 3am, but it is a smaller surface and you should check it against your catalog before switching.",
   },
   {
     slug: "paraglide",
@@ -636,7 +636,7 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update speed",
         rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, FormatJS and i18next only",
+        palamedes: "Checked report covers Lingui, React Intl and i18next only",
       },
     ],
     code: {
@@ -755,7 +755,7 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update speed",
         rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, FormatJS and i18next only",
+        palamedes: "Checked report covers Lingui, React Intl and i18next only",
       },
     ],
     code: {
@@ -867,7 +867,7 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update speed",
         rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, FormatJS and i18next only",
+        palamedes: "Checked report covers Lingui, React Intl and i18next only",
       },
     ],
     code: {
@@ -984,7 +984,7 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update speed",
         rival: "Not applicable — there is nothing to extract",
-        palamedes: "Checked report covers Lingui, FormatJS and i18next only",
+        palamedes: "Checked report covers Lingui, React Intl and i18next only",
       },
     ],
     code: {

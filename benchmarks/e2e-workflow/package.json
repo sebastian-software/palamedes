@@ -2,7 +2,7 @@
   "name": "@palamedes/benchmark-e2e-workflow",
   "private": true,
   "type": "module",
-  "description": "End-to-end extraction workflow benchmark for Palamedes, Lingui, FormatJS, and i18next-cli",
+  "description": "End-to-end extraction workflow benchmark for Palamedes, Lingui, React Intl, and i18next-cli",
   "engines": {
     "node": ">=22.22.0"
   },

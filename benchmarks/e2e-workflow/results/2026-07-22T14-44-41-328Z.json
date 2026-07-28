@@ -37,7 +37,7 @@
     "reset": "catalog files are reset to the same baseline state before every warmup and measured run",
     "semanticCheck": "active catalog messages are normalized after each tool run and compared with the generated current inventory",
     "toolScopes": {
-      "formatjs": "source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; FormatJS does not update locale translation catalogs",
+      "formatjs": "source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; the React Intl extraction workflow does not update locale translation catalogs",
       "otherTools": "source scan, extraction, merge/update of existing en/de catalogs, and catalog writes"
     }
   },

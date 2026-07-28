@@ -176,7 +176,7 @@ pnpm proof:icu
 
 See [ICU Semantics Proof: Source to Runtime](./icu-semantics-proof.md) for the
 reproducible proof, the exact claim boundary, and a dated snapshot of public
-FormatJS, i18next, Crowdin, Phrase, and Weblate documentation.
+React Intl, i18next, Crowdin, Phrase, and Weblate documentation.
 
 That is the right way to read the benchmark story as well. The Lingui benchmark
 is not meant to imply that every i18n library should be forced into the same

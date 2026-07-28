@@ -26,7 +26,7 @@ const PALAMEDES_TIMING_MARKER = "__PALAMEDES_TIMINGS__"
 const TOOL_LABELS = {
   palamedes: "Palamedes",
   lingui: "Lingui",
-  formatjs: "FormatJS",
+  formatjs: "React Intl",
   i18nextCli: "i18next-cli",
 }
 
@@ -127,7 +127,7 @@ async function main() {
           "active catalog messages are normalized after each tool run and compared with the generated current inventory",
         toolScopes: {
           formatjs:
-            "source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; FormatJS does not update locale translation catalogs",
+            "source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; the React Intl extraction workflow does not update locale translation catalogs",
           otherTools:
             "source scan, extraction, merge/update of existing en/de catalogs, and catalog writes",
         },
@@ -646,7 +646,7 @@ function renderMarkdown(report) {
     "",
     `- Palamedes CLI: ${report.versions.palamedes.cli}`,
     `- Lingui CLI: ${report.versions.lingui.cli}`,
-    `- FormatJS CLI: ${report.versions.formatjs.cli}`,
+    `- React Intl extraction CLI (@formatjs/cli): ${report.versions.formatjs.cli}`,
     `- i18next-cli: ${report.versions.i18nextCli.cli}`,
     "",
     "## Methodology",
@@ -655,7 +655,7 @@ function renderMarkdown(report) {
     `- Corpus: ${report.methodology.corpus}`,
     `- Reset: ${report.methodology.reset}`,
     `- Semantic check: ${report.methodology.semanticCheck}`,
-    `- FormatJS scope: ${report.methodology.toolScopes.formatjs}`,
+    `- React Intl scope: ${report.methodology.toolScopes.formatjs}`,
     `- Other tool scope: ${report.methodology.toolScopes.otherTools}`,
   ]
 
@@ -740,7 +740,7 @@ function renderMarkdown(report) {
     "- The i18next-cli corpus uses natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes."
   )
   lines.push(
-    "- FormatJS writes one extracted-message JSON artifact and does not update locale translation catalogs; its result is reported with that narrower scope instead of being presented as a catalog-merge equivalent."
+    "- The React Intl extraction workflow writes one extracted-message JSON artifact and does not update locale translation catalogs; its result is reported with that narrower scope instead of being presented as a catalog-merge equivalent."
   )
   lines.push(
     "- The harness reports source-message equivalence after each run instead of assuming every parser extracts the same result."

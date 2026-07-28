@@ -60,7 +60,7 @@ The following examples are a documentation snapshot checked on
 
 | Product    | Publicly documented ICU behavior                                                                                                                                                                    |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FormatJS   | Uses ICU Message syntax as its native message model, including `plural`, `select`, and `selectordinal`.                                                                                             |
+| React Intl | Uses ICU Message syntax as its native message model, including `plural`, `select`, and `selectordinal`.                                                                                             |
 | i18next    | Uses its own interpolation format by default. ICU is available through an i18n-format plugin; i18next documents that format plugins replace its native plural, interpolation, and context behavior. |
 | Crowdin    | Documents editor support for ICU arguments, nested plurals, target-language plural categories, previews, and syntax errors.                                                                         |
 | Phrase TMS | Parses ICU for supported formats when enabled; parsing is an all-or-nothing file/template setting, and ICU messages cannot be split or joined.                                                      |
@@ -68,7 +68,7 @@ The following examples are a documentation snapshot checked on
 
 Direct sources, all checked 2026-07-23:
 
-- [FormatJS ICU syntax](https://formatjs.github.io/docs/core-concepts/icu-syntax/)
+- [React Intl ICU syntax](https://formatjs.github.io/docs/core-concepts/icu-syntax/)
 - [i18next plugins and i18n formats](https://www.i18next.com/overview/plugins-and-utils)
 - [Crowdin ICU Message Syntax](https://support.crowdin.com/icu-message-syntax/)
 - [Phrase ICU Message Format](https://support.phrase.com/hc/en-us/articles/7765077293852-ICU-Message-Format-TMS)

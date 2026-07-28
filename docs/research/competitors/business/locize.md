@@ -68,7 +68,7 @@ repository: n/a (proprietary; SDKs under github.com/locize)
 ## Supported file formats & interop
 
 - Native/current integrations: i18next (primary), React, Vue, Angular, Next.js, Node.js, iOS, Android, PHP, Python, Java, .NET.
-- Framework-native examples/support: react-intl/FormatJS, next-intl, vue-i18n, ngx-translate, Transloco (Angular), Astro, Nuxt, Remix, React Router, Gatsby.
+- Framework-native examples/support: React Intl, next-intl, vue-i18n, ngx-translate, Transloco (Angular), Astro, Nuxt, Remix, React Router, Gatsby.
 - Deprecated/legacy integrations: js-lingui, standalone FormatJS, Polyglot.
 - File format converters: XLIFF, Gettext, Android strings XML, RESX, Fluent, TMX, Laravel PHP arrays, `.xcstrings` (iOS). `locize-cli download` supports: json/nested/flat, xliff2/xliff12, android, yaml (+rails), csv, xlsx, **po**, strings, resx, fluent, tmx, laravel, properties, xcstrings.
 - Export/off-boarding fidelity caveats (from locize docs): "locize generally only handles the translation content, i.e. keys and values, and never saves your imported file with the original file structure" — round-tripping preserves keys/values, not structural metadata/comments; "no sort of i18n format conversion while importing or exporting". Full metadata (tags, context, quality flags, review states) is only documented on the `/pull/` API endpoint, not the standard download path. ToS commits to 10 days' notice and "help" retrieving data on termination, but no guaranteed format/procedure. Official GitHub Action: `locize/download@v2`. Documented `locize-cli` bugs around export fidelity exist (invalid yaml-rails output #27, PO plural-form issues #30, sync not updating keys #64).

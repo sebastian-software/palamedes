@@ -66,7 +66,7 @@ test("both macro lanes render an identical logical message inventory", () => {
   )
 })
 
-test("FormatJS baseline catalog uses the CLI content-hash ID convention", () => {
+test("React Intl baseline catalog uses the @formatjs/cli content-hash ID convention", () => {
   assert.equal(formatJsId("Hello world"), "t/eDuu")
   assert.deepEqual(toFormatJsCatalog(["Hello world", "Hello {name}"]), {
     "t/eDuu": { defaultMessage: "Hello world" },
