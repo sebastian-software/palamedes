@@ -1326,22 +1326,23 @@ pub fn extract_messages(
     source: &str,
     filename: &str,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
-    extract_messages_with_scopes(source, filename, true)
+    extract_messages_with_mdx_options(source, filename, &MdxOptions::default())
 }
 
-fn extract_messages_with_scopes(
+/// Extracts source-string-first messages with explicit MDX semantics.
+///
+/// JavaScript and TypeScript extraction is unaffected by `mdx_options`.
+///
+/// # Errors
+///
+/// Returns an error under the same conditions as [`extract_messages`].
+pub fn extract_messages_with_mdx_options(
     source: &str,
     filename: &str,
-    reference_scopes: bool,
+    mdx_options: &MdxOptions,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
     let allocator = Allocator::default();
-    extract_messages_in(
-        &allocator,
-        source,
-        filename,
-        reference_scopes,
-        &MdxOptions::default(),
-    )
+    extract_messages_in(&allocator, source, filename, true, mdx_options)
 }
 
 /*
@@ -1479,10 +1480,12 @@ pub fn extract_catalog_messages_cached(
      * reference root or scope setting would otherwise serve entries whose
      * origins and records belong to the previous configuration.
      */
-    cache.reset_if_request_differs_with_mdx(
+    cache.reset_if_request_differs(
         &request.root_dir,
-        reference_scopes,
-        &mdx_options.extraction_stamp(),
+        &ExtractCatalogMessagesOptions {
+            reference_scopes,
+            mdx: mdx_options.clone(),
+        },
     );
 
     /*

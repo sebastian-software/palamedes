@@ -40,6 +40,15 @@ Defaults:
 - `runtimeModule`: `"@palamedes/runtime"`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 
+`runtimeModule` is the shared fallback for macro transforms and generated MDX
+modules. A more specific `mdx.runtimeModule` from `palamedes.yaml` or the
+plugin's `mdx` override takes precedence for MDX only.
+
+With `failOnMissing: true`, compiled MDX IDs are checked against every target
+locale in each catalog whose `include` patterns cover that MDX file. This
+reports missing MDX translations even when the catalog module has not been
+imported yet.
+
 ## Usage
 
 ```ts

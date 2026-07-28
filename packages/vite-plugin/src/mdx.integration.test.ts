@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -37,6 +37,32 @@ describe("Palamedes MDX Vite integration", () => {
     ).resolves.toBeDefined()
   })
 
+  it("applies failOnMissing to compiled MDX message IDs", async () => {
+    const root = await createFixture({ missingTranslation: true })
+
+    await expect(
+      build({
+        configFile: false,
+        logLevel: "silent",
+        plugins: [
+          palamedes({
+            configPath: path.join(root, "palamedes.yaml"),
+            failOnMissing: true,
+          }),
+          react(),
+        ],
+        root,
+        build: {
+          write: false,
+          rollupOptions: {
+            external: [/^@palamedes\//u, /^react(?:\/|$)/u],
+            input: path.join(root, "page.mdx"),
+          },
+        },
+      })
+    ).rejects.toThrow(/Missing 1 translation.*failOnMissing=true/s)
+  })
+
   it.each(["react", "solid"] as const)(
     "builds a real %s MDX entry through the framework pipeline",
     async (framework) => {
@@ -68,13 +94,27 @@ describe("Palamedes MDX Vite integration", () => {
   )
 })
 
-async function createFixture(options: { config?: boolean } = {}) {
+async function createFixture(options: { config?: boolean; missingTranslation?: boolean } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-mdx-"))
   fixtureDirectories.push(root)
   if (options.config !== false) {
     await writeFile(
       path.join(root, "palamedes.yaml"),
-      "locales: [en]\nsource-locale: en\ncatalogs: []\n"
+      options.missingTranslation
+        ? "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [.]\n"
+        : "locales: [en]\nsource-locale: en\ncatalogs: []\n"
+    )
+  }
+  if (options.missingTranslation) {
+    const locales = path.join(root, "locales")
+    await mkdir(locales, { recursive: true })
+    await writeFile(
+      path.join(locales, "en.po"),
+      'msgid ""\nmsgstr ""\n"Language: en\\n"\n\nmsgid "Hello <0>world</0>."\nmsgstr ""\n'
+    )
+    await writeFile(
+      path.join(locales, "de.po"),
+      'msgid ""\nmsgstr ""\n"Language: de\\n"\n\nmsgid "Hello <0>world</0>."\nmsgstr ""\n'
     )
   }
   await writeFile(path.join(root, "entry.js"), "export const value = 1\n")

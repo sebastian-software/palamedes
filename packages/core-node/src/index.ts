@@ -606,8 +606,12 @@ function mapExtractedMessages(
   })
 }
 
-export function extractMessagesNative(source: string, filename: string): NativeExtractedMessage[] {
-  return mapExtractedMessages(native.extractMessages(source, filename))
+export function extractMessagesNative(
+  source: string,
+  filename: string,
+  options?: MdxOptions
+): NativeExtractedMessage[] {
+  return mapExtractedMessages(native.extractMessages(source, filename, toNativeMdxOptions(options)))
 }
 
 export function analyzeMdxNative(

@@ -8,6 +8,7 @@ import {
   analyzeMdxNative,
   compileCatalogArtifact,
   compileCatalogModule,
+  extractMessagesNative,
   getNativeInfo,
   parsePo,
   transformMacrosNative,
@@ -116,6 +117,15 @@ Read the **guide**.
       })
     }
   )
+
+  it("forwards MDX extraction options across the NAPI boundary", () => {
+    expect(extractMessagesNative('<Card title="Open settings" />', "guide.mdx")).toStrictEqual([])
+    expect(
+      extractMessagesNative('<Card title="Open settings" />', "guide.mdx", {
+        translatableAttributes: ["alt", "title"],
+      })
+    ).toMatchObject([{ message: "Open settings" }])
+  })
 
   it("returns structured diagnostics for invalid MDX", () => {
     const result = analyzeMdxNative("# Good\n\n<Component\n", "broken.mdx")

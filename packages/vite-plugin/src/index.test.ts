@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   loadPalamedesConfig: vi.fn(),
   analyzeMdxNative: vi.fn(),
+  compileCatalogArtifactSelected: vi.fn(),
   compileCatalogModule: vi.fn(),
+  createMissingErrorMessage: vi.fn(),
   transformPalamedesMacros: vi.fn(),
 }))
 
@@ -13,11 +15,13 @@ vi.mock("@palamedes/config", () => ({
 
 vi.mock("@palamedes/core-node", () => ({
   analyzeMdxNative: mocks.analyzeMdxNative,
+  compileCatalogArtifactSelected: mocks.compileCatalogArtifactSelected,
   compileCatalogModule: mocks.compileCatalogModule,
 }))
 
 vi.mock("@palamedes/transform", () => ({
   PALAMEDES_MACRO_PACKAGES: ["@palamedes/core/macro", "@palamedes/react/macro"],
+  createMissingErrorMessage: mocks.createMissingErrorMessage,
   transformPalamedesMacros: mocks.transformPalamedesMacros,
 }))
 
@@ -31,7 +35,7 @@ beforeEach(() => {
     sourceLocale: "en",
     pseudoLocale: "pseudo",
     fallbackLocales: undefined,
-    catalogs: [{ path: "src/locales/{locale}", include: ["src"] }],
+    catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
   })
   mocks.analyzeMdxNative.mockReturnValue({
     messages: [],
@@ -50,6 +54,17 @@ beforeEach(() => {
     warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
+  mocks.compileCatalogArtifactSelected.mockReturnValue({
+    messages: {},
+    missing: [],
+    diagnostics: [],
+    watchFiles: ["/repo/src/locales/de.po", "/repo/src/locales/en.po"],
+    resolvedLocaleChain: ["de", "en"],
+  })
+  mocks.createMissingErrorMessage.mockImplementation(
+    (locale: string, missing: unknown[]) =>
+      `Missing ${missing.length} translation(s) for locale ${locale}`
+  )
   vi.spyOn(console, "warn").mockImplementation(() => {})
 })
 
@@ -129,6 +144,53 @@ describe("palamedes vite plugin", () => {
       expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml")
     }
   )
+
+  it("uses the global runtime module as the MDX fallback", async () => {
+    await runMdxTransform({}, { runtimeModule: "@acme/reactive-runtime" })
+
+    expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
+      "# Welcome",
+      "/repo/src/guide.mdx",
+      expect.objectContaining({ runtimeModule: "@acme/reactive-runtime" })
+    )
+  })
+
+  it("lets MDX configuration override the global runtime module", async () => {
+    await runMdxTransform(
+      {},
+      {
+        runtimeModule: "@acme/reactive-runtime",
+        mdx: { runtimeModule: "@acme/mdx-runtime" },
+      }
+    )
+
+    expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
+      "# Welcome",
+      "/repo/src/guide.mdx",
+      expect.objectContaining({ runtimeModule: "@acme/mdx-runtime" })
+    )
+  })
+
+  it("validates compiled MDX IDs when failOnMissing is enabled", async () => {
+    mocks.compileCatalogArtifactSelected.mockReturnValueOnce({
+      messages: {},
+      missing: [{ sourceKey: { message: "Welcome" } }],
+      diagnostics: [],
+      watchFiles: ["/repo/src/locales/de.po", "/repo/src/locales/en.po"],
+      resolvedLocaleChain: ["de", "en"],
+    })
+
+    await expect(runMdxTransform({}, { failOnMissing: true })).rejects.toThrow(
+      /Missing 1 translation.*failOnMissing=true/s
+    )
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
+      }),
+      "/repo/src/locales/de.po",
+      ["message-id"]
+    )
+  })
 
   it("configures JSX module parsing only for React MDX", async () => {
     await expect(runMdxConfig()).resolves.toMatchObject({

@@ -18,7 +18,7 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`
-- `extractMessagesNative(source, filename)`
+- `extractMessagesNative(source, filename, mdxOptions?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`

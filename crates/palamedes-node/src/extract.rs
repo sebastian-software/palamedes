@@ -110,8 +110,13 @@ impl TryFrom<palamedes::ExtractCatalogMessagesResult> for ExtractCatalogMessages
 ///
 /// Returns an error when the source cannot be parsed or when extracted origin
 /// offsets exceed the Node binding range.
-pub fn extract_messages(source: String, filename: String) -> Result<Vec<NativeExtractedMessage>> {
-    palamedes::extract_messages(&source, &filename)
+pub fn extract_messages(
+    source: String,
+    filename: String,
+    mdx: Option<NativeMdxOptions>,
+) -> Result<Vec<NativeExtractedMessage>> {
+    let mdx = mdx.map(Into::into).unwrap_or_default();
+    palamedes::extract_messages_with_mdx_options(&source, &filename, &mdx)
         .map_err(to_napi_error)
         .and_then(|messages| {
             messages

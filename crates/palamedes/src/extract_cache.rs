@@ -17,7 +17,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::extract::ExtractedMessageRecord;
+use crate::extract::{ExtractCatalogMessagesOptions, ExtractedMessageRecord};
 
 /// Bumped whenever the cached payload shape or the extractor's output changes
 /// in a way that makes previously stored entries wrong.
@@ -138,25 +138,35 @@ impl ExtractCache {
     ///
     /// A missing, unreadable, corrupt, or differently-stamped file is not an
     /// error: extraction simply runs cold and rewrites the cache afterwards.
+    ///
+    /// This compatibility entry point uses the default MDX extraction
+    /// semantics. Call [`Self::load_with_options`] when MDX behavior is
+    /// configurable.
     #[must_use]
     pub fn load(path: &Path, root_dir: &str, reference_scopes: bool) -> Self {
-        Self::load_with_mdx_stamp(path, root_dir, reference_scopes, "")
+        Self::load_with_options(
+            path,
+            root_dir,
+            &ExtractCatalogMessagesOptions {
+                reference_scopes,
+                ..ExtractCatalogMessagesOptions::default()
+            },
+        )
     }
 
-    /// Loads the cache with the complete MDX extraction-semantics stamp.
+    /// Loads the cache with all extraction semantics represented in `options`.
     #[must_use]
-    pub fn load_with_mdx_stamp(
+    pub fn load_with_options(
         path: &Path,
         root_dir: &str,
-        reference_scopes: bool,
-        mdx_stamp: &str,
+        options: &ExtractCatalogMessagesOptions,
     ) -> Self {
         let stamp = CacheStamp {
             schema: CACHE_SCHEMA,
             extractor_version: env!("CARGO_PKG_VERSION").to_owned(),
             root_dir: root_dir.to_owned(),
-            reference_scopes,
-            mdx_stamp: mdx_stamp.to_owned(),
+            reference_scopes: options.reference_scopes,
+            mdx_stamp: options.mdx.extraction_stamp(),
         };
 
         let entries = std::fs::read(path)
@@ -210,30 +220,23 @@ impl ExtractCache {
     /// themselves. A long-lived cache — watch mode holds one across config
     /// reloads — must therefore be re-validated on every request instead of
     /// only at load time.
-    #[cfg(test)]
-    pub(crate) fn reset_if_request_differs(&mut self, root_dir: &str, reference_scopes: bool) {
-        let mdx_stamp = self.stamp.mdx_stamp.clone();
-        self.reset_if_request_differs_with_mdx(root_dir, reference_scopes, &mdx_stamp);
-    }
-
-    /// Revalidates cache identity including configured MDX extraction semantics.
-    pub(crate) fn reset_if_request_differs_with_mdx(
+    pub(crate) fn reset_if_request_differs(
         &mut self,
         root_dir: &str,
-        reference_scopes: bool,
-        mdx_stamp: &str,
+        options: &ExtractCatalogMessagesOptions,
     ) {
+        let mdx_stamp = options.mdx.extraction_stamp();
         if !self.enabled
             || (self.stamp.root_dir == root_dir
-                && self.stamp.reference_scopes == reference_scopes
+                && self.stamp.reference_scopes == options.reference_scopes
                 && self.stamp.mdx_stamp == mdx_stamp)
         {
             return;
         }
 
         self.stamp.root_dir = root_dir.to_owned();
-        self.stamp.reference_scopes = reference_scopes;
-        self.stamp.mdx_stamp = mdx_stamp.to_owned();
+        self.stamp.reference_scopes = options.reference_scopes;
+        self.stamp.mdx_stamp = mdx_stamp;
         if !self.entries.is_empty() {
             self.entries.clear();
             self.dirty = true;
@@ -381,6 +384,13 @@ mod tests {
         }
     }
 
+    fn options(reference_scopes: bool) -> ExtractCatalogMessagesOptions {
+        ExtractCatalogMessagesOptions {
+            reference_scopes,
+            ..ExtractCatalogMessagesOptions::default()
+        }
+    }
+
     /// Backdates a file so it is outside the racy window and can be cached.
     fn write_aged(path: &Path, contents: &str) {
         std::fs::write(path, contents).expect("write");
@@ -442,8 +452,17 @@ mod tests {
         let flipped = ExtractCache::load(&cache_path, "root-one", false);
         assert!(flipped.is_empty());
 
-        let mdx_changed =
-            ExtractCache::load_with_mdx_stamp(&cache_path, "root-one", true, "attrs=alt,title");
+        let mdx_changed = ExtractCache::load_with_options(
+            &cache_path,
+            "root-one",
+            &ExtractCatalogMessagesOptions {
+                reference_scopes: true,
+                mdx: crate::MdxOptions {
+                    translatable_attributes: vec!["alt".to_owned(), "title".to_owned()],
+                    ..crate::MdxOptions::default()
+                },
+            },
+        );
         assert!(
             mdx_changed.is_empty(),
             "changed MDX extraction semantics must discard entries"
@@ -547,20 +566,20 @@ mod tests {
         assert_eq!(cache.len(), 1);
 
         // Same stamp: entries survive.
-        cache.reset_if_request_differs("root-one", true);
+        cache.reset_if_request_differs("root-one", &options(true));
         assert_eq!(cache.len(), 1);
 
         // A different reference root changes stored origins, so nothing may be
         // reused, and later inserts must be stamped for the new request.
-        cache.reset_if_request_differs("root-two", true);
+        cache.reset_if_request_differs("root-two", &options(true));
         assert!(cache.is_empty());
         assert!(cache.get(&key).is_none());
 
         let before = cache.fingerprint_before_read(&key);
         cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
-        cache.reset_if_request_differs("root-two", true);
+        cache.reset_if_request_differs("root-two", &options(true));
         assert_eq!(cache.len(), 1, "matching requests keep their entries");
-        cache.reset_if_request_differs("root-two", false);
+        cache.reset_if_request_differs("root-two", &options(false));
         assert!(cache.is_empty(), "flipped reference scopes discard entries");
 
         std::fs::remove_dir_all(root).expect("cleanup");

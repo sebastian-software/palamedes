@@ -5,16 +5,23 @@
  * No Babel required!
  */
 
+import { realpathSync, statSync } from "node:fs"
 import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter, version as viteVersion } from "vite"
 import {
   loadPalamedesConfig,
+  type PalamedesCatalogConfig,
   type LoadedPalamedesConfig,
   type PalamedesMdxConfig,
 } from "@palamedes/config"
-import { analyzeMdxNative, compileCatalogModule } from "@palamedes/core-node"
-import { transformPalamedesMacros } from "@palamedes/transform"
+import {
+  analyzeMdxNative,
+  compileCatalogArtifactSelected,
+  compileCatalogModule,
+  type CatalogArtifactConfig,
+} from "@palamedes/core-node"
+import { createMissingErrorMessage, transformPalamedesMacros } from "@palamedes/transform"
 import { PALAMEDES_MACRO_PACKAGES } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
@@ -22,9 +29,76 @@ const MDX_FILE_REGEX = /\.mdx$/i
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:"
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config."
 const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
-
 function stripQuery(id: string): string {
   return id.split("?")[0] ?? id
+}
+
+function normalizeFilterPath(value: string): string {
+  return value.replaceAll("\\", "/")
+}
+
+function canonicalPath(value: string): string {
+  try {
+    return realpathSync.native(value)
+  } catch {
+    return path.resolve(value)
+  }
+}
+
+function catalogArtifactConfig(
+  cfg: LoadedPalamedesConfig,
+  catalogs: PalamedesCatalogConfig[] = cfg.catalogs
+): CatalogArtifactConfig {
+  return {
+    rootDir: cfg.rootDir,
+    locales: cfg.locales,
+    sourceLocale: cfg.sourceLocale,
+    fallbackLocales: cfg.fallbackLocales,
+    pseudoLocale: cfg.pseudoLocale,
+    catalogs: catalogs.map((catalog) => ({
+      path: catalog.path,
+      include: catalog.include,
+      ...(catalog.exclude ? { exclude: catalog.exclude } : {}),
+      ...(catalog.format ? { format: catalog.format } : {}),
+    })),
+  }
+}
+
+function catalogMatchesSource(
+  cfg: LoadedPalamedesConfig,
+  catalog: PalamedesCatalogConfig,
+  id: string
+): boolean {
+  const rootDir = canonicalPath(cfg.rootDir)
+  const normalizePattern = (pattern: string, expandBareDirectory: boolean) => {
+    const absolute = path.resolve(rootDir, pattern)
+    if (expandBareDirectory) {
+      try {
+        if (statSync(absolute).isDirectory()) {
+          return `${normalizeFilterPath(absolute)}/**/*.{js,jsx,ts,tsx,mdx}`
+        }
+      } catch {
+        // Let the filter handle non-existent paths and glob patterns unchanged.
+      }
+    }
+    return normalizeFilterPath(absolute)
+  }
+  const include = catalog.include.map((pattern) => normalizePattern(pattern, true))
+  const exclude = (catalog.exclude ?? ["**/node_modules/**"]).map((pattern) =>
+    normalizePattern(pattern, false)
+  )
+  return createFilter(include, exclude)(normalizeFilterPath(canonicalPath(id)))
+}
+
+function catalogResourcePath(
+  cfg: LoadedPalamedesConfig,
+  catalog: PalamedesCatalogConfig,
+  locale: string
+): string {
+  const extension = catalog.format ?? "po"
+  const configuredPath = path.resolve(cfg.rootDir, catalog.path.replace("{locale}", locale))
+  const parsed = path.parse(configuredPath)
+  return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
 }
 
 export type PalamedesPluginOptions = {
@@ -75,7 +149,8 @@ export type PalamedesPluginOptions = {
   failOnCompileError?: boolean
 
   /**
-   * Module to import the runtime getter from.
+   * Module to import the runtime getter from for macro transforms and, unless
+   * overridden by MDX-specific configuration, generated MDX modules.
    * @default "@palamedes/runtime"
    */
   runtimeModule?: string
@@ -97,10 +172,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enablePoLoader = true,
     failOnMissing = false,
     failOnCompileError = false,
-    runtimeModule = "@palamedes/runtime",
+    runtimeModule,
     mdx: mdxOverride,
     ...configLoaderOptions
   } = options
+  const macroRuntimeModule = runtimeModule ?? "@palamedes/runtime"
 
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null
@@ -140,6 +216,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   function resolveMdxOptions(cfg: LoadedPalamedesConfig): PalamedesMdxConfig {
     return {
+      ...(runtimeModule ? { runtimeModule } : {}),
       ...cfg.mdx,
       ...mdxOverride,
     }
@@ -151,6 +228,42 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       error instanceof Error &&
       error.message.startsWith(MISSING_CONFIG_ERROR_PREFIX)
     )
+  }
+
+  function validateMdxTranslations(
+    cfg: LoadedPalamedesConfig,
+    id: string,
+    compiledIds: string[],
+    addWatchFile: (file: string) => void
+  ): void {
+    if (!failOnMissing || compiledIds.length === 0) {
+      return
+    }
+
+    const catalogs = cfg.catalogs.filter((catalog) => catalogMatchesSource(cfg, catalog, id))
+    if (catalogs.length === 0) {
+      throw new Error(
+        `Cannot validate MDX translations for ${id}: the file is not included in a configured catalog.`
+      )
+    }
+
+    for (const catalog of catalogs) {
+      const artifactConfig = catalogArtifactConfig(cfg, [catalog])
+      for (const locale of cfg.locales) {
+        if (locale === cfg.sourceLocale || locale === cfg.pseudoLocale) {
+          continue
+        }
+        const resourcePath = catalogResourcePath(cfg, catalog, locale)
+        const result = compileCatalogArtifactSelected(artifactConfig, resourcePath, compiledIds)
+        result.watchFiles.forEach(addWatchFile)
+        if (result.missing.length > 0) {
+          throw new Error(
+            `${createMissingErrorMessage(locale, result.missing)}\n\n` +
+              "You see this error because `failOnMissing=true` in Vite plugin configuration."
+          )
+        }
+      }
+    }
   }
 
   const plugins: Plugin[] = []
@@ -253,6 +366,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const result = analyzeMdxNative(source, cleanId, mdx)
         mdxModuleIds.add(cleanId)
         this.addWatchFile(cfg.configPath)
+        validateMdxTranslations(cfg, cleanId, result.compiledIds, (file) => this.addWatchFile(file))
 
         if (result.diagnostics.length > 0 || !result.code) {
           const details = result.diagnostics
@@ -341,7 +455,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
       try {
         const result = transformPalamedesMacros(code, cleanId, {
-          runtimeModule,
+          runtimeModule: macroRuntimeModule,
         })
 
         if (!result.hasChanged) {
@@ -387,29 +501,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         this.addWatchFile(cfg.configPath)
         const cleanId = stripQuery(id)
         const locale = path.basename(cleanId, ".po")
-        const result = compileCatalogModule(
-          {
-            rootDir: cfg.rootDir,
-            locales: cfg.locales,
-            sourceLocale: cfg.sourceLocale,
-            fallbackLocales: cfg.fallbackLocales,
-            pseudoLocale: cfg.pseudoLocale,
-            catalogs: cfg.catalogs,
-          },
-          cleanId,
-          {
-            locale,
-            pseudoLocale: cfg.pseudoLocale,
-            failOnMissing,
-            failOnCompileError,
-            missingFailureHint:
-              "You see this error because `failOnMissing=true` in Vite plugin configuration.",
-            compileFailureHint:
-              "These errors fail the build because `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
-            diagnosticsWarningHint:
-              "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
-          }
-        )
+        const result = compileCatalogModule(catalogArtifactConfig(cfg), cleanId, {
+          locale,
+          pseudoLocale: cfg.pseudoLocale,
+          failOnMissing,
+          failOnCompileError,
+          missingFailureHint:
+            "You see this error because `failOnMissing=true` in Vite plugin configuration.",
+          compileFailureHint:
+            "These errors fail the build because `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
+          diagnosticsWarningHint:
+            "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Vite plugin configuration.",
+        })
 
         result.watchFiles.forEach((file: string) => this.addWatchFile(file))
         // this.warn deduplicates and shows up in Vite's overlay/diagnostics.
