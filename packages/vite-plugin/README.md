@@ -110,6 +110,14 @@ palamedes({
 sets the directory the config search starts from, and `skipValidation` loads
 partially-authored config files without validation (tooling only).
 
+The top-level `runtimeModule` is shared by macro transforms and acts as the
+fallback for generated MDX modules. A more specific `mdx.runtimeModule` from
+the Palamedes config or the inline `mdx` override wins for MDX only.
+
+When `failOnMissing` is enabled, MDX compiled IDs are validated against every
+target locale in the catalogs that include the source file, even before a
+catalog module is imported.
+
 Imports ending in `?palamedes` are treated like `.po` catalog imports — the
 analog of Lingui's `?lingui` query suffix — so bundler-agnostic code can force
 a module through the Palamedes catalog loader.

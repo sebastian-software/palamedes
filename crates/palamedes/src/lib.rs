@@ -66,9 +66,9 @@ pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagno
 pub use error::{PalamedesError, PalamedesResult};
 pub use extract::{
     extract_catalog_messages_cached, extract_catalog_messages_from_files,
-    extract_catalog_messages_from_files_with_options, extract_messages, ExtractCatalogFileFailure,
-    ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult,
-    ExtractedMessageRecord,
+    extract_catalog_messages_from_files_with_options, extract_messages,
+    extract_messages_with_mdx_options, ExtractCatalogFileFailure, ExtractCatalogMessagesOptions,
+    ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult, ExtractedMessageRecord,
 };
 pub use extract_cache::{default_cache_path, ExtractCache};
 pub use mdx::{

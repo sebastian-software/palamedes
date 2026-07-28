@@ -125,6 +125,8 @@ TypeScript configs use the camelCase equivalents:
 `translatable-attributes` replaces the default list rather than extending it.
 Include `alt` explicitly when adding fields such as `title` or `aria-label`.
 `href` and `src` remain structural attributes and are never extracted.
+In Vite, the plugin's top-level `runtimeModule` option is the shared fallback
+for macros and MDX; `mdx.runtime-module` is the more specific MDX override.
 
 Translated frontmatter remains explicit. The compiler exports the original
 scalar object as `frontmatter`; when configured fields are present it also

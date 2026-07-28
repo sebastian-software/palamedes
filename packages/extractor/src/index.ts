@@ -8,17 +8,28 @@
  * requiring Babel transformation first.
  */
 
-import { extractMessagesNative, type NativeExtractedMessage } from "@palamedes/core-node"
+import {
+  extractMessagesNative,
+  type MdxOptions,
+  type NativeExtractedMessage,
+} from "@palamedes/core-node"
 
 const SUPPORTED_EXTENSIONS = /\.(js|mjs|cjs|jsx|ts|mts|cts|tsx|mdx)$/i
 
 export type ExtractedMessageInfo = NativeExtractedMessage
+export type PalamedesExtractorOptions = {
+  mdx?: MdxOptions
+}
 
 /**
  * Extract source-first messages from a JavaScript, TypeScript, or MDX module.
  */
-export function extractMessages(source: string, filename: string): ExtractedMessageInfo[] {
-  return extractMessagesNative(source, filename)
+export function extractMessages(
+  source: string,
+  filename: string,
+  mdx?: MdxOptions
+): ExtractedMessageInfo[] {
+  return extractMessagesNative(source, filename, mdx)
 }
 
 /**
@@ -49,20 +60,24 @@ export type PalamedesExtractor = {
   ): Promise<void>
 }
 
-export const extractor: PalamedesExtractor = {
-  match(filename: string): boolean {
-    return SUPPORTED_EXTENSIONS.test(filename)
-  },
+export function createExtractor(options: PalamedesExtractorOptions = {}): PalamedesExtractor {
+  return {
+    match(filename: string): boolean {
+      return SUPPORTED_EXTENSIONS.test(filename)
+    },
 
-  async extract(
-    filename: string,
-    code: string,
-    onMessageExtracted: (msg: ExtractedMessageInfo) => void
-  ): Promise<void> {
-    for (const msg of extractMessages(code, filename)) {
-      onMessageExtracted(msg)
-    }
-  },
+    async extract(
+      filename: string,
+      code: string,
+      onMessageExtracted: (msg: ExtractedMessageInfo) => void
+    ): Promise<void> {
+      for (const msg of extractMessages(code, filename, options.mdx)) {
+        onMessageExtracted(msg)
+      }
+    },
+  }
 }
+
+export const extractor: PalamedesExtractor = createExtractor()
 
 export default extractor

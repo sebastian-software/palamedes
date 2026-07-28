@@ -13,11 +13,13 @@ pub(super) fn load_extract_cache(config: &LoadedConfig, options: &ExtractOptions
     if options.no_cache || !config.extract_cache {
         return ExtractCache::disabled();
     }
-    ExtractCache::load_with_mdx_stamp(
+    ExtractCache::load_with_options(
         &extract_cache_path(config),
         &config.source_reference_root.to_string_lossy(),
-        config.reference_scopes,
-        &config.mdx.extraction_stamp(),
+        &palamedes::ExtractCatalogMessagesOptions {
+            reference_scopes: config.reference_scopes,
+            mdx: config.mdx.clone(),
+        },
     )
 }
 

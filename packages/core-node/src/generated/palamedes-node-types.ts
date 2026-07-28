@@ -404,7 +404,7 @@ export interface NativeBindings {
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogModule(request: CatalogModuleRequest): CatalogModuleResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
-  extractMessages(source: string, filename: string): Array<NativeExtractedMessage>;
+  extractMessages(source: string, filename: string, mdx?: NativeMdxOptions | undefined | null): Array<NativeExtractedMessage>;
   extractCatalogMessagesFromFiles(request: ExtractCatalogMessagesRequest): ExtractCatalogMessagesResult;
   analyzeMdx(source: string, filename: string, options?: NativeMdxOptions | undefined | null): NativeMdxAnalysisResult;
   getNativeInfo(): NativeInfo;

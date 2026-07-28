@@ -64,8 +64,23 @@ Rich JSX children inside `<Trans>` are extracted with numeric component slots. F
 ## Key Exports
 
 - `extractor`
-- `extractMessages(source, filename)`
+- `createExtractor(options?)`
+- `extractMessages(source, filename, mdxOptions?)`
 - `ExtractedMessageInfo`
+
+Configure MDX attributes and frontmatter for direct extraction:
+
+```ts
+import { createExtractor, extractMessages } from "@palamedes/extractor"
+
+const mdx = {
+  translatableAttributes: ["alt", "title", "aria-label"],
+  frontMatterFields: ["title", "description"],
+}
+
+const messages = extractMessages(source, "guide.mdx", mdx)
+const configuredExtractor = createExtractor({ mdx })
+```
 
 ## Related Packages
 
@@ -73,11 +88,8 @@ Rich JSX children inside `<Trans>` are extracted with numeric component slots. F
 - [`@palamedes/transform`](https://www.npmjs.com/package/@palamedes/transform)
 - [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node)
 
-## Limitations
-
 MDX uses the explicit `palamedes-ignore` directive rather than
-`lingui-extract-ignore`. Configurable attributes and frontmatter fields are
-available through `palamedes.yaml` and the CLI workflow.
+`lingui-extract-ignore`.
 
 ## License
 

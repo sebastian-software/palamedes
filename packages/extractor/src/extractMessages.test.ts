@@ -1,8 +1,34 @@
-import { extractMessages, extractor, type ExtractedMessageInfo } from "./index"
+import { createExtractor, extractMessages, extractor, type ExtractedMessageInfo } from "./index"
 
 it("matches MDX modules as first-class extraction inputs", () => {
   expect(extractor.match("content/guide.mdx")).toBe(true)
   expect(extractor.match("content/guide.md")).toBe(false)
+})
+
+it("forwards configured MDX attributes and frontmatter through both public APIs", async () => {
+  const source = '---\npageTitle: Settings guide\n---\n\n<Card title="Open settings" />'
+  const mdx = {
+    translatableAttributes: ["alt", "title"],
+    frontMatterFields: ["pageTitle"],
+  }
+
+  expect(extractMessages(source, "content/guide.mdx")).toStrictEqual([])
+  expect(extractMessages(source, "content/guide.mdx", mdx)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ message: "Settings guide" }),
+      expect.objectContaining({ message: "Open settings" }),
+    ])
+  )
+
+  const configured = createExtractor({ mdx })
+  const extracted: ExtractedMessageInfo[] = []
+  await configured.extract("content/guide.mdx", source, (message) => extracted.push(message))
+  expect(extracted).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ message: "Settings guide" }),
+      expect.objectContaining({ message: "Open settings" }),
+    ])
+  )
 })
 
 function extract(code: string) {
