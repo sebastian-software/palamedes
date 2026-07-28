@@ -143,6 +143,28 @@ describe("palamedes vite plugin", () => {
     await expect(runMdxConfig({ mdx: { framework: "solid" } })).resolves.toBeUndefined()
   })
 
+  it("does not require an auto-discovered config during Vite startup", async () => {
+    mocks.loadPalamedesConfig.mockRejectedValueOnce(
+      new Error("Could not find a Palamedes config. Expected one of palamedes.yaml.")
+    )
+
+    await expect(runMdxConfig()).resolves.toBeUndefined()
+  })
+
+  it("does not hide config errors other than missing auto-discovery", async () => {
+    mocks.loadPalamedesConfig.mockRejectedValueOnce(new Error("Invalid Palamedes config"))
+
+    await expect(runMdxConfig()).rejects.toThrow("Invalid Palamedes config")
+  })
+
+  it("still requires a config when an MDX module is transformed", async () => {
+    mocks.loadPalamedesConfig.mockRejectedValueOnce(
+      new Error("Could not find a Palamedes config. Expected one of palamedes.yaml.")
+    )
+
+    await expect(runMdxTransform()).rejects.toThrow("Could not find a Palamedes config")
+  })
+
   it("does not let the JavaScript include filter disable MDX", async () => {
     await expect(runMdxTransform({}, { include: "src/**/*.ts" })).resolves.toMatchObject({
       moduleType: "jsx",
