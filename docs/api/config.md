@@ -16,6 +16,7 @@
 - `PalamedesConfig`
 - `LoadedPalamedesConfig`
 - `PalamedesCatalogConfig`
+- `PalamedesPoOutputOptions`
 - `PalamedesFallbackLocales`
 - `PalamedesSourceReferenceRoot`
 - `PalamedesMdxConfig`

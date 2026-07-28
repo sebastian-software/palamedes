@@ -270,6 +270,7 @@ fn write_catalog(
         clean: options.clean,
         force_clean: options.force_clean,
         format: catalog.format,
+        po: catalog.po.clone().map(Into::into),
         messages: messages.to_vec(),
     })?;
 
@@ -315,6 +316,51 @@ mod tests {
         let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
         assert!(output.contains("msgid \"Dashboard\""));
         assert!(output.contains("#: apps/web/app/page.tsx#title"));
+    }
+
+    #[test]
+    fn extract_applies_per_catalog_po_output_options() {
+        let app = temp_dir("extract-po-options");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en]
+source-locale: en
+source-reference-root: config
+catalogs:
+  - path: locales/{locale}/messages
+    include: [app]
+    po:
+      line-breaks: off
+      order-locale: en-US
+"#,
+        )
+        .expect("write config");
+        let long = "This deliberately long extracted message remains on one physical PO line even though it exceeds the default folding width.";
+        fs::write(
+            app.join("app/page.tsx"),
+            format!(
+                "import {{ t }} from \"@palamedes/core/macro\";\nexport function message() {{ return t`{long}`; }}\n"
+            ),
+        )
+        .expect("write source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        run_extraction(&config, &extract_options()).expect("extract");
+
+        let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
+        assert!(
+            output
+                .lines()
+                .any(|line| line == format!("msgid \"{long}\"")),
+            "{output}"
+        );
+        assert!(
+            output
+                .lines()
+                .any(|line| line == format!("msgstr \"{long}\"")),
+            "{output}"
+        );
     }
 
     #[test]

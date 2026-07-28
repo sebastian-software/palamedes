@@ -89,6 +89,40 @@ storage extension. Palamedes appends `.po` by default or `.fcl` when
 `format` accepts `po` and `fcl`. `ndjson` is no longer supported; use `fcl`
 for Ferrocat Catalog Lines.
 
+PO catalogs also accept independent output controls:
+
+```yaml
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+    po:
+      line-breaks: off
+      order-by: message
+      order-locale: en-US
+```
+
+- `line-breaks` accepts `auto` (the default) or `off`. `off` disables
+  automatic width folding for long `msgid` and `msgstr` values. Actual newline
+  characters still use valid multiline PO syntax.
+- `order-by` accepts `message` (the default) or `origin`. Message ordering uses
+  code-point order by default. Origin ordering uses the first source reference,
+  then message identity.
+- `order-locale` enables ICU4X locale-aware ordering by message and then
+  context. It can only be combined with `order-by: message`.
+
+The `po` object is only valid for PO catalogs. JavaScript and TypeScript config
+files use the equivalent camelCase shape:
+
+```ts
+{
+  po: {
+    lineBreaks: "off",
+    orderBy: "message",
+    orderLocale: "en-US",
+  },
+}
+```
+
 See [Catalog formats](./catalog-formats.md) for the product boundary between
 PO storage, FCL storage, and the current framework `.po` import loaders.
 

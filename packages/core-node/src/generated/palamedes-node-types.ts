@@ -17,6 +17,13 @@ export interface CatalogUpdateMessage {
   extractedComments: Array<string>;
   origins: Array<CatalogOrigin>;
 }
+export type PoLineBreaks = "Auto" | "Off"
+export type PoOrderBy = "Message" | "Origin"
+export interface PoOutputOptions {
+  lineBreaks?: PoLineBreaks;
+  orderBy?: PoOrderBy;
+  orderLocale?: string;
+}
 export interface CatalogUpdateRequest {
   targetPath: string;
   locale: string;
@@ -24,6 +31,7 @@ export interface CatalogUpdateRequest {
   clean: boolean;
   forceClean?: boolean;
   format?: CatalogConfigFormat;
+  po?: PoOutputOptions;
   messages: Array<CatalogUpdateMessage>;
 }
 export interface CatalogUpdateStats {

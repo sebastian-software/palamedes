@@ -60,7 +60,8 @@ pub use catalog_combine::{
 pub use catalog_update::{
     parse_catalog, update_catalog_file, AiProvenance, CatalogOriginMetadata, CatalogParseRequest,
     CatalogParseResult, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
-    CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage,
+    CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks,
+    PoOrderBy, PoOutputOptions,
 };
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
