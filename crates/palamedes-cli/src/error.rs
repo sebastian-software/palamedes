@@ -20,6 +20,8 @@ pub enum CliError {
     },
     #[error("Could not serialize JSON output: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Could not determine the current directory: {0}")]
+    CurrentDir(#[source] std::io::Error),
     #[error("Catalog merge requires exactly two input files, received {0}.")]
     InvalidMergeInputCount(usize),
     #[error("Catalog convert requires either an input file or --config.")]
