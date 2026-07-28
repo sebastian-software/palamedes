@@ -145,21 +145,27 @@ describe("palamedes vite plugin", () => {
     }
   )
 
-  it("uses the global runtime module as the MDX fallback", async () => {
-    await runMdxTransform({}, { runtimeModule: "@acme/reactive-runtime" })
+  it("keeps the macro runtime module out of MDX options", async () => {
+    mocks.analyzeMdxNative.mockClear()
+    await runMdxTransform({}, { runtimeModule: "@acme/macro-runtime" })
 
-    expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
-      "# Welcome",
-      "/repo/src/guide.mdx",
-      expect.objectContaining({ runtimeModule: "@acme/reactive-runtime" })
-    )
+    /*
+     * The macro option is an opt-in that swaps a framework-agnostic default for
+     * a reactive one. MDX already defaults to the framework's reactive runtime,
+     * so inheriting the macro target would silently downgrade it.
+     */
+    const mdxOptions = mocks.analyzeMdxNative.mock.calls[0]?.[2] as
+      | Record<string, unknown>
+      | undefined
+    expect(mdxOptions).toBeDefined()
+    expect(mdxOptions).not.toHaveProperty("runtimeModule")
   })
 
-  it("lets MDX configuration override the global runtime module", async () => {
+  it("lets MDX configuration set its own runtime module", async () => {
     await runMdxTransform(
       {},
       {
-        runtimeModule: "@acme/reactive-runtime",
+        runtimeModule: "@acme/macro-runtime",
         mdx: { runtimeModule: "@acme/mdx-runtime" },
       }
     )

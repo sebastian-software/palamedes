@@ -40,9 +40,14 @@ Defaults:
 - `runtimeModule`: `"@palamedes/runtime"`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 
-`runtimeModule` is the shared fallback for macro transforms and generated MDX
-modules. A more specific `mdx.runtimeModule` from `palamedes.yaml` or the
-plugin's `mdx` override takes precedence for MDX only.
+`runtimeModule` configures the macro transform only. It is the opt-in described
+in [Locale strategies](../locale-strategies.md) that makes inline `t` / `plural`
+follow a live locale switch.
+
+Generated MDX modules are independent: they already default to the framework's
+reactive runtime subpath, because their frontmatter, image alt text, and
+translated attributes call `getI18n()` directly. Override that with
+`mdx.runtime-module` in `palamedes.yaml` or `mdx.runtimeModule` on the plugin.
 
 With `failOnMissing: true`, compiled MDX IDs are checked against every target
 locale in each catalog whose `include` patterns cover that MDX file. This

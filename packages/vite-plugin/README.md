@@ -97,7 +97,7 @@ palamedes({
   skipValidation: false,
   failOnMissing: false,
   failOnCompileError: false,
-  runtimeModule: "@palamedes/runtime",
+  runtimeModule: "@palamedes/react/runtime",
   mdx: {
     framework: "react",
     translatableAttributes: ["alt", "title"],
@@ -110,9 +110,11 @@ palamedes({
 sets the directory the config search starts from, and `skipValidation` loads
 partially-authored config files without validation (tooling only).
 
-The top-level `runtimeModule` is shared by macro transforms and acts as the
-fallback for generated MDX modules. A more specific `mdx.runtimeModule` from
-the Palamedes config or the inline `mdx` override wins for MDX only.
+The top-level `runtimeModule` configures the macro transform only — it is the
+opt-in that makes inline `t` / `plural` follow a live locale switch. Generated
+MDX modules are independent and already default to the framework's reactive
+runtime subpath; configure them with `mdx.runtimeModule` if you need a different
+target.
 
 When `failOnMissing` is enabled, MDX compiled IDs are validated against every
 target locale in the catalogs that include the source file, even before a
