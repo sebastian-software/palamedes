@@ -9,10 +9,12 @@ use ferrocat::{
     parse_catalog as ferrocat_parse_catalog, parse_po as ferrocat_parse_po,
     stringify_po as ferrocat_stringify_po, update_catalog as ferrocat_update_catalog, ApiError,
     CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, EffectiveTranslationRef,
-    ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, RenderOptions,
-    SerializeOptions, SourceExtractedMessage, UpdateCatalogOptions,
+    ObsoleteStrategy, OrderBy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode,
+    RenderOptions, SerializeOptions, SourceExtractedMessage, UpdateCatalogOptions,
 };
 use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
+use icu_collator::{options::CollatorOptions, Collator, CollatorPreferences};
+use icu_locale::Locale;
 use serde::{Deserialize, Serialize};
 
 /// Source origin used for catalog updates and parsed catalog messages.
@@ -59,6 +61,43 @@ pub struct CatalogUpdateMessage {
     pub origins: Vec<CatalogUpdateOrigin>,
 }
 
+/// Automatic line folding applied when serializing PO string literals.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PoLineBreaks {
+    /// Preserve Ferrocat's default automatic width folding.
+    #[default]
+    Auto,
+    /// Disable automatic width folding while preserving embedded newlines.
+    Off,
+}
+
+/// Sort key used for the final PO catalog.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PoOrderBy {
+    /// Sort by source message and then gettext context.
+    #[default]
+    Message,
+    /// Sort by the first source origin and then message identity.
+    Origin,
+}
+
+/// Generic output controls for PO catalogs.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoOutputOptions {
+    /// Automatic line-folding behavior.
+    #[serde(default)]
+    pub line_breaks: PoLineBreaks,
+    /// Final catalog sort key.
+    #[serde(default)]
+    pub order_by: PoOrderBy,
+    /// Optional locale used to collate message and context keys.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order_locale: Option<String>,
+}
+
 /// Request for updating a catalog file from source-first messages.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +116,9 @@ pub struct CatalogUpdateRequest {
     /// Catalog storage format.
     #[serde(default)]
     pub format: super::catalog_artifact::PalamedesCatalogFormat,
+    /// Optional PO-specific output controls.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub po: Option<PoOutputOptions>,
     /// Extracted messages to project into the catalog.
     pub messages: Vec<CatalogUpdateMessage>,
 }
@@ -249,6 +291,7 @@ fn update_catalog_file_source_first(
             "target_path must not be empty".to_owned(),
         )));
     }
+    validate_po_options(request.format, request.po.as_ref())?;
     let existing = read_existing_catalog(&target_path, request.format)?;
     let custom_header_attributes =
         BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
@@ -272,6 +315,13 @@ fn update_catalog_file_source_first(
     let mut render = RenderOptions::default()
         .with_include_origins(true)
         .with_placeholder_comments(PlaceholderCommentMode::Enabled { limit: 3 });
+    if request
+        .po
+        .as_ref()
+        .is_some_and(|po| po.order_by == PoOrderBy::Origin)
+    {
+        render = render.with_order_by(OrderBy::Origin);
+    }
     if request.format == super::catalog_artifact::PalamedesCatalogFormat::Po {
         render = render.with_custom_header_attributes(&custom_header_attributes);
     }
@@ -288,10 +338,16 @@ fn update_catalog_file_source_first(
 
     let mut result = ferrocat_update_catalog(update_options).map_err(PalamedesError::from)?;
     if let Some(existing) = &existing {
-        if let Some(metadata) = &existing.po_metadata {
-            result.content = restore_po_metadata(&result.content, metadata)?;
+        if po_output_requires_final_pass(existing.po_metadata.as_ref(), request.po.as_ref()) {
+            result.content = finalize_po_output(
+                &result.content,
+                existing.po_metadata.as_ref(),
+                request.po.as_ref(),
+            )?;
         }
         result.updated = result.content != existing.original;
+    } else if po_output_requires_final_pass(None, request.po.as_ref()) {
+        result.content = finalize_po_output(&result.content, None, request.po.as_ref())?;
     }
 
     if result.created || result.updated {
@@ -299,6 +355,26 @@ fn update_catalog_file_source_first(
     }
 
     Ok(public_update_result(result))
+}
+
+fn validate_po_options(
+    format: super::catalog_artifact::PalamedesCatalogFormat,
+    options: Option<&PoOutputOptions>,
+) -> PalamedesResult<()> {
+    let Some(options) = options else {
+        return Ok(());
+    };
+    if format != super::catalog_artifact::PalamedesCatalogFormat::Po {
+        return Err(PalamedesError::from(ApiError::InvalidArguments(
+            "po output options can only be used with PO catalogs".to_owned(),
+        )));
+    }
+    if options.order_locale.is_some() && options.order_by != PoOrderBy::Message {
+        return Err(PalamedesError::from(ApiError::InvalidArguments(
+            "po.orderLocale can only be used with po.orderBy \"message\"".to_owned(),
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -384,19 +460,82 @@ fn read_existing_catalog(
     }))
 }
 
-fn restore_po_metadata(
+fn po_output_requires_final_pass(
+    metadata: Option<&BTreeMap<PoMessageKey, PreservedPoMetadata>>,
+    options: Option<&PoOutputOptions>,
+) -> bool {
+    metadata.is_some()
+        || options.is_some_and(|options| {
+            options.line_breaks == PoLineBreaks::Off || options.order_locale.is_some()
+        })
+}
+
+fn finalize_po_output(
     updated: &str,
-    metadata: &BTreeMap<PoMessageKey, PreservedPoMetadata>,
+    metadata: Option<&BTreeMap<PoMessageKey, PreservedPoMetadata>>,
+    options: Option<&PoOutputOptions>,
 ) -> PalamedesResult<String> {
     let mut po = ferrocat_parse_po(updated)?;
-    for item in &mut po.items {
-        let key = (item.msgctxt.clone(), item.msgid.clone());
-        if let Some(metadata) = metadata.get(&key) {
-            item.comments = metadata.comments.clone().into();
-            item.flags = metadata.flags.clone().into();
+    if let Some(metadata) = metadata {
+        for item in &mut po.items {
+            let key = (item.msgctxt.clone(), item.msgid.clone());
+            if let Some(metadata) = metadata.get(&key) {
+                item.comments = metadata.comments.clone().into();
+                item.flags = metadata.flags.clone().into();
+            }
         }
     }
-    Ok(ferrocat_stringify_po(&po, &SerializeOptions::default()))
+
+    if let Some(order_locale) = options.and_then(|options| options.order_locale.as_deref()) {
+        sort_po_items_by_locale(&mut po.items, order_locale)?;
+    }
+
+    let serialize_options = match options.map(|options| options.line_breaks) {
+        Some(PoLineBreaks::Off) => SerializeOptions::default().with_fold_length(0),
+        None | Some(PoLineBreaks::Auto) => SerializeOptions::default(),
+    };
+    Ok(ferrocat_stringify_po(&po, &serialize_options))
+}
+
+fn sort_po_items_by_locale(
+    items: &mut [ferrocat::PoItem],
+    order_locale: &str,
+) -> PalamedesResult<()> {
+    let locale = order_locale.parse::<Locale>().map_err(|error| {
+        PalamedesError::from(ApiError::InvalidArguments(format!(
+            "invalid po.orderLocale \"{order_locale}\": {error}"
+        )))
+    })?;
+    let collator = Collator::try_new(
+        CollatorPreferences::from(locale),
+        CollatorOptions::default(),
+    )
+    .map_err(|error| {
+        PalamedesError::from(ApiError::InvalidArguments(format!(
+            "could not create a collator for po.orderLocale \"{order_locale}\": {error}"
+        )))
+    })?;
+
+    items.sort_by(|left, right| {
+        collator
+            .compare(&left.msgid, &right.msgid)
+            .then_with(|| compare_optional_context(&collator, &left.msgctxt, &right.msgctxt))
+            .then_with(|| left.msgid.cmp(&right.msgid))
+            .then_with(|| left.msgctxt.cmp(&right.msgctxt))
+            .then_with(|| left.obsolete.cmp(&right.obsolete))
+    });
+    Ok(())
+}
+
+fn compare_optional_context(
+    collator: &icu_collator::CollatorBorrowed<'_>,
+    left: &Option<String>,
+    right: &Option<String>,
+) -> std::cmp::Ordering {
+    collator.compare(
+        left.as_deref().unwrap_or(""),
+        right.as_deref().unwrap_or(""),
+    )
 }
 
 fn atomic_write_catalog(target_path: &Path, content: &str) -> PalamedesResult<()> {
@@ -585,7 +724,7 @@ mod tests {
 
     use super::{
         parse_catalog, update_catalog_file, CatalogParseRequest, CatalogUpdateMessage,
-        CatalogUpdateOrigin, CatalogUpdateRequest,
+        CatalogUpdateOrigin, CatalogUpdateRequest, PoLineBreaks, PoOrderBy, PoOutputOptions,
     };
     use crate::parse_po;
     use ferrocat::{machine_translation_hash, EffectiveTranslationRef};
@@ -600,6 +739,262 @@ mod tests {
             .into_owned()
     }
 
+    fn message(text: &str, context: Option<&str>, origin: &str) -> CatalogUpdateMessage {
+        CatalogUpdateMessage {
+            message: text.to_owned(),
+            context: context.map(str::to_owned),
+            placeholders: BTreeMap::new(),
+            extracted_comments: vec![],
+            origins: vec![CatalogUpdateOrigin {
+                file: origin.to_owned(),
+                line: 1,
+                scope: None,
+            }],
+        }
+    }
+
+    fn update_po(
+        path: &str,
+        messages: Vec<CatalogUpdateMessage>,
+        po: Option<PoOutputOptions>,
+    ) -> super::CatalogUpdateResponse {
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.to_owned(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            po,
+            messages,
+        })
+        .expect("update")
+    }
+
+    #[test]
+    fn po_line_breaks_off_keeps_long_single_line_values_on_one_physical_line() {
+        let path = temp_file("line-breaks-off");
+        let long = "A deliberately long source message and translation value that exceeds Ferrocat's default eighty-column fold length by a comfortable margin.";
+
+        update_po(
+            &path,
+            vec![message(long, None, "src/App.tsx")],
+            Some(PoOutputOptions {
+                line_breaks: PoLineBreaks::Off,
+                ..PoOutputOptions::default()
+            }),
+        );
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        assert!(output
+            .lines()
+            .any(|line| line == format!("msgid \"{long}\"")));
+        assert!(output
+            .lines()
+            .any(|line| line == format!("msgstr \"{long}\"")));
+    }
+
+    #[test]
+    fn po_line_breaks_off_preserves_embedded_newlines_as_valid_multiline_po() {
+        let path = temp_file("embedded-newlines");
+        let text = "First line\nSecond line";
+
+        update_po(
+            &path,
+            vec![message(text, None, "src/App.tsx")],
+            Some(PoOutputOptions {
+                line_breaks: PoLineBreaks::Off,
+                ..PoOutputOptions::default()
+            }),
+        );
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        assert!(output.contains("msgid \"First line\\n\"\n\"Second line\""));
+        let parsed = parse_po(&output).expect("parse output");
+        assert_eq!(parsed.items[0].msgid, text);
+        assert_eq!(
+            parsed.items[0].msgstr.first().map(String::as_str),
+            Some(text)
+        );
+    }
+
+    #[test]
+    fn po_order_locale_resorts_the_complete_catalog_by_message_then_context() {
+        let path = temp_file("locale-order");
+        std::fs::write(
+            &path,
+            concat!(
+                "msgid \"Zebra\"\nmsgstr \"Zebra\"\n\n",
+                "msgid \"Uber\"\nmsgstr \"Uber\"\n",
+            ),
+        )
+        .expect("write existing");
+        let messages = vec![
+            message("Zebra", None, "src/Zebra.tsx"),
+            message("über", None, "src/Umlaut.tsx"),
+            message("Uber", None, "src/Uber.tsx"),
+            message("éclair", None, "src/EclairAccent.tsx"),
+            message("eclair", None, "src/Eclair.tsx"),
+            message("Apple", None, "src/AppleUpper.tsx"),
+            message("apple", Some("z"), "src/AppleZ.tsx"),
+            message("apple", Some("a"), "src/AppleA.tsx"),
+            message("Álgebra", None, "src/Algebra.tsx"),
+            message("!Alert", None, "src/Alert.tsx"),
+        ];
+
+        update_po(
+            &path,
+            messages,
+            Some(PoOutputOptions {
+                order_locale: Some("en-US".to_owned()),
+                ..PoOutputOptions::default()
+            }),
+        );
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        let parsed = parse_po(&output).expect("parse output");
+        let identities = parsed
+            .items
+            .iter()
+            .map(|item| (item.msgid.as_str(), item.msgctxt.as_deref()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            identities,
+            vec![
+                ("!Alert", None),
+                ("Álgebra", None),
+                ("apple", Some("a")),
+                ("apple", Some("z")),
+                ("Apple", None),
+                ("eclair", None),
+                ("éclair", None),
+                ("Uber", None),
+                ("über", None),
+                ("Zebra", None),
+            ]
+        );
+    }
+
+    #[test]
+    fn po_order_locale_compares_missing_context_as_an_empty_string() {
+        let path = temp_file("locale-context-empty");
+        update_po(
+            &path,
+            vec![
+                message("Same", Some(""), "src/Empty.tsx"),
+                message("Same", None, "src/Missing.tsx"),
+                message("Same", Some("z"), "src/Z.tsx"),
+            ],
+            Some(PoOutputOptions {
+                order_locale: Some("en-US".to_owned()),
+                ..PoOutputOptions::default()
+            }),
+        );
+
+        let parsed =
+            parse_po(&std::fs::read_to_string(&path).expect("read output")).expect("parse output");
+        assert_eq!(parsed.items[0].msgctxt, None);
+        assert_eq!(parsed.items[1].msgctxt.as_deref(), Some(""));
+        assert_eq!(parsed.items[2].msgctxt.as_deref(), Some("z"));
+    }
+
+    #[test]
+    fn po_origin_order_uses_ferrocat_origin_sorting() {
+        let path = temp_file("origin-order");
+        update_po(
+            &path,
+            vec![
+                message("First message", None, "src/z.tsx"),
+                message("Second message", None, "src/a.tsx"),
+            ],
+            Some(PoOutputOptions {
+                order_by: PoOrderBy::Origin,
+                ..PoOutputOptions::default()
+            }),
+        );
+
+        let parsed =
+            parse_po(&std::fs::read_to_string(&path).expect("read output")).expect("parse output");
+        assert_eq!(parsed.items[0].msgid, "Second message");
+        assert_eq!(parsed.items[1].msgid, "First message");
+    }
+
+    #[test]
+    fn explicit_default_po_options_keep_default_output_byte_for_byte() {
+        let default_path = temp_file("default-output");
+        let explicit_path = temp_file("explicit-default-output");
+        let messages = vec![message(
+            "A long value that Ferrocat folds in its default mode because it is longer than the normal output width.",
+            None,
+            "src/App.tsx",
+        )];
+
+        update_po(&default_path, messages.clone(), None);
+        update_po(&explicit_path, messages, Some(PoOutputOptions::default()));
+
+        assert_eq!(
+            std::fs::read_to_string(default_path).expect("read default"),
+            std::fs::read_to_string(explicit_path).expect("read explicit default")
+        );
+    }
+
+    #[test]
+    fn rejects_po_options_for_fcl_and_locale_with_origin_ordering() {
+        let path = temp_file("invalid-po-options");
+        let invalid_fcl = update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Fcl,
+            po: Some(PoOutputOptions::default()),
+            messages: vec![],
+        })
+        .expect_err("reject PO options for FCL");
+        assert!(invalid_fcl.to_string().contains("only be used with PO"));
+
+        let invalid_order = update_catalog_file(CatalogUpdateRequest {
+            target_path: path,
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: Some(PoOutputOptions {
+                order_by: PoOrderBy::Origin,
+                order_locale: Some("en-US".to_owned()),
+                ..PoOutputOptions::default()
+            }),
+            messages: vec![],
+        })
+        .expect_err("reject locale with origin ordering");
+        assert!(invalid_order
+            .to_string()
+            .contains("only be used with po.orderBy"));
+    }
+
+    #[test]
+    fn rejects_invalid_po_order_locale_tags() {
+        let path = temp_file("invalid-order-locale");
+        let error = update_catalog_file(CatalogUpdateRequest {
+            target_path: path,
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: Some(PoOutputOptions {
+                order_locale: Some("en_US".to_owned()),
+                ..PoOutputOptions::default()
+            }),
+            messages: vec![message("Hello", None, "src/App.tsx")],
+        })
+        .expect_err("reject invalid locale tag");
+
+        assert!(error.to_string().contains("invalid po.orderLocale"));
+    }
+
     #[test]
     fn updates_source_locale_catalogs() {
         let path = temp_file("source");
@@ -610,6 +1005,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
@@ -652,6 +1048,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
@@ -691,6 +1088,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: Some("button".to_owned()),
@@ -770,6 +1168,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![message("First"), message("Second"), message("Third")],
         })
         .expect("update");
@@ -820,6 +1219,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
@@ -864,6 +1264,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![],
         })
         .expect("update");
@@ -932,6 +1333,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello".to_owned(),
                 context: None,
@@ -968,6 +1370,7 @@ mod tests {
             clean: true,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "Keep".to_owned(),
                 context: None,
@@ -1003,6 +1406,7 @@ mod tests {
             clean: false,
             force_clean: true,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "Keep".to_owned(),
                 context: None,
@@ -1028,6 +1432,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "{count, plural, one {# item} other {# items}}".to_owned(),
                 context: None,
@@ -1055,6 +1460,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: message.to_owned(),
                 context: None,
@@ -1081,6 +1487,7 @@ mod tests {
             clean: false,
             force_clean: false,
             format: crate::PalamedesCatalogFormat::Po,
+            po: None,
             messages: vec![CatalogUpdateMessage {
                 message: "Hello {0}".to_owned(),
                 context: None,

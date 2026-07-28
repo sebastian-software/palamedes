@@ -68,6 +68,11 @@ updateCatalogFile({
   locale: "en",
   sourceLocale: "en",
   clean: false,
+  po: {
+    lineBreaks: "off",
+    orderBy: "message",
+    orderLocale: "en-US",
+  },
   messages: [{ message: "Hello {name}", extractedComments: [], origins: [] }],
 })
 combineCatalogFiles({
@@ -111,6 +116,12 @@ Catalog operations use Ferrocat for parsing, updates, audits, ICU authoring
 diagnostics, metadata validation, and deterministic combine workflows. That
 keeps custom tooling close to the same semantics used by the official CLI and
 framework plugins.
+
+`updateCatalogFile()` accepts optional, independent PO output controls through
+`po`: `lineBreaks` (`"auto"` or `"off"`), `orderBy` (`"message"` or
+`"origin"`), and `orderLocale`. Locale ordering applies to messages and then
+contexts, and requires message ordering. PO options are rejected for FCL
+updates.
 
 The wrapper exposes lowercase public format values (`"po"` and `"fcl"`) while
 mapping to the native Ferrocat-backed API internally.

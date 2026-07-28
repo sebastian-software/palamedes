@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use ::config as config_rs;
 use palamedes::{
     CatalogArtifactConfig, CatalogConfig, FallbackLocales, MdxOptions, PalamedesCatalogFormat,
+    PoLineBreaks, PoOrderBy, PoOutputOptions,
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -70,9 +71,32 @@ pub struct ConfigCatalog {
     pub path: String,
     #[serde(default)]
     pub format: PalamedesCatalogFormat,
+    #[serde(default)]
+    pub po: Option<ConfigPoOutputOptions>,
     pub include: Vec<String>,
     #[serde(default)]
     pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ConfigPoOutputOptions {
+    #[serde(default, alias = "line_breaks")]
+    pub line_breaks: PoLineBreaks,
+    #[serde(default, alias = "order_by")]
+    pub order_by: PoOrderBy,
+    #[serde(default, alias = "order_locale")]
+    pub order_locale: Option<String>,
+}
+
+impl From<ConfigPoOutputOptions> for PoOutputOptions {
+    fn from(value: ConfigPoOutputOptions) -> Self {
+        Self {
+            line_breaks: value.line_breaks,
+            order_by: value.order_by,
+            order_locale: value.order_locale,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -345,6 +369,38 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
     if raw.catalogs.is_empty() {
         return invalid(path, "\"catalogs\" must contain at least one catalog.");
     }
+    for (index, catalog) in raw.catalogs.iter().enumerate() {
+        if catalog.format != PalamedesCatalogFormat::Po && catalog.po.is_some() {
+            return invalid(
+                path,
+                &format!(
+                    "\"catalogs[{index}].po\" can only be used when the catalog format is \"po\"."
+                ),
+            );
+        }
+        if let Some(po) = &catalog.po {
+            if po
+                .order_locale
+                .as_ref()
+                .is_some_and(|locale| locale.trim().is_empty())
+            {
+                return invalid(
+                    path,
+                    &format!(
+                        "\"catalogs[{index}].po.order-locale\" must be a non-empty locale when provided."
+                    ),
+                );
+            }
+            if po.order_locale.is_some() && po.order_by != PoOrderBy::Message {
+                return invalid(
+                    path,
+                    &format!(
+                        "\"catalogs[{index}].po.order-locale\" can only be used with \"order-by: message\"."
+                    ),
+                );
+            }
+        }
+    }
     if let Some(pseudo_locale) = &raw.pseudo_locale {
         // Documented behavior: a pseudo-locale outside `locales` is ignored.
         // Make the ignore visible instead of silent.
@@ -531,6 +587,116 @@ catalogs:
         let config = load_config(&app, None).expect("load config");
 
         assert!(!config.reference_scopes);
+    }
+
+    #[test]
+    fn loads_independent_po_output_options_from_yaml_config() {
+        let app = temp_dir("po-options");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+    po:
+      line-breaks: off
+      order-by: message
+      order-locale: en-US
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("load config");
+        let po = config.catalogs[0].po.as_ref().expect("PO options");
+        assert_eq!(po.line_breaks, palamedes::PoLineBreaks::Off);
+        assert_eq!(po.order_by, palamedes::PoOrderBy::Message);
+        assert_eq!(po.order_locale.as_deref(), Some("en-US"));
+    }
+
+    #[test]
+    fn rejects_invalid_po_output_option_combinations() {
+        for (name, catalog, expected) in [
+            (
+                "po-options-fcl",
+                "format: fcl\n    po:\n      line-breaks: off",
+                "can only be used when the catalog format is \"po\"",
+            ),
+            (
+                "po-options-origin-locale",
+                "po:\n      order-by: origin\n      order-locale: en-US",
+                "can only be used with \"order-by: message\"",
+            ),
+            (
+                "po-options-empty-locale",
+                "po:\n      order-locale: \"\"",
+                "must be a non-empty locale",
+            ),
+        ] {
+            let app = temp_dir(name);
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    r#"
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: src/locales/{{locale}}
+    include: [src]
+    {catalog}
+"#
+                ),
+            )
+            .expect("write config");
+
+            let error = load_config(&app, None).expect_err("invalid PO options");
+            assert!(error.to_string().contains(expected), "got: {error}");
+        }
+    }
+
+    #[test]
+    fn rejects_camel_case_po_keys_in_data_config() {
+        let app = temp_dir("po-options-camel-case");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+    po:
+      lineBreaks: off
+"#,
+        )
+        .expect("write config");
+
+        let error = load_config(&app, None).expect_err("camelCase PO key must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("lineBreaks"), "got: {message}");
+        assert!(message.contains("line-breaks"), "got: {message}");
+    }
+
+    #[test]
+    fn rejects_unknown_po_keys_in_data_config() {
+        let app = temp_dir("po-options-unknown");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+    po:
+      line-break: off
+"#,
+        )
+        .expect("write config");
+
+        let error = load_config(&app, None).expect_err("unknown PO key must be rejected");
+        assert!(error.to_string().contains("line-break"), "got: {error}");
     }
 
     #[test]

@@ -20,9 +20,16 @@ export const CONFIG_FILENAMES = [
 export type PalamedesFallbackLocales = string[] | Record<string, string[]>
 export type PalamedesSourceReferenceRoot = "git" | "lingui" | "config" | (string & {})
 
+export type PalamedesPoOutputOptions = {
+  lineBreaks?: "auto" | "off"
+  orderBy?: "message" | "origin"
+  orderLocale?: string
+}
+
 export type PalamedesCatalogConfig = {
   path: string
   format?: "po" | "fcl"
+  po?: PalamedesPoOutputOptions
   include: string[]
   exclude?: string[]
 }
@@ -216,10 +223,74 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
       : {}),
     ...(referenceScopes !== undefined ? { referenceScopes: referenceScopes as boolean } : {}),
     ...(mdx !== undefined ? { mdx } : {}),
-    catalogs: config.catalogs as PalamedesCatalogConfig[],
+    catalogs: normalizeDataCatalogs(config.catalogs, configPath) as PalamedesCatalogConfig[],
     ...(config.plugins !== undefined
       ? { plugins: config.plugins as PalamedesPluginDeclaration[] }
       : {}),
+  }
+}
+
+function normalizeDataCatalogs(value: unknown, configPath: string): unknown {
+  if (!Array.isArray(value)) {
+    return value
+  }
+  return value.map((catalog, index) => {
+    if (!catalog || typeof catalog !== "object" || Array.isArray(catalog)) {
+      return catalog
+    }
+    const record = catalog as Record<string, unknown>
+    if (record.po === undefined) {
+      return catalog
+    }
+    return {
+      ...record,
+      po: normalizePoDataConfig(record.po, configPath, index),
+    }
+  })
+}
+
+function normalizePoDataConfig(
+  value: unknown,
+  configPath: string,
+  catalogIndex: number
+): PalamedesPoOutputOptions {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value as PalamedesPoOutputOptions
+  }
+  const record = value as Record<string, unknown>
+  for (const [camel, kebab] of [
+    ["lineBreaks", "line-breaks"],
+    ["orderBy", "order-by"],
+    ["orderLocale", "order-locale"],
+  ]) {
+    if (camel in record) {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${catalogIndex}].po.${camel}". Data configs use kebab-case: "catalogs[${catalogIndex}].po.${kebab}".`
+      )
+    }
+  }
+  const knownKeys = new Set([
+    "line-breaks",
+    "line_breaks",
+    "order-by",
+    "order_by",
+    "order-locale",
+    "order_locale",
+  ])
+  for (const key of Object.keys(record)) {
+    if (!knownKeys.has(key)) {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${catalogIndex}].po.${key}".`
+      )
+    }
+  }
+  const lineBreaks = record["line-breaks"] ?? record.line_breaks
+  const orderBy = record["order-by"] ?? record.order_by
+  const orderLocale = record["order-locale"] ?? record.order_locale
+  return {
+    ...(lineBreaks !== undefined ? { lineBreaks: lineBreaks as "auto" | "off" } : {}),
+    ...(orderBy !== undefined ? { orderBy: orderBy as "message" | "origin" } : {}),
+    ...(orderLocale !== undefined ? { orderLocale: orderLocale as string } : {}),
   }
 }
 
@@ -401,6 +472,7 @@ async function normalizeConfig(
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       ...(catalog.format !== undefined ? { format: catalog.format } : {}),
+      ...(catalog.po !== undefined ? { po: { ...catalog.po } } : {}),
       include: [...catalog.include],
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
@@ -423,6 +495,7 @@ function normalizeConfigSync(config: PalamedesConfig, configPath: string): Loade
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       ...(catalog.format !== undefined ? { format: catalog.format } : {}),
+      ...(catalog.po !== undefined ? { po: { ...catalog.po } } : {}),
       include: [...catalog.include],
       ...(catalog.exclude ? { exclude: [...catalog.exclude] } : {}),
     })),
@@ -728,12 +801,66 @@ function validateCatalog(catalog: unknown, configPath: string, index: number): v
     )
   }
 
+  validatePoOutputOptions(record.po, record.format, configPath, index)
+
   if (
     record.exclude !== undefined &&
     (!Array.isArray(record.exclude) || record.exclude.some((value) => typeof value !== "string"))
   ) {
     throw new Error(
       `Invalid Palamedes config in ${configPath}: "catalogs[${index}].exclude" must be an array of strings when provided.`
+    )
+  }
+}
+
+function validatePoOutputOptions(
+  value: unknown,
+  format: unknown,
+  configPath: string,
+  index: number
+): void {
+  if (value === undefined) {
+    return
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po" must be an object.`
+    )
+  }
+  if (format === "fcl") {
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po" can only be used when the catalog format is "po".`
+    )
+  }
+  const po = value as Record<string, unknown>
+  for (const key of Object.keys(po)) {
+    if (!["lineBreaks", "orderBy", "orderLocale"].includes(key)) {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${index}].po.${key}".`
+      )
+    }
+  }
+  if (po.lineBreaks !== undefined && po.lineBreaks !== "auto" && po.lineBreaks !== "off") {
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.lineBreaks" must be "auto" or "off" when provided.`
+    )
+  }
+  if (po.orderBy !== undefined && po.orderBy !== "message" && po.orderBy !== "origin") {
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.orderBy" must be "message" or "origin" when provided.`
+    )
+  }
+  if (
+    po.orderLocale !== undefined &&
+    (typeof po.orderLocale !== "string" || po.orderLocale.trim().length === 0)
+  ) {
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.orderLocale" must be a non-empty locale when provided.`
+    )
+  }
+  if (po.orderLocale !== undefined && po.orderBy === "origin") {
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.orderLocale" can only be used with "orderBy: message".`
     )
   }
 }

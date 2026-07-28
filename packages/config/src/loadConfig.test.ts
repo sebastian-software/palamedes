@@ -86,6 +86,151 @@ describe("loadPalamedesConfig", () => {
     ])
   })
 
+  it("loads generic PO output options from JavaScript and data configs", async () => {
+    const jsDir = await createTempDir()
+    await writeFile(
+      path.join(jsDir, "palamedes.config.ts"),
+      `
+        export default {
+          locales: ["en"],
+          sourceLocale: "en",
+          catalogs: [{
+            path: "src/locales/{locale}",
+            include: ["src"],
+            po: {
+              lineBreaks: "off",
+              orderBy: "message",
+              orderLocale: "en-US",
+            },
+          }],
+        }
+      `
+    )
+
+    const jsConfig = await loadPalamedesConfig({ cwd: jsDir })
+    expect(jsConfig.catalogs[0]?.po).toStrictEqual({
+      lineBreaks: "off",
+      orderBy: "message",
+      orderLocale: "en-US",
+    })
+
+    const dataDir = await createTempDir()
+    await writeFile(
+      path.join(dataDir, "palamedes.yaml"),
+      `
+        locales: [en]
+        source-locale: en
+        catalogs:
+          - path: src/locales/{locale}
+            include: [src]
+            po:
+              line-breaks: off
+              order-by: message
+              order-locale: en-US
+      `
+    )
+
+    const dataConfig = loadPalamedesConfigSync({ cwd: dataDir })
+    expect(dataConfig.catalogs[0]?.po).toStrictEqual({
+      lineBreaks: "off",
+      orderBy: "message",
+      orderLocale: "en-US",
+    })
+  })
+
+  it("rejects invalid PO output option combinations", async () => {
+    for (const [name, catalog, expected] of [
+      [
+        "fcl",
+        `format: "fcl", po: { lineBreaks: "off" }`,
+        /po" can only be used when the catalog format is "po"/,
+      ],
+      [
+        "origin-locale",
+        `po: { orderBy: "origin", orderLocale: "en-US" }`,
+        /orderLocale" can only be used with "orderBy: message"/,
+      ],
+      ["empty-locale", `po: { orderLocale: "" }`, /orderLocale" must be a non-empty locale/],
+    ] as const) {
+      const fixtureDir = await createTempDir()
+      await writeFile(
+        path.join(fixtureDir, `palamedes.config.${name}.ts`),
+        `
+          export default {
+            locales: ["en"],
+            sourceLocale: "en",
+            catalogs: [{ path: "locales/{locale}", include: ["src"], ${catalog} }],
+          }
+        `
+      )
+
+      await expect(
+        loadPalamedesConfig({
+          cwd: fixtureDir,
+          configPath: `palamedes.config.${name}.ts`,
+        })
+      ).rejects.toThrow(expected)
+    }
+  })
+
+  it("rejects camelCase PO option keys in data configs", async () => {
+    const fixtureDir = await createTempDir()
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        locales: [en]
+        source-locale: en
+        catalogs:
+          - path: locales/{locale}
+            include: [src]
+            po:
+              lineBreaks: off
+      `
+    )
+
+    await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+      /unknown key "catalogs\[0\]\.po\.lineBreaks".*"catalogs\[0\]\.po\.line-breaks"/
+    )
+  })
+
+  it("rejects unknown PO option keys instead of silently dropping them", async () => {
+    for (const [filename, content] of [
+      [
+        "palamedes.yaml",
+        `
+          locales: [en]
+          source-locale: en
+          catalogs:
+            - path: locales/{locale}
+              include: [src]
+              po:
+                line-break: off
+        `,
+      ],
+      [
+        "palamedes.config.ts",
+        `
+          export default {
+            locales: ["en"],
+            sourceLocale: "en",
+            catalogs: [{
+              path: "locales/{locale}",
+              include: ["src"],
+              po: { lineBreak: "off" },
+            }],
+          }
+        `,
+      ],
+    ]) {
+      const fixtureDir = await createTempDir()
+      await writeFile(path.join(fixtureDir, filename), content)
+
+      await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
+        /unknown key "catalogs\[0\]\.po\.line-?break"/i
+      )
+    }
+  })
+
   it("normalizes and validates MDX data-config options", async () => {
     const fixtureDir = await createTempDir()
 

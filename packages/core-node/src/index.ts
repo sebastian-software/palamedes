@@ -111,8 +111,16 @@ export type CatalogCombineResult = Omit<GeneratedCatalogCombineResult, "diagnost
 }
 export type CatalogFileFormat = "po" | "fcl"
 export type CatalogConfigFormat = CatalogFileFormat
-export type CatalogUpdateRequest = Omit<GeneratedCatalogUpdateRequest, "format"> & {
+export type PoLineBreaks = "auto" | "off"
+export type PoOrderBy = "message" | "origin"
+export type PoOutputOptions = {
+  lineBreaks?: PoLineBreaks
+  orderBy?: PoOrderBy
+  orderLocale?: string
+}
+export type CatalogUpdateRequest = Omit<GeneratedCatalogUpdateRequest, "format" | "po"> & {
   format?: CatalogConfigFormat
+  po?: PoOutputOptions
 }
 export type CatalogParseRequest = Omit<GeneratedCatalogParseRequest, "format"> & {
   format?: CatalogConfigFormat
@@ -477,6 +485,41 @@ function toNativeUpdateRequest(request: CatalogUpdateRequest): NativeCatalogUpda
   return {
     ...request,
     format: request.format ? toNativeConfigFormat(request.format) : undefined,
+    po: request.po
+      ? {
+          lineBreaks: request.po.lineBreaks
+            ? toNativePoLineBreaks(request.po.lineBreaks)
+            : undefined,
+          orderBy: request.po.orderBy ? toNativePoOrderBy(request.po.orderBy) : undefined,
+          orderLocale: request.po.orderLocale,
+        }
+      : undefined,
+  }
+}
+
+function toNativePoLineBreaks(
+  lineBreaks: PoLineBreaks
+): NonNullable<NonNullable<NativeCatalogUpdateRequest["po"]>["lineBreaks"]> {
+  switch (lineBreaks) {
+    case "auto": {
+      return "Auto"
+    }
+    case "off": {
+      return "Off"
+    }
+  }
+}
+
+function toNativePoOrderBy(
+  orderBy: PoOrderBy
+): NonNullable<NonNullable<NativeCatalogUpdateRequest["po"]>["orderBy"]> {
+  switch (orderBy) {
+    case "message": {
+      return "Message"
+    }
+    case "origin": {
+      return "Origin"
+    }
   }
 }
 

@@ -31,6 +31,25 @@ pub struct CatalogUpdateMessage {
     pub origins: Vec<CatalogOrigin>,
 }
 
+#[napi(string_enum)]
+pub enum PoLineBreaks {
+    Auto,
+    Off,
+}
+
+#[napi(string_enum)]
+pub enum PoOrderBy {
+    Message,
+    Origin,
+}
+
+#[napi(object)]
+pub struct PoOutputOptions {
+    pub line_breaks: Option<PoLineBreaks>,
+    pub order_by: Option<PoOrderBy>,
+    pub order_locale: Option<String>,
+}
+
 #[napi(object)]
 pub struct CatalogUpdateRequest {
     pub target_path: String,
@@ -39,6 +58,7 @@ pub struct CatalogUpdateRequest {
     pub clean: bool,
     pub force_clean: Option<bool>,
     pub format: Option<CatalogConfigFormat>,
+    pub po: Option<PoOutputOptions>,
     pub messages: Vec<CatalogUpdateMessage>,
 }
 
@@ -434,6 +454,34 @@ impl From<CatalogUpdateMessage> for palamedes::CatalogUpdateMessage {
     }
 }
 
+impl From<PoLineBreaks> for palamedes::PoLineBreaks {
+    fn from(value: PoLineBreaks) -> Self {
+        match value {
+            PoLineBreaks::Auto => Self::Auto,
+            PoLineBreaks::Off => Self::Off,
+        }
+    }
+}
+
+impl From<PoOrderBy> for palamedes::PoOrderBy {
+    fn from(value: PoOrderBy) -> Self {
+        match value {
+            PoOrderBy::Message => Self::Message,
+            PoOrderBy::Origin => Self::Origin,
+        }
+    }
+}
+
+impl From<PoOutputOptions> for palamedes::PoOutputOptions {
+    fn from(value: PoOutputOptions) -> Self {
+        Self {
+            line_breaks: value.line_breaks.map(Into::into).unwrap_or_default(),
+            order_by: value.order_by.map(Into::into).unwrap_or_default(),
+            order_locale: value.order_locale,
+        }
+    }
+}
+
 impl From<CatalogUpdateRequest> for palamedes::CatalogUpdateRequest {
     fn from(value: CatalogUpdateRequest) -> Self {
         Self {
@@ -446,6 +494,7 @@ impl From<CatalogUpdateRequest> for palamedes::CatalogUpdateRequest {
                 .format
                 .map(palamedes::PalamedesCatalogFormat::from)
                 .unwrap_or_default(),
+            po: value.po.map(Into::into),
             messages: value
                 .messages
                 .into_iter()

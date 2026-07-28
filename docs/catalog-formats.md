@@ -26,6 +26,14 @@ catalogs:
 
 That writes `src/locales/en.po` and `src/locales/de.po`.
 
+PO output can be configured per catalog with the nested `po` object. The
+options are independent: disable automatic width folding with
+`line-breaks: off`, sort by the first source reference with
+`order-by: origin`, or set `order-locale` to sort the complete catalog with
+ICU4X by message and context. Defaults keep the standard Ferrocat PO output.
+See [Configuration](./configuration.md#catalogs) for the full schema and
+JavaScript spellings.
+
 ## FCL
 
 FCL means Ferrocat Catalog Lines. It is a line-oriented Ferrocat catalog format

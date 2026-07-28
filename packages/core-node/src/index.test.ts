@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -12,6 +12,7 @@ import {
   getNativeInfo,
   parsePo,
   transformMacrosNative,
+  updateCatalogFile,
 } from "./index"
 
 type SourceMapLike = {
@@ -58,6 +59,40 @@ msgstr "Oeffnen"
       msgstr: ["Oeffnen"],
       flags: { fuzzy: true },
     })
+  })
+
+  it("maps generic PO output options across the NAPI boundary", async () => {
+    const rootDir = await createTempDir()
+    const targetPath = path.join(rootDir, "en.po")
+    const long =
+      "This deliberately long source message and translation value stays on one physical line when automatic PO folding is disabled."
+
+    updateCatalogFile({
+      targetPath,
+      locale: "en",
+      sourceLocale: "en",
+      clean: false,
+      po: {
+        lineBreaks: "off",
+        orderBy: "message",
+        orderLocale: "en-US",
+      },
+      messages: [
+        { message: "Zebra", extractedComments: [], origins: [] },
+        { message: long, extractedComments: [], origins: [] },
+        { message: "Álgebra", extractedComments: [], origins: [] },
+        { message: "éclair", extractedComments: [], origins: [] },
+      ],
+    })
+
+    const output = await readFile(targetPath, "utf8")
+    expect(output).toContain(`msgid "${long}"\nmsgstr "${long}"`)
+    expect(parsePo(output).items.map((item) => item.msgid)).toStrictEqual([
+      "Álgebra",
+      "éclair",
+      long,
+      "Zebra",
+    ])
   })
 
   it("maps native transform results into JavaScript strings and source maps", () => {
