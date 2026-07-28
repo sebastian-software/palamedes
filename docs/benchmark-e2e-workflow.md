@@ -5,15 +5,15 @@ run after source changes:
 
 - Palamedes: `pmds extract`
 - Lingui: `lingui extract`
-- FormatJS: `formatjs extract`
+- React Intl: `formatjs extract`
 - i18next-cli: `i18next-cli extract`
 
 It is separate from the Lingui v6 hot-path benchmark. This harness
 includes source scanning, extraction, and output writes in one timed command.
 Palamedes, Lingui, and i18next-cli also update existing `en`
-and `de` catalogs. FormatJS instead writes its standard aggregated extracted-
-message JSON artifact; it does not provide a locale-catalog merge in this
-command, so its narrower scope is called out throughout the report.
+and `de` catalogs. The React Intl lane instead uses `@formatjs/cli` to write one
+aggregated extracted-message JSON artifact; it does not provide a locale-catalog
+merge in this command, so its narrower scope is called out throughout the report.
 
 ## What This Benchmark Times
 
@@ -21,21 +21,21 @@ The reported medians time one CLI command per tool:
 
 - Palamedes: `pmds extract --config palamedes.yaml`
 - Lingui: `lingui extract --config lingui.config.mjs`
-- FormatJS: `formatjs extract "src/generated/**/*.{ts,tsx}" --out-file src/locales/extracted.json --id-interpolation-pattern "[sha512:contenthash:base64:6]"`
+- React Intl: `formatjs extract "src/generated/**/*.{ts,tsx}" --out-file src/locales/extracted.json --id-interpolation-pattern "[sha512:contenthash:base64:6]"`
 - i18next-cli: `i18next-cli extract --config i18next.config.mjs --sync-all --trust-derived --quiet`
 
 That means the measured time includes:
 
-| Area                                        | Included in the timed median? | Notes                                                                                                                                                                                                     |
-| ------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Source file discovery                       | Yes                           | Each tool scans the generated source tree through its own normal config.                                                                                                                                  |
-| Source parsing / code inspection            | Yes                           | This is the parser work needed to find messages. It is not a separate type-check or lint pass.                                                                                                            |
-| Message extraction                          | Yes                           | The command has to read the authored source syntax and produce the current message set.                                                                                                                   |
-| Catalog update / merge                      | Except FormatJS               | Existing catalogs start with unchanged, changed, and removed messages; the source tree also contains new messages. FormatJS overwrites one extracted-message artifact instead of merging locale catalogs. |
-| Catalog file writes                         | Yes                           | Four tools write updated `en` and `de` catalogs. FormatJS writes one aggregated JSON extraction artifact with content-hash IDs.                                                                           |
-| Semantic result validation                  | No                            | The harness checks the written catalogs after the command so bad extraction cannot publish timings, but that check is outside the measured median.                                                        |
-| Runtime catalog/artifact compile            | No                            | Compiling catalogs into runtime artifacts is a separate benchmark surface.                                                                                                                                |
-| Type-checking, linting, bundling, app build | No                            | This benchmark is about catalog extraction/update workflows, not app validation.                                                                                                                          |
+| Area                                        | Included in the timed median? | Notes                                                                                                                                                                                                                             |
+| ------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source file discovery                       | Yes                           | Each tool scans the generated source tree through its own normal config.                                                                                                                                                          |
+| Source parsing / code inspection            | Yes                           | This is the parser work needed to find messages. It is not a separate type-check or lint pass.                                                                                                                                    |
+| Message extraction                          | Yes                           | The command has to read the authored source syntax and produce the current message set.                                                                                                                                           |
+| Catalog update / merge                      | Except React Intl             | Existing catalogs start with unchanged, changed, and removed messages; the source tree also contains new messages. React Intl's extraction workflow overwrites one extracted-message artifact instead of merging locale catalogs. |
+| Catalog file writes                         | Yes                           | Three tools write updated `en` and `de` catalogs. React Intl's extraction workflow writes one aggregated JSON artifact with content-hash IDs.                                                                                     |
+| Semantic result validation                  | No                            | The harness checks the written catalogs after the command so bad extraction cannot publish timings, but that check is outside the measured median.                                                                                |
+| Runtime catalog/artifact compile            | No                            | Compiling catalogs into runtime artifacts is a separate benchmark surface.                                                                                                                                                        |
+| Type-checking, linting, bundling, app build | No                            | This benchmark is about catalog extraction/update workflows, not app validation.                                                                                                                                                  |
 
 For Palamedes, the JSON report also includes the `PALAMEDES_TIMING_JSON=1`
 breakdown from inside `pmds extract` (`glob`, `extract`, and `write`). The
@@ -83,7 +83,7 @@ successfully.
 
 The i18next-cli corpus uses natural-language keys so active
 messages can be compared directly. Teams using key-only i18next architectures
-may see different catalog shapes and timings. FormatJS source uses
+may see different catalog shapes and timings. React Intl source uses
 `defineMessages` and `FormattedMessage`; validation compares the extracted
 `defaultMessage` values rather than treating its generated content-hash IDs as
 message semantics.
@@ -140,7 +140,7 @@ Latest checked full run:
 - measured runs: `7`
 - Palamedes CLI: `1.8.0`
 - Lingui CLI: `6.5.0`
-- FormatJS CLI: `6.16.14`
+- React Intl extraction CLI (`@formatjs/cli`): `6.16.14`
 - i18next-cli: `1.66.2`
 
 ### Small
@@ -158,11 +158,11 @@ Median results:
 | ----------- | ----------: |
 | Palamedes   |  `33.99 ms` |
 | Lingui      | `631.05 ms` |
-| FormatJS    | `273.88 ms` |
+| React Intl  | `273.88 ms` |
 | i18next-cli | `441.45 ms` |
 
 On this run, Palamedes measured `18.57x` faster than Lingui, `8.06x` faster
-than FormatJS, and `12.99x` faster than i18next-cli.
+than React Intl, and `12.99x` faster than i18next-cli.
 
 ### Medium
 
@@ -179,11 +179,11 @@ Median results:
 | ----------- | ----------: |
 | Palamedes   |  `47.54 ms` |
 | Lingui      | `708.78 ms` |
-| FormatJS    | `291.40 ms` |
+| React Intl  | `291.40 ms` |
 | i18next-cli | `555.34 ms` |
 
 On this run, Palamedes measured `14.91x` faster than Lingui, `6.13x` faster
-than FormatJS, and `11.68x` faster than i18next-cli.
+than React Intl, and `11.68x` faster than i18next-cli.
 
 ### Realistic
 
@@ -203,11 +203,11 @@ Median results:
 | ----------- | -----------: |
 | Palamedes   |  `122.33 ms` |
 | Lingui      | `2280.56 ms` |
-| FormatJS    |  `463.65 ms` |
+| React Intl  |  `463.65 ms` |
 | i18next-cli | `5815.11 ms` |
 
 On this run, Palamedes measured `18.64x` faster than Lingui, `3.79x` faster
-than FormatJS, and `47.54x` faster than i18next-cli.
+than React Intl, and `47.54x` faster than i18next-cli.
 
 ## Reading The Numbers
 

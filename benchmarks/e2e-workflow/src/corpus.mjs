@@ -546,7 +546,7 @@ export function toFormatJsCatalog(messages) {
   for (const message of messages) {
     const id = formatJsId(message)
     if (catalog[id] && catalog[id].defaultMessage !== message) {
-      throw new Error(`FormatJS content-hash collision for ${JSON.stringify(message)} at ${id}`)
+      throw new Error(`React Intl content-hash collision for ${JSON.stringify(message)} at ${id}`)
     }
     catalog[id] = { defaultMessage: message }
   }

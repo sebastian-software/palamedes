@@ -64,7 +64,7 @@ export const FUNDING: FundingRow[] = [
     checked: "July 2026",
   },
   {
-    project: "react-intl / FormatJS",
+    project: "React Intl",
     funder: "No disclosed funding; effectively one primary maintainer",
     sells: "Nothing. Which is also why throughput on non-core work is thin.",
     checked: "July 2026",

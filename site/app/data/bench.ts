@@ -49,7 +49,7 @@ export const BENCH_SMALL: BenchCorpus = {
   rows: [
     { tool: "Palamedes", medianMs: 33.99, accent: true },
     { tool: "Lingui", medianMs: 631.05 },
-    { tool: "FormatJS", medianMs: 273.88 },
+    { tool: "React Intl", medianMs: 273.88 },
     { tool: "i18next-cli", medianMs: 441.45 },
   ],
   ratios: {
@@ -66,7 +66,7 @@ export const BENCH_MEDIUM: BenchCorpus = {
   rows: [
     { tool: "Palamedes", medianMs: 47.54, accent: true },
     { tool: "Lingui", medianMs: 708.78 },
-    { tool: "FormatJS", medianMs: 291.4 },
+    { tool: "React Intl", medianMs: 291.4 },
     { tool: "i18next-cli", medianMs: 555.34 },
   ],
   ratios: {
@@ -83,7 +83,7 @@ export const BENCH_REALISTIC: BenchCorpus = {
   rows: [
     { tool: "Palamedes", medianMs: 122.33, accent: true },
     { tool: "Lingui", medianMs: 2280.56 },
-    { tool: "FormatJS", medianMs: 463.65 },
+    { tool: "React Intl", medianMs: 463.65 },
     { tool: "i18next-cli", medianMs: 5815.11 },
   ],
   ratios: {

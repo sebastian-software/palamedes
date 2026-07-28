@@ -18,7 +18,7 @@ export const handle = { layout: "bare" }
 export function meta() {
   return pageMeta({
     title:
-      "Palamedes compared — Lingui, i18next, next-intl, react-intl, Paraglide, Intlayer, General Translation, Tolgee",
+      "Palamedes compared — Lingui, i18next, next-intl, React Intl, Paraglide, Intlayer, General Translation, Tolgee",
     description: `Side-by-side comparisons of Palamedes with the major TypeScript i18n libraries: ${BENCH_REALISTIC.ratios.formatjs} to ${BENCH_REALISTIC.ratios.i18nextCli} faster on a checked benchmark, with what each of them does better and when to pick them instead.`,
     path: "/compare",
   })

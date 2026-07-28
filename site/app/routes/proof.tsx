@@ -68,7 +68,7 @@ export default function Proof() {
       <Section
         num="01 — Benchmarks"
         title="The workflow you feel every day: extract & update."
-        lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; FormatJS writes its standard extraction artifact. Every run uses the same logical inventory and is validated semantically."
+        lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; the React Intl extraction workflow writes one aggregated extraction artifact. Every run uses the same logical inventory and is validated semantically."
       >
         <div className="space-y-8">
           <BenchmarkChart corpus={BENCH_REALISTIC} />

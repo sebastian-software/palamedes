@@ -154,12 +154,12 @@ export default async function CheckoutHeading({ seats }) {
         a: `Yes. The same model is verified across ${contentStats.frameworkCount} meta-frameworks in CI, including the RSC-capable ones beyond Next.js. Palamedes ships React and Solid packages; there is no Vue or React Native support.`,
       },
       {
-        q: "Why can't react-intl support server components?",
-        a: "Its runtime resolves messages through React Context, which is a client-tree mechanism. That is an architectural premise rather than a missing feature, which is why the request to use react-intl without Context has stayed open rather than being implemented.",
+        q: "Why can't React Intl support server components?",
+        a: "Its runtime resolves messages through React Context, which is a client-tree mechanism. That is an architectural premise rather than a missing feature, which is why the request to use React Intl without Context has stayed open rather than being implemented.",
       },
     ],
     related: [
-      { label: "Compare with react-intl", href: "/compare/react-intl" },
+      { label: "Compare with React Intl", href: "/compare/react-intl" },
       { label: "Compare with next-intl", href: "/compare/next-intl" },
       { label: "The verified framework matrix", href: "/frameworks" },
     ],
@@ -219,11 +219,11 @@ export default async function CheckoutHeading({ seats }) {
       },
       {
         q: "Does the benchmark include catalog merging?",
-        a: "Yes, and that matters for reading it fairly. The catalog-aware tools extract and then update existing per-locale catalogs. FormatJS writes a single aggregated message file instead, so it is doing less work in the same row.",
+        a: "Yes, and that matters for reading it fairly. The catalog-aware tools extract and then update existing per-locale catalogs. The React Intl extraction workflow writes a single aggregated message file instead, so it is doing less work in the same row.",
       },
       {
         q: "Which tools are covered?",
-        a: "Lingui, FormatJS and i18next-cli. Tools the harness has not measured are not given a speed claim anywhere on this site, because a guess dressed as a benchmark is worse than no number.",
+        a: "Lingui, React Intl and i18next-cli. Tools the harness has not measured are not given a speed claim anywhere on this site, because a guess dressed as a benchmark is worse than no number.",
       },
       {
         q: "Does faster extraction mean a smaller bundle?",
@@ -344,7 +344,7 @@ select(gender, {
       },
     ],
     related: [
-      { label: "Compare with react-intl", href: "/compare/react-intl" },
+      { label: "Compare with React Intl", href: "/compare/react-intl" },
       { label: "Compare with i18next", href: "/compare/i18next" },
       { label: "See the full proof page", href: "/proof" },
     ],

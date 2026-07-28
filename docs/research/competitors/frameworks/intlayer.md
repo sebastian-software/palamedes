@@ -43,7 +43,7 @@ repository: https://github.com/aymericzip/intlayer
 
 - The unit is a **content declaration file** co-located with the component (`*.content.ts` and friends), exporting a dictionary with an explicit `key` and a `content` object.
 - Translations are declared inline per locale via `t({ en: "Home", fr: "Accueil", es: "Inicio" })`, so all locales for a string sit in one place in the source tree by default — the inverse of a per-locale catalog file.
-- There is **no extraction step**. Because content is declared rather than discovered, there is no source-scanning phase to optimise, and no drift between what is in the code and what is in the catalog. This is a genuinely different architecture from Palamedes, Lingui and FormatJS, and it means extraction benchmarks are not a meaningful axis of comparison.
+- There is **no extraction step**. Because content is declared rather than discovered, there is no source-scanning phase to optimise, and no drift between what is in the code and what is in the catalog. This is a genuinely different architecture from Palamedes, Lingui and React Intl, and it means extraction benchmarks are not a meaningful axis of comparison.
 - Rich content helpers form a bespoke DSL rather than a message-format string: `plural` (CLDR categories via `Intl.PluralRules`), `enu` (enumeration over numeric ranges you define), `cond`, `gender`, `insert`, `nest`, `md`, `html`, `file`. Docs explicitly contrast `plural` (delegates to CLDR) against `enu` (hand-defined ranges).
 - Message format is **configurable at project level**: `format?: 'intlayer' | 'icu' | 'i18next' | 'vue-i18n' | 'po'`, defaulting to `'intlayer'` (source: `packages/@intlayer/types/src/config.ts`). So ICU is reachable but is not the native or default vocabulary.
 - Dictionaries carry a `location`: `'local'`, `'remote'`, `'hybrid'`, or `'plugin'`. Remote and hybrid dictionaries are synchronised with a hosted CMS, so the source-of-truth boundary is configurable per dictionary rather than fixed.
@@ -97,7 +97,7 @@ repository: https://github.com/aymericzip/intlayer
 
 ## What they do differently
 
-- **Declaration instead of extraction.** Every other compile-time project in this set (Palamedes, Lingui, FormatJS, Paraglide, next-intl's experimental path) scans source to discover messages. Intlayer inverts it: you write the dictionary, and the component imports it. That removes an entire class of tooling — and an entire class of tooling problems — at the cost of writing the declaration by hand.
+- **Declaration instead of extraction.** Every other compile-time project in this set (Palamedes, Lingui, React Intl, Paraglide, next-intl's experimental path) scans source to discover messages. Intlayer inverts it: you write the dictionary, and the component imports it. That removes an entire class of tooling — and an entire class of tooling problems — at the cost of writing the declaration by hand.
 - **Per-component co-location as the organising principle**, rather than per-locale catalogs or central namespaces.
 - **Pluggable message format at project level**, so the same library can speak Intlayer, ICU, i18next, vue-i18n or PO semantics.
 - **Per-dictionary source-of-truth**: `local`, `remote` or `hybrid` against a hosted CMS, decided dictionary by dictionary rather than for the whole project.
