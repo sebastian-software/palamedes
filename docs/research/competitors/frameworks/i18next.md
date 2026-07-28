@@ -2,7 +2,7 @@
 title: i18next
 category: frontend-framework
 analyzed: 2026-07-06
-analyzed_versions: "i18next 26.3.4, react-i18next 17.0.8, i18next-parser 9.4.0, i18next-cli 1.65.0, i18next-http-backend 4.0.0"
+analyzed_versions: "i18next 26.3.4, react-i18next 17.0.8, i18next-cli 1.65.0, i18next-http-backend 4.0.0"
 homepage: https://www.i18next.com
 repository: https://github.com/i18next/i18next
 ---
@@ -22,7 +22,7 @@ repository: https://github.com/i18next/i18next
 | Message identity  | Key-based (arbitrary IDs) — explicitly not source-string-first                        |
 | ICU MessageFormat | Opt-in plugin (`i18next-icu`) that replaces the native `{{var}}` format               |
 | .po / gettext     | No — core is JSON; third-party converters only                                        |
-| Extraction        | i18next-parser (legacy, JS) / i18next-cli (new, Rust/SWC)                             |
+| Extraction        | i18next-cli (Rust/SWC)                                                                |
 | AI                | None in OSS core (AI lives in locize)                                                 |
 | Notable           | Runtime plugin architecture; SaaS-funds-OSS model incl. the v25.8 console-ad backlash |
 
@@ -32,7 +32,7 @@ repository: https://github.com/i18next/i18next
 - License: MIT (both i18next and react-i18next).
 - Current stable version + release date: i18next 26.3.4, released 2026-06-30 (npm registry `time` field: `2026-06-30T06:23:58.694Z`). react-i18next latest: 17.0.8.
 - Adoption:
-  - npm weekly downloads: i18next 18,215,438 (week of 2026-06-29–07-05); react-i18next 12,775,762; i18next-http-backend 2,550,463; i18next-parser 579,770.
+  - npm weekly downloads: i18next 18,215,438 (week of 2026-06-29–07-05); react-i18next 12,775,762; i18next-http-backend 2,550,463.
   - GitHub stars: i18next 8,597 (692 forks, 2 open issues, 282 releases); react-i18next 10,023 (1,053 forks).
   - Cited on homepage: "1,500+ of the world's top 100,000 websites," including X, GitLab, Deezer, DeepL, Microsoft Power BI.
 - First release / age: i18next first published to npm 2012-01-03 (v0.0.1); repo created 2011-12-16. Roughly 14.5 years old as of 2026-07-06.
@@ -70,8 +70,7 @@ repository: https://github.com/i18next/i18next
 
 ## Workflow & tooling
 
-- **i18next-cli** (current: 1.65.0) — the modern, officially promoted unified CLI, explicitly built to replace the legacy `i18next-parser`/`i18next-scanner` tools. Uses a native Rust-based parser (SWC) for source scanning; claims order-of-magnitude speedups over JS-based parsers ("workflows that once took over a minute... complete in under five seconds," per locize's own blog — vendor claim, not independently verified). Commands: `extract` (find/save keys, with `--watch`), `sync` (add missing / remove unused keys across locale files), `types` (generate TS defs for autocomplete/type safety), plus linting for hardcoded strings. Includes automatic migration from `i18next-parser` config.
-- **i18next-parser** (current: 9.4.0, 579,770 weekly downloads) — the older, still widely-used JS-based key extractor; scans source for `t()` calls and manages catalog JSON files.
+- **i18next-cli** (current: 1.65.0) — the modern, officially promoted unified CLI and successor to the deprecated, unmaintained `i18next-parser`. Uses a native Rust-based parser (SWC) for source scanning; claims order-of-magnitude speedups over JS-based parsers ("workflows that once took over a minute... complete in under five seconds," per locize's own blog — vendor claim, not independently verified). Commands: `extract` (find/save keys, with `--watch`), `sync` (add missing / remove unused keys across locale files), `types` (generate TS defs for autocomplete/type safety), plus linting for hardcoded strings. Includes automatic migration of legacy configurations.
 - Bundler integrations: webpack loaders, Vite plugins, rollup plugin, grunt-i18next.
 - No built-in CI-gating or review-flow product in the OSS core; that space is covered by locize (paid) or ad hoc scripting around `i18next-cli sync`.
 
@@ -82,7 +81,7 @@ repository: https://github.com/i18next/i18next
 
 ## Pricing
 
-- i18next, react-i18next, i18next-parser, i18next-cli, i18next-http-backend: free, open source, MIT-licensed.
+- i18next, react-i18next, i18next-cli, and i18next-http-backend: free, open source, MIT-licensed.
 - locize (companion commercial TMS, same maintainers): 14-day free trial (no credit card), a permanent free plan, and paid plans described as "flat monthly pricing, no per-seat or per-word surprises" — exact tier prices not shown on fetched pages; not verified.
 - Notable funding dynamic: locize has no VC funding; the stated model is that locize subscription revenue (including free-tier signups, which build usage data/adoption) directly funds continued i18next OSS development — an explicit "commercial product subsidizes the OSS library" structure, unlike typical corporate-sponsored or foundation-backed OSS projects.
 
@@ -109,7 +108,7 @@ repository: https://github.com/i18next/i18next
 - Key-based catalogs by design, explicitly rejecting "natural language as key" — the opposite of Palamedes' source-string-first `.po` approach; missing-key handling is a known pain point directly downstream of this choice.
 - Deliberately format-agnostic message syntax: ships its own lightweight interpolation/pluralization by default, but treats ICU MessageFormat as an optional plugin (`i18next-icu`) that _replaces_ rather than supplements the native format — a strict either/or, not a hybrid.
 - Business model is the standout differentiator: no corporate backer, no foundation, no VC — the maintainers built their own commercial SaaS (locize) specifically to bankroll the OSS project, and were transparent (and then walked back) about monetizing developer attention directly inside the library via a console notice. This funding structure is unusual among major OSS i18n tools and creates a direct commercial upsell path from every i18next install into locize.
-- Actively rebuilding its own tooling generation: replacing the aging JS-based `i18next-parser` with a Rust/SWC-powered `i18next-cli` that unifies extraction, sync, lint, and type generation — an unusually aggressive internal-tooling rewrite for a 14-year-old project, suggesting the team sees extraction/DX tooling as a competitive front.
+- Actively rebuilding its own tooling generation around a Rust/SWC-powered `i18next-cli` that unifies extraction, sync, lint, and type generation — an unusually aggressive internal-tooling rewrite for a 14-year-old project, suggesting the team sees extraction/DX tooling as a competitive front.
 
 ## Sources
 
@@ -121,12 +120,10 @@ repository: https://github.com/i18next/i18next
 - https://registry.npmjs.org/i18next/latest (accessed 2026-07-06)
 - https://registry.npmjs.org/react-i18next/latest (accessed 2026-07-06)
 - https://registry.npmjs.org/i18next-http-backend/latest (accessed 2026-07-06)
-- https://registry.npmjs.org/i18next-parser/latest (accessed 2026-07-06)
 - https://registry.npmjs.org/i18next-cli/latest (accessed 2026-07-06)
 - https://api.npmjs.org/downloads/point/last-week/i18next (accessed 2026-07-06)
 - https://api.npmjs.org/downloads/point/last-week/react-i18next (accessed 2026-07-06)
 - https://api.npmjs.org/downloads/point/last-week/i18next-http-backend (accessed 2026-07-06)
-- https://api.npmjs.org/downloads/point/last-week/i18next-parser (accessed 2026-07-06)
 - https://api.github.com/repos/i18next/i18next (accessed 2026-07-06)
 - https://api.github.com/repos/i18next/react-i18next (accessed 2026-07-06)
 - https://github.com/i18next/i18next (accessed 2026-07-06)

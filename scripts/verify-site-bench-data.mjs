@@ -19,12 +19,11 @@ const benchTsPath = join(repoRoot, "site/app/data/bench.ts")
 
 const report = readFileSync(reportPath, "utf8")
 const benchTs = readFileSync(benchTsPath, "utf8")
-const tools = ["Palamedes", "Lingui", "FormatJS", "i18next-parser", "i18next-cli"]
+const tools = ["Palamedes", "Lingui", "FormatJS", "i18next-cli"]
 const comparedTools = tools.filter((tool) => tool !== "Palamedes")
 const ratioFields = {
   Lingui: "lingui",
   FormatJS: "formatjs",
-  "i18next-parser": "i18nextParser",
   "i18next-cli": "i18nextCli",
 }
 
@@ -49,13 +48,13 @@ function parseSection(name) {
   const body = warmStart === -1 ? afterCold : afterCold.slice(0, warmStart)
   const medians = {}
   for (const match of body.matchAll(
-    /^\|\s+(Palamedes|Lingui|FormatJS|i18next-parser|i18next-cli)\s+\|\s+([\d.]+) ms\s+\|/gm
+    /^\|\s+(Palamedes|Lingui|FormatJS|i18next-cli)\s+\|\s+([\d.]+) ms\s+\|/gm
   )) {
     medians[match[1]] = Number(match[2])
   }
   const speedups = {}
   for (const match of body.matchAll(
-    /^\|\s+Palamedes vs (Lingui|FormatJS|i18next-parser|i18next-cli)\s+\|\s+Palamedes\s+\|\s+([\d.]+)x\s+\|/gm
+    /^\|\s+Palamedes vs (Lingui|FormatJS|i18next-cli)\s+\|\s+Palamedes\s+\|\s+([\d.]+)x\s+\|/gm
   )) {
     speedups[match[1]] = match[2]
   }
@@ -162,7 +161,7 @@ function parseBenchSection(name) {
   }
   const medians = {}
   for (const match of body.matchAll(
-    /\{ tool: "(Palamedes|Lingui|FormatJS|i18next-parser|i18next-cli)", medianMs: ([\d.]+)/g
+    /\{ tool: "(Palamedes|Lingui|FormatJS|i18next-cli)", medianMs: ([\d.]+)/g
   )) {
     medians[match[1]] = Number(match[2])
   }

@@ -223,7 +223,7 @@ export default async function CheckoutHeading({ seats }) {
       },
       {
         q: "Which tools are covered?",
-        a: "Lingui, FormatJS, i18next-parser and i18next-cli. Tools the harness has not measured are not given a speed claim anywhere on this site, because a guess dressed as a benchmark is worse than no number.",
+        a: "Lingui, FormatJS and i18next-cli. Tools the harness has not measured are not given a speed claim anywhere on this site, because a guess dressed as a benchmark is worse than no number.",
       },
       {
         q: "Does faster extraction mean a smaller bundle?",

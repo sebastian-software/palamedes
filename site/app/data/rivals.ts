@@ -85,7 +85,7 @@ function speedup(tool: string): string {
 }
 
 const NO_BENCHMARK =
-  "Not measured. The checked harness covers Lingui, FormatJS, and the two i18next extractors; anything else would be a guess."
+  "Not measured. The checked harness covers Lingui, FormatJS, and i18next-cli; anything else would be a guess."
 
 /*
  * The argument that applies to every page: extraction and catalog work is
@@ -95,7 +95,7 @@ const NO_BENCHMARK =
  */
 export const NATIVE_SHIFT = {
   title: "The toolchain already moved. i18n tooling mostly hasn't.",
-  body: "Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation, which is why the checked benchmark comes back between 3.69× and 45.03× faster depending on which tool you put next to it.",
+  body: `Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation, which is why the checked benchmark comes back between ${BENCH_REALISTIC.ratios.formatjs} and ${BENCH_REALISTIC.ratios.i18nextCli} faster depending on which tool you put next to it.`,
 }
 
 export const RIVALS: Rival[] = [
@@ -223,8 +223,7 @@ function checkoutLabel(seats) {
     subject: "i18next 26.3.4 / react-i18next 17.0.8",
     researched: "July 2026",
     metaTitle: "Palamedes vs i18next — stop maintaining a naming layer",
-    metaDescription:
-      "i18next is the most widely deployed i18n stack in JavaScript, and it asks every developer to invent and maintain keys. Palamedes uses the sentence you already wrote — and extracts it up to 45.03× faster on the checked benchmark.",
+    metaDescription: `i18next is the most widely deployed i18n stack in JavaScript, and it asks every developer to invent and maintain keys. Palamedes uses the sentence you already wrote — and extracts it up to ${BENCH_REALISTIC.ratios.i18nextCli} faster on the checked benchmark.`,
     eyebrow: "Compare · i18next",
     headline: "You already know what the string says.",
     lede: "i18next identifies messages by keys you invent, namespace, remember and keep in sync with a JSON tree. Palamedes identifies them by the source text you already typed. That single decision deletes a whole category of weekly work, changes what a missing translation looks like in production, and changes what lands in your translators' inbox.",
@@ -264,7 +263,7 @@ function checkoutLabel(seats) {
       },
       {
         title: "Extraction is a compile step, not a convention",
-        body: `Palamedes parses your source in a Rust core instead of scanning by convention. On the checked realistic corpus that shows up against both i18next extractors: ${speedup("i18next-parser")} for i18next-parser, and ${speedup("i18next-cli")} for i18next-cli — ${BENCH_REALISTIC.ratios.i18nextCli} on the same inventory.¹`,
+        body: `Palamedes parses your source in a Rust core instead of scanning by convention. On the checked realistic corpus that shows up against the current i18next CLI: ${speedup("i18next-cli")} for i18next-cli on the same inventory.¹`,
       },
     ],
     rows: [
@@ -290,8 +289,8 @@ function checkoutLabel(seats) {
       },
       {
         criterion: "Extract + update, realistic corpus",
-        rival: `${speedup("i18next-parser")} (parser) · ${speedup("i18next-cli")} (cli)`,
-        palamedes: `${BENCH_REALISTIC.ratios.i18nextParser} / ${BENCH_REALISTIC.ratios.i18nextCli} faster on the checked run¹`,
+        rival: speedup("i18next-cli"),
+        palamedes: `${BENCH_REALISTIC.ratios.i18nextCli} faster on the checked run¹`,
       },
       {
         criterion: "Framework reach",

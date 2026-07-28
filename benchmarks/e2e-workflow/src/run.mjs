@@ -27,11 +27,10 @@ const TOOL_LABELS = {
   palamedes: "Palamedes",
   lingui: "Lingui",
   formatjs: "FormatJS",
-  i18nextParser: "i18next-parser",
   i18nextCli: "i18next-cli",
 }
 
-const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "i18nextParser", "i18nextCli"]
+const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "i18nextCli"]
 /*
  * Directories any measured tool may leave behind as reusable state. Only
  * Palamedes writes one today; the others are listed so a future cache in one of
@@ -196,7 +195,6 @@ async function resolveToolPaths(args) {
     palamedes: args.pmdsBin ?? path.join(repoRoot, "target", "release", `pmds${binarySuffix}`),
     lingui: path.join(benchmarkRoot, "node_modules", ".bin", `lingui${commandSuffix}`),
     formatjs: path.join(benchmarkRoot, "node_modules", ".bin", `formatjs${commandSuffix}`),
-    i18nextParser: path.join(benchmarkRoot, "node_modules", ".bin", `i18next${commandSuffix}`),
     i18nextCli: path.join(benchmarkRoot, "node_modules", ".bin", `i18next-cli${commandSuffix}`),
   }
 
@@ -218,11 +216,10 @@ async function assertExecutable(tool, filename) {
 }
 
 async function readVersions(toolPaths) {
-  const [formatjsCli, linguiCli, i18nextParser, i18nextCli, benchmarkPackage, palamedesVersion] =
+  const [formatjsCli, linguiCli, i18nextCli, benchmarkPackage, palamedesVersion] =
     await Promise.all([
       readJson(path.join(benchmarkRoot, "node_modules", "@formatjs", "cli", "package.json")),
       readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "cli", "package.json")),
-      readJson(path.join(benchmarkRoot, "node_modules", "i18next-parser", "package.json")),
       readJson(path.join(benchmarkRoot, "node_modules", "i18next-cli", "package.json")),
       readJson(path.join(benchmarkRoot, "package.json")),
       readCommandVersion(toolPaths.palamedes, ["version"]),
@@ -238,9 +235,6 @@ async function readVersions(toolPaths) {
     },
     formatjs: {
       cli: formatjsCli.version,
-    },
-    i18nextParser: {
-      cli: i18nextParser.version,
     },
     i18nextCli: {
       cli: i18nextCli.version,
@@ -428,11 +422,6 @@ async function runTool(tool, cwd, toolPaths) {
         { cwd }
       )
     }
-    case "i18nextParser": {
-      return runCommand(toolPaths.i18nextParser, ["--config", "i18next-parser.config.cjs"], {
-        cwd,
-      })
-    }
     case "i18nextCli": {
       return runCommand(
         toolPaths.i18nextCli,
@@ -499,7 +488,7 @@ async function readActiveMessages(tool, rootDir, locale) {
       .sort()
   }
 
-  if (tool === "i18nextParser" || tool === "i18nextCli") {
+  if (tool === "i18nextCli") {
     const catalog = await readJson(path.join(rootDir, "src", "locales", locale, "translation.json"))
     return Object.keys(catalog).sort()
   }
@@ -560,7 +549,6 @@ function toolVersion(tool, versions) {
   if (tool === "palamedes") return versions.palamedes.cli
   if (tool === "lingui") return versions.lingui.cli
   if (tool === "formatjs") return versions.formatjs.cli
-  if (tool === "i18nextParser") return versions.i18nextParser.cli
   return versions.i18nextCli.cli
 }
 
@@ -659,7 +647,6 @@ function renderMarkdown(report) {
     `- Palamedes CLI: ${report.versions.palamedes.cli}`,
     `- Lingui CLI: ${report.versions.lingui.cli}`,
     `- FormatJS CLI: ${report.versions.formatjs.cli}`,
-    `- i18next-parser CLI: ${report.versions.i18nextParser.cli}`,
     `- i18next-cli: ${report.versions.i18nextCli.cli}`,
     "",
     "## Methodology",
@@ -750,7 +737,7 @@ function renderMarkdown(report) {
     "- Cold runs clear every tool cache alongside the catalogs. The source corpus is generated once per profile and never changes, so a retained cache would be hit by every run after the first and would silently turn the cold medians into warm ones."
   )
   lines.push(
-    "- The i18next-parser and i18next-cli corpora use natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes."
+    "- The i18next-cli corpus uses natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes."
   )
   lines.push(
     "- FormatJS writes one extracted-message JSON artifact and does not update locale translation catalogs; its result is reported with that narrower scope instead of being presented as a catalog-merge equivalent."
