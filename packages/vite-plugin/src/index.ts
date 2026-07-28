@@ -149,8 +149,10 @@ export type PalamedesPluginOptions = {
   failOnCompileError?: boolean
 
   /**
-   * Module to import the runtime getter from for macro transforms and, unless
-   * overridden by MDX-specific configuration, generated MDX modules.
+   * Module the macro transform imports the runtime getter from. Set it to a
+   * framework runtime subpath to make inline `t` / `plural` follow a live
+   * locale switch. Generated MDX modules are not affected; they default to the
+   * framework's reactive runtime and are configured through `mdx.runtimeModule`.
    * @default "@palamedes/runtime"
    */
   runtimeModule?: string
@@ -215,8 +217,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   }
 
   function resolveMdxOptions(cfg: LoadedPalamedesConfig): PalamedesMdxConfig {
+    /*
+     * The macro `runtimeModule` is deliberately not a fallback here. It is an
+     * opt-in that trades the framework-agnostic default for a reactive one,
+     * while generated MDX modules already default to the framework's reactive
+     * runtime subpath. Letting the macro option leak in would silently
+     * downgrade MDX whenever a project pins the macro target.
+     */
     return {
-      ...(runtimeModule ? { runtimeModule } : {}),
       ...cfg.mdx,
       ...mdxOverride,
     }
