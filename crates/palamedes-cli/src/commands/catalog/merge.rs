@@ -38,6 +38,11 @@ pub struct MergeOptions {
     /// Locale of the merged catalog.
     #[arg(long)]
     locale: Option<String>,
+    /// Real catalog pathname. Git merge drivers hand the driver temporary
+    /// files, so `--output` cannot identify which configured catalog is being
+    /// merged; pass `%P` here. Defaults to `--output`.
+    #[arg(long)]
+    path: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -60,22 +65,36 @@ impl Command for MergeOptions {
         if self.inputs.len() != 2 {
             return Err(CliError::InvalidMergeInputCount(self.inputs.len()));
         }
+        /*
+         * A Git merge driver runs wherever the conflicted worktree is, which
+         * need not be a Palamedes project. Only an explicit --config makes a
+         * missing config fatal; otherwise carry on without one rather than
+         * refusing the merge.
+         */
+        let config = match context.load_config(self.config.as_deref()) {
+            Ok(config) => Some(config),
+            Err(CliError::Config(ConfigError::NotFound)) if self.config.is_none() => None,
+            Err(error) => return Err(error),
+        };
+
         let source_locale = match &self.source_locale {
             Some(source_locale) => source_locale.clone(),
-            /*
-             * A Git merge driver runs wherever the conflicted worktree is, which
-             * need not be a Palamedes project. Only an explicit --config makes a
-             * missing config fatal; otherwise fall back to the default source
-             * locale rather than refusing the merge.
-             */
-            None => match context.load_config(self.config.as_deref()) {
-                Ok(config) => config.source_locale,
-                Err(CliError::Config(ConfigError::NotFound)) if self.config.is_none() => {
-                    "en".to_owned()
-                }
-                Err(error) => return Err(error),
-            },
+            None => config
+                .as_ref()
+                .map_or_else(|| "en".to_owned(), |config| config.source_locale.clone()),
         };
+
+        /*
+         * Without the catalog's own options a merged catalog comes back folded
+         * differently than the project writes it, and the next extraction
+         * turns that into a diff.
+         */
+        let po = config.as_ref().and_then(|config| {
+            config
+                .catalog_for_path(self.path.as_deref().unwrap_or(&self.output))
+                .and_then(|catalog| catalog.po.clone())
+                .map(Into::into)
+        });
 
         let mut input_paths = self.inputs.clone();
         if let Some(base) = &self.base {
@@ -96,6 +115,7 @@ impl Command for MergeOptions {
                 MergeConflictStrategy::UseLast => CatalogConflictStrategy::UseLast,
                 MergeConflictStrategy::Error => CatalogConflictStrategy::Error,
             },
+            po,
         })?)
     }
 

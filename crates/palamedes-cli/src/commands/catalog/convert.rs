@@ -167,6 +167,7 @@ fn convert_one_catalog(
         source_locale: source_locale.to_owned(),
         locale: locale.map(str::to_owned),
         conflict_strategy: CatalogConflictStrategy::UseFirst,
+        po: None,
     })?;
     Ok(())
 }

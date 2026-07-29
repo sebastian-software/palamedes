@@ -6,6 +6,7 @@ use ferrocat::{
     CatalogMode, CombineCatalogFilesOptions, CombineCatalogOptions, OrderBy,
 };
 
+use crate::catalog_update::{atomic_write_catalog, finalize_rendered_po, PoOutputOptions};
 use crate::error::{PalamedesError, PalamedesResult};
 
 pub use ferrocat::{
@@ -84,6 +85,9 @@ pub struct CatalogFileCombineRequest {
     pub locale: Option<String>,
     /// Strategy for resolving conflicting non-empty translations.
     pub conflict_strategy: CatalogConflictStrategy,
+    /// Optional PO-specific output controls, applied when the combined catalog
+    /// is written as PO.
+    pub po: Option<PoOutputOptions>,
 }
 
 /// Combines multiple catalogs into one deterministic catalog.
@@ -123,6 +127,21 @@ fn combine_catalog_contents(
     ferrocat_combine_catalogs(options).map_err(PalamedesError::from)
 }
 
+/// Rewrites a freshly combined PO file in the order and shape Palamedes
+/// writes, so a merged catalog matches what the next extraction produces.
+fn finalize_combined_po(
+    output_path: &std::path::Path,
+    po: Option<&PoOutputOptions>,
+) -> PalamedesResult<()> {
+    let combined = std::fs::read_to_string(output_path)
+        .map_err(|error| ferrocat::ApiError::io_with_path(output_path, error))?;
+    let finalized = finalize_rendered_po(&combined, po)?;
+    if finalized != combined {
+        atomic_write_catalog(output_path, &finalized)?;
+    }
+    Ok(())
+}
+
 /// Combines catalog files and atomically replaces the requested output path.
 ///
 /// # Errors
@@ -157,6 +176,16 @@ pub fn combine_catalog_files(
     }
 
     let result = ferrocat_combine_catalog_files(options).map_err(PalamedesError::from)?;
+
+    /*
+     * Ferrocat writes in code-point order, which is never what Palamedes puts
+     * in a PO catalog. Without this pass a merge would hand back a fully
+     * re-sorted file and the next extraction would sort it right back.
+     */
+    if matches!(result.format, ferrocat::CatalogFileFormat::Po) {
+        finalize_combined_po(&request.output_path, request.po.as_ref())?;
+    }
+
     Ok(CatalogFileCombineResult {
         output_path: result.output_path,
         format: match result.format {
@@ -240,6 +269,85 @@ mod tests {
         assert!(!result.content.contains("Shared"));
     }
 
+    /*
+     * A merged catalog has to come back in the order an extraction writes, or
+     * the merge commit carries a full re-sort that the next extraction undoes.
+     * Code-point order would put "Zebra" ahead of "Álgebra".
+     */
+    #[test]
+    fn writes_merged_po_files_in_collation_order() {
+        let dir = temp_dir("po-merge-order");
+        let ours = dir.join("ours.po");
+        let theirs = dir.join("theirs.po");
+        fs::write(
+            &ours,
+            "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Zebra\"\nmsgstr \"Zebra\"\n\nmsgid \"über\"\nmsgstr \"über\"\n",
+        )
+        .expect("write ours");
+        fs::write(
+            &theirs,
+            "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Álgebra\"\nmsgstr \"Álgebra\"\n\nmsgid \"Uber\"\nmsgstr \"Uber\"\n",
+        )
+        .expect("write theirs");
+
+        combine_catalog_files(CatalogFileCombineRequest {
+            input_paths: vec![ours.clone(), theirs],
+            output_path: ours.clone(),
+            format: None,
+            source_locale: "en".to_owned(),
+            locale: Some("de".to_owned()),
+            conflict_strategy: CatalogConflictStrategy::UseFirst,
+            po: None,
+        })
+        .expect("merge");
+
+        let parsed = ferrocat::parse_po(&fs::read_to_string(&ours).expect("read output"))
+            .expect("parse output");
+        assert_eq!(
+            parsed
+                .items
+                .iter()
+                .map(|item| item.msgid.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Álgebra", "Uber", "über", "Zebra"]
+        );
+    }
+
+    #[test]
+    fn applies_po_line_break_options_to_merged_output() {
+        let dir = temp_dir("po-merge-line-breaks");
+        let ours = dir.join("ours.po");
+        let theirs = dir.join("theirs.po");
+        let long = "A deliberately long translation value that Ferrocat would fold at its default output width.";
+        fs::write(
+            &ours,
+            format!("msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"{long}\"\nmsgstr \"{long}\"\n"),
+        )
+        .expect("write ours");
+        fs::write(&theirs, "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n").expect("write theirs");
+
+        combine_catalog_files(CatalogFileCombineRequest {
+            input_paths: vec![ours.clone(), theirs],
+            output_path: ours.clone(),
+            format: None,
+            source_locale: "en".to_owned(),
+            locale: Some("de".to_owned()),
+            conflict_strategy: CatalogConflictStrategy::UseFirst,
+            po: Some(crate::PoOutputOptions {
+                line_breaks: crate::PoLineBreaks::Off,
+            }),
+        })
+        .expect("merge");
+
+        let output = fs::read_to_string(&ours).expect("read output");
+        assert!(
+            output
+                .lines()
+                .any(|line| line == format!("msgid \"{long}\"")),
+            "{output}"
+        );
+    }
+
     #[test]
     fn merges_po_files_with_use_first_and_preserves_first_header() {
         let dir = temp_dir("po-use-first");
@@ -277,6 +385,7 @@ mod tests {
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
+            po: None,
         })
         .expect("merge");
 
@@ -336,6 +445,7 @@ mod tests {
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
+            po: None,
         })
         .expect("merge");
 
@@ -376,6 +486,7 @@ mod tests {
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
+            po: None,
         })
         .expect("merge");
 
@@ -404,6 +515,7 @@ mod tests {
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
+            po: None,
         })
         .expect_err("mixed formats");
 
@@ -431,6 +543,7 @@ mod tests {
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
+            po: None,
         })
         .expect_err("unsupported format");
 

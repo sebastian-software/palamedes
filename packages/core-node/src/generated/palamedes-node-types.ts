@@ -113,6 +113,7 @@ export interface CatalogFileCombineRequest {
   sourceLocale: string;
   locale?: string;
   conflictStrategy?: CatalogConflictStrategy;
+  po?: PoOutputOptions;
 }
 export interface CatalogFileCombineResult {
   outputPath: string;

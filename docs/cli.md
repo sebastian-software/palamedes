@@ -101,11 +101,18 @@ Git merge-driver workflows.
 
 ```bash
 pmds catalog merge ours.po theirs.po --output merged.po
-pmds catalog merge %A %B --base %O --output %A --format po --conflict-strategy use-first
+pmds catalog merge %A %B --base %O --output %A --path %P --format po --conflict-strategy use-first
 pmds catalog merge ours.fcl theirs.fcl --output merged.fcl --format fcl
 ```
 
 `pmds catalog merge` requires exactly two input catalogs in precedence order.
+
+Merged PO catalogs are written in the same order and shape as an extraction
+produces, so a resolved conflict does not land as a fully re-sorted file that
+the next `pmds extract` sorts back. Applying the catalog's own `po` options
+needs to know which configured catalog is being merged, and a Git merge driver
+only ever sees temporary files — pass `%P` through `--path` for that. Without
+it the output path is used, which is enough outside a merge driver.
 
 Options:
 
@@ -118,6 +125,7 @@ Options:
 | `--conflict-strategy <strategy>` | `use-first`, `use-last`, or `error`. Default: `use-first`.       |
 | `--source-locale <locale>`       | Source locale for catalog semantics. Defaults to config or `en`. |
 | `--locale <locale>`              | Locale of the merged catalog.                                    |
+| `--path <path>`                  | Real catalog pathname; pass `%P` in a Git merge driver.          |
 
 ## `pmds catalog convert`
 

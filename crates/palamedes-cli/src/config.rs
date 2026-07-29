@@ -254,6 +254,27 @@ impl LoadedConfig {
         self.root_dir.join(catalog_path.replace("{locale}", locale))
     }
 
+    /// Finds the configured catalog a file belongs to.
+    ///
+    /// Commands that receive a catalog by path rather than by config entry —
+    /// a Git merge driver, for one — need this to apply that catalog's output
+    /// options. Relative paths resolve against the config root, which is where
+    /// catalog paths are anchored.
+    pub fn catalog_for_path(&self, path: &Path) -> Option<&ConfigCatalog> {
+        let target = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.root_dir.join(path)
+        };
+        self.catalogs.iter().find(|catalog| {
+            self.locales.iter().any(|locale| {
+                self.resolve_catalog_path(&catalog.path, locale)
+                    .with_extension(catalog.format.extension())
+                    == target
+            })
+        })
+    }
+
     pub fn resolve_pattern(&self, pattern: &str) -> PathBuf {
         self.root_dir.join(pattern)
     }
@@ -581,6 +602,62 @@ catalogs:
         let config = load_config(&app, None).expect("load config");
         let po = config.catalogs[0].po.as_ref().expect("PO options");
         assert_eq!(po.line_breaks, palamedes::PoLineBreaks::Off);
+    }
+
+    /*
+     * A Git merge driver is handed temporary files, so the catalog it is
+     * merging can only be identified by the real pathname passed alongside
+     * them. Resolution has to work for every locale of every catalog, and has
+     * to reject paths that belong to no catalog rather than guessing.
+     */
+    #[test]
+    fn resolves_the_catalog_a_path_belongs_to() {
+        let app = temp_dir("catalog-for-path");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}/messages
+    include: [src]
+    po:
+      line-breaks: "off"
+  - path: docs/locales/{locale}
+    format: fcl
+    include: [docs]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("load config");
+
+        let po_catalog = config
+            .catalog_for_path(&app.join("src/locales/de/messages.po"))
+            .expect("catalog for a target locale");
+        assert_eq!(po_catalog.path, "src/locales/{locale}/messages");
+        assert_eq!(
+            po_catalog.po.as_ref().expect("PO options").line_breaks,
+            palamedes::PoLineBreaks::Off
+        );
+
+        // Relative paths anchor at the config root, which is what a merge
+        // driver's `%P` hands over.
+        assert!(config
+            .catalog_for_path(std::path::Path::new("src/locales/en/messages.po"))
+            .is_some());
+
+        assert_eq!(
+            config
+                .catalog_for_path(&app.join("docs/locales/en.fcl"))
+                .map(|catalog| catalog.path.as_str()),
+            Some("docs/locales/{locale}")
+        );
+
+        assert!(config
+            .catalog_for_path(&app.join("src/locales/fr/messages.po"))
+            .is_none());
+        assert!(config.catalog_for_path(&app.join("README.md")).is_none());
     }
 
     /*

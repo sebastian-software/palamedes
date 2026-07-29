@@ -433,6 +433,17 @@ fn read_existing_catalog(
     }))
 }
 
+/// Rewrites already-rendered PO output the way Palamedes writes catalogs:
+/// collation order plus the requested folding, with no preserved metadata to
+/// restore. Used by paths that hand off rendering to Ferrocat and need the
+/// result to match what an extraction would have produced.
+pub(crate) fn finalize_rendered_po(
+    rendered: &str,
+    options: Option<&PoOutputOptions>,
+) -> PalamedesResult<String> {
+    finalize_po_output(rendered, None, options)
+}
+
 fn finalize_po_output(
     updated: &str,
     metadata: Option<&BTreeMap<PoMessageKey, PreservedPoMetadata>>,
@@ -545,7 +556,7 @@ fn sort_po_items_collated(items: &mut [ferrocat::PoItem]) {
     }
 }
 
-fn atomic_write_catalog(target_path: &Path, content: &str) -> PalamedesResult<()> {
+pub(crate) fn atomic_write_catalog(target_path: &Path, content: &str) -> PalamedesResult<()> {
     let directory = target_path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(directory).map_err(|error| ApiError::io_with_path(directory, error))?;
     let mut temporary = tempfile::NamedTempFile::new_in(directory)
