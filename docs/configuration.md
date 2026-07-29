@@ -123,6 +123,16 @@ workflows Palamedes targets need, and it keeps the output identical no matter
 which locale a catalog holds. Languages with genuinely different collation
 (Swedish, Turkish, Czech and others) are not tailored for.
 
+`collated` uses a generated table covering Latin text, punctuation, symbols and
+digits rather than a full Unicode collation implementation, which keeps roughly
+1.2 MB of collation data out of every shipped binary. Two consequences worth
+knowing, both outside what source messages hold in practice: ligatures and
+digraphs (`ﬁ`, `Ǆ`) sort by their own weight instead of expanding to `fi` and
+`dz`, and characters outside the table sort after it by code point. The
+placement of non-Latin scripts after Latin still matches root collation; the
+order within them does not. Since this only decides the order entries appear
+in, a miss costs a line in a diff rather than a wrong translation.
+
 `collated` ordering and `line-breaks: "off"` both re-serialize the catalog once
 more after the update. That costs roughly one extra PO parse and serialize per
 catalog file — a few milliseconds on a large catalog.
