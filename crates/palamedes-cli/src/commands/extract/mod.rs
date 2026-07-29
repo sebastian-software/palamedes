@@ -332,7 +332,6 @@ catalogs:
     include: [app]
     po:
       line-breaks: "off"
-      order-by: collated
 "#,
         )
         .expect("write config");

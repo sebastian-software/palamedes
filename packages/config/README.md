@@ -23,12 +23,11 @@ catalogs:
     include: [src]
     po:
       line-breaks: "off"
-      order-by: collated
 ```
 
-PO output options are independent and per catalog. In JavaScript or TypeScript
-configs, use `po: { lineBreaks, orderBy }`. Data configs use the kebab-case
-spellings shown above. `orderBy: "collated"` sorts with the CLDR root
+PO output options are per catalog. In JavaScript or TypeScript configs, use
+`po: { lineBreaks }`; data configs use the kebab-case spelling shown above.
+Catalog order is not configurable — PO catalogs always use the CLDR root
 collation, matching `Intl.Collator("en-US")`. The `po` object is invalid for
 FCL catalogs.
 

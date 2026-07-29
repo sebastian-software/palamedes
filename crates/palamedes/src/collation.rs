@@ -1,5 +1,5 @@
 /*!
-Collation order for `PoOrderBy::Collated`.
+The order Palamedes writes PO catalogs in.
 
 Lingui sorts catalogs with `new Intl.Collator("en-US")`, which resolves to the
 unmodified CLDR root collation — English carries no tailoring of its own. This
@@ -22,7 +22,7 @@ Known limits, both outside what source catalogs hold in practice:
   holds, but the order within them does not.
 */
 
-use crate::collation_table::{Row, RANGE_START, ROWS, WIDE};
+use crate::collation_table::{Row, EXTRA, RANGE_START, ROWS, WIDE};
 
 /// Sort key reproducing CLDR root order for the covered repertoire.
 ///
@@ -45,8 +45,22 @@ fn is_combining(c: char) -> bool {
 }
 
 fn row(c: char) -> Option<&'static Row> {
-    let index = usize::try_from(u32::from(c).checked_sub(RANGE_START)?).ok()?;
-    ROWS.get(index)
+    if let Some(offset) = u32::from(c).checked_sub(RANGE_START) {
+        if let Some(row) = usize::try_from(offset)
+            .ok()
+            .and_then(|index| ROWS.get(index))
+        {
+            return Some(row);
+        }
+    }
+    /*
+     * Typographic characters sit far above the dense range, so they get their
+     * own sorted table rather than padding the dense one across the gap.
+     */
+    EXTRA
+        .binary_search_by(|(key, _)| key.cmp(&c))
+        .ok()
+        .map(|index| &EXTRA[index].1)
 }
 
 fn wide_decomposition(c: char) -> Option<&'static str> {
@@ -198,5 +212,35 @@ mod tests {
     #[test]
     fn sorts_uncovered_characters_after_the_covered_repertoire() {
         assert_eq!(sorted(vec!["日本語", "Zebra"]), vec!["Zebra", "日本語"]);
+    }
+
+    /*
+     * Typographic characters live well above the dense table range. Treating
+     * them as uncovered would sort every quoted or dashed message to the end
+     * of the catalog, so each one has to resolve to a real weight.
+     */
+    #[test]
+    fn covers_typographic_characters_above_the_dense_range() {
+        for text in [
+            "“Quoted”",
+            "‘Single’",
+            "Em — dash",
+            "En – dash",
+            "Ellipsis…",
+        ] {
+            assert_eq!(
+                sorted(vec![text, "Zebra"]),
+                vec![text, "Zebra"],
+                "{text} must sort before a plain letter"
+            );
+        }
+    }
+
+    #[test]
+    fn orders_typographic_punctuation_the_way_root_collation_does() {
+        assert_eq!(
+            sorted(vec!["Zebra", "“Quoted”", "{brace}", "!Alert", "100%"]),
+            vec!["!Alert", "“Quoted”", "{brace}", "100%", "Zebra"]
+        );
     }
 }

@@ -86,7 +86,7 @@ describe("loadPalamedesConfig", () => {
     ])
   })
 
-  it("loads generic PO output options from JavaScript and data configs", async () => {
+  it("loads PO output options from JavaScript and data configs", async () => {
     const jsDir = await createTempDir()
     await writeFile(
       path.join(jsDir, "palamedes.config.ts"),
@@ -97,20 +97,14 @@ describe("loadPalamedesConfig", () => {
           catalogs: [{
             path: "src/locales/{locale}",
             include: ["src"],
-            po: {
-              lineBreaks: "off",
-              orderBy: "collated",
-            },
+            po: { lineBreaks: "off" },
           }],
         }
       `
     )
 
     const jsConfig = await loadPalamedesConfig({ cwd: jsDir })
-    expect(jsConfig.catalogs[0]?.po).toStrictEqual({
-      lineBreaks: "off",
-      orderBy: "collated",
-    })
+    expect(jsConfig.catalogs[0]?.po).toStrictEqual({ lineBreaks: "off" })
 
     const dataDir = await createTempDir()
     await writeFile(
@@ -123,15 +117,11 @@ describe("loadPalamedesConfig", () => {
             include: [src]
             po:
               line-breaks: "off"
-              order-by: collated
       `
     )
 
     const dataConfig = loadPalamedesConfigSync({ cwd: dataDir })
-    expect(dataConfig.catalogs[0]?.po).toStrictEqual({
-      lineBreaks: "off",
-      orderBy: "collated",
-    })
+    expect(dataConfig.catalogs[0]?.po).toStrictEqual({ lineBreaks: "off" })
   })
 
   /*
@@ -164,15 +154,11 @@ describe("loadPalamedesConfig", () => {
         /po" can only be used when the catalog format is "po"/,
       ],
       [
-        "unknown-order",
-        `po: { orderBy: "locale" }`,
-        /orderBy" must be "message", "origin", or "collated"/,
+        "removed-order-by",
+        `po: { orderBy: "collated" }`,
+        /unknown key "catalogs\[0\]\.po\.orderBy"/,
       ],
-      [
-        "unknown-key",
-        `po: { orderLocale: "en-US" }`,
-        /unknown key "catalogs\[0\]\.po\.orderLocale"/,
-      ],
+      ["bad-line-breaks", `po: { lineBreaks: "wrap" }`, /lineBreaks" must be "auto" or "off"/],
     ] as const) {
       const fixtureDir = await createTempDir()
       await writeFile(

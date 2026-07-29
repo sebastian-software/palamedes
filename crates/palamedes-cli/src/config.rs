@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use ::config as config_rs;
 use palamedes::{
     CatalogArtifactConfig, CatalogConfig, FallbackLocales, MdxOptions, PalamedesCatalogFormat,
-    PoLineBreaks, PoOrderBy, PoOutputOptions,
+    PoLineBreaks, PoOutputOptions,
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -83,15 +83,12 @@ pub struct ConfigCatalog {
 pub struct ConfigPoOutputOptions {
     #[serde(default, alias = "line_breaks")]
     pub line_breaks: PoLineBreaks,
-    #[serde(default, alias = "order_by")]
-    pub order_by: PoOrderBy,
 }
 
 impl From<ConfigPoOutputOptions> for PoOutputOptions {
     fn from(value: ConfigPoOutputOptions) -> Self {
         Self {
             line_breaks: value.line_breaks,
-            order_by: value.order_by,
         }
     }
 }
@@ -565,7 +562,7 @@ catalogs:
     }
 
     #[test]
-    fn loads_independent_po_output_options_from_yaml_config() {
+    fn loads_po_output_options_from_yaml_config() {
         let app = temp_dir("po-options");
         fs::write(
             app.join(CONFIG_FILENAME),
@@ -577,7 +574,6 @@ catalogs:
     include: [src]
     po:
       line-breaks: "off"
-      order-by: collated
 "#,
         )
         .expect("write config");
@@ -585,7 +581,6 @@ catalogs:
         let config = load_config(&app, None).expect("load config");
         let po = config.catalogs[0].po.as_ref().expect("PO options");
         assert_eq!(po.line_breaks, palamedes::PoLineBreaks::Off);
-        assert_eq!(po.order_by, palamedes::PoOrderBy::Collated);
     }
 
     /*
@@ -621,7 +616,7 @@ catalogs:
     }
 
     #[test]
-    fn rejects_invalid_po_output_option_combinations() {
+    fn rejects_invalid_po_output_options() {
         for (name, catalog, expected) in [
             (
                 "po-options-fcl",
@@ -629,9 +624,14 @@ catalogs:
                 "can only be used when the catalog format is \"po\"",
             ),
             (
-                "po-options-unknown-order",
-                "po:\n      order-by: locale",
-                "expected one of `message`, `origin`, `collated`",
+                "po-options-unknown-line-breaks",
+                "po:\n      line-breaks: wrap",
+                "expected `auto` or `off`",
+            ),
+            (
+                "po-options-removed-order-by",
+                "po:\n      order-by: collated",
+                "order-by",
             ),
         ] {
             let app = temp_dir(name);

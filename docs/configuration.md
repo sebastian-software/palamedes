@@ -89,7 +89,7 @@ storage extension. Palamedes appends `.po` by default or `.fcl` when
 `format` accepts `po` and `fcl`. `ndjson` is no longer supported; use `fcl`
 for Ferrocat Catalog Lines.
 
-PO catalogs also accept independent output controls:
+PO catalogs also accept an output control:
 
 ```yaml
 catalogs:
@@ -97,45 +97,16 @@ catalogs:
     include: [src]
     po:
       line-breaks: "off"
-      order-by: collated
 ```
 
-- `line-breaks` accepts `auto` (the default) or `off`. `off` disables
-  automatic width folding for long `msgid` and `msgstr` values. Actual newline
-  characters still use valid multiline PO syntax.
+`line-breaks` accepts `auto` (the default) or `off`. `off` disables automatic
+width folding for long `msgid` and `msgstr` values, so editing one word no
+longer reflows the whole entry. Actual newline characters still use valid
+multiline PO syntax.
 
-  Quote the value. A bare `off` is a string under YAML 1.2, which is what
-  Palamedes parses with, but YAML 1.1 tooling reads it as the boolean `false`.
-  Both spellings are accepted, so existing configs keep working.
-
-- `order-by` accepts `message` (the default), `origin`, or `collated`.
-  - `message` sorts by source message and then gettext context in code-point
-    order.
-  - `origin` sorts by the first source reference, then message identity.
-  - `collated` sorts by source message and then gettext context using the CLDR
-    root collation — the same order `Intl.Collator("en-US")` produces, because
-    English carries no collation tailoring of its own. Use this to keep
-    catalogs migrated from Lingui from re-sorting wholesale on first
-    extraction.
-
-Ordering is not locale-configurable. Root collation is what the English-source
-workflows Palamedes targets need, and it keeps the output identical no matter
-which locale a catalog holds. Languages with genuinely different collation
-(Swedish, Turkish, Czech and others) are not tailored for.
-
-`collated` uses a generated table covering Latin text, punctuation, symbols and
-digits rather than a full Unicode collation implementation, which keeps roughly
-1.2 MB of collation data out of every shipped binary. Two consequences worth
-knowing, both outside what source messages hold in practice: ligatures and
-digraphs (`ﬁ`, `Ǆ`) sort by their own weight instead of expanding to `fi` and
-`dz`, and characters outside the table sort after it by code point. The
-placement of non-Latin scripts after Latin still matches root collation; the
-order within them does not. Since this only decides the order entries appear
-in, a miss costs a line in a diff rather than a wrong translation.
-
-`collated` ordering and `line-breaks: "off"` both re-serialize the catalog once
-more after the update. That costs roughly one extra PO parse and serialize per
-catalog file — a few milliseconds on a large catalog.
+Quote the value. A bare `off` is a string under YAML 1.2, which is what
+Palamedes parses with, but YAML 1.1 tooling reads it as the boolean `false`.
+Both spellings are accepted.
 
 The `po` object is only valid for PO catalogs. JavaScript and TypeScript config
 files use the equivalent camelCase shape:
@@ -144,10 +115,33 @@ files use the equivalent camelCase shape:
 {
   po: {
     lineBreaks: "off",
-    orderBy: "collated",
   },
 }
 ```
+
+## Catalog ordering
+
+Catalog order is not configurable. PO catalogs are always sorted by source
+message and then gettext context using the CLDR root collation — the same order
+`Intl.Collator("en-US")` produces, because English carries no collation
+tailoring of its own. That is what makes catalogs migrated from Lingui stay put
+instead of re-sorting wholesale on the first extraction, and it is the only
+order Palamedes writes, so there is nothing to keep in sync between projects.
+
+Ordering is not locale-aware beyond root collation. Languages with genuinely
+different collation (Swedish, Turkish, Czech and others) are not tailored for;
+the catalog order follows the source message, which is the same in every locale
+anyway.
+
+The order comes from a generated table covering Latin text, punctuation,
+symbols and digits rather than a full Unicode collation implementation, which
+keeps roughly 1.2 MB of collation data out of every shipped binary. Two
+consequences, both outside what source messages hold in practice: ligatures and
+digraphs (`ﬁ`, `Ǆ`) sort by their own weight instead of expanding to `fi` and
+`dz`, and characters outside the table sort after it by code point. The
+placement of non-Latin scripts after Latin still matches root collation; the
+order within them does not. Since this only decides the order entries appear
+in, a miss costs a line in a diff rather than a wrong translation.
 
 See [Catalog formats](./catalog-formats.md) for the product boundary between
 PO storage, FCL storage, and the current framework `.po` import loaders.

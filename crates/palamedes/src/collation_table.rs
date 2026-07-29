@@ -376,6 +376,32 @@ pub(crate) const ROWS: &[Row] = &[
     Row { primary: 126, secondary: 0, upper: false, wide: false },
 ];
 
+/// Covered characters above the dense range — typographic quotes, dashes and
+/// the like. Sorted by character so lookups can binary search.
+#[rustfmt::skip]
+pub(crate) const EXTRA: &[(char, Row)] = &[
+    ('–', Row { primary: 5, secondary: 0, upper: false, wide: false }),
+    ('—', Row { primary: 6, secondary: 0, upper: false, wide: false }),
+    ('‘', Row { primary: 18, secondary: 0, upper: false, wide: false }),
+    ('’', Row { primary: 19, secondary: 0, upper: false, wide: false }),
+    ('‚', Row { primary: 20, secondary: 0, upper: false, wide: false }),
+    ('“', Row { primary: 24, secondary: 0, upper: false, wide: false }),
+    ('”', Row { primary: 25, secondary: 0, upper: false, wide: false }),
+    ('„', Row { primary: 26, secondary: 0, upper: false, wide: false }),
+    ('†', Row { primary: 44, secondary: 0, upper: false, wide: false }),
+    ('‡', Row { primary: 45, secondary: 0, upper: false, wide: false }),
+    ('•', Row { primary: 46, secondary: 0, upper: false, wide: false }),
+    ('…', Row { primary: 15, secondary: 0, upper: false, wide: false }),
+    ('‹', Row { primary: 21, secondary: 0, upper: false, wide: false }),
+    ('›', Row { primary: 22, secondary: 0, upper: false, wide: false }),
+    ('€', Row { primary: 76, secondary: 0, upper: false, wide: false }),
+    ('™', Row { primary: 129, secondary: 0, upper: false, wide: false }),
+    ('←', Row { primary: 56, secondary: 0, upper: false, wide: false }),
+    ('↑', Row { primary: 58, secondary: 0, upper: false, wide: false }),
+    ('→', Row { primary: 57, secondary: 0, upper: false, wide: false }),
+    ('↓', Row { primary: 59, secondary: 0, upper: false, wide: false }),
+];
+
 /// Canonical decompositions for the few characters carrying several marks,
 /// sorted by character.
 #[rustfmt::skip]
