@@ -33,6 +33,7 @@
     "proof:icu": "pnpm build && node ./scripts/proof-icu-semantics.mjs",
     "proof:icu:check": "node ./scripts/proof-icu-semantics.mjs",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",
+    "check:binary-size": "node ./scripts/check-binary-size.mjs",
     "check:collation-table": "node ./scripts/generate-collation-table.mjs --check",
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check:published-types": "node ./scripts/check-published-types.mjs",
