@@ -1,4 +1,4 @@
-import { ButtonLink } from "~/components/chrome/Button"
+import { ButtonLink } from "@palamedes/site-ui"
 
 interface Cta {
   label: string

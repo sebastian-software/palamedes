@@ -1,0 +1,432 @@
+/*
+ * Shared Palamedes design contract — "Hellenic Spec Grid".
+ *
+ * The pmds component classes and CSS custom properties work in a plain Vite
+ * application. Tailwind-specific integration lives in the separate optional
+ * tailwind.css export so ordinary CSS tooling never sees framework at-rules.
+ */
+:root {
+  --color-paper: #faf9f4;
+  --color-ink: #0e2a4d;
+  --color-hair: #ddd6c6;
+  --color-accent: #8e6628;
+  --color-gold: #bc8a45;
+  --color-gray-spec: #7d7869;
+  --color-accent-soft: #d9ba7c;
+  --color-hover-fill: #f3efe3;
+  --color-track: #f1ede0;
+  --color-term-ok: #3fb950;
+  --color-term-warn: #d29922;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, Inter, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-display: "Cinzel Hellenic", "Times New Roman", serif;
+  --text-display: clamp(28px, 3.8vw, 49px);
+  --text-h2: clamp(22px, 3.2vw, 31px);
+  --tracking-micro: 0.14em;
+  --tracking-eyebrow: 0.22em;
+  --tracking-nav: 0.12em;
+  --tracking-label: 0.16em;
+  --tracking-th: 0.18em;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-gold);
+    color: var(--color-ink);
+  }
+
+  article ul {
+    list-style: disc;
+  }
+
+  article ol {
+    list-style: decimal;
+  }
+}
+
+@layer components {
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--color-track);
+    padding: 0.1em 0.35em;
+  }
+
+  pre code {
+    background: transparent;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  .pmds-site-header {
+    display: flex;
+    min-height: 4rem;
+    align-items: center;
+    gap: 1.5rem;
+    border-bottom: 1px solid var(--color-hair);
+    padding-inline: max(1.25rem, calc((100vw - 1320px) / 2));
+  }
+
+  .pmds-site-brand,
+  .pmds-site-actions,
+  .pmds-site-nav {
+    display: flex;
+    align-items: center;
+  }
+
+  .pmds-site-brand {
+    gap: 0.75rem;
+    color: var(--color-ink);
+    text-decoration: none;
+  }
+
+  .pmds-site-nav {
+    margin-left: auto;
+  }
+
+  .pmds-site-actions {
+    gap: 1rem;
+  }
+
+  .pmds-site-logo {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .pmds-counterpart-link {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-nav);
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+
+  .pmds-wordmark {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .pmds-button {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border: 1px solid var(--color-ink);
+    border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    text-decoration: none;
+    transition:
+      color 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+
+  .pmds-button--primary {
+    border-color: var(--color-ink);
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  .pmds-button--primary:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+  }
+
+  .pmds-button--outline,
+  .pmds-button--small {
+    background: transparent;
+    color: var(--color-ink);
+  }
+
+  .pmds-button--outline:hover,
+  .pmds-button--small:hover {
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  .pmds-button--small {
+    padding: 0.5rem 1rem;
+  }
+
+  .pmds-page,
+  .pmds-shell-footer {
+    width: 100%;
+    max-width: 1320px;
+    min-width: 0;
+    margin-inline: auto;
+    border-inline: 1px solid var(--color-hair);
+  }
+
+  .pmds-page {
+    min-height: 100vh;
+  }
+
+  .pmds-shell-footer {
+    border-top: 0;
+  }
+
+  .pmds-section {
+    border-top: 1px solid var(--color-hair);
+    padding: 3.5rem 2rem 4rem;
+  }
+
+  .pmds-section--dark {
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  .pmds-section-number,
+  .pmds-section-eyebrow,
+  .pmds-footer-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+
+  .pmds-section-number {
+    letter-spacing: var(--tracking-th);
+    color: var(--color-gray-spec);
+  }
+
+  .pmds-section-number--dark {
+    color: var(--color-accent-soft);
+  }
+
+  .pmds-section-eyebrow {
+    margin-top: 1.5rem;
+    letter-spacing: var(--tracking-eyebrow);
+    color: var(--color-gray-spec);
+  }
+
+  .pmds-section-eyebrow::before {
+    content: "§ ";
+    color: var(--color-accent);
+  }
+
+  .pmds-section-title {
+    max-width: 24em;
+    margin-top: 1rem;
+    font-family: var(--font-display);
+    font-size: var(--text-h2);
+    font-weight: 400;
+    line-height: 1.25;
+    letter-spacing: 0.015em;
+  }
+
+  .pmds-section-lede {
+    max-width: 44em;
+    margin-top: 1rem;
+  }
+
+  .pmds-section-content {
+    margin-top: 2.5rem;
+  }
+
+  .pmds-footer {
+    border-top: 1px solid var(--color-hair);
+  }
+
+  .pmds-footer-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--pmds-footer-columns, 4), minmax(0, 1fr));
+    gap: 1px;
+    border-bottom: 1px solid var(--color-hair);
+    background: var(--color-hair);
+  }
+
+  .pmds-footer-column {
+    min-width: 0;
+    padding: 2rem;
+    background: var(--color-paper);
+  }
+
+  .pmds-footer-title {
+    font-size: 10.5px;
+    letter-spacing: var(--tracking-label);
+    color: var(--color-gray-spec);
+  }
+
+  .pmds-footer-links {
+    margin-top: 1rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  .pmds-footer-links li + li {
+    margin-top: 0.5rem;
+  }
+
+  .pmds-footer-link {
+    color: inherit;
+    font-size: 13.5px;
+    text-decoration: none;
+  }
+
+  .pmds-footer-link:hover {
+    color: var(--color-accent);
+  }
+
+  .pmds-footer-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.25rem 2rem;
+  }
+
+  .pmds-footer-copyright {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-gray-spec);
+  }
+
+  .pmds-footer-wordmark {
+    font-size: 13px;
+    letter-spacing: 0.24em;
+    color: var(--color-gray-spec);
+  }
+}
+
+.pmds-nav-link {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 2px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-nav);
+  color: var(--color-ink);
+  text-decoration: none;
+  transition: color 120ms ease-out;
+}
+
+.pmds-nav-link:hover {
+  color: var(--color-accent);
+}
+
+.pmds-nav-link.active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes scanline {
+  from {
+    top: 0;
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+}
+
+@media (max-width: 56rem) {
+  .pmds-site-header {
+    flex-wrap: wrap;
+    padding-block: 0.75rem;
+  }
+
+  .pmds-site-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .pmds-footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 35rem) {
+  .pmds-section,
+  .pmds-footer-column {
+    padding-inline: 1.25rem;
+  }
+
+  .pmds-footer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pmds-footer-meta {
+    padding-inline: 1.25rem;
+  }
+
+  .pmds-footer-wordmark {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

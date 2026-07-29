@@ -1,9 +1,9 @@
 /*
  * Per-rival comparison content for the /compare/* landing pages.
  *
- * These pages are marketing. They are also checkable, and those two things are
- * not in tension — the argument is stronger when every claim survives being
- * looked up. Ground rules, in order of importance:
+ * These pages compare open-source client and framework architecture. The
+ * argument is stronger when every claim survives being looked up. Ground
+ * rules, in order of importance:
  *
  * 1. Every factual claim about another project comes from the dated research
  *    notes in docs/research/competitors/frameworks/ — `researched` carries
@@ -112,8 +112,8 @@ export const RIVALS: Rival[] = [
     lede: "Lingui got the authoring model right, and we are not going to pretend otherwise — write the message where the UI happens, let the source string be the identity, keep catalogs translators already know. Palamedes agrees with every part of that, then replaces the machinery underneath: one Rust core instead of a JS plugin stack, one runtime access model instead of several.",
     card: `The closest relative — and the checked benchmark says ${BENCH_REALISTIC.ratios.lingui} faster on the same corpus.`,
     facts: [
-      { label: "Adoption", value: "~1.29M downloads/week" },
-      { label: "Track record", value: "Since 2017" },
+      { label: "Licence", value: "MIT" },
+      { label: "Identity", value: "Source-derived or explicit IDs" },
       { label: "Catalogs", value: ".po, native" },
       { label: "Checked benchmark", value: `${BENCH_REALISTIC.ratios.lingui} slower` },
     ],
@@ -121,13 +121,13 @@ export const RIVALS: Rival[] = [
       "If you already believe in macro-based authoring and .po catalogs, the argument is not about the model — you and Lingui and we all agree on it. The argument is about what runs it. Lingui's extraction is a JavaScript toolchain that has been extended, worker-threaded and now experimentally re-hosted on Rolldown to chase the performance the architecture makes hard. Palamedes started on a native core and never had to chase it.",
     respectTitle: "What Lingui earned",
     respect: [
-      "Nine years of production track record. Lingui shipped this authoring model before most of today's React i18n tooling existed, and it was right.",
+      "Macro-based authoring, source-derived identity and native PO catalogs form a coherent client-to-catalog workflow.",
       "Genuinely broad framework support: React, React Native, Vue 3, SolidJS and vanilla JS are first-party, not community ports.",
       "Native ICU MessageFormat and first-class .po catalogs, so translator tooling works without adapters.",
     ],
     flipsideTitle: "What that history costs you",
     flipside: [
-      "v6 was a hard cut — ESM-only, Node ≥22.19, YAML config removed, and a changed auto-ID encoding that forces manual catalog rewrites. Months on, roughly 312k weekly downloads still land on @lingui/macro, which v6 marks as no longer maintained.",
+      "v6 was a hard cut — ESM-only, Node ≥22.19, YAML config removed, and a changed auto-ID encoding that forces manual catalog rewrites. The former @lingui/macro entry point is no longer maintained.",
       "Breadth thins out per target: Astro has been requested since 2023 and is still not first-party, and the App Router dynamic-route extraction limitation has been open since 2025.",
       "The performance ceiling is architectural. Worker threads and an experimental Rolldown extractor are real engineering aimed at a JS-toolchain constraint that a native core does not have.",
     ],
@@ -177,9 +177,9 @@ export const RIVALS: Rival[] = [
         palamedes: `React and Solid across ${contentStats.frameworkCount} meta-frameworks; no Vue, no React Native`,
       },
       {
-        criterion: "Maturity",
-        rival: "Mature, large community, years in production",
-        palamedes: `New — but ${contentStats.adrCount} ADRs and ${contentStats.exampleCount} browser-verified apps are on the table before you commit`,
+        criterion: "Verified host coverage",
+        rival: "Broad UI-framework packages",
+        palamedes: `${contentStats.exampleCount} browser-verified host applications`,
       },
     ],
     code: {
@@ -210,7 +210,7 @@ function checkoutLabel(seats) {
       "You are on React or Solid and expect to change meta-framework at some point.",
     ],
     honest:
-      "Lingui got here first and has the production mileage to show for it. Ours is the newer project, with a younger ecosystem and fewer UI packages. What we put on the table is broad, verified host coverage around one opinionated model, a native engine, and every tradeoff written down in the ADRs before you depend on any of it.",
+      "Lingui covers Vue and React Native while Palamedes does not, and its plugin surface is broader. Palamedes instead verifies supported React and Solid hosts around one runtime model and native catalog engine. If an unsupported UI framework or Lingui-specific plugin is required, Lingui is the technical fit.",
     migration: {
       body: "Source-string-first .po catalogs usually survive a migration after one extraction pass. Explicit-ID-heavy projects need a cleanup pass first — the playbook covers both routes, including the runtime wiring and the macro scope rules that differ.",
       label: "Migration playbook",
@@ -223,35 +223,35 @@ function checkoutLabel(seats) {
     subject: "i18next 26.3.4 / react-i18next 17.0.8",
     researched: "July 2026",
     metaTitle: "Palamedes vs i18next — stop maintaining a naming layer",
-    metaDescription: `i18next is the most widely deployed i18n stack in JavaScript, and it asks every developer to invent and maintain keys. Palamedes uses the sentence you already wrote — and extracts it up to ${BENCH_REALISTIC.ratios.i18nextCli} faster on the checked benchmark.`,
+    metaDescription: `i18next asks every developer to invent and maintain keys. Palamedes uses the sentence you already wrote — and extracts it up to ${BENCH_REALISTIC.ratios.i18nextCli} faster on the checked benchmark.`,
     eyebrow: "Compare · i18next",
     headline: "You already know what the string says.",
     lede: "i18next identifies messages by keys you invent, namespace, remember and keep in sync with a JSON tree. Palamedes identifies them by the source text you already typed. That single decision deletes a whole category of weekly work, changes what a missing translation looks like in production, and changes what lands in your translators' inbox.",
-    card: "The ecosystem giant. One question splits it: do keys identify your messages, or does the text?",
+    card: "A key-first plugin architecture. One question splits it: do keys identify your messages, or does the text?",
     facts: [
-      { label: "Adoption", value: "~18.2M downloads/week" },
-      { label: "Track record", value: "Since 2011" },
+      { label: "Licence", value: "MIT" },
+      { label: "Identity", value: "Explicit keys + namespaces" },
       { label: "Catalogs", value: "JSON, key-based" },
       { label: "Checked benchmark", value: `up to ${BENCH_REALISTIC.ratios.i18nextCli} slower` },
     ],
     thesis:
-      "Fourteen years of reach is a real asset and a real inheritance. The key-based model, the JSON namespaces, the plugin stack and the bolt-on ICU plugin all made sense when they were added, and together they are now a layer your team maintains forever. Palamedes removes the layer instead of optimizing it: the sentence is the identity, ICU is the format rather than an opt-in, and extraction is a compile step in a Rust core.",
+      "The key-based model, JSON namespaces, plugin stack and opt-in ICU plugin form a flexible runtime architecture, and together they are also a layer your team maintains. Palamedes removes the naming layer instead of optimizing it: the sentence is the identity, ICU is the format rather than an opt-in, and extraction is a compile step in a Rust core.",
     respectTitle: "What i18next earned",
     respect: [
-      "The broadest reach in the ecosystem by a wide margin — fourteen years of production use and an install base no alternative comes close to.",
+      "A modular core and plugin architecture cover a wide range of runtimes, data backends, detectors and bundlers.",
       "A modular plugin architecture covering nearly every backend, detector and bundler combination you are likely to need.",
       "Genuinely framework-agnostic: the same core runs in React, Vue, Angular, Node and Deno, with ports outside JavaScript entirely.",
     ],
     flipsideTitle: "What that inheritance costs you",
     flipside: [
-      "The key-based model has a signature production failure: when a lookup misses, users see checkout.button.buy. It is common enough that i18next's own commercial companion maintains a blog category about missing translations.",
+      "The key-based model has a signature runtime failure: when a lookup misses, users see checkout.button.buy unless fallback behavior and source copy are configured separately.",
       "Type-checking string keys has been expensive at scale — reported tsc slowdowns and out-of-memory crashes on large namespace sets, mitigated only recently, with three overlapping typing modes spanning v25 to v27.",
       "RSC support lagged badly: next-i18next stayed Pages-Router-only for years after the App Router shipped, and the official guidance was to bypass it and wire react-i18next by hand — a gap competitors were built specifically to fill.",
     ],
     differences: [
       {
         title: "A missing translation still reads like a sentence",
-        body: "When a key-based lookup misses, the UI shows the raw key in front of a paying customer. Palamedes falls back to the source string, so your worst case is untranslated English rather than an identifier that looks like a crash. The fallback is the message you already wrote — there is nothing to configure and nothing to forget.",
+        body: "When a key-based lookup misses, the UI can show the raw key to a user. Palamedes falls back to the source string, so the worst case is untranslated English rather than an identifier that looks like a crash. The fallback is the message you already wrote — there is nothing to configure and nothing to forget.",
       },
       {
         title: "No naming layer to maintain",
@@ -323,7 +323,7 @@ plural(seats, {
     pickRival: [
       "You need i18n outside React and Solid — Angular, Vue, jQuery or plain Node.",
       "You depend on the plugin ecosystem: specific backends, detectors, or post-processors.",
-      "You want the largest possible pool of tutorials, answers and hire-able experience.",
+      "You need an existing i18next-specific backend, detector or post-processor.",
     ],
     pickPalamedes: [
       "Key maintenance has become a chore, or raw keys have already leaked into production UI.",
@@ -332,7 +332,7 @@ plural(seats, {
       `Extraction time matters in CI: ${BENCH_REALISTIC.ratios.i18nextCli} against i18next-cli on the checked corpus.`,
     ],
     honest:
-      "i18next is the default for good reasons, and no benchmark changes that. It reaches frameworks we do not support, its plugin ecosystem has no equivalent here, and there is no migration playbook from i18next yet — moving a key-based catalog to source-string identity is real work you would be doing largely by hand today. If you want that path paved before you walk it, wait for us. If key maintenance is already costing you more than the migration would, do not.",
+      "i18next reaches frameworks Palamedes does not support, its plugin ecosystem has no equivalent here, and there is no migration playbook from i18next yet — moving a key-based catalog to source-string identity is technical migration work you would be doing largely by hand today.",
   },
   {
     slug: "next-intl",
@@ -347,23 +347,23 @@ plural(seats, {
     lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes draws the boundary differently: your framework keeps routing, while Palamedes carries the same authoring, catalog, validation, and runtime model across supported hosts.",
     card: "Next-native depth including routing, against one shared model across supported hosts.",
     facts: [
-      { label: "Adoption", value: "~4.0M downloads/week" },
+      { label: "Licence", value: "MIT" },
       { label: "Scope", value: "Next.js (use-intl for plain React)" },
-      { label: "Maintainers", value: "One" },
+      { label: "Message identity", value: "Explicit keys" },
       { label: "Routing", value: "Core feature" },
     ],
     thesis:
       "Both projects made a deliberate scope decision and they went opposite ways. next-intl bet that i18n and routing belong together inside one framework, and executed that bet very well. We bet that the framework layer is the part most likely to change under you — so Palamedes owns the part that does not: authoring, identity, catalogs, runtime lookup. Notably, the piece of next-intl that most resembles our approach — compile-time source-string extraction — is still shipping behind unstable_ prefixes. For us it is the only path there is.",
     respectTitle: "What next-intl earned",
     respect: [
-      "The deepest App Router and RSC integration in the field, widely treated as the de facto standard for Next.js i18n.",
+      "Deep App Router and RSC integration, including request configuration and server-component translation APIs.",
       "Locale routing as product: middleware, domain routing and localized pathnames work out of the box — real work you would otherwise write and maintain yourself.",
       "A strong type-safety story, with TypeScript augmentation of message keys and optionally of ICU argument shapes.",
     ],
     flipsideTitle: "What that depth costs you",
     flipside: [
-      "It is one framework's library. Teams that later diversify off Next.js drop to the lower-level use-intl and rebuild the routing and RSC integration themselves — the part they were paying for.",
-      "Four million weekly downloads rest on a single maintainer, with sponsorship small relative to that adoption. That is not a criticism of the person; it is a number worth putting in the risk column.",
+      "It is one framework's library. Teams that later diversify off Next.js drop to the lower-level use-intl and rebuild the routing and RSC integration themselves — the part that supplied the framework depth.",
+      "Its routing, middleware and request-configuration APIs are intentionally coupled to Next.js. Reusing the message layer elsewhere does not carry those integrations with it.",
       "The source-string extraction workflow is explicitly experimental, with reported non-deterministic PO ordering across rebuilds, no default-locale fallback for missing translations, and a generated hash in the msgid rather than the source text.",
     ],
     differences: [
@@ -412,9 +412,9 @@ plural(seats, {
         palamedes: "Checked report covers Lingui, React Intl and i18next only",
       },
       {
-        criterion: "Maintenance",
-        rival: "Single maintainer, very large adoption",
-        palamedes: "Company-maintained, newer ecosystem",
+        criterion: "Host boundary",
+        rival: "Next.js routing and request lifecycle",
+        palamedes: "Shared runtime model; routing remains host-owned",
       },
     ],
     code: {
@@ -460,8 +460,8 @@ function buyLabel(seats) {
     lede: "React Intl set the standard for ICU MessageFormat in JavaScript and we have no argument with the format — we have an argument with the plumbing. Resolving messages through React Context was the right call in 2014 and it is the reason React Server Components are a workaround here rather than a supported path.",
     card: "The ICU standard-bearer. Same rigor here, minus the Context tree that blocks server components.",
     facts: [
-      { label: "Adoption", value: "~3.1M downloads/week" },
-      { label: "Track record", value: "~12 years" },
+      { label: "Licence", value: "BSD-3-Clause" },
+      { label: "Runtime", value: "React Context" },
       { label: "Server components", value: "Not supported natively" },
       { label: "Checked benchmark", value: `${BENCH_REALISTIC.ratios.formatjs} slower` },
     ],
@@ -477,7 +477,7 @@ function buyLabel(seats) {
     flipside: [
       "No React Server Components, structurally. The Context-based runtime is incompatible with RSC, so App Router and every other RSC-first framework need a manual workaround.",
       "Boilerplate is the API. A <FormattedMessage> around every string is explicit and verbose, and the default non-precompiled path carries the ICU parser at runtime unless you opt into /no-parser plus AST precompilation.",
-      "Newer React meta-frameworks are on you: TanStack Start, SolidStart, Waku and React Router have no first-class integration, and maintainer bandwidth on non-core-React work looks thin.",
+      "Newer React meta-frameworks are on you: TanStack Start, SolidStart, Waku and React Router have no first-class integration, so their server and routing boundaries require application-level wiring.",
     ],
     differences: [
       {
@@ -566,16 +566,16 @@ function buyLabel(seats) {
       "Paraglide compiles messages into tree-shakable functions with no runtime library, and wins on bundle size. Palamedes keeps a runtime layer and gets in-place locale switching, .po catalogs and source-string identity for it.",
     eyebrow: "Compare · Paraglide",
     headline: "Smaller bundles. Bigger constraints.",
-    lede: "Paraglide compiles each message into its own tree-shakable function and ships no i18n runtime at all. The bundle-size win is real and we will not argue with it. What we will argue with is the price: a full page reload every time a user changes language, a catalog format only its own ecosystem speaks, and a key namespace you still have to design.",
+    lede: "Paraglide compiles each message into its own tree-shakable function and ships no i18n runtime at all. The bundle-size win is real and we will not argue with it. The tradeoff is a full page reload every time a user changes language, a catalog format tied to its toolchain, and a key namespace you still have to design.",
     card: "Zero runtime and smaller bundles, against in-place locale switching and .po catalogs.",
     facts: [
-      { label: "Adoption", value: "~358k downloads/week" },
+      { label: "Licence", value: "Apache-2.0" },
       { label: "Architecture", value: "Compile-time codegen" },
       { label: "Catalogs", value: ".inlang project format" },
       { label: "Locale switch", value: "Full page reload" },
     ],
     thesis:
-      "Both projects are compile-time by conviction, so this is not the usual runtime-versus-compiler argument — it is a disagreement about which cost is worth paying. Paraglide spends the user's locale switch to save kilobytes. Palamedes spends kilobytes to keep the switch instant and the catalogs in a format the localization industry already speaks. Which side is right depends entirely on whether your users change language, and how often your translators touch the files.",
+      "Both projects are compile-time by conviction, so this is not the usual runtime-versus-compiler argument — it is a disagreement about which cost is worth paying. Paraglide spends the user's locale switch to save kilobytes. Palamedes spends kilobytes to keep the switch instant and to emit standard PO catalogs. Which side is right depends on whether users change language in-session and which catalog handover the toolchain requires.",
     respectTitle: "What Paraglide earned",
     respect: [
       "A genuinely zero-runtime architecture: messages become plain ESM functions, so unused ones are tree-shaken away entirely.",
@@ -586,7 +586,7 @@ function buyLabel(seats) {
     flipside: [
       "Locale switching is a full page reload by design. If your product switches language in-session, every user pays for the bundle saving in latency and lost scroll position.",
       "The tree-shaking promise has documented gaps: a maintainer confirmed that re-exporting messages from a shared file — an ordinary pattern — defeats it, and per-locale build splitting is still an open feature request years in.",
-      "The .inlang project format ties your catalogs to one ecosystem, and that ecosystem has form for retiring peripheral tools: the Ninja GitHub Action is deprecated and the Parrot Figma plugin is archived.",
+      "The .inlang project format requires inlang-aware tooling or a conversion step when the rest of the localization pipeline expects PO.",
     ],
     differences: [
       {
@@ -594,8 +594,8 @@ function buyLabel(seats) {
         body: "Paraglide's v2 architecture switches locale by reloading the page — a deliberate design choice, not an oversight. Palamedes activates a new catalog in place: React components re-render through an external-store bridge, Solid through a signal. If a user can change language inside your product, that difference is not architectural trivia, it is something they feel.",
       },
       {
-        title: "Catalogs the industry already speaks",
-        body: "Paraglide stores messages in the .inlang project format with its own editor ecosystem around it. Palamedes writes .po — the format gettext-based CAT tools, translation agencies and most TMS products have spoken for decades — with the source string as the msgid, so a human can read the file directly and any vendor can quote on it without asking what it is.",
+        title: "Standard PO catalogs as the handover",
+        body: "Paraglide stores messages in the .inlang project format. Palamedes writes gettext .po with the source string as msgid, so CAT and TMS tooling can consume the catalog directly and a human can inspect it without a project-specific editor.",
       },
       {
         title: "Source strings instead of keys",
@@ -664,7 +664,7 @@ function buyLabel(seats) {
     ],
     pickPalamedes: [
       "Users switch language in-session and a page reload would be a visible regression.",
-      "Your translators or agency work in .po and you would rather not convert on every round trip.",
+      "Your localization workflow consumes .po and you would rather not convert on every round trip.",
       "You want source strings as identity instead of a key namespace to design and defend.",
       "You want catalog audits and ICU diagnostics as part of the toolchain, not as a separate product.",
     ],
@@ -672,172 +672,56 @@ function buyLabel(seats) {
       "Paraglide's bundle-size story is better than ours and we are not going to claim otherwise — zero runtime beats a runtime layer on that axis by construction, and that is a fine reason to pick them. We spend those kilobytes on in-place locale switching and .po interoperability because we think most products get more back from those than from the bytes. Nothing in the checked benchmark harness measures Paraglide, so there is no speed claim on this page.",
   },
   {
-    slug: "general-translation",
-    name: "General Translation",
-    subject: "gt-next 11.0.0 / gt-react 11.0.0",
-    researched: "July 2026",
-    metaTitle: "Palamedes vs General Translation — own your catalogs, or rent them",
-    metaDescription:
-      "General Translation bundles library, AI translation, review UI and CDN into one vendor, and gets you shipping fast. Palamedes is local-first tooling under an MIT licence, with .po catalogs your repository owns outright.",
-    eyebrow: "Compare · General Translation",
-    headline: "Your translations should outlive your vendor.",
-    lede: "General Translation is the most vertically integrated option on these pages: wrap JSX in <T>, let an AI agent open the migration PR, let their platform translate and their CDN deliver. It is genuinely fast to adopt. The question this page asks is what you are holding afterwards — and under which licence.",
-    card: "The vertically integrated AI vendor. The split is ownership: your repository, or their platform.",
-    facts: [
-      { label: "Adoption", value: "~50k downloads/week" },
-      { label: "Company age", value: "~2 years, seed-funded" },
-      { label: "SDK licence", value: "FSL-1.1-ALv2, not OSI" },
-      { label: "Catalogs", value: "Proprietary storage + CDN" },
-    ],
-    thesis:
-      "This is not really a library comparison, and pretending otherwise would waste your time. General Translation sells a pipeline: extraction, AI translation, hosted review and edge delivery from one vendor. Palamedes sells none of that — it makes your repository the system of record and leaves the translating to whoever you choose. If translation is a product you want to buy, buy it. If translation is an asset you want to own, the licence and the catalog format are the two things worth reading closely before you start.",
-    respectTitle: "What General Translation earned",
-    respect: [
-      "The lowest integration friction here by some distance: wrapping existing JSX in <T> skips the up-front extraction into a key dictionary that usually is the adoption cost.",
-      "Locadex automates the part nobody wants to do — an AI agent that scans the codebase, wraps translatable content and opens the migration PR itself.",
-      "One vendor covers extraction, AI translation, human review and CDN delivery, with a credible developer-tools customer list and a fast release cadence.",
-    ],
-    flipsideTitle: "What that integration costs you",
-    flipside: [
-      "The SDKs are FSL-1.1-ALv2 — source-available, with a Competing Use restriction and a two-year delayed conversion to Apache-2.0. Their own FAQ calls this open source; by OSI standards it is not, and that is a materially different legal position from MIT.",
-      "There is no standard catalog format. No .po or XLIFF export tooling is documented, so portability out of the ecosystem is unverified — the loadTranslations escape hatch changes where files are served from, not who owns the format.",
-      "ICU is not the format for JSX content: plurals and conditionals use GT's own components, and ICU appears only in the low-level formatMessage utility. Human review sits behind a paid plan, so the free tier ships AI output unchecked.",
-    ],
-    differences: [
-      {
-        title: "Your repository is the system of record",
-        body: "Palamedes writes .po into your repo. The catalogs are versioned with the code that produced them, reviewed in the same pull request, and readable without an account. With GT the JSX is the source and the translations live in their storage and CDN — which is why the escape hatch exists at all, and why it is worth checking what it actually returns.",
-      },
-      {
-        title: "MIT, from day one, permanently",
-        body: "Palamedes is MIT. Not source-available, not a delayed conversion, no competing-use clause to have your legal team read. For a dependency that will sit in the build of every product you ship for the next decade, the licence is not a footnote — it is one of the load-bearing decisions.",
-      },
-      {
-        title: "Vendor-neutral by construction",
-        body: "Because the handover format is .po, any agency, freelancer, CAT tool or TMS can quote on your catalogs without an integration project. Palamedes does not translate anything and has no opinion about who does — we would rather be the layer you keep than the pipeline you are inside.",
-      },
-      {
-        title: "ICU everywhere, not only in the escape hatch",
-        body: "Palamedes is ICU MessageFormat end to end, with a checked proof that nested select and plural semantics survive extraction, catalogs, compilation and rendering. GT reserves ICU for its low-level formatMessage utility and handles JSX plurals through bespoke components — portable vocabulary versus a vendor dialect.",
-      },
-    ],
-    rows: [
-      {
-        criterion: "What it is",
-        rival: "Library plus AI translation platform and CDN",
-        palamedes: "Local-first tooling; you choose who translates",
-      },
-      {
-        criterion: "SDK licence",
-        rival: "FSL-1.1-ALv2 — source-available, Apache-2.0 after 2 years",
-        palamedes: "MIT, from the first release",
-      },
-      {
-        criterion: "Source of truth",
-        rival: "JSX plus hosted storage and CDN",
-        palamedes: "The .po catalogs in your repository",
-      },
-      {
-        criterion: "Catalog portability",
-        rival: "No .po or XLIFF export tooling documented",
-        palamedes: "gettext .po — every CAT tool and TMS reads it",
-      },
-      {
-        criterion: "ICU MessageFormat",
-        rival: "Own components for JSX; ICU in formatMessage only",
-        palamedes: "Native end to end, with a checked proof",
-      },
-      {
-        criterion: "Translation itself",
-        rival: "The product — AI translation with optional human review",
-        palamedes: "Not our product. Bring any agency, TMS or MT engine",
-      },
-      {
-        criterion: "Extract + update speed",
-        rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, React Intl and i18next only",
-      },
-    ],
-    code: {
-      caption: "Both skip the key dictionary. They disagree about what happens next.",
-      rivalLabel: "General Translation",
-      rivalCode: `import { T } from "gt-next"
-
-<T>
-  <p>Buy {seats} seats</p>
-</T>`,
-      palamedesLabel: "Palamedes",
-      palamedesCode: `import { Trans } from "@palamedes/react"
-
-<Trans>Buy {seats} seats</Trans>`,
-      note: "The authoring ergonomics are close cousins — neither asks you to invent a key. What differs is the destination: GT's unit goes to their platform for AI translation, ours goes to a .po file in your repository for whoever you hire.",
-    },
-    pickRival: [
-      "You want translation itself bought, not managed — AI output, review UI and CDN from one vendor.",
-      "You want an agent to perform the initial i18n migration and open the PR for you.",
-      "Shipping 100+ languages this quarter matters more than owning the catalog format.",
-      "Your stack is React, Next.js, React Native or TanStack Start, which is what they cover.",
-    ],
-    pickPalamedes: [
-      "Your catalogs are an asset you intend to own, in a format any vendor can read.",
-      "An MIT licence with no competing-use clause is a requirement, not a preference.",
-      "You want ICU semantics guaranteed end to end rather than a vendor's component dialect.",
-      "You want to change translation supplier without changing your i18n library.",
-    ],
-    honest:
-      "General Translation solves a problem we deliberately do not touch: they will actually translate your product. We will not, ever — Palamedes hands you a .po file and stops. If what you want is one vendor from source string to delivered CDN asset, we are not that and are not becoming it. Their integration story is also genuinely smoother than ours on day one; ours is built to be better in year three.",
-  },
-  {
     slug: "tolgee",
-    name: "Tolgee",
-    subject: "@tolgee/core 7.1.1 / tolgee-platform 3.209.1",
+    name: "Tolgee JS SDK",
+    subject: "@tolgee/core 7.1.1 / @tolgee/react 7.1.1",
     researched: "July 2026",
-    metaTitle: "Palamedes vs Tolgee — repository-first catalogs vs a platform database",
+    metaTitle: "Palamedes vs the Tolgee JS SDK — source strings or explicit keys",
     metaDescription:
-      "Tolgee pairs a slick in-context editor with an open-core translation platform. Palamedes keeps the catalogs in your repository, with no server in the authoring loop and source strings instead of keys.",
-    eyebrow: "Compare · Tolgee",
-    headline: "Your catalogs, or their database.",
-    lede: "Tolgee is a translation platform with a good SDK attached, and its in-context editing is the nicest implementation of that idea we found — ALT+click a string in your running app, edit it, and let it capture the screenshot for context automatically. The structural question is where the truth lives: in their database, with your files as an export target, or in your repository.",
-    card: "A polished platform with an SDK. The split is where the truth lives: their database, or your repo.",
+      "A technical comparison of the MIT-licensed Tolgee JavaScript SDK and Palamedes: runtime keys and framework bindings versus source-string extraction and compiled catalogs.",
+    eyebrow: "Compare · Tolgee JS SDK",
+    headline: "A runtime key, or the sentence itself.",
+    lede: "The MIT-licensed Tolgee JavaScript SDK puts a framework-independent client runtime beneath idiomatic React, Vue, Angular and Svelte bindings. Palamedes starts earlier in the pipeline: it extracts the sentence from source, compiles repository-owned catalogs and keeps runtime adapters thin. This page compares only those open-source client architectures.",
+    card: "An MIT client runtime with broad framework bindings. The split is explicit keys versus extracted source strings.",
     facts: [
-      { label: "Adoption", value: "~123k downloads/week" },
-      { label: "Licence", value: "Open-core: Apache-2.0 + EE" },
-      { label: "Source of truth", value: "Platform key database" },
-      { label: "Identity", value: "Keys you maintain" },
+      { label: "Compared code", value: "JavaScript client SDK only" },
+      { label: "SDK licence", value: "MIT" },
+      { label: "Bindings", value: "React, Vue, Angular, Svelte" },
+      { label: "Message identity", value: "Explicit keys" },
     ],
     thesis:
-      "Tolgee and Palamedes disagree about which artifact is authoritative. In Tolgee, the platform's key database is the origin and your files are import and export targets — which is what makes the in-context editor and the screenshot capture possible in the first place. In Palamedes the .po file in your repository is the origin, full stop: no server participates in authoring, catalogs are reviewed in the pull request that changed the strings, and the whole toolchain runs offline. Both are coherent. Only one of them keeps working when the vendor does not.",
-    respectTitle: "What Tolgee earned",
+      "Tolgee's client SDK is runtime-centered: configure the core, load static data or a backend plugin, then resolve explicit keys through a framework binding. Palamedes is compiler-centered: write the source sentence, extract it into a repository-owned catalog and compile the runtime artifact. Both provide an MIT client path and ICU messages; they disagree about whether developers should name every message and whether catalog production belongs inside the client architecture.",
+    respectTitle: "What the Tolgee JS SDK earned",
     respect: [
-      "ALT+click in-context editing with automatic screenshot capture, feeding real UI context to translators and to its AI — a genuinely better mechanic than manual screenshot upload.",
-      "Native ICU MessageFormat platform-wide, including a plural-aware editor UI that handles nested plural and select properly rather than as raw text.",
-      "Broad format interop across mobile, backend and web — JSON, i18next, XLIFF and .po from one platform — plus a free self-hosting tier with core features unlocked.",
+      "A framework-independent core keeps runtime behavior aligned across first-party React, Vue, Angular and Svelte bindings.",
+      "The bindings expose idiomatic providers and hooks instead of asking every framework to wrap a generic API by hand.",
+      "Static translation data is a first-class client configuration and can be supplied directly to the runtime.",
     ],
-    flipsideTitle: "What that architecture costs you",
+    flipsideTitle: "What the runtime-first model costs you",
     flipside: [
-      "The platform database is the source of truth and your files are sync targets. Your repository holds a mirror, which means catalog history, review and blame live somewhere other than your git log.",
-      "Open-core has edges: the official Docker images always bundle the proprietary ee/ code, so a strictly Apache-2.0 build means stripping those directories and building it yourself.",
-      "The free tier caps at 500 keys and 3 seats, branching and the stronger AI features sit behind paid plans, and reviewers repeatedly describe the in-context browser extension as hard to configure.",
+      "Every message has an explicit string key, which introduces a namespace developers must design, remember and keep aligned with the readable source copy.",
+      "The client SDK consumes translation data but does not by itself provide Palamedes' PO-first extraction, semantic catalog merging and compilation workflow.",
+      "Translation loading remains runtime configuration — static data or a backend plugin — rather than a build artifact derived from the same source pass as extraction.",
     ],
     differences: [
       {
-        title: "No server in the authoring loop",
-        body: "Palamedes extraction, catalog merging, audits and compilation all run locally in a Rust core. There is no account, no API key and no network call between writing a string and having it in a catalog — which means CI, an offline train and a fresh clone all behave identically.",
+        title: "The source string is the identity",
+        body: "Palamedes derives public message identity from the sentence plus optional context. There is no checkout_buy key to invent, no second label to keep aligned with the copy and no unreadable fallback when a translation is missing.",
       },
       {
-        title: "Catalogs review like code, because they are",
-        body: "A Palamedes catalog change arrives in the same pull request as the string that caused it. You see the diff, git blame works, and reverting a feature reverts its messages. When the truth lives in a platform database, that history lives there too, and your repository stops being the place you can answer questions from.",
+        title: "Catalog production is part of the toolchain",
+        body: "Extraction, PO updates, audits, semantic merging and compilation run through one native core. The runtime receives a compiled artifact instead of also owning the policy for fetching and assembling translation data.",
       },
       {
-        title: "Source strings instead of keys",
-        body: "Tolgee is key-based: you invent identifiers and the platform maps them to translations. Palamedes derives identity from the source string plus optional context, so there is no namespace to design, nothing to keep in sync, and a missing translation degrades to readable English rather than an identifier.",
+        title: "Adapters follow the host boundary",
+        body: "Tolgee offers a broader set of first-party client bindings. Palamedes currently focuses on React and Solid, then verifies those adapters across supported meta-frameworks and server hosts instead of claiming equivalent breadth.",
       },
     ],
     rows: [
       {
-        criterion: "Source of truth",
-        rival: "Platform key database; files are sync targets",
-        palamedes: "The .po catalogs in your repository",
+        criterion: "Compared surface",
+        rival: "MIT JavaScript client SDK",
+        palamedes: "MIT local toolchain and runtime adapters",
       },
       {
         criterion: "Message identity",
@@ -845,24 +729,19 @@ function buyLabel(seats) {
         palamedes: "The source string plus optional context",
       },
       {
-        criterion: "Authoring loop",
-        rival: "SDK plus platform; in-context editing in the running app",
-        palamedes: "Fully local — no account, no API key, no network",
+        criterion: "Translation input",
+        rival: "Static data or a configured backend plugin",
+        palamedes: "Compiled artifacts from repository-owned PO catalogs",
       },
       {
         criterion: "ICU MessageFormat",
-        rival: "Native, with a plural-aware editor UI",
+        rival: "Native client message syntax",
         palamedes: "Native end to end, with a checked proof",
       },
       {
-        criterion: "Licence",
-        rival: "Open-core: Apache-2.0 platform, proprietary ee/, MIT SDKs",
-        palamedes: "MIT throughout",
-      },
-      {
-        criterion: "Translator context",
-        rival: "The strong suit — screenshots captured automatically",
-        palamedes: "Source comments and context in the .po file",
+        criterion: "Framework bindings",
+        rival: "React, Vue, Angular and Svelte",
+        palamedes: `React and Solid across ${contentStats.frameworkCount} verified meta-frameworks`,
       },
       {
         criterion: "Extract + update speed",
@@ -871,8 +750,8 @@ function buyLabel(seats) {
       },
     ],
     code: {
-      caption: "A key resolved through a platform, or the sentence itself.",
-      rivalLabel: "Tolgee",
+      caption: "A runtime key, or the sentence itself.",
+      rivalLabel: "Tolgee JS SDK",
       rivalCode: `import { useTranslate } from "@tolgee/react"
 
 const { t } = useTranslate()
@@ -883,22 +762,22 @@ t("checkout_buy", { seats })`,
 function buyLabel(seats) {
   return t\`Buy \${seats} seats\`
 }`,
-      note: "Tolgee's call site names a key that the platform resolves; the English text lives in the database. Palamedes' call site is the English text, and the catalog is generated from it.",
+      note: "Tolgee's call site resolves an explicit key through the configured client. Palamedes' call site is the readable sentence and extraction produces its catalog entry.",
     },
     pickRival: [
-      "In-context editing with automatic screenshots would materially improve your translation quality.",
-      "You want a translation platform and an SDK from one vendor, with the option to self-host it.",
-      "Your translators need a polished web editor more than your developers need local tooling.",
-      "You need one platform across mobile, backend and web formats, not just React and Solid.",
+      "You prefer explicit keys and runtime-configured translation data.",
+      "You need first-party Vue, Angular or Svelte bindings in addition to React.",
+      "A framework-independent client plugin surface is the center of your integration.",
+      "You already have static keyed translation data and do not need PO-first extraction.",
     ],
     pickPalamedes: [
-      "Catalogs belong in git, reviewed alongside the code change that caused them.",
-      "You want the whole toolchain to run offline, with no account and no API key.",
-      "You would rather not design and maintain a key namespace.",
-      "You want to add a platform later without having built your workflow around one.",
+      "You want source strings as identity instead of designing and maintaining a key namespace.",
+      "Extraction, PO updates, audits and compilation should be one local workflow.",
+      "Catalog changes should be produced and reviewed alongside source changes.",
+      "You need checked React and Solid integrations across supported server and meta-framework hosts.",
     ],
     honest:
-      "Tolgee's in-context editor is better than anything we offer, and we do not have a translator-facing UI at all — .po comments and context are what your translators get from us. If translator experience is the bottleneck you are solving, that gap is real and it matters more than anything on the rest of this page. Palamedes and a platform also stack perfectly well: keep the repository authoritative, export .po, and let a TMS handle the humans.",
+      "The Tolgee JS SDK covers more client frameworks than Palamedes today: there are first-party Vue, Angular and Svelte bindings, while Palamedes supports React and Solid. If client-framework breadth is the deciding constraint, that difference matters. This comparison is deliberately limited to the MIT client SDK.",
   },
   {
     slug: "intlayer",
@@ -913,9 +792,9 @@ function buyLabel(seats) {
     lede: "Intlayer and Palamedes agree on something most of this field does not: the central JSON namespace was a mistake. Intlayer's answer is to declare a dictionary file beside each component. Ours is to read the string out of the component itself. That single difference decides how much work each new message costs you, and who has to name it.",
     card: "The other anti-namespace project. It declares dictionaries; we read the sentence you wrote.",
     facts: [
-      { label: "Adoption", value: "~76.8k downloads/week" },
-      { label: "Age", value: "~2 years, single author" },
       { label: "Licence", value: "Apache-2.0" },
+      { label: "Identity", value: "Explicit dictionary keys" },
+      { label: "Catalog layout", value: "Co-located declarations" },
       { label: "ICU", value: "Selectable, not default" },
     ],
     thesis:
@@ -930,7 +809,7 @@ function buyLabel(seats) {
     flipside: [
       "The naming layer is still there. Every dictionary carries an explicit key, so you still invent identifiers and still keep them straight — the work moved from a central JSON tree into per-component files rather than disappearing.",
       "Declarations are locale-inline by default: t({ en, fr, es }) puts every language into a TypeScript file developers own. That reads well at three locales and becomes a merge-conflict surface at twelve, with translator content living in source files.",
-      "One primary author on a personal account, no organisation or funding found, and 383 npm releases across a 9.x major line in roughly two years — genuine throughput, but also churn you will be migrating across.",
+      "The configuration surface spans dictionary declaration, locale layout, framework adapters and selectable message formats; migrations must account for those project-level choices.",
     ],
     differences: [
       {
@@ -947,7 +826,7 @@ function buyLabel(seats) {
       },
       {
         title: ".po is the handover, not an export mode",
-        body: "Palamedes writes gettext .po with the source string as msgid, because that is the artifact an agency, a CAT tool or a TMS can price and process without asking questions. Intlayer supports PO as a format value; whether it round-trips msgctxt, plural forms and comments losslessly we could not verify, and a handover format is only worth as much as its fidelity.",
+        body: "Palamedes writes gettext .po with the source string as msgid so CAT and TMS tooling can process the artifact directly. Intlayer supports PO as a format value; whether it round-trips msgctxt, plural forms and comments losslessly could not be verified, and a handover format is only worth as much as its fidelity.",
       },
     ],
     rows: [
@@ -1015,7 +894,7 @@ function buyLabel(seats) {
       "You need Vue, Angular, Svelte, Lit or React Native. Their adapter matrix is genuinely wider than ours.",
       "You want no extraction step in your build under any circumstances.",
       "Co-located, hand-written dictionaries match how your team already thinks about component ownership.",
-      "You want the hosted CMS and visual editor for remote or hybrid dictionaries.",
+      "You need first-party bindings beyond React and Solid.",
     ],
     pickPalamedes: [
       "You would rather write a sentence than a sentence plus a dictionary entry plus a key.",
@@ -1024,7 +903,7 @@ function buyLabel(seats) {
       "You want catalog audits, ICU diagnostics and a benchmark you can re-run yourself.",
     ],
     honest:
-      "Intlayer covers far more UI frameworks than we do, and it is right that removing the scanner removes a category of failure — nothing can drift out of a catalog you wrote by hand. We think the price is too high, because it is paid on every single string forever while a scanner is paid for once. But that is a judgement about your team's habits, not a fact about the software, and if you disagree with it you should use theirs.",
+      "Intlayer covers far more UI frameworks than Palamedes, and removing the scanner eliminates a category of failure — nothing can drift out of a catalog you wrote by hand. The technical tradeoff is repeated keyed dictionary work for every message versus one extraction compiler in the build. Which model fits depends on the team's authoring workflow.",
   },
 ]
 

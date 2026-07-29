@@ -1,6 +1,5 @@
-import { Page } from "~/components/chrome/Page"
+import { Page, Section } from "@palamedes/site-ui"
 import { pageMeta } from "~/lib/meta"
-import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { REPO } from "~/data/links"
 import { POSTS } from "~/data/posts"

@@ -89,7 +89,6 @@ export default [
   route("blog/the-third-time-i-built-javascript-i18n-tooling", "routes/blog/the-third-time-i-built-javascript-i18n-tooling.md"),
   route("blog/what-we-delegated-to-ferrocat-and-why", "routes/blog/what-we-delegated-to-ferrocat-and-why.md"),
   route("compare", "routes/compare.tsx"),
-  route("compare/general-translation", "routes/compare/general-translation.tsx"),
   route("compare/i18next", "routes/compare/i18next.tsx"),
   route("compare/intlayer", "routes/compare/intlayer.tsx"),
   route("compare/lingui", "routes/compare/lingui.tsx"),
@@ -116,10 +115,8 @@ export default [
   route("decisions/017-cli-plugin-execution-boundary", "routes/decisions/017-cli-plugin-execution-boundary.md"),
   route("decisions/018-binary-plugin-protocol", "routes/decisions/018-binary-plugin-protocol.md"),
   route("decisions/019-extraction-cache", "routes/decisions/019-extraction-cache.md"),
-  route(
-    "decisions/020-framework-selection-lives-on-the-plugins",
-    "routes/decisions/020-framework-selection-lives-on-the-plugins.md"
-  ),
+  route("decisions/020-framework-selection-lives-on-the-plugins", "routes/decisions/020-framework-selection-lives-on-the-plugins.md"),
+  route("decisions/021-shared-cross-repository-site-ui", "routes/decisions/021-shared-cross-repository-site-ui.md"),
   route("docs/approach-comparison", "routes/docs/approach-comparison.md"),
   route("docs/backend-servers", "routes/docs/backend-servers.md"),
   route("docs/benchmark-e2e-workflow", "routes/docs/benchmark-e2e-workflow.md"),

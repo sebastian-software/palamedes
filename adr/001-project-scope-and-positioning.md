@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-17
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 ## Context
 
@@ -31,6 +31,12 @@ makes the open-source project sound less candid than it is.
 Finally, two general product narratives would drift. `PRODUCT.md` and a
 separate storyline document would both try to answer what Palamedes is and how
 to present it, without a meaningful ownership boundary between them.
+
+Palamedes and the planned Palamedes+ product also need a repository and content
+boundary that users can understand. Technical comparison of open-source client
+libraries helps people evaluate this project. Pricing, company, market, hosted
+platform, AI-service, and other commercial research serves the managed product
+and would blur the promise of this repository if it remained here.
 
 ## Decision
 
@@ -69,6 +75,25 @@ Palamedes is explicitly not:
 Palamedes+ is the planned optional managed layer for translation automation and
 collaboration. Palamedes covers the full local open-source workflow without an
 account or managed service.
+
+The repository boundary follows that product boundary:
+
+- this repository contains Palamedes OSS, `palamedes.dev`, and technical
+  comparison of genuinely open-source client SDKs and frameworks
+- the private `palamedes-plus` repository contains the commercial product,
+  commercial market research, pricing research, and the future
+  `plus.palamedes.dev` site
+- hybrid projects are compared here only to the extent that their client SDK
+  is open source; hosted services and commercial platform features are out of
+  scope
+- source-available SDKs with non-open-source restrictions are commercial
+  research and do not get an OSS comparison page
+- cross-product links remain explicit configuration and are not published
+  from `palamedes.dev` until the Plus destination is live
+
+The two sites share open-source layout primitives and design tokens from
+`packages/site-ui`; their content, deployment, product claims, and release
+timing remain independent.
 
 Product communication follows the same architecture:
 
@@ -143,6 +168,11 @@ review whether public claims match the implementation.
   parallel storyline reduces discovery cost and prevents message drift.
 - Palamedes+ can extend the workflow without making the local open-source
   toolchain less useful on its own.
+- Public comparison pages stay focused on inspectable open-source client code.
+- Commercial claims and volatile market facts are maintained with the
+  commercial product rather than mirrored into this repository.
+- Shared visual chrome does not imply a shared deployment or make either site
+  depend on the other at runtime.
 
 ## Validation And Review Triggers
 
@@ -153,6 +183,9 @@ Review this decision when:
 - the primary audience moves beyond TypeScript teams
 - Palamedes+ becomes available and changes the boundary between local and
   managed workflows
+- a compared client SDK changes license or a comparison expands into hosted,
+  pricing, company, or market claims
+- either site needs a cross-product link before the destination is live
 - public copy again describes the product primarily as small or narrow
 - a new general positioning document duplicates `PRODUCT.md`
 

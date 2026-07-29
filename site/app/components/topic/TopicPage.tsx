@@ -1,8 +1,6 @@
 import { Link } from "react-router"
 
-import { ButtonLink } from "~/components/chrome/Button"
-import { Page } from "~/components/chrome/Page"
-import { Section } from "~/components/chrome/Section"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui"
 import { CtaBand } from "~/components/home/CtaBand"
 import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
 import { BENCH_REALISTIC } from "~/data/bench"

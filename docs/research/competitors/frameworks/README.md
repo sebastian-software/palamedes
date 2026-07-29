@@ -5,14 +5,16 @@ compete with the open-source core of Palamedes. Snapshot date: **2026-07-06**
 (see each dossier's frontmatter for exact analyzed versions; every fact below
 is sourced in the linked dossier).
 
+Only the OSI-licensed client/framework surface is in scope. Commercial services
+and platform behavior are intentionally excluded even when the same vendor
+maintains an open-source SDK.
+
 ## Comparison table
 
 | Fact                  | [Lingui](lingui.md)                  | [i18next](i18next.md)                       | [next-intl](next-intl.md)                     | [React Intl](react-intl.md)         | [Paraglide / inlang](paraglide-inlang.md)                  | [Vue I18n](vue-i18n.md)                    |
 | --------------------- | ------------------------------------ | ------------------------------------------- | --------------------------------------------- | ----------------------------------- | ---------------------------------------------------------- | ------------------------------------------ |
 | License               | MIT                                  | MIT                                         | MIT                                           | BSD-3-Clause                        | MIT                                                        | MIT                                        |
 | Version (analyzed)    | 6.5.0                                | 26.3.4                                      | 4.13.1                                        | 10.1.14                             | 2.20.2                                                     | 11.4.6                                     |
-| Company / funding     | Community, Open Collective           | Core team, funded by own SaaS (locize)      | Single maintainer, GitHub Sponsors            | Community (ex-Yahoo), ~1 maintainer | Opral GmbH (~7 people, unfunded)                           | kazupon (part-time), sponsors              |
-| Pricing               | Free OSS                             | Free OSS (paid TMS: locize)                 | Free OSS                                      | Free OSS                            | Free OSS, no monetization                                  | Free OSS                                   |
 | Adoption (npm/wk · ★) | 1.29M · 5.8k                         | 18.2M · 8.6k                                | 4.0M · 4.3k                                   | 3.1M · 14.7k                        | 358k · 538                                                 | 3.24M · 2.7k (+7.2k archived)              |
 | Framework support     | React/RSC, RN, Vue 3, Solid, vanilla | Agnostic core; React, Angular, Vue, Node, … | Next.js only (use-intl for React)             | React (no RSC); agnostic core       | React, Next.js, SvelteKit, TanStack, RR, Astro, Vue, Solid | Vue/Nuxt only                              |
 | Message identity      | Source string or explicit ID         | Keys (explicitly not source-string)         | Keys; experimental source-string → hash keys  | Explicit or generated IDs           | Keys → compiled ESM functions                              | Keys                                       |
@@ -33,7 +35,9 @@ is sourced in the linked dossier).
 - [intlayer.md](intlayer.md) — declaration instead of extraction, per-component co-located dictionaries
 - [fluent.md](fluent.md) — the case against ICU itself; asymmetric localization, Mozilla-proven, effectively stalled on npm
 - [typesafe-i18n.md](typesafe-i18n.md) — types as the product; ~1 kB, zero dependencies, no ICU or .po. **Dormant, and excluded from comparison pages** — see the handling note in the dossier
+- [tolgee-js.md](tolgee-js.md) — MIT-licensed client runtime and framework bindings only; the associated TMS/platform is researched privately in Palamedes+
 
 Note: the `intlayer`, `fluent` and `typesafe-i18n` dossiers were added 2026-07-26,
 so their `analyzed` date differs from the 2026-07-06 snapshot shared by the
-others. The comparison table above has not been re-run against them.
+others. The comparison table above has not been re-run against them or Tolgee
+JS.
