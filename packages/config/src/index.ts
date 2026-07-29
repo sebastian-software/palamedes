@@ -22,7 +22,6 @@ export type PalamedesSourceReferenceRoot = "git" | "lingui" | "config" | (string
 
 export type PalamedesPoOutputOptions = {
   lineBreaks?: "auto" | "off"
-  orderBy?: "message" | "origin" | "collated"
 }
 
 export type PalamedesCatalogConfig = {
@@ -257,17 +256,14 @@ function normalizePoDataConfig(
     return value as PalamedesPoOutputOptions
   }
   const record = value as Record<string, unknown>
-  for (const [camel, kebab] of [
-    ["lineBreaks", "line-breaks"],
-    ["orderBy", "order-by"],
-  ]) {
+  for (const [camel, kebab] of [["lineBreaks", "line-breaks"]]) {
     if (camel in record) {
       throw new Error(
         `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${catalogIndex}].po.${camel}". Data configs use kebab-case: "catalogs[${catalogIndex}].po.${kebab}".`
       )
     }
   }
-  const knownKeys = new Set(["line-breaks", "line_breaks", "order-by", "order_by"])
+  const knownKeys = new Set(["line-breaks", "line_breaks"])
   for (const key of Object.keys(record)) {
     if (!knownKeys.has(key)) {
       throw new Error(
@@ -276,11 +272,7 @@ function normalizePoDataConfig(
     }
   }
   const lineBreaks = record["line-breaks"] ?? record.line_breaks
-  const orderBy = record["order-by"] ?? record.order_by
-  return {
-    ...(lineBreaks !== undefined ? { lineBreaks: normalizeLineBreaksDataValue(lineBreaks) } : {}),
-    ...(orderBy !== undefined ? { orderBy: orderBy as PalamedesPoOutputOptions["orderBy"] } : {}),
-  }
+  return lineBreaks === undefined ? {} : { lineBreaks: normalizeLineBreaksDataValue(lineBreaks) }
 }
 
 /*
@@ -837,7 +829,7 @@ function validatePoOutputOptions(
   }
   const po = value as Record<string, unknown>
   for (const key of Object.keys(po)) {
-    if (!["lineBreaks", "orderBy"].includes(key)) {
+    if (key !== "lineBreaks") {
       throw new Error(
         `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${index}].po.${key}".`
       )
@@ -846,16 +838,6 @@ function validatePoOutputOptions(
   if (po.lineBreaks !== undefined && po.lineBreaks !== "auto" && po.lineBreaks !== "off") {
     throw new Error(
       `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.lineBreaks" must be "auto" or "off" when provided.`
-    )
-  }
-  if (
-    po.orderBy !== undefined &&
-    po.orderBy !== "message" &&
-    po.orderBy !== "origin" &&
-    po.orderBy !== "collated"
-  ) {
-    throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.orderBy" must be "message", "origin", or "collated" when provided.`
     )
   }
 }

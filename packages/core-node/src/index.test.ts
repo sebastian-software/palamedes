@@ -72,10 +72,7 @@ msgstr "Oeffnen"
       locale: "en",
       sourceLocale: "en",
       clean: false,
-      po: {
-        lineBreaks: "off",
-        orderBy: "collated",
-      },
+      po: { lineBreaks: "off" },
       messages: [
         { message: "Zebra", extractedComments: [], origins: [] },
         { message: long, extractedComments: [], origins: [] },

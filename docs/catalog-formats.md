@@ -26,13 +26,12 @@ catalogs:
 
 That writes `src/locales/en.po` and `src/locales/de.po`.
 
-PO output can be configured per catalog with the nested `po` object. The
-options are independent: disable automatic width folding with
-`line-breaks: "off"`, sort by the first source reference with
-`order-by: origin`, or re-sort the complete catalog with the CLDR root
-collation using `order-by: collated`. Defaults keep the standard Ferrocat PO
-output. See [Configuration](./configuration.md#catalogs) for the full schema
-and JavaScript spellings.
+PO output can be configured per catalog with the nested `po` object: set
+`line-breaks: "off"` to disable automatic width folding. Catalog order is not
+configurable — PO catalogs are always sorted by source message and then gettext
+context using the CLDR root collation. See
+[Configuration](./configuration.md#catalogs) for the schema and the JavaScript
+spellings.
 
 One divergence is worth knowing about when catalogs move between Palamedes and
 gettext tooling: for values containing real newlines, Ferrocat puts the first

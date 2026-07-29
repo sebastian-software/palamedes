@@ -37,17 +37,9 @@ pub enum PoLineBreaks {
     Off,
 }
 
-#[napi(string_enum)]
-pub enum PoOrderBy {
-    Message,
-    Origin,
-    Collated,
-}
-
 #[napi(object)]
 pub struct PoOutputOptions {
     pub line_breaks: Option<PoLineBreaks>,
-    pub order_by: Option<PoOrderBy>,
 }
 
 #[napi(object)]
@@ -463,21 +455,10 @@ impl From<PoLineBreaks> for palamedes::PoLineBreaks {
     }
 }
 
-impl From<PoOrderBy> for palamedes::PoOrderBy {
-    fn from(value: PoOrderBy) -> Self {
-        match value {
-            PoOrderBy::Message => Self::Message,
-            PoOrderBy::Origin => Self::Origin,
-            PoOrderBy::Collated => Self::Collated,
-        }
-    }
-}
-
 impl From<PoOutputOptions> for palamedes::PoOutputOptions {
     fn from(value: PoOutputOptions) -> Self {
         Self {
             line_breaks: value.line_breaks.map(Into::into).unwrap_or_default(),
-            order_by: value.order_by.map(Into::into).unwrap_or_default(),
         }
     }
 }

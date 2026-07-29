@@ -10,8 +10,8 @@ use ferrocat::{
     parse_catalog as ferrocat_parse_catalog, parse_po as ferrocat_parse_po,
     stringify_po as ferrocat_stringify_po, update_catalog as ferrocat_update_catalog, ApiError,
     CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, EffectiveTranslationRef,
-    ObsoleteStrategy, OrderBy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode,
-    RenderOptions, SerializeOptions, SourceExtractedMessage, UpdateCatalogOptions,
+    ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, RenderOptions,
+    SerializeOptions, SourceExtractedMessage, UpdateCatalogOptions,
 };
 use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
 use serde::{Deserialize, Serialize};
@@ -71,20 +71,6 @@ pub enum PoLineBreaks {
     Off,
 }
 
-/// Sort key used for the final PO catalog.
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PoOrderBy {
-    /// Sort by source message and then gettext context, in code-point order.
-    #[default]
-    Message,
-    /// Sort by the first source origin and then message identity.
-    Origin,
-    /// Sort by source message and then gettext context using the CLDR root
-    /// collation, which is what `Intl.Collator("en-US")` resolves to.
-    Collated,
-}
-
 /// Generic output controls for PO catalogs.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -92,9 +78,6 @@ pub struct PoOutputOptions {
     /// Automatic line-folding behavior.
     #[serde(default)]
     pub line_breaks: PoLineBreaks,
-    /// Final catalog sort key.
-    #[serde(default)]
-    pub order_by: PoOrderBy,
 }
 
 /// Request for updating a catalog file from source-first messages.
@@ -314,14 +297,8 @@ fn update_catalog_file_source_first(
     let mut render = RenderOptions::default()
         .with_include_origins(true)
         .with_placeholder_comments(PlaceholderCommentMode::Enabled { limit: 3 });
-    if request
-        .po
-        .as_ref()
-        .is_some_and(|po| po.order_by == PoOrderBy::Origin)
-    {
-        render = render.with_order_by(OrderBy::Origin);
-    }
-    if request.format == super::catalog_artifact::PalamedesCatalogFormat::Po {
+    let is_po = request.format == super::catalog_artifact::PalamedesCatalogFormat::Po;
+    if is_po {
         render = render.with_custom_header_attributes(&custom_header_attributes);
     }
     let mut update_options = UpdateCatalogOptions::new(&request.source_locale, input)
@@ -335,9 +312,14 @@ fn update_catalog_file_source_first(
         update_options = update_options.with_existing(&existing.update_input);
     }
 
+    /*
+     * PO catalogs always take the final pass: ferrocat renders in code-point
+     * order, and the collation order Palamedes writes cannot be expressed
+     * through its render options.
+     */
     let mut result = ferrocat_update_catalog(update_options).map_err(PalamedesError::from)?;
     if let Some(existing) = &existing {
-        if po_output_requires_final_pass(existing.po_metadata.as_ref(), request.po.as_ref()) {
+        if is_po {
             result.content = finalize_po_output(
                 &result.content,
                 existing.po_metadata.as_ref(),
@@ -345,7 +327,7 @@ fn update_catalog_file_source_first(
             )?;
         }
         result.updated = result.content != existing.original;
-    } else if po_output_requires_final_pass(None, request.po.as_ref()) {
+    } else if is_po {
         result.content = finalize_po_output(&result.content, None, request.po.as_ref())?;
     }
 
@@ -451,16 +433,6 @@ fn read_existing_catalog(
     }))
 }
 
-fn po_output_requires_final_pass(
-    metadata: Option<&BTreeMap<PoMessageKey, PreservedPoMetadata>>,
-    options: Option<&PoOutputOptions>,
-) -> bool {
-    metadata.is_some()
-        || options.is_some_and(|options| {
-            options.line_breaks == PoLineBreaks::Off || options.order_by == PoOrderBy::Collated
-        })
-}
-
 fn finalize_po_output(
     updated: &str,
     metadata: Option<&BTreeMap<PoMessageKey, PreservedPoMetadata>>,
@@ -477,9 +449,7 @@ fn finalize_po_output(
         }
     }
 
-    if options.is_some_and(|options| options.order_by == PoOrderBy::Collated) {
-        sort_po_items_collated(&mut po.items);
-    }
+    sort_po_items_collated(&mut po.items);
 
     let serialize_options = match options.map(|options| options.line_breaks) {
         Some(PoLineBreaks::Off) => SerializeOptions::default().with_fold_length(0),
@@ -489,11 +459,10 @@ fn finalize_po_output(
 }
 
 /*
- * Sort key for `PoOrderBy::Collated`. The two collation keys carry the actual
- * order; the raw message identity that follows only breaks ties between
- * entries the collator considers equal (canonically equivalent spellings, for
- * example), so the result stays stable across runs regardless of the order
- * ferrocat rendered.
+ * Catalog sort key. The two collation keys carry the actual order; the raw
+ * message identity that follows only breaks ties between entries the collation
+ * considers equal (canonically equivalent spellings, for example), so the
+ * result stays stable across runs regardless of the order ferrocat rendered.
  */
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct CollatedKey {
@@ -704,7 +673,7 @@ mod tests {
 
     use super::{
         parse_catalog, update_catalog_file, CatalogParseRequest, CatalogUpdateMessage,
-        CatalogUpdateOrigin, CatalogUpdateRequest, PoLineBreaks, PoOrderBy, PoOutputOptions,
+        CatalogUpdateOrigin, CatalogUpdateRequest, PoLineBreaks, PoOutputOptions,
     };
     use crate::parse_po;
     use ferrocat::{machine_translation_hash, EffectiveTranslationRef};
@@ -761,7 +730,6 @@ mod tests {
             vec![message(long, None, "src/App.tsx")],
             Some(PoOutputOptions {
                 line_breaks: PoLineBreaks::Off,
-                ..PoOutputOptions::default()
             }),
         );
 
@@ -784,7 +752,6 @@ mod tests {
             vec![message(text, None, "src/App.tsx")],
             Some(PoOutputOptions {
                 line_breaks: PoLineBreaks::Off,
-                ..PoOutputOptions::default()
             }),
         );
 
@@ -799,7 +766,7 @@ mod tests {
     }
 
     #[test]
-    fn po_collated_order_resorts_the_complete_catalog_by_message_then_context() {
+    fn resorts_the_complete_catalog_by_message_then_context() {
         let path = temp_file("collated-order");
         std::fs::write(
             &path,
@@ -822,14 +789,7 @@ mod tests {
             message("!Alert", None, "src/Alert.tsx"),
         ];
 
-        update_po(
-            &path,
-            messages,
-            Some(PoOutputOptions {
-                order_by: PoOrderBy::Collated,
-                ..PoOutputOptions::default()
-            }),
-        );
+        update_po(&path, messages, None);
 
         let output = std::fs::read_to_string(&path).expect("read output");
         let parsed = parse_po(&output).expect("parse output");
@@ -856,7 +816,7 @@ mod tests {
     }
 
     #[test]
-    fn po_collated_order_compares_missing_context_as_an_empty_string() {
+    fn compares_missing_context_as_an_empty_string() {
         let path = temp_file("collated-context-empty");
         update_po(
             &path,
@@ -865,10 +825,7 @@ mod tests {
                 message("Same", None, "src/Missing.tsx"),
                 message("Same", Some("z"), "src/Z.tsx"),
             ],
-            Some(PoOutputOptions {
-                order_by: PoOrderBy::Collated,
-                ..PoOutputOptions::default()
-            }),
+            None,
         );
 
         let parsed =
@@ -878,25 +835,24 @@ mod tests {
         assert_eq!(parsed.items[2].msgctxt.as_deref(), Some("z"));
     }
 
+    /// Message identity decides the order, not where a message was extracted
+    /// from.
     #[test]
-    fn po_origin_order_uses_ferrocat_origin_sorting() {
-        let path = temp_file("origin-order");
+    fn ignores_source_origins_when_ordering() {
+        let path = temp_file("origin-irrelevant");
         update_po(
             &path,
             vec![
                 message("First message", None, "src/z.tsx"),
                 message("Second message", None, "src/a.tsx"),
             ],
-            Some(PoOutputOptions {
-                order_by: PoOrderBy::Origin,
-                ..PoOutputOptions::default()
-            }),
+            None,
         );
 
         let parsed =
             parse_po(&std::fs::read_to_string(&path).expect("read output")).expect("parse output");
-        assert_eq!(parsed.items[0].msgid, "Second message");
-        assert_eq!(parsed.items[1].msgid, "First message");
+        assert_eq!(parsed.items[0].msgid, "First message");
+        assert_eq!(parsed.items[1].msgid, "Second message");
     }
 
     #[test]
@@ -1040,7 +996,6 @@ msgstr "Zebra""#;
                 .collect(),
             Some(PoOutputOptions {
                 line_breaks: PoLineBreaks::Off,
-                order_by: PoOrderBy::Collated,
             }),
         );
 
@@ -1065,7 +1020,6 @@ msgstr "Zebra""#;
             vec![message("First line\nSecond line", None, "src/App.tsx")],
             Some(PoOutputOptions {
                 line_breaks: PoLineBreaks::Off,
-                order_by: PoOrderBy::Collated,
             }),
         );
 
