@@ -14,14 +14,14 @@ repository: https://github.com/lingui/js-lingui
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Message identity | Source text or explicit IDs |
-| Syntax | ICU MessageFormat through macros/descriptors |
-| Catalogs | PO is first-class; JSON formats also available |
-| Extraction | Babel/SWC macros and CLI extraction |
-| Compilation | Catalogs compile to compact JavaScript data |
-| Frameworks | React, React Native, Vue, Solid, vanilla JS |
+| Fact             | Value                                          |
+| ---------------- | ---------------------------------------------- |
+| Message identity | Source text or explicit IDs                    |
+| Syntax           | ICU MessageFormat through macros/descriptors   |
+| Catalogs         | PO is first-class; JSON formats also available |
+| Extraction       | Babel/SWC macros and CLI extraction            |
+| Compilation      | Catalogs compile to compact JavaScript data    |
+| Frameworks       | React, React Native, Vue, Solid, vanilla JS    |
 
 Lingui's macros preserve natural source authoring while extracting descriptors
 at build time. The CLI merges extracted messages into catalogs, and compilation

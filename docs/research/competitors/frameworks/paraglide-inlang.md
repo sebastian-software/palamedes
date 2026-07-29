@@ -14,14 +14,14 @@ repository: https://github.com/opral/paraglide-js
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Message identity | Explicit keys in an inlang project |
-| Build model | Generates one tree-shakable function per message |
-| Runtime | Generated modules; no central formatter runtime |
-| Catalog/project format | inlang project settings plus message resources |
-| Framework support | Framework-agnostic output with adapters/integrations |
-| ICU / PO | ICU through plugins; no native PO workflow found |
+| Fact                   | Value                                                |
+| ---------------------- | ---------------------------------------------------- |
+| Message identity       | Explicit keys in an inlang project                   |
+| Build model            | Generates one tree-shakable function per message     |
+| Runtime                | Generated modules; no central formatter runtime      |
+| Catalog/project format | inlang project settings plus message resources       |
+| Framework support      | Framework-agnostic output with adapters/integrations |
+| ICU / PO               | ICU through plugins; no native PO workflow found     |
 
 Paraglide compiles translation resources into ESM functions. Applications
 import or call generated message functions, allowing bundlers to tree-shake

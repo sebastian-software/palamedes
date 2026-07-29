@@ -14,15 +14,15 @@ repository: https://github.com/amannn/next-intl
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Primary target | Next.js App Router |
-| Message identity | Explicit keys |
-| Message syntax | ICU MessageFormat |
-| Catalogs | Locale JSON messages |
-| Runtime | Server and client APIs with request-scoped configuration |
-| Routing | Locale-aware navigation and middleware APIs |
-| Extraction | Experimental `useExtracted` source transform |
+| Fact             | Value                                                    |
+| ---------------- | -------------------------------------------------------- |
+| Primary target   | Next.js App Router                                       |
+| Message identity | Explicit keys                                            |
+| Message syntax   | ICU MessageFormat                                        |
+| Catalogs         | Locale JSON messages                                     |
+| Runtime          | Server and client APIs with request-scoped configuration |
+| Routing          | Locale-aware navigation and middleware APIs              |
+| Extraction       | Experimental `useExtracted` source transform             |
 
 next-intl integrates locale routing, request configuration, server rendering,
 client hooks, dates/numbers, and ICU messages around Next.js conventions.

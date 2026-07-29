@@ -17,14 +17,14 @@ repository: https://github.com/codingcommons/typesafe-i18n
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Message identity | Keys derived from the base-locale TypeScript object |
-| Type model | Generated locale and translation function types |
-| Runtime | Small generated formatter/runtime |
-| Catalogs | TypeScript/JavaScript locale objects |
-| Extraction | Declaration/generation workflow rather than source scan |
-| ICU / PO | Neither is native |
+| Fact             | Value                                                   |
+| ---------------- | ------------------------------------------------------- |
+| Message identity | Keys derived from the base-locale TypeScript object     |
+| Type model       | Generated locale and translation function types         |
+| Runtime          | Small generated formatter/runtime                       |
+| Catalogs         | TypeScript/JavaScript locale objects                    |
+| Extraction       | Declaration/generation workflow rather than source scan |
+| ICU / PO         | Neither is native                                       |
 
 The base locale defines the complete typed shape. The generator creates locale
 types and formatter functions so missing keys, arguments, and formatter inputs

@@ -14,14 +14,14 @@ repository: https://github.com/projectfluent/fluent.js
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Message identity | Stable identifiers in FTL resources |
-| Message model | Fluent syntax with attributes, terms, selectors, and asymmetric localization |
-| Runtime | `@fluent/bundle`; React binding available |
-| Catalog format | Fluent Translation List (`.ftl`) |
-| Extraction | No first-party source scanner in the JS runtime |
-| ICU / PO | Neither is the native model |
+| Fact             | Value                                                                        |
+| ---------------- | ---------------------------------------------------------------------------- |
+| Message identity | Stable identifiers in FTL resources                                          |
+| Message model    | Fluent syntax with attributes, terms, selectors, and asymmetric localization |
+| Runtime          | `@fluent/bundle`; React binding available                                    |
+| Catalog format   | Fluent Translation List (`.ftl`)                                             |
+| Extraction       | No first-party source scanner in the JS runtime                              |
+| ICU / PO         | Neither is the native model                                                  |
 
 Fluent's central technical idea is asymmetric localization: a target message may
 encode grammatical distinctions that are absent from the source message.

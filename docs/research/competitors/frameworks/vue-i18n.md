@@ -14,15 +14,15 @@ repository: https://github.com/intlify/vue-i18n
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Message identity | Explicit keys |
-| Message syntax | Vue I18n message syntax |
-| Runtime | Vue plugin with Composition and legacy APIs |
-| Catalogs | JavaScript/JSON/YAML and SFC `<i18n>` blocks |
-| Compilation | Runtime JIT or build-time AOT with the unplugin |
-| ICU | Optional support through tooling; not the default DSL |
-| PO | No native PO workflow |
+| Fact             | Value                                                 |
+| ---------------- | ----------------------------------------------------- |
+| Message identity | Explicit keys                                         |
+| Message syntax   | Vue I18n message syntax                               |
+| Runtime          | Vue plugin with Composition and legacy APIs           |
+| Catalogs         | JavaScript/JSON/YAML and SFC `<i18n>` blocks          |
+| Compilation      | Runtime JIT or build-time AOT with the unplugin       |
+| ICU              | Optional support through tooling; not the default DSL |
+| PO               | No native PO workflow                                 |
 
 Vue I18n integrates locale state, message lookup, plurals, dates, and numbers
 with Vue reactivity. Messages can be global or component-local, including

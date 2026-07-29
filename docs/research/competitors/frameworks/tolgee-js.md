@@ -18,15 +18,15 @@ features are commercial research and deliberately excluded.
 
 ## Fact sheet
 
-| Fact | Value |
-| --- | --- |
-| License | MIT |
-| Packages | Framework-agnostic core plus React, Vue, Angular, and Svelte bindings |
-| Message identity | Explicit string keys |
-| Message syntax | ICU MessageFormat |
-| Catalog delivery | Static data or a configured remote backend |
-| Extraction | Separate CLI/tooling rather than source-string macro extraction |
-| Distinctive client behavior | Dev-time in-context editing hooks |
+| Fact                        | Value                                                                 |
+| --------------------------- | --------------------------------------------------------------------- |
+| License                     | MIT                                                                   |
+| Packages                    | Framework-agnostic core plus React, Vue, Angular, and Svelte bindings |
+| Message identity            | Explicit string keys                                                  |
+| Message syntax              | ICU MessageFormat                                                     |
+| Catalog delivery            | Static data or a configured remote backend                            |
+| Extraction                  | Separate CLI/tooling rather than source-string macro extraction       |
+| Distinctive client behavior | Dev-time in-context editing hooks                                     |
 
 ## Client architecture
 
@@ -43,13 +43,13 @@ features are commercial research and deliberately excluded.
 
 ## Technical comparison with Palamedes
 
-| Area | Tolgee JS SDK | Palamedes |
-| --- | --- | --- |
-| Primary identity | Explicit key | Source string or explicit descriptor |
-| Runtime format | ICU-oriented JSON/data | Compiled catalogs backed by PO workflows |
-| Framework model | Core plus first-party framework wrappers | Host-neutral core plus framework adapters |
-| Translation source | Static data or backend plugin | Repo-owned catalogs |
-| In-context client UI | First-party dev tooling | Not an OSS runtime goal |
+| Area                 | Tolgee JS SDK                            | Palamedes                                 |
+| -------------------- | ---------------------------------------- | ----------------------------------------- |
+| Primary identity     | Explicit key                             | Source string or explicit descriptor      |
+| Runtime format       | ICU-oriented JSON/data                   | Compiled catalogs backed by PO workflows  |
+| Framework model      | Core plus first-party framework wrappers | Host-neutral core plus framework adapters |
+| Translation source   | Static data or backend plugin            | Repo-owned catalogs                       |
+| In-context client UI | First-party dev tooling                  | Not an OSS runtime goal                   |
 
 ## Strengths
 

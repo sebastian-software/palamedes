@@ -14,14 +14,14 @@ repository: https://github.com/aymericzip/intlayer
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Authoring model | Co-located typed content declarations |
-| Message identity | Declaration keys and generated content accessors |
-| Build model | Declaration discovery plus generated dictionaries/types |
-| Framework support | React, Next.js, Vue, Nuxt, Svelte, Angular, and others |
-| Formats | Native declarations plus configurable ICU/i18next/Vue/PO inputs |
-| Extraction | Declaration-based; no source-string scan required |
+| Fact              | Value                                                           |
+| ----------------- | --------------------------------------------------------------- |
+| Authoring model   | Co-located typed content declarations                           |
+| Message identity  | Declaration keys and generated content accessors                |
+| Build model       | Declaration discovery plus generated dictionaries/types         |
+| Framework support | React, Next.js, Vue, Nuxt, Svelte, Angular, and others          |
+| Formats           | Native declarations plus configurable ICU/i18next/Vue/PO inputs |
+| Extraction        | Declaration-based; no source-string scan required               |
 
 Intlayer co-locates content declarations with components rather than discovering
 messages from UI code. A build step finds declarations, validates them, and

@@ -14,16 +14,16 @@ repository: https://github.com/i18next/i18next
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Message identity | Explicit keys |
-| Message syntax | i18next interpolation/plural syntax by default |
-| Runtime | Framework-agnostic plugin runtime |
-| Framework bindings | React, Vue, Angular, Svelte, Node, and others |
-| Catalogs | Commonly JSON; resources can be loaded through backend plugins |
-| Extraction | `i18next-cli` |
-| ICU | Optional plugin that replaces the default formatter |
-| PO | No native PO workflow |
+| Fact               | Value                                                          |
+| ------------------ | -------------------------------------------------------------- |
+| Message identity   | Explicit keys                                                  |
+| Message syntax     | i18next interpolation/plural syntax by default                 |
+| Runtime            | Framework-agnostic plugin runtime                              |
+| Framework bindings | React, Vue, Angular, Svelte, Node, and others                  |
+| Catalogs           | Commonly JSON; resources can be loaded through backend plugins |
+| Extraction         | `i18next-cli`                                                  |
+| ICU                | Optional plugin that replaces the default formatter            |
+| PO                 | No native PO workflow                                          |
 
 i18next is organized around a small runtime and replaceable plugins for
 backends, language detection, caching, formatting, and framework integration.

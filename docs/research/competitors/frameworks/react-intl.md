@@ -14,15 +14,15 @@ repository: https://github.com/formatjs/formatjs
 
 ## Technical snapshot
 
-| Fact | Value |
-| --- | --- |
-| Message identity | Explicit or generated descriptor IDs |
-| Message syntax | ICU MessageFormat |
-| Runtime | React provider/components/hooks over FormatJS Intl |
-| Catalogs | Commonly JSON descriptors/compiled AST |
-| Extraction | Babel/TypeScript transforms and FormatJS CLI |
-| Compilation | ICU parsing and optional AST precompilation |
-| PO | No native PO catalog workflow |
+| Fact             | Value                                              |
+| ---------------- | -------------------------------------------------- |
+| Message identity | Explicit or generated descriptor IDs               |
+| Message syntax   | ICU MessageFormat                                  |
+| Runtime          | React provider/components/hooks over FormatJS Intl |
+| Catalogs         | Commonly JSON descriptors/compiled AST             |
+| Extraction       | Babel/TypeScript transforms and FormatJS CLI       |
+| Compilation      | ICU parsing and optional AST precompilation        |
+| PO               | No native PO catalog workflow                      |
 
 React Intl is the React binding over FormatJS' ECMA-402 and ICU tooling. Message
 descriptors carry ID, default message, and description. Extraction collects
