@@ -41,13 +41,13 @@ pub enum PoLineBreaks {
 pub enum PoOrderBy {
     Message,
     Origin,
+    Collated,
 }
 
 #[napi(object)]
 pub struct PoOutputOptions {
     pub line_breaks: Option<PoLineBreaks>,
     pub order_by: Option<PoOrderBy>,
-    pub order_locale: Option<String>,
 }
 
 #[napi(object)]
@@ -468,6 +468,7 @@ impl From<PoOrderBy> for palamedes::PoOrderBy {
         match value {
             PoOrderBy::Message => Self::Message,
             PoOrderBy::Origin => Self::Origin,
+            PoOrderBy::Collated => Self::Collated,
         }
     }
 }
@@ -477,7 +478,6 @@ impl From<PoOutputOptions> for palamedes::PoOutputOptions {
         Self {
             line_breaks: value.line_breaks.map(Into::into).unwrap_or_default(),
             order_by: value.order_by.map(Into::into).unwrap_or_default(),
-            order_locale: value.order_locale,
         }
     }
 }

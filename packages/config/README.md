@@ -22,15 +22,15 @@ catalogs:
   - path: src/locales/{locale}
     include: [src]
     po:
-      line-breaks: off
-      order-by: message
-      order-locale: en-US
+      line-breaks: "off"
+      order-by: collated
 ```
 
 PO output options are independent and per catalog. In JavaScript or TypeScript
-configs, use `po: { lineBreaks, orderBy, orderLocale }`. Data configs use the
-kebab-case spellings shown above. `orderLocale` requires message ordering, and
-the `po` object is invalid for FCL catalogs.
+configs, use `po: { lineBreaks, orderBy }`. Data configs use the kebab-case
+spellings shown above. `orderBy: "collated"` sorts with the CLDR root
+collation, matching `Intl.Collator("en-US")`. The `po` object is invalid for
+FCL catalogs.
 
 ## Exports
 

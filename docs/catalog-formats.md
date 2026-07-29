@@ -28,11 +28,18 @@ That writes `src/locales/en.po` and `src/locales/de.po`.
 
 PO output can be configured per catalog with the nested `po` object. The
 options are independent: disable automatic width folding with
-`line-breaks: off`, sort by the first source reference with
-`order-by: origin`, or set `order-locale` to sort the complete catalog with
-ICU4X by message and context. Defaults keep the standard Ferrocat PO output.
-See [Configuration](./configuration.md#catalogs) for the full schema and
-JavaScript spellings.
+`line-breaks: "off"`, sort by the first source reference with
+`order-by: origin`, or re-sort the complete catalog with the CLDR root
+collation using `order-by: collated`. Defaults keep the standard Ferrocat PO
+output. See [Configuration](./configuration.md#catalogs) for the full schema
+and JavaScript spellings.
+
+One divergence is worth knowing about when catalogs move between Palamedes and
+gettext tooling: for values containing real newlines, Ferrocat puts the first
+chunk on the `msgid`/`msgstr` line, while GNU gettext and `pofile` open with an
+empty string and continue on the following lines. Both parse to the same
+message, but the spelling differs, so multiline messages still show up as
+mechanical diffs. `line-breaks` does not change this.
 
 ## FCL
 

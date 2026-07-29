@@ -112,11 +112,10 @@ export type CatalogCombineResult = Omit<GeneratedCatalogCombineResult, "diagnost
 export type CatalogFileFormat = "po" | "fcl"
 export type CatalogConfigFormat = CatalogFileFormat
 export type PoLineBreaks = "auto" | "off"
-export type PoOrderBy = "message" | "origin"
+export type PoOrderBy = "message" | "origin" | "collated"
 export type PoOutputOptions = {
   lineBreaks?: PoLineBreaks
   orderBy?: PoOrderBy
-  orderLocale?: string
 }
 export type CatalogUpdateRequest = Omit<GeneratedCatalogUpdateRequest, "format" | "po"> & {
   format?: CatalogConfigFormat
@@ -491,7 +490,6 @@ function toNativeUpdateRequest(request: CatalogUpdateRequest): NativeCatalogUpda
             ? toNativePoLineBreaks(request.po.lineBreaks)
             : undefined,
           orderBy: request.po.orderBy ? toNativePoOrderBy(request.po.orderBy) : undefined,
-          orderLocale: request.po.orderLocale,
         }
       : undefined,
   }
@@ -519,6 +517,9 @@ function toNativePoOrderBy(
     }
     case "origin": {
       return "Origin"
+    }
+    case "collated": {
+      return "Collated"
     }
   }
 }

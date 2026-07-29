@@ -14,7 +14,6 @@ use ferrocat::{
 };
 use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
 use icu_collator::{options::CollatorOptions, Collator, CollatorPreferences};
-use icu_locale::Locale;
 use serde::{Deserialize, Serialize};
 
 /// Source origin used for catalog updates and parsed catalog messages.
@@ -76,11 +75,14 @@ pub enum PoLineBreaks {
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PoOrderBy {
-    /// Sort by source message and then gettext context.
+    /// Sort by source message and then gettext context, in code-point order.
     #[default]
     Message,
     /// Sort by the first source origin and then message identity.
     Origin,
+    /// Sort by source message and then gettext context using the CLDR root
+    /// collation, which is what `Intl.Collator("en-US")` resolves to.
+    Collated,
 }
 
 /// Generic output controls for PO catalogs.
@@ -93,9 +95,6 @@ pub struct PoOutputOptions {
     /// Final catalog sort key.
     #[serde(default)]
     pub order_by: PoOrderBy,
-    /// Optional locale used to collate message and context keys.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub order_locale: Option<String>,
 }
 
 /// Request for updating a catalog file from source-first messages.
@@ -361,17 +360,9 @@ fn validate_po_options(
     format: super::catalog_artifact::PalamedesCatalogFormat,
     options: Option<&PoOutputOptions>,
 ) -> PalamedesResult<()> {
-    let Some(options) = options else {
-        return Ok(());
-    };
-    if format != super::catalog_artifact::PalamedesCatalogFormat::Po {
+    if options.is_some() && format != super::catalog_artifact::PalamedesCatalogFormat::Po {
         return Err(PalamedesError::from(ApiError::InvalidArguments(
             "po output options can only be used with PO catalogs".to_owned(),
-        )));
-    }
-    if options.order_locale.is_some() && options.order_by != PoOrderBy::Message {
-        return Err(PalamedesError::from(ApiError::InvalidArguments(
-            "po.orderLocale can only be used with po.orderBy \"message\"".to_owned(),
         )));
     }
     Ok(())
@@ -466,7 +457,7 @@ fn po_output_requires_final_pass(
 ) -> bool {
     metadata.is_some()
         || options.is_some_and(|options| {
-            options.line_breaks == PoLineBreaks::Off || options.order_locale.is_some()
+            options.line_breaks == PoLineBreaks::Off || options.order_by == PoOrderBy::Collated
         })
 }
 
@@ -486,8 +477,8 @@ fn finalize_po_output(
         }
     }
 
-    if let Some(order_locale) = options.and_then(|options| options.order_locale.as_deref()) {
-        sort_po_items_by_locale(&mut po.items, order_locale)?;
+    if options.is_some_and(|options| options.order_by == PoOrderBy::Collated) {
+        sort_po_items_collated(&mut po.items)?;
     }
 
     let serialize_options = match options.map(|options| options.line_breaks) {
@@ -497,45 +488,55 @@ fn finalize_po_output(
     Ok(ferrocat_stringify_po(&po, &serialize_options))
 }
 
-fn sort_po_items_by_locale(
-    items: &mut [ferrocat::PoItem],
-    order_locale: &str,
-) -> PalamedesResult<()> {
-    let locale = order_locale.parse::<Locale>().map_err(|error| {
-        PalamedesError::from(ApiError::InvalidArguments(format!(
-            "invalid po.orderLocale \"{order_locale}\": {error}"
-        )))
-    })?;
-    let collator = Collator::try_new(
-        CollatorPreferences::from(locale),
-        CollatorOptions::default(),
-    )
-    .map_err(|error| {
-        PalamedesError::from(ApiError::InvalidArguments(format!(
-            "could not create a collator for po.orderLocale \"{order_locale}\": {error}"
-        )))
-    })?;
-
-    items.sort_by(|left, right| {
-        collator
-            .compare(&left.msgid, &right.msgid)
-            .then_with(|| compare_optional_context(&collator, &left.msgctxt, &right.msgctxt))
-            .then_with(|| left.msgid.cmp(&right.msgid))
-            .then_with(|| left.msgctxt.cmp(&right.msgctxt))
-            .then_with(|| left.obsolete.cmp(&right.obsolete))
-    });
-    Ok(())
+/*
+ * Sort key for `PoOrderBy::Collated`. The two collation keys carry the actual
+ * order; the raw message identity that follows only breaks ties between
+ * entries the collator considers equal (canonically equivalent spellings, for
+ * example), so the result stays stable across runs regardless of the order
+ * ferrocat rendered.
+ */
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct CollatedKey {
+    message: Vec<u8>,
+    context: Vec<u8>,
+    raw_message: String,
+    raw_context: Option<String>,
+    obsolete: bool,
 }
 
-fn compare_optional_context(
-    collator: &icu_collator::CollatorBorrowed<'_>,
-    left: &Option<String>,
-    right: &Option<String>,
-) -> std::cmp::Ordering {
-    collator.compare(
-        left.as_deref().unwrap_or(""),
-        right.as_deref().unwrap_or(""),
-    )
+fn sort_po_items_collated(items: &mut [ferrocat::PoItem]) -> PalamedesResult<()> {
+    /*
+     * The root collation is what `Intl.Collator("en-US")` resolves to: English
+     * carries no tailoring of its own. Building the collator from the default
+     * (root) preferences keeps that explicit and removes the whole class of
+     * "unsupported locale silently falls back to root" surprises.
+     */
+    let collator = Collator::try_new(CollatorPreferences::default(), CollatorOptions::default())
+        .map_err(|error| {
+            PalamedesError::from(ApiError::InvalidArguments(format!(
+                "could not create the PO collator: {error}"
+            )))
+        })?;
+
+    /*
+     * Collation keys are computed once per entry instead of on every
+     * comparison: n key computations instead of n log n collations.
+     */
+    items.sort_by_cached_key(|item| {
+        let mut message = Vec::new();
+        let Ok(()) = collator.write_sort_key_to(&item.msgid, &mut message);
+        let mut context = Vec::new();
+        let Ok(()) =
+            collator.write_sort_key_to(item.msgctxt.as_deref().unwrap_or(""), &mut context);
+        CollatedKey {
+            message,
+            context,
+            raw_message: item.msgid.clone(),
+            raw_context: item.msgctxt.clone(),
+            obsolete: item.obsolete,
+        }
+    });
+    Ok(())
 }
 
 fn atomic_write_catalog(target_path: &Path, content: &str) -> PalamedesResult<()> {
@@ -819,8 +820,8 @@ mod tests {
     }
 
     #[test]
-    fn po_order_locale_resorts_the_complete_catalog_by_message_then_context() {
-        let path = temp_file("locale-order");
+    fn po_collated_order_resorts_the_complete_catalog_by_message_then_context() {
+        let path = temp_file("collated-order");
         std::fs::write(
             &path,
             concat!(
@@ -846,7 +847,7 @@ mod tests {
             &path,
             messages,
             Some(PoOutputOptions {
-                order_locale: Some("en-US".to_owned()),
+                order_by: PoOrderBy::Collated,
                 ..PoOutputOptions::default()
             }),
         );
@@ -876,8 +877,8 @@ mod tests {
     }
 
     #[test]
-    fn po_order_locale_compares_missing_context_as_an_empty_string() {
-        let path = temp_file("locale-context-empty");
+    fn po_collated_order_compares_missing_context_as_an_empty_string() {
+        let path = temp_file("collated-context-empty");
         update_po(
             &path,
             vec![
@@ -886,7 +887,7 @@ mod tests {
                 message("Same", Some("z"), "src/Z.tsx"),
             ],
             Some(PoOutputOptions {
-                order_locale: Some("en-US".to_owned()),
+                order_by: PoOrderBy::Collated,
                 ..PoOutputOptions::default()
             }),
         );
@@ -939,10 +940,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_po_options_for_fcl_and_locale_with_origin_ordering() {
+    fn rejects_po_options_for_fcl_catalogs() {
         let path = temp_file("invalid-po-options");
         let invalid_fcl = update_catalog_file(CatalogUpdateRequest {
-            target_path: path.clone(),
+            target_path: path,
             locale: "en".to_owned(),
             source_locale: "en".to_owned(),
             clean: false,
@@ -953,46 +954,163 @@ mod tests {
         })
         .expect_err("reject PO options for FCL");
         assert!(invalid_fcl.to_string().contains("only be used with PO"));
-
-        let invalid_order = update_catalog_file(CatalogUpdateRequest {
-            target_path: path,
-            locale: "en".to_owned(),
-            source_locale: "en".to_owned(),
-            clean: false,
-            force_clean: false,
-            format: crate::PalamedesCatalogFormat::Po,
-            po: Some(PoOutputOptions {
-                order_by: PoOrderBy::Origin,
-                order_locale: Some("en-US".to_owned()),
-                ..PoOutputOptions::default()
-            }),
-            messages: vec![],
-        })
-        .expect_err("reject locale with origin ordering");
-        assert!(invalid_order
-            .to_string()
-            .contains("only be used with po.orderBy"));
     }
 
-    #[test]
-    fn rejects_invalid_po_order_locale_tags() {
-        let path = temp_file("invalid-order-locale");
-        let error = update_catalog_file(CatalogUpdateRequest {
-            target_path: path,
-            locale: "en".to_owned(),
-            source_locale: "en".to_owned(),
-            clean: false,
-            force_clean: false,
-            format: crate::PalamedesCatalogFormat::Po,
-            po: Some(PoOutputOptions {
-                order_locale: Some("en_US".to_owned()),
-                ..PoOutputOptions::default()
-            }),
-            messages: vec![message("Hello", None, "src/App.tsx")],
-        })
-        .expect_err("reject invalid locale tag");
+    /*
+     * The acceptance criteria in #479 ask for a comparison against real Lingui
+     * 6 output. Lingui delegates PO serialization to `pofile` and orders with
+     * `new Intl.Collator("en-US")` over message and then context, so this
+     * fixture is the entry region of a catalog produced by exactly that
+     * combination. Header parity is explicitly out of scope, so the header is
+     * not part of the comparison.
+     */
+    const LINGUI_GOLDEN_ENTRIES: &str = r#"msgid "!Alert"
+msgstr "!Alert"
 
-        assert!(error.to_string().contains("invalid po.orderLocale"));
+msgid "\"Quoted\""
+msgstr "\"Quoted\""
+
+msgid "(Parens)"
+msgstr "(Parens)"
+
+msgid "A deliberately long source message and translation value that exceeds the default eighty column fold length by a comfortable margin."
+msgstr "A deliberately long source message and translation value that exceeds the default eighty column fold length by a comfortable margin."
+
+msgid "Álgebra"
+msgstr "Álgebra"
+
+msgctxt "a"
+msgid "apple"
+msgstr "apple"
+
+msgctxt "z"
+msgid "apple"
+msgstr "apple"
+
+msgid "Apple"
+msgstr "Apple"
+
+msgid "co-op"
+msgstr "co-op"
+
+msgid "coop"
+msgstr "coop"
+
+msgid "eclair"
+msgstr "eclair"
+
+msgid "éclair"
+msgstr "éclair"
+
+msgid "Item 10"
+msgstr "Item 10"
+
+msgid "Item 2"
+msgstr "Item 2"
+
+msgid "MiXeD CaSe"
+msgstr "MiXeD CaSe"
+
+msgid "naïve"
+msgstr "naïve"
+
+msgid "résumé"
+msgstr "résumé"
+
+msgid "Uber"
+msgstr "Uber"
+
+msgid "über"
+msgstr "über"
+
+msgid "Zebra"
+msgstr "Zebra""#;
+
+    #[test]
+    fn collated_unfolded_output_matches_lingui_golden_entries() {
+        let path = temp_file("lingui-golden");
+        let long = "A deliberately long source message and translation value that exceeds the default eighty column fold length by a comfortable margin.";
+        let corpus: Vec<(&str, Option<&str>)> = vec![
+            ("Zebra", None),
+            ("über", None),
+            ("Uber", None),
+            ("éclair", None),
+            ("eclair", None),
+            ("Apple", None),
+            ("apple", Some("z")),
+            ("apple", Some("a")),
+            ("Álgebra", None),
+            ("!Alert", None),
+            ("\"Quoted\"", None),
+            ("(Parens)", None),
+            ("Item 10", None),
+            ("Item 2", None),
+            ("co-op", None),
+            ("coop", None),
+            ("naïve", None),
+            ("résumé", None),
+            ("MiXeD CaSe", None),
+            (long, None),
+        ];
+
+        update_po(
+            &path,
+            corpus
+                .iter()
+                .map(|(text, context)| message(text, *context, "src/App.tsx"))
+                .collect(),
+            Some(PoOutputOptions {
+                line_breaks: PoLineBreaks::Off,
+                order_by: PoOrderBy::Collated,
+            }),
+        );
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        let entries = strip_po_header_and_references(&output);
+        assert_eq!(entries, LINGUI_GOLDEN_ENTRIES);
+    }
+
+    /*
+     * Ferrocat puts the first chunk of a multiline value on the keyword line,
+     * while `pofile` and GNU gettext open with an empty string and continue on
+     * the following lines. Both parse identically, but the spelling differs, so
+     * messages containing newlines still produce a mechanical diff when a
+     * catalog moves between the two tool chains. Pinned here so the divergence
+     * is a recorded fact rather than a surprise.
+     */
+    #[test]
+    fn multiline_values_diverge_from_pofile_spelling() {
+        let path = temp_file("multiline-divergence");
+        update_po(
+            &path,
+            vec![message("First line\nSecond line", None, "src/App.tsx")],
+            Some(PoOutputOptions {
+                line_breaks: PoLineBreaks::Off,
+                order_by: PoOrderBy::Collated,
+            }),
+        );
+
+        let output = std::fs::read_to_string(&path).expect("read output");
+        assert!(output.contains("msgid \"First line\\n\"\n\"Second line\""));
+        // What `pofile` would have written instead:
+        assert!(!output.contains("msgid \"\"\n\"First line\\n\"\n\"Second line\""));
+    }
+
+    /// Drops the PO header block and `#:` reference comments so a comparison
+    /// covers ordering and folding, which is what #479 is about.
+    fn strip_po_header_and_references(output: &str) -> String {
+        output
+            .split("\n\n")
+            .skip(1)
+            .map(|block| {
+                block
+                    .lines()
+                    .filter(|line| !line.starts_with("#:"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 
     #[test]

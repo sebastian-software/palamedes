@@ -1232,7 +1232,6 @@ dependencies = [
  "ferrocat-po",
  "ferromark",
  "icu_collator",
- "icu_locale",
  "ignore",
  "oxc_allocator",
  "oxc_ast",

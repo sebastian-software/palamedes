@@ -74,8 +74,7 @@ msgstr "Oeffnen"
       clean: false,
       po: {
         lineBreaks: "off",
-        orderBy: "message",
-        orderLocale: "en-US",
+        orderBy: "collated",
       },
       messages: [
         { message: "Zebra", extractedComments: [], origins: [] },
