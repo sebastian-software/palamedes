@@ -177,6 +177,7 @@ pub struct CatalogFileCombineRequest {
     pub source_locale: String,
     pub locale: Option<String>,
     pub conflict_strategy: Option<CatalogConflictStrategy>,
+    pub po: Option<PoOutputOptions>,
 }
 
 #[napi(object)]
@@ -710,6 +711,7 @@ impl From<CatalogFileCombineRequest> for palamedes::CatalogFileCombineRequest {
             conflict_strategy: value
                 .conflict_strategy
                 .map_or(palamedes::CatalogConflictStrategy::UseFirst, Into::into),
+            po: value.po.map(Into::into),
         }
     }
 }

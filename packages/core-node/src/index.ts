@@ -129,6 +129,7 @@ export type CatalogFileCombineRequest = {
   sourceLocale: string
   locale?: string
   conflictStrategy?: CatalogConflictStrategy
+  po?: PoOutputOptions
 }
 export type CatalogFileCombineResult = Omit<
   GeneratedCatalogFileCombineResult,
@@ -456,6 +457,16 @@ function toNativeFileCombineRequest(
     conflictStrategy: request.conflictStrategy
       ? toNativeConflictStrategy(request.conflictStrategy)
       : undefined,
+    po: toNativePoOptions(request.po),
+  }
+}
+
+function toNativePoOptions(po: PoOutputOptions | undefined): NativeCatalogUpdateRequest["po"] {
+  if (!po) {
+    return undefined
+  }
+  return {
+    lineBreaks: po.lineBreaks ? toNativePoLineBreaks(po.lineBreaks) : undefined,
   }
 }
 
@@ -482,13 +493,7 @@ function toNativeUpdateRequest(request: CatalogUpdateRequest): NativeCatalogUpda
   return {
     ...request,
     format: request.format ? toNativeConfigFormat(request.format) : undefined,
-    po: request.po
-      ? {
-          lineBreaks: request.po.lineBreaks
-            ? toNativePoLineBreaks(request.po.lineBreaks)
-            : undefined,
-        }
-      : undefined,
+    po: toNativePoOptions(request.po),
   }
 }
 
