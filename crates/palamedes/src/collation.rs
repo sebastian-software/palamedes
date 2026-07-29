@@ -27,18 +27,52 @@ use crate::collation_table::{Row, EXTRA, RANGE_START, ROWS, WIDE};
 /// Sort key reproducing CLDR root order for the covered repertoire.
 ///
 /// The three levels mirror the real algorithm: base letters first, then
-/// diacritics, then case. Comparing the tuple lexicographically gives the same
-/// answer as comparing level by level.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+/// diacritics, then case.
+///
+/// All three live in one byte buffer rather than three vectors. Catalogs are
+/// sorted by building a key per entry, so the allocation count per entry is
+/// what this costs in practice, and comparing byte slices lets the comparison
+/// itself run as a memcmp.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CollationKey {
-    primary: Vec<u32>,
-    secondary: Vec<u32>,
-    tertiary: Vec<u8>,
+    bytes: Vec<u8>,
+    primary_end: u32,
+    secondary_end: u32,
 }
 
-/// Weights above every table entry, so uncovered characters sort after the
-/// covered repertoire while staying ordered among themselves.
-const UNCOVERED_BASE: u32 = 0x10_000;
+impl CollationKey {
+    fn primary(&self) -> &[u8] {
+        &self.bytes[..self.primary_end as usize]
+    }
+
+    fn secondary(&self) -> &[u8] {
+        &self.bytes[self.primary_end as usize..self.secondary_end as usize]
+    }
+
+    fn tertiary(&self) -> &[u8] {
+        &self.bytes[self.secondary_end as usize..]
+    }
+}
+
+impl Ord for CollationKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.primary()
+            .cmp(other.primary())
+            .then_with(|| self.secondary().cmp(other.secondary()))
+            .then_with(|| self.tertiary().cmp(other.tertiary()))
+    }
+}
+
+impl PartialOrd for CollationKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Marks an uncovered character in the primary level. Above every table
+/// weight, so uncovered characters sort after the covered repertoire, and the
+/// four code-point bytes that follow order them among themselves.
+const UNCOVERED_TAG: u8 = 0xFF;
 
 fn is_combining(c: char) -> bool {
     ('\u{0300}'..='\u{036F}').contains(&c)
@@ -69,71 +103,122 @@ fn wide_decomposition(c: char) -> Option<&'static str> {
         .map(|index| WIDE[index].1)
 }
 
-/// Weight for a character the table does not cover.
-fn uncovered_weight(c: char) -> u32 {
-    /*
-     * Case is a tertiary distinction everywhere else, so fold here too rather
-     * than letting an uppercase form sort away from its lowercase one.
-     */
-    let base = c.to_lowercase().next().unwrap_or(c);
-    UNCOVERED_BASE + u32::from(base)
+/// The levels being filled while walking a string once.
+struct Levels {
+    /// Doubles as the finished key buffer: the other two are appended to it.
+    primary: Vec<u8>,
+    secondary: Vec<u8>,
+    tertiary: Vec<u8>,
+}
+
+impl Levels {
+    fn push_uncovered(&mut self, character: char) {
+        /*
+         * Case is a tertiary distinction everywhere else, so fold here too
+         * rather than letting an uppercase form sort away from its lowercase
+         * one.
+         */
+        let base = character.to_lowercase().next().unwrap_or(character);
+        self.primary.push(UNCOVERED_TAG);
+        self.primary
+            .extend_from_slice(&u32::from(base).to_be_bytes());
+        self.tertiary.push(u8::from(character.is_uppercase()));
+    }
+
+    fn push_row(&mut self, row: &Row) {
+        // Table weights are ranks in a repertoire far smaller than
+        // `UNCOVERED_TAG`, so one byte holds them and keeps them below it.
+        self.primary.push(row.primary);
+        if row.secondary != 0 {
+            push_mark(&mut self.secondary, row.secondary);
+        }
+        self.tertiary.push(u8::from(row.upper));
+    }
+
+    fn push_char(&mut self, character: char) {
+        /*
+         * Combining marks sit above the table's range, so this has to come
+         * before the lookup — otherwise a decomposed "café" would treat its
+         * accent as an uncovered character and stop matching the precomposed
+         * spelling.
+         */
+        if is_combining(character) {
+            push_mark(&mut self.secondary, u32::from(character));
+            return;
+        }
+        match row(character) {
+            Some(row) if row.wide => {
+                for expanded in wide_decomposition(character).unwrap_or_default().chars() {
+                    self.push_char(expanded);
+                }
+            }
+            Some(row) if row.primary != 0 => self.push_row(row),
+            _ => self.push_uncovered(character),
+        }
+    }
+}
+
+/// Combining marks are confined to U+0300..=U+036F, so the offset into that
+/// block fits in a byte and keeps their relative order.
+fn push_mark(out: &mut Vec<u8>, mark: u32) {
+    out.push(u8::try_from(mark.saturating_sub(0x0300)).unwrap_or(u8::MAX));
 }
 
 /// Builds the sort key for a single string.
 pub(crate) fn collation_key(text: &str) -> CollationKey {
-    let mut key = CollationKey {
-        primary: Vec::with_capacity(text.len()),
+    /*
+     * Most entries have no gettext context, so the empty key is the single
+     * most common one in a catalog sort. Returning it without touching the
+     * allocator saves one allocation per entry.
+     */
+    if text.is_empty() {
+        return CollationKey {
+            bytes: Vec::new(),
+            primary_end: 0,
+            secondary_end: 0,
+        };
+    }
+
+    let mut levels = Levels {
+        // Primary and tertiary are one byte per ASCII character.
+        primary: Vec::with_capacity(text.len() * 2 + 8),
         secondary: Vec::new(),
         tertiary: Vec::with_capacity(text.len()),
     };
 
-    for character in text.chars() {
+    if text.is_ascii() {
         /*
-         * The common path is one array index: the row already carries the
-         * primary weight of the base letter, the diacritic that belongs on the
-         * secondary level, and the case bit. Building these keys is the hot
-         * loop of a collated extraction, so it stays free of searches.
+         * Source messages are overwhelmingly ASCII, and there the whole
+         * repertoire lives in the dense table: no UTF-8 decoding, no combining
+         * marks, no expansions, no lookup past a bounds check.
          */
-        match row(character) {
-            Some(row) if row.wide => {
-                let expanded = wide_decomposition(character).unwrap_or_default();
-                push_expanded(&mut key, expanded);
+        for &byte in text.as_bytes() {
+            let index = usize::from(byte).wrapping_sub(RANGE_START as usize);
+            match ROWS.get(index) {
+                Some(row) if row.primary != 0 => levels.push_row(row),
+                _ => levels.push_uncovered(char::from(byte)),
             }
-            Some(row) if row.primary != 0 => {
-                key.primary.push(u32::from(row.primary));
-                if row.secondary != 0 {
-                    key.secondary.push(row.secondary);
-                }
-                key.tertiary.push(u8::from(row.upper));
-            }
-            _ if is_combining(character) => key.secondary.push(u32::from(character)),
-            _ => {
-                key.primary.push(uncovered_weight(character));
-                key.tertiary.push(u8::from(character.is_uppercase()));
-            }
+        }
+    } else {
+        for character in text.chars() {
+            levels.push_char(character);
         }
     }
 
-    key
-}
+    let Levels {
+        mut primary,
+        secondary,
+        tertiary,
+    } = levels;
+    let primary_end = primary.len();
+    primary.extend_from_slice(&secondary);
+    let secondary_end = primary.len();
+    primary.extend_from_slice(&tertiary);
 
-/// Handles the rare characters that decompose into more than one mark.
-fn push_expanded(key: &mut CollationKey, expanded: &str) {
-    for character in expanded.chars() {
-        if is_combining(character) {
-            key.secondary.push(u32::from(character));
-            continue;
-        }
-        match row(character) {
-            Some(row) if row.primary != 0 => {
-                key.primary.push(u32::from(row.primary));
-                key.tertiary.push(u8::from(row.upper));
-            }
-            _ => {
-                key.primary.push(uncovered_weight(character));
-                key.tertiary.push(u8::from(character.is_uppercase()));
-            }
-        }
+    CollationKey {
+        bytes: primary,
+        primary_end: u32::try_from(primary_end).unwrap_or(u32::MAX),
+        secondary_end: u32::try_from(secondary_end).unwrap_or(u32::MAX),
     }
 }
 
@@ -175,8 +260,8 @@ mod tests {
     fn keeps_accent_information_at_the_secondary_level() {
         assert_ne!(collation_key("resume"), collation_key("résumé"));
         assert_eq!(
-            collation_key("resume").primary,
-            collation_key("résumé").primary
+            collation_key("resume").primary(),
+            collation_key("résumé").primary()
         );
     }
 

@@ -6,7 +6,7 @@
 /// Everything the key builder needs for one code point.
 pub(crate) struct Row {
     /// Rank of the base letter in CLDR root order, or 0 when uncovered.
-    pub(crate) primary: u16,
+    pub(crate) primary: u8,
     /// Combining mark contributed to the secondary level, or 0 for none.
     pub(crate) secondary: u32,
     /// Whether the character is uppercase, which is a tertiary difference.
