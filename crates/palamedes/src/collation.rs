@@ -22,7 +22,7 @@ Known limits, both outside what source catalogs hold in practice:
   holds, but the order within them does not.
 */
 
-use crate::collation_table::{DECOMPOSITIONS, PRIMARY};
+use crate::collation_table::{Row, RANGE_START, ROWS, WIDE};
 
 /// Sort key reproducing CLDR root order for the covered repertoire.
 ///
@@ -44,23 +44,25 @@ fn is_combining(c: char) -> bool {
     ('\u{0300}'..='\u{036F}').contains(&c)
 }
 
-fn decomposition(c: char) -> Option<&'static str> {
-    DECOMPOSITIONS
-        .binary_search_by(|(key, _)| key.cmp(&c))
-        .ok()
-        .map(|index| DECOMPOSITIONS[index].1)
+fn row(c: char) -> Option<&'static Row> {
+    let index = usize::try_from(u32::from(c).checked_sub(RANGE_START)?).ok()?;
+    ROWS.get(index)
 }
 
-fn primary_weight(c: char) -> u32 {
+fn wide_decomposition(c: char) -> Option<&'static str> {
+    WIDE.binary_search_by(|(key, _)| key.cmp(&c))
+        .ok()
+        .map(|index| WIDE[index].1)
+}
+
+/// Weight for a character the table does not cover.
+fn uncovered_weight(c: char) -> u32 {
     /*
-     * Case is a tertiary distinction, so both cases share one primary weight
-     * and the table only carries the lowercase form.
+     * Case is a tertiary distinction everywhere else, so fold here too rather
+     * than letting an uppercase form sort away from its lowercase one.
      */
     let base = c.to_lowercase().next().unwrap_or(c);
-    match PRIMARY.binary_search_by(|(key, _)| key.cmp(&base)) {
-        Ok(index) => u32::from(PRIMARY[index].1),
-        Err(_) => UNCOVERED_BASE + u32::from(base),
-    }
+    UNCOVERED_BASE + u32::from(base)
 }
 
 /// Builds the sort key for a single string.
@@ -73,27 +75,51 @@ pub(crate) fn collation_key(text: &str) -> CollationKey {
 
     for character in text.chars() {
         /*
-         * Precomposed characters are expanded so an accent reaches the
-         * secondary level. Without that, "resume" and "résumé" would produce
-         * identical keys and fall through to the raw tie-break.
+         * The common path is one array index: the row already carries the
+         * primary weight of the base letter, the diacritic that belongs on the
+         * secondary level, and the case bit. Building these keys is the hot
+         * loop of a collated extraction, so it stays free of searches.
          */
-        match decomposition(character) {
-            Some(expanded) => push_char_run(&mut key, expanded.chars()),
-            None => push_char_run(&mut key, std::iter::once(character)),
+        match row(character) {
+            Some(row) if row.wide => {
+                let expanded = wide_decomposition(character).unwrap_or_default();
+                push_expanded(&mut key, expanded);
+            }
+            Some(row) if row.primary != 0 => {
+                key.primary.push(u32::from(row.primary));
+                if row.secondary != 0 {
+                    key.secondary.push(row.secondary);
+                }
+                key.tertiary.push(u8::from(row.upper));
+            }
+            _ if is_combining(character) => key.secondary.push(u32::from(character)),
+            _ => {
+                key.primary.push(uncovered_weight(character));
+                key.tertiary.push(u8::from(character.is_uppercase()));
+            }
         }
     }
 
     key
 }
 
-fn push_char_run(key: &mut CollationKey, characters: impl Iterator<Item = char>) {
-    for character in characters {
+/// Handles the rare characters that decompose into more than one mark.
+fn push_expanded(key: &mut CollationKey, expanded: &str) {
+    for character in expanded.chars() {
         if is_combining(character) {
             key.secondary.push(u32::from(character));
             continue;
         }
-        key.primary.push(primary_weight(character));
-        key.tertiary.push(u8::from(character.is_uppercase()));
+        match row(character) {
+            Some(row) if row.primary != 0 => {
+                key.primary.push(u32::from(row.primary));
+                key.tertiary.push(u8::from(row.upper));
+            }
+            _ => {
+                key.primary.push(uncovered_weight(character));
+                key.tertiary.push(u8::from(character.is_uppercase()));
+            }
+        }
     }
 }
 
