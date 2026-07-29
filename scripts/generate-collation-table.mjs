@@ -66,6 +66,15 @@ function buildTable() {
   // Primary order: one weight per base character, ordered by ICU itself.
   const bases = [...new Set(chars.map(baseOf))].filter((b) => [...b].length === 1)
   bases.sort((a, b) => collator.compare(a, b) || (a < b ? -1 : 1))
+  /*
+   * Weights are emitted as single bytes and must stay below the marker the key
+   * builder uses for uncovered characters, so the repertoire has a hard cap.
+   */
+  if (bases.length >= 0xff) {
+    throw new Error(
+      `Repertoire has ${bases.length} base characters; a primary weight must fit in a byte below 0xFF.`
+    )
+  }
   const weightOf = new Map(bases.map((b, index) => [b, index + 1]))
 
   /*
@@ -159,7 +168,7 @@ function render({ rows, extra, wide }) {
 /// Everything the key builder needs for one code point.
 pub(crate) struct Row {
     /// Rank of the base letter in CLDR root order, or 0 when uncovered.
-    pub(crate) primary: u16,
+    pub(crate) primary: u8,
     /// Combining mark contributed to the secondary level, or 0 for none.
     pub(crate) secondary: u32,
     /// Whether the character is uppercase, which is a tertiary difference.
