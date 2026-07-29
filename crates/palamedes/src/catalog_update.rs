@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::collation::{collation_key, CollationKey};
+use crate::collation::{collation_key, collation_prefix, CollationKey, CollationPrefix};
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::{
@@ -473,18 +473,76 @@ struct CollatedKey {
     obsolete: bool,
 }
 
-fn sort_po_items_collated(items: &mut [ferrocat::PoItem]) {
-    /*
-     * Collation keys are computed once per entry instead of on every
-     * comparison: n key computations instead of n log n collations.
-     */
-    items.sort_by_cached_key(|item| CollatedKey {
+fn collated_key(item: &ferrocat::PoItem) -> CollatedKey {
+    CollatedKey {
         message: collation_key(&item.msgid),
         context: collation_key(item.msgctxt.as_deref().unwrap_or("")),
         raw_message: item.msgid.clone(),
         raw_context: item.msgctxt.clone(),
         obsolete: item.obsolete,
-    });
+    }
+}
+
+/*
+ * Sorting by the full key means building one per entry, and a catalog entry is
+ * a whole message: most pairs are already decided by their first few
+ * characters. So order by a packed prefix of the primary level first, which
+ * needs no allocation, and only build keys inside the runs that share one.
+ *
+ * The worst case — every entry sharing a prefix — is the previous behavior of
+ * one key per entry, so this cannot be slower by more than the prefix pass.
+ */
+fn sort_po_items_collated(items: &mut [ferrocat::PoItem]) {
+    if items.len() < 2 {
+        return;
+    }
+
+    let prefixes: Vec<CollationPrefix> = items
+        .iter()
+        .map(|item| collation_prefix(&item.msgid))
+        .collect();
+    let mut order: Vec<u32> = (0..u32::try_from(items.len()).unwrap_or(u32::MAX)).collect();
+    order.sort_unstable_by_key(|&index| prefixes[index as usize]);
+
+    let mut start = 0;
+    while start < order.len() {
+        let prefix = prefixes[order[start] as usize];
+        let mut end = start + 1;
+        while end < order.len() && prefixes[order[end] as usize] == prefix {
+            end += 1;
+        }
+        if end - start > 1 {
+            let mut run: Vec<(CollatedKey, u32)> = order[start..end]
+                .iter()
+                .map(|&index| (collated_key(&items[index as usize]), index))
+                .collect();
+            run.sort_by(|left, right| left.0.cmp(&right.0));
+            for (slot, (_, index)) in order[start..end].iter_mut().zip(run) {
+                *slot = index;
+            }
+        }
+        start = end;
+    }
+
+    /*
+     * Apply the permutation in place. Rebuilding the vector instead would copy
+     * every entry twice, which on a catalog-sized item is more than the prefix
+     * pass saves.
+     *
+     * `order` says which entry belongs at each position; swapping needs the
+     * opposite, so invert it first.
+     */
+    let mut destination = vec![0_u32; order.len()];
+    for (position, &source) in order.iter().enumerate() {
+        destination[source as usize] = u32::try_from(position).unwrap_or(u32::MAX);
+    }
+    for position in 0..destination.len() {
+        while destination[position] as usize != position {
+            let target = destination[position] as usize;
+            items.swap(position, target);
+            destination.swap(position, target);
+        }
+    }
 }
 
 fn atomic_write_catalog(target_path: &Path, content: &str) -> PalamedesResult<()> {
