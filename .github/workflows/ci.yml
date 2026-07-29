@@ -102,6 +102,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
@@ -119,6 +124,13 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --workspace --locked
+
+      # Palamedes ships prebuilt binaries for five platforms, so anything baked
+      # into the executable multiplies. Checked once, on the pinned toolchain,
+      # because the number only has to be watched — not watched twice.
+      - name: Check shipped binary size
+        if: matrix.toolchain == '1.95'
+        run: node ./scripts/check-binary-size.mjs
 
   remix-next-canary:
     name: remix next canary
