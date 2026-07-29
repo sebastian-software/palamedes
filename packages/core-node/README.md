@@ -70,8 +70,7 @@ updateCatalogFile({
   clean: false,
   po: {
     lineBreaks: "off",
-    orderBy: "message",
-    orderLocale: "en-US",
+    orderBy: "collated",
   },
   messages: [{ message: "Hello {name}", extractedComments: [], origins: [] }],
 })
@@ -118,10 +117,10 @@ keeps custom tooling close to the same semantics used by the official CLI and
 framework plugins.
 
 `updateCatalogFile()` accepts optional, independent PO output controls through
-`po`: `lineBreaks` (`"auto"` or `"off"`), `orderBy` (`"message"` or
-`"origin"`), and `orderLocale`. Locale ordering applies to messages and then
-contexts, and requires message ordering. PO options are rejected for FCL
-updates.
+`po`: `lineBreaks` (`"auto"` or `"off"`) and `orderBy` (`"message"`,
+`"origin"`, or `"collated"`). Collated ordering applies the CLDR root collation
+to messages and then contexts, which is the order `Intl.Collator("en-US")`
+produces. PO options are rejected for FCL updates.
 
 The wrapper exposes lowercase public format values (`"po"` and `"fcl"`) while
 mapping to the native Ferrocat-backed API internally.

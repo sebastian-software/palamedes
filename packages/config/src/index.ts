@@ -22,8 +22,7 @@ export type PalamedesSourceReferenceRoot = "git" | "lingui" | "config" | (string
 
 export type PalamedesPoOutputOptions = {
   lineBreaks?: "auto" | "off"
-  orderBy?: "message" | "origin"
-  orderLocale?: string
+  orderBy?: "message" | "origin" | "collated"
 }
 
 export type PalamedesCatalogConfig = {
@@ -261,7 +260,6 @@ function normalizePoDataConfig(
   for (const [camel, kebab] of [
     ["lineBreaks", "line-breaks"],
     ["orderBy", "order-by"],
-    ["orderLocale", "order-locale"],
   ]) {
     if (camel in record) {
       throw new Error(
@@ -269,14 +267,7 @@ function normalizePoDataConfig(
       )
     }
   }
-  const knownKeys = new Set([
-    "line-breaks",
-    "line_breaks",
-    "order-by",
-    "order_by",
-    "order-locale",
-    "order_locale",
-  ])
+  const knownKeys = new Set(["line-breaks", "line_breaks", "order-by", "order_by"])
   for (const key of Object.keys(record)) {
     if (!knownKeys.has(key)) {
       throw new Error(
@@ -286,12 +277,24 @@ function normalizePoDataConfig(
   }
   const lineBreaks = record["line-breaks"] ?? record.line_breaks
   const orderBy = record["order-by"] ?? record.order_by
-  const orderLocale = record["order-locale"] ?? record.order_locale
   return {
-    ...(lineBreaks !== undefined ? { lineBreaks: lineBreaks as "auto" | "off" } : {}),
-    ...(orderBy !== undefined ? { orderBy: orderBy as "message" | "origin" } : {}),
-    ...(orderLocale !== undefined ? { orderLocale: orderLocale as string } : {}),
+    ...(lineBreaks !== undefined ? { lineBreaks: normalizeLineBreaksDataValue(lineBreaks) } : {}),
+    ...(orderBy !== undefined ? { orderBy: orderBy as PalamedesPoOutputOptions["orderBy"] } : {}),
   }
+}
+
+/*
+ * YAML 1.1 parsers read a bare `off` as the boolean `false`. The `yaml` package
+ * follows YAML 1.2 and keeps it a string, but TOML and JSON configs can carry a
+ * real boolean here, and so can any 1.1 tooling upstream of us. Map it back
+ * rather than reporting "must be \"auto\" or \"off\"" for a config that reads
+ * exactly like the documented one.
+ */
+function normalizeLineBreaksDataValue(value: unknown): PalamedesPoOutputOptions["lineBreaks"] {
+  if (value === false) {
+    return "off"
+  }
+  return value as PalamedesPoOutputOptions["lineBreaks"]
 }
 
 function normalizeMdxDataConfig(value: unknown, configPath: string): PalamedesMdxConfig {
@@ -834,7 +837,7 @@ function validatePoOutputOptions(
   }
   const po = value as Record<string, unknown>
   for (const key of Object.keys(po)) {
-    if (!["lineBreaks", "orderBy", "orderLocale"].includes(key)) {
+    if (!["lineBreaks", "orderBy"].includes(key)) {
       throw new Error(
         `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${index}].po.${key}".`
       )
@@ -845,22 +848,14 @@ function validatePoOutputOptions(
       `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.lineBreaks" must be "auto" or "off" when provided.`
     )
   }
-  if (po.orderBy !== undefined && po.orderBy !== "message" && po.orderBy !== "origin") {
-    throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.orderBy" must be "message" or "origin" when provided.`
-    )
-  }
   if (
-    po.orderLocale !== undefined &&
-    (typeof po.orderLocale !== "string" || po.orderLocale.trim().length === 0)
+    po.orderBy !== undefined &&
+    po.orderBy !== "message" &&
+    po.orderBy !== "origin" &&
+    po.orderBy !== "collated"
   ) {
     throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.orderLocale" must be a non-empty locale when provided.`
-    )
-  }
-  if (po.orderLocale !== undefined && po.orderBy === "origin") {
-    throw new Error(
-      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.orderLocale" can only be used with "orderBy: message".`
+      `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.orderBy" must be "message", "origin", or "collated" when provided.`
     )
   }
 }

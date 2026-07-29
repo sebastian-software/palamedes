@@ -99,8 +99,7 @@ describe("loadPalamedesConfig", () => {
             include: ["src"],
             po: {
               lineBreaks: "off",
-              orderBy: "message",
-              orderLocale: "en-US",
+              orderBy: "collated",
             },
           }],
         }
@@ -110,8 +109,7 @@ describe("loadPalamedesConfig", () => {
     const jsConfig = await loadPalamedesConfig({ cwd: jsDir })
     expect(jsConfig.catalogs[0]?.po).toStrictEqual({
       lineBreaks: "off",
-      orderBy: "message",
-      orderLocale: "en-US",
+      orderBy: "collated",
     })
 
     const dataDir = await createTempDir()
@@ -124,18 +122,38 @@ describe("loadPalamedesConfig", () => {
           - path: src/locales/{locale}
             include: [src]
             po:
-              line-breaks: off
-              order-by: message
-              order-locale: en-US
+              line-breaks: "off"
+              order-by: collated
       `
     )
 
     const dataConfig = loadPalamedesConfigSync({ cwd: dataDir })
     expect(dataConfig.catalogs[0]?.po).toStrictEqual({
       lineBreaks: "off",
-      orderBy: "message",
-      orderLocale: "en-US",
+      orderBy: "collated",
     })
+  })
+
+  /*
+   * The documented spelling is quoted, but a YAML 1.1 parser upstream — or a
+   * TOML/JSON config — can hand us a real boolean here. Both must land on
+   * "off" rather than tripping the value check.
+   */
+  it("accepts a boolean false for data-config line breaks", async () => {
+    const dataDir = await createTempDir()
+    await writeFile(
+      path.join(dataDir, "palamedes.json"),
+      JSON.stringify({
+        locales: ["en"],
+        "source-locale": "en",
+        catalogs: [
+          { path: "src/locales/{locale}", include: ["src"], po: { "line-breaks": false } },
+        ],
+      })
+    )
+
+    const config = loadPalamedesConfigSync({ cwd: dataDir })
+    expect(config.catalogs[0]?.po).toStrictEqual({ lineBreaks: "off" })
   })
 
   it("rejects invalid PO output option combinations", async () => {
@@ -146,11 +164,15 @@ describe("loadPalamedesConfig", () => {
         /po" can only be used when the catalog format is "po"/,
       ],
       [
-        "origin-locale",
-        `po: { orderBy: "origin", orderLocale: "en-US" }`,
-        /orderLocale" can only be used with "orderBy: message"/,
+        "unknown-order",
+        `po: { orderBy: "locale" }`,
+        /orderBy" must be "message", "origin", or "collated"/,
       ],
-      ["empty-locale", `po: { orderLocale: "" }`, /orderLocale" must be a non-empty locale/],
+      [
+        "unknown-key",
+        `po: { orderLocale: "en-US" }`,
+        /unknown key "catalogs\[0\]\.po\.orderLocale"/,
+      ],
     ] as const) {
       const fixtureDir = await createTempDir()
       await writeFile(
@@ -184,7 +206,7 @@ describe("loadPalamedesConfig", () => {
           - path: locales/{locale}
             include: [src]
             po:
-              lineBreaks: off
+              lineBreaks: "off"
       `
     )
 
@@ -204,7 +226,7 @@ describe("loadPalamedesConfig", () => {
             - path: locales/{locale}
               include: [src]
               po:
-                line-break: off
+                line-break: "off"
         `,
       ],
       [

@@ -331,8 +331,8 @@ catalogs:
   - path: locales/{locale}/messages
     include: [app]
     po:
-      line-breaks: off
-      order-locale: en-US
+      line-breaks: "off"
+      order-by: collated
 "#,
         )
         .expect("write config");
@@ -340,7 +340,15 @@ catalogs:
         fs::write(
             app.join("app/page.tsx"),
             format!(
-                "import {{ t }} from \"@palamedes/core/macro\";\nexport function message() {{ return t`{long}`; }}\n"
+                concat!(
+                    "import {{ t }} from \"@palamedes/core/macro\";\n",
+                    "export function message() {{ return t`{long}`; }}\n",
+                    "export function a() {{ return t`Zebra`; }}\n",
+                    "export function b() {{ return t`Álgebra`; }}\n",
+                    "export function c() {{ return t`über`; }}\n",
+                    "export function d() {{ return t`Uber`; }}\n"
+                ),
+                long = long
             ),
         )
         .expect("write source");
@@ -361,6 +369,19 @@ catalogs:
                 .any(|line| line == format!("msgstr \"{long}\"")),
             "{output}"
         );
+
+        /*
+         * Collated ordering has to survive the whole CLI path, not just the
+         * core: code-point order would put "Zebra" ahead of "Álgebra".
+         */
+        let order = output
+            .lines()
+            .filter_map(|line| line.strip_prefix("msgid \""))
+            .filter(|line| !line.is_empty() && *line != "\"")
+            .map(|line| line.trim_end_matches('"').to_owned())
+            .filter(|msgid| msgid != long)
+            .collect::<Vec<_>>();
+        assert_eq!(order, vec!["Álgebra", "Uber", "über", "Zebra"], "{output}");
     }
 
     #[test]

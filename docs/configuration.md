@@ -96,19 +96,36 @@ catalogs:
   - path: src/locales/{locale}
     include: [src]
     po:
-      line-breaks: off
-      order-by: message
-      order-locale: en-US
+      line-breaks: "off"
+      order-by: collated
 ```
 
 - `line-breaks` accepts `auto` (the default) or `off`. `off` disables
   automatic width folding for long `msgid` and `msgstr` values. Actual newline
   characters still use valid multiline PO syntax.
-- `order-by` accepts `message` (the default) or `origin`. Message ordering uses
-  code-point order by default. Origin ordering uses the first source reference,
-  then message identity.
-- `order-locale` enables ICU4X locale-aware ordering by message and then
-  context. It can only be combined with `order-by: message`.
+
+  Quote the value. A bare `off` is a string under YAML 1.2, which is what
+  Palamedes parses with, but YAML 1.1 tooling reads it as the boolean `false`.
+  Both spellings are accepted, so existing configs keep working.
+
+- `order-by` accepts `message` (the default), `origin`, or `collated`.
+  - `message` sorts by source message and then gettext context in code-point
+    order.
+  - `origin` sorts by the first source reference, then message identity.
+  - `collated` sorts by source message and then gettext context using the CLDR
+    root collation — the same order `Intl.Collator("en-US")` produces, because
+    English carries no collation tailoring of its own. Use this to keep
+    catalogs migrated from Lingui from re-sorting wholesale on first
+    extraction.
+
+Ordering is not locale-configurable. Root collation is what the English-source
+workflows Palamedes targets need, and it keeps the output identical no matter
+which locale a catalog holds. Languages with genuinely different collation
+(Swedish, Turkish, Czech and others) are not tailored for.
+
+`collated` ordering and `line-breaks: "off"` both re-serialize the catalog once
+more after the update. That costs roughly one extra PO parse and serialize per
+catalog file — a few milliseconds on a large catalog.
 
 The `po` object is only valid for PO catalogs. JavaScript and TypeScript config
 files use the equivalent camelCase shape:
@@ -117,8 +134,7 @@ files use the equivalent camelCase shape:
 {
   po: {
     lineBreaks: "off",
-    orderBy: "message",
-    orderLocale: "en-US",
+    orderBy: "collated",
   },
 }
 ```

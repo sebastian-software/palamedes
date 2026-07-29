@@ -85,8 +85,6 @@ pub struct ConfigPoOutputOptions {
     pub line_breaks: PoLineBreaks,
     #[serde(default, alias = "order_by")]
     pub order_by: PoOrderBy,
-    #[serde(default, alias = "order_locale")]
-    pub order_locale: Option<String>,
 }
 
 impl From<ConfigPoOutputOptions> for PoOutputOptions {
@@ -94,7 +92,6 @@ impl From<ConfigPoOutputOptions> for PoOutputOptions {
         Self {
             line_breaks: value.line_breaks,
             order_by: value.order_by,
-            order_locale: value.order_locale,
         }
     }
 }
@@ -378,28 +375,6 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
                 ),
             );
         }
-        if let Some(po) = &catalog.po {
-            if po
-                .order_locale
-                .as_ref()
-                .is_some_and(|locale| locale.trim().is_empty())
-            {
-                return invalid(
-                    path,
-                    &format!(
-                        "\"catalogs[{index}].po.order-locale\" must be a non-empty locale when provided."
-                    ),
-                );
-            }
-            if po.order_locale.is_some() && po.order_by != PoOrderBy::Message {
-                return invalid(
-                    path,
-                    &format!(
-                        "\"catalogs[{index}].po.order-locale\" can only be used with \"order-by: message\"."
-                    ),
-                );
-            }
-        }
     }
     if let Some(pseudo_locale) = &raw.pseudo_locale {
         // Documented behavior: a pseudo-locale outside `locales` is ignored.
@@ -601,9 +576,8 @@ catalogs:
   - path: src/locales/{locale}
     include: [src]
     po:
-      line-breaks: off
-      order-by: message
-      order-locale: en-US
+      line-breaks: "off"
+      order-by: collated
 "#,
         )
         .expect("write config");
@@ -611,8 +585,39 @@ catalogs:
         let config = load_config(&app, None).expect("load config");
         let po = config.catalogs[0].po.as_ref().expect("PO options");
         assert_eq!(po.line_breaks, palamedes::PoLineBreaks::Off);
-        assert_eq!(po.order_by, palamedes::PoOrderBy::Message);
-        assert_eq!(po.order_locale.as_deref(), Some("en-US"));
+        assert_eq!(po.order_by, palamedes::PoOrderBy::Collated);
+    }
+
+    /*
+     * YAML 1.1 reads a bare `off` as the boolean `false`, YAML 1.2 keeps it a
+     * string. The documented spelling is quoted for that reason, but configs
+     * written before that are common enough that the bare form has to keep
+     * working.
+     */
+    #[test]
+    fn accepts_bare_and_quoted_off_for_line_breaks() {
+        for (name, spelling) in [("po-off-bare", "off"), ("po-off-quoted", "\"off\"")] {
+            let app = temp_dir(name);
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    r#"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: src/locales/{{locale}}
+    include: [src]
+    po:
+      line-breaks: {spelling}
+"#
+                ),
+            )
+            .expect("write config");
+
+            let config = load_config(&app, None).expect("load config");
+            let po = config.catalogs[0].po.as_ref().expect("PO options");
+            assert_eq!(po.line_breaks, palamedes::PoLineBreaks::Off, "{name}");
+        }
     }
 
     #[test]
@@ -620,18 +625,13 @@ catalogs:
         for (name, catalog, expected) in [
             (
                 "po-options-fcl",
-                "format: fcl\n    po:\n      line-breaks: off",
+                "format: fcl\n    po:\n      line-breaks: \"off\"",
                 "can only be used when the catalog format is \"po\"",
             ),
             (
-                "po-options-origin-locale",
-                "po:\n      order-by: origin\n      order-locale: en-US",
-                "can only be used with \"order-by: message\"",
-            ),
-            (
-                "po-options-empty-locale",
-                "po:\n      order-locale: \"\"",
-                "must be a non-empty locale",
+                "po-options-unknown-order",
+                "po:\n      order-by: locale",
+                "expected one of `message`, `origin`, `collated`",
             ),
         ] {
             let app = temp_dir(name);
@@ -667,7 +667,7 @@ catalogs:
   - path: src/locales/{locale}
     include: [src]
     po:
-      lineBreaks: off
+      lineBreaks: "off"
 "#,
         )
         .expect("write config");
@@ -690,7 +690,7 @@ catalogs:
   - path: src/locales/{locale}
     include: [src]
     po:
-      line-break: off
+      line-break: "off"
 "#,
         )
         .expect("write config");
