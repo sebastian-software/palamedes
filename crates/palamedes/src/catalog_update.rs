@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::collation::{collation_key, CollationKey};
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::{
@@ -13,7 +14,6 @@ use ferrocat::{
     RenderOptions, SerializeOptions, SourceExtractedMessage, UpdateCatalogOptions,
 };
 use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
-use icu_collator::{options::CollatorOptions, Collator, CollatorPreferences};
 use serde::{Deserialize, Serialize};
 
 /// Source origin used for catalog updates and parsed catalog messages.
@@ -478,7 +478,7 @@ fn finalize_po_output(
     }
 
     if options.is_some_and(|options| options.order_by == PoOrderBy::Collated) {
-        sort_po_items_collated(&mut po.items)?;
+        sort_po_items_collated(&mut po.items);
     }
 
     let serialize_options = match options.map(|options| options.line_breaks) {
@@ -497,46 +497,25 @@ fn finalize_po_output(
  */
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct CollatedKey {
-    message: Vec<u8>,
-    context: Vec<u8>,
+    message: CollationKey,
+    context: CollationKey,
     raw_message: String,
     raw_context: Option<String>,
     obsolete: bool,
 }
 
-fn sort_po_items_collated(items: &mut [ferrocat::PoItem]) -> PalamedesResult<()> {
-    /*
-     * The root collation is what `Intl.Collator("en-US")` resolves to: English
-     * carries no tailoring of its own. Building the collator from the default
-     * (root) preferences keeps that explicit and removes the whole class of
-     * "unsupported locale silently falls back to root" surprises.
-     */
-    let collator = Collator::try_new(CollatorPreferences::default(), CollatorOptions::default())
-        .map_err(|error| {
-            PalamedesError::from(ApiError::InvalidArguments(format!(
-                "could not create the PO collator: {error}"
-            )))
-        })?;
-
+fn sort_po_items_collated(items: &mut [ferrocat::PoItem]) {
     /*
      * Collation keys are computed once per entry instead of on every
      * comparison: n key computations instead of n log n collations.
      */
-    items.sort_by_cached_key(|item| {
-        let mut message = Vec::new();
-        let Ok(()) = collator.write_sort_key_to(&item.msgid, &mut message);
-        let mut context = Vec::new();
-        let Ok(()) =
-            collator.write_sort_key_to(item.msgctxt.as_deref().unwrap_or(""), &mut context);
-        CollatedKey {
-            message,
-            context,
-            raw_message: item.msgid.clone(),
-            raw_context: item.msgctxt.clone(),
-            obsolete: item.obsolete,
-        }
+    items.sort_by_cached_key(|item| CollatedKey {
+        message: collation_key(&item.msgid),
+        context: collation_key(item.msgctxt.as_deref().unwrap_or("")),
+        raw_message: item.msgid.clone(),
+        raw_context: item.msgctxt.clone(),
+        obsolete: item.obsolete,
     });
-    Ok(())
 }
 
 fn atomic_write_catalog(target_path: &Path, content: &str) -> PalamedesResult<()> {

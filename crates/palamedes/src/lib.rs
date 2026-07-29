@@ -23,6 +23,8 @@ mod catalog_audit;
 mod catalog_combine;
 mod catalog_update;
 mod choice;
+mod collation;
+mod collation_table;
 mod descriptor;
 mod diagnostic;
 mod error;
