@@ -164,6 +164,83 @@ fn push_mark(out: &mut Vec<u8>, mark: u32) {
     out.push(u8::try_from(mark.saturating_sub(0x0300)).unwrap_or(u8::MAX));
 }
 
+/// Bytes of the primary level packed into [`CollationPrefix`].
+const PREFIX_BYTES: usize = 16;
+
+/// The leading primary weights of a string, packed into one integer.
+///
+/// Almost every pair of messages in a catalog differs within the first few
+/// characters, so comparing these decides the order without building a key at
+/// all. Weights start at 1, so the zero padding of a shorter string orders it
+/// before a longer one that extends it — the same answer the full key gives.
+pub(crate) type CollationPrefix = u128;
+
+/// Packs the first [`PREFIX_BYTES`] primary weights of `text`.
+pub(crate) fn collation_prefix(text: &str) -> CollationPrefix {
+    let mut packed: CollationPrefix = 0;
+    let mut written = 0;
+
+    let mut push = |byte: u8, written: &mut usize| {
+        if *written < PREFIX_BYTES {
+            packed = (packed << 8) | CollationPrefix::from(byte);
+            *written += 1;
+        }
+    };
+
+    if text.is_ascii() {
+        for &byte in text.as_bytes() {
+            if written == PREFIX_BYTES {
+                break;
+            }
+            let index = usize::from(byte).wrapping_sub(RANGE_START as usize);
+            match ROWS.get(index) {
+                Some(row) if row.primary != 0 => push(row.primary, &mut written),
+                _ => push_uncovered_prefix(char::from(byte), &mut push, &mut written),
+            }
+        }
+    } else {
+        for character in text.chars() {
+            if written == PREFIX_BYTES {
+                break;
+            }
+            if is_combining(character) {
+                continue;
+            }
+            match row(character) {
+                Some(found) if found.wide => {
+                    for expanded in wide_decomposition(character).unwrap_or_default().chars() {
+                        if let Some(expanded_row) = row(expanded).filter(|row| row.primary != 0) {
+                            push(expanded_row.primary, &mut written);
+                        }
+                    }
+                }
+                Some(found) if found.primary != 0 => push(found.primary, &mut written),
+                _ => push_uncovered_prefix(character, &mut push, &mut written),
+            }
+        }
+    }
+
+    if written == 0 {
+        // Nothing reached the primary level — shifting by the full width would
+        // be undefined, and zero is the right answer anyway.
+        return 0;
+    }
+    // Left-align so a short string keeps its zero padding on the right.
+    packed << (8 * (PREFIX_BYTES - written))
+}
+
+fn push_uncovered_prefix(
+    character: char,
+    push: &mut impl FnMut(u8, &mut usize),
+    written: &mut usize,
+) {
+    let base = character.to_lowercase().next().unwrap_or(character);
+    push(UNCOVERED_TAG, written);
+    for byte in u32::from(base).to_be_bytes() {
+        push(byte, written);
+    }
+}
+
 /// Builds the sort key for a single string.
 pub(crate) fn collation_key(text: &str) -> CollationKey {
     /*
@@ -224,7 +301,7 @@ pub(crate) fn collation_key(text: &str) -> CollationKey {
 
 #[cfg(test)]
 mod tests {
-    use super::collation_key;
+    use super::{collation_key, collation_prefix};
 
     fn sorted(mut items: Vec<&str>) -> Vec<&str> {
         items.sort_by(|left, right| {
@@ -318,6 +395,53 @@ mod tests {
                 vec![text, "Zebra"],
                 "{text} must sort before a plain letter"
             );
+        }
+    }
+
+    /*
+     * The catalog sort orders by the packed prefix first and only builds keys
+     * inside runs that share one. That is only sound if a prefix difference
+     * always agrees with the full key, so check it over a corpus that mixes
+     * shared prefixes, lengths, accents, punctuation and the empty string.
+     */
+    #[test]
+    fn prefix_order_never_disagrees_with_the_full_key() {
+        let corpus = [
+            "",
+            "a",
+            "ab",
+            "abc",
+            "Save changes",
+            "Save changes?",
+            "Save changes and continue for a good long while",
+            "Save account",
+            "save changes",
+            "“Save changes”",
+            "{count, plural, one {# item} other {# items}}",
+            "<0>Save</0> changes",
+            "Álgebra",
+            "über",
+            "Uber",
+            "café",
+            "cafe\u{0301}",
+            "日本語",
+            "!Alert",
+            "A very long message that shares its opening words with another one",
+            "A very long message that shares its opening words with something else",
+        ];
+
+        for left in corpus {
+            for right in corpus {
+                let prefixes = collation_prefix(left).cmp(&collation_prefix(right));
+                if prefixes.is_eq() {
+                    continue;
+                }
+                assert_eq!(
+                    prefixes,
+                    collation_key(left).cmp(&collation_key(right)),
+                    "prefix order disagrees with the full key for {left:?} vs {right:?}"
+                );
+            }
         }
     }
 
