@@ -81,11 +81,7 @@ const ROUTE_EXPECTATIONS = [
   { path: "/compare/next-intl", h1: "frameworks wide." },
   { path: "/compare/react-intl", h1: "Keep the ICU rigor. Lose the provider." },
   { path: "/compare/paraglide", h1: "Smaller bundles. Bigger constraints." },
-  {
-    path: "/compare/general-translation",
-    h1: "Your translations should outlive your vendor.",
-  },
-  { path: "/compare/tolgee", h1: "Your catalogs, or their database." },
+  { path: "/compare/tolgee", h1: "A runtime key, or the sentence itself." },
   { path: "/compare/intlayer", h1: "Write the dictionary, or write the sentence." },
   { path: "/guides", h1: "The decisions that actually cost you time." },
   {

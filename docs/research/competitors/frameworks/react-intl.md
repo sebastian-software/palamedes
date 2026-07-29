@@ -1,132 +1,47 @@
 ---
 title: React Intl
 category: frontend-framework
+scope: oss-client-framework
+subject: formatjs-react-intl-runtime-and-tooling
+license: BSD-3-Clause
 analyzed: 2026-07-06
-analyzed_versions: "react-intl 10.1.14; @formatjs/intl 4.1.14; @formatjs/icu-messageformat-parser 3.5.12; @formatjs/cli (formatjs_cli) 1.1.18; intl-messageformat 11.2.9"
+analyzed_versions: "react-intl 10.1.14; @formatjs/intl 4.1.14; @formatjs/cli 1.1.18; intl-messageformat 11.2.9"
 homepage: https://formatjs.github.io
 repository: https://github.com/formatjs/formatjs
 ---
 
 # React Intl
 
-## Fact sheet
+## Technical snapshot
 
-| Fact              | Value                                                                                           |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
-| License           | BSD-3-Clause                                                                                    |
-| Analyzed version  | react-intl 10.1.14 (2026-06-26)                                                                 |
-| Company / funding | Community (ex-Yahoo); effectively one primary maintainer; no disclosed funding                  |
-| Pricing           | Free OSS                                                                                        |
-| Adoption          | ~3.1M npm downloads/week; 14.7k GitHub stars                                                    |
-| Framework support | React (Client Components only — no native RSC); framework-agnostic core via @formatjs/intl      |
-| Message identity  | Explicit IDs or CLI-generated content hashes of `defaultMessage`                                |
-| ICU MessageFormat | Yes — native (the ICU standard-bearer in JS)                                                    |
-| .po / gettext     | No — custom JSON + TMS-specific formatter adapters                                              |
-| Extraction        | Static `formatjs extract` → `compile` (optional AST precompilation)                             |
-| AI                | None                                                                                            |
-| Notable           | Ships standalone `Intl.*` polyfill packages; missing RSC support is the sharpest structural gap |
+| Fact             | Value                                              |
+| ---------------- | -------------------------------------------------- |
+| Message identity | Explicit or generated descriptor IDs               |
+| Message syntax   | ICU MessageFormat                                  |
+| Runtime          | React provider/components/hooks over FormatJS Intl |
+| Catalogs         | Commonly JSON descriptors/compiled AST             |
+| Extraction       | Babel/TypeScript transforms and FormatJS CLI       |
+| Compilation      | ICU parsing and optional AST precompilation        |
+| PO               | No native PO catalog workflow                      |
 
-## Snapshot
+React Intl is the React binding over FormatJS' ECMA-402 and ICU tooling. Message
+descriptors carry ID, default message, and description. Extraction collects
+those descriptors, while compilation can parse messages ahead of time to avoid
+shipping the parser.
 
-- Maintainer / company / funding: Community-maintained monorepo (`formatjs/formatjs`). Originated as `yahoo/react-intl` at Yahoo (~2014), later spun out under the independent FormatJS org. Primary current maintainer visible in changelogs/commits: longlho (Long Ho), with other contributors (e.g. redonkulus). No corporate backing or disclosed funding/sponsorship model found; not verified whether it has OpenCollective/GitHub Sponsors income at meaningful scale.
-- License: BSD-3-Clause.
-- Current stable version + release date: react-intl 10.1.14 (published on npm; per GitHub releases, react-intl and sibling packages — vue-intl 7.2.11, @formatjs/intl 4.1.14 — were tagged June 26, 2026; @formatjs/cli 1.1.18 followed June 28, 2026).
-- Adoption:
-  - npm weekly downloads (react-intl): 3,099,905 for the week of 2026-06-29 to 2026-07-05 (api.npmjs.org).
-  - GitHub stars: ~14.7k (formatjs/formatjs monorepo).
-  - Primary language: TypeScript (66.2% of repo).
-  - Open issues: 4 (as of fetch on 2026-07-06) — unusually low for a 14.7k-star repo; likely aggressive issue-closing/triage rather than lack of usage, but not verified.
-  - Total commits on main: ~6,710 (monorepo, includes all FormatJS packages, not just react-intl).
-- First release / age: Originated as Yahoo's internal `react-intl` (~2014), making it one of the oldest React i18n libraries still maintained (~12 years). Exact first npm publish date of the FormatJS-era `react-intl` package not verified (npm versions page returned HTTP 403 on fetch attempt).
+Rich-text placeholders map ICU tags to React render functions. Date, number,
+relative-time, list, and display-name formatting use the same provider/runtime
+surface.
 
-## Positioning & target audience
+## What it does differently
 
-- React Intl positions itself as the React integration for standards-based internationalization on client and server. Its underlying monorepo also ships `@formatjs/intl` (framework-agnostic core), `vue-intl`, and format-specific packages (`intl-numberformat`, `intl-datetimeformat`, `intl-pluralrules`, etc. — largely polyfills for ECMA-402 `Intl` APIs).
-- Targets teams that want a standards-based approach (ICU syntax used across Java/PHP/other platforms too) rather than a JS-ecosystem-specific message format.
-- Marketed as safe/conservative choice: "simple and safe for smaller codebases," not over-featured, and TMS-agnostic since ICU MessageFormat is a widely supported industry format (per third-party comparison, Tolgee blog).
-
-## Core concepts & architecture
-
-- **Message identity**: Messages are declared inline via `defineMessages`/`FormattedMessage` with a `defaultMessage` (and optional `description`). Teams can provide explicit IDs or configure the extraction tooling to generate content hashes (e.g. `sha512:contenthash:base64:6`) from `defaultMessage`. The checked Palamedes benchmark uses the generated-ID workflow; that choice is not intrinsic to every React Intl application.
-- **ICU MessageFormat**: Full ICU syntax — plural, selectordinal, select, rich-text tag interpolation (arbitrary `<tag>` handlers), number/date/time skeletons via ECMA-402 `Intl`. The `other` case is mandatory for plural/select/selectordinal. Apostrophes are ICU escape characters (a common source of author error).
-- **Extraction + compile pipeline** (two distinct steps, both via `@formatjs/cli`):
-  1. `formatjs extract` scans source (Babel/TS transform required to locate `defineMessage`/`FormattedMessage` call sites) and emits a JSON file of `{id, defaultMessage, description}` per message.
-  2. `formatjs compile` transforms translated JSON into a runtime-ready bundle, optionally as a **precompiled AST** (skips ICU parsing at runtime for performance) or as plain compiled JSON.
-- **Intl polyfills**: The monorepo ships its own polyfills for `Intl.NumberFormat`, `Intl.DateTimeFormat`, `Intl.PluralRules`, `Intl.RelativeTimeFormat`, `Intl.ListFormat`, `Intl.Segmenter`, etc., independent of react-intl itself — useful for older runtimes/Node versions lacking full ECMA-402 coverage.
-- **Runtime model**: `IntlProvider` (React Context) supplies `locale` + `messages` to the tree; components (`FormattedMessage`, `FormattedNumber`, `FormattedDate`, ...) or the `useIntl()`/`injectIntl` APIs consume them. This is a **client-side, context-based runtime** — translations are plain data loaded per-locale and swapped by re-rendering under a new `IntlProvider`.
-- **Type safety**: TypeScript support via `@types/react` peer dep and a TS transformer (`@formatjs/ts-transformer`) for extraction from `.ts`/`.tsx`; message IDs/shape are not strongly typed against usage sites the way some newer tools attempt (e.g. no compile-time enforcement that all interpolation variables are provided) — not verified in exhaustive depth but no evidence of full end-to-end typed-catalog checking.
-
-## Framework & platform support
-
-- React Intl itself targets React. The same monorepo contains the sibling `vue-intl` package; Svelte extraction support was added there per changelog notes (unclear packaging boundary — not fully verified).
-- **No native React Server Components support**: `useIntl` and `FormattedMessage` rely on React Context and only work in Client Components. Using react-intl in Next.js App Router Server Components requires a manual workaround (a hand-rolled `getIntl()` helper using the underlying `@formatjs/intl` core library directly, bypassing the Context-based API). This is a structural limitation versus frameworks/tools built Context-free from the start (e.g. next-intl, or Palamedes' one-runtime-model approach across SSR frameworks).
-- Framework-agnostic core (`@formatjs/intl`) can be used standalone in any JS environment (Node backends, other frameworks) without React.
-- No official first-class integration package found for TanStack Start, SolidStart, Waku, or React Router (Palamedes' target frameworks) — react-intl is React-Context-bound, so usage in RSC-first frameworks needs the same manual workaround pattern as Next.js.
-
-## Catalog formats & interop
-
-- Extracted format: custom JSON (`{"id": {"defaultMessage": "...", "description": "..."}}`), not an industry-standard catalog format like `.po`/gettext.
-- Built-in formatters exist to transform to/from popular TMS-specific JSON shapes (Crowdin, Lokalise, Phrase Strings mentioned in docs) so translators can work in their platform's native format; custom formatter functions can be authored for unsupported vendors.
-- Compiled output (post-`formatjs compile`) is either flat JSON or a precompiled AST format — both are React Intl-specific, not portable to other i18n runtimes.
-- No `.po`/gettext support — this is a structural difference from Palamedes' `.po`-catalog approach; React Intl's workflow is JSON-first with TMS adapters bolted on, rather than adopting an existing translation-industry-standard file format.
-
-## Workflow & tooling
-
-- `@formatjs/cli`: `extract` and `compile` subcommands are the backbone of the workflow; also ships `formatjs-cli-lib` (had an open bug at time of research: `globSync is not a function`, opened July 2, 2026, formatjs/formatjs#6843).
-- Babel plugin (`babel-plugin-formatjs`) and TS transformer (`@formatjs/ts-transformer`) for locating message declarations at build time; also `@formatjs/unplugin` (bundler-agnostic plugin, presumably for Vite/webpack/rollup/esbuild via unplugin).
-- `eslint-plugin-formatjs`: lint rules enforcing message hygiene (e.g. requiring descriptions, valid ICU syntax, no literal strings in JSX left untranslated).
-- Precompiling to AST + resolving `@formatjs/icu-messageformat-parser` to its `/no-parser` variant is a documented technique to shrink bundle size (~40% reduction) — implies the default runtime bundle carries non-trivial parsing weight unless this optimization is manually applied.
-
-## AI features
-
-- None found. No AI-assisted translation, AI extraction, or LLM tooling mentioned anywhere in the official docs or repo. This is a purely traditional extract/translate/compile pipeline.
-
-## Pricing
-
-- Fully free and open source (BSD-3-Clause). No paid tier, hosted service, or commercial offering from the FormatJS project itself — monetization/translation-management is entirely delegated to third-party TMS vendors (Crowdin, Lokalise, Phrase, etc.) via format adapters.
-
-## Strengths
-
-- Long track record (~12 years under various names) and very high adoption (~3.1M weekly npm downloads for react-intl alone).
-- Standards-based: ICU MessageFormat is a cross-platform, cross-language standard (also used in Java, PHP, etc.), reducing lock-in risk for translation vocabulary/rules.
-- Rich, mature ICU feature set: plurals, select, selectordinal, rich-text tags, full number/date skeleton support.
-- TMS-agnostic via formatter adapters — can slot into most vendor translation workflows.
-- AST precompilation option for runtime performance (skip re-parsing ICU strings on every render).
-- Ships its own `Intl.*` polyfills as separate packages, useful for environments with incomplete ECMA-402 support.
-
-## Weaknesses & criticism
-
-- **No React Server Components support** — Context-based architecture is fundamentally incompatible with RSC; requires manual workarounds for Next.js App Router and, by extension, any RSC-first meta-framework (source: community tutorials/Stack posts, formatjs/formatjs#4192 "Enable use of 'react-intl' without React Context").
-- **Bundle size regressions reported by users** — GitHub discussion (#4256) titled "react-intl bundle size more than doubled"; another issue (#1450) flags bundle bloat from polyfills. Default (non-precompiled) usage carries ICU-parser weight at runtime unless developers manually opt into the `/no-parser` + AST-precompiled path.
-- **Verbosity / boilerplate** — component-based API (`FormattedMessage` wrapping everything in JSX) is more verbose than hook-only or template-literal approaches used by some competitors; third-party comparisons note this as a DX tradeoff.
-- **Maintenance bandwidth appears thin** — commit/release activity is real and recent (releases as recently as late June 2026), but the visible maintainer surface is small (effectively one primary maintainer, longlho, dominating changelog activity); a multi-year-old feature request for Vue (t-helper, opened 2022) remains open and unaddressed, suggesting slow throughput on non-core-React work.
-- Only 4 open issues on a 14.7k-star repo is atypical — could indicate either unusually disciplined triage or that issues are being closed without resolution / community has moved elsewhere for support (Slack channel is the suggested support venue instead of GitHub issues); not verified which explanation dominates.
-- No first-class support for newer/non-Next React meta-frameworks (TanStack Start, SolidStart, Waku, React Router) — integration effort is left entirely to the app developer.
-- Custom JSON catalog format (not gettext/.po) means less direct interoperability with the broader localization-industry tooling ecosystem that already speaks `.po`.
-
-## What they do differently
-
-- Uses **ICU MessageFormat** as the message syntax (industry standard across languages/platforms) rather than a project-specific template syntax — this is the single biggest philosophical divergence from many JS-first i18n libraries.
-- Supports both **explicit message IDs and generated content hashes**. In the generated-ID workflow, changing the default message changes the ID and can orphan existing translations unless tooling explicitly handles diffing; explicit IDs avoid that specific behavior at the cost of maintaining a separate key namespace.
-- Ships a genuinely **framework-agnostic core** (`@formatjs/intl`) decoupled from React, plus separate `Intl.*` polyfill packages usable independent of any UI framework — broader in scope than "just a React library."
-- Offers an **AST-precompilation step** as a distinct, opt-in performance path (parse ICU once at build time, ship AST, skip runtime parsing) — a formal two-stage extract → compile pipeline rather than shipping raw ICU strings to the runtime by default.
-- Deliberately **TMS-agnostic via pluggable formatters** rather than being built around one specific translation backend or SaaS.
-- Explicitly **does not support React Server Components** natively — a structural gap that stands in contrast to Palamedes' "one runtime model across Next.js, TanStack Start, SolidStart, Waku, React Router, Vite, and backend servers" positioning; React Intl's Context-dependent runtime is the direct architectural reason RSC needs a bypass.
+React Intl treats explicit descriptors, ICU, and the JavaScript Intl platform
+as the stable abstraction. Palamedes adds a source-string-first PO workflow,
+native extraction/transform core, and broader framework adapters.
 
 ## Sources
 
-- https://registry.npmjs.org/react-intl/latest (accessed 2026-07-06)
-- https://api.npmjs.org/downloads/point/last-week/react-intl (accessed 2026-07-06)
-- https://formatjs.github.io/docs/getting-started/installation (accessed 2026-07-06)
-- https://formatjs.github.io/docs/getting-started/message-extraction (accessed 2026-07-06)
-- https://formatjs.github.io/docs/getting-started/message-distribution (accessed 2026-07-06)
-- https://formatjs.github.io/docs/core-concepts/icu-syntax (accessed 2026-07-06)
-- https://github.com/formatjs/formatjs (accessed 2026-07-06)
-- https://github.com/formatjs/formatjs/releases (accessed 2026-07-06)
-- https://github.com/formatjs/formatjs/issues (accessed 2026-07-06)
-- https://github.com/formatjs/formatjs/issues/1450 "Much larger bundle size with polyfills" (accessed 2026-07-06)
-- https://github.com/formatjs/formatjs/discussions/4256 "react-intl bundle size more than doubled" (accessed 2026-07-06)
-- https://github.com/formatjs/formatjs/issues/4192 "Enable use of 'react-intl' without React Context" (accessed 2026-07-06)
-- https://tolgee.io/blog/react-i18n-libraries-comparison (accessed 2026-07-06)
-- https://i18nexus.com/tutorials/nextjs/react-intl (accessed 2026-07-06)
-- https://bundlephobia.com/package/react-intl (accessed 2026-07-06)
+- https://formatjs.github.io/docs/react-intl — accessed 2026-07-06
+- https://formatjs.github.io/docs/getting-started/message-extraction — accessed 2026-07-06
+- https://formatjs.github.io/docs/tooling/cli — accessed 2026-07-06
+- https://github.com/formatjs/formatjs — accessed 2026-07-06

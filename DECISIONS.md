@@ -52,6 +52,7 @@ Then read the CLI extension decisions:
 18. [ADR-018: Binary Plugin Protocol for Rust-First Extensions](./adr/018-binary-plugin-protocol.md)
 19. [ADR-019: Extraction Cache](./adr/019-extraction-cache.md)
 20. [ADR-020: Framework Selection Lives On The Plugins](./adr/020-framework-selection-lives-on-the-plugins.md)
+21. [ADR-021: Shared Cross-Repository Site UI](./adr/021-shared-cross-repository-site-ui.md)
 
 ## ADR Policy
 

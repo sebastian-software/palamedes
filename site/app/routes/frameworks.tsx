@@ -1,9 +1,7 @@
 import { Link } from "react-router"
 
-import { ButtonLink } from "~/components/chrome/Button"
-import { Page } from "~/components/chrome/Page"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui"
 import { pageMeta } from "~/lib/meta"
-import { Section } from "~/components/chrome/Section"
 import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix"
 import { FwPanels } from "~/components/frameworks/FwPanels"
 import { CtaBand } from "~/components/home/CtaBand"

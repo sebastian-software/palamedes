@@ -1,0 +1,108 @@
+/*
+ * Optional Tailwind v4 integration. Plain Vite consumers import only
+ * styles.css; Tailwind consumers import both files before tailwindcss.
+ */
+@theme {
+  --color-*: initial;
+  --color-paper: #faf9f4;
+  --color-ink: #0e2a4d;
+  --color-hair: #ddd6c6;
+  --color-accent: #8e6628;
+  --color-gold: #bc8a45;
+  --color-gray-spec: #7d7869;
+  --color-accent-soft: #d9ba7c;
+  --color-hover-fill: #f3efe3;
+  --color-track: #f1ede0;
+  --color-term-ok: #3fb950;
+  --color-term-warn: #d29922;
+  --color-white: #ffffff;
+  --color-transparent: transparent;
+
+  --font-sans: "Helvetica Neue", Helvetica, Arial, Inter, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-display: "Cinzel Hellenic", "Times New Roman", serif;
+
+  --text-display: clamp(28px, 3.8vw, 49px);
+  --text-h2: clamp(22px, 3.2vw, 31px);
+  --text-band: clamp(19px, 2.8vw, 28px);
+  --text-stat: 34px;
+
+  --tracking-micro: 0.14em;
+  --tracking-eyebrow: 0.22em;
+  --tracking-nav: 0.12em;
+  --tracking-label: 0.16em;
+  --tracking-th: 0.18em;
+
+  --radius-*: initial;
+  --shadow-*: initial;
+
+  --breakpoint-grid: 60rem;
+  --breakpoint-tight: 35rem;
+}
+
+@utility micro {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-micro);
+}
+
+@utility mono-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility hairline-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--color-hair);
+  border: 1px solid var(--color-hair);
+
+  > * {
+    min-width: 0;
+  }
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--color-gray-spec);
+
+  &::before {
+    content: "§ ";
+    color: var(--color-accent);
+  }
+}
+
+@utility frame {
+  width: 100%;
+  max-width: 1320px;
+  min-width: 0;
+  margin-inline: auto;
+  border-inline: 1px solid var(--color-hair);
+}
+
+@utility display-serif {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.015em;
+}
+
+@utility meander {
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'%3E%3Cpath d='M0 17h16V1H5v10h6V6H8' fill='none' stroke='%23bc8a45' stroke-width='1.6'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: auto 100%;
+}
+
+@utility ghost-glyph {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--color-hair);
+  user-select: none;
+  pointer-events: none;
+}

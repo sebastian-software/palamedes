@@ -1,16 +1,12 @@
 import { Link } from "react-router"
 
-import { ButtonLink } from "~/components/chrome/Button"
-import { Page } from "~/components/chrome/Page"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui"
 import { pageMeta } from "~/lib/meta"
-import { Section } from "~/components/chrome/Section"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
 import contentStats from "~/data/generated/content-stats.json"
 import { BENCH_REALISTIC } from "~/data/bench"
 import { REPO, decisionHref, docsHref } from "~/data/links"
-import { FUNDING } from "~/data/funding"
-import { PLATFORMS, PLATFORMS_RESEARCHED } from "~/data/platforms"
 import { NATIVE_SHIFT, RIVALS } from "~/data/rivals"
 
 export const handle = { layout: "bare" }
@@ -18,7 +14,7 @@ export const handle = { layout: "bare" }
 export function meta() {
   return pageMeta({
     title:
-      "Palamedes compared — Lingui, i18next, next-intl, React Intl, Paraglide, Intlayer, General Translation, Tolgee",
+      "Palamedes compared — Lingui, i18next, next-intl, React Intl, Paraglide, Intlayer, Tolgee",
     description: `Side-by-side comparisons of Palamedes with the major TypeScript i18n libraries: ${BENCH_REALISTIC.ratios.formatjs} to ${BENCH_REALISTIC.ratios.i18nextCli} faster on a checked benchmark, with what each of them does better and when to pick them instead.`,
     path: "/compare",
   })
@@ -137,184 +133,7 @@ export default function Compare() {
       </Section>
 
       <Section
-        num="03 — Different category"
-        title="Translation platforms stack with us. They do not replace us."
-        lede="A TMS solves hosted workflow, vendor management and delivery — none of which Palamedes does or intends to. The one thing worth checking before you sign is where each platform thinks the authoritative copy of a string lives, because that decides whether it sits on top of a repository-first toolchain or wants to become the toolchain. All of these read .po, which is the whole reason we write it."
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse border border-hair">
-            <thead>
-              <tr>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-ink">
-                  Platform
-                </th>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
-                  Ownership
-                </th>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
-                  Source of truth
-                </th>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
-                  .po handover
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {PLATFORMS.map((platform) => (
-                <tr key={platform.name}>
-                  <th
-                    scope="row"
-                    className="border border-hair px-4 py-3 text-left align-top text-[12.5px] font-bold"
-                  >
-                    {platform.name}
-                    <span className="mt-1.5 block text-[12px] font-normal text-ink/85">
-                      {platform.note}
-                    </span>
-                  </th>
-                  <td className="border border-hair px-4 py-3 align-top text-[13px]">
-                    {platform.owner}
-                  </td>
-                  <td className="border border-hair px-4 py-3 align-top text-[13px]">
-                    {platform.truth}
-                  </td>
-                  <td className="border border-hair px-4 py-3 align-top text-[13px]">
-                    {platform.po}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mono-nums mt-3 text-[11px] text-gray-spec">
-          Researched {PLATFORMS_RESEARCHED}. Platforms change ownership and pricing often — re-check
-          before you sign anything.
-        </p>
-        <p className="mt-6 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">
-          Two of these ship a developer SDK rather than only a platform, so they get a full
-          comparison of their own:{" "}
-          <Link to="/compare/general-translation" viewTransition className="text-accent">
-            General Translation
-          </Link>{" "}
-          and{" "}
-          <Link to="/compare/tolgee" viewTransition className="text-accent">
-            Tolgee
-          </Link>
-          .
-        </p>
-      </Section>
-
-      <Section
-        num="04 — Follow the money"
-        title="Who is paying for your i18n library?"
-        lede="This is the least discussed thing about this field and one of the more useful. Nearly every actively-funded JavaScript i18n library is either sponsored by translation vendors or built by one. None of that is hidden — every figure below comes from a public funding page — and none of it makes those libraries bad. It does mean the people paying for the roadmap mostly sell translation platforms, and that is worth knowing before you assume the defaults were chosen with only your interests in mind."
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse border border-hair">
-            <thead>
-              <tr>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-ink">
-                  Project
-                </th>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
-                  Who pays for the work
-                </th>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
-                  What they sell
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {FUNDING.map((row) => {
-                const isUs = row.project === "Palamedes"
-                return (
-                  <tr key={row.project}>
-                    <th
-                      scope="row"
-                      className={`border border-hair px-4 py-3 text-left align-top text-[12.5px] font-bold ${
-                        isUs ? "border-l-2 border-l-accent bg-hover-fill text-accent" : ""
-                      }`}
-                    >
-                      {row.project}
-                    </th>
-                    <td
-                      className={`border border-hair px-4 py-3 align-top text-[13px] ${
-                        isUs ? "bg-hover-fill" : ""
-                      }`}
-                    >
-                      {row.funder}
-                    </td>
-                    <td
-                      className={`border border-hair px-4 py-3 align-top text-[13px] ${
-                        isUs ? "bg-hover-fill" : ""
-                      }`}
-                    >
-                      {row.sells}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="mono-nums mt-3 text-[11px] text-gray-spec">
-          From each project&apos;s own public funding pages — GitHub Sponsors, Open Collective,
-          company disclosures — checked July 2026. Sponsorships change; re-check before you quote
-          this.
-        </p>
-
-        <div className="mt-8 max-w-[60em] border-l-4 border-accent bg-hover-fill px-6 py-6">
-          <p className="micro text-[10px] tracking-label text-gray-spec">Our own disclosure</p>
-          <h3 className="mt-2 text-[15px] font-bold">
-            We are not neutral either, and here is exactly how.
-          </h3>
-          <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
-            Palamedes is built by Sebastian Software, a company. Palamedes+ is planned as an
-            optional managed layer for translation automation and collaboration. Making the argument
-            above without saying that would be the kind of thing the rest of these pages exist to
-            avoid. The open-source Palamedes toolchain covers authoring, transformation, extraction,
-            catalogs, validation, semantic merging, compilation, and runtime integration.
-          </p>
-          <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
-            What you should hold us to is the architecture, not the plan. Palamedes does not require
-            Palamedes+: your catalogs stay in your repository, the local toolchain needs no account,
-            and the core remains MIT-licensed. If a commercial product ever depended on making that
-            local toolchain less useful on its own, the architecture would have to change first —
-            and you would see the commit.
-          </p>
-          <a href={decisionHref()} className="mono-nums mt-4 inline-block text-[13px] text-accent">
-            Read the decision records →
-          </a>
-        </div>
-      </Section>
-
-      <Section
-        num="05 — Not a competitor"
-        title="A machine-translation step is not an alternative to this."
-        lede="A growing class of tools translates localization files in CI: point them at your catalogs, they call a model, they commit the result back as a pull request. They are worth knowing about, and they are not alternatives to Palamedes — they have no runtime, no message identity and no catalog semantics. They assume something upstream already produced well-formed catalogs."
-      >
-        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
-          <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">That upstream part is us</h3>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              Palamedes extracts your source strings, resolves identity across refactors, merges
-              semantically and validates the ICU. What a translation step receives is only as good
-              as what produced it — and if the catalog is wrong, translating it faithfully makes it
-              wrong in more languages.
-            </p>
-          </div>
-          <div className="bg-paper px-6 py-6">
-            <h3 className="text-[15px] font-bold">.po is why they compose</h3>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">
-              Most of these tools read gettext .po, which is exactly what Palamedes writes. Pick
-              whichever one you like, or none — the repository stays the system of record either
-              way, and nothing about your catalogs depends on that choice.
-            </p>
-          </div>
-        </div>
-      </Section>
-
-      <Section
-        num="06 — ICU semantics"
+        num="03 — ICU semantics"
         title="The durable claim is about the pipeline we control."
         lede="ICU support varies across libraries, TMS products, file formats and project settings, and any table claiming otherwise ages badly. Palamedes makes a bounded, executable claim instead: nested ICU selectors stay intact from source through transformation, PO catalogs, compilation and runtime rendering."
       >
@@ -359,19 +178,18 @@ export default function Compare() {
             original never had. It ships in Firefox, so this is proven at scale, not theoretical.
           </p>
           <p className="mt-3 text-[13.5px] leading-relaxed text-ink/85">
-            We chose ICU anyway, for reasons we will defend: it is what the localization industry
-            already speaks, what every TMS and CAT tool already processes, and what makes a .po file
-            portable between vendors. Fluent&apos;s expressiveness is real, and it is paid for in a
-            format only its own ecosystem reads. Practically, the choice is also narrower than it
-            looks — <code>@fluent/react</code> has not been published since August 2023, and there
-            is no server-components story. If your constraint is morphologically rich target
-            languages and you have localization engineers to match, read their case rather than
-            ours.
+            We chose ICU anyway, for reasons we will defend: TMS and CAT tools process it directly,
+            and it keeps PO catalogs interoperable across a mixed localization toolchain.
+            Fluent&apos;s expressiveness is real; its format instead requires Fluent-aware tooling.
+            The client architecture also differs: <code>@fluent/react</code> resolves through a
+            React provider and does not supply a server-components path. If morphologically rich
+            target languages require translation-authored selectors, read Fluent&apos;s technical
+            case rather than ours.
           </p>
         </div>
       </Section>
 
-      <StatementBand num="07 — The honest bit">
+      <StatementBand num="04 — The honest bit">
         Every tool on these pages is good software, built by people who thought hard about the
         problem — and every one of them was designed against a JavaScript toolchain that has since
         been rebuilt underneath them. We started on the other side of that line. If our tradeoffs do
