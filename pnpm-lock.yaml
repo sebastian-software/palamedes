@@ -78,7 +78,7 @@ importers:
         version: 6.6.0
       '@lingui/swc-plugin':
         specifier: 6.6.0
-        version: 6.6.0(@lingui/core@6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0))(@swc/core@1.15.46)(next@16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
+        version: 6.6.0(@lingui/core@6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0))(@swc/core@1.15.46)(next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
       '@palamedes/core-node':
         specifier: workspace:^
         version: link:../../packages/core-node
@@ -101,8 +101,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/runtime
       next:
-        specifier: ^16.2.11
-        version: 16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^16.2.12
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -150,8 +150,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/runtime
       next:
-        specifier: ^16.2.11
-        version: 16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^16.2.12
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -199,8 +199,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/runtime
       next:
-        specifier: ^16.2.11
-        version: 16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^16.2.12
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -248,8 +248,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/runtime
       next:
-        specifier: ^16.2.11
-        version: 16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^16.2.12
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -551,7 +551,7 @@ importers:
         version: link:../../packages/runtime
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -579,7 +579,7 @@ importers:
         version: link:../../packages/runtime
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -607,7 +607,7 @@ importers:
         version: link:../../packages/runtime
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -635,7 +635,7 @@ importers:
         version: link:../../packages/runtime
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -1471,8 +1471,8 @@ importers:
         version: link:../transform
     devDependencies:
       next:
-        specifier: 16.2.11
-        version: 16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: 16.2.12
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -1545,7 +1545,7 @@ importers:
         version: 24.13.3
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2362,6 +2362,9 @@ packages:
 
   '@emnapi/runtime@1.11.2':
     resolution: {integrity: sha512-kyOl3X0DuTiT1h2ft8r2fYO8JYtU9a9Xis/zBSiGArNaagCOWx90N1k2wxp18czFDH+OgcWGb5ZP/XMt3dcyPA==}
+
+  '@emnapi/runtime@1.11.3':
+    resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
 
   '@emnapi/runtime@1.9.2':
     resolution: {integrity: sha512-3U4+MIWHImeyu1wnmVygh5WlgfYDtyf0k8AbLhMFxOipihf6nrWC4syIm/SwEeec0mNSafiiNnMJwbza/Is6Lw==}
@@ -3735,57 +3738,57 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@next/env@16.2.11':
-    resolution: {integrity: sha512-0do5A3BJ2gxWr0ZCMcD6BhW+e595jyxdTl3rXTS6lOtD8ektMiW6CO+EPwt1Eca1DBnm90r/7GdiKWBKxH++DA==}
+  '@next/env@16.2.12':
+    resolution: {integrity: sha512-d0Z5Bc13Fa4nR8pFAKx2jay2yhJM16vlfHbTzYnUQAxlNb6B6lmn4hjt69lYNt4kRtyYP6gEM49lPRHNbIyneg==}
 
-  '@next/swc-darwin-arm64@16.2.11':
-    resolution: {integrity: sha512-wryL4pjKmDwGv2ox6+GZDFxvmtSRLqApBR8kL1j4+vhB7Z5vJC/zAnXpiR9Xkfzl0AS8WLMnsuGV/UKI67/rrw==}
+  '@next/swc-darwin-arm64@16.2.12':
+    resolution: {integrity: sha512-0W1R0teHWJrqKX0FH20IzzIWAOuGtBxPGuObrxy1lE8hQvCFj49KE8a3WUg0D7sq6rn6zkM4c7YGUnhudBS6oA==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [darwin]
 
-  '@next/swc-darwin-x64@16.2.11':
-    resolution: {integrity: sha512-aZl2j4f/fLyjQvOhv0Oe9UaMAQHolYpKhctsoYzplSumKJKPUmgjcf6545aBtysLTcu994TREd0+pSgNE4ohmg==}
+  '@next/swc-darwin-x64@16.2.12':
+    resolution: {integrity: sha512-Hy5Ls099+aFUmOLmIgPfLqNi6iCwhL3uQCssz5rWk+5Nkc6TUKCE83DY5BbNylfm3+mfwcSFnLRfrZDJhVxdtw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [darwin]
 
-  '@next/swc-linux-arm64-gnu@16.2.11':
-    resolution: {integrity: sha512-5jEriyEnH/LWFy27L2ZG0XaLlyEJIjhsImEsiS9P563PKEVp2BVups/xfOucIrsvVntp11oNcZwjHvaDPYVB5g==}
+  '@next/swc-linux-arm64-gnu@16.2.12':
+    resolution: {integrity: sha512-+YqU2h1cQkHsGfvjAsrSmst8UIFBibBGm5x3Xgel8NLMiDQtNOM4sM2GOEMvG5YiOBNeN/Ykk8cQC2S0Xrqljg==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@next/swc-linux-arm64-musl@16.2.11':
-    resolution: {integrity: sha512-eIjcpx2fnnFSSkZDbTxy74KnokUXDjfoLClpWelfgHLf621aTqswhwXQ7GkD5K5rplrS6LZ/Bj+mVuvzluBOEg==}
+  '@next/swc-linux-arm64-musl@16.2.12':
+    resolution: {integrity: sha512-0qjhiYBaKAqF63LA1ZWAAnKTzFUguAaZiRa5etMLGGPj/B6uEVjtIZldIzFEp3wHlB0koK6aTzqPtSdplTCjoA==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@next/swc-linux-x64-gnu@16.2.11':
-    resolution: {integrity: sha512-8WgzpaWMs46qJT9kiV47cje86L0x/Mu9t8/Gwj+pnbgW3rETVfCnaScPjlYUwNScpOozdcIMHWmAvuZJUonR2w==}
+  '@next/swc-linux-x64-gnu@16.2.12':
+    resolution: {integrity: sha512-7A3q26W+h7gnA15uqBToNuDqBEFZZcqh0mW2mn4AJh/G5pdg2RVE3n4slzLEliASZFG3NmsbEzng/x2Sh09mBg==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@next/swc-linux-x64-musl@16.2.11':
-    resolution: {integrity: sha512-I3UgPds7G4ZYnTb/H+5GBGuUT2DhAk6j0mL6A4s63RjFs74wB2hOWP0vaxsK+3NJraExt3eYEPQ/UtT0x/64Nw==}
+  '@next/swc-linux-x64-musl@16.2.12':
+    resolution: {integrity: sha512-qSjL/uppm+cbh21s72Ss8gkiOhQ4dExWHNGOWy6eZV7STj5WsKehgxT61beSsOj+YYQuTplL376lOCdMQU5T8w==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@next/swc-win32-arm64-msvc@16.2.11':
-    resolution: {integrity: sha512-n89CjtcThnjrwgJMAiI5xbqwLY51zvwC9tSlArmVndAJLYVl9T9UAdlkXTmZvE++idoXe8KdglQlhNRdUp1c6g==}
+  '@next/swc-win32-arm64-msvc@16.2.12':
+    resolution: {integrity: sha512-X6hzsOUJac/e7AWSbn9gQ9nzHld1xWP5iyjHpYWvud8pufB679O1xg4JDyKr8Xd69Jvd+kM2Der6uftiZCmjYA==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [win32]
 
-  '@next/swc-win32-x64-msvc@16.2.11':
-    resolution: {integrity: sha512-md8CLNggS1Dx9pUgApzps5uAf+N8GN9xywzmNx9vHAWo94HtBwCCqkSnhIrdfQe83Dhz8Lfo/20Nb1Zxal092w==}
+  '@next/swc-win32-x64-msvc@16.2.12':
+    resolution: {integrity: sha512-F6fakeHuFTLOPt0bslQJdf+xtT+WIP9DVn/m4y1w1mRnVPyh3D/cNvzlRkxM444xfm+IvvYNSOrKiA2CDJ0Uxw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
@@ -9808,8 +9811,8 @@ packages:
   neo-async@2.6.2:
     resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
 
-  next@16.2.11:
-    resolution: {integrity: sha512-B339zaqbyK8cmxhoAvLrcwoabwCP1wz21zSzfqxqXAemTu2BXnH7tQnfcglKv1vnMUIDBc+Hth7XODQriTZiRQ==}
+  next@16.2.12:
+    resolution: {integrity: sha512-iD59eYQWmbFcEbX7v/acG5DRym9iw1DdaPoD0WTA920naWsE25wShzJW4+UvAs8MK9EC2kBfIH6vtto1H1PHGw==}
     engines: {node: '>=20.9.0'}
     hasBin: true
     peerDependencies:
@@ -13116,6 +13119,11 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@emnapi/runtime@1.11.3':
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+
   '@emnapi/runtime@1.9.2':
     dependencies:
       tslib: 2.8.1
@@ -14024,13 +14032,13 @@ snapshots:
       '@messageformat/parser': 5.1.1
       js-sha256: 0.10.1
 
-  '@lingui/swc-plugin@6.6.0(@lingui/core@6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0))(@swc/core@1.15.46)(next@16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))':
+  '@lingui/swc-plugin@6.6.0(@lingui/core@6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0))(@swc/core@1.15.46)(next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))':
     dependencies:
       '@lingui/conf': 6.6.0
       '@lingui/core': 6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0)
     optionalDependencies:
       '@swc/core': 1.15.46
-      next: 16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      next: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
 
   '@mapbox/node-pre-gyp@2.0.3(supports-color@10.2.2)':
     dependencies:
@@ -14167,6 +14175,13 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
+  '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)':
+    dependencies:
+      '@emnapi/core': 1.11.2
+      '@emnapi/runtime': 1.11.3
+      '@tybys/wasm-util': 0.10.3
+    optional: true
+
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)':
     dependencies:
       '@emnapi/core': 1.9.2
@@ -14174,30 +14189,30 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
-  '@next/env@16.2.11': {}
+  '@next/env@16.2.12': {}
 
-  '@next/swc-darwin-arm64@16.2.11':
+  '@next/swc-darwin-arm64@16.2.12':
     optional: true
 
-  '@next/swc-darwin-x64@16.2.11':
+  '@next/swc-darwin-x64@16.2.12':
     optional: true
 
-  '@next/swc-linux-arm64-gnu@16.2.11':
+  '@next/swc-linux-arm64-gnu@16.2.12':
     optional: true
 
-  '@next/swc-linux-arm64-musl@16.2.11':
+  '@next/swc-linux-arm64-musl@16.2.12':
     optional: true
 
-  '@next/swc-linux-x64-gnu@16.2.11':
+  '@next/swc-linux-x64-gnu@16.2.12':
     optional: true
 
-  '@next/swc-linux-x64-musl@16.2.11':
+  '@next/swc-linux-x64-musl@16.2.12':
     optional: true
 
-  '@next/swc-win32-arm64-msvc@16.2.11':
+  '@next/swc-win32-arm64-msvc@16.2.12':
     optional: true
 
-  '@next/swc-win32-x64-msvc@16.2.11':
+  '@next/swc-win32-x64-msvc@16.2.12':
     optional: true
 
   '@nodelib/fs.scandir@2.1.5':
@@ -14329,9 +14344,9 @@ snapshots:
   '@oxc-minify/binding-openharmony-arm64@0.121.0':
     optional: true
 
-  '@oxc-minify/binding-wasm32-wasi@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
+  '@oxc-minify/binding-wasm32-wasi@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)':
     dependencies:
-      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
@@ -14442,9 +14457,9 @@ snapshots:
   '@oxc-parser/binding-openharmony-arm64@0.127.0':
     optional: true
 
-  '@oxc-parser/binding-wasm32-wasi@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
+  '@oxc-parser/binding-wasm32-wasi@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)':
     dependencies:
-      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
@@ -14653,9 +14668,9 @@ snapshots:
   '@oxc-transform/binding-openharmony-arm64@0.121.0':
     optional: true
 
-  '@oxc-transform/binding-wasm32-wasi@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
+  '@oxc-transform/binding-wasm32-wasi@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)':
     dependencies:
-      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
@@ -14947,7 +14962,7 @@ snapshots:
 
   '@remix-run/assert@0.3.0': {}
 
-  '@remix-run/assets@0.4.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
+  '@remix-run/assets@0.4.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)':
     dependencies:
       '@oxc-project/runtime': 0.121.0
       '@remix-run/file-storage': 0.13.7
@@ -14959,10 +14974,10 @@ snapshots:
       get-tsconfig: 4.14.0
       lightningcss: 1.33.0
       magic-string: 0.30.21
-      oxc-minify: 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
-      oxc-parser: 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      oxc-minify: 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
+      oxc-parser: 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       oxc-resolver: 11.23.0
-      oxc-transform: 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      oxc-transform: 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       picomatch: 4.0.5
       source-map-js: 1.2.1
     transitivePeerDependencies:
@@ -14983,10 +14998,10 @@ snapshots:
       '@remix-run/fetch-router': 0.20.1
       '@remix-run/session': 0.4.2
 
-  '@remix-run/cli@0.3.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)':
+  '@remix-run/cli@0.3.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)':
     dependencies:
       '@remix-run/terminal': 0.1.1
-      '@remix-run/test': 0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)
+      '@remix-run/test': 0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
       semver: 7.8.5
     transitivePeerDependencies:
       - '@emnapi/core'
@@ -15094,10 +15109,10 @@ snapshots:
 
   '@remix-run/node-fetch-server@0.14.0': {}
 
-  '@remix-run/node-tsx@0.1.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
+  '@remix-run/node-tsx@0.1.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)':
     dependencies:
       get-tsconfig: 4.14.0
-      oxc-transform: 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      oxc-transform: 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
@@ -15142,9 +15157,9 @@ snapshots:
 
   '@remix-run/terminal@0.1.1': {}
 
-  '@remix-run/test@0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)':
+  '@remix-run/test@0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)':
     dependencies:
-      '@remix-run/node-tsx': 0.1.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@remix-run/node-tsx': 0.1.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@remix-run/terminal': 0.1.1
       es-module-lexer: 2.3.0
       esbuild: 0.27.7
@@ -20720,9 +20735,9 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@16.2.11(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:
-      '@next/env': 16.2.11
+      '@next/env': 16.2.12
       '@swc/helpers': 0.5.15
       baseline-browser-mapping: 2.11.0
       caniuse-lite: 1.0.30001806
@@ -20731,14 +20746,14 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
       styled-jsx: 5.1.6(@babel/core@8.0.1)(react@19.2.8)
     optionalDependencies:
-      '@next/swc-darwin-arm64': 16.2.11
-      '@next/swc-darwin-x64': 16.2.11
-      '@next/swc-linux-arm64-gnu': 16.2.11
-      '@next/swc-linux-arm64-musl': 16.2.11
-      '@next/swc-linux-x64-gnu': 16.2.11
-      '@next/swc-linux-x64-musl': 16.2.11
-      '@next/swc-win32-arm64-msvc': 16.2.11
-      '@next/swc-win32-x64-msvc': 16.2.11
+      '@next/swc-darwin-arm64': 16.2.12
+      '@next/swc-darwin-x64': 16.2.12
+      '@next/swc-linux-arm64-gnu': 16.2.12
+      '@next/swc-linux-arm64-musl': 16.2.12
+      '@next/swc-linux-x64-gnu': 16.2.12
+      '@next/swc-linux-x64-musl': 16.2.12
+      '@next/swc-win32-arm64-msvc': 16.2.12
+      '@next/swc-win32-x64-msvc': 16.2.12
       '@playwright/test': 1.62.0
       sharp: 0.34.5
     transitivePeerDependencies:
@@ -21190,7 +21205,7 @@ snapshots:
       object-keys: 1.1.1
       safe-push-apply: 1.0.0
 
-  oxc-minify@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2):
+  oxc-minify@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3):
     optionalDependencies:
       '@oxc-minify/binding-android-arm-eabi': 0.121.0
       '@oxc-minify/binding-android-arm64': 0.121.0
@@ -21208,7 +21223,7 @@ snapshots:
       '@oxc-minify/binding-linux-x64-gnu': 0.121.0
       '@oxc-minify/binding-linux-x64-musl': 0.121.0
       '@oxc-minify/binding-openharmony-arm64': 0.121.0
-      '@oxc-minify/binding-wasm32-wasi': 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@oxc-minify/binding-wasm32-wasi': 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@oxc-minify/binding-win32-arm64-msvc': 0.121.0
       '@oxc-minify/binding-win32-ia32-msvc': 0.121.0
       '@oxc-minify/binding-win32-x64-msvc': 0.121.0
@@ -21216,7 +21231,7 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  oxc-parser@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2):
+  oxc-parser@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3):
     dependencies:
       '@oxc-project/types': 0.121.0
     optionalDependencies:
@@ -21236,7 +21251,7 @@ snapshots:
       '@oxc-parser/binding-linux-x64-gnu': 0.121.0
       '@oxc-parser/binding-linux-x64-musl': 0.121.0
       '@oxc-parser/binding-openharmony-arm64': 0.121.0
-      '@oxc-parser/binding-wasm32-wasi': 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@oxc-parser/binding-wasm32-wasi': 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@oxc-parser/binding-win32-arm64-msvc': 0.121.0
       '@oxc-parser/binding-win32-ia32-msvc': 0.121.0
       '@oxc-parser/binding-win32-x64-msvc': 0.121.0
@@ -21313,7 +21328,7 @@ snapshots:
       '@oxc-resolver/binding-win32-arm64-msvc': 11.24.2
       '@oxc-resolver/binding-win32-x64-msvc': 11.24.2
 
-  oxc-transform@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2):
+  oxc-transform@0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3):
     optionalDependencies:
       '@oxc-transform/binding-android-arm-eabi': 0.121.0
       '@oxc-transform/binding-android-arm64': 0.121.0
@@ -21331,7 +21346,7 @@ snapshots:
       '@oxc-transform/binding-linux-x64-gnu': 0.121.0
       '@oxc-transform/binding-linux-x64-musl': 0.121.0
       '@oxc-transform/binding-openharmony-arm64': 0.121.0
-      '@oxc-transform/binding-wasm32-wasi': 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@oxc-transform/binding-wasm32-wasi': 0.121.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@oxc-transform/binding-win32-arm64-msvc': 0.121.0
       '@oxc-transform/binding-win32-ia32-msvc': 0.121.0
       '@oxc-transform/binding-win32-x64-msvc': 0.121.0
@@ -22069,14 +22084,14 @@ snapshots:
       mdast-util-to-markdown: 2.1.2
       unified: 11.0.5
 
-  remix@3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0):
+  remix@3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0):
     dependencies:
       '@remix-run/assert': 0.3.0
-      '@remix-run/assets': 0.4.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@remix-run/assets': 0.4.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@remix-run/async-context-middleware': 0.3.4
       '@remix-run/auth': 0.2.6
       '@remix-run/auth-middleware': 0.2.4
-      '@remix-run/cli': 0.3.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)
+      '@remix-run/cli': 0.3.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
       '@remix-run/compression-middleware': 0.1.12
       '@remix-run/cookie': 0.5.4
       '@remix-run/cop-middleware': 0.1.7
@@ -22102,7 +22117,7 @@ snapshots:
       '@remix-run/mime': 0.4.2
       '@remix-run/multipart-parser': 0.16.3
       '@remix-run/node-fetch-server': 0.14.0
-      '@remix-run/node-tsx': 0.1.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@remix-run/node-tsx': 0.1.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@remix-run/render-middleware': 0.1.4
       '@remix-run/response': 0.3.7
       '@remix-run/route-pattern': 0.23.0
@@ -22113,7 +22128,7 @@ snapshots:
       '@remix-run/static-middleware': 0.4.13
       '@remix-run/tar-parser': 0.7.1
       '@remix-run/terminal': 0.1.1
-      '@remix-run/test': 0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(playwright@1.62.0)
+      '@remix-run/test': 0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
       '@remix-run/ui': 0.4.0
     optionalDependencies:
       playwright: 1.62.0
