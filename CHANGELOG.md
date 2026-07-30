@@ -52,6 +52,44 @@
   and the macro content pre-filter is derived from the canonical macro
   package list (it previously missed `@palamedes/solid/macro`).
 
+## [1.9.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.8.0...palamedes-v1.9.0) (2026-07-30)
+
+
+### Features
+
+* add first-class MDX support ([c6b976e](https://github.com/sebastian-software/palamedes/commit/c6b976e30fa7e4679bb69eecaa76fc677eff214a))
+* **catalog:** add configurable PO output options ([9ffec16](https://github.com/sebastian-software/palamedes/commit/9ffec1672891e3e17f7c535eef2f821a2c084813))
+* **plugin:** add palamedes-plugin Rust SDK crate ([22c34a6](https://github.com/sebastian-software/palamedes/commit/22c34a671b91e5a6adab93cfb040176a671b50f8))
+* **plugins:** select the framework once instead of naming runtime modules ([4e0396c](https://github.com/sebastian-software/palamedes/commit/4e0396c129037f16af6a6aa6cce17acbd3e124a6))
+
+
+### Bug Fixes
+
+* **catalog:** write merged PO catalogs the way an extraction writes them ([ecfc42f](https://github.com/sebastian-software/palamedes/commit/ecfc42f660064adb6cbe3a60e54e954043fa1e55))
+* **ci:** refresh site smoke assertions ([54f4ba6](https://github.com/sebastian-software/palamedes/commit/54f4ba63bc0130dc074cab4a3bab1b7aff7beda3))
+* **ci:** stabilize site deployment ([b7beac3](https://github.com/sebastian-software/palamedes/commit/b7beac37a763fa6a2d8f7bf0778c8a38ed28cb7c))
+* cleanup ([5d7b5c7](https://github.com/sebastian-software/palamedes/commit/5d7b5c7ffe8c1a836197b9494fddf614628f526c))
+* **cli:** resolve the working directory lazily and fallibly ([538cf3f](https://github.com/sebastian-software/palamedes/commit/538cf3f9021730db5db64bedaca5ab0564dd9cef))
+* complete MDX integration follow-ups ([1cdf1f7](https://github.com/sebastian-software/palamedes/commit/1cdf1f7b58281ff0bc34829f6b60c72f8c5cf5d2))
+* **core-node:** normalize generated native types ([d4985e4](https://github.com/sebastian-software/palamedes/commit/d4985e4c07d82e0af7488e85a87fa73f252afb7f))
+* **core,cli:** restore ICU apostrophe parity and harden extraction caching ([1fa8f5b](https://github.com/sebastian-software/palamedes/commit/1fa8f5b76a42ac61167348625fc2214b6a3cc5c0))
+* **core,react,solid:** degrade adapter render failures instead of crashing ([466db7a](https://github.com/sebastian-software/palamedes/commit/466db7a5a23a3ef06ba55a6b64978e3a959a5e9e))
+* format OSS research dossiers ([15bce24](https://github.com/sebastian-software/palamedes/commit/15bce24c0eb407bd64dce40a45a39c56f6260973))
+* harden MDX Vite integration ([b4dcc40](https://github.com/sebastian-software/palamedes/commit/b4dcc4012e0eec231e8c41e24aaf4053d0adca77))
+* **next-plugin:** exclude node_modules from the webpack po rule and merge turbopack loader shorthands ([7034bb9](https://github.com/sebastian-software/palamedes/commit/7034bb9b1213fba779e20de126e10ba31d0879b6))
+* **plugin:** reject duplicate commands and foreign protocol versions ([afd0ec5](https://github.com/sebastian-software/palamedes/commit/afd0ec5d03ab72bca1567064d7287638b6d29620))
+* **transform:** derive lookup keys from canonicalized message text ([f6f5ce1](https://github.com/sebastian-software/palamedes/commit/f6f5ce14807859da9446019a193700356afa9859))
+* **vite:** allow configless startup ([34dca70](https://github.com/sebastian-software/palamedes/commit/34dca70a814b474d91792bf163c8b400557be45c))
+* **vite:** keep the macro runtime module out of MDX options ([56e2d55](https://github.com/sebastian-software/palamedes/commit/56e2d5537463e0e533fee57c5e88845d1a7e6b00))
+
+
+### Performance Improvements
+
+* **catalog:** replace ICU collator with a generated root-order table ([8b18c92](https://github.com/sebastian-software/palamedes/commit/8b18c920edcd8ff1a9cbe0c89d093ca94ad9f273))
+* **collation:** build sort keys in one pass with an ASCII fast path ([041dcfc](https://github.com/sebastian-software/palamedes/commit/041dcfc06d659c7e93bec6472f14510dc50c7aa0))
+* **collation:** decide the catalog order by a packed prefix first ([4cee1c5](https://github.com/sebastian-software/palamedes/commit/4cee1c5dcaf8911c9570e0d722f4168eaa2ac9a7))
+* **collation:** index the collation table directly instead of searching it ([9889ed3](https://github.com/sebastian-software/palamedes/commit/9889ed32d8d4f2aff01a90c57360f7e600c6ac19))
+
 ## [1.8.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.7.0...palamedes-v1.8.0) (2026-07-27)
 
 
