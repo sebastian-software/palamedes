@@ -302,10 +302,10 @@ export interface ExtractCatalogMessagesRequest {
   rootDir: string;
   files: Array<string>;
   /**
- * Worker threads for the parallel extraction pass. Omit to use the
- * measured default; 1 forces serial extraction.
- */
-maxThreads?: number;
+   * Worker threads for the parallel extraction pass. Omit to use the
+   * measured default; 1 forces serial extraction.
+   */
+  maxThreads?: number;
   referenceScopes?: boolean;
   mdx?: NativeMdxOptions;
 }

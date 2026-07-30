@@ -36,8 +36,18 @@ function generateSource() {
     for (const entry of lines) {
       if (entry.kind === "interface") {
         const body = String(entry.def)
-          .split("\\n")
-          .map((line) => `  ${line};`)
+          .split(/\r?\n|\\n/u)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            if (line.startsWith("*")) {
+              return `   ${line}`
+            }
+            if (line.startsWith("/**")) {
+              return `  ${line}`
+            }
+            return `  ${line.replace(/;$/u, "")};`
+          })
           .join("\n")
         interfaces.push(`export interface ${entry.name} {\n${body}\n}`)
         continue
