@@ -17,9 +17,7 @@
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "build:site": "pnpm --filter @palamedes/site build",
     "dev:site": "pnpm --filter @palamedes/site dev",
-    "examples:matrix": "node ./scripts/print-example-matrix.mjs",
     "container:ports": "node ./scripts/container/print-podman-ports.mjs",
-    "deploy:examples": "node ./scripts/deploy-examples.mjs",
     "capture:example-screenshots": "node ./scripts/capture-example-screenshots.mjs",
     "verify:examples": "pnpm build && node ./scripts/verify-examples-all.mjs",
     "verify:examples:smoke": "node ./scripts/verify-examples.mjs",
@@ -59,7 +57,6 @@
     "oxfmt": "^0.61.0",
     "oxlint": "^1.76.0",
     "typescript": "^6.0.3",
-    "vercel": "^58.1.0",
     "vitest": "^4.1.10"
   }
 }

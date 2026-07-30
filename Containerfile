@@ -1,4 +1,4 @@
-# Run all 24 Palamedes example apps side by side in a single container, each
+# Run all 25 Palamedes example apps side by side in a single container, each
 # on its fixed port from scripts/example-matrix.mjs. Built and run with Podman:
 #
 #   podman build -f Containerfile -t palamedes-examples .

@@ -1,23 +1,27 @@
 # Demo Deployments
 
 The Palamedes example matrix is verified primarily through local runs and CI.
-Automatic deployments are not part of the default merge or release path. The
-matrix spans 24 examples (six frameworks × four locale strategies). Public demo
-URLs are documented as the live reference surface where hosting exists, but
-reachability depends on the hosting and DNS notes in this document. The five
-currently hosted subdomain demos require the per-example wildcard DNS records
-described under Subdomain Locale Hosting. The five tld rows describe the
-intended shape only: the `examples.palamedes-i18n.*` domains described under
-TLD Locale Hosting are not provisioned yet, so those URLs are not publicly
-reachable. Remix v3 is verified locally and in CI, but is not yet a public demo
-deployment target.
+The matrix spans 25 runnable examples: six frameworks × four locale strategies,
+plus the Vite MDX example. Release CI publishes one shared examples container to
+GitHub Container Registry; deployment from that image to the public demo
+infrastructure is managed outside this repository. Public demo URLs are
+documented as the live reference surface where hosting exists, but reachability
+depends on the hosting and DNS notes in this document. The five currently hosted
+subdomain demos require the per-example wildcard DNS records described under
+Subdomain Locale Hosting. The five tld rows describe the intended shape only:
+the `examples.palamedes-i18n.*` domains described under TLD Locale Hosting are
+not provisioned yet, so those URLs are not publicly reachable. Remix v3 is
+verified locally and in CI, but is not yet a public demo deployment target.
 
 ## Current Policy
 
 - the canonical verification path is `pnpm build:examples` plus `pnpm verify:examples`
-- example deployments do not run automatically on `main`
-- the Next.js, SolidStart, and Remix examples (including their subdomain and tld variants) are excluded from `deploy-examples.yml`
-- the `deploy-examples.yml` workflow supports manual deployment of the Vite-based examples (TanStack, Waku, React Router — cookie, route, subdomain, and tld) if an additional hosted URL is needed
+- release commits publish the shared examples image through
+  [`publish-examples-container.yml`](../.github/workflows/publish-examples-container.yml)
+- the image contains the complete example matrix and starts every example on its
+  fixed port
+- public routing, TLS, DNS, and image rollout belong to the external demo
+  infrastructure
 
 ## Live Reference URLs
 
@@ -167,47 +171,16 @@ Reference table are not yet reachable. The canonical verification path runs loca
 support is covered by the same local/CI verification path, not by public TLD
 deployment yet.
 
-## Optional Manual Deployments
+## Container Image Publication
 
-The optional deployment workflow lives at:
+The repository publishes the examples image through
+[`publish-examples-container.yml`](../.github/workflows/publish-examples-container.yml).
+The workflow runs for release commits on `main` and can also be forced manually.
+It builds the workspace and complete example matrix, then pushes
+`ghcr.io/sebastian-software/palamedes-examples` with `latest` and commit-SHA
+tags.
 
-- [deploy-examples.yml](../.github/workflows/deploy-examples.yml)
-
-It is `workflow_dispatch` only and intentionally excludes the Next.js examples.
-If used, it runs:
-
-1. target selection
-2. selected example verification with the filtered `pnpm verify:examples` command
-3. manual per-example deployment for the selected non-Next example
-
-Supported deployment targets:
-
-- `tanstack-cookie`
-- `tanstack-route`
-- `tanstack-subdomain`
-- `waku-cookie`
-- `waku-route`
-- `waku-subdomain`
-- `react-router-cookie`
-- `react-router-route`
-- `react-router-subdomain`
-- `tanstack-tld`
-- `waku-tld`
-- `react-router-tld`
-
-## Why Next.js, SolidStart, And Remix Are Not In `deploy-examples.yml`
-
-The Next.js, SolidStart, and Remix examples are part of the verified matrix, but
-they are excluded from the `deploy-examples.yml` workflow. That workflow targets
-the Vite-based examples (TanStack, Waku, React Router — cookie, route, subdomain,
-and tld) specifically.
-
-For this OSS setup, the guaranteed baseline is:
-
-- the examples build
-- the examples run locally
-- SSR, locale routing, cookie handling, and localized server actions are covered in browser tests
-
-The hosting mechanism for the Next.js and SolidStart examples is separate from
-`deploy-examples.yml` and is not further documented here. Remix v3 remains a
-server-first beta proof surface until a public hosting target is chosen.
+The image starts every example through
+[`scripts/container/start-all.mjs`](../scripts/container/start-all.mjs). Fixed
+ports come from the shared example matrix. Reverse-proxy routing and deployment
+of a selected image tag are intentionally external to this repository.

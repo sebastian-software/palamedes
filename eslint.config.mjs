@@ -12,7 +12,6 @@ const generatedAndBuildIgnores = {
     "**/.nitro/**",
     "**/.output/**",
     "**/.tanstack/**",
-    "**/.vercel/**",
     "**/.vinxi/**",
     "**/coverage/**",
     "**/target/**",

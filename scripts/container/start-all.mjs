@@ -20,8 +20,8 @@ function log(message) {
   process.stdout.write(`[supervisor] ${message}\n`)
 }
 
-// Prefix each child line with its example id so the interleaved output of ten
-// servers stays readable.
+// Prefix each child line with its example id so the interleaved server output
+// stays readable.
 function prefixOutput(stream, id) {
   const tag = `[${id}] `
   let buffer = ""

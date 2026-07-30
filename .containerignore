@@ -31,8 +31,6 @@ dist
 
 # Plugin runtime state and local tooling
 .sf-plugin
-.vercel
-**/.vercel
 .vitest-attachments
 
 # Misc

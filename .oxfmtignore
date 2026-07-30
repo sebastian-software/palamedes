@@ -7,7 +7,6 @@ target/
 .vinxi/
 .nitro/
 .output/
-.vercel/
 coverage/
 docs/example-screenshots/
 benchmarks/*/results/
