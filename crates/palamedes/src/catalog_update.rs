@@ -1,15 +1,15 @@
 use std::collections::BTreeMap;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::{
-    parse_catalog as ferrocat_parse_catalog, update_catalog as ferrocat_update_catalog, ApiError,
-    CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, EffectiveTranslationRef,
-    ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, RenderOptions,
-    SerializeOptions, SourceExtractedMessage, UpdateCatalogOptions,
+    parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
+    ApiError, CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult,
+    EffectiveTranslationRef, ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog,
+    PlaceholderCommentMode, RenderOptions, SerializeOptions, SourceExtractedMessage,
+    UpdateCatalogFileOptions, UpdateCatalogOptions,
 };
 use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
 use serde::{Deserialize, Serialize};
@@ -272,7 +272,6 @@ fn update_catalog_file_source_first(
         )));
     }
     validate_po_options(request.format, request.po.as_ref())?;
-    let existing = read_existing_catalog(&target_path)?;
     let custom_header_attributes =
         BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
     let input = CatalogUpdateInput::SourceFirst(
@@ -301,25 +300,20 @@ fn update_catalog_file_source_first(
             .with_custom_header_attributes(&custom_header_attributes)
             .with_po_serialize_options(po_serialize_options(request.po.as_ref()));
     }
-    let mut update_options = UpdateCatalogOptions::new(&request.source_locale, input)
+    let update_options = UpdateCatalogOptions::new(&request.source_locale, input)
         .with_locale(&request.locale)
         .with_mode(request.format.ferrocat_mode())
         .with_obsolete_strategy(obsolete_strategy)
         .with_overwrite_source_translations(true)
         .with_render(render)
         .with_now(&now);
-    if let Some(existing) = &existing {
-        update_options = update_options.with_existing(existing);
-    }
-
-    let mut result = ferrocat_update_catalog(update_options).map_err(PalamedesError::from)?;
-    if let Some(existing) = &existing {
-        result.updated = result.content != *existing;
-    }
-
-    if result.created || result.updated {
-        atomic_write_catalog(&target_path, &result.content)?;
-    }
+    let file_options = UpdateCatalogFileOptions::new(
+        &target_path,
+        &request.source_locale,
+        CatalogUpdateInput::default(),
+    )
+    .with_options(update_options);
+    let result = ferrocat_update_catalog_file(file_options).map_err(PalamedesError::from)?;
 
     Ok(public_update_result(result))
 }
@@ -336,54 +330,11 @@ fn validate_po_options(
     Ok(())
 }
 
-fn read_existing_catalog(target_path: &Path) -> PalamedesResult<Option<String>> {
-    match std::fs::read_to_string(target_path) {
-        Ok(content) => Ok(Some(content)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(PalamedesError::from(ApiError::io_with_path(
-            target_path,
-            error,
-        ))),
-    }
-}
-
 pub(crate) fn po_serialize_options(options: Option<&PoOutputOptions>) -> SerializeOptions {
     match options.map(|options| options.line_breaks) {
         Some(PoLineBreaks::Off) => SerializeOptions::default().with_fold_length(0),
         None | Some(PoLineBreaks::Auto) => SerializeOptions::default(),
     }
-}
-
-pub(crate) fn atomic_write_catalog(target_path: &Path, content: &str) -> PalamedesResult<()> {
-    let directory = target_path.parent().unwrap_or_else(|| Path::new("."));
-    std::fs::create_dir_all(directory).map_err(|error| ApiError::io_with_path(directory, error))?;
-    let mut temporary = tempfile::NamedTempFile::new_in(directory)
-        .map_err(|error| ApiError::io_with_path(directory, error))?;
-    temporary
-        .write_all(content.as_bytes())
-        .map_err(|error| ApiError::io_with_path(target_path, error))?;
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|error| ApiError::io_with_path(target_path, error))?;
-    temporary
-        .persist(target_path)
-        .map_err(|error| ApiError::io_with_path(target_path, error.error))?;
-    sync_catalog_directory(directory)?;
-    Ok(())
-}
-
-#[cfg(unix)]
-fn sync_catalog_directory(directory: &Path) -> PalamedesResult<()> {
-    std::fs::File::open(directory)
-        .and_then(|file| file.sync_all())
-        .map_err(|error| ApiError::io_with_path(directory, error))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn sync_catalog_directory(_directory: &Path) -> PalamedesResult<()> {
-    Ok(())
 }
 
 fn project_message(message: CatalogUpdateMessage) -> PalamedesResult<SourceExtractedMessage> {
