@@ -56,8 +56,8 @@
     "concurrently": "^10.0.3",
     "eslint": "^10.7.0",
     "eslint-config-setup": "^0.5.0",
-    "oxfmt": "^0.60.0",
-    "oxlint": "^1.75.0",
+    "oxfmt": "^0.61.0",
+    "oxlint": "^1.76.0",
     "typescript": "^6.0.3",
     "vercel": "^57.0.0",
     "vitest": "^4.1.10"
