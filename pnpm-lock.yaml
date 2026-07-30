@@ -56,8 +56,8 @@ importers:
         specifier: 6.6.0
         version: 6.6.0
       i18next-cli:
-        specifier: 1.67.2
-        version: 1.67.2(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(typescript@6.0.3)
+        specifier: 1.67.3
+        version: 1.67.3(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(typescript@6.0.3)
 
   benchmarks/lingui-v6:
     dependencies:
@@ -8657,8 +8657,8 @@ packages:
     resolution: {integrity: sha512-eKCa6bwnJhvxj14kZk5NCPc6Hb6BdsU9DZcOnmQKSnO1VKrfV0zCvtttPZUsBvjmNDn8rpcJfpwSYnHBjc95MQ==}
     engines: {node: '>=18.18.0'}
 
-  i18next-cli@1.67.2:
-    resolution: {integrity: sha512-T8NgbOIEEgnWfDEe3mGKcR5JXnJR0MD40gitnRVhEfGXyZbSyczIDkNy5CPR4GDjztLCFWHHftrAX6d9sZKX5g==}
+  i18next-cli@1.67.3:
+    resolution: {integrity: sha512-kW5Hq0kzOGoZQCxOLqtrcj4NqIGmQJkBr5c78XQz3WqBgZuJ1PzvLEEjoXdyDkX1IwPO19OTEv3sOeCCWU+Igg==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -19423,7 +19423,7 @@ snapshots:
 
   human-signals@8.0.1: {}
 
-  i18next-cli@1.67.2(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(typescript@6.0.3):
+  i18next-cli@1.67.3(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(typescript@6.0.3):
     dependencies:
       '@croct/json5-parser': 0.2.2
       '@swc/core': 1.15.47
