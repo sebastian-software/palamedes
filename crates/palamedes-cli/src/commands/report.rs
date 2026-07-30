@@ -1,14 +1,12 @@
 //! `pmds report` — per-locale catalog translation completeness.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use clap::Args;
-use palamedes::{parse_catalog, CatalogParseRequest};
-use serde::Serialize;
+use palamedes::{measure_catalog_coverage, CatalogCoverageRequest, CatalogCoverageResult};
 
 use crate::command::{render_json, Command, Context};
-use crate::commands::{normalize_locale_list, read_po};
+use crate::commands::normalize_locale_list;
 use crate::config::LoadedConfig;
 use crate::error::CliError;
 
@@ -28,38 +26,8 @@ pub struct ReportOptions {
     fail_if_below: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct CompletenessReport {
-    locales: Vec<LocaleCompletenessReport>,
-}
-
-#[derive(Debug, Serialize)]
-struct LocaleCompletenessReport {
-    locale: String,
-    total: usize,
-    translated: usize,
-    missing: usize,
-    fuzzy: usize,
-    percent: f64,
-}
-
-#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
-struct MessageKey {
-    message: String,
-    context: Option<String>,
-}
-
-#[derive(Debug)]
-struct MutableLocaleStats {
-    locale: String,
-    total: usize,
-    translated: usize,
-    missing: usize,
-    fuzzy: usize,
-}
-
 impl Command for ReportOptions {
-    type Output = CompletenessReport;
+    type Output = CatalogCoverageResult;
 
     fn run(&self, context: &Context) -> Result<Self::Output, CliError> {
         // Reject an out-of-range threshold before doing any work: the run
@@ -103,148 +71,15 @@ impl Command for ReportOptions {
     }
 }
 
-fn build_report(config: &LoadedConfig, locales: &[String]) -> Result<CompletenessReport, CliError> {
-    let mut stats = locales
-        .iter()
-        .map(|locale| {
-            (
-                locale.clone(),
-                MutableLocaleStats {
-                    locale: locale.clone(),
-                    total: 0,
-                    translated: 0,
-                    missing: 0,
-                    fuzzy: 0,
-                },
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-
-    for catalog in &config.catalogs {
-        let source_path = config
-            .resolve_catalog_path(&catalog.path, &config.source_locale)
-            .with_extension(catalog.format.extension());
-        let source_catalog = read_catalog_for_report(
-            &source_path,
-            &config.source_locale,
-            &config.source_locale,
-            catalog.format,
-        )?;
-        let source_messages = source_catalog
-            .into_iter()
-            .filter(|message| !message.obsolete)
-            .map(|message| MessageKey {
-                message: message.message,
-                context: message.context,
-            })
-            .collect::<Vec<_>>();
-
-        for locale in locales {
-            let Some(locale_stats) = stats.get_mut(locale) else {
-                continue;
-            };
-            locale_stats.total += source_messages.len();
-
-            if locale == &config.source_locale {
-                locale_stats.translated += source_messages.len();
-                continue;
-            }
-
-            let target_path = config
-                .resolve_catalog_path(&catalog.path, locale)
-                .with_extension(catalog.format.extension());
-            /*
-             * Fuzzy entries carry a translation that needs review; gettext
-             * tooling treats them as untranslated, and so does this report.
-             * The flag only exists in the PO storage format.
-             */
-            let fuzzy_keys = if catalog.format == palamedes::PalamedesCatalogFormat::Po
-                && target_path.exists()
-            {
-                read_po(&target_path)?
-                    .items
-                    .into_iter()
-                    .filter(|item| item.flags.get("fuzzy").copied().unwrap_or(false))
-                    .map(|item| MessageKey {
-                        message: item.msgid,
-                        context: item.msgctxt,
-                    })
-                    .collect::<BTreeSet<_>>()
-            } else {
-                BTreeSet::new()
-            };
-            let target_messages = if target_path.exists() {
-                read_catalog_for_report(
-                    &target_path,
-                    &config.source_locale,
-                    locale,
-                    catalog.format,
-                )?
-                .into_iter()
-                .filter(|message| !message.obsolete)
-                .map(|message| {
-                    (
-                        MessageKey {
-                            message: message.message,
-                            context: message.context,
-                        },
-                        message.translated,
-                    )
-                })
-                .collect::<BTreeMap<_, _>>()
-            } else {
-                BTreeMap::new()
-            };
-
-            for source_message in &source_messages {
-                let Some(target) = target_messages.get(source_message) else {
-                    locale_stats.missing += 1;
-                    continue;
-                };
-                if fuzzy_keys.contains(source_message) {
-                    locale_stats.fuzzy += 1;
-                    locale_stats.missing += 1;
-                } else if *target {
-                    locale_stats.translated += 1;
-                } else {
-                    locale_stats.missing += 1;
-                }
-            }
-        }
-    }
-
-    Ok(CompletenessReport {
-        locales: stats
-            .into_values()
-            .map(|locale| LocaleCompletenessReport {
-                percent: if locale.total == 0 {
-                    100.0
-                } else {
-                    (locale.translated as f64 / locale.total as f64) * 100.0
-                },
-                locale: locale.locale,
-                total: locale.total,
-                translated: locale.translated,
-                missing: locale.missing,
-                fuzzy: locale.fuzzy,
-            })
-            .collect(),
+fn build_report(
+    config: &LoadedConfig,
+    locales: &[String],
+) -> Result<CatalogCoverageResult, CliError> {
+    measure_catalog_coverage(CatalogCoverageRequest {
+        config: config.artifact_config(),
+        locales: locales.to_vec(),
     })
-}
-
-fn read_catalog_for_report(
-    path: &Path,
-    source_locale: &str,
-    locale: &str,
-    format: palamedes::PalamedesCatalogFormat,
-) -> Result<Vec<palamedes::ParsedCatalogMessage>, CliError> {
-    let result = parse_catalog(&CatalogParseRequest {
-        target_path: path.to_string_lossy().into_owned(),
-        locale: locale.to_owned(),
-        source_locale: source_locale.to_owned(),
-        format,
-    })?;
-    Ok(result.messages)
+    .map_err(CliError::from)
 }
 
 fn resolve_report_locales(config: &LoadedConfig, selected: &[String]) -> Vec<String> {
@@ -261,7 +96,7 @@ fn resolve_report_locales(config: &LoadedConfig, selected: &[String]) -> Vec<Str
         .collect()
 }
 
-fn print_report(result: &CompletenessReport) {
+fn print_report(result: &CatalogCoverageResult) {
     if result.locales.is_empty() {
         println!("No target locales configured.");
         return;

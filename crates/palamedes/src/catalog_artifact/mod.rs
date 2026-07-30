@@ -6,7 +6,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use ferrocat::{
     compile_catalog_artifact as ferrocat_compile_catalog_artifact,
@@ -26,6 +26,16 @@ pub use self::types::{
     CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogConfig, FallbackLocales,
     PalamedesCatalogFormat,
 };
+
+pub(crate) fn resolve_catalog_path(
+    config: &CatalogArtifactConfig,
+    catalog: &CatalogConfig,
+    locale: &str,
+) -> PathBuf {
+    Path::new(&config.root_dir)
+        .join(catalog.path.replace("{locale}", locale))
+        .with_extension(catalog.format.extension())
+}
 
 struct PreparedCompilation {
     locale: String,
@@ -88,8 +98,12 @@ pub fn compile_catalog_artifact_selected(
 ) -> PalamedesResult<CatalogArtifactResult> {
     let prepared = prepare_compilation(&request.config, &request.resource_path)?;
     let catalogs = prepared.loaded.values().collect::<Vec<_>>();
-    let compiled_id_index = CompiledCatalogIdIndex::new(&catalogs, CompiledKeyStrategy::FerrocatV1)
-        .map_err(PalamedesError::BuildCompiledIdIndex)?;
+    let compiled_id_index = CompiledCatalogIdIndex::new_with_policy(
+        &catalogs,
+        CompiledKeyStrategy::FerrocatV1,
+        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
+    )
+    .map_err(PalamedesError::BuildCompiledIdIndex)?;
     let ferrocat_fallback_chain = ferrocat_fallback_chain(
         &prepared.fallback_chain,
         &prepared.locale,

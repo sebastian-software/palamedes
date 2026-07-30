@@ -217,6 +217,7 @@ pub struct CatalogAuditCheckOptions {
     pub icu_compatibility: Option<bool>,
     pub semantic_metadata: Option<bool>,
     pub obsolete_entries: Option<bool>,
+    pub fuzzy_flags: Option<bool>,
 }
 
 #[napi(object)]
@@ -766,6 +767,7 @@ impl From<CatalogAuditCheckOptions> for palamedes::CatalogAuditCheckOptions {
             icu_compatibility: value.icu_compatibility,
             semantic_metadata: value.semantic_metadata,
             obsolete_entries: value.obsolete_entries,
+            fuzzy_flags: value.fuzzy_flags,
         }
     }
 }

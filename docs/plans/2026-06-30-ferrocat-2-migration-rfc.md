@@ -1,9 +1,13 @@
 # RFC: Ferrocat 2.x Migration
 
-**Status:** Active plan
+**Status:** Superseded by the Ferrocat 3.2 integration (2026-07-31)
 **Date:** 2026-06-30 (updated 2026-07-03 for the Ferrocat 2.1.1 baseline)
 **Owner:** Palamedes maintainers
 **Tracking issue:** [palamedes#285](https://github.com/sebastian-software/palamedes/issues/285)
+
+> Historical note: Ferrocat 3.2 supersedes this RFC's fuzzy and conversion
+> constraints. Current Palamedes releases preserve review markers across PO/FCL
+> conversion and use Ferrocat's format-neutral audit and coverage semantics.
 
 ## Summary
 

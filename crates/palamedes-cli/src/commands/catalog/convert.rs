@@ -4,12 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
-use palamedes::{
-    combine_catalog_files, CatalogConflictStrategy, CatalogFileCombineRequest, CatalogFileFormat,
-};
+use palamedes::{convert_catalog_file, CatalogFileConvertRequest, CatalogFileFormat};
 
 use crate::command::{Command, Context};
-use crate::commands::read_po;
 use crate::error::CliError;
 
 #[derive(Debug, Args)]
@@ -151,43 +148,65 @@ fn convert_one_catalog(
     if input.extension().and_then(|ext| ext.to_str()) != Some("po") {
         return Err(CliError::UnsupportedConvertSource);
     }
-    reject_fuzzy_po(input)?;
-    if let Some(parent) = output.parent() {
+    if let Some(parent) = output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
         fs::create_dir_all(parent).map_err(|source| CliError::Io {
             path: parent.to_path_buf(),
             source,
         })?;
     }
-    combine_catalog_files(CatalogFileCombineRequest {
-        input_paths: vec![input.to_path_buf()],
+    convert_catalog_file(CatalogFileConvertRequest {
+        input_path: input.to_path_buf(),
         output_path: output.to_path_buf(),
-        format: Some(match to {
+        source_format: CatalogFileFormat::Po,
+        target_format: match to {
             ConvertFormat::Fcl => CatalogFileFormat::Fcl,
-        }),
+        },
         source_locale: source_locale.to_owned(),
         locale: locale.map(str::to_owned),
-        conflict_strategy: CatalogConflictStrategy::UseFirst,
-        po: None,
     })?;
-    Ok(())
-}
-
-fn reject_fuzzy_po(path: &Path) -> Result<(), CliError> {
-    let catalog = read_po(path)?;
-    if catalog
-        .items
-        .iter()
-        .any(|item| item.flags.get("fuzzy").copied().unwrap_or(false))
-    {
-        return Err(CliError::FuzzyCatalogInput {
-            path: path.to_path_buf(),
-        });
-    }
     Ok(())
 }
 
 const fn convert_extension(to: ConvertFormat) -> &'static str {
     match to {
         ConvertFormat::Fcl => "fcl",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::{convert_one_catalog, ConvertFormat};
+    use crate::commands::test_support::temp_dir;
+
+    #[test]
+    fn fuzzy_po_conversion_preserves_review_metadata_in_fcl() {
+        let fixture = temp_dir("convert-fuzzy-po");
+        let input = fixture.join("de.po");
+        let output = fixture.join("de.fcl");
+        fs::write(
+            &input,
+            concat!(
+                "msgid \"\"\n",
+                "msgstr \"\"\n",
+                "\"Language: de\\n\"\n\n",
+                "# Translator note\n",
+                "#, fuzzy\n",
+                "msgid \"Hello\"\n",
+                "msgstr \"Hallo\"\n",
+            ),
+        )
+        .expect("write input");
+
+        convert_one_catalog(&input, &output, "en", Some("de"), ConvertFormat::Fcl)
+            .expect("convert fuzzy catalog");
+
+        let converted = fs::read_to_string(output).expect("read output");
+        assert!(converted.contains("tc=Translator note"));
+        assert!(converted.contains("f=fuzzy"));
     }
 }

@@ -4,11 +4,9 @@ use std::path::Path;
 
 use ferrocat::{parse_catalog, NormalizedParsedCatalog, ParseCatalogOptions};
 
-use crate::error::{PalamedesError, PalamedesResult};
-use crate::icu_text::canonicalize_catalog_quoting;
-
 use super::resolve::normalize_path;
 use super::types::{CatalogArtifactConfig, CatalogConfig};
+use crate::error::{PalamedesError, PalamedesResult};
 
 pub(super) type LocaleCatalogs = BTreeMap<String, NormalizedParsedCatalog>;
 
@@ -38,11 +36,10 @@ pub(super) fn load_catalogs(
             .with_locale(locale.as_str())
             .with_mode(catalog.format.ferrocat_mode());
 
-        let mut parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
+        let parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
             path: file.clone(),
             source,
         })?;
-        canonicalize_catalog_quoting(&mut parsed);
 
         loaded.insert(
             locale,

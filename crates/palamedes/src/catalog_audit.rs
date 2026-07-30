@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use ferrocat::{
-    parse_catalog, CatalogAuditIcuOptions, CatalogAuditOptions, IcuSyntaxPolicy,
+    parse_catalog_for_review, CatalogAuditIcuOptions, CatalogAuditOptions, IcuSyntaxPolicy,
     NormalizedParsedCatalog, ParseCatalogOptions,
 };
 use ferrocat_po::audit_catalogs as ferrocat_audit_catalogs;
@@ -11,10 +11,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::icu_text::canonicalize_catalog_quoting;
 use crate::message_metadata::MessageMetadataInput;
 
-use super::catalog_artifact::{CatalogArtifactConfig, CatalogConfig};
+use super::catalog_artifact::{resolve_catalog_path, CatalogArtifactConfig, CatalogConfig};
 
 /// Request for auditing configured catalogs.
 #[derive(Debug, Deserialize)]
@@ -55,6 +54,9 @@ pub struct CatalogAuditCheckOptions {
     /// Report obsolete entries.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub obsolete_entries: Option<bool>,
+    /// Report entries carrying a fuzzy review marker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fuzzy_flags: Option<bool>,
 }
 
 /// Aggregate catalog audit result.
@@ -139,12 +141,8 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
-        // Catalog texts are canonicalized into strict ICU quoting at load time
-        // (see `icu_text`), so the strict parser reads them exactly the way the
-        // JS runtime does. `RuntimeLiteralApostrophes` would instead double
-        // every apostrophe and model `L'{title}` as a live argument that the
-        // runtime actually swallows.
-        let icu_options = CatalogAuditIcuOptions::new().with_syntax_policy(IcuSyntaxPolicy::Strict);
+        let icu_options = CatalogAuditIcuOptions::new()
+            .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes);
         let options = CatalogAuditOptions::new(&request.config.source_locale)
             .with_locales(&locale_refs)
             .with_metadata(&metadata)
@@ -211,6 +209,9 @@ impl CatalogAuditCheckOptions {
         if let Some(value) = self.obsolete_entries {
             checks.obsolete_entries = value;
         }
+        if let Some(value) = self.fuzzy_flags {
+            checks.fuzzy_flags = value;
+        }
         checks
     }
 }
@@ -246,7 +247,7 @@ fn load_audit_catalogs(
 
     let mut loaded = Vec::new();
     for locale in locales {
-        let path = catalog_path(config, catalog, &locale);
+        let path = resolve_catalog_path(config, catalog, &locale);
         if !path.exists() {
             continue;
         }
@@ -258,18 +259,11 @@ fn load_audit_catalogs(
             .with_locale(locale.as_str())
             .with_mode(catalog.format.ferrocat_mode());
 
-        let mut parsed = parse_catalog(options).map_err(|source| PalamedesError::ParseCatalog {
-            path: path.clone(),
-            source,
-        })?;
-        canonicalize_catalog_quoting(&mut parsed);
         let catalog =
-            parsed
-                .into_normalized_view()
-                .map_err(|source| PalamedesError::NormalizeCatalog {
-                    path: path.clone(),
-                    source,
-                })?;
+            parse_catalog_for_review(options).map_err(|source| PalamedesError::ParseCatalog {
+                path: path.clone(),
+                source,
+            })?;
         loaded.push(LoadedAuditCatalog { catalog });
     }
 
@@ -283,18 +277,17 @@ fn paths_by_locale(
     config
         .locales
         .iter()
-        .map(|locale| (locale.clone(), catalog_path(config, catalog, locale)))
+        .map(|locale| {
+            (
+                locale.clone(),
+                resolve_catalog_path(config, catalog, locale),
+            )
+        })
         .collect()
 }
 
-fn catalog_path(config: &CatalogArtifactConfig, catalog: &CatalogConfig, locale: &str) -> PathBuf {
-    Path::new(&config.root_dir)
-        .join(catalog.path.replace("{locale}", locale))
-        .with_extension(catalog.format.extension())
-}
-
 fn source_catalog_path(config: &CatalogArtifactConfig, catalog: &CatalogConfig) -> PathBuf {
-    catalog_path(config, catalog, &config.source_locale)
+    resolve_catalog_path(config, catalog, &config.source_locale)
 }
 
 fn diagnostic_locale_from_name(code: &str, name: Option<&str>) -> Option<String> {
@@ -460,6 +453,37 @@ msgstr "L'{title} est bereit"
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.code == "icu.missing_argument"
+                && diagnostic.locale.as_deref() == Some("de")));
+    }
+
+    #[test]
+    fn reports_fuzzy_entries_through_the_review_aware_catalog() {
+        let fixture = create_fixture_dir("catalog-audit-fuzzy");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+        fs::write(
+            locale_dir.join("en.po"),
+            "msgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write en");
+        fs::write(
+            locale_dir.join("de.po"),
+            "#, fuzzy\nmsgid \"Hello\"\nmsgstr \"Hallo\"\n",
+        )
+        .expect("write de");
+
+        let result = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec!["de".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit");
+
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "catalog.fuzzy_flag"
                 && diagnostic.locale.as_deref() == Some("de")));
     }
 

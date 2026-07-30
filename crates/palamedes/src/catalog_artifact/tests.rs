@@ -3,7 +3,6 @@ use super::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
     CatalogConfig, PalamedesCatalogFormat,
 };
-use crate::icu_text::canonicalize_runtime_quoting;
 use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
 use std::collections::BTreeSet;
@@ -409,7 +408,7 @@ msgstr "Konnte {firstName}'s Daten nicht laden"
         .diagnostics
         .iter()
         .any(|diagnostic| diagnostic.code == "icu.missing_argument"
-            && diagnostic.source_key.message == "Couldn''t load {name}"
+            && diagnostic.source_key.message == "Couldn't load {name}"
             && diagnostic.locale == "de"));
     assert!(result
         .diagnostics
@@ -1015,13 +1014,15 @@ const authored = t`L'${title} est prêt`;
     );
 
     // Each translation is actually reachable, not just present as some key.
-    // The compiled value is the canonical form of the catalog text, which the
-    // runtime parser reads back as the translator wrote it.
-    for (id, translation) in transformed.compiled_ids.iter().zip(&translations) {
-        assert_eq!(
-            result.messages.get(id).map(String::as_str),
-            Some(canonicalize_runtime_quoting(translation).as_str())
-        );
+    // Keep the expected canonical strings independent of Ferrocat's helper so
+    // a future policy change cannot silently move both sides of this test.
+    let expected_translations = [
+        "DE Don''t greet {name}",
+        "DE Don''t wave at {name}",
+        "DE L''{title} est prêt",
+    ];
+    for (id, expected) in transformed.compiled_ids.iter().zip(expected_translations) {
+        assert_eq!(result.messages.get(id).map(String::as_str), Some(expected));
     }
 
     // The raw-ICU surfaces resolve through the canonical form of their text ...
