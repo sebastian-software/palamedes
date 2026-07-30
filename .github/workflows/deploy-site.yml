@@ -46,8 +46,26 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
+      - name: Set up pnpm cache
+        uses: actions/setup-node@v7
+        with:
+          cache: pnpm
+          node-version: 24
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "dependency installation failed after $attempt attempts"
+              exit 1
+            fi
+            echo "dependency installation attempt $attempt failed; retrying in 15s"
+            sleep 15
+          done
 
       - name: Build site
         run: pnpm build:site
@@ -91,7 +109,7 @@ jobs:
             local path="$1"
             local attempt
             for attempt in 1 2 3; do
-              if body=$(curl -sS --max-time 20 -w '\n%{http_code}' "$base$path"); then
+              if body=$(curl -sSL --max-redirs 5 --max-time 20 -w '\n%{http_code}' "$base$path"); then
                 status="${body##*$'\n'}"
                 content="${body%$'\n'*}"
                 return 0
