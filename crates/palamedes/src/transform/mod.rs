@@ -271,7 +271,9 @@ fn apply_replacement(
     let start = string_wizard_offset(replacement.start)?;
 
     if replacement.start == replacement.end {
-        magic_string.append_left(start, replacement.text.clone());
+        magic_string
+            .append_left(start, replacement.text.clone())
+            .map_err(|reason| PalamedesError::TransformEditFailed { reason })?;
     } else {
         let end = string_wizard_offset(replacement.end)?;
 
