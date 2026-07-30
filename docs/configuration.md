@@ -121,27 +121,29 @@ files use the equivalent camelCase shape:
 
 ## Catalog ordering
 
-Catalog order is not configurable. PO catalogs are always sorted by source
+Catalog order is not configurable. Ferrocat sorts PO and FCL catalogs by source
 message and then gettext context using the CLDR root collation — the same order
 `Intl.Collator("en-US")` produces, because English carries no collation
 tailoring of its own. That is what makes catalogs migrated from Lingui stay put
 instead of re-sorting wholesale on the first extraction, and it is the only
-order Palamedes writes, so there is nothing to keep in sync between projects.
+order Palamedes writes, so there is nothing to keep in sync between formats or
+projects.
 
 Ordering is not locale-aware beyond root collation. Languages with genuinely
 different collation (Swedish, Turkish, Czech and others) are not tailored for;
 the catalog order follows the source message, which is the same in every locale
 anyway.
 
-The order comes from a generated table covering Latin text, punctuation,
-symbols and digits rather than a full Unicode collation implementation, which
-keeps roughly 1.2 MB of collation data out of every shipped binary. Two
-consequences, both outside what source messages hold in practice: ligatures and
-digraphs (`ﬁ`, `Ǆ`) sort by their own weight instead of expanding to `fi` and
-`dz`, and characters outside the table sort after it by code point. The
-placement of non-Latin scripts after Latin still matches root collation; the
-order within them does not. Since this only decides the order entries appear
-in, a miss costs a line in a diff rather than a wrong translation.
+Ferrocat implements the order with a generated table covering Latin text,
+punctuation, symbols and digits rather than a full Unicode collation
+implementation. Two consequences, both outside what source messages hold in
+practice: ligatures and digraphs (`ﬁ`, `Ǆ`) sort by their own weight instead of
+expanding to `fi` and `dz`, and characters outside the table sort after it by
+code point. The placement of non-Latin scripts after Latin still matches root
+collation; the order within them does not. Since this only decides the order
+entries appear in, a miss costs a line in a diff rather than a wrong
+translation. Ferrocat records the implementation and trade-offs in
+[ADR 0026](https://ferrocat.dev/architecture/adr/0026-cldr-root-catalog-order).
 
 See [Catalog formats](./catalog-formats.md) for the product boundary between
 PO storage, FCL storage, and the current framework `.po` import loaders.

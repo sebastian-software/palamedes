@@ -114,10 +114,10 @@ keeps custom tooling close to the same semantics used by the official CLI and
 framework plugins.
 
 `updateCatalogFile()` accepts an optional PO output control through `po`:
-`lineBreaks` (`"auto"` or `"off"`). Catalog order is not configurable — PO
-catalogs are always sorted by message and then context using the CLDR root
-collation, which is the order `Intl.Collator("en-US")` produces. PO options are
-rejected for FCL updates.
+`lineBreaks` (`"auto"` or `"off"`). Catalog order is not configurable —
+Ferrocat sorts PO and FCL catalogs by message and then context using the CLDR
+root order that `Intl.Collator("en-US")` produces. PO options are rejected for
+FCL updates.
 
 The wrapper exposes lowercase public format values (`"po"` and `"fcl"`) while
 mapping to the native Ferrocat-backed API internally.

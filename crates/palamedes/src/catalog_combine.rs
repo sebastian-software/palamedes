@@ -6,7 +6,7 @@ use ferrocat::{
     CatalogMode, CombineCatalogFilesOptions, CombineCatalogOptions, OrderBy,
 };
 
-use crate::catalog_update::{atomic_write_catalog, finalize_rendered_po, PoOutputOptions};
+use crate::catalog_update::{po_serialize_options, PoOutputOptions};
 use crate::error::{PalamedesError, PalamedesResult};
 
 pub use ferrocat::{
@@ -127,21 +127,6 @@ fn combine_catalog_contents(
     ferrocat_combine_catalogs(options).map_err(PalamedesError::from)
 }
 
-/// Rewrites a freshly combined PO file in the order and shape Palamedes
-/// writes, so a merged catalog matches what the next extraction produces.
-fn finalize_combined_po(
-    output_path: &std::path::Path,
-    po: Option<&PoOutputOptions>,
-) -> PalamedesResult<()> {
-    let combined = std::fs::read_to_string(output_path)
-        .map_err(|error| ferrocat::ApiError::io_with_path(output_path, error))?;
-    let finalized = finalize_rendered_po(&combined, po)?;
-    if finalized != combined {
-        atomic_write_catalog(output_path, &finalized)?;
-    }
-    Ok(())
-}
-
 /// Combines catalog files and atomically replaces the requested output path.
 ///
 /// # Errors
@@ -167,7 +152,8 @@ pub fn combine_catalog_files(
     .with_selection(ferrocat::CatalogCombineSelection::All)
     .with_order_by(OrderBy::Msgid)
     .with_include_origins(true)
-    .with_include_obsolete(false);
+    .with_include_obsolete(false)
+    .with_po_serialize_options(po_serialize_options(request.po.as_ref()));
     if let Some(format) = request.format {
         options = options.with_format(format.into());
     }
@@ -176,15 +162,6 @@ pub fn combine_catalog_files(
     }
 
     let result = ferrocat_combine_catalog_files(options).map_err(PalamedesError::from)?;
-
-    /*
-     * Ferrocat writes in code-point order, which is never what Palamedes puts
-     * in a PO catalog. Without this pass a merge would hand back a fully
-     * re-sorted file and the next extraction would sort it right back.
-     */
-    if matches!(result.format, ferrocat::CatalogFileFormat::Po) {
-        finalize_combined_po(&request.output_path, request.po.as_ref())?;
-    }
 
     Ok(CatalogFileCombineResult {
         output_path: result.output_path,
@@ -270,9 +247,8 @@ mod tests {
     }
 
     /*
-     * A merged catalog has to come back in the order an extraction writes, or
-     * the merge commit carries a full re-sort that the next extraction undoes.
-     * Code-point order would put "Zebra" ahead of "Álgebra".
+     * Ferrocat's combine path has to use the same catalog-storage order as its
+     * update path. Code-point order would put "Zebra" ahead of "Álgebra".
      */
     #[test]
     fn writes_merged_po_files_in_collation_order() {

@@ -23,8 +23,6 @@ mod catalog_audit;
 mod catalog_combine;
 mod catalog_update;
 mod choice;
-mod collation;
-mod collation_table;
 mod descriptor;
 mod diagnostic;
 mod error;
@@ -91,7 +89,7 @@ pub use transform::{
 };
 
 /// Published `ferrocat` version used by the Rust core.
-pub const FERROCAT_VERSION: &str = "2.2.0";
+pub const FERROCAT_VERSION: &str = "3.1.0";
 
 /// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]

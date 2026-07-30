@@ -37,7 +37,7 @@ That means Palamedes needs a clean boundary, not just a dependency swap.
 - PO parsing and serialization
 - catalog update semantics
 - normalized parsed-catalog access
-- PO and FCL storage semantics
+- PO and FCL storage semantics, including deterministic catalog ordering
 - ICU parsing and validation
 - plural and gettext-adjacent catalog behavior
 - other reusable host-neutral catalog primitives

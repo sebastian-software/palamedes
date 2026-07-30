@@ -3,12 +3,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::collation::{collation_key, collation_prefix, CollationKey, CollationPrefix};
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::{
-    parse_catalog as ferrocat_parse_catalog, parse_po as ferrocat_parse_po,
-    stringify_po as ferrocat_stringify_po, update_catalog as ferrocat_update_catalog, ApiError,
+    parse_catalog as ferrocat_parse_catalog, update_catalog as ferrocat_update_catalog, ApiError,
     CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult, EffectiveTranslationRef,
     ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, RenderOptions,
     SerializeOptions, SourceExtractedMessage, UpdateCatalogOptions,
@@ -274,7 +272,7 @@ fn update_catalog_file_source_first(
         )));
     }
     validate_po_options(request.format, request.po.as_ref())?;
-    let existing = read_existing_catalog(&target_path, request.format)?;
+    let existing = read_existing_catalog(&target_path)?;
     let custom_header_attributes =
         BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
     let input = CatalogUpdateInput::SourceFirst(
@@ -299,7 +297,9 @@ fn update_catalog_file_source_first(
         .with_placeholder_comments(PlaceholderCommentMode::Enabled { limit: 3 });
     let is_po = request.format == super::catalog_artifact::PalamedesCatalogFormat::Po;
     if is_po {
-        render = render.with_custom_header_attributes(&custom_header_attributes);
+        render = render
+            .with_custom_header_attributes(&custom_header_attributes)
+            .with_po_serialize_options(po_serialize_options(request.po.as_ref()));
     }
     let mut update_options = UpdateCatalogOptions::new(&request.source_locale, input)
         .with_locale(&request.locale)
@@ -309,26 +309,12 @@ fn update_catalog_file_source_first(
         .with_render(render)
         .with_now(&now);
     if let Some(existing) = &existing {
-        update_options = update_options.with_existing(&existing.update_input);
+        update_options = update_options.with_existing(existing);
     }
 
-    /*
-     * PO catalogs always take the final pass: ferrocat renders in code-point
-     * order, and the collation order Palamedes writes cannot be expressed
-     * through its render options.
-     */
     let mut result = ferrocat_update_catalog(update_options).map_err(PalamedesError::from)?;
     if let Some(existing) = &existing {
-        if is_po {
-            result.content = finalize_po_output(
-                &result.content,
-                existing.po_metadata.as_ref(),
-                request.po.as_ref(),
-            )?;
-        }
-        result.updated = result.content != existing.original;
-    } else if is_po {
-        result.content = finalize_po_output(&result.content, None, request.po.as_ref())?;
+        result.updated = result.content != *existing;
     }
 
     if result.created || result.updated {
@@ -350,209 +336,21 @@ fn validate_po_options(
     Ok(())
 }
 
-#[derive(Debug)]
-struct ExistingCatalog {
-    original: String,
-    update_input: String,
-    po_metadata: Option<BTreeMap<PoMessageKey, PreservedPoMetadata>>,
-}
-
-type PoMessageKey = (Option<String>, String);
-
-#[derive(Clone, Debug)]
-struct PreservedPoMetadata {
-    comments: Vec<String>,
-    flags: Vec<String>,
-}
-
-fn read_existing_catalog(
-    target_path: &Path,
-    format: super::catalog_artifact::PalamedesCatalogFormat,
-) -> PalamedesResult<Option<ExistingCatalog>> {
-    let original = match std::fs::read_to_string(target_path) {
-        Ok(content) => content,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(PalamedesError::from(ApiError::io_with_path(
-                target_path,
-                error,
-            )))
-        }
-    };
-
-    if format != super::catalog_artifact::PalamedesCatalogFormat::Po {
-        return Ok(Some(ExistingCatalog {
-            update_input: original.clone(),
-            original,
-            po_metadata: None,
-        }));
+fn read_existing_catalog(target_path: &Path) -> PalamedesResult<Option<String>> {
+    match std::fs::read_to_string(target_path) {
+        Ok(content) => Ok(Some(content)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(PalamedesError::from(ApiError::io_with_path(
+            target_path,
+            error,
+        ))),
     }
-
-    let mut po = ferrocat_parse_po(&original)?;
-
-    /*
-     * Most catalogs carry no translator comments or gettext flags at all. For
-     * those the strip/restore dance below preserves nothing, so skip it: hand
-     * ferrocat the original text and let it render normally. That saves one
-     * serialize here plus a full parse/serialize pair in restore_po_metadata —
-     * two PO round trips per catalog file, which is ~11 ms per `pmds extract`
-     * on a 6k-message en/de pair.
-     */
-    if po
-        .items
-        .iter()
-        .all(|item| item.comments.is_empty() && item.flags.is_empty())
-    {
-        return Ok(Some(ExistingCatalog {
-            update_input: original.clone(),
-            original,
-            po_metadata: None,
-        }));
-    }
-
-    let metadata = po
-        .items
-        .iter_mut()
-        .map(|item| {
-            let key = (item.msgctxt.clone(), item.msgid.clone());
-            let metadata = PreservedPoMetadata {
-                comments: item.comments.iter().cloned().collect(),
-                flags: item.flags.iter().cloned().collect(),
-            };
-            item.comments.clear();
-            item.flags.clear();
-            (key, metadata)
-        })
-        .collect();
-    let update_input = ferrocat_stringify_po(&po, &SerializeOptions::default());
-
-    Ok(Some(ExistingCatalog {
-        original,
-        update_input,
-        po_metadata: Some(metadata),
-    }))
 }
 
-/// Rewrites already-rendered PO output the way Palamedes writes catalogs:
-/// collation order plus the requested folding, with no preserved metadata to
-/// restore. Used by paths that hand off rendering to Ferrocat and need the
-/// result to match what an extraction would have produced.
-pub(crate) fn finalize_rendered_po(
-    rendered: &str,
-    options: Option<&PoOutputOptions>,
-) -> PalamedesResult<String> {
-    finalize_po_output(rendered, None, options)
-}
-
-fn finalize_po_output(
-    updated: &str,
-    metadata: Option<&BTreeMap<PoMessageKey, PreservedPoMetadata>>,
-    options: Option<&PoOutputOptions>,
-) -> PalamedesResult<String> {
-    let mut po = ferrocat_parse_po(updated)?;
-    if let Some(metadata) = metadata {
-        for item in &mut po.items {
-            let key = (item.msgctxt.clone(), item.msgid.clone());
-            if let Some(metadata) = metadata.get(&key) {
-                item.comments = metadata.comments.clone().into();
-                item.flags = metadata.flags.clone().into();
-            }
-        }
-    }
-
-    sort_po_items_collated(&mut po.items);
-
-    let serialize_options = match options.map(|options| options.line_breaks) {
+pub(crate) fn po_serialize_options(options: Option<&PoOutputOptions>) -> SerializeOptions {
+    match options.map(|options| options.line_breaks) {
         Some(PoLineBreaks::Off) => SerializeOptions::default().with_fold_length(0),
         None | Some(PoLineBreaks::Auto) => SerializeOptions::default(),
-    };
-    Ok(ferrocat_stringify_po(&po, &serialize_options))
-}
-
-/*
- * Catalog sort key. The two collation keys carry the actual order; the raw
- * message identity that follows only breaks ties between entries the collation
- * considers equal (canonically equivalent spellings, for example), so the
- * result stays stable across runs regardless of the order ferrocat rendered.
- */
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct CollatedKey {
-    message: CollationKey,
-    context: CollationKey,
-    raw_message: String,
-    raw_context: Option<String>,
-    obsolete: bool,
-}
-
-fn collated_key(item: &ferrocat::PoItem) -> CollatedKey {
-    CollatedKey {
-        message: collation_key(&item.msgid),
-        context: collation_key(item.msgctxt.as_deref().unwrap_or("")),
-        raw_message: item.msgid.clone(),
-        raw_context: item.msgctxt.clone(),
-        obsolete: item.obsolete,
-    }
-}
-
-/*
- * Sorting by the full key means building one per entry, and a catalog entry is
- * a whole message: most pairs are already decided by their first few
- * characters. So order by a packed prefix of the primary level first, which
- * needs no allocation, and only build keys inside the runs that share one.
- *
- * The worst case — every entry sharing a prefix — is the previous behavior of
- * one key per entry, so this cannot be slower by more than the prefix pass.
- */
-fn sort_po_items_collated(items: &mut [ferrocat::PoItem]) {
-    if items.len() < 2 {
-        return;
-    }
-
-    let prefixes: Vec<CollationPrefix> = items
-        .iter()
-        .map(|item| collation_prefix(&item.msgid))
-        .collect();
-    let mut order: Vec<u32> = (0..u32::try_from(items.len()).unwrap_or(u32::MAX)).collect();
-    order.sort_unstable_by_key(|&index| prefixes[index as usize]);
-
-    let mut start = 0;
-    while start < order.len() {
-        let prefix = prefixes[order[start] as usize];
-        let mut end = start + 1;
-        while end < order.len() && prefixes[order[end] as usize] == prefix {
-            end += 1;
-        }
-        if end - start > 1 {
-            let mut run: Vec<(CollatedKey, u32)> = order[start..end]
-                .iter()
-                .map(|&index| (collated_key(&items[index as usize]), index))
-                .collect();
-            run.sort_by(|left, right| left.0.cmp(&right.0));
-            for (slot, (_, index)) in order[start..end].iter_mut().zip(run) {
-                *slot = index;
-            }
-        }
-        start = end;
-    }
-
-    /*
-     * Apply the permutation in place. Rebuilding the vector instead would copy
-     * every entry twice, which on a catalog-sized item is more than the prefix
-     * pass saves.
-     *
-     * `order` says which entry belongs at each position; swapping needs the
-     * opposite, so invert it first.
-     */
-    let mut destination = vec![0_u32; order.len()];
-    for (position, &source) in order.iter().enumerate() {
-        destination[source as usize] = u32::try_from(position).unwrap_or(u32::MAX);
-    }
-    for position in 0..destination.len() {
-        while destination[position] as usize != position {
-            let target = destination[position] as usize;
-            items.swap(position, target);
-            destination.swap(position, target);
-        }
     }
 }
 
@@ -748,10 +546,15 @@ mod tests {
     use ferrocat::{machine_translation_hash, EffectiveTranslationRef};
 
     fn temp_file(name: &str) -> String {
+        temp_file_with_extension(name, "po")
+    }
+
+    fn temp_file_with_extension(name: &str, extension: &str) -> String {
         std::env::temp_dir()
             .join(format!(
-                "palamedes-catalog-update-{name}-{}.po",
-                std::process::id()
+                "palamedes-catalog-update-{name}-{}.{}",
+                std::process::id(),
+                extension
             ))
             .to_string_lossy()
             .into_owned()
@@ -881,6 +684,46 @@ mod tests {
                 ("über", None),
                 ("Zebra", None),
             ]
+        );
+    }
+
+    #[test]
+    fn delegates_fcl_catalog_ordering_to_ferrocat() {
+        let path = temp_file_with_extension("fcl-collated-order", "fcl");
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Fcl,
+            po: None,
+            messages: ["Zebra", "über", "Uber", "Apple", "apple", "Álgebra"]
+                .into_iter()
+                .map(|text| message(text, None, "src/App.tsx"))
+                .collect(),
+        })
+        .expect("update FCL");
+
+        let output = std::fs::read_to_string(&path).expect("read FCL output");
+        assert!(
+            output.starts_with("%FCL1\tsource=en\tlocale=en\torder=collated\n"),
+            "{output}"
+        );
+        let parsed = parse_catalog(&CatalogParseRequest {
+            target_path: path,
+            locale: "en".to_owned(),
+            source_locale: "en".to_owned(),
+            format: crate::PalamedesCatalogFormat::Fcl,
+        })
+        .expect("parse FCL output");
+        assert_eq!(
+            parsed
+                .messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Álgebra", "apple", "Apple", "Uber", "über", "Zebra"]
         );
     }
 
@@ -1243,12 +1086,8 @@ msgstr "Zebra""#;
         );
     }
 
-    /*
-     * read_existing_catalog skips the strip/restore round trip when no item
-     * carries translator comments or flags. The predicate is all-or-nothing per
-     * file, so the case that would break is a catalog where only one item among
-     * many has metadata: a per-item early-out would drop it.
-     */
+    // Opaque metadata belongs to individual message identities and must not
+    // leak to neighboring entries when Ferrocat updates the complete catalog.
     #[test]
     fn preserves_metadata_when_only_one_item_of_many_carries_it() {
         let path = temp_file("po-metadata-sparse");
@@ -1314,11 +1153,8 @@ msgstr "Zebra""#;
         }
     }
 
-    /*
-     * Guards the fast path itself: a catalog without any translator comments or
-     * flags skips the round trip, and must still get fresh source references
-     * and keep existing translations.
-     */
+    // Catalogs without opaque metadata still receive refreshed extractor-owned
+    // comments and source references while keeping existing translations.
     #[test]
     fn refreshes_source_metadata_for_catalogs_without_preserved_metadata() {
         let path = temp_file("po-no-metadata");

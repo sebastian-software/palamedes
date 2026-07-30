@@ -27,9 +27,9 @@ catalogs:
 
 PO output options are per catalog. In JavaScript or TypeScript configs, use
 `po: { lineBreaks }`; data configs use the kebab-case spelling shown above.
-Catalog order is not configurable — PO catalogs always use the CLDR root
-collation, matching `Intl.Collator("en-US")`. The `po` object is invalid for
-FCL catalogs.
+Catalog order is not configurable — Ferrocat gives PO and FCL catalogs the
+CLDR root order matching `Intl.Collator("en-US")`. The `po` object is invalid
+for FCL catalogs.
 
 ## Exports
 
