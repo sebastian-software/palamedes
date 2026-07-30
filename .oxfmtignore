@@ -12,6 +12,8 @@ coverage/
 docs/example-screenshots/
 benchmarks/*/results/
 packages/core-node/src/generated/
+examples/nextjs-*/next-env.d.ts
+examples/tanstack-*/src/routeTree.gen.ts
 site/app/routes.ts
 CHANGELOG.md
 pnpm-lock.yaml
