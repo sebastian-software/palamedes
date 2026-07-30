@@ -28,8 +28,8 @@ That writes `src/locales/en.po` and `src/locales/de.po`.
 
 PO output can be configured per catalog with the nested `po` object: set
 `line-breaks: "off"` to disable automatic width folding. Catalog order is not
-configurable — PO catalogs are always sorted by source message and then gettext
-context using the CLDR root collation. See
+configurable — Ferrocat sorts both PO and FCL catalogs by source message and
+then gettext context using the CLDR root collation. See
 [Configuration](./configuration.md#catalogs) for the schema and the JavaScript
 spellings.
 
