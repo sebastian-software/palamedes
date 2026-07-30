@@ -67,8 +67,11 @@ pnpm exec pmds catalog convert src/locales/de.po --to fcl --output src/locales/d
 ```
 
 `pmds audit` reports missing translations, extra catalog entries, obsolete
-messages, and ICU compatibility issues through the same `ferrocat`
+messages, fuzzy review markers, and ICU compatibility issues through the same `ferrocat`
 catalog engine that powers Palamedes builds.
+
+`pmds catalog convert` preserves translator comments, obsolete state, and
+review markers such as `fuzzy` when converting PO catalogs to FCL.
 
 `--threads <COUNT>` sets the worker threads for the parallel extraction pass,
 overriding `extract-threads` in the config; it defaults to `4` and `1` runs

@@ -21,6 +21,8 @@ use std::collections::BTreeMap;
 mod catalog_artifact;
 mod catalog_audit;
 mod catalog_combine;
+mod catalog_convert;
+mod catalog_coverage;
 mod catalog_update;
 mod choice;
 mod descriptor;
@@ -57,6 +59,13 @@ pub use catalog_combine::{
     CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats, CatalogConflictStrategy,
     CatalogFileCombineRequest, CatalogFileCombineResult, CatalogFileFormat,
 };
+pub use catalog_convert::{
+    convert_catalog_file, CatalogFileConvertRequest, CatalogFileConvertResult,
+};
+pub use catalog_coverage::{
+    measure_catalog_coverage, CatalogCoverageRequest, CatalogCoverageResult,
+    CatalogLocaleCoverageResult,
+};
 pub use catalog_update::{
     parse_catalog, update_catalog_file, AiProvenance, CatalogOriginMetadata, CatalogParseRequest,
     CatalogParseResult, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
@@ -89,7 +98,7 @@ pub use transform::{
 };
 
 /// Published `ferrocat` version used by the Rust core.
-pub const FERROCAT_VERSION: &str = "3.1.0";
+pub const FERROCAT_VERSION: &str = "3.2.2";
 
 /// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]

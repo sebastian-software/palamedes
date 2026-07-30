@@ -139,6 +139,7 @@ export interface CatalogAuditCheckOptions {
   icuCompatibility?: boolean;
   semanticMetadata?: boolean;
   obsoleteEntries?: boolean;
+  fuzzyFlags?: boolean;
 }
 export interface CatalogAuditRequest {
   config: CatalogArtifactConfig;

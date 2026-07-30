@@ -8,9 +8,9 @@ rust-version.workspace = true
 description = "Rust core for Palamedes."
 
 [dependencies]
-ferrocat = "=3.1.0"
-ferrocat-icu = "=3.1.0"
-ferrocat-po = "=3.1.0"
+ferrocat = "=3.2.2"
+ferrocat-icu = "=3.2.2"
+ferrocat-po = "=3.2.2"
 ferromark = { version = "=0.7.0", features = ["mdx"] }
 oxc_allocator = "0.141.0"
 oxc_ast = "0.141.0"

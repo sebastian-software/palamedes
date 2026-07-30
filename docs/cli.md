@@ -51,7 +51,8 @@ Options:
 
 ## `pmds audit`
 
-Audits catalogs for missing translations and ICU authoring issues.
+Audits catalogs for missing translations, fuzzy review markers, and ICU
+authoring issues across PO and FCL.
 
 ```bash
 pmds audit
@@ -74,9 +75,9 @@ Options:
 
 Reports per-locale translation completeness from configured catalogs. Source
 locale entries count as translated; target locales are compared against the
-source catalog messages that are not obsolete. PO entries flagged `fuzzy`
-need review and count as untranslated (reported in a separate `fuzzy`
-column), matching gettext conventions.
+source catalog messages that are not obsolete. PO and FCL entries marked
+`fuzzy` need review and count as untranslated (reported in a separate `fuzzy`
+column).
 
 ```bash
 pmds report
@@ -129,8 +130,9 @@ Options:
 
 ## `pmds catalog convert`
 
-Converts supported PO catalogs to Ferrocat Catalog Lines (FCL). Conversion
-fails before writing output when a PO source contains raw `fuzzy` flags.
+Converts supported PO catalogs to Ferrocat Catalog Lines (FCL). Translator
+comments, obsolete state, and review markers such as `fuzzy` are preserved.
+The output file is replaced only after conversion succeeds.
 
 ```bash
 pmds catalog convert src/locales/de.po --to fcl --output src/locales/de.fcl

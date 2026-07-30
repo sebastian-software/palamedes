@@ -6,7 +6,7 @@ use crate::error::{PalamedesError, PalamedesResult};
 
 use super::load::load_catalogs;
 use super::types::{CatalogArtifactConfig, FallbackLocales};
-use super::PreparedCompilation;
+use super::{resolve_catalog_path, PreparedCompilation};
 
 #[derive(Debug, Clone)]
 struct ResolvedCatalogRequest {
@@ -156,9 +156,7 @@ fn collect_watch_files(
 
         if matcher.is_match(&primary_pattern) {
             for locale in locale_chain {
-                let candidate = root_dir
-                    .join(catalog.path.replace("{locale}", locale))
-                    .with_extension(catalog.format.extension());
+                let candidate = resolve_catalog_path(config, catalog, locale);
                 if !files.contains(&candidate) {
                     files.push(candidate);
                 }

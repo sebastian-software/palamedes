@@ -30,8 +30,6 @@ pub enum CliError {
     InvalidConvertOutput,
     #[error("Catalog convert --to=fcl only supports PO source catalogs.")]
     UnsupportedConvertSource,
-    #[error("Catalog convert refused {path} because fuzzy PO entries are not supported for FCL conversion.")]
-    FuzzyCatalogInput { path: PathBuf },
     #[error("Invalid --fail-if-below value. Expected a percent from 0 to 100.")]
     InvalidThreshold,
     #[error("Catalog audit failed with {errors} error(s).")]
