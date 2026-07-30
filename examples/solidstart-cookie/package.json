@@ -14,7 +14,7 @@
     "@palamedes/example-ui": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "@palamedes/solid": "workspace:^",
-    "@solidjs/router": "^0.16.1",
+    "@solidjs/router": "^1.0.0",
     "@solidjs/start": "^1.3.2",
     "solid-js": "^1.9.14"
   },

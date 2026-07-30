@@ -665,8 +665,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/solid
       '@solidjs/router':
-        specifier: ^0.16.1
-        version: 0.16.1(solid-js@1.9.14)
+        specifier: ^1.0.0
+        version: 1.0.0(solid-js@1.9.14)
       '@solidjs/start':
         specifier: ^1.3.2
         version: 1.3.2(@testing-library/jest-dom@6.9.1)(solid-js@1.9.14)(supports-color@10.2.2)(vinxi@0.5.11(@types/node@24.13.3)(@vercel/blob@2.4.0)(aws4fetch@1.0.20)(db0@0.3.4)(debug@4.4.3(supports-color@10.2.2))(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.1.5)(supports-color@10.2.2)(terser@5.49.0)(tsx@4.21.0)(webpack@5.105.4(@swc/core@1.15.46)(cssnano@7.1.3(postcss@8.5.22))(csso@5.0.5)(esbuild@0.27.7)(lightningcss@1.33.0)(postcss@8.5.22))(yaml@2.9.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
@@ -708,8 +708,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/solid
       '@solidjs/router':
-        specifier: ^0.16.1
-        version: 0.16.1(solid-js@1.9.14)
+        specifier: ^1.0.0
+        version: 1.0.0(solid-js@1.9.14)
       '@solidjs/start':
         specifier: ^1.3.2
         version: 1.3.2(@testing-library/jest-dom@6.9.1)(solid-js@1.9.14)(supports-color@10.2.2)(vinxi@0.5.11(@types/node@24.13.3)(@vercel/blob@2.4.0)(aws4fetch@1.0.20)(db0@0.3.4)(debug@4.4.3(supports-color@10.2.2))(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.1.5)(supports-color@10.2.2)(terser@5.49.0)(tsx@4.21.0)(webpack@5.105.4(@swc/core@1.15.46)(cssnano@7.1.3(postcss@8.5.22))(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.22))(yaml@2.9.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
@@ -751,8 +751,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/solid
       '@solidjs/router':
-        specifier: ^0.16.1
-        version: 0.16.1(solid-js@1.9.14)
+        specifier: ^1.0.0
+        version: 1.0.0(solid-js@1.9.14)
       '@solidjs/start':
         specifier: ^1.3.2
         version: 1.3.2(@testing-library/jest-dom@6.9.1)(solid-js@1.9.14)(supports-color@10.2.2)(vinxi@0.5.11(@types/node@24.13.3)(@vercel/blob@2.4.0)(aws4fetch@1.0.20)(db0@0.3.4)(debug@4.4.3(supports-color@10.2.2))(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.1.5)(supports-color@10.2.2)(terser@5.49.0)(tsx@4.21.0)(webpack@5.105.4(@swc/core@1.15.46)(cssnano@7.1.3(postcss@8.5.22))(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.22))(yaml@2.9.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
@@ -794,8 +794,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/solid
       '@solidjs/router':
-        specifier: ^0.16.1
-        version: 0.16.1(solid-js@1.9.14)
+        specifier: ^1.0.0
+        version: 1.0.0(solid-js@1.9.14)
       '@solidjs/start':
         specifier: ^1.3.2
         version: 1.3.2(@testing-library/jest-dom@6.9.1)(solid-js@1.9.14)(supports-color@10.2.2)(vinxi@0.5.11(@types/node@24.13.3)(@vercel/blob@2.4.0)(aws4fetch@1.0.20)(db0@0.3.4)(debug@4.4.3(supports-color@10.2.2))(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.1.5)(supports-color@10.2.2)(terser@5.49.0)(tsx@4.21.0)(webpack@5.105.4(@swc/core@1.15.46)(cssnano@7.1.3(postcss@8.5.22))(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.22))(yaml@2.9.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
@@ -5654,8 +5654,8 @@ packages:
     resolution: {integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==}
     engines: {node: '>=18'}
 
-  '@solidjs/router@0.16.1':
-    resolution: {integrity: sha512-IhyjedgC6LRpw/8CPGGI89FrV+r0xTHzOl2c4CRyzYQ1bLepJxbVI1LLKvsavMWY5TRBRacV7hAeOhuTXkjiqg==}
+  '@solidjs/router@1.0.0':
+    resolution: {integrity: sha512-cCSk1hvgCowiMa9bzzYWHiLu1U4E22+DfJe6/rOwAyECKrxc3jrd5QnoW3sDDJtW+e077cz/M67bPl3DqOBw1Q==}
     peerDependencies:
       solid-js: ^1.8.6
 
@@ -15560,7 +15560,7 @@ snapshots:
 
   '@sindresorhus/merge-streams@4.0.0': {}
 
-  '@solidjs/router@0.16.1(solid-js@1.9.14)':
+  '@solidjs/router@1.0.0(solid-js@1.9.14)':
     dependencies:
       solid-js: 1.9.14
 
