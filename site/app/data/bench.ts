@@ -28,7 +28,7 @@ export interface BenchCorpus {
 }
 
 export const BENCH_META = {
-  generated: "2026-07-28",
+  generated: "2026-07-30",
   node: "v24.18.0",
   platform: "darwin/arm64",
   runs: 7,
@@ -47,15 +47,15 @@ export const BENCH_SMALL: BenchCorpus = {
   title: "Small corpus — 80 files, 640 messages (median of 7 runs)",
   corpus: "80 files, 640 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 33.99, accent: true },
-    { tool: "Lingui", medianMs: 631.05 },
-    { tool: "React Intl", medianMs: 273.88 },
-    { tool: "i18next-cli", medianMs: 441.45 },
+    { tool: "Palamedes", medianMs: 35.61, accent: true },
+    { tool: "Lingui", medianMs: 650.85 },
+    { tool: "React Intl", medianMs: 274.15 },
+    { tool: "i18next-cli", medianMs: 377.86 },
   ],
   ratios: {
-    lingui: "18.57×",
-    formatjs: "8.06×",
-    i18nextCli: "12.99×",
+    lingui: "18.28×",
+    formatjs: "7.70×",
+    i18nextCli: "10.61×",
   },
 }
 
@@ -64,15 +64,15 @@ export const BENCH_MEDIUM: BenchCorpus = {
   title: "Medium corpus — 240 files, 1920 messages (median of 7 runs)",
   corpus: "240 files, 1920 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 47.54, accent: true },
-    { tool: "Lingui", medianMs: 708.78 },
-    { tool: "React Intl", medianMs: 291.4 },
-    { tool: "i18next-cli", medianMs: 555.34 },
+    { tool: "Palamedes", medianMs: 46.57, accent: true },
+    { tool: "Lingui", medianMs: 727 },
+    { tool: "React Intl", medianMs: 293.98 },
+    { tool: "i18next-cli", medianMs: 563.29 },
   ],
   ratios: {
-    lingui: "14.91×",
-    formatjs: "6.13×",
-    i18nextCli: "11.68×",
+    lingui: "15.61×",
+    formatjs: "6.31×",
+    i18nextCli: "12.10×",
   },
 }
 
@@ -81,14 +81,14 @@ export const BENCH_REALISTIC: BenchCorpus = {
   title: "Realistic corpus — 1,500 files across ~400k lines, 6,000 messages (median of 7 runs)",
   corpus: "1,500 files (750 with i18n), ~400k lines, 6,000 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 122.33, accent: true },
-    { tool: "Lingui", medianMs: 2280.56 },
-    { tool: "React Intl", medianMs: 463.65 },
-    { tool: "i18next-cli", medianMs: 5815.11 },
+    { tool: "Palamedes", medianMs: 121.55, accent: true },
+    { tool: "Lingui", medianMs: 2250.87 },
+    { tool: "React Intl", medianMs: 474.67 },
+    { tool: "i18next-cli", medianMs: 5694.94 },
   ],
   ratios: {
-    lingui: "18.64×",
-    formatjs: "3.79×",
-    i18nextCli: "47.54×",
+    lingui: "18.52×",
+    formatjs: "3.91×",
+    i18nextCli: "46.85×",
   },
 }
