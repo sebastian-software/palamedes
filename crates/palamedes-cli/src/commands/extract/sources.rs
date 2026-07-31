@@ -140,6 +140,32 @@ pub(super) fn walk_roots_for_patterns(patterns: &[String], fallback: &Path) -> V
     roots.into_iter().collect()
 }
 
+pub(super) fn build_exclude_set(
+    catalog: &ConfigCatalog,
+    config: &LoadedConfig,
+) -> Result<GlobSet, CliError> {
+    let mut builder = GlobSetBuilder::new();
+    let excludes = if catalog.exclude.is_empty() {
+        vec!["**/node_modules/**".to_owned()]
+    } else {
+        catalog.exclude.clone()
+    };
+    for pattern in excludes {
+        let resolved = config.resolve_pattern(&pattern);
+        let normalized = resolved.to_string_lossy().into_owned();
+        builder.add(
+            Glob::new(&normalized).map_err(|source| CliError::GlobPattern {
+                pattern: normalized,
+                source,
+            })?,
+        );
+    }
+    builder.build().map_err(|source| CliError::GlobPattern {
+        pattern: "exclude".to_owned(),
+        source,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -170,30 +196,4 @@ mod tests {
 
         assert_eq!(paths, expected);
     }
-}
-
-pub(super) fn build_exclude_set(
-    catalog: &ConfigCatalog,
-    config: &LoadedConfig,
-) -> Result<GlobSet, CliError> {
-    let mut builder = GlobSetBuilder::new();
-    let excludes = if catalog.exclude.is_empty() {
-        vec!["**/node_modules/**".to_owned()]
-    } else {
-        catalog.exclude.clone()
-    };
-    for pattern in excludes {
-        let resolved = config.resolve_pattern(&pattern);
-        let normalized = resolved.to_string_lossy().into_owned();
-        builder.add(
-            Glob::new(&normalized).map_err(|source| CliError::GlobPattern {
-                pattern: normalized,
-                source,
-            })?,
-        );
-    }
-    builder.build().map_err(|source| CliError::GlobPattern {
-        pattern: "exclude".to_owned(),
-        source,
-    })
 }
