@@ -253,7 +253,13 @@ mod tests {
         fs::create_dir_all(app.join("app")).expect("create app");
         write_config(&app, None);
         let source_path = app.join("app/page.tsx");
-        fs::write(&source_path, "const broken =").expect("write invalid source");
+        // The macro import keeps the broken file on the parsing path;
+        // marker-free files skip the parse and cannot fail extraction.
+        fs::write(
+            &source_path,
+            "import { t } from \"@palamedes/core/macro\"\nconst broken =",
+        )
+        .expect("write invalid source");
 
         let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
         run_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
