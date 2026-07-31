@@ -246,6 +246,12 @@ async function writeRealisticSourceFiles(rootDir, sourceMessages, profile, rende
   }
 
   const generatedDir = path.join(rootDir, "src", "generated")
+  /*
+   * Pending write thunks, flushed in bounded batches below. All four tool
+   * workspaces are generated concurrently, so an unbounded Promise.all here
+   * can hold thousands of file descriptors at once and fail with EMFILE on
+   * hosts with a conservative open-file limit.
+   */
   const writes = []
   let fileIndex = 0
 
@@ -253,8 +259,9 @@ async function writeRealisticSourceFiles(rootDir, sourceMessages, profile, rende
    * whereas .tsx + filler + <Trans> hits a JSX parse edge in the extractor. */
   for (let i = 0; i < profile.markedFiles; i += 1) {
     const filename = path.join(generatedDir, `fixture-${String(fileIndex).padStart(4, "0")}.ts`)
-    writes.push(
-      writeFile(filename, renderer(fileIndex, marked[i], "ts", profile.markedFileLines), "utf8")
+    const renderedIndex = fileIndex
+    writes.push(() =>
+      writeFile(filename, renderer(renderedIndex, marked[i], "ts", profile.markedFileLines), "utf8")
     )
     fileIndex += 1
   }
@@ -265,13 +272,17 @@ async function writeRealisticSourceFiles(rootDir, sourceMessages, profile, rende
       generatedDir,
       `fixture-${String(fileIndex).padStart(4, "0")}.${extension}`
     )
-    writes.push(
-      writeFile(filename, renderFillerModule(fileIndex, profile.unmarkedFileLines), "utf8")
+    const renderedIndex = fileIndex
+    writes.push(() =>
+      writeFile(filename, renderFillerModule(renderedIndex, profile.unmarkedFileLines), "utf8")
     )
     fileIndex += 1
   }
 
-  await Promise.all(writes)
+  const batchSize = 128
+  for (let start = 0; start < writes.length; start += batchSize) {
+    await Promise.all(writes.slice(start, start + batchSize).map((write) => write()))
+  }
 }
 
 const FILLER_UNIT_LINES = 13
