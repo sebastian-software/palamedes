@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::diagnostic::CatalogDiagnostic;
@@ -263,7 +263,7 @@ pub fn parse_catalog(request: &CatalogParseRequest) -> PalamedesResult<CatalogPa
 }
 
 fn update_catalog_file_source_first(
-    request: CatalogUpdateRequest,
+    mut request: CatalogUpdateRequest,
 ) -> PalamedesResult<CatalogUpdateResponse> {
     let target_path = PathBuf::from(&request.target_path);
     if target_path.as_os_str().is_empty() {
@@ -272,6 +272,7 @@ fn update_catalog_file_source_first(
         )));
     }
     validate_po_options(request.format, request.po.as_ref())?;
+    preserve_existing_po_apostrophe_identities(&mut request, &target_path)?;
     let custom_header_attributes =
         BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
     let input = CatalogUpdateInput::SourceFirst(
@@ -324,6 +325,121 @@ fn update_catalog_file_source_first(
     let result = ferrocat_update_catalog_file(file_options).map_err(PalamedesError::from)?;
 
     Ok(public_update_result(result))
+}
+
+/// Keeps a translated PO entry attached when an extractor upgrade only changes
+/// the apostrophe spelling of its identity.
+///
+/// Ferrocat deliberately treats `(msgid, msgctxt)` as exact identity. The
+/// compatibility policy here is therefore applied before projection, at the
+/// Palamedes integration boundary: an extracted message reuses one existing
+/// spelling only when both canonicalize to the same runtime-literal ICU text.
+/// Exact identities win, and ambiguous candidates are left alone rather than
+/// silently merging distinct catalog entries.
+fn preserve_existing_po_apostrophe_identities(
+    request: &mut CatalogUpdateRequest,
+    target_path: &Path,
+) -> PalamedesResult<()> {
+    if request.format != super::catalog_artifact::PalamedesCatalogFormat::Po {
+        return Ok(());
+    }
+    if !request
+        .messages
+        .iter()
+        .any(|message| message.message.contains('\''))
+    {
+        return Ok(());
+    }
+
+    let content = match std::fs::read_to_string(target_path) {
+        Ok(content) => content,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => {
+            return Err(PalamedesError::ReadFile {
+                path: target_path.to_path_buf(),
+                source,
+            });
+        }
+    };
+    if content.is_empty() || request.messages.is_empty() {
+        return Ok(());
+    }
+
+    let parsed = ferrocat_parse_catalog(
+        ParseCatalogOptions::new(&content, &request.source_locale)
+            .with_locale(&request.locale)
+            .with_mode(request.format.ferrocat_mode()),
+    )
+    .map_err(PalamedesError::from)?;
+    let existing = parsed
+        .messages
+        .into_iter()
+        .map(|message| (message.msgid, message.msgctxt))
+        .collect::<Vec<_>>();
+    let extracted_identities = request
+        .messages
+        .iter()
+        .map(|message| (message.message.clone(), message.context.clone()))
+        .collect::<BTreeSet<_>>();
+
+    let mut proposed = Vec::new();
+    for (message_index, message) in request.messages.iter().enumerate() {
+        let exact = existing
+            .iter()
+            .any(|identity| identity.0 == message.message && identity.1 == message.context);
+        if exact {
+            continue;
+        }
+
+        let candidates = existing
+            .iter()
+            .enumerate()
+            .filter(|(_, identity)| {
+                identity.1 == message.context
+                    && !extracted_identities.contains(identity)
+                    && apostrophe_canonical_equivalent(&identity.0, &message.message)
+            })
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        if let [existing_index] = candidates.as_slice() {
+            proposed.push((message_index, *existing_index));
+        }
+    }
+
+    let mut candidate_inputs = BTreeMap::<usize, BTreeSet<(String, Option<String>)>>::new();
+    for (message_index, existing_index) in &proposed {
+        let message = &request.messages[*message_index];
+        candidate_inputs
+            .entry(*existing_index)
+            .or_default()
+            .insert((message.message.clone(), message.context.clone()));
+    }
+    for (message_index, existing_index) in proposed {
+        if candidate_inputs
+            .get(&existing_index)
+            .is_some_and(|identities| identities.len() == 1)
+        {
+            request.messages[message_index]
+                .message
+                .clone_from(&existing[existing_index].0);
+        }
+    }
+
+    Ok(())
+}
+
+fn apostrophe_canonical_equivalent(left: &str, right: &str) -> bool {
+    if left == right || (!left.contains('\'') && !right.contains('\'')) {
+        return false;
+    }
+
+    ferrocat::canonicalize_icu_with_policy(
+        left,
+        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
+    ) == ferrocat::canonicalize_icu_with_policy(
+        right,
+        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
+    )
 }
 
 fn validate_po_options(
@@ -796,11 +912,17 @@ msgstr "apple"
 msgid "Apple"
 msgstr "Apple"
 
+msgid "client's booking"
+msgstr "client's booking"
+
 msgid "co-op"
 msgstr "co-op"
 
 msgid "coop"
 msgstr "coop"
+
+msgid "don't stop"
+msgstr "don't stop"
 
 msgid "eclair"
 msgstr "eclair"
@@ -813,6 +935,9 @@ msgstr "Item 10"
 
 msgid "Item 2"
 msgstr "Item 2"
+
+msgid "l'été"
+msgstr "l'été"
 
 msgid "MiXeD CaSe"
 msgstr "MiXeD CaSe"
@@ -853,6 +978,9 @@ msgstr "Zebra""#;
             ("Item 2", None),
             ("co-op", None),
             ("coop", None),
+            ("don't stop", None),
+            ("client's booking", None),
+            ("l'été", None),
             ("naïve", None),
             ("résumé", None),
             ("MiXeD CaSe", None),
@@ -1334,6 +1462,238 @@ msgstr "Zebra""#;
 
         let output = std::fs::read_to_string(&path).expect("read");
         assert!(!output.contains("Old"));
+    }
+
+    #[test]
+    fn force_clean_preserves_lingui_apostrophe_translations_and_metadata() {
+        let path = temp_file("lingui-apostrophe-migration");
+        let lock = machine_translation_hash(EffectiveTranslationRef::Singular("nicht aufhören"));
+        let fixture =
+            include_str!("../fixtures/lingui-apostrophes.de.po").replace("{{DONT_LOCK}}", &lock);
+        std::fs::write(&path, fixture).expect("write Lingui fixture");
+
+        let request = || CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: vec![
+                message("don''t stop", None, "src/App.tsx"),
+                message("client''s booking", Some("booking"), "src/Client.tsx"),
+                message("l''été", None, "src/Summer.tsx"),
+            ],
+        };
+
+        let migrated = update_catalog_file(request()).expect("migrate Lingui catalog");
+        assert_eq!(migrated.stats.total, 3);
+        assert_eq!(migrated.stats.added, 0);
+        assert_eq!(migrated.stats.obsolete_removed, 0);
+
+        let output = std::fs::read_to_string(&path).expect("read migrated output");
+        let po = parse_po(&output).expect("parse migrated output");
+        assert_eq!(po.items.len(), 3);
+        let dont = po
+            .items
+            .iter()
+            .find(|item| item.msgid == "don't stop")
+            .expect("natural-apostrophe identity survives");
+        assert_eq!(
+            dont.msgstr.first().map(String::as_str),
+            Some("nicht aufhören")
+        );
+        assert_eq!(dont.comments.as_slice(), ["Keep the contraction informal."]);
+        assert_eq!(
+            dont.flags,
+            BTreeMap::from([("fuzzy".to_owned(), true), ("no-wrap".to_owned(), true)])
+        );
+        assert!(output.contains(&format!("#@ lock: {lock}")));
+        assert!(output.contains("#@ ai: openai/gpt-5.5-high:0.95"));
+
+        let clients = po
+            .items
+            .iter()
+            .find(|item| item.msgid == "client's booking")
+            .expect("possessive identity survives");
+        assert_eq!(clients.msgctxt.as_deref(), Some("booking"));
+        assert_eq!(
+            clients.msgstr.first().map(String::as_str),
+            Some("Buchung des Kunden")
+        );
+        let summer = po
+            .items
+            .iter()
+            .find(|item| item.msgid == "l'été")
+            .expect("Unicode apostrophe identity survives");
+        assert_eq!(
+            summer.msgstr.first().map(String::as_str),
+            Some("der Sommer")
+        );
+
+        let repeated = update_catalog_file(request()).expect("repeat migration");
+        assert!(!repeated.updated);
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read repeated output"),
+            output
+        );
+    }
+
+    #[test]
+    fn force_clean_reuses_palamedes_1_9_canonical_identity_for_new_raw_source() {
+        let path = temp_file("palamedes-1-9-apostrophe-migration");
+        let lock = machine_translation_hash(EffectiveTranslationRef::Singular("nicht aufhören"));
+        std::fs::write(
+            &path,
+            format!(
+                "# Existing translator note\n\
+                 #, fuzzy\n\
+                 #@ lock: {lock}\n\
+                 #@ ai: openai/gpt-5.5-high:0.95\n\
+                 msgid \"don''t stop\"\n\
+                 msgstr \"nicht aufhören\"\n"
+            ),
+        )
+        .expect("write Palamedes 1.9 catalog");
+
+        let request = || CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: vec![message("don't stop", None, "src/App.tsx")],
+        };
+        let migrated = update_catalog_file(request()).expect("reuse canonical identity");
+        assert_eq!(migrated.stats.added, 0);
+        assert_eq!(migrated.stats.obsolete_removed, 0);
+
+        let output = std::fs::read_to_string(&path).expect("read migrated output");
+        let po = parse_po(&output).expect("parse migrated output");
+        assert_eq!(po.items.len(), 1);
+        assert_eq!(po.items[0].msgid, "don''t stop");
+        assert_eq!(
+            po.items[0].msgstr.first().map(String::as_str),
+            Some("nicht aufhören")
+        );
+        assert_eq!(
+            po.items[0].comments.as_slice(),
+            ["Existing translator note"]
+        );
+        assert_eq!(
+            po.items[0].flags,
+            BTreeMap::from([("fuzzy".to_owned(), true)])
+        );
+        assert!(output.contains(&format!("#@ lock: {lock}")));
+        assert!(output.contains("#@ ai: openai/gpt-5.5-high:0.95"));
+
+        let repeated = update_catalog_file(request()).expect("repeat canonical reuse");
+        assert!(!repeated.updated);
+        assert_eq!(
+            std::fs::read_to_string(path).expect("read repeated output"),
+            output
+        );
+    }
+
+    #[test]
+    fn exact_apostrophe_identity_wins_without_merging_an_equivalent_entry() {
+        let path = temp_file("apostrophe-exact-wins");
+        std::fs::write(
+            &path,
+            concat!(
+                "msgid \"don't\"\n",
+                "msgstr \"exact translation\"\n\n",
+                "msgid \"don''t\"\n",
+                "msgstr \"canonical translation\"\n",
+            ),
+        )
+        .expect("write existing catalog");
+
+        let result = update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: vec![message("don't", None, "src/App.tsx")],
+        })
+        .expect("update exact identity");
+
+        let po =
+            parse_po(&std::fs::read_to_string(path).expect("read output")).expect("parse output");
+        assert_eq!(po.items.len(), 1);
+        assert_eq!(po.items[0].msgid, "don't");
+        assert_eq!(
+            po.items[0].msgstr.first().map(String::as_str),
+            Some("exact translation")
+        );
+        assert_eq!(result.stats.obsolete_removed, 1);
+    }
+
+    #[test]
+    fn apostrophe_migration_never_crosses_context_and_deduplicates_identical_inputs() {
+        let context_path = temp_file("apostrophe-context-separated");
+        std::fs::write(
+            &context_path,
+            concat!(
+                "msgctxt \"menu\"\n",
+                "msgid \"don't\"\n",
+                "msgstr \"menu translation\"\n",
+            ),
+        )
+        .expect("write contextual catalog");
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: context_path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: vec![message("don''t", Some("dialog"), "src/App.tsx")],
+        })
+        .expect("update separate context");
+        let context_po =
+            parse_po(&std::fs::read_to_string(context_path).expect("read contextual output"))
+                .expect("parse contextual output");
+        assert_eq!(context_po.items.len(), 1);
+        assert_eq!(context_po.items[0].msgctxt.as_deref(), Some("dialog"));
+        assert!(context_po.items[0].msgstr.iter().all(String::is_empty));
+
+        let collision_path = temp_file("apostrophe-duplicate-input");
+        std::fs::write(
+            &collision_path,
+            "msgid \"don't\"\nmsgstr \"duplicate-safe translation\"\n",
+        )
+        .expect("write duplicate-input catalog");
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: collision_path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: vec![
+                message("don''t", None, "src/One.tsx"),
+                message("don''t", None, "src/Two.tsx"),
+            ],
+        })
+        .expect("update duplicate inputs");
+        let collision_po =
+            parse_po(&std::fs::read_to_string(collision_path).expect("read collision output"))
+                .expect("parse collision output");
+        assert_eq!(collision_po.items.len(), 1);
+        assert_eq!(collision_po.items[0].msgid, "don't");
+        assert_eq!(
+            collision_po.items[0].msgstr.first().map(String::as_str),
+            Some("duplicate-safe translation")
+        );
     }
 
     #[test]
