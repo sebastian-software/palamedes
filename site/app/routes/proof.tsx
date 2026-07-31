@@ -6,7 +6,6 @@ import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
-import { WarmLane } from "~/components/proof/WarmLane"
 import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
 import { CATALOG_QA_CARDS } from "~/data/features"
 import contentStats from "~/data/generated/content-stats.json"
@@ -67,11 +66,10 @@ export default function Proof() {
       <Section
         num="01 — Benchmarks"
         title="The workflow you feel every day: extract & update."
-        lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; the React Intl extraction workflow writes one aggregated extraction artifact. Every run uses the same logical inventory and is validated semantically. It has two lanes: a cold one that clears every cache so four tools can be compared fairly, and a warm one that measures the run you trigger after an edit."
+        lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; the React Intl extraction workflow writes one aggregated extraction artifact. Every run uses the same logical inventory and is validated semantically. Palamedes carries two bars: the cold run every tool performs, and the cached re-run after an edit — the run a developer actually triggers."
       >
         <div className="space-y-8">
-          <BenchmarkChart corpus={BENCH_REALISTIC} />
-          <WarmLane corpus={BENCH_REALISTIC_WARM} />
+          <BenchmarkChart corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <div className="max-w-[56em] border-l-4 border-accent pl-4">
             <p className="micro text-[10px] text-gray-spec">Honest note</p>
             <p className="mt-1 text-[13.5px]">

@@ -11,7 +11,6 @@ import { StatementBand } from "~/components/home/StatementBand"
 import { TerminalCascade } from "~/components/home/TerminalCascade"
 import { WorkflowFlow } from "~/components/home/WorkflowFlow"
 import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
-import { WarmLane } from "~/components/proof/WarmLane"
 import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
 import contentStats from "~/data/generated/content-stats.json"
 import { HOME_MODEL_CARDS } from "~/data/features"
@@ -93,12 +92,11 @@ export default function Home() {
       <Section
         num="03 — Proof"
         title="We don't ask you to trust a slogan. The repo shows the work."
-        lede="Every combination in the verified framework matrix is a real app, re-checked in CI through the same Playwright flow — with public demos where the hosting is ready. Every benchmark number links to a checked-in, re-runnable report. The first chart is the cold comparison against other tools; the second is the run you actually trigger all day."
+        lede="Every combination in the verified framework matrix is a real app, re-checked in CI through the same Playwright flow — with public demos where the hosting is ready. Every benchmark number links to a checked-in, re-runnable report. Palamedes carries two bars: the cold run every tool performs, and the cached re-run you actually trigger all day."
       >
         <div className="space-y-10">
           <FrameworkMatrix />
-          <BenchmarkChart corpus={BENCH_REALISTIC} />
-          <WarmLane corpus={BENCH_REALISTIC_WARM} />
+          <BenchmarkChart corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <ButtonLink variant="outline" href="/proof">
             All benchmarks &amp; the verification story
           </ButtonLink>
