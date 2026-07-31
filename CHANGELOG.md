@@ -52,6 +52,27 @@
   and the macro content pre-filter is derived from the canonical macro
   package list (it previously missed `@palamedes/solid/macro`).
 
+## [1.10.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.9.0...palamedes-v1.10.0) (2026-07-31)
+
+
+### Features
+
+* **catalog:** adopt Ferrocat 3.2.2 ([04625e5](https://github.com/sebastian-software/palamedes/commit/04625e5d696692a10d9adf004697d335132f3ffe))
+* **catalog:** adopt Ferrocat 3.3.0 and skip write barriers for catalogs ([6bd81d0](https://github.com/sebastian-software/palamedes/commit/6bd81d030f74544df14531dff10929ffb0fb151c))
+
+
+### Bug Fixes
+
+* **benchmark:** bound corpus write concurrency to avoid EMFILE ([6a8a0c4](https://github.com/sebastian-software/palamedes/commit/6a8a0c41a5c286c216e4775d661c1aef8a1cd9ce))
+* **extract:** preserve apostrophe translations ([6bcedb2](https://github.com/sebastian-software/palamedes/commit/6bcedb238ddd84027d3f163c1c2a3e8e1d3f2d51))
+
+
+### Performance Improvements
+
+* **cli:** parallelize catalog writes and cut file-set ordering cost ([7b0f4be](https://github.com/sebastian-software/palamedes/commit/7b0f4beb34f3edb57207b72bd42f02d47775056d))
+* **extract:** skip parsing files without i18n markers in batch extraction ([6b2579c](https://github.com/sebastian-software/palamedes/commit/6b2579cd018c68c6812e2d5fa06897daf12c6be1))
+* **extract:** skip redundant AST walks for files without i18n markers ([e3d6573](https://github.com/sebastian-software/palamedes/commit/e3d65736d0115502b495fecaca77b2c667e71ad5))
+
 ## [1.9.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.8.0...palamedes-v1.9.0) (2026-07-30)
 
 
