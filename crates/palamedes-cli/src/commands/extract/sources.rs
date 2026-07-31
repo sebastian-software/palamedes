@@ -17,7 +17,7 @@ pub(super) fn collect_source_files(
     let include_patterns = normalized_include_patterns(catalog, config);
     let include = build_glob_set(&include_patterns, "include")?;
     let exclude = build_exclude_set(catalog, config)?;
-    let mut files = BTreeSet::new();
+    let mut files = Vec::new();
 
     for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
         for entry in WalkBuilder::new(root)
@@ -36,12 +36,43 @@ pub(super) fn collect_source_files(
                 continue;
             }
             if include.is_match(path) {
-                files.insert(path.to_path_buf());
+                files.push(path.to_path_buf());
             }
         }
     }
 
-    Ok(files.into_iter().collect())
+    sort_and_dedupe_paths(&mut files);
+    Ok(files)
+}
+
+/*
+ * Path::cmp compares component-by-component and re-parses both paths on every
+ * comparison, which made the former BTreeSet<PathBuf> collection the single
+ * most expensive main-thread item after the catalog writes (~25% of
+ * main-thread instructions on the realistic benchmark corpus). Sorting on a
+ * cached byte key computes the ordering key once per path instead.
+ *
+ * On Unix the key maps the separator to 0x00, which is below every byte a
+ * component can contain, so byte order on the mapped key equals component
+ * order and the resulting file order — and with it catalog origin order — is
+ * unchanged. Other platforms keep Path's own ordering.
+ */
+pub(super) fn sort_and_dedupe_paths<P: AsRef<Path> + Ord>(paths: &mut Vec<P>) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        paths.sort_by_cached_key(|path| {
+            path.as_ref()
+                .as_os_str()
+                .as_bytes()
+                .iter()
+                .map(|&byte| if byte == b'/' { 0 } else { byte })
+                .collect::<Vec<u8>>()
+        });
+    }
+    #[cfg(not(unix))]
+    paths.sort_unstable();
+    paths.dedup_by(|left, right| left.as_ref() == right.as_ref());
 }
 
 pub(super) fn build_include_set(
@@ -107,6 +138,38 @@ pub(super) fn walk_roots_for_patterns(patterns: &[String], fallback: &Path) -> V
         roots.insert(fallback.to_path_buf());
     }
     roots.into_iter().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::sort_and_dedupe_paths;
+
+    /*
+     * The byte-key sort must reproduce Path::cmp's component order exactly,
+     * including the case where a directory name is a prefix of a sibling's
+     * ("app" vs "app-shared"): plain byte order on the unmapped path would put
+     * "app-shared" first because '-' sorts below '/'.
+     */
+    #[test]
+    fn sorts_in_component_order_and_dedupes() {
+        let mut paths = vec![
+            PathBuf::from("/repo/app-shared/x.ts"),
+            PathBuf::from("/repo/app/y.ts"),
+            PathBuf::from("/repo/app/y.ts"),
+            PathBuf::from("/repo/app.ts"),
+            PathBuf::from("/repo/app/b-c/d.ts"),
+            PathBuf::from("/repo/app/b.ts"),
+        ];
+        let mut expected = paths.clone();
+        expected.sort();
+        expected.dedup();
+
+        sort_and_dedupe_paths(&mut paths);
+
+        assert_eq!(paths, expected);
+    }
 }
 
 pub(super) fn build_exclude_set(
