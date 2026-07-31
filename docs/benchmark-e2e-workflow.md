@@ -133,15 +133,15 @@ become warm ones.
 
 Latest checked full run:
 
-- timestamp: `2026-07-28T07:33:39.942Z`
+- timestamp: `2026-07-30T23:21:54.115Z`
 - Node: `v24.18.0`
 - platform: `darwin/arm64`
 - warmup: `3`
 - measured runs: `7`
-- Palamedes CLI: `1.8.0`
-- Lingui CLI: `6.5.0`
+- Palamedes CLI: `1.9.0`
+- Lingui CLI: `6.6.0`
 - React Intl extraction CLI (`@formatjs/cli`): `6.16.14`
-- i18next-cli: `1.66.2`
+- i18next-cli: `1.67.3`
 
 ### Small
 
@@ -156,13 +156,13 @@ Median results:
 
 | Tool        |      Median |
 | ----------- | ----------: |
-| Palamedes   |  `33.99 ms` |
-| Lingui      | `631.05 ms` |
-| React Intl  | `273.88 ms` |
-| i18next-cli | `441.45 ms` |
+| Palamedes   |  `35.61 ms` |
+| Lingui      | `650.85 ms` |
+| React Intl  | `274.15 ms` |
+| i18next-cli | `377.86 ms` |
 
-On this run, Palamedes measured `18.57x` faster than Lingui, `8.06x` faster
-than React Intl, and `12.99x` faster than i18next-cli.
+On this run, Palamedes measured `18.28x` faster than Lingui, `7.70x` faster
+than React Intl, and `10.61x` faster than i18next-cli.
 
 ### Medium
 
@@ -177,13 +177,13 @@ Median results:
 
 | Tool        |      Median |
 | ----------- | ----------: |
-| Palamedes   |  `47.54 ms` |
-| Lingui      | `708.78 ms` |
-| React Intl  | `291.40 ms` |
-| i18next-cli | `555.34 ms` |
+| Palamedes   |  `46.57 ms` |
+| Lingui      | `727.00 ms` |
+| React Intl  | `293.98 ms` |
+| i18next-cli | `563.29 ms` |
 
-On this run, Palamedes measured `14.91x` faster than Lingui, `6.13x` faster
-than React Intl, and `11.68x` faster than i18next-cli.
+On this run, Palamedes measured `15.61x` faster than Lingui, `6.31x` faster
+than React Intl, and `12.10x` faster than i18next-cli.
 
 ### Realistic
 
@@ -201,13 +201,13 @@ Median results:
 
 | Tool        |       Median |
 | ----------- | -----------: |
-| Palamedes   |  `122.33 ms` |
-| Lingui      | `2280.56 ms` |
-| React Intl  |  `463.65 ms` |
-| i18next-cli | `5815.11 ms` |
+| Palamedes   |  `121.55 ms` |
+| Lingui      | `2250.87 ms` |
+| React Intl  |  `474.67 ms` |
+| i18next-cli | `5694.94 ms` |
 
-On this run, Palamedes measured `18.64x` faster than Lingui, `3.79x` faster
-than React Intl, and `47.54x` faster than i18next-cli.
+On this run, Palamedes measured `18.52x` faster than Lingui, `3.91x` faster
+than React Intl, and `46.85x` faster than i18next-cli.
 
 ## Reading The Numbers
 

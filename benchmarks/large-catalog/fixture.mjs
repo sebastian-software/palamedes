@@ -60,7 +60,7 @@ export function createLargeCatalogFixture(options = {}) {
     const descriptor = context
       ? `{ message: ${JSON.stringify(message)}, context: ${JSON.stringify(context)} }`
       : `{ message: ${JSON.stringify(message)} }`
-    sourceFile.lines.push(`    t(${descriptor}, { count, name, status }),`)
+    sourceFile.lines.push(`    t(${descriptor}, ${createValues(index)}),`)
   }
 
   for (const sourceFile of sourceFiles) {
@@ -76,6 +76,20 @@ export function createLargeCatalogFixture(options = {}) {
       filename: sourceFile.filename,
       source: `${sourceFile.lines.join("\n")}\n`,
     })),
+  }
+}
+
+function createValues(index) {
+  switch (index % 5) {
+    case 0:
+    case 4:
+      return "{ name }"
+    case 1:
+      return "{ count }"
+    case 2:
+      return "{ status }"
+    case 3:
+      return "{ count, name }"
   }
 }
 
