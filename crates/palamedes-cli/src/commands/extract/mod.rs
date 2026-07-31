@@ -305,7 +305,10 @@ fn write_catalogs(
                             .skip(worker)
                             .step_by(worker_count)
                             .map(|(index, (catalog, messages, locale))| {
-                                (index, write_catalog(catalog, locale, messages, config, options))
+                                (
+                                    index,
+                                    write_catalog(catalog, locale, messages, config, options),
+                                )
                             })
                             .collect::<Vec<_>>()
                     })
