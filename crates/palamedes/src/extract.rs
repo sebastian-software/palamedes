@@ -144,8 +144,10 @@ struct LineLocator {
 impl LineLocator {
     fn new(source: &str) -> Self {
         let mut line_starts = vec![0];
-        for (index, ch) in source.char_indices() {
-            if ch == '\n' {
+        // A byte scan: '\n' cannot occur inside a multi-byte UTF-8 sequence,
+        // and decoding every char just to find newlines showed up in profiles.
+        for (index, &byte) in source.as_bytes().iter().enumerate() {
+            if byte == b'\n' {
                 line_starts.push(index + 1);
             }
         }
@@ -1385,10 +1387,29 @@ fn extract_messages_in(
         return Err(PalamedesError::ParseSource { messages });
     }
 
-    let line_locator = LineLocator::new(source);
     let mut collector = MacroCollector::new();
     collector.visit_program(&parsed.program);
 
+    /*
+     * Without a single imported Palamedes macro, the only remaining extraction
+     * surface is the `i18n._`/`i18n.t` runtime-call form, and every spelling of
+     * it necessarily contains the text `i18n`. When neither is present nothing
+     * can be extracted and none of the macro-shape diagnostics below can fire:
+     * the scope validator and the extraction visitor resolve identifiers
+     * through the import map before doing anything else. On real trees most
+     * files carry no i18n at all, so skipping their remaining two AST walks and
+     * the line index is a large share of the extraction pass. A file that
+     * merely mentions `i18n` somewhere takes the normal path; the check is an
+     * over-approximation, never a behavior change.
+     */
+    if collector.imported_macros.is_empty()
+        && collector.removed_macro_import.is_none()
+        && !source.contains("i18n")
+    {
+        return Ok(Vec::new());
+    }
+
+    let line_locator = LineLocator::new(source);
     if let Some((macro_name, offset)) = collector.removed_macro_import.as_ref() {
         let (line, column) = line_locator.get_location(*offset);
         return Err(PalamedesError::UnsupportedMacroSyntax {
