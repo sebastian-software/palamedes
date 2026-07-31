@@ -43,6 +43,21 @@ The current proof:
   and its checked report
   [`benchmarks/e2e-workflow/results/latest.md`](https://github.com/sebastian-software/palamedes/blob/main/benchmarks/e2e-workflow/results/latest.md).
 
+**The run you trigger all day.** Cross-tool comparisons have to run cold —
+every cache cleared, every tool doing the same work — and that is the lane the
+comparison numbers come from. But it is not the run you actually make. You edit
+a few files and extract again. On the realistic corpus (1,500 files, 6,000
+messages) a cold extract and catalog update takes `82.14 ms`; touching `5`
+source files and re-running takes `33.11 ms`, because extraction is cached per
+file and validated by a `stat` — unchanged files are neither read nor parsed
+([ADR-019](https://palamedes.dev/decisions/019-extraction-cache)). In watch
+mode that cache is held in memory for the life of the process.
+
+The compared tools have no equivalent local cache: they re-extract in full, so
+their warm runs cost what their cold runs cost. That makes this a capability
+difference rather than a race, which is exactly why it is kept out of every
+speedup number we publish.
+
 **Try it live.** The live reference covers cookie, route, and subdomain demos across the framework matrix (tld domains are still being provisioned). Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
