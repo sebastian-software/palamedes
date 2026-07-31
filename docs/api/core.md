@@ -254,11 +254,14 @@ show placeholder syntax to the reader:
 
 Quoted runs become `MessageLiteralNode` entries in `getMessageNodes()` output.
 
-Application authors do not need to think about any of this: the macros and the
-extractor escape authored apostrophes on the way into the catalog, so a source
-message written as `Ada's file` is stored as a pattern that renders it back
-unchanged. The rules above matter for translators hand-editing `.po` files, for
-catalogs imported from a TMS, and for patterns passed directly to
+Application authors do not need to think about any of this. Runtime descriptors
+escape authored apostrophes, while extracted catalog identities keep natural
+prose such as `Ada's file` unchanged. The extractor only doubles an apostrophe
+when it directly precedes generated ICU syntax: `` t`L'${title}` `` therefore
+produces the catalog pattern `L''{title}` so the placeholder remains live.
+Policy-aware compiled keys keep the catalog and runtime spellings aligned.
+The rules above matter for translators hand-editing `.po` files, for catalogs
+imported from a TMS, and for patterns passed directly to
 `formatMessagePattern()` — all of which use standard ICU quoting.
 
 One deliberate exception: a descriptor whose `message` is a **string literal**

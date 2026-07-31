@@ -475,6 +475,75 @@ catalogs:
     }
 
     #[test]
+    fn force_clean_keeps_lingui_apostrophe_translations_and_is_idempotent() {
+        let app = temp_dir("extract-apostrophe-migration");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        fs::create_dir_all(app.join("locales/de")).expect("create target locale");
+        write_config(&app, Some("config"));
+        fs::write(
+            app.join("app/page.tsx"),
+            concat!(
+                "import { t } from \"@palamedes/core/macro\";\n",
+                "export function messages() {\n",
+                "  const contraction = t`don't stop`;\n",
+                "  const possessive = t`client's booking`;\n",
+                "  const summer = t`l'été`;\n",
+                "  const doubled = t`It''s ready`;\n",
+                "  const boundary = t`L'${title}`;\n",
+                "  return [contraction, possessive, summer, doubled, boundary];\n",
+                "}\n",
+            ),
+        )
+        .expect("write source");
+        fs::write(
+            app.join("locales/de/messages.po"),
+            concat!(
+                "msgid \"don't stop\"\n",
+                "msgstr \"nicht aufhören\"\n\n",
+                "msgid \"client's booking\"\n",
+                "msgstr \"Buchung des Kunden\"\n\n",
+                "msgid \"l'été\"\n",
+                "msgstr \"der Sommer\"\n",
+            ),
+        )
+        .expect("write Lingui target catalog");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let mut options = extract_options();
+        options.force_clean = true;
+        run_extraction(&config, &options).expect("force-clean extraction");
+
+        let source = fs::read_to_string(app.join("locales/en/messages.po")).expect("read source");
+        for identity in [
+            "don't stop",
+            "client's booking",
+            "l'été",
+            "It''s ready",
+            "L''{title}",
+        ] {
+            assert!(
+                source.contains(&format!("msgid \"{identity}\"")),
+                "missing source identity {identity:?}:\n{source}"
+            );
+        }
+
+        let target = fs::read_to_string(app.join("locales/de/messages.po")).expect("read target");
+        for translation in ["nicht aufhören", "Buchung des Kunden", "der Sommer"] {
+            assert!(
+                target.contains(&format!("msgstr \"{translation}\"")),
+                "{target}"
+            );
+        }
+        assert!(!target.contains("msgid \"don''t stop\""), "{target}");
+
+        run_extraction(&config, &options).expect("repeat force-clean extraction");
+        assert_eq!(
+            fs::read_to_string(app.join("locales/de/messages.po")).expect("read repeated target"),
+            target
+        );
+    }
+
+    #[test]
     fn extract_discovers_mdx_and_uses_shared_configured_semantics() {
         let app = temp_dir("extract-mdx");
         fs::create_dir_all(app.join("app")).expect("create app");
