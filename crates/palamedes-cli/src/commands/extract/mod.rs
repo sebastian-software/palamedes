@@ -6,9 +6,9 @@ mod sources;
 mod test_support;
 mod watch;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::Args;
@@ -22,7 +22,7 @@ use crate::command::{Command, Context};
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
 use cache::{load_extract_cache, persist_extract_cache};
-use sources::collect_source_files;
+use sources::{collect_source_files, sort_and_dedupe_paths};
 use watch::run_watch_mode;
 
 /// Prefix the benchmark harness looks for when `PALAMEDES_TIMING_JSON=1`
@@ -115,14 +115,11 @@ fn run_extraction_with_cache(
     cache: &mut ExtractCache,
 ) -> Result<(), CliError> {
     let started_at = Instant::now();
-    let mut total_write_ms = 0;
     let mut total_glob_ms = 0;
     let mut total_extract_ms = 0;
     let mut total_messages = 0;
-    // Catalogs may match overlapping file sets; count each source file once.
-    let mut unique_files = BTreeSet::new();
-    // Same for failures: an overlapping file must be reported and counted once,
-    // not once per catalog that matched it.
+    // Failures from overlapping catalogs must be reported and counted once,
+    // not once per catalog that matched the file.
     let mut unique_failures = BTreeMap::<String, String>::new();
     let mut results = Vec::with_capacity(config.catalogs.len());
 
@@ -131,7 +128,6 @@ fn run_extraction_with_cache(
         total_glob_ms += result.glob_ms;
         total_extract_ms += result.extract_ms;
         total_messages += result.messages.len();
-        unique_files.extend(result.files.iter().cloned());
         for failure in &result.failed_files {
             unique_failures
                 .entry(failure.path.clone())
@@ -139,6 +135,23 @@ fn run_extraction_with_cache(
         }
         results.push(result);
     }
+
+    /*
+     * Catalogs may match overlapping file sets; count each source file once.
+     * Every per-catalog list arrives sorted and deduped from
+     * collect_source_files, so the common single-catalog configuration needs
+     * no second pass at all.
+     */
+    let unique_files: Vec<&Path> = if results.len() == 1 {
+        results[0].files.iter().map(PathBuf::as_path).collect()
+    } else {
+        let mut merged: Vec<&Path> = results
+            .iter()
+            .flat_map(|result| result.files.iter().map(PathBuf::as_path))
+            .collect();
+        sort_and_dedupe_paths(&mut merged);
+        merged
+    };
     let total_files = unique_files.len();
 
     for (path, message) in &unique_failures {
@@ -167,11 +180,15 @@ fn run_extraction_with_cache(
         });
     }
 
+    let write_started_at = Instant::now();
+    let mut write_jobs = Vec::with_capacity(config.catalogs.len() * config.locales.len());
     for (catalog, result) in config.catalogs.iter().zip(&results) {
         for locale in &config.locales {
-            total_write_ms += write_catalog(catalog, locale, &result.messages, config, options)?;
+            write_jobs.push((catalog, &result.messages, locale.as_str()));
         }
     }
+    write_catalogs(&write_jobs, config, options)?;
+    let total_write_ms = write_started_at.elapsed().as_millis();
 
     let total_ms = started_at.elapsed().as_millis();
     println!("✓ Extracted {total_messages} messages from {total_files} files ({total_ms}ms)");
@@ -245,14 +262,81 @@ fn extract_from_catalog(
     })
 }
 
+/*
+ * Each (catalog, locale) write is independent work against a distinct target
+ * file, so the jobs run concurrently. That overlaps the CPU-bound
+ * parse/merge/serialize work in ferrocat across locales and — just as
+ * important on macOS, where `File::sync_all` issues an F_FULLFSYNC barrier
+ * per written catalog and its directory — the per-file durability stalls that
+ * dominate the write phase for small catalogs.
+ *
+ * Outcomes are collected per job and reported in job order afterwards, so
+ * verbose output and the first error stay deterministic regardless of how the
+ * work was scheduled. Unlike the former serial loop, later writes are still
+ * attempted when an earlier one fails; the first failure in job order is the
+ * one returned.
+ */
+fn write_catalogs(
+    write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
+    config: &LoadedConfig,
+    options: &ExtractOptions,
+) -> Result<(), CliError> {
+    let worker_count = write_jobs.len().min(
+        std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(1),
+    );
+
+    let mut outcomes: Vec<Option<Result<Vec<String>, CliError>>> = Vec::new();
+    outcomes.resize_with(write_jobs.len(), || None);
+
+    if worker_count <= 1 {
+        for (outcome, (catalog, messages, locale)) in outcomes.iter_mut().zip(write_jobs) {
+            *outcome = Some(write_catalog(catalog, locale, messages, config, options));
+        }
+    } else {
+        let collected = std::thread::scope(|scope| {
+            let handles = (0..worker_count)
+                .map(|worker| {
+                    scope.spawn(move || {
+                        write_jobs
+                            .iter()
+                            .enumerate()
+                            .skip(worker)
+                            .step_by(worker_count)
+                            .map(|(index, (catalog, messages, locale))| {
+                                (index, write_catalog(catalog, locale, messages, config, options))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .flat_map(|handle| handle.join().expect("catalog write worker panicked"))
+                .collect::<Vec<_>>()
+        });
+        for (index, outcome) in collected {
+            outcomes[index] = Some(outcome);
+        }
+    }
+
+    for outcome in outcomes {
+        let lines = outcome.expect("every write job produces an outcome")?;
+        for line in lines {
+            eprintln!("{line}");
+        }
+    }
+    Ok(())
+}
+
 fn write_catalog(
     catalog: &ConfigCatalog,
     locale: &str,
     messages: &[CatalogUpdateMessage],
     config: &LoadedConfig,
     options: &ExtractOptions,
-) -> Result<u128, CliError> {
-    let started_at = Instant::now();
+) -> Result<Vec<String>, CliError> {
     let catalog_path = config
         .resolve_catalog_path(&catalog.path, locale)
         .with_extension(catalog.format.extension());
@@ -274,14 +358,18 @@ fn write_catalog(
         messages: messages.to_vec(),
     })?;
 
+    let mut lines = Vec::new();
     if options.verbose {
-        eprintln!("  -> {}", catalog_path.display());
+        lines.push(format!("  -> {}", catalog_path.display()));
         for diagnostic in result.diagnostics {
-            eprintln!("Warning: {}: {}", diagnostic.code, diagnostic.message);
+            lines.push(format!(
+                "Warning: {}: {}",
+                diagnostic.code, diagnostic.message
+            ));
         }
     }
 
-    Ok(started_at.elapsed().as_millis())
+    Ok(lines)
 }
 
 #[cfg(test)]
