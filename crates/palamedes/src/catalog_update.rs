@@ -307,12 +307,20 @@ fn update_catalog_file_source_first(
         .with_overwrite_source_translations(true)
         .with_render(render)
         .with_now(&now);
+    /*
+     * Catalog files are repository-owned, regenerable artifacts, so the write
+     * skips Ferrocat's per-file durability barriers (File::sync_all is
+     * F_FULLFSYNC on macOS and was the dominant fixed cost of the write phase
+     * there). The rename stays atomic; after a crash the worst case is an old
+     * or missing catalog that the next extract rewrites.
+     */
     let file_options = UpdateCatalogFileOptions::new(
         &target_path,
         &request.source_locale,
         CatalogUpdateInput::default(),
     )
-    .with_options(update_options);
+    .with_options(update_options)
+    .with_durability(ferrocat::WriteDurability::Rename);
     let result = ferrocat_update_catalog_file(file_options).map_err(PalamedesError::from)?;
 
     Ok(public_update_result(result))
