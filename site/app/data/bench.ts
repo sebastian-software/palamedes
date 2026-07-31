@@ -115,9 +115,11 @@ export const BENCH_REALISTIC: BenchCorpus = {
 }
 
 /*
- * Only BENCH_REALISTIC_WARM is rendered (home + proof). The two smaller
- * corpora are kept for the same reason as their cold counterparts: they back
- * the doc tables and are guarded against the report.
+ * Only BENCH_REALISTIC_WARM is rendered — it is passed to BenchmarkChart on
+ * home, proof, and the topic pages, where it becomes a second, marked
+ * Palamedes bar. The two smaller corpora are kept for the same reason as their
+ * cold counterparts: they back the doc tables and are guarded against the
+ * report.
  */
 export const BENCH_SMALL_WARM: BenchWarm = {
   id: "small",
