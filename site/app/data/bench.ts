@@ -27,6 +27,27 @@ export interface BenchCorpus {
   ratios: { lingui: string; formatjs: string; i18nextCli: string }
 }
 
+/*
+ * The warm lane: what the *next* extract costs after an edit, which is the run
+ * a developer triggers dozens of times a day. Palamedes reuses its extraction
+ * cache here (ADR-019); the compared tools have no comparable local cache and
+ * re-extract in full, so their warm medians equal their cold ones.
+ *
+ * That is why this shape carries no competitor row and no ratio field: warm is
+ * a capability difference, not a like-for-like race, and it must never reach a
+ * speedup claim. The only comparison it supports is Palamedes against its own
+ * cold run. scripts/verify-site-bench-data.mjs asserts both medians and the
+ * touched-file count against the report.
+ */
+export interface BenchWarm {
+  id: "small" | "medium" | "realistic"
+  corpus: string
+  /** Source files edited before each warm run, per the report's warm lane. */
+  touchedFiles: number
+  coldMs: number
+  warmMs: number
+}
+
 export const BENCH_META = {
   generated: "2026-07-31",
   node: "v24.18.0",
@@ -91,4 +112,33 @@ export const BENCH_REALISTIC: BenchCorpus = {
     formatjs: "5.73×",
     i18nextCli: "76.18×",
   },
+}
+
+/*
+ * Only BENCH_REALISTIC_WARM is rendered (home + proof). The two smaller
+ * corpora are kept for the same reason as their cold counterparts: they back
+ * the doc tables and are guarded against the report.
+ */
+export const BENCH_SMALL_WARM: BenchWarm = {
+  id: "small",
+  corpus: "80 files, 640 messages",
+  touchedFiles: 5,
+  coldMs: 12.82,
+  warmMs: 10.27,
+}
+
+export const BENCH_MEDIUM_WARM: BenchWarm = {
+  id: "medium",
+  corpus: "240 files, 1920 messages",
+  touchedFiles: 5,
+  coldMs: 22.22,
+  warmMs: 14.05,
+}
+
+export const BENCH_REALISTIC_WARM: BenchWarm = {
+  id: "realistic",
+  corpus: "1,500 files (750 with i18n), ~400k lines, 6,000 messages",
+  touchedFiles: 5,
+  coldMs: 82.14,
+  warmMs: 33.11,
 }
