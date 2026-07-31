@@ -1642,6 +1642,35 @@ fn extract_one_file(
         }
     };
 
+    /*
+     * Batch fast path: every extractable construct requires one of two textual
+     * markers. Macro imports name a `@palamedes/...` package as a literal
+     * import specifier, and the runtime-call form spells an `i18n` member
+     * somewhere. A file containing neither cannot produce messages or
+     * macro-shape diagnostics, so the parse is skipped entirely; on real trees
+     * most files carry no i18n at all, and parsing them is the bulk of the
+     * extraction pass. MDX files always take the full path.
+     *
+     * Deliberate trade-off, scoped to batch extraction (`pmds extract` and the
+     * binding): a syntax-broken file without any i18n marker no longer fails
+     * the run — the same posture other extractors take for non-matching files.
+     * Files with a marker keep exact parse diagnostics, and the single-file
+     * `extract_messages` API still parses everything.
+     */
+    let is_mdx = Path::new(file)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mdx"));
+    if !is_mdx && !source.contains("@palamedes") && !source.contains("i18n") {
+        return FileExtraction::Extracted {
+            path: file.clone(),
+            relative_file: relative_origin_file(root_dir, file),
+            messages: Vec::new(),
+            fresh: true,
+            fingerprint,
+        };
+    }
+
     let extracted = EXTRACT_ARENA.with(|arena| {
         let mut arena = arena.borrow_mut();
         let extracted = extract_messages_in(&arena, &source, file, reference_scopes, mdx_options);
@@ -2976,7 +3005,13 @@ const message = t({ message })
         let root = temp_root("batch-failure");
         fs::create_dir_all(&root).expect("root dir");
         let invalid = root.join("invalid.ts");
-        fs::write(&invalid, "const broken =").expect("invalid source");
+        // The i18n marker keeps the file on the parsing path; marker-free
+        // files skip the parse entirely and are covered by the test below.
+        fs::write(
+            &invalid,
+            "import { t } from \"@palamedes/core/macro\"\nconst broken =",
+        )
+        .expect("invalid source");
 
         let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
             root_dir: root.to_string_lossy().into_owned(),
@@ -2988,6 +3023,32 @@ const message = t({ message })
         assert_eq!(result.file_count, 1);
         assert_eq!(result.failed_files.len(), 1);
         assert!(result.failed_files[0].message.contains("Parse error"));
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /*
+     * The batch fast path must not report syntax errors in files that carry no
+     * i18n marker at all: they cannot produce messages, and failing the run on
+     * them would make `pmds extract` a project-wide syntax check.
+     */
+    #[test]
+    fn batch_skips_broken_files_without_i18n_markers() {
+        let root = temp_root("batch-skip-markerless");
+        fs::create_dir_all(&root).expect("root dir");
+        let invalid = root.join("invalid.ts");
+        fs::write(&invalid, "const broken =").expect("invalid source");
+
+        let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![invalid.to_string_lossy().into_owned()],
+            max_threads: None,
+        })
+        .expect("batch extraction should continue");
+
+        assert_eq!(result.file_count, 1);
+        assert!(result.failed_files.is_empty());
+        assert!(result.messages.is_empty());
 
         fs::remove_dir_all(root).expect("cleanup");
     }

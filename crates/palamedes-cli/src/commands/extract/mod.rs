@@ -616,7 +616,13 @@ catalogs:
         let app = temp_dir("extract-failure");
         fs::create_dir_all(app.join("app")).expect("create app");
         write_config(&app, None);
-        fs::write(app.join("app/page.tsx"), "const broken =").expect("write invalid source");
+        // The macro import keeps the file on the parsing path; marker-free
+        // files skip the parse and can no longer fail extraction.
+        fs::write(
+            app.join("app/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\"\nconst broken =",
+        )
+        .expect("write invalid source");
         fs::create_dir_all(app.join("locales/en")).expect("create source locale");
         let catalog_path = app.join("locales/en/messages.po");
         let original = "msgid \"Existing\"\nmsgstr \"Existing\"\n";
@@ -654,7 +660,11 @@ catalogs:
 "#,
         )
         .expect("write config");
-        fs::write(app.join("app/page.tsx"), "const broken =").expect("write invalid source");
+        fs::write(
+            app.join("app/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\"\nconst broken =",
+        )
+        .expect("write invalid source");
 
         let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
         let error = run_extraction(&config, &extract_options()).expect_err("extract should fail");
