@@ -8,7 +8,9 @@ package names.
 - `createI18n(options?)`
 - `DEFAULT_LOCALE`
 - `formatMessagePattern(pattern, values, locale?)`
+- `formatMessageNodes(nodes, values, locale?)`
 - `parseMessagePattern(pattern)`
+- `defineCompiledCatalog(messages, precompiled)` for catalog-loader output
 - `resolveChoice(node, value, locale?)` and `ResolvedChoice`
 - `replacePoundPlaceholders(value, numericValue, locale?)`
 - `stringifyValue(value)`
@@ -17,6 +19,7 @@ package names.
 - `defineLocaleControls(config)` from `@palamedes/core/locale`
 - `MessageMetadata`
 - `CatalogMessages`
+- `PrecompiledCatalogMessages`
 - `PalamedesI18n`
 - `CreateI18nOptions`
 - `MissingMessageInfo`
@@ -104,6 +107,14 @@ that produce these nodes.
 `load()` merges messages into the locale catalog. The locale passed to
 `createI18n({ locale })`, or `DEFAULT_LOCALE` when omitted, is active
 immediately. `activate()` switches the locale used by `_()` and `getMessage()`.
+
+First-party catalog loaders call `defineCompiledCatalog()` during module
+evaluation. The helper leaves every public catalog value as a string and adds
+non-enumerable build-time parser output. `load()` uses that output for direct
+node formatting, so valid generated catalogs do not invoke the ICU parser in
+the browser. Spreading or JSON-serializing a catalog intentionally drops the
+metadata; the resulting plain string catalog remains supported through lazy
+parsing.
 
 Fallback order for `getMessage(id, metadata)`:
 

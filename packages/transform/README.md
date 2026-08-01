@@ -76,6 +76,11 @@ The root package also re-exports catalog-loader helpers from
 - `CatalogLoaderResult`
 - `MissingCatalogMessage`
 
+`renderCatalogModule()` preserves string-valued `messages` and emits hidden
+build-time parser output through `defineCompiledCatalog()`. Invalid patterns
+remain strings with a lazy-parser marker so the runtime keeps its established
+diagnostics and source fallback.
+
 ## Supported Macro Shapes
 
 - tagged templates such as `t\`...\``

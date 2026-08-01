@@ -36,6 +36,7 @@ mod jsx_message;
 mod mdx;
 mod message_metadata;
 mod placeholder_name;
+mod runtime_message;
 #[cfg(test)]
 mod test_support;
 mod transform;
@@ -91,6 +92,10 @@ pub use message_metadata::{
     MessageArgumentMetadataInput, MessageFormatStyleKind, MessageMetadata,
     MessageMetadataDiagnostic, MessageMetadataInput, MessageMetadataValidationReport,
     MessageOriginMetadata, MessageSelectorKind, MessageSelectorMetadata,
+};
+pub use runtime_message::{
+    precompile_runtime_catalog_messages, PrecompiledRuntimeMessage, PrecompiledRuntimeMessages,
+    RuntimeMessageChoiceKind, RuntimeMessageFormat, RuntimeMessageNode,
 };
 pub use transform::{
     transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,

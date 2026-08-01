@@ -20,7 +20,19 @@ const baseResult: CatalogCompileArtifactResult = {
 describe("catalog loader helpers", () => {
   it("renders catalog modules consistently", () => {
     expect(renderCatalogModule({ greeting: "Hallo" })).toBe(
-      'export const messages={"greeting":"Hallo"};export default { messages };'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({"greeting":"Hallo"},{});export default { messages };'
+    )
+  })
+
+  it("embeds parser output for ICU messages and leaves invalid patterns lazy", () => {
+    expect(
+      renderCatalogModule({
+        greeting: "Hallo {name}",
+        broken: "Hallo {name",
+        unsupported: "{items, list, other {Items}}",
+      })
+    ).toBe(
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({"greeting":"Hallo {name}","broken":"Hallo {name","unsupported":"{items, list, other {Items}}"},{"greeting":[{"type":"text","value":"Hallo "},{"type":"variable","name":"name"}],"broken":false,"unsupported":false});export default { messages };'
     )
   })
 

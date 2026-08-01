@@ -1431,13 +1431,19 @@ fn render_catalog_module(
     locale: &str,
     resource_path: &str,
 ) -> Result<String> {
+    let precompiled = palamedes::precompile_runtime_catalog_messages(messages);
     let messages = serde_json::to_string(messages).map_err(|error| {
         napi::Error::from_reason(format!(
             "Failed to render catalog module for locale {locale} at {resource_path}: {error}"
         ))
     })?;
+    let precompiled = serde_json::to_string(&precompiled).map_err(|error| {
+        napi::Error::from_reason(format!(
+            "Failed to render precompiled catalog messages for locale {locale} at {resource_path}: {error}"
+        ))
+    })?;
     Ok(format!(
-        "export const messages={messages};export default {{ messages }};"
+        "import{{defineCompiledCatalog as __palamedesDefineCompiledCatalog}}from\"@palamedes/core\";export const messages=__palamedesDefineCompiledCatalog({messages},{precompiled});export default {{ messages }};"
     ))
 }
 
