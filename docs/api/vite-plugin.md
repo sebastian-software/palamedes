@@ -27,6 +27,7 @@ interface PalamedesPluginOptions {
   failOnCompileError?: boolean
   framework?: "react" | "solid" | "none"
   runtimeModule?: string
+  keepSourceFallbacks?: boolean
   mdx?: PalamedesMdxConfig | false
 }
 ```
@@ -40,6 +41,7 @@ Defaults:
 - `failOnCompileError`: `false`
 - `framework`: `"react"`
 - `runtimeModule`: derived from `framework`
+- `keepSourceFallbacks`: `true` during `vite serve`, `false` during `vite build`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 
 `framework` states which UI framework the app compiles for. It selects the
@@ -49,6 +51,13 @@ component contract for generated MDX modules. Solid apps must set
 `framework: "solid"`; `"none"` restores the framework-agnostic runtime.
 
 `runtimeModule` overrides only the macro transform's module path.
+
+`keepSourceFallbacks` applies to both macro transforms and generated MDX.
+Production builds strip authored messages from runtime calls by default and
+therefore require compiled catalogs to be loaded before translated code
+renders. They also omit translator comments and context metadata from runtime
+descriptors. Set `keepSourceFallbacks` to `true` when production must retain
+readable source-message fallbacks.
 
 Generated MDX modules are independent: they already default to the framework's
 reactive runtime subpath, because their frontmatter, image alt text, and

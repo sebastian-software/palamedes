@@ -108,6 +108,11 @@ console.log(po.headers.Language)
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
 
+`analyzeMdxNative()` and `transformMacrosNative()` omit authored source-message
+fallbacks by default. Pass `keepSourceFallbacks: true` when generated runtime
+code must retain them. `stripMessageField` remains a deprecated inverse option
+for macro-transform compatibility.
+
 Catalog operations use Ferrocat for parsing, updates, audits, ICU authoring
 diagnostics, metadata validation, and deterministic combine workflows. That
 keeps custom tooling close to the same semantics used by the official CLI and

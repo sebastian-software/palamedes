@@ -172,6 +172,12 @@ export type PalamedesPluginOptions = {
   runtimeModule?: string
 
   /**
+   * Preserve authored source messages as browser/runtime fallbacks.
+   * Defaults to `true` during `vite serve` and `false` during `vite build`.
+   */
+  keepSourceFallbacks?: boolean
+
+  /**
    * Override MDX analysis options from the Palamedes config, or disable MDX.
    * @default configuration `mdx` values with React framework defaults
    */
@@ -190,10 +196,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     failOnCompileError = false,
     framework = "react",
     runtimeModule,
+    keepSourceFallbacks,
     mdx: mdxOverride,
     ...configLoaderOptions
   } = options
   const macroRuntimeModule = resolveMacroRuntimeModule(framework, runtimeModule)
+  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false
+  let stripNonEssentialProps = true
 
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null
@@ -348,7 +357,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           }
           throw error
         }
-        const mdx = resolveMdxOptions(cfg)
+        const mdx = {
+          ...resolveMdxOptions(cfg),
+          keepSourceFallbacks: resolvedKeepSourceFallbacks,
+        }
         if ((mdx.framework ?? "react") === "solid") {
           return
         }
@@ -390,7 +402,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         const cfg = await getConfigLazy()
-        const mdx = resolveMdxOptions(cfg)
+        const mdx = {
+          ...resolveMdxOptions(cfg),
+          keepSourceFallbacks: resolvedKeepSourceFallbacks,
+        }
         const result = analyzeMdxNative(source, cleanId, mdx)
         mdxModuleIds.add(cleanId)
         this.addWatchFile(cfg.configPath)
@@ -450,7 +465,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     name: "palamedes:transform",
     enforce: "pre" as const,
 
-    config(viteConfig) {
+    config(viteConfig, env) {
+      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? env.command === "serve"
+      stripNonEssentialProps = env.command === "build"
       const ids = new Set(PALAMEDES_MACRO_PACKAGES)
       macroIds = ids
 
@@ -484,6 +501,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       try {
         const result = transformPalamedesMacros(code, cleanId, {
           runtimeModule: macroRuntimeModule,
+          keepSourceFallbacks: resolvedKeepSourceFallbacks,
+          stripNonEssentialProps,
         })
 
         if (!result.hasChanged) {

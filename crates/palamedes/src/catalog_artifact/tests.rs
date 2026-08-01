@@ -947,8 +947,15 @@ const authored = t`L'${title} est prêt`;
     let scoped_source = scope_macro_test_source(source, "test.tsx");
     let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
         .expect("apostrophe messages should extract");
-    let transformed = crate::transform::transform_macros(&scoped_source, "test.tsx", None)
-        .expect("apostrophe messages should transform");
+    let transformed = crate::transform::transform_macros(
+        &scoped_source,
+        "test.tsx",
+        Some(crate::transform::NativeTransformOptions {
+            keep_source_fallbacks: Some(true),
+            ..crate::transform::NativeTransformOptions::default()
+        }),
+    )
+    .expect("apostrophe messages should transform");
 
     // Raw-ICU surfaces stay raw in the catalog, authored text stays escaped.
     assert_eq!(

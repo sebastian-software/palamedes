@@ -28,6 +28,7 @@ interface WithPalamedesOptions {
   failOnCompileError?: boolean
   framework?: "react" | "solid" | "none"
   runtimeModule?: string
+  keepSourceFallbacks?: boolean
   workspaceRoot?: string
 }
 ```
@@ -41,6 +42,7 @@ Defaults:
 - `failOnCompileError`: `false`
 - `framework`: `"react"`
 - `runtimeModule`: derived from `framework`
+- `keepSourceFallbacks`: `true` in development, `false` in production
 
 ## Usage
 
@@ -49,6 +51,13 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 
 module.exports = withPalamedes({})
 ```
+
+Production output strips authored messages from generated runtime calls by
+default and therefore requires compiled catalogs to be loaded before translated
+code renders. It also omits translator comments and context metadata from
+runtime descriptors. Set `keepSourceFallbacks: true` when production must
+retain readable source-message fallbacks. The option is forwarded identically
+to the Turbopack and webpack transform loaders.
 
 The plugin configures both Turbopack and webpack paths, and requires Next.js
 16 (`peerDependencies: next ^16` — the emitted top-level `turbopack.rules`

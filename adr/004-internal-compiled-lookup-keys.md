@@ -35,6 +35,13 @@ This key:
 
 The derivation strategy is fixed and not a configurable application-level feature. Palamedes follows Ferrocat's public `FerrocatV1` compiled-key contract for this purpose rather than owning a separate private algorithm.
 
+Generated runtime code uses the compact key without embedding the authored
+source message by default. First-party host adapters preserve source fallbacks
+during development, where readable output helps diagnose missing catalog setup,
+and strip them from production output. Applications that intentionally rely on
+runtime source fallback behavior can opt back in with
+`keepSourceFallbacks: true`.
+
 Source code, extraction, catalog updates, parsed catalog data, and user-facing diagnostics remain source-string-first.
 
 ## Alternatives Considered
@@ -55,5 +62,6 @@ Rejected because it adds policy surface where Palamedes benefits from a single c
 
 - Palamedes can keep runtime payloads compact without reintroducing an author-facing ID model.
 - Transformed code and compiled catalogs may contain opaque short keys without changing the public authoring contract.
+- Production output requires its compiled catalogs to be loaded before translated code renders; missing catalog setup fails visibly with the internal key unless source fallbacks are explicitly preserved.
 - Documentation must describe the keys as implementation detail, not as product identity.
 - The runtime key contract can be shared cleanly between transformed code and compiled catalog artifacts without turning those keys into a public authoring concept.

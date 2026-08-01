@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type * as CoreNode from "@palamedes/core-node"
 
@@ -23,6 +23,10 @@ const loadContext = {
   format: "module",
   importAttributes: {},
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe("createPalamedesRemixLoadHook", () => {
   beforeEach(() => {
@@ -65,6 +69,31 @@ describe("createPalamedesRemixLoadHook", () => {
     expect(String(loaded.source)).toMatch(
       /\/\/# sourceMappingURL=data:application\/json;base64,[A-Za-z0-9+/=]+$/u
     )
+  })
+
+  it("strips source fallbacks in production unless explicitly preserved", () => {
+    vi.stubEnv("NODE_ENV", "production")
+    const source = [
+      'import { t } from "@palamedes/core/macro"',
+      "export function label() {",
+      "  return t`Production fallback`",
+      "}",
+    ].join("\n")
+    const loadDefault = createPalamedesRemixLoadHook()
+    const stripped = loadDefault(
+      new URL("file:///repo/app/routes/home.tsx").href,
+      loadContext,
+      () => ({ format: "module", source })
+    )
+    const loadPreserved = createPalamedesRemixLoadHook({ keepSourceFallbacks: true })
+    const preserved = loadPreserved(
+      new URL("file:///repo/app/routes/home.tsx").href,
+      loadContext,
+      () => ({ format: "module", source })
+    )
+
+    expect(String(stripped.source)).not.toContain('message: "Production fallback"')
+    expect(String(preserved.source)).toContain('message: "Production fallback"')
   })
 
   it.each([

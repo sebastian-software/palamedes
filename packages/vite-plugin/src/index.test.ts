@@ -376,6 +376,45 @@ describe("palamedes vite plugin", () => {
     )
   })
 
+  it.each([
+    ["build", false, true],
+    ["serve", true, false],
+  ] as const)(
+    "sets runtime fallback metadata for Vite %s",
+    (command, expectedFallbacks, expectedMetadataStrip) => {
+      runMacroTransform({}, command)
+
+      expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.objectContaining({
+          keepSourceFallbacks: expectedFallbacks,
+          stripNonEssentialProps: expectedMetadataStrip,
+        })
+      )
+    }
+  )
+
+  it("lets keepSourceFallbacks override the Vite command default", () => {
+    runMacroTransform({ keepSourceFallbacks: true }, "build")
+
+    expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ keepSourceFallbacks: true })
+    )
+  })
+
+  it("applies the source fallback mode to compiled MDX", async () => {
+    await runMdxTransform({}, {}, "serve")
+
+    expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
+      "# Welcome",
+      "/repo/src/guide.mdx",
+      expect.objectContaining({ keepSourceFallbacks: true })
+    )
+  })
+
   it("seeds MDX options from the framework option", async () => {
     mocks.analyzeMdxNative.mockClear()
     await runMdxTransform({}, { framework: "solid" })
@@ -399,7 +438,10 @@ describe("palamedes vite plugin", () => {
   })
 })
 
-function runMacroTransform(options: Parameters<typeof palamedes>[0] = {}) {
+function runMacroTransform(
+  options: Parameters<typeof palamedes>[0] = {},
+  command?: "build" | "serve"
+) {
   mocks.transformPalamedesMacros.mockClear()
   mocks.transformPalamedesMacros.mockReturnValue({
     code: "transformed",
@@ -409,6 +451,14 @@ function runMacroTransform(options: Parameters<typeof palamedes>[0] = {}) {
   })
   const macroPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:transform")
   const transform = macroPlugin?.transform
+
+  if (command && typeof macroPlugin?.config === "function") {
+    macroPlugin.config.call(
+      {} as any,
+      {} as any,
+      { command, mode: command === "serve" ? "development" : "production" } as any
+    )
+  }
 
   if (typeof transform !== "function") {
     throw new TypeError("Expected macro transform hook")
@@ -445,9 +495,21 @@ async function runPoTransform(
 
 async function runMdxTransform(
   context: Record<string, unknown> = {},
-  options: Parameters<typeof palamedes>[0] = {}
+  options: Parameters<typeof palamedes>[0] = {},
+  command?: "build" | "serve"
 ) {
-  const mdxPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:mdx")
+  const plugins = palamedes(options)
+  if (command) {
+    const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform")
+    if (typeof macroPlugin?.config === "function") {
+      macroPlugin.config.call(
+        {} as any,
+        {} as any,
+        { command, mode: command === "serve" ? "development" : "production" } as any
+      )
+    }
+  }
+  const mdxPlugin = plugins.find((plugin) => plugin.name === "palamedes:mdx")
   const transform = mdxPlugin?.transform
 
   if (typeof transform !== "function") {

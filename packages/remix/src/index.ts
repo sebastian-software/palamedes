@@ -42,6 +42,12 @@ export type PalamedesRemixRegisterOptions = {
   runtimeModule?: string
 
   /**
+   * Preserve authored source messages as runtime fallbacks.
+   * Defaults to `true` in development and `false` in production.
+   */
+  keepSourceFallbacks?: boolean
+
+  /**
    * Optional Palamedes config path used for `.po` catalog imports.
    * Relative paths resolve from the imported catalog file's directory.
    */
@@ -80,6 +86,8 @@ export function createPalamedesRemixLoadHook(
     options.framework ?? "none",
     options.runtimeModule
   )
+  const keepSourceFallbacks = options.keepSourceFallbacks ?? process.env.NODE_ENV !== "production"
+  const stripNonEssentialProps = process.env.NODE_ENV === "production"
   const configCache = new Map<string, LoadedPalamedesConfig>()
 
   return (url, context, nextLoad) => {
@@ -95,6 +103,8 @@ export function createPalamedesRemixLoadHook(
     const code = stringifySource(loaded.source)
     const result = transformPalamedesMacros(code, fileURLToPath(url), {
       runtimeModule,
+      keepSourceFallbacks,
+      stripNonEssentialProps,
     })
 
     if (!result.hasChanged) {

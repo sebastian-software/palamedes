@@ -12,7 +12,14 @@ fn transform_macros(
     options: Option<NativeTransformOptions>,
 ) -> PalamedesResult<NativeTransformResult> {
     let scoped_source = scope_macro_test_source(source, filename);
-    let mut result = transform_macros_raw(&scoped_source, filename, options)?;
+    let mut options = options.unwrap_or_default();
+    // Most transform fixtures assert the authored fallback spelling. Keep it
+    // explicitly so the tests stay focused while production-default behavior
+    // is covered by dedicated cases below.
+    if options.keep_source_fallbacks.is_none() && options.strip_message_field.is_none() {
+        options.keep_source_fallbacks = Some(true);
+    }
+    let mut result = transform_macros_raw(&scoped_source, filename, Some(options))?;
 
     if let Some(map) = result.map.as_mut() {
         map.sources_content = Some(vec![Some(source.to_string())]);
@@ -84,8 +91,15 @@ function choices() {
 }
 "##;
 
-    let result = transform_macros_raw(source, "test.tsx", None)
-        .expect("function-scoped macros and top-level Trans should succeed");
+    let result = transform_macros_raw(
+        source,
+        "test.tsx",
+        Some(NativeTransformOptions {
+            keep_source_fallbacks: Some(true),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("function-scoped macros and top-level Trans should succeed");
 
     assert!(result.has_changed);
     assert!(result.code.contains("Rendered later"));
@@ -755,6 +769,82 @@ fn strips_message_field_when_requested() {
 
     assert!(!result.code.contains("message:"));
     assert!(result.code.contains("comment: \"Greeting\""));
+}
+
+#[test]
+fn strips_source_fallbacks_by_default_from_calls_and_trans() {
+    let result = transform_macros_raw(
+        r#"import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
+"#,
+        "test.tsx",
+        None,
+    )
+    .expect("default transform should succeed");
+
+    assert!(result.code.contains("getI18n()._(\""));
+    assert!(result.code.contains("<Trans id=\""));
+    assert!(!result.code.contains("message: \"Hello\""));
+    assert!(!result.code.contains("message={\"Rich text\"}"));
+}
+
+#[test]
+fn keeps_source_fallbacks_when_requested() {
+    let result = transform_macros_raw(
+        r#"import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+function View() { return <><span>{t`Hello`}</span><Trans>Rich text</Trans></>; }
+"#,
+        "test.tsx",
+        Some(NativeTransformOptions {
+            keep_source_fallbacks: Some(true),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("fallback-preserving transform should succeed");
+
+    assert!(result.code.contains("message: \"Hello\""));
+    assert!(result.code.contains("message={\"Rich text\"}"));
+}
+
+#[test]
+fn honors_explicit_legacy_strip_message_field_values() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+function message() { return t`Hello`; }
+"#;
+    let stripped = transform_macros_raw(
+        source,
+        "test.ts",
+        Some(NativeTransformOptions {
+            strip_message_field: Some(true),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("legacy strip transform");
+    let kept = transform_macros_raw(
+        source,
+        "test.ts",
+        Some(NativeTransformOptions {
+            strip_message_field: Some(false),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("legacy keep transform");
+    let positive_option_wins = transform_macros_raw(
+        source,
+        "test.ts",
+        Some(NativeTransformOptions {
+            keep_source_fallbacks: Some(false),
+            strip_message_field: Some(false),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("positive option precedence transform");
+
+    assert!(!stripped.code.contains("message: \"Hello\""));
+    assert!(kept.code.contains("message: \"Hello\""));
+    assert!(!positive_option_wins.code.contains("message: \"Hello\""));
 }
 
 #[test]

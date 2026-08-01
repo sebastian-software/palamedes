@@ -55,6 +55,8 @@ pub struct MdxOptions {
     /// Explicit opt-out marker used in an immediately preceding comment.
     #[serde(alias = "ignore-directive", alias = "ignore_directive")]
     pub ignore_directive: String,
+    /// Preserve source messages as runtime fallbacks in generated modules.
+    pub keep_source_fallbacks: bool,
 }
 
 impl Default for MdxOptions {
@@ -66,6 +68,7 @@ impl Default for MdxOptions {
             trans_module: None,
             runtime_module: None,
             ignore_directive: DEFAULT_IGNORE_DIRECTIVE.to_owned(),
+            keep_source_fallbacks: false,
         }
     }
 }
@@ -252,6 +255,18 @@ struct MessageReference {
     id: String,
 }
 
+fn runtime_lookup_arguments(reference: &MessageReference, keep_source_fallbacks: bool) -> String {
+    if keep_source_fallbacks {
+        format!(
+            "{}, undefined, {{ message: {} }}",
+            js_string(&reference.id),
+            js_string(&reference.message)
+        )
+    } else {
+        js_string(&reference.id)
+    }
+}
+
 struct MdxCompiler<'a> {
     source: &'a str,
     filename: &'a str,
@@ -416,10 +431,9 @@ impl<'a> MdxCompiler<'a> {
         writer.append("  return { ...frontmatter");
         for (key, reference) in &self.translated_front_matter {
             writer.append(&format!(
-                ", {}: __i18n._({}, undefined, {{ message: {} }})",
+                ", {}: __i18n._({})",
                 js_string(key),
-                js_string(&reference.id),
-                js_string(&reference.message)
+                runtime_lookup_arguments(reference, self.options.keep_source_fallbacks)
             ));
         }
         writer.append(" };\n}\n");
@@ -834,9 +848,8 @@ impl<'a> MdxCompiler<'a> {
             |reference| {
                 self.needs_i18n = true;
                 format!(
-                    "__palamedesGetI18n()._({}, undefined, {{ message: {} }})",
-                    js_string(&reference.id),
-                    js_string(&reference.message)
+                    "__palamedesGetI18n()._({})",
+                    runtime_lookup_arguments(reference, self.options.keep_source_fallbacks)
                 )
             },
         );
@@ -900,10 +913,10 @@ impl<'a> MdxCompiler<'a> {
             source_offset,
         );
         self.needs_trans = true;
-        let mut props = vec![
-            format!("id={{{}}}", js_string(&reference.id)),
-            format!("message={{{}}}", js_string(&reference.message)),
-        ];
+        let mut props = vec![format!("id={{{}}}", js_string(&reference.id))];
+        if self.options.keep_source_fallbacks {
+            props.push(format!("message={{{}}}", js_string(&reference.message)));
+        }
         if !unit.values.is_empty() {
             let values = unit
                 .values
@@ -1012,9 +1025,8 @@ impl<'a> MdxCompiler<'a> {
                 attribute.token_start,
                 attribute.token_end,
                 format!(
-                    "{{__palamedesGetI18n()._({}, undefined, {{ message: {} }})}}",
-                    js_string(&reference.id),
-                    js_string(&reference.message)
+                    "{{__palamedesGetI18n()._({})}}",
+                    runtime_lookup_arguments(&reference, self.options.keep_source_fallbacks)
                 ),
             ));
         }
@@ -2071,6 +2083,44 @@ Do not translate this.
         .code
         .expect("Solid compile");
         assert!(solid.contains("0: (children) => <strong>{children}</strong>"));
+    }
+
+    #[test]
+    fn strips_runtime_source_fallbacks_by_default_and_can_preserve_them() {
+        let source = r#"---
+title: Front matter fallback
+---
+
+Visible fallback phrase.
+
+![Image fallback phrase](./diagram.png)
+
+<Card title="Attribute fallback phrase" />
+"#;
+        let options = MdxOptions {
+            translatable_attributes: vec!["alt".to_owned(), "title".to_owned()],
+            front_matter_fields: vec!["title".to_owned()],
+            ..MdxOptions::default()
+        };
+        let stripped = analyze_valid(source, options.clone())
+            .code
+            .expect("stripped compile");
+        let kept = analyze_valid(
+            source,
+            MdxOptions {
+                keep_source_fallbacks: true,
+                ..options
+            },
+        )
+        .code
+        .expect("fallback-preserving compile");
+
+        assert!(!stripped.contains("message={"));
+        assert!(!stripped.contains("{ message:"));
+        assert!(kept.contains("message={\"Visible fallback phrase.\"}"));
+        assert!(kept.contains("{ message: \"Image fallback phrase\" }"));
+        assert!(kept.contains("{ message: \"Attribute fallback phrase\" }"));
+        assert!(kept.contains("{ message: \"Front matter fallback\" }"));
     }
 
     #[test]

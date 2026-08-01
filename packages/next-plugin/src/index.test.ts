@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { withPalamedes } from "./index"
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 type RuleItem = {
   condition?: unknown
@@ -35,6 +39,31 @@ describe("withPalamedes turbopack config", () => {
     expect(rule.loaders?.[0]?.options).toMatchObject({
       runtimeModule: "@acme/custom-runtime",
     })
+  })
+
+  it.each([
+    ["development", true, false],
+    ["production", false, true],
+  ] as const)(
+    "sets runtime fallback metadata for the %s Turbopack mode",
+    (mode, expectedFallbacks, expectedMetadataStrip) => {
+      vi.stubEnv("NODE_ENV", mode)
+      const config = withPalamedes()
+
+      const rule = getRules(config)["*"] as RuleItem
+      expect(rule.loaders?.[0]?.options).toMatchObject({
+        keepSourceFallbacks: expectedFallbacks,
+        stripNonEssentialProps: expectedMetadataStrip,
+      })
+    }
+  )
+
+  it("lets keepSourceFallbacks override the Next mode default", () => {
+    vi.stubEnv("NODE_ENV", "production")
+    const config = withPalamedes({}, { keepSourceFallbacks: true })
+
+    const rule = getRules(config)["*"] as RuleItem
+    expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: true })
   })
 
   it("translates include/exclude options into the turbopack rule condition", () => {

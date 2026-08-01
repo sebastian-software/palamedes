@@ -42,11 +42,18 @@ const result = transformPalamedesMacros(
   "example.ts",
   {
     runtimeModule: "@palamedes/runtime",
+    keepSourceFallbacks: false,
   }
 )
 
 console.log(result.code)
 ```
+
+The transform strips authored source messages from generated runtime calls and
+`Trans` props by default. Set `keepSourceFallbacks: true` when the generated
+code must render readable source text without a loaded catalog. The legacy
+inverse option `stripMessageField` remains available for compatibility but is
+deprecated.
 
 ## Key Exports
 

@@ -367,6 +367,7 @@ pub(super) fn transform_trans_element(
     source: &str,
     jsx_runtime_module: &str,
     replacements: &[super::Replacement],
+    options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let attrs = jsx_attributes(&element.opening_element);
     if attrs.contains_key("id") {
@@ -386,10 +387,10 @@ pub(super) fn transform_trans_element(
     };
     let lookup_key = compiled_message_key(&message, context.as_deref());
 
-    let mut attrs = vec![
-        format!("id=\"{}\"", escape_string(&lookup_key)),
-        format!("message={{\"{}\"}}", escape_string(&message)),
-    ];
+    let mut attrs = vec![format!("id=\"{}\"", escape_string(&lookup_key))];
+    if options.keep_source_fallbacks() {
+        attrs.push(format!("message={{\"{}\"}}", escape_string(&message)));
+    }
 
     if !components.is_empty() {
         let components_prop = render_value_bindings(&components);
@@ -553,7 +554,7 @@ fn build_runtime_descriptor(
     let mut parts = Vec::new();
 
     if let Some(message) = message {
-        if !options.strip_message_field.unwrap_or(false) {
+        if options.keep_source_fallbacks() {
             parts.push(format!("message: \"{}\"", escape_string(message)));
         }
     }

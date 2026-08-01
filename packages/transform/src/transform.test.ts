@@ -1,4 +1,13 @@
-import { transformPalamedesMacros } from "./transform"
+import { transformPalamedesMacros as transformPalamedesMacrosRaw } from "./transform"
+import type { TransformOptions } from "./types"
+
+function transformPalamedesMacros(code: string, filename: string, options: TransformOptions = {}) {
+  const compatibilityOptions =
+    options.keepSourceFallbacks === undefined && options.stripMessageField === undefined
+      ? { ...options, keepSourceFallbacks: true }
+      : options
+  return transformPalamedesMacrosRaw(code, filename, compatibilityOptions)
+}
 
 type SourceMapLike = {
   file?: string
@@ -343,7 +352,39 @@ const manager = <Trans> — no manager</Trans>;
     expect(result.code).toContain('message={" — no manager"}')
   })
 
-  it("strips the message field when requested", () => {
+  it("strips source fallbacks by default from calls and Trans", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+function View() {
+  return <><span>{t\`Hello\`}</span><Trans>Rich text</Trans></>;
+}
+`
+    const result = transformPalamedesMacrosRaw(code, "test.tsx")
+
+    expect(result.code).toContain('getI18n()._("')
+    expect(result.code).toContain('<Trans id="')
+    expect(result.code).not.toContain('message: "Hello"')
+    expect(result.code).not.toContain('message={"Rich text"}')
+  })
+
+  it("keeps source fallbacks when requested", () => {
+    const code = `
+import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+function View() {
+  return <><span>{t\`Hello\`}</span><Trans>Rich text</Trans></>;
+}
+`
+    const result = transformPalamedesMacrosRaw(code, "test.tsx", {
+      keepSourceFallbacks: true,
+    })
+
+    expect(result.code).toContain('message: "Hello"')
+    expect(result.code).toContain('message={"Rich text"}')
+  })
+
+  it("supports the legacy stripMessageField option", () => {
     const code = `
 import { t } from "@palamedes/core/macro";
 function message() {
