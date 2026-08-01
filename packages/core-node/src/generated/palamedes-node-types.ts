@@ -327,6 +327,8 @@ export interface NativeMdxOptions {
   transModule?: string;
   runtimeModule?: string;
   ignoreDirective?: string;
+  /** Preserve source messages as runtime fallbacks. Defaults to `false`. */
+  keepSourceFallbacks?: boolean;
 }
 export interface NativeMdxSourceRange {
   start: number;
@@ -375,6 +377,9 @@ export interface NativeTransformOptions {
   runtimeModule?: string;
   runtimeImportName?: string;
   stripNonEssentialProps?: boolean;
+  /** Preserve source messages as runtime fallbacks. Defaults to `false`. */
+  keepSourceFallbacks?: boolean;
+  /** @deprecated Use `keepSourceFallbacks` with the inverse value. */
   stripMessageField?: boolean;
 }
 export interface NativeTransformEdit {

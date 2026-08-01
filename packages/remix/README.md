@@ -59,6 +59,11 @@ In practice:
   runtime calls against compiled catalogs — the same code shape the build-time
   integrations (`@palamedes/vite-plugin`, `@palamedes/next-plugin`) produce.
 
+The register hook preserves source-message fallbacks in development and strips
+them in production. Create a custom hook with
+`createPalamedesRemixLoadHook({ keepSourceFallbacks: true })` when production
+server code must retain readable source fallbacks.
+
 The transform cost moves from build time to process start, stays proportional
 to the number of macro-containing modules, and recurs per cold start. That is
 the same tradeoff Remix makes for its own TypeScript and JSX lowering, so

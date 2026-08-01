@@ -98,12 +98,18 @@ palamedes({
   failOnMissing: false,
   failOnCompileError: false,
   framework: "react",
+  keepSourceFallbacks: undefined,
   mdx: {
     translatableAttributes: ["alt", "title"],
     frontMatterFields: ["title", "description"],
   },
 })
 ```
+
+`keepSourceFallbacks` defaults to `true` during `vite serve` and `false` during
+`vite build`. Production builds therefore emit compact catalog lookups instead
+of duplicating authored messages in macro and generated MDX output. Set it
+explicitly to override the command-based default.
 
 `cwd` and `skipValidation` are passed through to `loadPalamedesConfig`: `cwd`
 sets the directory the config search starts from, and `skipValidation` loads

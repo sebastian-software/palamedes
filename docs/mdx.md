@@ -126,6 +126,12 @@ compiled MDX; `mdx.framework` overrides it per config. The plugin's
 `runtimeModule` option applies to macros only — use `mdx.runtime-module` to
 point MDX at a different runtime.
 
+The Vite plugin preserves inline source-message fallbacks in development and
+strips them from generated MDX during production builds. Configure
+`keepSourceFallbacks` on `palamedes()` when a production module must retain
+those readable fallbacks; this build-output policy intentionally does not live
+in the extraction-oriented `mdx` data config.
+
 Translated frontmatter remains explicit. The compiler exports the original
 scalar object as `frontmatter`; when configured fields are present it also
 exports `getTranslatedFrontmatter()`, which resolves those fields through the

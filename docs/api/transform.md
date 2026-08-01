@@ -36,3 +36,13 @@ custom bundler needs to render compiled catalog artifacts into JavaScript
 modules with the same diagnostics and missing-catalog messages.
 
 Most apps should use a framework plugin instead of this package directly.
+
+## Runtime fallback options
+
+`TransformOptions.keepSourceFallbacks` defaults to `false`. When enabled, the
+transform includes the authored message in generated `i18n._()` descriptors and
+`Trans` props so missing catalogs can render readable source text.
+
+`stripMessageField` is the deprecated inverse compatibility option. An explicit
+`keepSourceFallbacks` value takes precedence; new integrations should use only
+the positive option.

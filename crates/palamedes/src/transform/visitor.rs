@@ -153,6 +153,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     .strip_suffix("/macro")
                     .unwrap_or("@palamedes/react"),
                 &attribute_replacements,
+                self.options,
             ),
             "Plural" | "Select" | "SelectOrdinal" => transform_choice_jsx_element(
                 it,

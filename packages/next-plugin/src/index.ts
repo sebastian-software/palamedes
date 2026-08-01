@@ -145,6 +145,12 @@ export type WithPalamedesOptions = {
   runtimeModule?: string
 
   /**
+   * Preserve authored source messages as runtime fallbacks.
+   * Defaults to `true` in development and `false` in production.
+   */
+  keepSourceFallbacks?: boolean
+
+  /**
    * Monorepo workspace root to use for Turbopack and output file tracing.
    * If omitted, Palamedes will try to detect a workspace root from process.cwd().
    */
@@ -233,10 +239,13 @@ export function withPalamedes(
     failOnCompileError = false,
     framework = "react",
     runtimeModule: explicitRuntimeModule,
+    keepSourceFallbacks: explicitKeepSourceFallbacks,
     workspaceRoot: explicitWorkspaceRoot,
   } = options
 
   const runtimeModule = resolveMacroRuntimeModule(framework, explicitRuntimeModule)
+  const keepSourceFallbacks = explicitKeepSourceFallbacks ?? process.env.NODE_ENV !== "production"
+  const stripNonEssentialProps = process.env.NODE_ENV === "production"
   const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)
   const configuredTurbopackRoot = baseConfig.turbopack?.root ?? workspaceRoot
   const outputFileTracingRoot =
@@ -269,7 +278,7 @@ export function withPalamedes(
     loaders: [
       {
         loader: oxcLoaderPath,
-        options: { runtimeModule },
+        options: { runtimeModule, keepSourceFallbacks, stripNonEssentialProps },
       },
     ],
   })
@@ -311,7 +320,7 @@ export function withPalamedes(
         use: [
           {
             loader: oxcLoaderPath,
-            options: { runtimeModule },
+            options: { runtimeModule, keepSourceFallbacks, stripNonEssentialProps },
           },
         ],
       })

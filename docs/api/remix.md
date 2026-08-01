@@ -29,6 +29,7 @@ interface PalamedesRemixRegisterOptions {
   exclude?: RegExp
   framework?: "react" | "solid" | "none"
   runtimeModule?: string
+  keepSourceFallbacks?: boolean
   configPath?: string
   failOnMissing?: boolean
   failOnCompileError?: boolean
@@ -41,6 +42,7 @@ Defaults:
 - `exclude`: `/[/\\]node_modules[/\\]/`
 - `framework`: `"none"` — Remix 3 ships its own UI layer and does not depend on React
 - `runtimeModule`: derived from `framework`
+- `keepSourceFallbacks`: `true` in development, `false` in production
 - `configPath`: unset — `.po` imports discover the Palamedes config from the
   imported catalog file's directory; relative paths resolve from there
 - `failOnMissing` / `failOnCompileError`: `false` — missing translations and
@@ -49,6 +51,11 @@ Defaults:
 The default intentionally excludes `.cjs` because the macro transform injects
 ESM imports. Pass a custom `include` only if your hook also provides a
 CommonJS-compatible runtime binding.
+
+Production register hooks strip authored messages from generated runtime calls
+and omit translator comments and context metadata by default. Set
+`keepSourceFallbacks: true` when server production code must render readable
+source text without a loaded catalog.
 
 `.po` imports are claimed by the hook before Node's default loader runs. They
 compile through the same catalog module path used by the Vite/Next integrations

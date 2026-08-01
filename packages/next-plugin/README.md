@@ -126,10 +126,16 @@ module.exports = withPalamedes(
     failOnMissing: false,
     failOnCompileError: false,
     framework: "react",
+    keepSourceFallbacks: undefined,
     workspaceRoot: undefined,
   }
 )
 ```
+
+`keepSourceFallbacks` defaults to `true` in development and `false` in
+production. Production output therefore relies on loaded compiled catalogs and
+does not duplicate authored source messages in transformed modules. Set the
+option explicitly when readable runtime fallbacks are required in production.
 
 `include` and `exclude` select which sources are macro-transformed, and apply
 under both bundlers: webpack uses them as the loader's `test`/`exclude`, and

@@ -41,9 +41,26 @@ pub struct NativeTransformOptions {
     /// Removes non-essential descriptor fields such as comments and context.
     #[serde(rename = "stripNonEssentialProps")]
     pub strip_non_essential_props: Option<bool>,
-    /// Removes emitted source messages from descriptors when possible.
+    /// Keeps source messages in generated runtime calls and rich-text props.
+    ///
+    /// Source fallbacks are stripped by default. Development host adapters set
+    /// this to `true`; production adapters only do so when explicitly asked.
+    #[serde(rename = "keepSourceFallbacks")]
+    pub keep_source_fallbacks: Option<bool>,
+    /// Legacy inverse of `keep_source_fallbacks`.
+    ///
+    /// Explicit values remain supported for compatibility. New integrations
+    /// should use the positive option instead.
     #[serde(rename = "stripMessageField")]
     pub strip_message_field: Option<bool>,
+}
+
+impl NativeTransformOptions {
+    fn keep_source_fallbacks(&self) -> bool {
+        self.keep_source_fallbacks
+            .or_else(|| self.strip_message_field.map(|strip| !strip))
+            .unwrap_or(false)
+    }
 }
 
 /// A textual source replacement applied by the transformer.
