@@ -72,8 +72,8 @@ Rejected because it recreates the fragmentation that the Rust-first architecture
 - Remaining local catalog logic in Palamedes should be treated as candidate delegation material, not as a permanent second foundation.
 - New generic catalog or ICU helpers should default to `ferrocat` unless they are clearly product-specific.
 - Catalog compilation/export for runtime maps can now be delegated to Ferrocat's artifact APIs and compiled-key contract, while Palamedes remains responsible for host-side module rendering and config-aware orchestration.
-- Build-time runtime-node generation must parse through Ferrocat and only map
-  its AST into Palamedes' product-specific browser representation; Palamedes
-  must not grow a second Rust ICU parser for precompilation.
+- Build-time message-function generation must parse through Ferrocat and only
+  lower its AST into Palamedes' executable runtime operations; Palamedes must
+  not grow a second Rust ICU parser for compilation.
 - Palamedes exposes PO and FCL as product-shaped storage choices; it should not expose lower-level Ferrocat modes such as gettext-compatible PO through config or host APIs without a separate product decision.
 - Ferrocat option values should be built with the upstream `new()` and `with_*()` builder style, so future Ferrocat cleanup releases stay mechanical.

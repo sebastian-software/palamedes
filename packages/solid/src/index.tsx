@@ -1,13 +1,19 @@
 import type { JSX } from "solid-js"
 
 import {
-  formatMessagePattern,
+  createCompiledMessageRuntime,
+  formatMessageArgument,
   parseMessagePattern,
   replacePoundPlaceholders,
   resolveChoice,
   stringifyValue,
 } from "@palamedes/core"
-import type { MessageMetadata, MessageNode, PalamedesI18n } from "@palamedes/core"
+import type {
+  CompiledMessageRuntime,
+  MessageMetadata,
+  MessageNode,
+  PalamedesI18n,
+} from "@palamedes/core"
 
 import { getI18n } from "./runtime"
 
@@ -85,9 +91,8 @@ export function Trans({
       context,
       comment,
     }
-    const nodes = i18n.getMessageNodes(resolvedId, metadata)
-
-    return renderResilient(i18n, resolvedId, metadata, nodes, values ?? {}, components ?? {})
+    const runtime = createSolidMessageRuntime(i18n.locale, components ?? {})
+    return i18n.renderMessage(resolvedId, values ?? {}, runtime, metadata)
   }) as unknown as JSX.Element
 }
 
@@ -108,8 +113,8 @@ function renderChoice(
     const i18n = useReactiveI18n()
     const message = buildChoiceMessage("value", kind, choices, offset)
     const metadata: MessageMetadata = { message, reportMissing: false }
-    const nodes = i18n.getMessageNodes(message, metadata)
-    return renderResilient(i18n, message, metadata, nodes, { value }, {})
+    const runtime = createSolidMessageRuntime(i18n.locale, {})
+    return i18n.renderMessage(message, { value }, runtime, metadata)
   }) as unknown as JSX.Element
 }
 
@@ -219,63 +224,65 @@ function validatePluralOffset(offset: number | undefined): void {
   }
 }
 
-/*
- * Rendering nodes must degrade exactly like core's string renderer.
- * `i18n._()` reports a broken message through `onError` and falls back to the
- * source, but the component path walks the nodes itself: an error thrown here
- * (most easily a translator-introduced plural resolved against an absent or
- * non-numeric value) escapes the component render, takes the surrounding tree
- * down and never reaches `onError`. The whole walk is wrapped, not just the
- * choice case, so every node type shares the contract.
- */
-function renderResilient(
-  i18n: PalamedesI18n,
-  id: string,
-  metadata: MessageMetadata,
-  nodes: MessageNode[],
-  values: Record<string, unknown>,
+function createSolidMessageRuntime(
+  locale: string,
   components: Record<string, WrapperComponent | JSX.Element>
-): JSX.Element[] {
-  try {
-    return renderNodes(nodes, values, components, i18n.locale)
-  } catch (error) {
-    const fallback = metadata.message ?? id
-    // Resolve again (without a second missing report) purely to tell telemetry
-    // which pattern actually failed: the catalog entry or the source message.
-    const pattern = i18n.getMessage(id, { ...metadata, reportMissing: false })
-    // Guarded: instances reach the adapters through the untyped global runtime
-    // bridge and may predate this hook.
-    i18n.reportError?.({ id, error, pattern, fallback, metadata })
-
-    if (pattern !== fallback) {
-      try {
-        return renderNodes(parseMessagePattern(fallback), values, components, i18n.locale)
-      } catch {
-        return [fallback]
+): CompiledMessageRuntime<JSX.Element[]> {
+  const runtime: CompiledMessageRuntime<JSX.Element[]> = createCompiledMessageRuntime<
+    JSX.Element[]
+  >(locale, {
+    pattern(pattern, values) {
+      return renderNodes(parseMessagePattern(pattern), values, runtime, locale)
+    },
+    join(...parts) {
+      return parts.flatMap((part) => (typeof part === "string" ? [part] : part))
+    },
+    value(value) {
+      return [renderVariable(value)]
+    },
+    number(value, style) {
+      return [formatMessageArgument("number", value, style, locale)]
+    },
+    date(value, style) {
+      return [formatMessageArgument("date", value, style, locale)]
+    },
+    time(value, style) {
+      return [formatMessageArgument("time", value, style, locale)]
+    },
+    pound(value) {
+      return [replacePoundPlaceholders("#", value, locale)]
+    },
+    literal(value) {
+      return [value]
+    },
+    tag(name, children) {
+      const component = components[name]
+      if (typeof component === "function") {
+        return [component(children as unknown as JSX.Element)]
       }
-    }
-
-    return [fallback]
-  }
+      if (component !== undefined && component !== null) {
+        return [component as JSX.Element]
+      }
+      return children
+    },
+  })
+  return runtime
 }
 
 function renderNodes(
   nodes: MessageNode[],
   values: Record<string, unknown>,
-  components: Record<string, WrapperComponent | JSX.Element>,
+  runtime: CompiledMessageRuntime<JSX.Element[]>,
   locale: string,
   pluralValue?: number
 ): JSX.Element[] {
-  return nodes.flatMap((node, index) =>
-    renderNode(node, values, components, index, locale, pluralValue)
-  )
+  return nodes.flatMap((node) => renderNode(node, values, runtime, locale, pluralValue))
 }
 
 function renderNode(
   node: MessageNode,
   values: Record<string, unknown>,
-  components: Record<string, WrapperComponent | JSX.Element>,
-  key: number,
+  runtime: CompiledMessageRuntime<JSX.Element[]>,
   locale: string,
   pluralValue?: number
 ): JSX.Element[] {
@@ -288,38 +295,26 @@ function renderNode(
       ]
     }
     case "literal": {
-      return [node.value]
+      return runtime.literal(node.value)
     }
     case "variable": {
-      return [renderVariable(values[node.name])]
+      return runtime.value(values, node.name)
     }
     case "formatted": {
-      return [formatMessagePattern(buildFormattedMessage(node), values, locale)]
+      return runtime[node.format](values, node.variable, node.style)
     }
     case "tag": {
-      const children = renderNodes(node.children, values, components, locale, pluralValue)
-      const component = components[node.name]
-
-      if (typeof component === "function") {
-        return [component(children as unknown as JSX.Element)]
-      }
-
-      if (component !== undefined && component !== null) {
-        return [component as JSX.Element]
-      }
-
-      return children
+      return runtime.tag(
+        node.name,
+        renderNodes(node.children, values, runtime, locale, pluralValue)
+      )
     }
     case "choice": {
       const resolved = resolveChoice(node, values[node.variable], locale)
       const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue
-      return renderNodes(resolved.nodes, values, components, locale, nextPluralValue)
+      return renderNodes(resolved.nodes, values, runtime, locale, nextPluralValue)
     }
   }
-}
-
-function buildFormattedMessage(node: Extract<MessageNode, { type: "formatted" }>): string {
-  return `{${node.variable}, ${node.format}${node.style ? `, ${node.style}` : ""}}`
 }
 
 function renderVariable(value: unknown): JSX.Element {

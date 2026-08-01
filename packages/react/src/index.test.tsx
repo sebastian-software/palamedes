@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { act, render } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { createI18n } from "@palamedes/core"
+import { createI18n, defineCompiledCatalog, type CompiledMessage } from "@palamedes/core"
 import { resetI18nRuntime, setClientI18n } from "@palamedes/runtime"
 import { createServerI18nScope } from "@palamedes/runtime/server"
 
@@ -31,6 +31,30 @@ describe("@palamedes/react", () => {
     )
 
     expect(html).toBe("Bereitgestellt von <strong>Palamedes</strong>")
+  })
+
+  it("executes generated message functions directly through the React renderer", () => {
+    const footer: CompiledMessage = (values, runtime) =>
+      runtime.join(
+        "Hallo ",
+        runtime.value(values, "name"),
+        ", ",
+        runtime.tag("0", runtime.join("willkommen"))
+      )
+    const i18n = createI18n({ locale: "de" })
+    i18n.load("de", defineCompiledCatalog({ footer }))
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <Trans
+        id="footer"
+        message="Hello {name}, <0>welcome</0>"
+        values={{ name: "Ada" }}
+        components={{ 0: <strong /> }}
+      />
+    )
+
+    expect(html).toBe("Hallo Ada, <strong>willkommen</strong>")
   })
 
   it("renders a self-closing placeholder as a void component", () => {

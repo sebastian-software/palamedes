@@ -134,9 +134,10 @@ diagnostics, React or Solid JSX, compiled message IDs, and a source map.
 `compileCatalogModule(config, resourcePath, options)` is the direct module
 rendering API used by the first-party `.po` loaders. Pass the artifact config,
 the resource path, and options such as `locale`, `pseudoLocale`,
-`failOnMissing`, and `failOnCompileError`. The generated module preserves the
-public string message map and associates Ferrocat-parsed runtime nodes with it,
-so valid catalog messages do not need ICU parsing in the browser.
+`failOnMissing`, and `failOnCompileError`. The generated module contains one map
+of constant strings and executable message functions lowered from Ferrocat's
+AST, so valid dynamic messages need neither ICU parsing nor AST interpretation
+in the browser.
 
 ## Related Packages
 

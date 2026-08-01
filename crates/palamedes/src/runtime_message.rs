@@ -1,38 +1,24 @@
 use std::collections::BTreeMap;
 
 use ferrocat_icu::{parse_icu, IcuNode, IcuPluralKind};
-use serde::{Serialize, Serializer};
 
-/// Runtime-ready parser output keyed by compiled message ID.
+/// Runtime-ready message programs keyed by compiled message ID.
 ///
 /// Constant text is omitted from this map. Messages that cannot be represented
-/// by the browser runtime carry a `false` lazy-parser marker when serialized.
-pub type PrecompiledRuntimeMessages = BTreeMap<String, PrecompiledRuntimeMessage>;
+/// by the browser runtime retain a lazy-parser marker.
+pub type RuntimeCompiledMessages = BTreeMap<String, RuntimeCompiledMessage>;
 
 /// Build-time result for one non-constant catalog message.
 #[derive(Debug, PartialEq, Eq)]
-pub enum PrecompiledRuntimeMessage {
-    /// Runtime-ready parser output.
+pub enum RuntimeCompiledMessage {
+    /// Runtime-ready program input.
     Nodes(Vec<RuntimeMessageNode>),
     /// Keep the browser runtime's resilient lazy-parser path.
     Lazy,
 }
 
-impl Serialize for PrecompiledRuntimeMessage {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::Nodes(nodes) => nodes.serialize(serializer),
-            Self::Lazy => false.serialize(serializer),
-        }
-    }
-}
-
-/// Serializable node shape consumed by `@palamedes/core`.
-#[derive(Debug, PartialEq, Eq, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+/// Host-neutral node shape lowered into executable message functions.
+#[derive(Debug, PartialEq, Eq)]
 pub enum RuntimeMessageNode {
     /// Literal message text.
     Text {
@@ -56,7 +42,6 @@ pub enum RuntimeMessageNode {
         /// Runtime formatter kind.
         format: RuntimeMessageFormat,
         /// Optional formatter style.
-        #[serde(skip_serializing_if = "Option::is_none")]
         style: Option<String>,
     },
     /// Select, plural, or ordinal-plural branch.
@@ -66,7 +51,6 @@ pub enum RuntimeMessageNode {
         /// Runtime choice kind.
         kind: RuntimeMessageChoiceKind,
         /// Optional plural offset.
-        #[serde(skip_serializing_if = "Option::is_none")]
         offset: Option<u32>,
         /// Available selector branches.
         options: BTreeMap<String, Vec<Self>>,
@@ -78,11 +62,12 @@ pub enum RuntimeMessageNode {
         /// Nested message nodes.
         children: Vec<Self>,
     },
+    /// Runtime plural operand placeholder.
+    Pound,
 }
 
 /// Formatter kinds implemented by the browser runtime.
-#[derive(Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RuntimeMessageFormat {
     /// Number formatting through `Intl.NumberFormat`.
     Number,
@@ -93,8 +78,7 @@ pub enum RuntimeMessageFormat {
 }
 
 /// Choice kinds implemented by the browser runtime.
-#[derive(Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RuntimeMessageChoiceKind {
     /// Cardinal plural selection.
     Plural,
@@ -104,15 +88,15 @@ pub enum RuntimeMessageChoiceKind {
     Selectordinal,
 }
 
-/// Parses compiled catalog strings into the browser runtime's node shape.
+/// Parses compiled catalog strings into a host-neutral message program.
 ///
 /// This is a product-specific compilation step rather than a second ICU
 /// parser: Ferrocat owns parsing, while Palamedes maps its AST to the runtime
-/// contract used by generated JavaScript catalog modules.
+/// operations used to generate executable JavaScript catalog functions.
 #[must_use]
-pub fn precompile_runtime_catalog_messages(
+pub fn compile_runtime_catalog_messages(
     messages: &BTreeMap<String, String>,
-) -> PrecompiledRuntimeMessages {
+) -> RuntimeCompiledMessages {
     messages
         .iter()
         .filter_map(|(id, pattern)| {
@@ -121,10 +105,10 @@ pub fn precompile_runtime_catalog_messages(
                 .and_then(|parsed| convert_nodes(parsed.nodes, false))
             {
                 Some(nodes) => nodes,
-                None => return Some((id.clone(), PrecompiledRuntimeMessage::Lazy)),
+                None => return Some((id.clone(), RuntimeCompiledMessage::Lazy)),
             };
             (!is_constant_text(pattern, &nodes))
-                .then(|| (id.clone(), PrecompiledRuntimeMessage::Nodes(nodes)))
+                .then(|| (id.clone(), RuntimeCompiledMessage::Nodes(nodes)))
         })
         .collect()
 }
@@ -185,9 +169,7 @@ fn convert_node(node: IcuNode, in_plural: bool) -> Option<RuntimeMessageNode> {
             offset: (offset != 0).then_some(offset),
             options: convert_options(options, true)?,
         }),
-        IcuNode::Pound => Some(RuntimeMessageNode::Text {
-            value: "#".to_owned(),
-        }),
+        IcuNode::Pound => Some(RuntimeMessageNode::Pound),
         IcuNode::Tag { name, children } => Some(RuntimeMessageNode::Tag {
             name,
             children: convert_nodes(children, in_plural)?,
@@ -222,12 +204,10 @@ fn push_node(nodes: &mut Vec<RuntimeMessageNode>, node: RuntimeMessageNode) {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{
-        precompile_runtime_catalog_messages, PrecompiledRuntimeMessage, RuntimeMessageNode,
-    };
+    use super::{compile_runtime_catalog_messages, RuntimeCompiledMessage, RuntimeMessageNode};
 
-    fn compile(pattern: &str) -> Option<PrecompiledRuntimeMessage> {
-        precompile_runtime_catalog_messages(&BTreeMap::from([(
+    fn compile(pattern: &str) -> Option<RuntimeCompiledMessage> {
+        compile_runtime_catalog_messages(&BTreeMap::from([(
             "message".to_owned(),
             pattern.to_owned(),
         )]))
@@ -244,7 +224,7 @@ mod tests {
     fn compiles_variables_and_rich_text() {
         assert_eq!(
             compile("Hello {name}, <strong>welcome</strong>"),
-            Some(PrecompiledRuntimeMessage::Nodes(vec![
+            Some(RuntimeCompiledMessage::Nodes(vec![
                 RuntimeMessageNode::Text {
                     value: "Hello ".to_owned(),
                 },
@@ -266,7 +246,7 @@ mod tests {
 
     #[test]
     fn preserves_quoted_and_runtime_plural_pounds() {
-        let Some(PrecompiledRuntimeMessage::Nodes(nodes)) =
+        let Some(RuntimeCompiledMessage::Nodes(nodes)) =
             compile("{count, plural, other {'#' of # items}}")
         else {
             panic!("expected compiled plural");
@@ -281,19 +261,61 @@ mod tests {
                 RuntimeMessageNode::Literal {
                     value: "# of ".to_owned(),
                 },
+                RuntimeMessageNode::Pound,
                 RuntimeMessageNode::Text {
-                    value: "# items".to_owned(),
+                    value: " items".to_owned(),
                 },
             ])
         );
     }
 
     #[test]
-    fn omits_formatter_kinds_the_runtime_cannot_render() {
+    fn treats_pound_as_syntax_only_inside_a_plural() {
+        let Some(RuntimeCompiledMessage::Nodes(nodes)) =
+            compile("{gender, select, other {# profile}}")
+        else {
+            panic!("expected compiled select");
+        };
+        let [RuntimeMessageNode::Choice { options, .. }] = nodes.as_slice() else {
+            panic!("expected compiled select");
+        };
+        assert_eq!(
+            options.get("other"),
+            Some(&vec![RuntimeMessageNode::Text {
+                value: "# profile".to_owned(),
+            }])
+        );
+
+        let Some(RuntimeCompiledMessage::Nodes(nodes)) =
+            compile("{count, plural, other {{gender, select, other {# profiles}}}}")
+        else {
+            panic!("expected compiled plural");
+        };
+        let [RuntimeMessageNode::Choice { options, .. }] = nodes.as_slice() else {
+            panic!("expected compiled plural");
+        };
+        let Some([RuntimeMessageNode::Choice { options, .. }]) =
+            options.get("other").map(Vec::as_slice)
+        else {
+            panic!("expected nested select");
+        };
+        assert_eq!(
+            options.get("other"),
+            Some(&vec![
+                RuntimeMessageNode::Pound,
+                RuntimeMessageNode::Text {
+                    value: " profiles".to_owned(),
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn keeps_unsupported_formatter_kinds_lazy() {
         let messages = BTreeMap::from([("message".to_owned(), "Items: {items, list}".to_owned())]);
         assert_eq!(
-            precompile_runtime_catalog_messages(&messages).get("message"),
-            Some(&PrecompiledRuntimeMessage::Lazy)
+            compile_runtime_catalog_messages(&messages).get("message"),
+            Some(&RuntimeCompiledMessage::Lazy)
         );
     }
 }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { createI18n, defineCompiledCatalog, formatMessagePattern } from "@palamedes/core"
+
 import {
   createCatalogLoaderResult,
   createCompileErrorMessage,
@@ -20,11 +22,11 @@ const baseResult: CatalogCompileArtifactResult = {
 describe("catalog loader helpers", () => {
   it("renders catalog modules consistently", () => {
     expect(renderCatalogModule({ greeting: "Hallo" })).toBe(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({"greeting":"Hallo"},{});export default { messages };'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({["greeting"]:"Hallo"});export default { messages };'
     )
   })
 
-  it("embeds parser output for ICU messages and leaves invalid patterns lazy", () => {
+  it("emits message functions and leaves invalid patterns lazy", () => {
     expect(
       renderCatalogModule({
         greeting: "Hallo {name}",
@@ -32,8 +34,77 @@ describe("catalog loader helpers", () => {
         unsupported: "{items, list, other {Items}}",
       })
     ).toBe(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({"greeting":"Hallo {name}","broken":"Hallo {name","unsupported":"{items, list, other {Items}}"},{"greeting":[{"type":"text","value":"Hallo "},{"type":"variable","name":"name"}],"broken":false,"unsupported":false});export default { messages };'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";const __pm0=(v,r)=>r.join("Hallo ",r.value(v,"name"));const __pm1=(v,r)=>r.pattern("Hallo {name",v);const __pm2=(v,r)=>r.pattern("{items, list, other {Items}}",v);export const messages=__palamedesDefineCompiledCatalog({["greeting"]:__pm0,["broken"]:__pm1,["unsupported"]:__pm2});export default { messages };'
     )
+  })
+
+  it("hoists plural branches instead of allocating them during rendering", () => {
+    expect(
+      renderCatalogModule({
+        inbox: "{count, plural, one {# Nachricht} other {# Nachrichten}}",
+      })
+    ).toBe(
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";const __pb0=(v,r,p)=>r.join(r.pound(p)," Nachricht");const __pb1=(v,r,p)=>r.join(r.pound(p)," Nachrichten");const __pc0={["one"]:__pb0,["other"]:__pb1};const __pm0=(v,r)=>r.plural(v,"count",0,"plural",__pc0);export const messages=__palamedesDefineCompiledCatalog({["inbox"]:__pm0});export default { messages };'
+    )
+  })
+
+  it("executes the emitted module through the Core runtime", async () => {
+    const globalKey = "__palamedesTestDefineCompiledCatalog"
+    Object.defineProperty(globalThis, globalKey, {
+      configurable: true,
+      value: defineCompiledCatalog,
+    })
+    const patterns = {
+      plain: "Willkommen",
+      greeting: "Hallo {name}",
+      inbox: "{count, plural, one {# Nachricht} other {# Nachrichten}}",
+      hashSelect: "{gender, select, other {# Profil}}",
+      nestedSelect: "{count, plural, other {{gender, select, other {# Profile}}}}",
+      formatted: "Summe: {amount, number, ::currency/EUR}",
+      quoted: "Literal '{name}', Wert: {name}",
+      rich: "Hallo <strong>{name}</strong>",
+      offset: "{count, plural, offset:1 one {eins} other {# weitere}}",
+      ordinal: "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}",
+    }
+    const code = renderCatalogModule(patterns)
+      .replace(
+        'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";',
+        `const __palamedesDefineCompiledCatalog=globalThis.${globalKey};`
+      )
+      .replace("export const messages=", "const messages=")
+      .replace("export default { messages };", "export default messages;")
+
+    try {
+      const url = `data:text/javascript;charset=utf-8,${encodeURIComponent(code)}`
+      const module = (await import(url)) as {
+        default: Parameters<ReturnType<typeof createI18n>["load"]>[1]
+      }
+      const i18n = createI18n({ locale: "de" })
+      i18n.load("de", module.default)
+
+      expect(i18n._("plain")).toBe("Willkommen")
+      expect(i18n._("greeting", { name: "Ada" })).toBe("Hallo Ada")
+      expect(i18n._("inbox", { count: 2 })).toBe("2 Nachrichten")
+      expect(i18n._("hashSelect", { gender: "other" })).toBe("# Profil")
+      expect(i18n._("nestedSelect", { count: 2, gender: "other" })).toBe("2 Profile")
+      expect(i18n._("formatted", { amount: 12.3 })).toBe(
+        formatMessagePattern(patterns.formatted, { amount: 12.3 }, "de")
+      )
+      expect(i18n._("quoted", { name: "Ada" })).toBe(
+        formatMessagePattern(patterns.quoted, { name: "Ada" }, "de")
+      )
+      expect(i18n._("rich", { name: "Ada" })).toBe(
+        formatMessagePattern(patterns.rich, { name: "Ada" }, "de")
+      )
+      expect(i18n._("offset", { count: 4 })).toBe(
+        formatMessagePattern(patterns.offset, { count: 4 }, "de")
+      )
+      expect(i18n._("ordinal", { count: 3 })).toBe(
+        formatMessagePattern(patterns.ordinal, { count: 3 }, "de")
+      )
+    } finally {
+      delete (globalThis as Record<string, unknown>)[globalKey]
+    }
   })
 
   it("formats missing translations with context", () => {

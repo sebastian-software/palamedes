@@ -1,6 +1,12 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest"
 
-import { createI18n, DEFAULT_LOCALE, defineCompiledCatalog, type MessageNode } from "./index"
+import {
+  createI18n,
+  DEFAULT_LOCALE,
+  defineCompiledCatalog,
+  type CompiledMessage,
+  type CompiledMessageBranch,
+} from "./index"
 
 describe("createI18n", () => {
   it("starts with the default locale as a non-optional string", () => {
@@ -58,40 +64,35 @@ describe("createI18n", () => {
     expect(i18n._("greeting", { name: "Ada" })).toBe("Hallo Ada")
   })
 
-  it("uses generated parser output without changing the public string catalog", () => {
-    const greetingNodes: MessageNode[] = [
-      { type: "text", value: "Hallo " },
-      { type: "variable", name: "name" },
-    ]
-    const messages = defineCompiledCatalog(
-      {
-        greeting: "Hallo {name}",
-        plain: "Nur Text",
-      },
-      {
-        greeting: greetingNodes,
-      }
-    )
-    const i18n = createI18n({ locale: "de" })
-
-    expect(messages).toStrictEqual({
-      greeting: "Hallo {name}",
+  it("executes generated functions while keeping constants as strings", () => {
+    const greeting: CompiledMessage = (values, runtime) =>
+      runtime.join("Hallo ", runtime.value(values, "name"))
+    const messages = defineCompiledCatalog({
+      greeting,
       plain: "Nur Text",
     })
-    expect(JSON.stringify(messages)).toBe('{"greeting":"Hallo {name}","plain":"Nur Text"}')
+    const i18n = createI18n({ locale: "de" })
+
+    expect(messages.greeting).toBe(greeting)
+    expect(messages.plain).toBe("Nur Text")
+    expect(JSON.stringify(messages)).toBe('{"plain":"Nur Text"}')
 
     i18n.load("de", messages)
 
     expect(i18n._("greeting", { name: "Ada" })).toBe("Hallo Ada")
     expect(i18n._("plain")).toBe("Nur Text")
     expect(i18n.getMessage("greeting")).toBe("Hallo {name}")
-    expect(i18n.getMessageNodes("greeting")).toBe(greetingNodes)
+    expect(i18n.getMessageNodes("greeting")).toStrictEqual([
+      { type: "text", value: "Hallo " },
+      { type: "variable", name: "name" },
+    ])
     expect(i18n.getMessageNodes("plain")).toStrictEqual([{ type: "text", value: "Nur Text" }])
   })
 
-  it("keeps lazy parsing for generated entries without usable parser output", () => {
+  it("keeps lazy parsing for generated entries that could not compile", () => {
     const onError = vi.fn()
-    const messages = defineCompiledCatalog({ broken: "Hallo {name" }, { broken: false })
+    const broken: CompiledMessage = (values, runtime) => runtime.pattern("Hallo {name", values)
+    const messages = defineCompiledCatalog({ broken })
     const i18n = createI18n({ locale: "de", onError })
     i18n.load("de", messages)
 
@@ -100,21 +101,41 @@ describe("createI18n", () => {
     expect(onError.mock.calls[0]?.[0].pattern).toBe("Hallo {name")
   })
 
-  it("drops stale parser output when a later string catalog overrides an id", () => {
+  it("executes compiled plural branches and reconstructs their public pattern", () => {
+    const one: CompiledMessageBranch = (_values, runtime, pluralValue) =>
+      runtime.join(runtime.pound(pluralValue!), " Nachricht")
+    const other: CompiledMessageBranch = (_values, runtime, pluralValue) =>
+      runtime.join(runtime.pound(pluralValue!), " Nachrichten")
+    const branches = { one, other }
+    const inbox: CompiledMessage = (values, runtime) =>
+      runtime.plural(values, "count", 0, "plural", branches)
+    const i18n = createI18n({ locale: "de" })
+    i18n.load("de", defineCompiledCatalog({ inbox }))
+
+    expect(i18n._("inbox", { count: 1 })).toBe("1 Nachricht")
+    expect(i18n._("inbox", { count: 2 })).toBe("2 Nachrichten")
+    expect(i18n.getMessage("inbox")).toBe(
+      "{count, plural, one {# Nachricht} other {# Nachrichten}}"
+    )
+    expect(i18n.getMessageNodes("inbox")).toEqual([
+      {
+        type: "choice",
+        variable: "count",
+        kind: "plural",
+        options: {
+          one: [{ type: "text", value: "# Nachricht" }],
+          other: [{ type: "text", value: "# Nachrichten" }],
+        },
+      },
+    ])
+  })
+
+  it("drops a stale compiled function when a later string catalog overrides an id", () => {
     const onError = vi.fn()
     const i18n = createI18n({ locale: "de", onError })
-    i18n.load(
-      "de",
-      defineCompiledCatalog(
-        { greeting: "Hallo {name}" },
-        {
-          greeting: [
-            { type: "text", value: "Hallo " },
-            { type: "variable", name: "name" },
-          ],
-        }
-      )
-    )
+    const greeting: CompiledMessage = (values, runtime) =>
+      runtime.join("Hallo ", runtime.value(values, "name"))
+    i18n.load("de", defineCompiledCatalog({ greeting }))
 
     i18n.load("de", { greeting: "Defekt {name" })
 

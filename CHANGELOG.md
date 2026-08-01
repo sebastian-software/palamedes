@@ -62,9 +62,9 @@
 
 ### Performance Improvements
 
-- Generated PO and FCL catalog modules now carry build-time ICU parser output,
-  so valid catalog messages bypass first-render parsing in the browser. Public
-  catalog values remain strings; manual and invalid string catalogs retain the
+- Generated PO and FCL catalog modules now emit one map of constant strings and
+  executable message functions. Valid dynamic messages bypass browser ICU
+  parsing and AST interpretation; manual and invalid string catalogs retain the
   bounded lazy parser and existing fallback behavior.
 
 ## [1.10.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.9.0...palamedes-v1.10.0) (2026-07-31)

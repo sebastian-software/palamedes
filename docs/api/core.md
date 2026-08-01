@@ -8,9 +8,10 @@ package names.
 - `createI18n(options?)`
 - `DEFAULT_LOCALE`
 - `formatMessagePattern(pattern, values, locale?)`
-- `formatMessageNodes(nodes, values, locale?)`
+- `formatMessageArgument(format, value, style?, locale?)`
 - `parseMessagePattern(pattern)`
-- `defineCompiledCatalog(messages, precompiled)` for catalog-loader output
+- `defineCompiledCatalog(messages)` for generated catalog-loader output
+- `createCompiledMessageRuntime(locale, renderer)` for host adapters
 - `resolveChoice(node, value, locale?)` and `ResolvedChoice`
 - `replacePoundPlaceholders(value, numericValue, locale?)`
 - `stringifyValue(value)`
@@ -19,7 +20,10 @@ package names.
 - `defineLocaleControls(config)` from `@palamedes/core/locale`
 - `MessageMetadata`
 - `CatalogMessages`
-- `PrecompiledCatalogMessages`
+- `CatalogMessage`
+- `CompiledCatalogMessages`
+- `CompiledMessage`
+- `CompiledMessageRuntime`
 - `PalamedesI18n`
 - `CreateI18nOptions`
 - `MissingMessageInfo`
@@ -66,25 +70,29 @@ const label = i18n._("Hello {name}", { name: "Ada" })
 interface PalamedesI18n {
   readonly locale: string
   _(id: string, values?, metadata?): string
-  load(locale: string, messages: CatalogMessages): void
+  load(locale: string, messages: CatalogMessages | CompiledCatalogMessages): void
   activate(locale: string): void
   getMessage(id: string, metadata?: MessageMetadata): string
   getMessageNodes(id: string, metadata?: MessageMetadata): MessageNode[]
+  renderMessage<TResult>(id, values, runtime, metadata?): TResult
   reportError(info: ReportedMessageError): void
 }
 ```
 
-`reportError()` routes a rendering failure that happened outside the instance
-(for example inside a framework adapter's node renderer) through the same
-`onError` telemetry hook as internal formatting failures, filling in the active
-locale. `replacePoundPlaceholders(value, numericValue, locale?)` replaces `#`
-markers in already-resolved choice text using the instance-independent cached
-`Intl.NumberFormat`; the framework adapters use it so pound formatting shares
+`renderMessage()` executes a generated function directly against a host result
+renderer and applies the same telemetry and fallback behavior as `_()`.
+First-party React and Solid adapters use this path. `reportError()` remains for
+custom or older adapters that render outside the instance.
+
+`replacePoundPlaceholders(value, numericValue, locale?)` replaces `#` markers
+in already-resolved choice text using the instance-independent cached
+`Intl.NumberFormat`; framework renderers use it so pound formatting shares
 core's formatter cache.
 
-`getMessageNodes()` returns the parsed message as a `MessageNode[]` tree. The
-`<Trans>`-style components in `@palamedes/react` and `@palamedes/solid` render
-from this structure; custom `PalamedesI18n` implementations must provide it.
+`getMessageNodes()` returns the parsed message as a `MessageNode[]` tree. For
+generated functions it reconstructs the ICU pattern and parses it only when
+this compatibility API is called. First-party adapters render functions
+directly and neither parse ICU nor allocate this tree.
 
 A custom renderer must handle every `MessageNode` variant, including
 `MessageLiteralNode`:
@@ -108,13 +116,17 @@ that produce these nodes.
 `createI18n({ locale })`, or `DEFAULT_LOCALE` when omitted, is active
 immediately. `activate()` switches the locale used by `_()` and `getMessage()`.
 
-First-party catalog loaders call `defineCompiledCatalog()` during module
-evaluation. The helper leaves every public catalog value as a string and adds
-non-enumerable build-time parser output. `load()` uses that output for direct
-node formatting, so valid generated catalogs do not invoke the ICU parser in
-the browser. Spreading or JSON-serializing a catalog intentionally drops the
-metadata; the resulting plain string catalog remains supported through lazy
-parsing.
+First-party catalog loaders call `defineCompiledCatalog()` around a single map
+during module evaluation. A value is either a constant string or a
+`CompiledMessage` function. The non-enumerable catalog brand tells `load()` that
+string entries are constants; function entries execute directly through Core,
+React, or Solid renderers.
+
+Spreading a generated catalog drops the constant-string brand, so copied string
+entries safely fall back to lazy parsing while function entries remain
+executable. JSON is not a transport for generated catalogs because JavaScript
+serialization omits functions; use source PO/FCL data or a hand-written string
+catalog when a serializable format is required.
 
 Fallback order for `getMessage(id, metadata)`:
 

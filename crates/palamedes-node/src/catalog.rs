@@ -1427,24 +1427,225 @@ fn create_catalog_module_result(
 }
 
 fn render_catalog_module(
-    messages: &std::collections::BTreeMap<String, String>,
+    messages: &BTreeMap<String, String>,
     locale: &str,
     resource_path: &str,
 ) -> Result<String> {
-    let precompiled = palamedes::precompile_runtime_catalog_messages(messages);
-    let messages = serde_json::to_string(messages).map_err(|error| {
+    let compiled = palamedes::compile_runtime_catalog_messages(messages);
+    let mut renderer = RuntimeModuleRenderer::default();
+    let mut entries = Vec::with_capacity(messages.len());
+    let context = RuntimeModuleContext {
+        locale,
+        resource_path,
+    };
+
+    for (id, pattern) in messages {
+        let key = render_javascript_string(id, locale, resource_path)?;
+        let value = match compiled.get(id) {
+            None => render_javascript_string(pattern, locale, resource_path)?,
+            Some(palamedes::RuntimeCompiledMessage::Lazy) => {
+                renderer.render_lazy_message(pattern, &context)?
+            }
+            Some(palamedes::RuntimeCompiledMessage::Nodes(nodes)) => {
+                renderer.render_message(nodes, &context)?
+            }
+        };
+        entries.push(format!("[{key}]:{value}"));
+    }
+
+    Ok(format!(
+        "import{{defineCompiledCatalog as __palamedesDefineCompiledCatalog}}from\"@palamedes/core\";{}export const messages=__palamedesDefineCompiledCatalog({{{}}});export default {{ messages }};",
+        renderer.declarations,
+        entries.join(",")
+    ))
+}
+
+#[derive(Default)]
+struct RuntimeModuleRenderer {
+    declarations: String,
+    next_message: usize,
+    next_choice: usize,
+    next_branch: usize,
+}
+
+struct RuntimeModuleContext<'a> {
+    locale: &'a str,
+    resource_path: &'a str,
+}
+
+impl RuntimeModuleRenderer {
+    fn render_lazy_message(
+        &mut self,
+        pattern: &str,
+        context: &RuntimeModuleContext<'_>,
+    ) -> Result<String> {
+        let name = self.message_name();
+        let pattern = render_javascript_string(pattern, context.locale, context.resource_path)?;
+        self.declarations
+            .push_str(&format!("const {name}=(v,r)=>r.pattern({pattern},v);"));
+        Ok(name)
+    }
+
+    fn render_message(
+        &mut self,
+        nodes: &[palamedes::RuntimeMessageNode],
+        context: &RuntimeModuleContext<'_>,
+    ) -> Result<String> {
+        let expression = self.render_nodes(nodes, false, context)?;
+        let name = self.message_name();
+        self.declarations
+            .push_str(&format!("const {name}=(v,r)=>{expression};"));
+        Ok(name)
+    }
+
+    fn render_nodes(
+        &mut self,
+        nodes: &[palamedes::RuntimeMessageNode],
+        in_branch: bool,
+        context: &RuntimeModuleContext<'_>,
+    ) -> Result<String> {
+        let mut parts = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            parts.extend(self.render_node(node, in_branch, context)?);
+        }
+        if parts.len() == 1
+            && nodes.len() == 1
+            && !matches!(nodes[0], palamedes::RuntimeMessageNode::Text { .. })
+        {
+            return Ok(parts.pop().expect("single rendered message part"));
+        }
+        Ok(format!("r.join({})", parts.join(",")))
+    }
+
+    fn render_node(
+        &mut self,
+        node: &palamedes::RuntimeMessageNode,
+        in_branch: bool,
+        context: &RuntimeModuleContext<'_>,
+    ) -> Result<Vec<String>> {
+        let expression = match node {
+            palamedes::RuntimeMessageNode::Text { value } => {
+                render_javascript_string(value, context.locale, context.resource_path)?
+            }
+            palamedes::RuntimeMessageNode::Literal { value } => format!(
+                "r.literal({})",
+                render_javascript_string(value, context.locale, context.resource_path)?
+            ),
+            palamedes::RuntimeMessageNode::Variable { name } => format!(
+                "r.value(v,{})",
+                render_javascript_string(name, context.locale, context.resource_path)?
+            ),
+            palamedes::RuntimeMessageNode::Formatted {
+                variable,
+                format,
+                style,
+            } => {
+                let operation = match format {
+                    palamedes::RuntimeMessageFormat::Number => "number",
+                    palamedes::RuntimeMessageFormat::Date => "date",
+                    palamedes::RuntimeMessageFormat::Time => "time",
+                };
+                let variable =
+                    render_javascript_string(variable, context.locale, context.resource_path)?;
+                let style = style
+                    .as_deref()
+                    .map(|style| {
+                        render_javascript_string(style, context.locale, context.resource_path)
+                    })
+                    .transpose()?
+                    .map(|style| format!(",{style}"))
+                    .unwrap_or_default();
+                format!("r.{operation}(v,{variable}{style})")
+            }
+            palamedes::RuntimeMessageNode::Choice {
+                variable,
+                kind,
+                offset,
+                options,
+            } => self.render_choice(
+                variable,
+                kind,
+                offset.unwrap_or(0),
+                options,
+                in_branch,
+                context,
+            )?,
+            palamedes::RuntimeMessageNode::Tag { name, children } => format!(
+                "r.tag({},{})",
+                render_javascript_string(name, context.locale, context.resource_path)?,
+                self.render_nodes(children, in_branch, context)?
+            ),
+            palamedes::RuntimeMessageNode::Pound => {
+                if in_branch {
+                    "r.pound(p)".to_owned()
+                } else {
+                    "\"#\"".to_owned()
+                }
+            }
+        };
+        Ok(vec![expression])
+    }
+
+    fn render_choice(
+        &mut self,
+        variable: &str,
+        kind: &palamedes::RuntimeMessageChoiceKind,
+        offset: u32,
+        options: &BTreeMap<String, Vec<palamedes::RuntimeMessageNode>>,
+        in_branch: bool,
+        context: &RuntimeModuleContext<'_>,
+    ) -> Result<String> {
+        let choice_name = format!("__pc{}", self.next_choice);
+        self.next_choice += 1;
+        let mut option_entries = Vec::with_capacity(options.len());
+
+        for (selector, nodes) in options {
+            let expression = self.render_nodes(nodes, true, context)?;
+            let branch_name = format!("__pb{}", self.next_branch);
+            self.next_branch += 1;
+            self.declarations
+                .push_str(&format!("const {branch_name}=(v,r,p)=>{expression};"));
+            option_entries.push(format!(
+                "[{}]:{branch_name}",
+                render_javascript_string(selector, context.locale, context.resource_path)?
+            ));
+        }
+
+        self.declarations.push_str(&format!(
+            "const {choice_name}={{{}}};",
+            option_entries.join(",")
+        ));
+        let variable = render_javascript_string(variable, context.locale, context.resource_path)?;
+        Ok(match kind {
+            palamedes::RuntimeMessageChoiceKind::Select => {
+                if in_branch {
+                    format!("r.select(v,{variable},{choice_name},p)")
+                } else {
+                    format!("r.select(v,{variable},{choice_name})")
+                }
+            }
+            palamedes::RuntimeMessageChoiceKind::Plural => {
+                format!("r.plural(v,{variable},{offset},\"plural\",{choice_name})")
+            }
+            palamedes::RuntimeMessageChoiceKind::Selectordinal => {
+                format!("r.plural(v,{variable},{offset},\"selectordinal\",{choice_name})")
+            }
+        })
+    }
+
+    fn message_name(&mut self) -> String {
+        let name = format!("__pm{}", self.next_message);
+        self.next_message += 1;
+        name
+    }
+}
+
+fn render_javascript_string(value: &str, locale: &str, resource_path: &str) -> Result<String> {
+    serde_json::to_string(value).map_err(|error| {
         napi::Error::from_reason(format!(
             "Failed to render catalog module for locale {locale} at {resource_path}: {error}"
         ))
-    })?;
-    let precompiled = serde_json::to_string(&precompiled).map_err(|error| {
-        napi::Error::from_reason(format!(
-            "Failed to render precompiled catalog messages for locale {locale} at {resource_path}: {error}"
-        ))
-    })?;
-    Ok(format!(
-        "import{{defineCompiledCatalog as __palamedesDefineCompiledCatalog}}from\"@palamedes/core\";export const messages=__palamedesDefineCompiledCatalog({messages},{precompiled});export default {{ messages }};"
-    ))
+    })
 }
 
 fn create_missing_error_message(

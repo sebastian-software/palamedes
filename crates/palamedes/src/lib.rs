@@ -94,7 +94,7 @@ pub use message_metadata::{
     MessageOriginMetadata, MessageSelectorKind, MessageSelectorMetadata,
 };
 pub use runtime_message::{
-    precompile_runtime_catalog_messages, PrecompiledRuntimeMessage, PrecompiledRuntimeMessages,
+    compile_runtime_catalog_messages, RuntimeCompiledMessage, RuntimeCompiledMessages,
     RuntimeMessageChoiceKind, RuntimeMessageFormat, RuntimeMessageNode,
 };
 pub use transform::{
