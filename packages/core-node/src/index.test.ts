@@ -185,6 +185,9 @@ msgstr "Hello"
 
 msgid "Hello {name}"
 msgstr "Hello {name}"
+
+msgid "{count, plural, one {# message} other {# messages}}"
+msgstr "{count, plural, one {# message} other {# messages}}"
 `
     )
     await writeFile(
@@ -198,6 +201,9 @@ msgstr "Hallo"
 
 msgid "Hello {name}"
 msgstr "Hallo {name}"
+
+msgid "{count, plural, one {# message} other {# messages}}"
+msgstr "{count, plural, one {# Nachricht} other {# Nachrichten}}"
 `
     )
 
@@ -217,9 +223,9 @@ msgstr "Hallo {name}"
     )
     expect(result.code).toContain("export const messages=")
     expect(result.code).toContain("Hallo")
-    expect(result.code).toContain(
-      '[{"type":"text","value":"Hallo "},{"type":"variable","name":"name"}]'
-    )
+    expect(result.code).toContain('(v,r)=>r.join("Hallo ",r.value(v,"name"));')
+    expect(result.code).toContain('r.plural(v,"count",0,"plural",')
+    expect(result.code).toContain('r.join(r.pound(p)," Nachricht")')
     expect(result.warnings).toStrictEqual([])
     expect(result.watchFiles).toContain(path.join(deCatalog, "messages.po"))
     expect(result.locale).toBe("de")
@@ -339,8 +345,11 @@ msgstr "${lineSeparators}"
 
     expect(messageIds).toStrictEqual([...messageIds].sort())
     expect(JSON.stringify(artifact.messages)).toContain(lineSeparators)
+    const entries = Object.entries(artifact.messages)
+      .map(([id, message]) => `[${JSON.stringify(id)}]:${JSON.stringify(message)}`)
+      .join(",")
     expect(module.code).toBe(
-      `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog(${JSON.stringify(artifact.messages)},{});export default { messages };`
+      `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({${entries}});export default { messages };`
     )
   })
 })

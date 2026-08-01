@@ -1,5 +1,15 @@
 import {
-  formatMessageNodes,
+  compiledMessageSource,
+  createStringMessageRuntime,
+  isCompiledCatalog,
+  type CatalogMessage,
+  type CatalogMessages,
+  type CompiledCatalogMessages,
+  type CompiledMessageRuntime,
+  type MessageValues,
+} from "./compiledMessage"
+import {
+  formatMessageArgument,
   formatMessagePattern,
   parseMessagePattern,
   type MessageNode,
@@ -15,39 +25,6 @@ export type MessageMetadata = {
    * catalog in apps that never loaded matching entries.
    */
   reportMissing?: boolean
-}
-
-export type CatalogMessages = Record<string, string>
-
-/**
- * Build-time parser output associated with a generated string catalog.
- *
- * A missing key marks constant text; `false` keeps runtime parsing for a
- * compiler-rejected message. Catalogs without this attached metadata remain
- * entirely lazy-parsed.
- */
-export type PrecompiledCatalogMessages = Record<string, MessageNode[] | false>
-
-const PRECOMPILED_MESSAGES_SYMBOL = Symbol.for("@palamedes/core/precompiled-messages")
-
-/**
- * Associates build-time parser output with a catalog without changing its
- * public `Record<string, string>` shape or JSON/spread behavior.
- *
- * Catalog loaders emit this helper call. Application code normally only needs
- * to pass the returned messages to `i18n.load()`.
- */
-export function defineCompiledCatalog(
-  messages: CatalogMessages,
-  precompiled: PrecompiledCatalogMessages
-): CatalogMessages {
-  Object.defineProperty(messages, PRECOMPILED_MESSAGES_SYMBOL, {
-    configurable: false,
-    enumerable: false,
-    value: precompiled,
-    writable: false,
-  })
-  return messages
 }
 
 export const DEFAULT_LOCALE = "en"
@@ -89,33 +66,43 @@ export type CreateI18nOptions = {
 
 export type PalamedesI18n = {
   readonly locale: string
-  _: (id: string, values?: Record<string, unknown>, metadata?: MessageMetadata) => string
-  load: (locale: string, messages: CatalogMessages) => void
+  _: (id: string, values?: MessageValues, metadata?: MessageMetadata) => string
+  load: (locale: string, messages: CatalogMessages | CompiledCatalogMessages) => void
   activate: (locale: string) => void
   getMessage: (id: string, metadata?: MessageMetadata) => string
   getMessageNodes: (id: string, metadata?: MessageMetadata) => MessageNode[]
+  /** Execute a message directly against a host renderer such as React or Solid. */
+  renderMessage: <TResult>(
+    id: string,
+    values: MessageValues,
+    runtime: CompiledMessageRuntime<TResult>,
+    metadata?: MessageMetadata
+  ) => TResult
   /**
    * Route a rendering failure raised outside core through this instance's
-   * `onError` hook. The host adapters (React/Solid) render message nodes
-   * themselves, so their failures would otherwise bypass the telemetry that
-   * `_()` reports for the very same message.
+   * `onError` hook. Kept for custom and older host adapters; first-party
+   * adapters use `renderMessage()`, which reports failures itself.
    */
   reportError: (info: ReportedMessageError) => void
 }
 
 type ResolvedMessage = {
-  pattern: string
+  value: CatalogMessage
   fallback: string
-  precompiled?: MessageNode[] | null
+  compiled: boolean
+  fromCatalog: boolean
 }
 
-type LoadedCatalog = {
-  messages: CatalogMessages
-  precompiled: Record<string, MessageNode[] | null>
+type LoadedMessage = {
+  value: CatalogMessage
+  compiled: boolean
 }
+
+type LoadedCatalog = Record<string, LoadedMessage>
 
 export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
   const catalogs = new Map<string, LoadedCatalog>()
+  const stringRuntimes = new Map<string, CompiledMessageRuntime<string>>()
   let activeLocale = options.locale ?? DEFAULT_LOCALE
 
   function notifyMissing(info: MissingMessageInfo): void {
@@ -136,17 +123,15 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
 
   function resolveMessage(id: string, metadata?: MessageMetadata): ResolvedMessage {
     const catalog = catalogs.get(activeLocale)
-    const catalogMessage = catalog?.messages[id]
+    const loaded = catalog !== undefined && Object.hasOwn(catalog, id) ? catalog[id] : undefined
     const fallback = metadata?.message ?? id
 
-    if (catalogMessage !== undefined) {
+    if (loaded !== undefined) {
       return {
-        pattern: catalogMessage,
+        value: loaded.value,
         fallback,
-        precompiled:
-          catalog !== undefined && Object.hasOwn(catalog.precompiled, id)
-            ? catalog.precompiled[id]
-            : undefined,
+        compiled: loaded.compiled,
+        fromCatalog: true,
       }
     }
 
@@ -159,80 +144,85 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     }
 
     return {
-      pattern: fallback,
+      value: fallback,
       fallback,
+      compiled: false,
+      fromCatalog: false,
     }
   }
 
-  function renderMessage(
+  function renderResolvedMessage<TResult>(
     message: ResolvedMessage,
-    values: Record<string, unknown>,
+    values: MessageValues,
+    runtime: CompiledMessageRuntime<TResult>,
     id?: string,
     metadata?: MessageMetadata
-  ): string {
+  ): TResult {
     try {
-      if (message.precompiled === null) {
-        return message.pattern
+      if (typeof message.value === "function") {
+        return message.value<TResult>(values, runtime)
       }
-      if (message.precompiled !== undefined) {
-        return formatMessageNodes(message.precompiled, values, activeLocale)
+      if (message.compiled) {
+        return runtime.join(message.value)
       }
-      return formatMessagePattern(message.pattern, values, activeLocale)
+      return runtime.pattern(message.value, values)
     } catch (error) {
+      const pattern = getResolvedPattern(message)
       notifyError({
         id,
         locale: activeLocale,
         error: normalizeError(error),
-        pattern: message.pattern,
+        pattern,
         fallback: message.fallback,
         metadata,
       })
-    }
 
-    // Keep rendering resilient after telemetry: try the source fallback, then
-    // return the raw source message if that pattern is malformed too.
-    if (message.pattern !== message.fallback) {
-      try {
-        return formatMessagePattern(message.fallback, values, activeLocale)
-      } catch {
-        return message.fallback
+      if (message.fromCatalog && pattern !== message.fallback) {
+        try {
+          return runtime.pattern(message.fallback, values)
+        } catch {
+          // Fall through to plain source text when the fallback is malformed.
+        }
       }
-    }
 
-    return message.fallback
+      return runtime.join(message.fallback)
+    }
   }
 
-  function parseMessage(
+  function getStringRuntime(locale: string): CompiledMessageRuntime<string> {
+    const cached = stringRuntimes.get(locale)
+    if (cached) {
+      return cached
+    }
+    const runtime = createStringMessageRuntime(locale)
+    stringRuntimes.set(locale, runtime)
+    return runtime
+  }
+
+  function parseResolvedMessage(
     message: ResolvedMessage,
     id?: string,
     metadata?: MessageMetadata
   ): MessageNode[] {
+    const pattern = getResolvedPattern(message)
     try {
-      if (message.precompiled === null) {
-        return message.pattern.length === 0 ? [] : [{ type: "text", value: message.pattern }]
-      }
-      if (message.precompiled !== undefined) {
-        return message.precompiled
-      }
-      return parseMessagePattern(message.pattern)
+      return parseMessagePattern(pattern)
     } catch (error) {
       notifyError({
         id,
         locale: activeLocale,
         error: normalizeError(error),
-        pattern: message.pattern,
+        pattern,
         fallback: message.fallback,
         metadata,
       })
     }
 
-    // Rich-text renderers need the same resilience as string formatting:
-    // parse the source fallback, then render malformed source as plain text.
-    if (message.pattern !== message.fallback) {
+    if (message.fromCatalog && pattern !== message.fallback) {
       try {
         return parseMessagePattern(message.fallback)
       } catch {
-        return [{ type: "text", value: message.fallback }]
+        // Fall through to plain source text when the fallback is malformed.
       }
     }
 
@@ -245,25 +235,13 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     },
 
     load(locale, messages) {
-      const current = catalogs.get(locale) ?? {
-        messages: Object.create(null) as CatalogMessages,
-        precompiled: Object.create(null) as Record<string, MessageNode[] | null>,
-      }
-      const precompiled = getPrecompiledCatalogMessages(messages)
+      const current = catalogs.get(locale) ?? (Object.create(null) as LoadedCatalog)
+      const compiledCatalog = isCompiledCatalog(messages)
 
-      for (const [id, pattern] of Object.entries(messages)) {
-        current.messages[id] = pattern
-        if (precompiled === undefined) {
-          delete current.precompiled[id]
-        } else if (Object.hasOwn(precompiled, id)) {
-          const nodes = precompiled[id]
-          if (Array.isArray(nodes)) {
-            current.precompiled[id] = nodes
-          } else {
-            delete current.precompiled[id]
-          }
-        } else {
-          current.precompiled[id] = null
+      for (const [id, value] of Object.entries(messages)) {
+        current[id] = {
+          value,
+          compiled: compiledCatalog || typeof value === "function",
         }
       }
 
@@ -275,11 +253,15 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     },
 
     getMessage(id, metadata) {
-      return resolveMessage(id, metadata).pattern
+      return getResolvedPattern(resolveMessage(id, metadata))
     },
 
     getMessageNodes(id, metadata) {
-      return parseMessage(resolveMessage(id, metadata), id, metadata)
+      return parseResolvedMessage(resolveMessage(id, metadata), id, metadata)
+    },
+
+    renderMessage(id, values, runtime, metadata) {
+      return renderResolvedMessage(resolveMessage(id, metadata), values, runtime, id, metadata)
     },
 
     reportError(info) {
@@ -294,8 +276,25 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     },
 
     _(id, values = {}, metadata) {
-      return renderMessage(resolveMessage(id, metadata), values, id, metadata)
+      return renderResolvedMessage(
+        resolveMessage(id, metadata),
+        values,
+        getStringRuntime(activeLocale),
+        id,
+        metadata
+      )
     },
+  }
+}
+
+function getResolvedPattern(message: ResolvedMessage): string {
+  if (typeof message.value === "string") {
+    return message.value
+  }
+  try {
+    return compiledMessageSource(message.value)
+  } catch {
+    return message.fallback
   }
 }
 
@@ -303,15 +302,20 @@ function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
 }
 
-function getPrecompiledCatalogMessages(
-  messages: CatalogMessages
-): PrecompiledCatalogMessages | undefined {
-  return (messages as CatalogMessages & Record<symbol, PrecompiledCatalogMessages | undefined>)[
-    PRECOMPILED_MESSAGES_SYMBOL
-  ]
-}
-
-export { formatMessageNodes, formatMessagePattern, parseMessagePattern }
+export {
+  createCompiledMessageRuntime,
+  defineCompiledCatalog,
+  type CatalogMessage,
+  type CatalogMessages,
+  type CompiledCatalogMessages,
+  type CompiledMessage,
+  type CompiledMessageBranch,
+  type CompiledMessageBranches,
+  type CompiledMessageRuntime,
+  type ExecutableMessageRenderer,
+  type MessageValues,
+} from "./compiledMessage"
+export { formatMessageArgument, formatMessagePattern, parseMessagePattern }
 export {
   replacePoundPlaceholders,
   resolveChoice,

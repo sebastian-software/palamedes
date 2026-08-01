@@ -91,13 +91,8 @@ export function formatMessagePattern(
   return formatMessageNodes(parseMessagePattern(pattern), values, locale)
 }
 
-/**
- * Formats message nodes that were parsed ahead of time by a catalog compiler.
- *
- * String catalogs continue to use `formatMessagePattern`; generated catalogs
- * can call this path through the i18n instance without parsing in the browser.
- */
-export function formatMessageNodes(
+/** Formats an already-parsed message tree with the string renderer. */
+function formatMessageNodes(
   nodes: MessageNode[],
   values: Record<string, unknown> = {},
   locale?: string
@@ -492,7 +487,7 @@ function renderNodeToString(
       return stringifyValue(values[node.name])
     }
     case "formatted": {
-      return formatArgument(node, values[node.variable], locale)
+      return formatMessageArgument(node.format, values[node.variable], node.style, locale)
     }
     case "tag": {
       return renderNodesToString(node.children, values, locale, pluralValue)
@@ -505,18 +500,19 @@ function renderNodeToString(
   }
 }
 
-function formatArgument(
-  node: MessageFormattedArgumentNode,
+export function formatMessageArgument(
+  format: MessageFormattedArgumentNode["format"],
   value: unknown,
+  style?: string,
   locale?: string
 ): string {
-  if (node.format === "number") {
+  if (format === "number") {
     const numericValue = normalizeFormattedNumberValue(value)
     if (numericValue === undefined) {
       return stringifyValue(value)
     }
 
-    return getNumberFormatter(locale, node.style).format(numericValue)
+    return getNumberFormatter(locale, style).format(numericValue)
   }
 
   const dateValue = normalizeDateValue(value)
@@ -524,7 +520,7 @@ function formatArgument(
     return stringifyValue(value)
   }
 
-  return getDateTimeFormatter(locale, node.format, node.style).format(dateValue)
+  return getDateTimeFormatter(locale, format, style).format(dateValue)
 }
 
 function getNumberFormatter(
@@ -642,14 +638,14 @@ export function resolveChoice(
     return { nodes: exact ?? getChoiceOption(node, "other") ?? [] }
   }
 
-  const numericValue = requireChoiceNumericValue(node, value)
+  const numericValue = requireChoiceNumericValue(node.variable, node.kind, value)
   const operand = numericValue - (node.offset ?? 0)
   const exactMatch = getChoiceOption(node, `=${numericValue}`)
   if (exactMatch) {
     return { nodes: exactMatch, pluralValue: operand }
   }
 
-  const category = getPluralRules(locale, node.kind).select(operand)
+  const category = selectPluralCategory(operand, locale, node.kind)
   return {
     nodes: getChoiceOption(node, category) ?? getChoiceOption(node, "other") ?? [],
     pluralValue: operand,
@@ -666,7 +662,7 @@ function getChoiceOption(node: MessageChoiceNode, key: string): MessageNode[] | 
   return Object.hasOwn(node.options, key) ? node.options[key] : undefined
 }
 
-function requireChoiceNumericValue(node: MessageChoiceNode, value: unknown): number {
+export function requireChoiceNumericValue(variable: string, kind: string, value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value
   }
@@ -679,9 +675,7 @@ function requireChoiceNumericValue(node: MessageChoiceNode, value: unknown): num
   }
 
   throw new Error(
-    `Missing or non-numeric value for {${node.variable}, ${node.kind}, …}: received ${describeValue(
-      value
-    )}.`
+    `Missing or non-numeric value for {${variable}, ${kind}, …}: received ${describeValue(value)}.`
   )
 }
 
@@ -716,6 +710,14 @@ function getPluralRules(locale: string | undefined, kind: string): Intl.PluralRu
     return cached
   }
   return rememberFormatter(pluralRulesCache, cacheKey, new Intl.PluralRules(locale, { type }))
+}
+
+export function selectPluralCategory(
+  value: number,
+  locale: string | undefined,
+  kind: "plural" | "selectordinal"
+): Intl.LDMLPluralRule {
+  return getPluralRules(locale, kind).select(value)
 }
 
 function rememberFormatter<TFormatter>(
