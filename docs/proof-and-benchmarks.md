@@ -208,28 +208,38 @@ routine local checks.
 
 ## Local Baseline
 
-Checked local sample, captured on July 27, 2026 with:
+Checked local sample, captured on July 31, 2026 with:
 
 ```bash
-node ./scripts/benchmark-proof.mjs --warmup 3 --runs 7
+node ./scripts/benchmark-proof.mjs --warmup 3 --runs 7 --large-messages 10000
 ```
 
 Environment:
 
 - Node `v24.18.0`
 - macOS `darwin/arm64`
-- Palamedes core `1.7.0`
-- Ferrocat `2.2.0`
+- Palamedes core `1.9.0`
+- Ferrocat `3.3.0`
 - fixture corpus: 5 files / 1628 source bytes / 7 catalog messages
 
 Median results from that run:
 
-- transform: `0.51 ms`
-- extract: `0.33 ms`
-- catalog update: `0.45 ms`
-- catalog artifact compile: `5.17 ms`
+- transform: `0.48 ms`
+- extract: `0.30 ms`
+- catalog update: `0.46 ms`
+- catalog artifact compile: `5.65 ms`
 
-Sampled peak RSS stayed between `53 MiB` and `56 MiB` across the four steps.
+Sampled peak RSS stayed between `54 MiB` and `58 MiB` across the four steps.
+
+The same run generated `10,000` messages across `20` source files
+(`1,213,545` source bytes). Its median results were:
+
+- large transform: `5,327.49 ms`
+- large extract: `106.81 ms`
+- large catalog update: `161.20 ms`
+- large catalog artifact compile: `431.40 ms`
+
+Sampled peak RSS for the large fixture ranged from `118 MiB` to `178 MiB`.
 
 These numbers are not comparable with the previously checked March 2026 sample:
 that one ran against a different fixture corpus (5 files / 7002 source bytes /

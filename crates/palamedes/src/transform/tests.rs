@@ -353,7 +353,7 @@ const richChoice = <Plural value={props.quantity()} one="# task" other="# tasks"
 }
 
 #[test]
-fn extractor_and_transform_share_escaped_apostrophes() {
+fn extractor_preserves_source_apostrophes_while_transform_escapes_runtime_text() {
     let source = r##"import { plural, t } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/react/macro";
 
@@ -361,6 +361,7 @@ const tagged = t`L'${title} est prêt`;
 const rich = <Trans>l'{item}</Trans>;
 const choice = plural(count, { one: "'#' don't item", other: "# don't items" });
 const plain = t`don't`;
+const doubled = t`client''s l''été`;
 "##;
     let scoped_source = scope_macro_test_source(source, "test.tsx");
     let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
@@ -368,8 +369,8 @@ const plain = t`don't`;
     let transformed =
         transform_macros(source, "test.tsx", None).expect("apostrophe messages should transform");
 
-    // Authored apostrophes are doubled so the runtime parser renders them
-    // literally instead of quoting the placeholder that follows.
+    // Catalog identities preserve natural and already doubled apostrophes.
+    // Only a literal/placeholder boundary needs escaping in persisted ICU.
     assert_eq!(
         extracted
             .iter()
@@ -378,22 +379,30 @@ const plain = t`don't`;
         vec![
             "L''{title} est prêt",
             "l''{item}",
-            "{count, plural, one {''#'' don''t item} other {# don''t items}}",
-            "don''t",
+            "{count, plural, one {''#' don't item} other {# don't items}}",
+            "don't",
+            "client''s l''été",
         ]
     );
 
-    // Byte-identical message text on both sides keeps the compiled ids aligned.
+    // Runtime messages may use stricter apostrophe escaping, but policy-aware
+    // key derivation still maps both spellings to the same compiled ids.
     let extracted_ids = extracted
         .iter()
         .map(|message| compiled_message_key(&message.message, message.context.as_deref()))
         .collect::<Vec<_>>();
     assert_eq!(transformed.compiled_ids, extracted_ids);
-    for message in &extracted {
+    for runtime_message in [
+        "L''{title} est prêt",
+        "l''{item}",
+        "{count, plural, one {''#'' don''t item} other {# don''t items}}",
+        "don''t",
+        "client''s l''été",
+    ] {
         assert!(
-            transformed.code.contains(message.message.as_str()),
+            transformed.code.contains(runtime_message),
             "transform output should embed {:?}",
-            message.message
+            runtime_message
         );
     }
 }

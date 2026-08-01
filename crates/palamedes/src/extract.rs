@@ -12,7 +12,7 @@ use crate::descriptor::{
 };
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract_cache::{ExtractCache, ReadStartFingerprint};
-use crate::icu_text::escape_icu_literal;
+use crate::icu_text::escape_icu_source_literal;
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
@@ -643,9 +643,7 @@ fn extract_choice_options_from_object(
             return Err(invalid_choice_option(macro_name, location, &key));
         };
         let (value, option_placeholders) = match property.value.without_parentheses() {
-            Expression::StringLiteral(literal) => {
-                (escape_icu_literal(literal.value.as_str()), BTreeMap::new())
-            }
+            Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
             Expression::TemplateLiteral(template) => template_to_message_with_state(
                 template,
                 source,
@@ -1018,12 +1016,10 @@ fn template_to_message_with_state(
     let mut placeholders = BTreeMap::new();
 
     for (index, quasi) in template.quasis.iter().enumerate() {
-        // Authored literal text: escape before appending so an apostrophe at a
-        // segment boundary cannot quote the placeholder that follows.
         if let Some(value) = quasi.value.cooked {
-            message.push_str(&escape_icu_literal(value.as_str()));
+            message.push_str(value.as_str());
         } else {
-            message.push_str(&escape_icu_literal(quasi.value.raw.as_str()));
+            message.push_str(quasi.value.raw.as_str());
         }
 
         if let Some(expr) = template.expressions.get(index) {
@@ -1041,7 +1037,7 @@ fn template_to_message_with_state(
         }
     }
 
-    Ok((message, placeholders))
+    Ok((escape_icu_source_literal(&message), placeholders))
 }
 
 fn make_unique_placeholder_name(
@@ -1156,7 +1152,9 @@ fn extract_jsx_children_as_message(
 ) -> PalamedesResult<String> {
     let mut next_component_index = 0usize;
 
-    Ok(extract_jsx_children_as_message_with_state(children, &mut next_component_index)?.message)
+    Ok(escape_icu_source_literal(
+        &extract_jsx_children_as_message_with_state(children, &mut next_component_index)?.message,
+    ))
 }
 
 fn extract_jsx_children_as_message_with_state(
@@ -1168,7 +1166,7 @@ fn extract_jsx_children_as_message_with_state(
     for child in children {
         match child {
             JSXChild::Text(text) => {
-                let value = escape_icu_literal(&clean_jsx_text(text.value.as_str()));
+                let value = clean_jsx_text(text.value.as_str());
                 if !value.is_empty() {
                     parts.push(JsxMessagePart::Text(value));
                 }
@@ -1176,9 +1174,7 @@ fn extract_jsx_children_as_message_with_state(
             JSXChild::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::EmptyExpression(_) => {}
                 JSXExpression::StringLiteral(literal) => {
-                    parts.push(JsxMessagePart::Text(escape_icu_literal(
-                        literal.value.as_str(),
-                    )));
+                    parts.push(JsxMessagePart::Text(literal.value.to_string()));
                 }
                 expr => {
                     let Some(name) = jsx_expression_name(expr) else {
@@ -1266,13 +1262,12 @@ fn extract_choice_options_from_jsx(
             continue;
         };
         let (value, option_placeholders) = match attr_value {
-            JSXAttributeValue::StringLiteral(literal) => (
-                escape_icu_literal(&decode_jsx_entities(literal.value.as_str())),
-                BTreeMap::new(),
-            ),
+            JSXAttributeValue::StringLiteral(literal) => {
+                (decode_jsx_entities(literal.value.as_str()), BTreeMap::new())
+            }
             JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
                 JSXExpression::StringLiteral(literal) => {
-                    (escape_icu_literal(literal.value.as_str()), BTreeMap::new())
+                    (literal.value.to_string(), BTreeMap::new())
                 }
                 JSXExpression::TemplateLiteral(template) => template_to_message_with_state(
                     template,
@@ -1311,7 +1306,9 @@ fn build_icu_message(
         .map(|value| format!(" offset:{value}"))
         .unwrap_or_default();
 
-    format!("{{{value_name}, {format},{offset_part} {option_parts}}}")
+    escape_icu_source_literal(&format!(
+        "{{{value_name}, {format},{offset_part} {option_parts}}}"
+    ))
 }
 
 fn argument_expression_name(arg: &Argument<'_>) -> Option<String> {
@@ -2580,9 +2577,7 @@ const message = t({ message })
             vec![
                 "Allocate energy usage to business units for {locationName} ({periodLabel}). Total: {totalMwh} MWh",
                 "Match Score: {matchPercentage}%",
-                // The authored apostrophe is escaped so the runtime renders it
-                // literally instead of opening an ICU quote.
-                "We just need a few details to connect you with {clientCompanyName}''s sustainability program.",
+                "We just need a few details to connect you with {clientCompanyName}'s sustainability program.",
             ]
         );
     }

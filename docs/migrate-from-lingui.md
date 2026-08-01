@@ -260,9 +260,17 @@ ICU diagnostics with the current native core and `ferrocat`.
 Existing translations carried over from Lingui or a TMS keep their ICU quoting.
 Doubled apostrophes (`Ada''s`) render as a single `'`, and `'{'` still emits a
 literal brace — this used to be a documented divergence in the Palamedes
-runtime and is no longer one. Plain apostrophes in prose (`don't`) are left
-alone rather than treated as quote openers, so catalogs that mix both
-conventions migrate without a rewrite. See
+runtime and is no longer one. Plain apostrophes in prose (`don't`, `client's`,
+and `l'été`) stay unchanged in newly extracted PO identities. An apostrophe
+immediately before generated ICU syntax is still escaped, so `` t`L'${title}` ``
+is stored as `L''{title}` and the placeholder remains live at runtime.
+
+When an existing PO catalog uses the other spelling solely because an older
+Palamedes extractor doubled its natural apostrophes, `pmds extract` reuses the
+unique matching `(msgid, msgctxt)` entry. Its translation, translator comments,
+flags, and machine metadata survive, including with `--force-clean`, and
+repeated extraction is stable. Exact identities always win; Palamedes does not
+merge ambiguous entries or entries with different contexts. See
 [Quoting and literal text](api/core.md#quoting-and-literal-text).
 
 ## Common Migration Errors

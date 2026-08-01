@@ -133,15 +133,15 @@ become warm ones.
 
 Latest checked full run:
 
-- timestamp: `2026-07-28T07:33:39.942Z`
+- timestamp: `2026-07-31T08:33:20.786Z`
 - Node: `v24.18.0`
 - platform: `darwin/arm64`
 - warmup: `3`
 - measured runs: `7`
-- Palamedes CLI: `1.8.0`
-- Lingui CLI: `6.5.0`
+- Palamedes CLI: `1.9.0`
+- Lingui CLI: `6.6.0`
 - React Intl extraction CLI (`@formatjs/cli`): `6.16.14`
-- i18next-cli: `1.66.2`
+- i18next-cli: `1.67.3`
 
 ### Small
 
@@ -156,13 +156,17 @@ Median results:
 
 | Tool        |      Median |
 | ----------- | ----------: |
-| Palamedes   |  `33.99 ms` |
-| Lingui      | `631.05 ms` |
-| React Intl  | `273.88 ms` |
-| i18next-cli | `441.45 ms` |
+| Palamedes   |  `12.82 ms` |
+| Lingui      | `690.97 ms` |
+| React Intl  | `282.84 ms` |
+| i18next-cli | `404.93 ms` |
 
-On this run, Palamedes measured `18.57x` faster than Lingui, `8.06x` faster
-than React Intl, and `12.99x` faster than i18next-cli.
+On this run, Palamedes measured `53.91x` faster than Lingui, `22.07x` faster
+than React Intl, and `31.59x` faster than i18next-cli.
+
+Warm lane: after touching `5` source files, Palamedes re-ran in `10.27 ms`
+against its own cold `12.82 ms`. The compared tools re-extract in full, so
+their warm medians repeat their cold ones.
 
 ### Medium
 
@@ -177,13 +181,17 @@ Median results:
 
 | Tool        |      Median |
 | ----------- | ----------: |
-| Palamedes   |  `47.54 ms` |
-| Lingui      | `708.78 ms` |
-| React Intl  | `291.40 ms` |
-| i18next-cli | `555.34 ms` |
+| Palamedes   |  `22.22 ms` |
+| Lingui      | `761.69 ms` |
+| React Intl  | `305.90 ms` |
+| i18next-cli | `618.69 ms` |
 
-On this run, Palamedes measured `14.91x` faster than Lingui, `6.13x` faster
-than React Intl, and `11.68x` faster than i18next-cli.
+On this run, Palamedes measured `34.27x` faster than Lingui, `13.76x` faster
+than React Intl, and `27.84x` faster than i18next-cli.
+
+Warm lane: after touching `5` source files, Palamedes re-ran in `14.05 ms`
+against its own cold `22.22 ms`. The compared tools re-extract in full, so
+their warm medians repeat their cold ones.
 
 ### Realistic
 
@@ -201,13 +209,19 @@ Median results:
 
 | Tool        |       Median |
 | ----------- | -----------: |
-| Palamedes   |  `122.33 ms` |
-| Lingui      | `2280.56 ms` |
-| React Intl  |  `463.65 ms` |
-| i18next-cli | `5815.11 ms` |
+| Palamedes   |   `82.14 ms` |
+| Lingui      | `2405.52 ms` |
+| React Intl  |  `470.81 ms` |
+| i18next-cli | `6256.98 ms` |
 
-On this run, Palamedes measured `18.64x` faster than Lingui, `3.79x` faster
-than React Intl, and `47.54x` faster than i18next-cli.
+On this run, Palamedes measured `29.29x` faster than Lingui, `5.73x` faster
+than React Intl, and `76.18x` faster than i18next-cli.
+
+Warm lane: after touching `5` source files, Palamedes re-ran in `33.11 ms`
+against its own cold `82.14 ms` — the corpus where the cache has the most to
+skip, and the shape of a real repository. The compared tools re-extract in
+full, so their warm medians repeat their cold ones (`2339.33 ms`, `470.60 ms`,
+and `6196.06 ms`), which is why this lane never enters a speedup ratio.
 
 ## Reading The Numbers
 

@@ -1,0 +1,26 @@
+msgid ""
+msgstr ""
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"X-Generator: @lingui/cli\n"
+
+# Keep the contraction informal.
+#. Lingui extractor note
+#: src/App.tsx:4
+#, fuzzy, no-wrap
+#@ lock: {{DONT_LOCK}}
+#@ ai: openai/gpt-5.5-high:0.95
+msgid "don't stop"
+msgstr "nicht aufhören"
+
+# Customer-facing possessive.
+#: src/Client.tsx:8
+msgctxt "booking"
+msgid "client's booking"
+msgstr "Buchung des Kunden"
+
+# French source text carried through Lingui.
+#: src/Summer.tsx:12
+msgid "l'été"
+msgstr "der Sommer"
