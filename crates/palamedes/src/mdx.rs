@@ -1962,7 +1962,10 @@ const untranslated = "code";
     fn separates_mdx_catalog_apostrophes_from_runtime_escaping() {
         let result = analyze_valid(
             "don't client's l'été It''s L'{title}",
-            MdxOptions::default(),
+            MdxOptions {
+                keep_source_fallbacks: true,
+                ..MdxOptions::default()
+            },
         );
         assert_eq!(
             result
