@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest"
 
-import { createI18n, DEFAULT_LOCALE } from "./index"
+import { createI18n, DEFAULT_LOCALE, defineCompiledCatalog, type MessageNode } from "./index"
 
 describe("createI18n", () => {
   it("starts with the default locale as a non-optional string", () => {
@@ -56,6 +56,71 @@ describe("createI18n", () => {
 
     expect(i18n.locale).toBe("de")
     expect(i18n._("greeting", { name: "Ada" })).toBe("Hallo Ada")
+  })
+
+  it("uses generated parser output without changing the public string catalog", () => {
+    const greetingNodes: MessageNode[] = [
+      { type: "text", value: "Hallo " },
+      { type: "variable", name: "name" },
+    ]
+    const messages = defineCompiledCatalog(
+      {
+        greeting: "Hallo {name}",
+        plain: "Nur Text",
+      },
+      {
+        greeting: greetingNodes,
+      }
+    )
+    const i18n = createI18n({ locale: "de" })
+
+    expect(messages).toStrictEqual({
+      greeting: "Hallo {name}",
+      plain: "Nur Text",
+    })
+    expect(JSON.stringify(messages)).toBe('{"greeting":"Hallo {name}","plain":"Nur Text"}')
+
+    i18n.load("de", messages)
+
+    expect(i18n._("greeting", { name: "Ada" })).toBe("Hallo Ada")
+    expect(i18n._("plain")).toBe("Nur Text")
+    expect(i18n.getMessage("greeting")).toBe("Hallo {name}")
+    expect(i18n.getMessageNodes("greeting")).toBe(greetingNodes)
+    expect(i18n.getMessageNodes("plain")).toStrictEqual([{ type: "text", value: "Nur Text" }])
+  })
+
+  it("keeps lazy parsing for generated entries without usable parser output", () => {
+    const onError = vi.fn()
+    const messages = defineCompiledCatalog({ broken: "Hallo {name" }, { broken: false })
+    const i18n = createI18n({ locale: "de", onError })
+    i18n.load("de", messages)
+
+    expect(i18n._("broken", {}, { message: "Hello" })).toBe("Hello")
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0].pattern).toBe("Hallo {name")
+  })
+
+  it("drops stale parser output when a later string catalog overrides an id", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ locale: "de", onError })
+    i18n.load(
+      "de",
+      defineCompiledCatalog(
+        { greeting: "Hallo {name}" },
+        {
+          greeting: [
+            { type: "text", value: "Hallo " },
+            { type: "variable", name: "name" },
+          ],
+        }
+      )
+    )
+
+    i18n.load("de", { greeting: "Defekt {name" })
+
+    expect(i18n._("greeting", { name: "Ada" }, { message: "Hello {name}" })).toBe("Hello Ada")
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0].pattern).toBe("Defekt {name")
   })
 
   it("falls back to source metadata when the compiled catalog is missing a key", () => {

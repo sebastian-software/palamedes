@@ -88,7 +88,21 @@ export function formatMessagePattern(
   values: Record<string, unknown> = {},
   locale?: string
 ): string {
-  return renderNodesToString(parseMessagePattern(pattern), values, locale)
+  return formatMessageNodes(parseMessagePattern(pattern), values, locale)
+}
+
+/**
+ * Formats message nodes that were parsed ahead of time by a catalog compiler.
+ *
+ * String catalogs continue to use `formatMessagePattern`; generated catalogs
+ * can call this path through the i18n instance without parsing in the browser.
+ */
+export function formatMessageNodes(
+  nodes: MessageNode[],
+  values: Record<string, unknown> = {},
+  locale?: string
+): string {
+  return renderNodesToString(nodes, values, locale)
 }
 
 function parseNodes(

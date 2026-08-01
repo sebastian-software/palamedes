@@ -60,6 +60,13 @@
   and the macro content pre-filter is derived from the canonical macro
   package list (it previously missed `@palamedes/solid/macro`).
 
+### Performance Improvements
+
+- Generated PO and FCL catalog modules now carry build-time ICU parser output,
+  so valid catalog messages bypass first-render parsing in the browser. Public
+  catalog values remain strings; manual and invalid string catalogs retain the
+  bounded lazy parser and existing fallback behavior.
+
 ## [1.10.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.9.0...palamedes-v1.10.0) (2026-07-31)
 
 

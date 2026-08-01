@@ -182,6 +182,9 @@ msgstr ""
 
 msgid "Hello"
 msgstr "Hello"
+
+msgid "Hello {name}"
+msgstr "Hello {name}"
 `
     )
     await writeFile(
@@ -192,6 +195,9 @@ msgstr ""
 
 msgid "Hello"
 msgstr "Hallo"
+
+msgid "Hello {name}"
+msgstr "Hallo {name}"
 `
     )
 
@@ -206,8 +212,14 @@ msgstr "Hallo"
       { locale: "de" }
     )
 
+    expect(result.code).toContain(
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";'
+    )
     expect(result.code).toContain("export const messages=")
     expect(result.code).toContain("Hallo")
+    expect(result.code).toContain(
+      '[{"type":"text","value":"Hallo "},{"type":"variable","name":"name"}]'
+    )
     expect(result.warnings).toStrictEqual([])
     expect(result.watchFiles).toContain(path.join(deCatalog, "messages.po"))
     expect(result.locale).toBe("de")
@@ -328,7 +340,7 @@ msgstr "${lineSeparators}"
     expect(messageIds).toStrictEqual([...messageIds].sort())
     expect(JSON.stringify(artifact.messages)).toContain(lineSeparators)
     expect(module.code).toBe(
-      `export const messages=${JSON.stringify(artifact.messages)};export default { messages };`
+      `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog(${JSON.stringify(artifact.messages)},{});export default { messages };`
     )
   })
 })

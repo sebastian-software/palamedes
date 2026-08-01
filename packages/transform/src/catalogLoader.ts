@@ -1,3 +1,5 @@
+import { parseMessagePattern, type MessageNode } from "@palamedes/core"
+
 export type CatalogSourceKey = {
   message: string
   context?: string
@@ -118,7 +120,53 @@ export function createCompileErrorMessage(
 }
 
 export function renderCatalogModule(messages: Record<string, string>): string {
-  return `export const messages=${JSON.stringify(messages)};export default { messages };`
+  const precompiled = precompileCatalogMessages(messages)
+  return `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog(${JSON.stringify(messages)},${JSON.stringify(precompiled)});export default { messages };`
+}
+
+function precompileCatalogMessages(
+  messages: Record<string, string>
+): Record<string, MessageNode[] | false> {
+  const precompiled: Record<string, MessageNode[] | false> = Object.create(null)
+
+  for (const [id, pattern] of Object.entries(messages)) {
+    try {
+      const nodes = parseMessagePattern(pattern)
+      if (!hasSupportedRuntimeNodes(nodes)) {
+        precompiled[id] = false
+      } else if (!isConstantText(pattern, nodes)) {
+        precompiled[id] = nodes
+      }
+    } catch {
+      // Preserve runtime diagnostics and fallback for invalid patterns when
+      // failOnCompileError is disabled.
+      precompiled[id] = false
+    }
+  }
+
+  return precompiled
+}
+
+function hasSupportedRuntimeNodes(nodes: MessageNode[]): boolean {
+  return nodes.every((node) => {
+    if (node.type === "tag") {
+      return hasSupportedRuntimeNodes(node.children)
+    }
+    if (node.type !== "choice") {
+      return true
+    }
+    if (!(["plural", "select", "selectordinal"] as string[]).includes(node.kind)) {
+      return false
+    }
+    return Object.values(node.options).every(hasSupportedRuntimeNodes)
+  })
+}
+
+function isConstantText(pattern: string, nodes: MessageNode[]): boolean {
+  return (
+    (pattern.length === 0 && nodes.length === 0) ||
+    (nodes.length === 1 && nodes[0]?.type === "text" && nodes[0].value === pattern)
+  )
 }
 
 function renderSourceKey(sourceKey: CatalogSourceKey): string {

@@ -51,6 +51,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@palamedes/core": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^"
   },

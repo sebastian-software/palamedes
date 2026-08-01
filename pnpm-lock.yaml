@@ -1622,6 +1622,9 @@ importers:
 
   packages/transform:
     dependencies:
+      '@palamedes/core':
+        specifier: workspace:^
+        version: link:../core
       '@palamedes/core-node':
         specifier: workspace:^
         version: link:../core-node

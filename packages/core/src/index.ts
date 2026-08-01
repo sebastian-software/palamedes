@@ -1,4 +1,9 @@
-import { formatMessagePattern, parseMessagePattern, type MessageNode } from "./messageFormat"
+import {
+  formatMessageNodes,
+  formatMessagePattern,
+  parseMessagePattern,
+  type MessageNode,
+} from "./messageFormat"
 
 export type MessageMetadata = {
   message?: string
@@ -13,6 +18,37 @@ export type MessageMetadata = {
 }
 
 export type CatalogMessages = Record<string, string>
+
+/**
+ * Build-time parser output associated with a generated string catalog.
+ *
+ * A missing key marks constant text; `false` keeps runtime parsing for a
+ * compiler-rejected message. Catalogs without this attached metadata remain
+ * entirely lazy-parsed.
+ */
+export type PrecompiledCatalogMessages = Record<string, MessageNode[] | false>
+
+const PRECOMPILED_MESSAGES_SYMBOL = Symbol.for("@palamedes/core/precompiled-messages")
+
+/**
+ * Associates build-time parser output with a catalog without changing its
+ * public `Record<string, string>` shape or JSON/spread behavior.
+ *
+ * Catalog loaders emit this helper call. Application code normally only needs
+ * to pass the returned messages to `i18n.load()`.
+ */
+export function defineCompiledCatalog(
+  messages: CatalogMessages,
+  precompiled: PrecompiledCatalogMessages
+): CatalogMessages {
+  Object.defineProperty(messages, PRECOMPILED_MESSAGES_SYMBOL, {
+    configurable: false,
+    enumerable: false,
+    value: precompiled,
+    writable: false,
+  })
+  return messages
+}
 
 export const DEFAULT_LOCALE = "en"
 
@@ -70,10 +106,16 @@ export type PalamedesI18n = {
 type ResolvedMessage = {
   pattern: string
   fallback: string
+  precompiled?: MessageNode[] | null
+}
+
+type LoadedCatalog = {
+  messages: CatalogMessages
+  precompiled: Record<string, MessageNode[] | null>
 }
 
 export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
-  const catalogs = new Map<string, CatalogMessages>()
+  const catalogs = new Map<string, LoadedCatalog>()
   let activeLocale = options.locale ?? DEFAULT_LOCALE
 
   function notifyMissing(info: MissingMessageInfo): void {
@@ -94,13 +136,17 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
 
   function resolveMessage(id: string, metadata?: MessageMetadata): ResolvedMessage {
     const catalog = catalogs.get(activeLocale)
-    const catalogMessage = catalog?.[id]
+    const catalogMessage = catalog?.messages[id]
     const fallback = metadata?.message ?? id
 
     if (catalogMessage !== undefined) {
       return {
         pattern: catalogMessage,
         fallback,
+        precompiled:
+          catalog !== undefined && Object.hasOwn(catalog.precompiled, id)
+            ? catalog.precompiled[id]
+            : undefined,
       }
     }
 
@@ -125,6 +171,12 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     metadata?: MessageMetadata
   ): string {
     try {
+      if (message.precompiled === null) {
+        return message.pattern
+      }
+      if (message.precompiled !== undefined) {
+        return formatMessageNodes(message.precompiled, values, activeLocale)
+      }
       return formatMessagePattern(message.pattern, values, activeLocale)
     } catch (error) {
       notifyError({
@@ -156,6 +208,12 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     metadata?: MessageMetadata
   ): MessageNode[] {
     try {
+      if (message.precompiled === null) {
+        return message.pattern.length === 0 ? [] : [{ type: "text", value: message.pattern }]
+      }
+      if (message.precompiled !== undefined) {
+        return message.precompiled
+      }
       return parseMessagePattern(message.pattern)
     } catch (error) {
       notifyError({
@@ -187,8 +245,29 @@ export function createI18n(options: CreateI18nOptions = {}): PalamedesI18n {
     },
 
     load(locale, messages) {
-      const current = catalogs.get(locale) ?? {}
-      catalogs.set(locale, { ...current, ...messages })
+      const current = catalogs.get(locale) ?? {
+        messages: Object.create(null) as CatalogMessages,
+        precompiled: Object.create(null) as Record<string, MessageNode[] | null>,
+      }
+      const precompiled = getPrecompiledCatalogMessages(messages)
+
+      for (const [id, pattern] of Object.entries(messages)) {
+        current.messages[id] = pattern
+        if (precompiled === undefined) {
+          delete current.precompiled[id]
+        } else if (Object.hasOwn(precompiled, id)) {
+          const nodes = precompiled[id]
+          if (Array.isArray(nodes)) {
+            current.precompiled[id] = nodes
+          } else {
+            delete current.precompiled[id]
+          }
+        } else {
+          current.precompiled[id] = null
+        }
+      }
+
+      catalogs.set(locale, current)
     },
 
     activate(locale) {
@@ -224,7 +303,15 @@ function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
 }
 
-export { formatMessagePattern, parseMessagePattern }
+function getPrecompiledCatalogMessages(
+  messages: CatalogMessages
+): PrecompiledCatalogMessages | undefined {
+  return (messages as CatalogMessages & Record<symbol, PrecompiledCatalogMessages | undefined>)[
+    PRECOMPILED_MESSAGES_SYMBOL
+  ]
+}
+
+export { formatMessageNodes, formatMessagePattern, parseMessagePattern }
 export {
   replacePoundPlaceholders,
   resolveChoice,
