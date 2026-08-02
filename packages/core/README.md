@@ -150,6 +150,10 @@ accidental compatibility dependency cannot silently enlarge the browser
 bundle. Generated catalogs are executable modules rather than JSON data: JSON
 serialization intentionally omits their function entries.
 
+The package-root instance also exposes an optional `parsePattern(pattern)`
+adapter capability. It parses the argument as a raw ICU pattern without a
+catalog lookup; the parser-free factory intentionally omits it.
+
 Palamedes supports the common ICU argument types that product UIs usually need
 inside translated sentences:
 

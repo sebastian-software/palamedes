@@ -64,6 +64,18 @@ describe("createI18n", () => {
     expect(i18n._("greeting", { name: "Ada" })).toBe("Hallo Ada")
   })
 
+  it("parses raw patterns without re-entering catalog lookup", () => {
+    const i18n = createI18n({ locale: "de" })
+    i18n.load("de", {
+      "Hello {name}": "Falscher Katalogtreffer",
+    })
+
+    expect(i18n.parsePattern?.("Hello {name}")).toStrictEqual([
+      { type: "text", value: "Hello " },
+      { type: "variable", name: "name" },
+    ])
+  })
+
   it("executes generated functions while keeping constants as strings", () => {
     const greeting: CompiledMessage = (values, runtime) =>
       runtime.join("Hallo ", runtime.value(values, "name"))

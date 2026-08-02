@@ -32,6 +32,19 @@ support hand-written ICU string catalogs, `parseMessagePattern()`, and direct
 `getMessageNodes()` access. Custom transform or MDX module overrides remain
 honored and therefore own their chosen runtime boundary.
 
+Within each framework, the package root and `compiled` entrypoint share one
+framework-specific message renderer. That shared renderer imports only
+`@palamedes/core/compiled`; the package root injects its parser as a
+compatibility fallback, while the compiled entrypoint does not. Full Core
+instances additionally expose an optional parse-only `parsePattern()`
+capability, which treats its argument as raw ICU rather than looking it up as a
+catalog key. Parser-free Core instances omit the capability.
+
+React and Solid retain separate renderers because their result types, element
+cloning, wrapper-component behavior, and reactivity contracts differ. The
+boundary is shared across entrypoints within a framework, not across
+frameworks.
+
 The parser-free Core factory rejects an unbranded string catalog when it is
 loaded. A generated lazy fallback caused by invalid or unsupported ICU reports
 the error through `onError` and returns the raw fallback. Normal generated
@@ -65,6 +78,10 @@ adding another package or version boundary.
   types from `@palamedes/core/compiled` to keep the parser unreachable.
 - Directly authored `Trans` imports may continue using package roots; generated
   transforms select the compiled entry automatically.
+- Root and compiled entrypoints no longer maintain parallel copies of their
+  framework's message walker and runtime adapter.
+- Raw fallback patterns cannot collide with an equal catalog key on current
+  full Core instances because parsing no longer re-enters catalog lookup.
 - `pnpm benchmark:runtime-browser` builds the real Vite MDX example, verifies a
   stable parser sentinel against the compatibility entry, rejects that sentinel
   in browser assets, and reports raw, gzip, and Brotli JavaScript sizes.

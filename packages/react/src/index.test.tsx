@@ -80,6 +80,25 @@ describe("@palamedes/react", () => {
     ).toBe("Hallo Ada")
   })
 
+  it("parses lazy patterns without re-entering catalog lookup", () => {
+    const greeting: CompiledMessage = (values, runtime) => runtime.pattern("Hello {name}", values)
+    const i18n = createI18n({ locale: "de" })
+    i18n.load(
+      "de",
+      defineCompiledCatalog({
+        greeting,
+        "Hello {name}": "Falscher Katalogtreffer",
+      })
+    )
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <CompiledTrans id="greeting" values={{ name: "Ada" }} components={{}} />
+    )
+
+    expect(html).toBe("Hello Ada")
+  })
+
   it("keeps rendering with older i18n instances that have no renderMessage hook", () => {
     const i18n = createI18n({ locale: "de" })
     i18n.load("de", {
