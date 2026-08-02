@@ -770,7 +770,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         return { code: renderCatalogModule(selected ?? {}), map: null }
       },
 
-      async generateBundle() {
+      async generateBundle(_options, bundle) {
         const environmentName = (this as { environment?: { name?: string } }).environment?.name
         if (!importMapBinding || environmentName === "ssr" || sidecarModules.size === 0) {
           return
@@ -797,9 +797,32 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           }
         }
 
-        const manifest: { locales: string[]; importMaps: Record<string, string> } = {
+        // Which chunk imports which bare message specifier, so servers can
+        // emit modulepreload hints for the mapped assets of the chunks they
+        // are about to serve and message assets load in parallel with the
+        // code instead of one waterfall step behind it.
+        const chunkImports: Record<string, string[]> = {}
+        for (const fileName of Object.keys(bundle).sort()) {
+          const output = bundle[fileName]
+          if (!output || output.type !== "chunk") {
+            continue
+          }
+          const bareImports = output.imports
+            .filter((imported) => imported.startsWith(BARE_MESSAGES_PREFIX))
+            .sort()
+          if (bareImports.length > 0) {
+            chunkImports[fileName] = bareImports
+          }
+        }
+
+        const manifest: {
+          locales: string[]
+          importMaps: Record<string, string>
+          chunkImports: Record<string, string[]>
+        } = {
           locales,
           importMaps: {},
+          chunkImports,
         }
         for (const [locale, imports] of importMaps) {
           const source = JSON.stringify({ imports })
