@@ -1,10 +1,11 @@
+// The compatibility factory, deliberately: the demo panels format raw ICU
+// patterns at runtime through the plain `Trans` component, which needs the
+// parser. Apps without raw-ICU usage can import createI18n from
+// "@palamedes/core/compiled" instead and drop the parser from the bundle;
+// the generated message sidecars work identically with both factories.
 import { createI18n } from "@palamedes/core"
-import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
-import { setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
+import { setClientI18n } from "@palamedes/runtime"
 import { defineLocaleControls } from "@palamedes/core/locale"
-import { messages as enMessages } from "../locales/en.po"
-import { messages as deMessages } from "../locales/de.po"
-import { messages as esMessages } from "../locales/es.po"
 
 export const LOCALES = ["en", "de", "es"] as const
 export const DEFAULT_LOCALE = "en"
@@ -24,32 +25,16 @@ export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale)
 }
 
-// Demo catalogs are tiny, so they ship statically. That keeps client locale
-// activation synchronous, which matters during hydration: translated components
-// render in the same pass as the activation call, before any async load could
-// resolve. Larger apps would dynamically import per-locale chunks instead.
-const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
-  en: enMessages,
-  de: deMessages,
-  es: esMessages,
-}
-
-export function loadMessages(locale: Locale): CompiledCatalogMessages {
-  return CATALOGS[locale]
-}
-
 export function createExampleI18n() {
   return createI18n()
 }
 
-export function activateServerI18n(locale: Locale) {
-  const i18n = createExampleI18n()
-  i18n.load(locale, loadMessages(locale))
-  i18n.activate(locale)
-  setServerI18nGetter(() => i18n)
-  return i18n
-}
-
+// This example uses experimental graph splitting: no catalog is imported here.
+// Every code chunk registers the messages it uses through a generated sidecar
+// module at evaluation time, so activation stays synchronous and
+// hydration-safe, and `setClientI18n` flushes registrations that arrived
+// before the instance was installed. Server rendering keeps its full catalogs
+// in lib/i18n.server.ts.
 const clientI18n = createExampleI18n()
 
 export function syncClientI18n(locale: Locale) {
@@ -57,7 +42,6 @@ export function syncClientI18n(locale: Locale) {
     return
   }
 
-  clientI18n.load(locale, loadMessages(locale))
   clientI18n.activate(locale)
   setClientI18n(clientI18n)
 }

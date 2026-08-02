@@ -6,86 +6,162 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-msgid "Add to cart"
-msgstr "Add to cart"
-
-msgid "Attendees"
-msgstr "Attendees"
-
-msgid "Availability"
-msgstr "Availability"
-
-msgid "Behind the scenes"
-msgstr "Behind the scenes"
-
-msgid "Berlin, Germany"
-msgstr "Berlin, Germany"
-
-msgid "Book your seat at Frontend Stage 2026"
-msgstr "Book your seat at Frontend Stage 2026"
-
-msgid "Conference pass"
-msgstr "Conference pass"
-
-msgid "Currency"
-msgstr "Currency"
-
-msgid "Date"
-msgstr "Date"
-
-msgid "Fewer tickets"
-msgstr "Fewer tickets"
-
-msgid "Locale"
-msgstr "Locale"
-
-msgid "Localized live with Palamedes"
-msgstr "Localized live with Palamedes"
-
-msgid "More tickets"
-msgstr "More tickets"
-
-msgid "Number"
-msgstr "Number"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Refresh server result"
-
-msgid "Rendered with React Router"
-msgstr "Rendered with React Router"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server action confirmed locale {locale}."
-msgstr "Server action confirmed locale {locale}."
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Three days of talks on the craft of building for the web. Choose your tickets below."
-
-msgid "Total"
-msgstr "Total"
-
-msgid "Venue"
-msgstr "Venue"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Welcome back, {attendeeName}."
-
-msgid "each"
-msgstr "each"
-
-msgid "one switch, every format"
-msgstr "one switch, every format"
-
-msgid "server locale"
-msgstr "server locale"
-
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
 
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# seat left} other {# seats left}}"
+
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid ""
+"{workshops, plural, one {# workshop still has open seats} other {# workshops "
+"still have open seats}}"
+msgstr ""
+"{workshops, plural, one {# workshop still has open seats} other {# workshops "
+"still have open seats}}"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "Add to cart"
+
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "Attendance insights"
+msgstr "Attendance insights"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Attendees"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Availability"
+
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "Back to ticket sale"
+msgstr "Back to ticket sale"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Behind the scenes"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Germany"
+
+#: examples/react-router-cookie/app/routes/home.tsx
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Book your seat at Frontend Stage 2026"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Conference pass"
+
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "Countries represented"
+msgstr "Countries represented"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Currency"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Date"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "each"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
+
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "Live numbers for the current ticket sale, rendered on their own route."
+msgstr "Live numbers for the current ticket sale, rendered on their own route."
+
+#: examples/react-router-cookie/app/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Locale"
+
+#: examples/react-router-cookie/app/routes/home.tsx
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "Localized live with Palamedes"
+msgstr "Localized live with Palamedes"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "More tickets"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Number"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "one switch, every format"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Refresh server result"
+
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "Registered attendees"
+msgstr "Registered attendees"
+
+#: examples/react-router-cookie/app/routes/home.tsx
+msgid "Rendered with React Router"
+msgstr "Rendered with React Router"
+
+#: examples/react-router-cookie/app/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/react-router-cookie/app/routes/home.tsx#action
+msgid "Server action confirmed locale {locale}."
+msgstr "Server action confirmed locale {locale}."
+
+#: examples/react-router-cookie/app/routes/home.tsx
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "server locale"
+msgstr "server locale"
+
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "Talks scheduled"
+msgstr "Talks scheduled"
+
+#: examples/react-router-cookie/app/routes/home.tsx
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Venue"
+
+#: examples/react-router-cookie/app/routes/home.tsx
+msgid "View attendance insights"
+msgstr "View attendance insights"
+
+#: examples/react-router-cookie/app/routes/home.tsx
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."
+
+#: examples/react-router-cookie/app/routes/insights.tsx
+msgid "Workshop capacity"
+msgstr "Workshop capacity"

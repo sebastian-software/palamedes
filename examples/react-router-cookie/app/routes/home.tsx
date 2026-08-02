@@ -1,4 +1,4 @@
-import { redirect } from "react-router"
+import { Link, redirect } from "react-router"
 import { t } from "@palamedes/core/macro"
 import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
@@ -8,13 +8,8 @@ import { ClientReady } from "~/components/ClientReady"
 import { LocaleSwitcher } from "~/components/LocaleSwitcher"
 import { ProofPanel } from "~/components/ProofPanel"
 import { TicketPanel } from "~/components/TicketPanel"
-import {
-  LOCALE_COOKIE,
-  activateServerI18n,
-  getLocaleLabel,
-  resolveLocaleFromRequest,
-  syncClientI18n,
-} from "~/lib/i18n"
+import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest, syncClientI18n } from "~/lib/i18n"
+import { activateServerI18n } from "~/lib/i18n.server"
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -98,6 +93,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <TicketPanel locale={locale} />
         <ProofPanel locale={locale} />
       </div>
+
+      <p className="lede">
+        <Link data-testid="insights-link" to="/insights">
+          <Trans>View attendance insights</Trans>
+        </Link>
+      </p>
 
       <footer className="foot">
         <span className="foot-badge">Palamedes</span>
