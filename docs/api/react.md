@@ -41,6 +41,11 @@ components:
 - `Select`
 - `SelectOrdinal`
 
+The transform rewrites `Trans` to `@palamedes/react/compiled`. That subpath
+exports the compiled-message `Trans` adapter (including the `react-server`
+condition) without importing Core's ICU parser. The package root remains the
+full runtime-component compatibility surface.
+
 ## Runtime Components
 
 Runtime components subscribe to the client activation snapshot and read the

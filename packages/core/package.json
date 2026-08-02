@@ -22,6 +22,11 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     },
+    "./compiled": {
+      "types": "./dist/compiled.d.ts",
+      "import": "./dist/compiled.mjs",
+      "require": "./dist/compiled.cjs"
+    },
     "./macro": {
       "types": "./dist/macro.d.ts",
       "import": "./dist/macro.mjs",

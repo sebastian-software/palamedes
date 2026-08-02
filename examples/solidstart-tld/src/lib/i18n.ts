@@ -1,5 +1,5 @@
-import type { CatalogMessages } from "@palamedes/core"
 import { createI18n } from "@palamedes/core"
+import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 import { defineLocaleControls } from "@palamedes/core/locale"
 import { messages as deMessages } from "../locales/de.po"
@@ -30,7 +30,7 @@ export const locales = defineLocaleControls<Locale>({
 export const LOCALE_LABELS = locales.labels
 export const normalizeLocale = locales.normalizeLocale
 
-export const localeMessages: Record<Locale, CatalogMessages> = {
+export const localeMessages: Record<Locale, CompiledCatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,

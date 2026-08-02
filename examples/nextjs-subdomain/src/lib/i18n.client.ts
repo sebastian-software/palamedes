@@ -1,4 +1,4 @@
-import type { CatalogMessages } from "@palamedes/core"
+import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
 import { activateServerI18n, setClientI18n } from "@palamedes/runtime"
 import { cache } from "react"
 import { createExampleI18n, locales, type Locale } from "./i18n"
@@ -11,7 +11,7 @@ import { messages as esMessages } from "../locales/es.po"
 // components render in the same pass as the activation call, before any async
 // import could resolve. Without this, hydration throws "No active client i18n
 // instance". Larger apps would dynamically import per-locale chunks instead.
-const CATALOGS: Record<Locale, CatalogMessages> = {
+const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,

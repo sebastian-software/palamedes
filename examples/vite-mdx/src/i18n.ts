@@ -1,4 +1,4 @@
-import { createI18n, type CatalogMessages } from "@palamedes/core"
+import { createI18n, type CompiledCatalogMessages } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
 import { messages as deMessages } from "./locales/de.po"
@@ -7,7 +7,7 @@ import { messages as enMessages } from "./locales/en.po"
 export const LOCALES = ["en", "de"] as const
 export type Locale = (typeof LOCALES)[number]
 
-const catalogs: Record<Locale, CatalogMessages> = {
+const catalogs: Record<Locale, CompiledCatalogMessages> = {
   de: deMessages,
   en: enMessages,
 }

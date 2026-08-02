@@ -81,7 +81,13 @@ impl<'a> Visit<'a> for ImportCollector {
             }
         }
 
-        if matches!(source, "@palamedes/react" | "@palamedes/solid") {
+        if matches!(
+            source,
+            "@palamedes/react"
+                | "@palamedes/react/compiled"
+                | "@palamedes/solid"
+                | "@palamedes/solid/compiled"
+        ) {
             if let Some(specifiers) = &it.specifiers {
                 for specifier in specifiers {
                     if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {

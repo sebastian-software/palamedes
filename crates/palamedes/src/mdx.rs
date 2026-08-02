@@ -18,9 +18,9 @@ use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart}
 use crate::transform::NativeTransformSourceMap;
 
 const DEFAULT_IGNORE_DIRECTIVE: &str = "palamedes-ignore";
-const REACT_TRANS_MODULE: &str = "@palamedes/react";
+const REACT_TRANS_MODULE: &str = "@palamedes/react/compiled";
 const REACT_RUNTIME_MODULE: &str = "@palamedes/react/runtime";
-const SOLID_TRANS_MODULE: &str = "@palamedes/solid";
+const SOLID_TRANS_MODULE: &str = "@palamedes/solid/compiled";
 const SOLID_RUNTIME_MODULE: &str = "@palamedes/solid/runtime";
 
 /// Framework contract used for generated rich-text component bindings.
@@ -2074,6 +2074,7 @@ Do not translate this.
         let react = analyze_valid(source, MdxOptions::default())
             .code
             .expect("React compile");
+        assert!(react.contains(r#"from "@palamedes/react/compiled""#));
         assert!(react.contains("0: <strong />"));
 
         let solid = analyze_valid(
@@ -2085,6 +2086,7 @@ Do not translate this.
         )
         .code
         .expect("Solid compile");
+        assert!(solid.contains(r#"from "@palamedes/solid/compiled""#));
         assert!(solid.contains("0: (children) => <strong>{children}</strong>"));
     }
 

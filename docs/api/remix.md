@@ -3,7 +3,7 @@
 `@palamedes/remix` is the server-first Remix v3 integration for Palamedes.
 
 Install `@palamedes/core` as a direct runtime dependency: generated catalog
-modules import `defineCompiledCatalog()` from it.
+modules import `defineCompiledCatalog()` from its `compiled` entrypoint.
 
 It targets Remix v3's default Node loader model rather than Vite. Register
 Remix's TSX loader first, then Palamedes:

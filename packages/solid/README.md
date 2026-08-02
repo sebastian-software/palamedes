@@ -43,9 +43,11 @@ export function Footer() {
 ```
 
 When the Palamedes transform runs, macro imports are rewritten to runtime
-imports from `@palamedes/solid`. Rich JSX children are transformed to numeric
-component slots in the message, for example `<0>Palamedes</0>`, while the Solid
-wrapper is passed separately.
+imports from `@palamedes/solid/compiled`, which excludes the ICU parser. Rich
+JSX children are transformed to numeric component slots in the message, for
+example `<0>Palamedes</0>`, while the Solid wrapper is passed separately.
+Direct imports from `@palamedes/solid` remain the compatibility surface for
+hand-written runtime component patterns.
 
 ## Runtime Components
 

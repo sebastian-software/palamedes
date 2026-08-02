@@ -1,5 +1,5 @@
-import type { CatalogMessages } from "@palamedes/core"
 import { createI18n } from "@palamedes/core"
+import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 import { defineLocaleControls } from "@palamedes/core/locale"
 import { messages as enMessages } from "../locales/en.po"
@@ -25,13 +25,13 @@ export const normalizeLocale = locales.normalizeLocale
 // activation synchronous, which matters during hydration: translated components
 // render in the same pass as the activation call, before any async load could
 // resolve. Larger apps would dynamically import per-locale chunks instead.
-const CATALOGS: Record<Locale, CatalogMessages> = {
+const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,
 }
 
-export function loadMessages(locale: Locale): CatalogMessages {
+export function loadMessages(locale: Locale): CompiledCatalogMessages {
   return CATALOGS[locale]
 }
 

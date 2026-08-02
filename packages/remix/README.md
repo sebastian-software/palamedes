@@ -9,7 +9,7 @@ pnpm add @palamedes/core @palamedes/remix @palamedes/runtime remix
 ```
 
 `@palamedes/core` must be a direct runtime dependency because generated catalog
-modules import `defineCompiledCatalog()` from it.
+modules import `defineCompiledCatalog()` from its `compiled` entrypoint.
 
 Use this package with Remix v3's default Node loader path. Register Remix's TSX
 loader first, then Palamedes:
