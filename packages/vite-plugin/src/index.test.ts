@@ -621,10 +621,18 @@ describe("experimental graph splitting", () => {
       { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
     )
     const emitted: { fileName: string; source: string }[] = []
-    await sidecarPlugin.generateBundle.call({
-      environment: { name: "client" },
-      emitFile: (file: { fileName: string; source: string }) => emitted.push(file),
-    } as never)
+    await sidecarPlugin.generateBundle.call(
+      {
+        environment: { name: "client" },
+        emitFile: (file: { fileName: string; source: string }) => emitted.push(file),
+      } as never,
+      {},
+      {
+        "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
+        "assets/vendor.js": { type: "chunk", imports: [] },
+        "assets/style.css": { type: "asset" },
+      }
+    )
 
     // One dependency-free asset per (sidecar x locale); pseudo is skipped.
     const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"))
@@ -644,6 +652,9 @@ describe("experimental graph splitting", () => {
     const parsed = JSON.parse(manifest!.source)
     expect(parsed.locales).toEqual(["en", "de"])
     expect(parsed.importMaps.de).toBe(deMap!.fileName)
+    // Only chunks with bare message imports appear, so servers can preload
+    // the mapped assets of the chunks they serve.
+    expect(parsed.chunkImports).toEqual({ "assets/home-abc.js": [`#pmds/${key}`] })
   })
 
   it("skips asset emission for SSR bundles", async () => {
@@ -653,10 +664,14 @@ describe("experimental graph splitting", () => {
       { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
     )
     const emitFile = vi.fn()
-    await sidecarPlugin.generateBundle.call({
-      environment: { name: "ssr" },
-      emitFile,
-    } as never)
+    await sidecarPlugin.generateBundle.call(
+      {
+        environment: { name: "ssr" },
+        emitFile,
+      } as never,
+      {},
+      {}
+    )
 
     expect(emitFile).not.toHaveBeenCalled()
   })
