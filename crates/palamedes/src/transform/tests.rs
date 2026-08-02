@@ -143,6 +143,36 @@ fn transforms_tagged_templates() {
 }
 
 #[test]
+fn aliases_injected_runtime_import_when_local_name_is_taken_by_another_module() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+import { getI18n } from "@palamedes/runtime";
+
+const locale = getI18n().locale;
+const msg = t`Hello`;
+"#;
+
+    let result = transform_macros(
+        source,
+        "test.ts",
+        Some(NativeTransformOptions {
+            runtime_module: Some("@palamedes/react/runtime".to_string()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("transform should avoid runtime import collisions");
+
+    assert!(result.has_changed);
+    assert!(result
+        .code
+        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/react/runtime";"#));
+    assert!(result
+        .code
+        .contains(r#"import { getI18n } from "@palamedes/runtime";"#));
+    assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
+    assert!(result.code.contains("const locale = getI18n().locale;"));
+}
+
+#[test]
 fn unchanged_transform_has_no_source_map() {
     let result = transform_macros("const msg = \"Hello\";\n", "test.ts", None)
         .expect("transform should succeed");

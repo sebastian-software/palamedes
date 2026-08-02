@@ -22,6 +22,8 @@ pub(super) struct ImportCollector {
     pub macro_import_ranges: Vec<(usize, usize)>,
     pub removed_macro_import: Option<(String, usize)>,
     pub has_runtime_import: bool,
+    pub has_runtime_import_name_collision: bool,
+    pub import_local_names: HashSet<String>,
     pub trans_import_sources: HashSet<String>,
 }
 
@@ -34,6 +36,8 @@ impl ImportCollector {
             macro_import_ranges: Vec::new(),
             removed_macro_import: None,
             has_runtime_import: false,
+            has_runtime_import_name_collision: false,
+            import_local_names: HashSet::new(),
             trans_import_sources: HashSet::new(),
         }
     }
@@ -42,6 +46,15 @@ impl ImportCollector {
 impl<'a> Visit<'a> for ImportCollector {
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         let source = it.source.value.as_str();
+
+        if let Some(specifiers) = &it.specifiers {
+            for specifier in specifiers {
+                if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
+                    self.import_local_names
+                        .insert(specifier.local.name.to_string());
+                }
+            }
+        }
 
         if PALAMEDES_MACRO_PACKAGES.contains(&source) {
             self.macro_import_ranges
@@ -76,6 +89,14 @@ impl<'a> Visit<'a> for ImportCollector {
                         if specifier.local.name == self.runtime_import_name.as_str() {
                             self.has_runtime_import = true;
                         }
+                    }
+                }
+            }
+        } else if let Some(specifiers) = &it.specifiers {
+            for specifier in specifiers {
+                if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
+                    if specifier.local.name == self.runtime_import_name.as_str() {
+                        self.has_runtime_import_name_collision = true;
                     }
                 }
             }

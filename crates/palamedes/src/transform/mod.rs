@@ -29,7 +29,7 @@ pub(super) struct Replacement {
 }
 
 /// Options controlling how macro transforms emit runtime code.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct NativeTransformOptions {
     /// Runtime module path used for injected imports.
@@ -157,6 +157,15 @@ pub fn transform_macros(
     let mut collector = ImportCollector::new(&runtime_module, &runtime_import_name);
     collector.visit_program(&parsed.program);
 
+    let effective_runtime_import_name =
+        if !collector.has_runtime_import && collector.has_runtime_import_name_collision {
+            unique_runtime_import_alias(&runtime_import_name, &collector.import_local_names)
+        } else {
+            runtime_import_name.clone()
+        };
+    let mut options = options;
+    options.runtime_import_name = Some(effective_runtime_import_name.clone());
+
     if let Some((macro_name, offset)) = collector.removed_macro_import.as_ref() {
         return Err(PalamedesError::UnsupportedMacroSyntax {
             macro_name: macro_name.clone(),
@@ -203,10 +212,17 @@ pub fn transform_macros(
     let mut prefix = String::new();
 
     if visitor.needs_runtime_import && !collector.has_runtime_import {
-        let _ = writeln!(
-            prefix,
-            "import {{ {runtime_import_name} }} from \"{runtime_module}\";"
-        );
+        if effective_runtime_import_name == runtime_import_name {
+            let _ = writeln!(
+                prefix,
+                "import {{ {runtime_import_name} }} from \"{runtime_module}\";"
+            );
+        } else {
+            let _ = writeln!(
+                prefix,
+                "import {{ {runtime_import_name} as {effective_runtime_import_name} }} from \"{runtime_module}\";"
+            );
+        }
     }
 
     let mut trans_modules = visitor
@@ -279,6 +295,33 @@ pub fn transform_macros(
         map,
         prepend_text: None,
     })
+}
+
+fn unique_runtime_import_alias(
+    runtime_import_name: &str,
+    used_import_names: &std::collections::HashSet<String>,
+) -> String {
+    let base = format!("__palamedes{}", uppercase_first(runtime_import_name));
+    if !used_import_names.contains(&base) {
+        return base;
+    }
+
+    let mut counter = 2;
+    loop {
+        let candidate = format!("{base}{counter}");
+        if !used_import_names.contains(&candidate) {
+            return candidate;
+        }
+        counter += 1;
+    }
+}
+
+fn uppercase_first(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
 }
 
 fn apply_replacement(
