@@ -28,9 +28,13 @@ export type TransProps = {
 }
 
 type PatternParser = (pattern: string) => MessageNode[]
+type RendererI18n = Pick<
+  PalamedesI18n,
+  "locale" | "getMessage" | "getMessageNodes" | "parsePattern" | "renderMessage" | "reportError"
+>
 
 /** Creates the shared Trans component for compatibility and compiled entries. */
-export function createTrans(useI18n: () => PalamedesI18n, fallbackParser?: PatternParser) {
+export function createTrans(useI18n: () => RendererI18n, fallbackParser?: PatternParser) {
   return function Trans({
     id,
     message,
@@ -48,7 +52,7 @@ export function createTrans(useI18n: () => PalamedesI18n, fallbackParser?: Patte
 }
 
 export function renderI18nMessage(
-  i18n: PalamedesI18n,
+  i18n: RendererI18n,
   id: string,
   values: Record<string, unknown>,
   runtime: CompiledMessageRuntime<ReactNode[]>,
@@ -79,7 +83,7 @@ export function renderI18nMessage(
 }
 
 export function createReactMessageRuntime(
-  i18n: PalamedesI18n,
+  i18n: RendererI18n,
   components: Record<string, ReactElement>,
   fallbackParser?: PatternParser
 ): CompiledMessageRuntime<ReactNode[]> {
@@ -126,7 +130,7 @@ export function createReactMessageRuntime(
 }
 
 function parsePattern(
-  i18n: PalamedesI18n,
+  i18n: RendererI18n,
   pattern: string,
   fallbackParser?: PatternParser
 ): MessageNode[] {
