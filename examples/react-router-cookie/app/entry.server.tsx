@@ -7,7 +7,7 @@ import { isbot } from "isbot"
 import type { RenderToPipeableStreamOptions } from "react-dom/server"
 import { renderToPipeableStream } from "react-dom/server"
 import { resolveLocaleFromRequest } from "~/lib/i18n"
-import { getLocaleImportMap } from "~/lib/i18n.server"
+import { getLocaleBinding, type LocaleBinding } from "~/lib/i18n.server"
 
 export const streamTimeout = 5000
 
@@ -17,37 +17,58 @@ export const streamTimeout = 5000
  * module load starts, and React 19 hoists modulepreload links above anything
  * rendered from a route component, so injecting the map through the Layout is
  * a race. Splicing it into the stream directly after <head> is the only spot
- * that deterministically precedes every preload. Null map (dev) passes the
- * stream through untouched.
+ * that deterministically precedes every preload.
+ *
+ * The same pass adds modulepreload hints for the message assets belonging to
+ * the code chunks this document already preloads, so messages download in
+ * parallel with the code instead of one waterfall step behind it. Buffering
+ * ends at </head>; with onShellReady the head arrives in the first flush.
+ * Null binding (dev) passes the stream through untouched.
  */
-function createImportMapInjector(importMap: string | null): Transform {
-  if (!importMap) {
+function createLocaleBindingInjector(binding: LocaleBinding | null): Transform {
+  if (!binding) {
     return new PassThrough()
   }
-  const injection = `<head><script type="importmap">${importMap}</script>`
-  let injected = false
-  let carry = ""
+  let buffered = ""
+  let done = false
   return new Transform({
     transform(chunk, _encoding, callback) {
-      if (injected) {
+      if (done) {
         callback(null, chunk)
         return
       }
-      const text = carry + String(chunk)
-      const index = text.indexOf("<head>")
-      if (index === -1) {
-        // Keep a tail that could contain a split "<head>" across chunks.
-        carry = text.slice(-6)
-        callback(null, text.slice(0, text.length - carry.length))
+      buffered += String(chunk)
+      const headEnd = buffered.indexOf("</head>")
+      if (headEnd === -1) {
+        callback()
         return
       }
-      injected = true
-      carry = ""
-      callback(null, text.slice(0, index) + injection + text.slice(index + "<head>".length))
+      done = true
+      let html = buffered.replace(
+        "<head>",
+        `<head><script type="importmap">${binding.importMapJson}</script>`
+      )
+      const preloads = new Set<string>()
+      for (const match of html.matchAll(/<link rel="modulepreload" href="\/(assets\/[^"]+)"/g)) {
+        for (const bare of binding.chunkImports[match[1]!] ?? []) {
+          const asset = binding.imports[bare]
+          if (asset) {
+            preloads.add(asset)
+          }
+        }
+      }
+      if (preloads.size > 0) {
+        const links = [...preloads]
+          .map((href) => `<link rel="modulepreload" href="${href}"/>`)
+          .join("")
+        html = html.replace("</head>", `${links}</head>`)
+      }
+      buffered = ""
+      callback(null, html)
     },
     flush(callback) {
-      if (carry) {
-        this.push(carry)
+      if (!done && buffered) {
+        this.push(buffered)
       }
       callback()
     },
@@ -102,8 +123,8 @@ export default function handleRequest(
 
           responseHeaders.set("Content-Type", "text/html")
 
-          const injector = createImportMapInjector(
-            getLocaleImportMap(resolveLocaleFromRequest(request).locale)
+          const injector = createLocaleBindingInjector(
+            getLocaleBinding(resolveLocaleFromRequest(request).locale)
           )
           injector.pipe(body)
           pipe(injector)

@@ -27,26 +27,42 @@ export function activateServerI18n(locale: Locale) {
 // Import-map locale binding: the production client resolves its per-route
 // message assets through one import map per locale, emitted next to the
 // client assets. The document must carry the active locale's map before any
-// module loads, so the root loader reads it here. In dev the manifest does
-// not exist (dev serves the embedded form) and this returns null.
-const importMapCache = new Map<Locale, string | null>()
+// module loads, and can preload the mapped assets of the chunks it serves so
+// messages download in parallel with the code. In dev the manifest does not
+// exist (dev serves the embedded form) and this returns null.
+export type LocaleBinding = {
+  importMapJson: string
+  imports: Record<string, string>
+  chunkImports: Record<string, string[]>
+}
 
-function readLocaleImportMap(locale: Locale): string | null {
+const bindingCache = new Map<Locale, LocaleBinding | null>()
+
+function readLocaleBinding(locale: Locale): LocaleBinding | null {
   try {
     const clientDir = path.resolve(import.meta.dirname, "../client")
     const manifest = JSON.parse(
       readFileSync(path.join(clientDir, "palamedes-split-manifest.json"), "utf8")
-    ) as { importMaps: Record<string, string> }
+    ) as { importMaps: Record<string, string>; chunkImports?: Record<string, string[]> }
     const mapFile = manifest.importMaps[locale]
-    return mapFile ? readFileSync(path.join(clientDir, mapFile), "utf8") : null
+    if (!mapFile) {
+      return null
+    }
+    const importMapJson = readFileSync(path.join(clientDir, mapFile), "utf8")
+    const parsed = JSON.parse(importMapJson) as { imports: Record<string, string> }
+    return {
+      importMapJson,
+      imports: parsed.imports,
+      chunkImports: manifest.chunkImports ?? {},
+    }
   } catch {
     return null
   }
 }
 
-export function getLocaleImportMap(locale: Locale): string | null {
-  if (!importMapCache.has(locale)) {
-    importMapCache.set(locale, readLocaleImportMap(locale))
+export function getLocaleBinding(locale: Locale): LocaleBinding | null {
+  if (!bindingCache.has(locale)) {
+    bindingCache.set(locale, readLocaleBinding(locale))
   }
-  return importMapCache.get(locale) ?? null
+  return bindingCache.get(locale) ?? null
 }

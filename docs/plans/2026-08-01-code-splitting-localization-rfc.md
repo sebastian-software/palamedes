@@ -701,11 +701,14 @@ Verified on the production build in a browser:
   bit-for-bit (after sorting emission; unsorted, transform order leaked into
   map hashes).
 
-Open follow-ups from this spike: no modulepreload hints for mapped assets yet
-(one extra request-waterfall step for messages — the server can emit
-`<link rel="modulepreload">` from the same map); the manifest-reading server
-helper is example-code that belongs in an adapter surface; and non-navigation
-locale switching would need an async ensure path (Stage 0 territory).
+Follow-up done (2026-08-02): the manifest now records which chunk imports
+which bare specifier (`chunkImports`), and the example's stream injector
+emits `<link rel="modulepreload">` for the mapped assets of the chunks the
+document already preloads — measured in the browser, message assets start in
+the same millisecond as the route chunk instead of one waterfall step later.
+Still open: the manifest-reading server helper is example-code that belongs
+in an adapter surface, and non-navigation locale switching would need an
+async ensure path (Stage 0 territory).
 
 ## Prior art (references, not blueprints)
 
