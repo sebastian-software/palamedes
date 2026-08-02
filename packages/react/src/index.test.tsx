@@ -101,6 +101,22 @@ describe("@palamedes/react", () => {
     expect(html).toBe("Hallo Ada, <strong>willkommen</strong>")
   })
 
+  it("formats compiled Trans fallbacks with older parser-capable i18n instances", () => {
+    const i18n = createI18n({ locale: "de" })
+    i18n.load("de", {
+      inbox: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
+    })
+    const legacyI18n: PalamedesI18n = { ...i18n }
+    delete legacyI18n.renderMessage
+    setClientI18n(legacyI18n)
+
+    const html = renderToStaticMarkup(
+      <CompiledTrans id="inbox" message="Hello {name}" values={{ name: "Ada" }} components={{}} />
+    )
+
+    expect(html).toBe("Hello Ada")
+  })
+
   it("renders a self-closing placeholder as a void component", () => {
     const i18n = createI18n()
     i18n.activate("en")

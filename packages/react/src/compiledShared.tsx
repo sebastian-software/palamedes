@@ -61,6 +61,15 @@ function renderI18nMessage(
     const fallback = metadata.message ?? id
     const pattern = i18n.getMessage(id, { ...metadata, reportMissing: false })
     i18n.reportError?.({ id, error, pattern, fallback, metadata })
+
+    if (pattern !== fallback) {
+      try {
+        return runtime.pattern(fallback, values)
+      } catch {
+        // Fall through to plain source text when the fallback is malformed.
+      }
+    }
+
     return runtime.join(fallback)
   }
 }

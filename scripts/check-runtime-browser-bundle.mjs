@@ -4,15 +4,19 @@ import { brotliCompressSync, gzipSync } from "node:zlib"
 
 const assetsDirectory = new URL("../examples/vite-mdx/dist/assets/", import.meta.url)
 const assetNames = (await readdir(assetsDirectory)).filter((name) => name.endsWith(".js"))
+const parserSentinel = "[palamedes:icu-parser]"
 
 assert.notEqual(assetNames.length, 0, "Build the Vite MDX example before checking its bundle")
 
-const parserSignatures = [
-  "Expected a non-negative integer plural offset",
-  "Expected identifier at index",
-  "Unterminated apostrophe quote",
-  "while parsing message pattern",
-]
+const compatibilityEntry = await readFile(
+  new URL("../packages/core/dist/index.mjs", import.meta.url),
+  "utf8"
+)
+assert.equal(
+  compatibilityEntry.includes(parserSentinel),
+  true,
+  "The Core compatibility entry must contain the ICU parser sentinel"
+)
 
 let rawBytes = 0
 let gzipBytes = 0
@@ -22,13 +26,11 @@ for (const assetName of assetNames) {
   const source = await readFile(new URL(assetName, assetsDirectory))
   const code = source.toString("utf8")
 
-  for (const signature of parserSignatures) {
-    assert.equal(
-      code.includes(signature),
-      false,
-      `The browser bundle contains the ICU parser signature ${JSON.stringify(signature)}`
-    )
-  }
+  assert.equal(
+    code.includes(parserSentinel),
+    false,
+    `The browser bundle contains the ICU parser sentinel in ${assetName}`
+  )
 
   rawBytes += source.byteLength
   gzipBytes += gzipSync(source).byteLength

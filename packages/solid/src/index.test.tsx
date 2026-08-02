@@ -95,6 +95,24 @@ describe("@palamedes/solid", () => {
     expect([render()].flat(Infinity).join("")).toBe("Hallo Ada, <strong>willkommen</strong>")
   })
 
+  it("formats compiled Trans fallbacks with older parser-capable i18n instances", () => {
+    const i18n = createI18n({ locale: "de" })
+    i18n.load("de", {
+      inbox: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
+    })
+    const legacyI18n: PalamedesI18n = { ...i18n }
+    delete legacyI18n.renderMessage
+    setServerI18nGetter(() => legacyI18n)
+
+    const render = CompiledTrans({
+      id: "inbox",
+      message: "Hello {name}",
+      values: { name: "Ada" },
+    }) as unknown as () => unknown
+
+    expect([render()].flat(Infinity).join("")).toBe("Hello Ada")
+  })
+
   it("re-renders Trans output when the client locale switches", async () => {
     // Pretend we are on the client so `getI18n` reads the client instance.
     ;(globalThis as { window?: unknown }).window = {}

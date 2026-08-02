@@ -17,6 +17,11 @@ canonical verification path. Public demo URLs are documented as the live
 reference surface, but reachability depends on the hosting and DNS rows in
 [docs/demo-deployments.md](../docs/demo-deployments.md).
 
+The server-framework matrix intentionally uses the package-root compatibility
+runtime: its ticket panels directly author ICU patterns through `Trans` to test
+that fallback surface. The focused Vite MDX example is the end-to-end proof for
+the parser-free generated path through the `compiled` entrypoints.
+
 This file is the canonical documentation for the full matrix. Individual
 example READMEs are optional and should stay short; add one only when a specific
 example needs local setup notes that do not belong in the shared matrix guide.

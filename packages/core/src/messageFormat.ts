@@ -47,6 +47,10 @@ export type MessageNode =
 
 const parseCache = new Map<string, MessageNode[]>()
 
+// Keep this marker stable: the browser bundle check uses it to prove both that
+// the compatibility entry still contains the parser and compiled apps do not.
+const PARSER_BUNDLE_SENTINEL = "[palamedes:icu-parser]"
+
 // Parsed patterns are keyed by the full message text, so the working set is the
 // app's message count — sharing the formatter bound made any catalog with more
 // than 64 messages evict continuously and re-parse everything on every render.
@@ -237,7 +241,7 @@ function readPluralOffset(state: ParserState): number | undefined {
     !Number.isSafeInteger(offset) ||
     !/\s/.test(state.input[state.index] ?? "")
   ) {
-    throw new Error(
+    throw parserError(
       `Expected a non-negative integer plural offset at index ${state.index} while parsing message pattern: ${patternExcerpt(state)}`
     )
   }
@@ -410,13 +414,17 @@ function skipWhitespace(state: ParserState): void {
 function expectChar(state: ParserState, expected: string): void {
   if (state.input[state.index] !== expected) {
     const found = state.input[state.index]
-    throw new Error(
+    throw parserError(
       `Expected "${expected}" but found ${
         found === undefined ? "end of pattern" : `"${found}"`
       } at index ${state.index} while parsing message pattern: ${patternExcerpt(state)}`
     )
   }
   state.index += 1
+}
+
+function parserError(message: string): Error {
+  return new Error(`${PARSER_BUNDLE_SENTINEL} ${message}`)
 }
 
 /* A short window around the failure point so telemetry can locate it. */
