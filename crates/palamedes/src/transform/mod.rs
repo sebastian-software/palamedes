@@ -29,7 +29,7 @@ pub(super) struct Replacement {
 }
 
 /// Options controlling how macro transforms emit runtime code.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct NativeTransformOptions {
     /// Runtime module path used for injected imports.
@@ -157,12 +157,18 @@ pub fn transform_macros(
     let mut collector = ImportCollector::new(&runtime_module, &runtime_import_name);
     collector.visit_program(&parsed.program);
 
-    let effective_runtime_import_name =
-        if !collector.has_runtime_import && collector.has_runtime_import_name_collision {
-            unique_runtime_import_alias(&runtime_import_name, &collector.import_local_names)
-        } else {
-            runtime_import_name.clone()
-        };
+    let runtime_import_name_is_unsafe = if collector.has_reusable_runtime_import {
+        collector.runtime_import_binding_count > 1
+    } else {
+        collector
+            .used_identifier_names
+            .contains(&runtime_import_name)
+    };
+    let effective_runtime_import_name = if runtime_import_name_is_unsafe {
+        unique_runtime_import_alias(&runtime_import_name, &collector.used_identifier_names)
+    } else {
+        runtime_import_name.clone()
+    };
     let mut options = options;
     options.runtime_import_name = Some(effective_runtime_import_name.clone());
 
@@ -211,7 +217,9 @@ pub fn transform_macros(
 
     let mut prefix = String::new();
 
-    if visitor.needs_runtime_import && !collector.has_runtime_import {
+    let needs_runtime_import = !collector.has_reusable_runtime_import
+        || effective_runtime_import_name != runtime_import_name;
+    if visitor.needs_runtime_import && needs_runtime_import {
         if effective_runtime_import_name == runtime_import_name {
             let _ = writeln!(
                 prefix,
@@ -299,17 +307,17 @@ pub fn transform_macros(
 
 fn unique_runtime_import_alias(
     runtime_import_name: &str,
-    used_import_names: &std::collections::HashSet<String>,
+    used_identifier_names: &std::collections::HashSet<String>,
 ) -> String {
     let base = format!("__palamedes{}", uppercase_first(runtime_import_name));
-    if !used_import_names.contains(&base) {
+    if !used_identifier_names.contains(&base) {
         return base;
     }
 
     let mut counter = 2;
     loop {
         let candidate = format!("{base}{counter}");
-        if !used_import_names.contains(&candidate) {
+        if !used_identifier_names.contains(&candidate) {
             return candidate;
         }
         counter += 1;
