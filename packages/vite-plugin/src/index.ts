@@ -36,6 +36,37 @@ const MDX_FILE_REGEX = /\.mdx$/i
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:"
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/"
 const RESOLVED_MESSAGES_PREFIX = "\0palamedes:messages/"
+const BARE_MESSAGES_PREFIX = "#pmds/"
+const SPLIT_MANIFEST_NAME = "palamedes-split-manifest.json"
+const RENDERED_CATALOG_IMPORT =
+  'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";'
+const RENDERED_CATALOG_DEFAULT_EXPORT = "export default { messages };"
+
+/*
+ * Rewrite the native renderer's module source into a dependency-free message
+ * asset for import-map delivery: no imports (the aggregator re-brands on
+ * receive), plus a `locale` export so the aggregator learns which locale the
+ * import map delivered. The exact-string operations are deliberately strict —
+ * if the native output shape changes, emitting fails loudly instead of
+ * shipping broken assets. The shape is pinned by @palamedes/transform's
+ * catalogLoader tests.
+ */
+function bareMessageAsset(rendered: string, locale: string): string {
+  if (
+    !rendered.startsWith(RENDERED_CATALOG_IMPORT) ||
+    !rendered.includes("__palamedesDefineCompiledCatalog(") ||
+    !rendered.trimEnd().endsWith(RENDERED_CATALOG_DEFAULT_EXPORT)
+  ) {
+    throw new Error(
+      "Palamedes graph splitting: the native catalog module shape changed; cannot derive a bare message asset."
+    )
+  }
+  const body = rendered
+    .slice(RENDERED_CATALOG_IMPORT.length)
+    .replace("__palamedesDefineCompiledCatalog(", "(")
+  const withoutDefault = body.slice(0, body.lastIndexOf(RENDERED_CATALOG_DEFAULT_EXPORT))
+  return `export const locale=${JSON.stringify(locale)};${withoutDefault}`
+}
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config."
 const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
 function stripQuery(id: string): string {
@@ -195,9 +226,24 @@ export type PalamedesPluginOptions = {
    * so route-level code splitting splits messages without any route
    * configuration. Requires the application to install its client instance
    * with `setClientI18n` instead of importing `.po` catalogs eagerly.
+   *
+   * The object form selects how the locale dimension binds:
+   *
+   * - `localeBinding: "embed"` (default) — every sidecar embeds all locales;
+   *   simplest, works everywhere, ships `locales ×` the route's messages.
+   * - `localeBinding: "import-map"` — production client builds import each
+   *   sidecar through a bare `#pmds/<key>` specifier and the build emits one
+   *   dependency-free message asset per (sidecar × locale) plus one import
+   *   map per locale and a `palamedes-split-manifest.json`. The server must
+   *   inject the active locale's import map into the HTML before any module
+   *   loads; the browser then downloads only the active locale's messages,
+   *   and translation-only deploys change message assets and import maps
+   *   while code chunks keep their hashes. Locale switching requires a
+   *   document navigation. Dev servers and SSR builds keep the embedded
+   *   form.
    * @default false
    */
-  experimentalGraphSplitting?: boolean
+  experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" }
 }
 
 /**
@@ -218,8 +264,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     ...configLoaderOptions
   } = options
   const macroRuntimeModule = resolveMacroRuntimeModule(framework, runtimeModule)
+  const graphSplitting = experimentalGraphSplitting !== false
+  const importMapBinding =
+    typeof experimentalGraphSplitting === "object" &&
+    experimentalGraphSplitting.localeBinding === "import-map"
   let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false
   let stripNonEssentialProps = true
+  let isBuildCommand = false
+  let resolvedBase = "/"
 
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null
@@ -500,6 +552,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     config(viteConfig, env) {
       resolvedKeepSourceFallbacks = keepSourceFallbacks ?? env.command === "serve"
       stripNonEssentialProps = env.command === "build"
+      isBuildCommand = env.command === "build"
+      resolvedBase = typeof viteConfig.base === "string" ? viteConfig.base : "/"
       const ids = new Set(PALAMEDES_MACRO_PACKAGES)
       macroIds = ids
 
@@ -541,7 +595,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return null
         }
 
-        if (experimentalGraphSplitting && result.compiledIds.length > 0) {
+        if (graphSplitting && result.compiledIds.length > 0) {
           const key = sidecarKey(cleanId)
           sidecarModules.set(key, { sourceId: cleanId, compiledIds: result.compiledIds })
           return {
@@ -568,9 +622,74 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   // artifacts stay on the branded parser-free compiled ABI) plus one
   // aggregator that registers the branded exports with the runtime. The
   // bundler then distributes messages along the module graph.
-  if (experimentalGraphSplitting) {
+  if (graphSplitting) {
+    type SidecarEntry = { sourceId: string; compiledIds: string[] }
+
+    function compileSidecarLocale(
+      cfg: LoadedPalamedesConfig,
+      entry: SidecarEntry,
+      locale: string,
+      context: { addWatchFile?: (file: string) => void; warn?: (message: string) => void }
+    ): Record<string, string> | null {
+      const catalogs = cfg.catalogs.filter((catalog) =>
+        catalogMatchesSource(cfg, catalog, entry.sourceId)
+      )
+      if (catalogs.length === 0) {
+        context.warn?.(
+          `Palamedes graph splitting: ${entry.sourceId} uses messages but is not included in any configured catalog; its messages will be missing at runtime.`
+        )
+        return null
+      }
+
+      const selected: Record<string, string> = {}
+      for (const catalog of catalogs) {
+        const artifactConfig = catalogArtifactConfig(cfg, [catalog])
+        const resourcePath = catalogResourcePath(cfg, catalog, locale)
+        const result = compileCatalogArtifactSelected(
+          artifactConfig,
+          resourcePath,
+          entry.compiledIds
+        )
+        result.watchFiles.forEach((file: string) => context.addWatchFile?.(file))
+        if (result.missing.length > 0 && context.warn) {
+          const message =
+            `${createMissingErrorMessage(locale, result.missing)}\n\n` +
+            `Referenced by ${entry.sourceId}.`
+          if (failOnMissing) {
+            throw new Error(message)
+          }
+          context.warn(message)
+        }
+        Object.assign(selected, result.messages)
+      }
+      return selected
+    }
+
+    function splitLocales(cfg: LoadedPalamedesConfig): string[] {
+      // Pseudo-locale catalogs are generated, not stored; the selected
+      // compile has no pseudo path yet. Split mode skips them for now.
+      return cfg.locales.filter((candidate) => candidate !== cfg.pseudoLocale)
+    }
+
     plugins.push({
       name: "palamedes:message-sidecars",
+
+      config() {
+        if (!importMapBinding) {
+          return
+        }
+        // Bare #pmds/ specifiers stay external in client builds; the emitted
+        // per-locale import map resolves them in the browser. SSR aggregators
+        // never emit these specifiers, so the external filter cannot match
+        // there.
+        return {
+          build: {
+            rollupOptions: {
+              external: (id: string) => id.startsWith(BARE_MESSAGES_PREFIX),
+            },
+          },
+        }
+      },
 
       resolveId(id) {
         if (id.startsWith(VIRTUAL_MESSAGES_PREFIX)) {
@@ -578,7 +697,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
       },
 
-      async load(id) {
+      async load(id, loadOptions) {
         if (!id.startsWith(RESOLVED_MESSAGES_PREFIX)) {
           return null
         }
@@ -594,12 +713,30 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         const cfg = await getConfigLazy()
         this.addWatchFile(cfg.configPath)
-        // Pseudo-locale catalogs are generated, not stored; the selected
-        // compile has no pseudo path yet. Split mode skips them for now.
-        const locales = cfg.locales.filter((candidate) => candidate !== cfg.pseudoLocale)
+        const locales = splitLocales(cfg)
 
         if (locale === undefined) {
-          // Aggregator: import each branded per-locale module and register it.
+          const ssr =
+            loadOptions?.ssr === true ||
+            (this as { environment?: { name?: string } }).environment?.name === "ssr"
+
+          if (importMapBinding && isBuildCommand && !ssr) {
+            // Import-map binding: the client aggregator imports one
+            // locale-neutral bare specifier. The per-locale import map decides
+            // which emitted message asset answers it, so only the active
+            // locale downloads, and the asset name's hash never appears in
+            // this module or its importers. The asset ships unbranded
+            // (dependency-free); branding happens on receive.
+            const boundCode =
+              `import { locale as l, messages as m } from "${BARE_MESSAGES_PREFIX}${key}";\n` +
+              `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
+              `import { registerMessages } from "@palamedes/runtime";\n` +
+              `registerMessages({ [l]: defineCompiledCatalog(m) });\n`
+            return { code: boundCode, map: null, moduleSideEffects: true }
+          }
+
+          // Embedded binding: import each branded per-locale module and
+          // register it.
           const imports = locales
             .map(
               (localeName, index) =>
@@ -620,39 +757,62 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           this.error(`Palamedes message sidecar "${key}" requested unknown locale "${locale}".`)
         }
 
-        const catalogs = cfg.catalogs.filter((catalog) =>
-          catalogMatchesSource(cfg, catalog, entry.sourceId)
+        let selected: Record<string, string> | null = null
+        try {
+          selected = compileSidecarLocale(cfg, entry, locale, {
+            addWatchFile: (file) => this.addWatchFile(file),
+            warn: (message) => this.warn(message),
+          })
+        } catch (error) {
+          this.error(error instanceof Error ? error.message : String(error))
+        }
+
+        return { code: renderCatalogModule(selected ?? {}), map: null }
+      },
+
+      async generateBundle() {
+        const environmentName = (this as { environment?: { name?: string } }).environment?.name
+        if (!importMapBinding || environmentName === "ssr" || sidecarModules.size === 0) {
+          return
+        }
+
+        const cfg = await getConfigLazy()
+        const locales = splitLocales(cfg)
+        const importMaps = new Map<string, Record<string, string>>(
+          locales.map((locale) => [locale, {}])
         )
-        if (catalogs.length === 0) {
-          this.warn(
-            `Palamedes graph splitting: ${entry.sourceId} uses messages but is not included in any configured catalog; its messages will be missing at runtime.`
-          )
-          return { code: renderCatalogModule({}), map: null }
-        }
 
-        const selected: Record<string, string> = {}
-        for (const catalog of catalogs) {
-          const artifactConfig = catalogArtifactConfig(cfg, [catalog])
-          const resourcePath = catalogResourcePath(cfg, catalog, locale)
-          const result = compileCatalogArtifactSelected(
-            artifactConfig,
-            resourcePath,
-            entry.compiledIds
-          )
-          result.watchFiles.forEach((file: string) => this.addWatchFile(file))
-          if (result.missing.length > 0) {
-            const message =
-              `${createMissingErrorMessage(locale, result.missing)}\n\n` +
-              `Referenced by ${entry.sourceId}.`
-            if (failOnMissing) {
-              this.error(message)
-            }
-            this.warn(message)
+        // Sorted for determinism: sidecarModules fills in transform order,
+        // which varies between builds; unsorted emission would re-hash the
+        // import maps of untouched locales on every build.
+        const sortedSidecars = [...sidecarModules.entries()].sort(([a], [b]) => a.localeCompare(b))
+        for (const [key, entry] of sortedSidecars) {
+          for (const locale of locales) {
+            const selected = compileSidecarLocale(cfg, entry, locale, {})
+            const asset = bareMessageAsset(renderCatalogModule(selected ?? {}), locale)
+            const contentHash = createHash("sha256").update(asset).digest("hex").slice(0, 8)
+            const fileName = `assets/palamedes-m-${key}.${locale}-${contentHash}.js`
+            this.emitFile({ type: "asset", fileName, source: asset })
+            importMaps.get(locale)![`${BARE_MESSAGES_PREFIX}${key}`] = `${resolvedBase}${fileName}`
           }
-          Object.assign(selected, result.messages)
         }
 
-        return { code: renderCatalogModule(selected), map: null }
+        const manifest: { locales: string[]; importMaps: Record<string, string> } = {
+          locales,
+          importMaps: {},
+        }
+        for (const [locale, imports] of importMaps) {
+          const source = JSON.stringify({ imports })
+          const contentHash = createHash("sha256").update(source).digest("hex").slice(0, 8)
+          const fileName = `assets/palamedes-importmap.${locale}-${contentHash}.json`
+          this.emitFile({ type: "asset", fileName, source })
+          manifest.importMaps[locale] = fileName
+        }
+        this.emitFile({
+          type: "asset",
+          fileName: SPLIT_MANIFEST_NAME,
+          source: JSON.stringify(manifest, null, 2),
+        })
       },
     })
   }

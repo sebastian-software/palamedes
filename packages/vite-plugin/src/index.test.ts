@@ -531,15 +531,149 @@ describe("experimental graph splitting", () => {
     expect(result?.code).toContain("export const messages")
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"))
   })
+
+  const IMPORT_MAP_OPTIONS = {
+    experimentalGraphSplitting: { localeBinding: "import-map" as const },
+  }
+
+  function nativeModuleShape(map: string): string {
+    return (
+      `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";` +
+      `export const messages=__palamedesDefineCompiledCatalog(${map});export default { messages };`
+    )
+  }
+
+  it("binds client aggregators to bare specifiers under import-map binding", async () => {
+    const { load, key } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
+    )
+    const result = await load(`\0palamedes:messages/${key}`, { ssr: false })
+
+    expect(result?.code).toBe(
+      `import { locale as l, messages as m } from "#pmds/${key}";\n` +
+        `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
+        `import { registerMessages } from "@palamedes/runtime";\n` +
+        `registerMessages({ [l]: defineCompiledCatalog(m) });\n`
+    )
+  })
+
+  it("keeps SSR aggregators on the embedded form under import-map binding", async () => {
+    const { load, key } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
+    )
+    const result = await load(`\0palamedes:messages/${key}`, { ssr: true })
+
+    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/en`)
+    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/de`)
+    expect(result?.code).not.toContain("#pmds/")
+  })
+
+  it("keeps dev-server aggregators on the embedded form under import-map binding", async () => {
+    const { load, key } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "serve" }
+    )
+    const result = await load(`\0palamedes:messages/${key}`, { ssr: false })
+
+    expect(result?.code).toContain(`virtual:palamedes-messages/${key}/en`)
+    expect(result?.code).not.toContain("#pmds/")
+  })
+
+  it("externalizes bare message specifiers under import-map binding", async () => {
+    const { sidecarPlugin } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
+    )
+    const configResult = sidecarPlugin.config.call({} as never)
+    const external = configResult?.build?.rollupOptions?.external as (id: string) => boolean
+
+    expect(external("#pmds/abc123")).toBe(true)
+    expect(external("react")).toBe(false)
+
+    const { sidecarPlugin: embeddedPlugin } = await runSidecarLoad(["id-a"])
+    expect(embeddedPlugin.config.call({} as never)).toBeUndefined()
+  })
+
+  it("emits per-locale message assets, import maps, and the manifest", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages))
+    )
+    mocks.compileCatalogArtifactSelected.mockImplementation(
+      (_config: unknown, resourcePath: string) => ({
+        messages:
+          resourcePath === "/repo/src/locales/de.po" ? { "id-a": "Hallo" } : { "id-a": "Hello" },
+        missing: [],
+        diagnostics: [],
+        watchFiles: [],
+        resolvedLocaleChain: [],
+      })
+    )
+
+    const { key, sidecarPlugin } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
+    )
+    const emitted: { fileName: string; source: string }[] = []
+    await sidecarPlugin.generateBundle.call({
+      environment: { name: "client" },
+      emitFile: (file: { fileName: string; source: string }) => emitted.push(file),
+    } as never)
+
+    // One dependency-free asset per (sidecar x locale); pseudo is skipped.
+    const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"))
+    expect(assets).toHaveLength(2)
+    const deAsset = assets.find((file) => file.fileName.includes(".de-"))
+    expect(deAsset?.source).toBe(
+      `export const locale="de";export const messages=({"id-a":"Hallo"});`
+    )
+    expect(deAsset?.source).not.toContain("import")
+
+    const maps = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-importmap."))
+    expect(maps).toHaveLength(2)
+    const deMap = maps.find((file) => file.fileName.includes(".de-"))
+    expect(JSON.parse(deMap!.source).imports[`#pmds/${key}`]).toBe(`/${deAsset!.fileName}`)
+
+    const manifest = emitted.find((file) => file.fileName === "palamedes-split-manifest.json")
+    const parsed = JSON.parse(manifest!.source)
+    expect(parsed.locales).toEqual(["en", "de"])
+    expect(parsed.importMaps.de).toBe(deMap!.fileName)
+  })
+
+  it("skips asset emission for SSR bundles", async () => {
+    const { sidecarPlugin } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
+    )
+    const emitFile = vi.fn()
+    await sidecarPlugin.generateBundle.call({
+      environment: { name: "ssr" },
+      emitFile,
+    } as never)
+
+    expect(emitFile).not.toHaveBeenCalled()
+  })
 })
 
 async function runSidecarLoad(
   compiledIds: string[],
-  context: Record<string, unknown> = {}
+  context: Record<string, unknown> = {},
+  setup: {
+    pluginOptions?: Parameters<typeof palamedes>[0]
+    command?: "build" | "serve"
+  } = {}
 ): Promise<{
-  load: (id: string) => Promise<any>
+  load: (id: string, loadOptions?: { ssr?: boolean }) => Promise<any>
   key: string
   addWatchFile: ReturnType<typeof vi.fn>
+  sidecarPlugin: any
 }> {
   mocks.transformPalamedesMacros.mockClear()
   mocks.compileCatalogArtifactSelected.mockClear()
@@ -550,13 +684,24 @@ async function runSidecarLoad(
     compiledIds,
     map: null,
   })
-  const plugins = palamedes({ experimentalGraphSplitting: true })
+  const plugins = palamedes(setup.pluginOptions ?? { experimentalGraphSplitting: true })
   const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform")
   const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars")
   const transform = macroPlugin?.transform
   const load = sidecarPlugin?.load
   if (typeof transform !== "function" || typeof load !== "function") {
     throw new TypeError("Expected transform and sidecar load hooks")
+  }
+
+  if (setup.command && typeof macroPlugin?.config === "function") {
+    macroPlugin.config.call(
+      {} as any,
+      {} as any,
+      {
+        command: setup.command,
+        mode: setup.command === "serve" ? "development" : "production",
+      } as any
+    )
   }
 
   const transformed = (await transform.call(
@@ -570,7 +715,7 @@ async function runSidecarLoad(
   }
 
   const addWatchFile = vi.fn()
-  const boundLoad = (id: string) =>
+  const boundLoad = (id: string, loadOptions?: { ssr?: boolean }) =>
     Promise.resolve(
       load.call(
         {
@@ -581,11 +726,12 @@ async function runSidecarLoad(
           warn() {},
           ...context,
         } as any,
-        id
+        id,
+        loadOptions
       )
     )
 
-  return { load: boundLoad, key, addWatchFile }
+  return { load: boundLoad, key, addWatchFile, sidecarPlugin }
 }
 
 function runMacroTransform(
