@@ -3,7 +3,12 @@ import { createRenderEffect, createRoot, createSignal } from "solid-js"
 import { renderToString } from "solid-js/web/dist/server.js"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { createI18n, defineCompiledCatalog, type CompiledMessage } from "@palamedes/core"
+import {
+  createI18n,
+  defineCompiledCatalog,
+  type CompiledMessage,
+  type PalamedesI18n,
+} from "@palamedes/core"
 import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
@@ -39,6 +44,25 @@ describe("@palamedes/solid", () => {
     const i18n = createI18n({ locale: "de" })
     i18n.load("de", defineCompiledCatalog({ footer }))
     setServerI18nGetter(() => i18n)
+
+    const render = Trans({
+      id: "footer",
+      message: "Hello {name}, <0>welcome</0>",
+      values: { name: "Ada" },
+      components: { 0: (children) => ["<strong>", children, "</strong>"] },
+    }) as unknown as () => unknown
+
+    expect([render()].flat(Infinity).join("")).toBe("Hallo Ada, <strong>willkommen</strong>")
+  })
+
+  it("keeps rendering with older i18n instances that have no renderMessage hook", () => {
+    const i18n = createI18n({ locale: "de" })
+    i18n.load("de", {
+      footer: "Hallo {name}, <0>willkommen</0>",
+    })
+    const legacyI18n: PalamedesI18n = { ...i18n }
+    delete legacyI18n.renderMessage
+    setServerI18nGetter(() => legacyI18n)
 
     const render = Trans({
       id: "footer",

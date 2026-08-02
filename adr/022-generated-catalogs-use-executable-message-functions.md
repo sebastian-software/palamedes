@@ -43,6 +43,10 @@ Ferrocat remains the Rust-side ICU parser. The Rust core lowers its AST into a
 host-neutral message program, and the Node host boundary renders safe JavaScript
 module source in accordance with ADR-011.
 
+The native renderer is the single catalog-module generator. The public
+TypeScript `renderCatalogModule()` compatibility helper delegates to that
+renderer instead of parsing ICU and maintaining a second JavaScript generator.
+
 ## Alternatives Considered
 
 ### 1. Parallel string and pre-parsed-node maps
@@ -78,5 +82,8 @@ manual catalogs remain a supported fallback path.
   allocates nodes for compiled messages.
 - The compiler owns safe JavaScript expression generation, including escaped
   literals, computed object keys, nested choices, and plural-pound semantics.
+- Custom integrations loading generated modules must declare
+  `@palamedes/core` as a direct runtime dependency because the module imports
+  `defineCompiledCatalog()` from that package.
 - Runtime and bundle benchmarks must cover both payload size and first-render
   execution before the representation is considered stable.

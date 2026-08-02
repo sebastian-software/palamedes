@@ -1622,9 +1622,6 @@ importers:
 
   packages/transform:
     dependencies:
-      '@palamedes/core':
-        specifier: workspace:^
-        version: link:../core
       '@palamedes/core-node':
         specifier: workspace:^
         version: link:../core-node
@@ -1632,6 +1629,9 @@ importers:
         specifier: workspace:^
         version: link:../runtime
     devDependencies:
+      '@palamedes/core':
+        specifier: workspace:^
+        version: link:../core
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

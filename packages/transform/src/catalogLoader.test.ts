@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { createI18n, defineCompiledCatalog, formatMessagePattern } from "@palamedes/core"
+import { renderCatalogModule as renderNativeCatalogModule } from "@palamedes/core-node"
 
 import {
   createCatalogLoaderResult,
@@ -20,6 +21,15 @@ const baseResult: CatalogCompileArtifactResult = {
 }
 
 describe("catalog loader helpers", () => {
+  it("delegates module rendering to the canonical native generator", () => {
+    const messages = {
+      greeting: "Hallo {name}",
+      inbox: "{count, plural, one {# Nachricht} other {# Nachrichten}}",
+    }
+
+    expect(renderCatalogModule(messages)).toBe(renderNativeCatalogModule(messages))
+  })
+
   it("renders catalog modules consistently", () => {
     expect(renderCatalogModule({ greeting: "Hallo" })).toBe(
       'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({["greeting"]:"Hallo"});export default { messages };'
@@ -34,7 +44,7 @@ describe("catalog loader helpers", () => {
         unsupported: "{items, list, other {Items}}",
       })
     ).toBe(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";const __pm0=(v,r)=>r.join("Hallo ",r.value(v,"name"));const __pm1=(v,r)=>r.pattern("Hallo {name",v);const __pm2=(v,r)=>r.pattern("{items, list, other {Items}}",v);export const messages=__palamedesDefineCompiledCatalog({["greeting"]:__pm0,["broken"]:__pm1,["unsupported"]:__pm2});export default { messages };'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";const __pm0=(v,r)=>r.pattern("Hallo {name",v);const __pm1=(v,r)=>r.join("Hallo ",r.value(v,"name"));const __pm2=(v,r)=>r.pattern("{items, list, other {Items}}",v);export const messages=__palamedesDefineCompiledCatalog({["broken"]:__pm0,["greeting"]:__pm1,["unsupported"]:__pm2});export default { messages };'
     )
   })
 

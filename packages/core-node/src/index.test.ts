@@ -11,6 +11,7 @@ import {
   extractMessagesNative,
   getNativeInfo,
   parsePo,
+  renderCatalogModule,
   transformMacrosNative,
   updateCatalogFile,
 } from "./index"
@@ -38,6 +39,19 @@ describe("@palamedes/core-node", () => {
 
     expect(info.palamedesVersion).toMatch(/^\d+\.\d+\.\d+/)
     expect(info.ferrocatVersion).toMatch(/^\d+\.\d+\.\d+/)
+  })
+
+  it("renders executable catalog modules from in-memory messages", () => {
+    const code = renderCatalogModule({
+      greeting: "Hallo {name}",
+      plain: "Willkommen",
+    })
+
+    expect(code).toContain(
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";'
+    )
+    expect(code).toContain('(v,r)=>r.join("Hallo ",r.value(v,"name"));')
+    expect(code).toContain('["plain"]:"Willkommen"')
   })
 
   it("parses PO content across the NAPI boundary", () => {

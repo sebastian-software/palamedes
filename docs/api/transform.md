@@ -30,10 +30,14 @@ plugins.
 `mightContainPalamedesMacros(source)` as the cheap string pre-check before
 parsing.
 
-The `@palamedes/transform/catalog-loader` subpath exports the catalog-loader
-helpers used by the first-party Vite and Next plugins. They are useful when a
-custom bundler needs to render compiled catalog artifacts into JavaScript
-modules with the same diagnostics and missing-catalog messages.
+The `@palamedes/transform/catalog-loader` subpath exports compatibility helpers
+for custom bundlers that already consume compiled catalog artifacts. The
+first-party loaders call `@palamedes/core-node` directly, and
+`renderCatalogModule()` delegates to that same native generator.
+
+Generated catalog modules import `defineCompiledCatalog()` from
+`@palamedes/core`, so custom integrations must install `@palamedes/core` as a
+direct runtime dependency.
 
 Most apps should use a framework plugin instead of this package directly.
 

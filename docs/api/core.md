@@ -74,15 +74,16 @@ interface PalamedesI18n {
   activate(locale: string): void
   getMessage(id: string, metadata?: MessageMetadata): string
   getMessageNodes(id: string, metadata?: MessageMetadata): MessageNode[]
-  renderMessage<TResult>(id, values, runtime, metadata?): TResult
+  renderMessage?<TResult>(id, values, runtime, metadata?): TResult
   reportError(info: ReportedMessageError): void
 }
 ```
 
 `renderMessage()` executes a generated function directly against a host result
 renderer and applies the same telemetry and fallback behavior as `_()`.
-First-party React and Solid adapters use this path. `reportError()` remains for
-custom or older adapters that render outside the instance.
+First-party React and Solid adapters use this path when present, then fall back
+to `getMessageNodes()` for older or custom instances. `reportError()` remains
+for adapters that render outside the instance.
 
 `replacePoundPlaceholders(value, numericValue, locale?)` replaces `#` markers
 in already-resolved choice text using the instance-independent cached

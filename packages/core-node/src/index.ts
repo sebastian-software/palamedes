@@ -618,6 +618,11 @@ export function compileCatalogModule(
   return native.compileCatalogModule(request)
 }
 
+/** Render an already-compiled message map through the canonical native generator. */
+export function renderCatalogModule(messages: Record<string, string>): string {
+  return native.renderCatalogModule(messages)
+}
+
 function mapExtractedMessages(
   messages: GeneratedNativeExtractedMessage[]
 ): NativeExtractedMessage[] {
