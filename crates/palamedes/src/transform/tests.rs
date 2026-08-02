@@ -143,6 +143,189 @@ fn transforms_tagged_templates() {
 }
 
 #[test]
+fn aliases_injected_runtime_import_when_local_name_is_taken_by_another_module() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+import { getI18n } from "@palamedes/runtime";
+
+const locale = getI18n().locale;
+const msg = t`Hello`;
+"#;
+
+    let result = transform_macros(
+        source,
+        "test.ts",
+        Some(NativeTransformOptions {
+            runtime_module: Some("@palamedes/react/runtime".to_string()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("transform should avoid runtime import collisions");
+
+    assert!(result.has_changed);
+    assert!(result
+        .code
+        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/react/runtime";"#));
+    assert!(result
+        .code
+        .contains(r#"import { getI18n } from "@palamedes/runtime";"#));
+    assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
+    assert!(result.code.contains("const locale = getI18n().locale;"));
+}
+
+#[test]
+fn aliases_injected_runtime_import_for_default_and_namespace_imports() {
+    for conflicting_import in [
+        r#"import getI18n from "./imperative-runtime";"#,
+        r#"import * as getI18n from "./imperative-runtime";"#,
+    ] {
+        let source = format!(
+            r#"import {{ t }} from "@palamedes/core/macro";
+{conflicting_import}
+
+const msg = t`Hello`;
+"#
+        );
+
+        let result = transform_macros(
+            &source,
+            "test.ts",
+            Some(NativeTransformOptions {
+                runtime_module: Some("@palamedes/react/runtime".to_string()),
+                ..NativeTransformOptions::default()
+            }),
+        )
+        .expect("transform should avoid all import binding collisions");
+
+        assert!(result.code.contains(
+            r#"import { getI18n as __palamedesGetI18n } from "@palamedes/react/runtime";"#
+        ));
+        assert!(result.code.contains(conflicting_import));
+        assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
+    }
+}
+
+#[test]
+fn aliases_runtime_import_when_nested_binding_would_shadow_generated_calls() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+
+function greeting(getI18n: () => string) {
+  const local = getI18n();
+  return `${local}: ${t`Hello`}`;
+}
+"#;
+
+    let result = transform_macros(source, "test.ts", None)
+        .expect("transform should avoid nested runtime getter shadowing");
+
+    assert!(result
+        .code
+        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#));
+    assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
+    assert!(result.code.contains("const local = getI18n();"));
+}
+
+#[test]
+fn generates_runtime_alias_not_used_by_existing_bindings_or_references() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+import { getI18n } from "@palamedes/runtime";
+
+const __palamedesGetI18n = "occupied";
+console.log(__palamedesGetI18n2);
+const msg = t`Hello`;
+"#;
+
+    let result = transform_macros(
+        source,
+        "test.ts",
+        Some(NativeTransformOptions {
+            runtime_module: Some("@palamedes/react/runtime".to_string()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("transform should generate a globally unused runtime alias");
+
+    assert!(result
+        .code
+        .contains(r#"import { getI18n as __palamedesGetI18n3 } from "@palamedes/react/runtime";"#));
+    assert!(result.code.contains(r#"__palamedesGetI18n3()._("#));
+    assert!(result.code.contains("console.log(__palamedesGetI18n2);"));
+}
+
+#[test]
+fn reuses_matching_runtime_import_when_it_is_not_shadowed() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+import { getI18n } from "@palamedes/react/runtime";
+
+const msg = t`Hello`;
+"#;
+
+    let result = transform_macros(
+        source,
+        "test.ts",
+        Some(NativeTransformOptions {
+            runtime_module: Some("@palamedes/react/runtime".to_string()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("transform should reuse the matching runtime import");
+
+    assert_eq!(
+        result
+            .code
+            .matches(r#"from "@palamedes/react/runtime""#)
+            .count(),
+        1
+    );
+    assert!(!result.code.contains("__palamedesGetI18n"));
+    assert!(result.code.contains(r#"getI18n()._("#));
+}
+
+#[test]
+fn aliases_matching_runtime_import_when_nested_binding_shadows_it() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+import { getI18n } from "@palamedes/runtime";
+
+function greeting(getI18n: () => string) {
+  const local = getI18n();
+  return `${local}: ${t`Hello`}`;
+}
+"#;
+
+    let result = transform_macros(source, "test.ts", None)
+        .expect("transform should avoid shadowing a matching runtime import");
+
+    assert!(result
+        .code
+        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#));
+    assert_eq!(
+        result.code.matches(r#"from "@palamedes/runtime""#).count(),
+        2
+    );
+    assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
+    assert!(result.code.contains("const local = getI18n();"));
+}
+
+#[test]
+fn does_not_reuse_different_export_aliased_to_runtime_import_name() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+import { createI18n as getI18n } from "@palamedes/runtime";
+
+const msg = t`Hello`;
+"#;
+
+    let result = transform_macros(source, "test.ts", None)
+        .expect("transform should import the configured runtime export");
+
+    assert!(result
+        .code
+        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/runtime";"#));
+    assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
+    assert!(result
+        .code
+        .contains(r#"import { createI18n as getI18n } from "@palamedes/runtime";"#));
+}
+
+#[test]
 fn unchanged_transform_has_no_source_map() {
     let result = transform_macros("const msg = \"Hello\";\n", "test.ts", None)
         .expect("transform should succeed");
