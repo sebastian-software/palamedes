@@ -65,5 +65,6 @@ adding another package or version boundary.
   types from `@palamedes/core/compiled` to keep the parser unreachable.
 - Directly authored `Trans` imports may continue using package roots; generated
   transforms select the compiled entry automatically.
-- `pnpm benchmark:runtime-browser` builds the real Vite MDX example, rejects
-  known parser signatures, and reports raw, gzip, and Brotli JavaScript sizes.
+- `pnpm benchmark:runtime-browser` builds the real Vite MDX example, verifies a
+  stable parser sentinel against the compatibility entry, rejects that sentinel
+  in browser assets, and reports raw, gzip, and Brotli JavaScript sizes.
