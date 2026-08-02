@@ -52,10 +52,13 @@ that module is a branded map of executable message functions on the parser-free
 compiled ABI:
 
 ```js
-import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";
-const __pm0=(v,r)=>r.join("Hallo ",r.value(v,"name"));
-export const messages=__palamedesDefineCompiledCatalog({["<idA>"]:"Konstante",["<idB>"]:__pm0});
-export default { messages };
+import { defineCompiledCatalog as __palamedesDefineCompiledCatalog } from "@palamedes/core/compiled"
+const __pm0 = (v, r) => r.join("Hallo ", r.value(v, "name"))
+export const messages = __palamedesDefineCompiledCatalog({
+  ["<idA>"]: "Konstante",
+  ["<idB>"]: __pm0,
+})
+export default { messages }
 ```
 
 rendered by the native module renderer in `crates/palamedes-node/src/catalog.rs`
@@ -91,14 +94,14 @@ place, unused:
   MDX. All three host adapters currently discard it
   (`packages/vite-plugin/src/index.ts:502-515`).
 - **Subset compilation.** `compileCatalogArtifactSelected(config, resourcePath,
-  compiledIds)` compiles exactly a given id subset of a catalog
+compiledIds)` compiles exactly a given id subset of a catalog
   (`packages/core-node/src/index.ts:580`, core at
   `crates/palamedes/src/catalog_artifact/mod.rs:88-146`). Today it only backs
   MDX missing-translation validation.
 - **Native module rendering for arbitrary maps.** Since ADR-022,
   `renderCatalogModule(messages)` renders any id→pattern map into the branded
   executable module source on the compiled ABI. Composed with the selected
-  compile, subset artifacts become subset *modules* in two existing calls —
+  compile, subset artifacts become subset _modules_ in two existing calls —
   precompiled, parser-free, and per locale.
 - **Additive runtime loading.** `i18n.load(locale, partial)` already merges
   (`packages/core/src/index.ts:189-192`), so chunked registration does not
@@ -213,7 +216,7 @@ native source map valid; imports hoist anyway):
 
 ```js
 // appended to Checkout.tsx after macro transform
-import "virtual:palamedes/messages/f3a9c1"   // hash of module id
+import "virtual:palamedes/messages/f3a9c1" // hash of module id
 ```
 
 The plugin resolves that id, calls `compileCatalogArtifactSelected` with the
@@ -258,7 +261,7 @@ sync keep code-chunk cache hits.
   reintroduces the `L` factor V1 removed. V4b below removes it cleanly; the
   two compose.
 - **Duplication across sidecars.** A message used in five files appears in
-  five sidecars. Bundler hoisting dedupes *modules*, not object entries.
+  five sidecars. Bundler hoisting dedupes _modules_, not object entries.
   Mitigation (a): accept and measure — shared strings tend to be short UI
   chrome, and chunk-level hoisting still collapses sidecars that end up in the
   same chunk only if identical. Mitigation (b), the **V2b refinement**: the
@@ -279,7 +282,7 @@ sync keep code-chunk cache hits.
   eager full catalogs in dev, split in build, is a legitimate simplification).
 - **Dynamic message ids.** `i18n._(someVariable)` cannot be attributed to a
   module's id set statically. Escape hatch: such messages fall into a
-  *residual catalog* loaded per locale like V1, and the audit surface reports
+  _residual catalog_ loaded per locale like V1, and the audit surface reports
   them (`pmds audit` already exists as the diagnostic home).
 - **ADR-011/022 alignment.** Subset selection, compilation, and module
   rendering all stay native (ADR-022 makes the native renderer the single
@@ -298,7 +301,7 @@ almost entirely from parts that already exist.
 
 ### V3 — Route-manifest artifacts (explicit, framework-driven)
 
-**Idea.** Attribute messages to *emitted chunks* rather than source modules:
+**Idea.** Attribute messages to _emitted chunks_ rather than source modules:
 collect `moduleId → compiledIds` during transform, then in `generateBundle`
 walk each chunk's module list, union the ids, and emit one asset per
 `(chunk × locale)` plus a manifest. Route loaders (TanStack/React Router
@@ -314,7 +317,7 @@ wiring, a manifest to version, an await on every route transition, and
 hand-rolled dedup (a "common" asset for messages shared above a threshold,
 i.e. reimplementing what the bundler does for free in V2).
 
-**Verdict.** Not the primary path, but the right *delivery mode* for two real
+**Verdict.** Not the primary path, but the right _delivery mode_ for two real
 cases: teams that want messages on a CDN outside the JS pipeline, and as the
 mechanical substrate for V6 (the server needs exactly this attribution to
 compute route payloads). Design the chunk-attribution pass once; let V3 and V6
@@ -328,7 +331,7 @@ The user-visible locale dimension, attacked at two different binding times.
 once per locale; the transform inlines translations at the call site
 (precompiled ICU: plain strings become literals, parameterized messages become
 compact precompiled patterns or functions). No catalogs, no lookup, no
-registry: message splitting is perfect *by construction* because messages are
+registry: message splitting is perfect _by construction_ because messages are
 code. Dead-locale elimination is automatic.
 
 Costs are equally structural: `L×` build time and artifact storage;
@@ -342,7 +345,7 @@ V4a no longer needs to invent precompilation — it needs to inline the
 already-compiled function at the call site instead of looking it up in a map.
 
 What redeems it: Palamedes already ships `subdomain` and `tld` locale
-strategies where each locale lives on its own origin and switching *is* a
+strategies where each locale lives on its own origin and switching _is_ a
 navigation. For those deployments, per-locale artifacts are not a workaround
 but the natural shape, and Vite's environments API (the road Paraglide 2 took
 with per-locale graphs) makes the build mechanics tractable. **Positioning:
@@ -351,7 +354,7 @@ mechanism.**
 
 **V4b — Load-time binding via import maps (per-locale sidecars, one app
 build).** Keep the app build locale-neutral (V2 sidecars), but emit the
-sidecar *contents* per locale and let the HTML bind the locale:
+sidecar _contents_ per locale and let the HTML bind the locale:
 
 - sidecar imports use a bare specifier per sidecar (`#pmds/f3a9c1`),
 - the build emits `f3a9c1.en.js`, `f3a9c1.de.js`, … (subset compile per
@@ -372,7 +375,7 @@ per-locale variants of sidecar chunks needs either bundler cooperation
 only. Browser support for import maps is no longer the constraint it was.
 
 **Verdict.** V4b is the designated endgame for SPA-shaped hosts, deliberately
-staged *after* V2 proves the sidecar mechanics; V4a is a niche mode that
+staged _after_ V2 proves the sidecar mechanics; V4a is a niche mode that
 shares the ICU-precompilation investment but should not gate anything.
 
 ### V5 — Per-message compiled functions (Paraglide-style)
@@ -429,7 +432,7 @@ but not graph splitting; not worth its own machinery beyond that.
   next-intl `pick`-per-page), which moves splitting into authoring and
   translation surfaces and rots as routes evolve.
 - **Parser-free discipline (ADR-023).** Every split delivery mechanism that
-  ships message *data* as JS must emit the branded compiled ABI via the native
+  ships message _data_ as JS must emit the branded compiled ABI via the native
   renderer; plain string maps would either re-import the ICU parser into the
   browser (defeating the parser-free win) or be rejected by the parser-free
   Core factory. Mechanisms that ship JSON over HTTP (V3/V6 delivery modes)
@@ -459,17 +462,17 @@ but not graph splitting; not worth its own machinery beyond that.
 
 ## Comparison at a glance
 
-| | First-load messages | Locale switch | Build cost | Hydration | Coupling | Author effort |
-|---|---|---|---|---|---|---|
-| Status quo | all locales × all messages | instant | — | sync | none | none |
-| V1 lazy locale | 1 locale × all | async fetch | none | needs Stage 0 | none | pattern change |
-| V2 sidecars | all locales × route | instant | plugin pass | sync ✓ | bundler only | none |
-| V2b + atoms | all locales × route, deduped | instant | + graph size | sync ✓ | bundler only | none |
-| V3 route manifest | 1 locale × route | async fetch | emit pass | needs await | per framework | none |
-| V4a permutation | 1 locale × route (inlined) | navigation | × L builds | sync ✓ | build infra | none |
-| V4b import maps | **1 locale × route** | reload or ensure | + per-locale emit | sync ✓ | SSR injects map | none |
-| V5 per-message fns | all locales × used | instant | compiler | sync ✓ | model shift | none |
-| V6 server inline | **exactly used client set** | server round trip | attribution pass | sync ✓ | deep per host | none |
+|                    | First-load messages          | Locale switch     | Build cost        | Hydration     | Coupling        | Author effort  |
+| ------------------ | ---------------------------- | ----------------- | ----------------- | ------------- | --------------- | -------------- |
+| Status quo         | all locales × all messages   | instant           | —                 | sync          | none            | none           |
+| V1 lazy locale     | 1 locale × all               | async fetch       | none              | needs Stage 0 | none            | pattern change |
+| V2 sidecars        | all locales × route          | instant           | plugin pass       | sync ✓        | bundler only    | none           |
+| V2b + atoms        | all locales × route, deduped | instant           | + graph size      | sync ✓        | bundler only    | none           |
+| V3 route manifest  | 1 locale × route             | async fetch       | emit pass         | needs await   | per framework   | none           |
+| V4a permutation    | 1 locale × route (inlined)   | navigation        | × L builds        | sync ✓        | build infra     | none           |
+| V4b import maps    | **1 locale × route**         | reload or ensure  | + per-locale emit | sync ✓        | SSR injects map | none           |
+| V5 per-message fns | all locales × used           | instant           | compiler          | sync ✓        | model shift     | none           |
+| V6 server inline   | **exactly used client set**  | server round trip | attribution pass  | sync ✓        | deep per host   | none           |
 
 Order-of-magnitude sizing, explicitly an estimate to be replaced by the
 benchmark lane: at the realistic-corpus scale (6,000 messages), a compiled
@@ -568,13 +571,13 @@ Measured on that example (2 routes, 3 locales, 37 messages), production build
 on `7e697a1`, fair baseline = same two-route app with eager static catalog
 imports, both sides on the compatibility factory (see the parser note below):
 
-| | eager baseline | graph splitting |
-|---|---|---|
-| shared chunk (`jsx-runtime`) | 139.65 kB (46.38 gzip) — carries **all** messages | 134.34 kB (44.21) — carries none |
-| `home` route chunk | 6.85 kB (1.85) | 11.37 kB (3.23) — its messages ride along |
-| `insights` route chunk | 2.46 kB (0.86) | 4.24 kB (1.52) — its messages ride along |
-| `LocaleSwitcher` shared chunk | 4.86 kB (2.28) | 4.97 kB (2.33) |
-| messages loaded on `/` | all routes × 3 locales | home's own × 3 locales |
+|                               | eager baseline                                    | graph splitting                           |
+| ----------------------------- | ------------------------------------------------- | ----------------------------------------- |
+| shared chunk (`jsx-runtime`)  | 139.65 kB (46.38 gzip) — carries **all** messages | 134.34 kB (44.21) — carries none          |
+| `home` route chunk            | 6.85 kB (1.85)                                    | 11.37 kB (3.23) — its messages ride along |
+| `insights` route chunk        | 2.46 kB (0.86)                                    | 4.24 kB (1.52) — its messages ride along  |
+| `LocaleSwitcher` shared chunk | 4.86 kB (2.28)                                    | 4.97 kB (2.33)                            |
+| messages loaded on `/`        | all routes × 3 locales                            | home's own × 3 locales                    |
 
 The dynamic messages inside those route chunks are the ADR-022 executable
 functions (`(v,r)=>r.plural(...)` visibly inline in the emitted chunks), not
@@ -588,7 +591,7 @@ dependency: swapping the example's `createI18n` to `@palamedes/core/compiled`
 moved the `[palamedes:icu-parser]` sentinel out of the shared chunk while all
 sidecar-fed messages (including plurals) kept rendering. The example
 nevertheless stays on the compatibility factory, because its proof panels
-format *raw* ICU patterns through the plain `Trans` component at runtime —
+format _raw_ ICU patterns through the plain `Trans` component at runtime —
 which is exactly the compatibility case ADR-023 keeps the parser for, and
 orthogonal to splitting. Fully parser-free split apps need both the compiled
 factory and no raw-ICU compatibility components.
@@ -620,7 +623,7 @@ Corrections the spike feeds back into the body above:
    render, so buffer + flush suffices. Stage 0 in full remains the
    prerequisite for V1/V3, not for V2.
 3. **Unrelated pre-existing finding**, hit while verifying: transformed macro
-   calls inside react-router *actions* crashed in production because
+   calls inside react-router _actions_ crashed in production because
    `@palamedes/react/runtime` exported a hook-shaped `getI18n`
    (`useSyncExternalStore` outside render). Reproduced identically on an
    unmodified eager build — and fixed on this branch: the hook exists only to
