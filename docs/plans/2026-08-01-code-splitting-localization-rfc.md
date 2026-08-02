@@ -613,11 +613,16 @@ Corrections the spike feeds back into the body above:
 
 1. **Sidecars inline into their importer's chunk** when they have a single
    importer, so a translation-only change re-hashes the route chunks that use
-   the changed message — not a separate message asset. The "translation
-   changes never invalidate code chunks" property additionally needs sidecars
-   emitted as their own chunks (`manualChunks`, or V2b atoms which are shared
-   and therefore split naturally). Stage 2 should treat that as a follow-up
-   knob, not a given.
+   the changed message — not a separate message asset. A later design pass
+   sharpened this further: emitting sidecars as their own chunks does **not**
+   restore the cache property either, because ESM chunks reference each other
+   by hashed filename — a changed message chunk changes the import specifier
+   inside its importer, and the hash cascades up the static import chain. The
+   only thing that breaks that chain is name indirection: a bare specifier in
+   the code chunk plus an import map (or manifest-driven loader) carrying the
+   hash. In other words, the caching property and the load-time locale
+   binding are the _same_ mechanism — V4b is not an optimization on top of
+   separate message chunks; it is the step that makes them meaningful.
 2. **The runtime contract needed for V2 alone is smaller than Stage 0**: no
    async `ensureLocale`, no suspense — module evaluation always precedes
    render, so buffer + flush suffices. Stage 0 in full remains the
@@ -658,6 +663,49 @@ from the rebased state. What the upgrade changed:
 - The main-branch runtime refactors did **not** change the pre-existing
   hook-`getI18n` action crash; it reproduced identically on `7e697a1` and is
   now fixed on this branch (finding 3 above).
+
+## Appendix: Stage-3 spike results (2026-08-02, import-map binding)
+
+V4b works. Built on top of the Stage-2 sidecars, behind the extended flag
+`experimentalGraphSplitting: { localeBinding: "import-map" }`:
+
+- **Plugin.** In production client builds the aggregator imports one
+  locale-neutral bare specifier (`#pmds/<key>`), marked external; SSR builds
+  and dev servers keep the embedded form. `generateBundle` emits one
+  dependency-free message asset per (sidecar × locale) — derived from the
+  native renderer's output, with a `locale` export and no imports; branding
+  happens on receive in the aggregator via `defineCompiledCatalog` — plus one
+  import map per locale and a `palamedes-split-manifest.json`. Emission is
+  sorted for build determinism.
+- **Example.** The server splices the active locale's import map into the
+  HTML stream directly after `<head>`. That placement is load-bearing: React
+  19 hoists modulepreload links above anything a route component renders, and
+  an import map that loses that race is silently rejected, killing the module
+  graph — reproduced as an intermittent dead page before the injection moved
+  into `entry.server`. Locale switching became a document navigation
+  (`<Form reloadDocument>`), the documented V4b trade.
+
+Verified on the production build in a browser:
+
+- **`1 locale × route` is real.** First load of `/` fetches exactly the four
+  home-route message assets of the active locale — zero assets of other
+  locales. Client-side navigation to `/insights` fetches exactly one more
+  asset: that route's messages in the active locale. Locale switches load the
+  new locale's assets via the new document's import map; hydration and
+  client-side interactivity verified after warm-cache switches across
+  de/en/es.
+- **Translation-only deploys keep code chunks byte-identical.** Changing one
+  German translation and rebuilding changes exactly one `.de` message asset
+  and the `.de` import map; every code chunk, every other locale's assets and
+  maps keep their hashes. Rebuilding without changes reproduces the bundle
+  bit-for-bit (after sorting emission; unsorted, transform order leaked into
+  map hashes).
+
+Open follow-ups from this spike: no modulepreload hints for mapped assets yet
+(one extra request-waterfall step for messages — the server can emit
+`<link rel="modulepreload">` from the same map); the manifest-reading server
+helper is example-code that belongs in an adapter surface; and non-navigation
+locale switching would need an async ensure path (Stage 0 territory).
 
 ## Prior art (references, not blueprints)
 
