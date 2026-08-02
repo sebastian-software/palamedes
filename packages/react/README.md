@@ -18,7 +18,7 @@ pnpm add @palamedes/core @palamedes/react
 ```
 
 `@palamedes/core` is a direct runtime dependency of generated catalog modules,
-which import `defineCompiledCatalog()` from it.
+which import `defineCompiledCatalog()` from its `compiled` entrypoint.
 
 ## Minimal Example
 
@@ -56,6 +56,9 @@ unconditionally during a function-component or custom-hook render.
 
 Rich JSX children are transformed to numeric component slots in the message, for
 example `<0>Palamedes</0>`, while the React component is passed separately.
+The transform imports `Trans` from `@palamedes/react/compiled`, which excludes
+the ICU parser. Direct imports from `@palamedes/react` remain the compatibility
+surface for hand-written runtime component patterns.
 
 ## Runtime Components
 

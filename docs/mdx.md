@@ -100,7 +100,7 @@ mdx:
   framework: react
   translatable-attributes: [alt, title, aria-label]
   front-matter-fields: [title, description]
-  trans-module: "@palamedes/react"
+  trans-module: "@palamedes/react/compiled"
   runtime-module: "@palamedes/react/runtime"
   ignore-directive: palamedes-ignore
 ```
@@ -110,7 +110,7 @@ mdx:
 | `framework`               | `react`                      | Generates React or Solid rich-component bindings.           |
 | `translatable-attributes` | `[alt]`                      | Static JSX attributes extracted as standalone messages.     |
 | `front-matter-fields`     | `[]`                         | Scalar frontmatter values extracted as standalone messages. |
-| `trans-module`            | framework package            | Module exporting `Trans`.                                   |
+| `trans-module`            | framework `/compiled` path   | Module exporting parser-free `Trans`.                       |
 | `runtime-module`          | framework `/runtime` subpath | Module exporting the reactive `getI18n`.                    |
 | `ignore-directive`        | `palamedes-ignore`           | Marker used for an explicit per-unit opt-out.               |
 

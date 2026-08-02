@@ -1,21 +1,15 @@
 import type { JSX } from "solid-js"
 
-import {
-  createCompiledMessageRuntime,
-  formatMessageArgument,
-  parseMessagePattern,
-  replacePoundPlaceholders,
-  resolveChoice,
-  stringifyValue,
-} from "@palamedes/core"
-import type {
-  CompiledMessageRuntime,
-  MessageMetadata,
-  MessageNode,
-  PalamedesI18n,
-} from "@palamedes/core"
+import { parseMessagePattern } from "@palamedes/core"
+import type { MessageMetadata, MessageNode, PalamedesI18n } from "@palamedes/core"
 
 import { getI18n } from "./runtime"
+import {
+  createSolidMessageRuntime,
+  createTrans,
+  renderI18nMessage,
+  type TransProps,
+} from "./transShared"
 
 export {
   buildLocaleSwitchItems,
@@ -31,19 +25,7 @@ function useReactiveI18n(): PalamedesI18n {
   return getI18n<PalamedesI18n>()
 }
 
-type WrapperComponent = (children: JSX.Element) => JSX.Element
-
-export type TransProps = {
-  // `id` is optional in authored source: components are written with `message`
-  // (or choice props) and the Palamedes compiler transform injects the resolved
-  // `id` at build time. Hand-written runtime usage may still pass `id` directly.
-  id?: string
-  message?: string
-  context?: string
-  comment?: string
-  values?: Record<string, unknown>
-  components?: Record<string, WrapperComponent | JSX.Element>
-}
+export type { TransProps } from "./transShared"
 
 type ChoiceComponentProps = {
   value: string | number
@@ -72,28 +54,10 @@ export type SelectProps = {
   [key: string]: string | number | undefined
 }
 
-export function Trans({
-  id,
-  message,
-  values,
-  components,
-  context,
-  comment,
-}: TransProps): JSX.Element {
-  const resolvedId = id ?? message ?? ""
+const RuntimeTrans = createTrans(useReactiveI18n, parseMessagePattern)
 
-  // Returning an accessor (a plain function) makes Solid track it: it re-runs on
-  // a client locale switch, so the rendered nodes follow the active i18n.
-  return (() => {
-    const i18n = useReactiveI18n()
-    const metadata: MessageMetadata = {
-      message,
-      context,
-      comment,
-    }
-    const runtime = createSolidMessageRuntime(i18n.locale, components ?? {})
-    return renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)
-  }) as unknown as JSX.Element
+export function Trans(props: TransProps): JSX.Element {
+  return RuntimeTrans(props)
 }
 
 /*
@@ -113,7 +77,7 @@ function renderChoice(
     const i18n = useReactiveI18n()
     const message = buildChoiceMessage("value", kind, choices, offset)
     const metadata: MessageMetadata = { message, reportMissing: false }
-    const runtime = createSolidMessageRuntime(i18n.locale, {})
+    const runtime = createSolidMessageRuntime(i18n, {}, parseMessagePattern)
     return renderI18nMessage(i18n, message, { value }, runtime, metadata)
   }) as unknown as JSX.Element
 }
@@ -222,146 +186,4 @@ function validatePluralOffset(offset: number | undefined): void {
   if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0)) {
     throw new RangeError("Plural offset must be a non-negative safe integer.")
   }
-}
-
-function renderI18nMessage(
-  i18n: PalamedesI18n,
-  id: string,
-  values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<JSX.Element[]>,
-  metadata: MessageMetadata
-): JSX.Element[] {
-  if (typeof i18n.renderMessage === "function") {
-    return i18n.renderMessage(id, values, runtime, metadata)
-  }
-
-  const nodes = i18n.getMessageNodes(id, metadata)
-  try {
-    return renderNodes(nodes, values, runtime, i18n.locale)
-  } catch (error) {
-    const fallback = metadata.message ?? id
-    const pattern = i18n.getMessage(id, { ...metadata, reportMissing: false })
-    i18n.reportError?.({ id, error, pattern, fallback, metadata })
-
-    if (pattern !== fallback) {
-      try {
-        return runtime.pattern(fallback, values)
-      } catch {
-        // Fall through to plain source text when the fallback is malformed.
-      }
-    }
-
-    return runtime.join(fallback)
-  }
-}
-
-function createSolidMessageRuntime(
-  locale: string,
-  components: Record<string, WrapperComponent | JSX.Element>
-): CompiledMessageRuntime<JSX.Element[]> {
-  const runtime: CompiledMessageRuntime<JSX.Element[]> = createCompiledMessageRuntime<
-    JSX.Element[]
-  >(locale, {
-    pattern(pattern, values) {
-      return renderNodes(parseMessagePattern(pattern), values, runtime, locale)
-    },
-    join(...parts) {
-      return parts.flatMap((part) => (typeof part === "string" ? [part] : part))
-    },
-    value(value) {
-      return [renderVariable(value)]
-    },
-    number(value, style) {
-      return [formatMessageArgument("number", value, style, locale)]
-    },
-    date(value, style) {
-      return [formatMessageArgument("date", value, style, locale)]
-    },
-    time(value, style) {
-      return [formatMessageArgument("time", value, style, locale)]
-    },
-    pound(value) {
-      return [replacePoundPlaceholders("#", value, locale)]
-    },
-    literal(value) {
-      return [value]
-    },
-    tag(name, children) {
-      const component = components[name]
-      if (typeof component === "function") {
-        return [component(children as unknown as JSX.Element)]
-      }
-      if (component !== undefined && component !== null) {
-        return [component as JSX.Element]
-      }
-      return children
-    },
-  })
-  return runtime
-}
-
-function renderNodes(
-  nodes: MessageNode[],
-  values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<JSX.Element[]>,
-  locale: string,
-  pluralValue?: number
-): JSX.Element[] {
-  return nodes.flatMap((node) => renderNode(node, values, runtime, locale, pluralValue))
-}
-
-function renderNode(
-  node: MessageNode,
-  values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<JSX.Element[]>,
-  locale: string,
-  pluralValue?: number
-): JSX.Element[] {
-  switch (node.type) {
-    case "text": {
-      return [
-        pluralValue === undefined
-          ? node.value
-          : replacePoundPlaceholders(node.value, pluralValue, locale),
-      ]
-    }
-    case "literal": {
-      return runtime.literal(node.value)
-    }
-    case "variable": {
-      return runtime.value(values, node.name)
-    }
-    case "formatted": {
-      return runtime[node.format](values, node.variable, node.style)
-    }
-    case "tag": {
-      return runtime.tag(
-        node.name,
-        renderNodes(node.children, values, runtime, locale, pluralValue)
-      )
-    }
-    case "choice": {
-      const resolved = resolveChoice(node, values[node.variable], locale)
-      const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue
-      return renderNodes(resolved.nodes, values, runtime, locale, nextPluralValue)
-    }
-  }
-}
-
-function renderVariable(value: unknown): JSX.Element {
-  if (value === null || value === undefined) {
-    return ""
-  }
-
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value)
-  }
-
-  // Same stringification as the core string renderer (`i18n._`), so Dates
-  // render as deterministic ISO strings on server and client alike.
-  if (value instanceof Date) {
-    return stringifyValue(value)
-  }
-
-  return value as JSX.Element
 }

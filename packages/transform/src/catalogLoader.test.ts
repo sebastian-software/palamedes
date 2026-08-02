@@ -32,7 +32,7 @@ describe("catalog loader helpers", () => {
 
   it("renders catalog modules consistently", () => {
     expect(renderCatalogModule({ greeting: "Hallo" })).toBe(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({["greeting"]:"Hallo"});export default { messages };'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";export const messages=__palamedesDefineCompiledCatalog({["greeting"]:"Hallo"});export default { messages };'
     )
   })
 
@@ -44,7 +44,7 @@ describe("catalog loader helpers", () => {
         unsupported: "{items, list, other {Items}}",
       })
     ).toBe(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";const __pm0=(v,r)=>r.pattern("Hallo {name",v);const __pm1=(v,r)=>r.join("Hallo ",r.value(v,"name"));const __pm2=(v,r)=>r.pattern("{items, list, other {Items}}",v);export const messages=__palamedesDefineCompiledCatalog({["broken"]:__pm0,["greeting"]:__pm1,["unsupported"]:__pm2});export default { messages };'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";const __pm0=(v,r)=>r.pattern("Hallo {name",v);const __pm1=(v,r)=>r.join("Hallo ",r.value(v,"name"));const __pm2=(v,r)=>r.pattern("{items, list, other {Items}}",v);export const messages=__palamedesDefineCompiledCatalog({["broken"]:__pm0,["greeting"]:__pm1,["unsupported"]:__pm2});export default { messages };'
     )
   })
 
@@ -54,7 +54,7 @@ describe("catalog loader helpers", () => {
         inbox: "{count, plural, one {# Nachricht} other {# Nachrichten}}",
       })
     ).toBe(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";const __pb0=(v,r,p)=>r.join(r.pound(p)," Nachricht");const __pb1=(v,r,p)=>r.join(r.pound(p)," Nachrichten");const __pc0={["one"]:__pb0,["other"]:__pb1};const __pm0=(v,r)=>r.plural(v,"count",0,"plural",__pc0);export const messages=__palamedesDefineCompiledCatalog({["inbox"]:__pm0});export default { messages };'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";const __pb0=(v,r,p)=>r.join(r.pound(p)," Nachricht");const __pb1=(v,r,p)=>r.join(r.pound(p)," Nachrichten");const __pc0={["one"]:__pb0,["other"]:__pb1};const __pm0=(v,r)=>r.plural(v,"count",0,"plural",__pc0);export const messages=__palamedesDefineCompiledCatalog({["inbox"]:__pm0});export default { messages };'
     )
   })
 
@@ -78,7 +78,7 @@ describe("catalog loader helpers", () => {
     }
     const code = renderCatalogModule(patterns)
       .replace(
-        'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";',
+        'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";',
         `const __palamedesDefineCompiledCatalog=globalThis.${globalKey};`
       )
       .replace("export const messages=", "const messages=")

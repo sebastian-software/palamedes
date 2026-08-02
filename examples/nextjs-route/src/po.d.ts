@@ -1,8 +1,8 @@
 declare module "*.po" {
-  export const messages: Record<string, string>
+  export const messages: import("@palamedes/core/compiled").CompiledCatalogMessages
 
   const catalog: {
-    messages: Record<string, string>
+    messages: import("@palamedes/core/compiled").CompiledCatalogMessages
   }
 
   export default catalog

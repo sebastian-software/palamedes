@@ -65,6 +65,15 @@
 
 ### Performance Improvements
 
+- React and Solid now share one internal message renderer between their root
+  and `compiled` entrypoints. This removes parallel runtime implementations
+  while preserving the parser-free production boundary; lazy raw patterns use
+  a parse-only Core capability instead of re-entering catalog lookup.
+- Generated catalogs, transformed `Trans` components, and compiled MDX now use
+  parser-free `compiled` package entrypoints. The real Vite MDX production
+  proof drops from 214.65 kB to 209.25 kB raw JavaScript and from 68.28 kB to
+  66.67 kB gzip; `pnpm benchmark:runtime-browser` guards the boundary. Package
+  roots retain lazy parsing for hand-written ICU string catalogs.
 - Generated PO and FCL catalog modules now emit one map of constant strings and
   executable message functions. Valid dynamic messages bypass browser ICU
   parsing and AST interpretation; manual and invalid string catalogs retain the

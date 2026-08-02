@@ -4,6 +4,8 @@ export default defineBuildConfig({
   entries: [
     "./src/index",
     "./src/index-server",
+    "./src/compiled",
+    "./src/compiled-server",
     "./src/client",
     "./src/runtime",
     "./src/runtime-server",
@@ -15,7 +17,9 @@ export default defineBuildConfig({
     emitCJS: true,
     output: {
       banner: (chunk) =>
-        chunk.name === "index" || chunk.name === "runtime" ? '"use client";' : "",
+        chunk.name === "index" || chunk.name === "compiled" || chunk.name === "runtime"
+          ? '"use client";'
+          : "",
     },
   },
 })

@@ -84,6 +84,8 @@ manual catalogs remain a supported fallback path.
   literals, computed object keys, nested choices, and plural-pound semantics.
 - Custom integrations loading generated modules must declare
   `@palamedes/core` as a direct runtime dependency because the module imports
-  `defineCompiledCatalog()` from that package.
+  `defineCompiledCatalog()` from its `compiled` entrypoint.
 - Runtime and bundle benchmarks must cover both payload size and first-render
   execution before the representation is considered stable.
+- ADR-023 defines the parser-free package boundary used by generated production
+  code while retaining package-root compatibility for hand-written catalogs.

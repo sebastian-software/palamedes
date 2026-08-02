@@ -1,11 +1,10 @@
 import {
   formatMessageArgument,
-  formatMessagePattern,
   replacePoundPlaceholders,
   requireChoiceNumericValue,
   selectPluralCategory,
   stringifyValue,
-} from "./messageFormat"
+} from "./runtimeFormat"
 
 export type MessageValues = Record<string, unknown>
 
@@ -139,10 +138,15 @@ export function createCompiledMessageRuntime<TResult>(
   return runtime
 }
 
-export function createStringMessageRuntime(locale: string): CompiledMessageRuntime<string> {
+export type PatternFormatter = (pattern: string, values: MessageValues, locale: string) => string
+
+export function createStringMessageRuntime(
+  locale: string,
+  formatPattern: PatternFormatter
+): CompiledMessageRuntime<string> {
   return createCompiledMessageRuntime(locale, {
     pattern(pattern, values) {
-      return formatMessagePattern(pattern, values, locale)
+      return formatPattern(pattern, values, locale)
     },
     join(...parts) {
       return parts.join("")

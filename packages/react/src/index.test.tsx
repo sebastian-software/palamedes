@@ -10,10 +10,16 @@ import {
   type CompiledMessage,
   type PalamedesI18n,
 } from "@palamedes/core"
+import {
+  createI18n as createCompiledI18n,
+  defineCompiledCatalog as defineParserFreeCatalog,
+  type CompiledMessage as ParserFreeMessage,
+} from "@palamedes/core/compiled"
 import { resetI18nRuntime, setClientI18n } from "@palamedes/runtime"
 import { createServerI18nScope } from "@palamedes/runtime/server"
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
+import { Trans as CompiledTrans } from "./compiled"
 import { useClientLocale } from "./client"
 import { getI18n as getReactiveI18n } from "./runtime"
 
@@ -62,6 +68,37 @@ describe("@palamedes/react", () => {
     expect(html).toBe("Hallo Ada, <strong>willkommen</strong>")
   })
 
+  it("renders generated messages through the parser-free production entry", () => {
+    const greeting: ParserFreeMessage = (values, runtime) =>
+      runtime.join("Hallo ", runtime.value(values, "name"))
+    const i18n = createCompiledI18n({ locale: "de" })
+    i18n.load("de", defineParserFreeCatalog({ greeting }))
+    setClientI18n(i18n)
+
+    expect(
+      renderToStaticMarkup(<CompiledTrans id="greeting" values={{ name: "Ada" }} components={{}} />)
+    ).toBe("Hallo Ada")
+  })
+
+  it("parses lazy patterns without re-entering catalog lookup", () => {
+    const greeting: CompiledMessage = (values, runtime) => runtime.pattern("Hello {name}", values)
+    const i18n = createI18n({ locale: "de" })
+    i18n.load(
+      "de",
+      defineCompiledCatalog({
+        greeting,
+        "Hello {name}": "Falscher Katalogtreffer",
+      })
+    )
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <CompiledTrans id="greeting" values={{ name: "Ada" }} components={{}} />
+    )
+
+    expect(html).toBe("Hello Ada")
+  })
+
   it("keeps rendering with older i18n instances that have no renderMessage hook", () => {
     const i18n = createI18n({ locale: "de" })
     i18n.load("de", {
@@ -81,6 +118,22 @@ describe("@palamedes/react", () => {
     )
 
     expect(html).toBe("Hallo Ada, <strong>willkommen</strong>")
+  })
+
+  it("formats compiled Trans fallbacks with older parser-capable i18n instances", () => {
+    const i18n = createI18n({ locale: "de" })
+    i18n.load("de", {
+      inbox: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
+    })
+    const legacyI18n: PalamedesI18n = { ...i18n }
+    delete legacyI18n.renderMessage
+    setClientI18n(legacyI18n)
+
+    const html = renderToStaticMarkup(
+      <CompiledTrans id="inbox" message="Hello {name}" values={{ name: "Ada" }} components={{}} />
+    )
+
+    expect(html).toBe("Hello Ada")
   })
 
   it("renders a self-closing placeholder as a void component", () => {

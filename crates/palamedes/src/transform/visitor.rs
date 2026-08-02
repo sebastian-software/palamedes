@@ -183,7 +183,8 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
                 if macro_info.imported_name == "Trans" {
                     if let Some(module) = macro_info.source.strip_suffix("/macro") {
-                        self.trans_import_modules.insert(module.to_string());
+                        self.trans_import_modules
+                            .insert(format!("{module}/compiled"));
                     }
                 } else {
                     self.needs_runtime_import = true;

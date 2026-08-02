@@ -28,6 +28,7 @@
     "benchmark:e2e-workflow:quick": "cargo build --release -p palamedes-cli && pnpm --filter @palamedes/benchmark-e2e-workflow benchmark:quick",
     "benchmark:lingui-v6": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark",
     "benchmark:lingui-v6:quick": "pnpm build && pnpm --filter @palamedes/benchmark-lingui-v6 benchmark:quick",
+    "benchmark:runtime-browser": "pnpm build && pnpm --filter @palamedes/example-vite-mdx build && node ./scripts/check-runtime-browser-bundle.mjs",
     "proof:icu": "pnpm build && node ./scripts/proof-icu-semantics.mjs",
     "proof:icu:check": "node ./scripts/proof-icu-semantics.mjs",
     "test": "pnpm -r --filter \"./packages/**\" --if-present test",

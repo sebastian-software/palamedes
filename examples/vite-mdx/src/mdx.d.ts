@@ -6,7 +6,7 @@ declare module "*.mdx" {
 }
 
 declare module "*.po" {
-  import type { CatalogMessages } from "@palamedes/core"
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
 
-  export const messages: CatalogMessages
+  export const messages: CompiledCatalogMessages
 }
