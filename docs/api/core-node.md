@@ -18,6 +18,7 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`
+- `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
@@ -38,7 +39,13 @@ catalog artifact as a JavaScript module. The locale is resolved from the
 configured catalog path pattern (so layouts like `{locale}/messages.po` work);
 the caller-supplied `options.locale` is only a fallback when resolution is
 unavailable, and the result reports the effective locale as `locale`. The
-first-party Vite and Next plugins use this function for `.po` imports.
+first-party Vite, Next, and Remix integrations use this function for `.po`
+imports.
+
+`renderCatalogModule(messages)` exposes the same native module generator for
+custom integrations that already have a compiled message map. The TypeScript
+compatibility helper delegates to this function; there is no second ICU parser
+or code generator.
 
 ## Stability
 

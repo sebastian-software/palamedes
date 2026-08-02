@@ -1419,14 +1419,33 @@ fn create_catalog_module_result(
     }
 
     Ok(CatalogModuleResult {
-        code: render_catalog_module(&artifact.messages, &locale, &options.resource_path)?,
+        code: render_catalog_module_with_context(
+            &artifact.messages,
+            &locale,
+            &options.resource_path,
+        )?,
         warnings,
         watch_files: artifact.watch_files,
         locale,
     })
 }
 
-fn render_catalog_module(
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Renders catalog messages as the executable JavaScript module consumed by bundlers.
+///
+/// This is the canonical module renderer for both the native catalog compiler
+/// and JavaScript compatibility helpers that already have compiled messages.
+///
+/// # Errors
+///
+/// Returns an error when a message ID or pattern cannot be represented safely
+/// in JavaScript module source.
+pub fn render_catalog_module(messages: BTreeMap<String, String>) -> Result<String> {
+    render_catalog_module_with_context(&messages, "und", "<in-memory catalog>")
+}
+
+fn render_catalog_module_with_context(
     messages: &BTreeMap<String, String>,
     locale: &str,
     resource_path: &str,

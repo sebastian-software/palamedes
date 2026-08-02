@@ -416,6 +416,7 @@ export interface NativeBindings {
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogModule(request: CatalogModuleRequest): CatalogModuleResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
+  renderCatalogModule(messages: Record<string, string>): string;
   extractMessages(source: string, filename: string, mdx?: NativeMdxOptions | undefined | null): Array<NativeExtractedMessage>;
   extractCatalogMessagesFromFiles(request: ExtractCatalogMessagesRequest): ExtractCatalogMessagesResult;
   analyzeMdx(source: string, filename: string, options?: NativeMdxOptions | undefined | null): NativeMdxAnalysisResult;

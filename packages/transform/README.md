@@ -29,8 +29,13 @@ If you are integrating Palamedes into an app, start with [`@palamedes/vite-plugi
 ## Installation
 
 ```bash
+pnpm add @palamedes/core
 pnpm add -D @palamedes/transform
 ```
+
+Generated catalog modules import `defineCompiledCatalog()` from
+`@palamedes/core`, so it must be a direct runtime dependency when using the
+catalog-loader helpers.
 
 ## Minimal Example
 
@@ -79,7 +84,9 @@ The root package also re-exports catalog-loader helpers from
 `renderCatalogModule()` emits one `defineCompiledCatalog()` map. Constant
 messages are strings; dynamic messages are renderer-independent functions with
 module-hoisted choice branches. Invalid patterns become functions that delegate
-to the lazy parser, preserving established diagnostics and source fallback.
+to the lazy parser, preserving established diagnostics and source fallback. The
+helper delegates to the same native Ferrocat-backed generator used by the
+first-party loaders; it does not maintain a second ICU parser or generator.
 
 ## Supported Macro Shapes
 

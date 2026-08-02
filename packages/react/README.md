@@ -14,8 +14,11 @@ the component, without making translation state another provider tree to manage.
 ## Installation
 
 ```bash
-pnpm add @palamedes/react
+pnpm add @palamedes/core @palamedes/react
 ```
+
+`@palamedes/core` is a direct runtime dependency of generated catalog modules,
+which import `defineCompiledCatalog()` from it.
 
 ## Minimal Example
 

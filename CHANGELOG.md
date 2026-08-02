@@ -31,6 +31,9 @@
   honored), normalize `_N` exact-match props to ICU `=N` like the macro
   transform, and reject invalid option props or option text with unbalanced
   braces instead of silently misrendering.
+- React and Solid use the new executable-message hook when available and retain
+  the previous node-rendering path for older or custom `PalamedesI18n`
+  implementations that do not expose it.
 - `<Trans>` variable values that are `Date` instances now render as
   deterministic ISO strings (matching `i18n._`), fixing SSR hydration
   mismatches across time zones.
@@ -65,7 +68,8 @@
 - Generated PO and FCL catalog modules now emit one map of constant strings and
   executable message functions. Valid dynamic messages bypass browser ICU
   parsing and AST interpretation; manual and invalid string catalogs retain the
-  bounded lazy parser and existing fallback behavior.
+  bounded lazy parser and existing fallback behavior. Native and TypeScript
+  entry points share one Ferrocat-backed code generator.
 
 ## [1.10.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.9.0...palamedes-v1.10.0) (2026-07-31)
 

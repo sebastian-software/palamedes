@@ -88,16 +88,7 @@ export function formatMessagePattern(
   values: Record<string, unknown> = {},
   locale?: string
 ): string {
-  return formatMessageNodes(parseMessagePattern(pattern), values, locale)
-}
-
-/** Formats an already-parsed message tree with the string renderer. */
-function formatMessageNodes(
-  nodes: MessageNode[],
-  values: Record<string, unknown> = {},
-  locale?: string
-): string {
-  return renderNodesToString(nodes, values, locale)
+  return renderNodesToString(parseMessagePattern(pattern), values, locale)
 }
 
 function parseNodes(

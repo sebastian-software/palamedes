@@ -103,6 +103,7 @@ console.log(po.headers.Language)
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`
+- `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
@@ -132,12 +133,16 @@ catalog extraction. It returns extracted messages, structured source-ranged
 diagnostics, React or Solid JSX, compiled message IDs, and a source map.
 
 `compileCatalogModule(config, resourcePath, options)` is the direct module
-rendering API used by the first-party `.po` loaders. Pass the artifact config,
-the resource path, and options such as `locale`, `pseudoLocale`,
+rendering API used by the first-party Vite, Next, and Remix `.po` loaders. Pass
+the artifact config, the resource path, and options such as `locale`, `pseudoLocale`,
 `failOnMissing`, and `failOnCompileError`. The generated module contains one map
 of constant strings and executable message functions lowered from Ferrocat's
 AST, so valid dynamic messages need neither ICU parsing nor AST interpretation
 in the browser.
+
+`renderCatalogModule(messages)` exposes that same canonical native generator
+for compatibility helpers and custom integrations that already have a compiled
+message map.
 
 ## Related Packages
 

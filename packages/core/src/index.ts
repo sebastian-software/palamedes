@@ -72,7 +72,7 @@ export type PalamedesI18n = {
   getMessage: (id: string, metadata?: MessageMetadata) => string
   getMessageNodes: (id: string, metadata?: MessageMetadata) => MessageNode[]
   /** Execute a message directly against a host renderer such as React or Solid. */
-  renderMessage: <TResult>(
+  renderMessage?: <TResult>(
     id: string,
     values: MessageValues,
     runtime: CompiledMessageRuntime<TResult>,

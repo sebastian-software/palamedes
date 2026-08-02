@@ -92,7 +92,7 @@ export function Trans({
       comment,
     }
     const runtime = createSolidMessageRuntime(i18n.locale, components ?? {})
-    return i18n.renderMessage(resolvedId, values ?? {}, runtime, metadata)
+    return renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)
   }) as unknown as JSX.Element
 }
 
@@ -114,7 +114,7 @@ function renderChoice(
     const message = buildChoiceMessage("value", kind, choices, offset)
     const metadata: MessageMetadata = { message, reportMissing: false }
     const runtime = createSolidMessageRuntime(i18n.locale, {})
-    return i18n.renderMessage(message, { value }, runtime, metadata)
+    return renderI18nMessage(i18n, message, { value }, runtime, metadata)
   }) as unknown as JSX.Element
 }
 
@@ -221,6 +221,37 @@ function assertParseableChoiceMessage(message: string, kind: string, expectedKey
 function validatePluralOffset(offset: number | undefined): void {
   if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0)) {
     throw new RangeError("Plural offset must be a non-negative safe integer.")
+  }
+}
+
+function renderI18nMessage(
+  i18n: PalamedesI18n,
+  id: string,
+  values: Record<string, unknown>,
+  runtime: CompiledMessageRuntime<JSX.Element[]>,
+  metadata: MessageMetadata
+): JSX.Element[] {
+  if (typeof i18n.renderMessage === "function") {
+    return i18n.renderMessage(id, values, runtime, metadata)
+  }
+
+  const nodes = i18n.getMessageNodes(id, metadata)
+  try {
+    return renderNodes(nodes, values, runtime, i18n.locale)
+  } catch (error) {
+    const fallback = metadata.message ?? id
+    const pattern = i18n.getMessage(id, { ...metadata, reportMissing: false })
+    i18n.reportError?.({ id, error, pattern, fallback, metadata })
+
+    if (pattern !== fallback) {
+      try {
+        return runtime.pattern(fallback, values)
+      } catch {
+        // Fall through to plain source text when the fallback is malformed.
+      }
+    }
+
+    return runtime.join(fallback)
   }
 }
 
