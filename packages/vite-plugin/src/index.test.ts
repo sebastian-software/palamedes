@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   compileCatalogArtifactSelected: vi.fn(),
   compileCatalogModule: vi.fn(),
   createMissingErrorMessage: vi.fn(),
+  renderCatalogModule: vi.fn(),
   transformPalamedesMacros: vi.fn(),
 }))
 
@@ -19,6 +20,7 @@ vi.mock("@palamedes/core-node", () => ({
   analyzeMdxNative: mocks.analyzeMdxNative,
   compileCatalogArtifactSelected: mocks.compileCatalogArtifactSelected,
   compileCatalogModule: mocks.compileCatalogModule,
+  renderCatalogModule: mocks.renderCatalogModule,
 }))
 
 vi.mock("@palamedes/transform", async (importOriginal) => {
@@ -73,6 +75,10 @@ beforeEach(() => {
   mocks.createMissingErrorMessage.mockImplementation(
     (locale: string, missing: unknown[]) =>
       `Missing ${missing.length} translation(s) for locale ${locale}`
+  )
+  mocks.renderCatalogModule.mockImplementation(
+    (messages: Record<string, string>) =>
+      `/*rendered*/export const messages=${JSON.stringify(messages)};export default { messages };`
   )
   vi.spyOn(console, "warn").mockImplementation(() => {})
 })
@@ -438,15 +444,160 @@ describe("palamedes vite plugin", () => {
   })
 })
 
+describe("experimental graph splitting", () => {
+  it("appends a sidecar import to modules that reference messages", async () => {
+    const result = (await runMacroTransform({ experimentalGraphSplitting: true }, undefined, [
+      "id-a",
+      "id-b",
+    ])) as { code?: string } | null
+
+    expect(result?.code).toMatch(
+      /^transformed\nimport "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/
+    )
+  })
+
+  it("leaves modules without message references untouched", async () => {
+    const result = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      []
+    )) as { code?: string } | null
+
+    expect(result?.code).toBe("transformed")
+  })
+
+  it("does not append sidecar imports when the flag is off", async () => {
+    const result = (await runMacroTransform({}, undefined, ["id-a"])) as { code?: string } | null
+
+    expect(result?.code).toBe("transformed")
+  })
+
+  it("aggregates branded per-locale modules into one registration, skipping pseudo", async () => {
+    const { load, key } = await runSidecarLoad(["id-a"])
+    const result = await load(`\0palamedes:messages/${key}`)
+
+    expect(result?.code).toBe(
+      `import { messages as m0 } from "virtual:palamedes-messages/${key}/en";\n` +
+        `import { messages as m1 } from "virtual:palamedes-messages/${key}/de";\n` +
+        `import { registerMessages } from "@palamedes/runtime";\n` +
+        `registerMessages({ "en": m0, "de": m1 });\n`
+    )
+    expect(result?.moduleSideEffects).toBe(true)
+    // Message compilation happens in the per-locale modules, not the aggregator.
+    expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled()
+  })
+
+  it("renders per-locale modules through the native catalog renderer", async () => {
+    mocks.compileCatalogArtifactSelected.mockImplementation(
+      (_config: unknown, resourcePath: string) => ({
+        messages:
+          resourcePath === "/repo/src/locales/de.po" ? { "id-a": "Hallo" } : { "id-a": "Hello" },
+        missing: [],
+        diagnostics: [],
+        watchFiles: [resourcePath],
+        resolvedLocaleChain: [],
+      })
+    )
+
+    const { load, key, addWatchFile } = await runSidecarLoad(["id-a"])
+    const result = await load(`\0palamedes:messages/${key}/de`)
+
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledTimes(1)
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledWith(
+      expect.objectContaining({ rootDir: "/repo" }),
+      "/repo/src/locales/de.po",
+      ["id-a"]
+    )
+    expect(mocks.renderCatalogModule).toHaveBeenCalledWith({ "id-a": "Hallo" })
+    expect(result?.code).toBe(
+      `/*rendered*/export const messages={"id-a":"Hallo"};export default { messages };`
+    )
+    expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/de.po")
+  })
+
+  it("warns on missing translations and keeps the sidecar buildable", async () => {
+    mocks.compileCatalogArtifactSelected.mockReturnValue({
+      messages: {},
+      missing: [{ id: "id-a", message: "Hello" }],
+      diagnostics: [],
+      watchFiles: [],
+      resolvedLocaleChain: [],
+    })
+
+    const warn = vi.fn()
+    const { load, key } = await runSidecarLoad(["id-a"], { warn })
+    const result = await load(`\0palamedes:messages/${key}/de`)
+
+    expect(result?.code).toContain("export const messages")
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"))
+  })
+})
+
+async function runSidecarLoad(
+  compiledIds: string[],
+  context: Record<string, unknown> = {}
+): Promise<{
+  load: (id: string) => Promise<any>
+  key: string
+  addWatchFile: ReturnType<typeof vi.fn>
+}> {
+  mocks.transformPalamedesMacros.mockClear()
+  mocks.compileCatalogArtifactSelected.mockClear()
+  mocks.renderCatalogModule.mockClear()
+  mocks.transformPalamedesMacros.mockReturnValue({
+    code: "transformed",
+    hasChanged: true,
+    compiledIds,
+    map: null,
+  })
+  const plugins = palamedes({ experimentalGraphSplitting: true })
+  const macroPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform")
+  const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars")
+  const transform = macroPlugin?.transform
+  const load = sidecarPlugin?.load
+  if (typeof transform !== "function" || typeof load !== "function") {
+    throw new TypeError("Expected transform and sidecar load hooks")
+  }
+
+  const transformed = (await transform.call(
+    { error: vi.fn() } as never,
+    'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
+    "/repo/src/label.ts"
+  )) as { code?: string } | null
+  const key = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(transformed?.code ?? "")?.[1]
+  if (!key) {
+    throw new Error("Expected a sidecar import in the transformed output")
+  }
+
+  const addWatchFile = vi.fn()
+  const boundLoad = (id: string) =>
+    Promise.resolve(
+      load.call(
+        {
+          addWatchFile,
+          error(message: unknown) {
+            throw message instanceof Error ? message : new Error(String(message))
+          },
+          warn() {},
+          ...context,
+        } as any,
+        id
+      )
+    )
+
+  return { load: boundLoad, key, addWatchFile }
+}
+
 function runMacroTransform(
   options: Parameters<typeof palamedes>[0] = {},
-  command?: "build" | "serve"
+  command?: "build" | "serve",
+  compiledIds: string[] = []
 ) {
   mocks.transformPalamedesMacros.mockClear()
   mocks.transformPalamedesMacros.mockReturnValue({
     code: "transformed",
     hasChanged: true,
-    compiledIds: [],
+    compiledIds,
     map: null,
   })
   const macroPlugin = palamedes(options).find((plugin) => plugin.name === "palamedes:transform")

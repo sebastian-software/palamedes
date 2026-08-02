@@ -5,6 +5,7 @@
  * No Babel required!
  */
 
+import { createHash } from "node:crypto"
 import { realpathSync, statSync } from "node:fs"
 import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
@@ -19,6 +20,7 @@ import {
   analyzeMdxNative,
   compileCatalogArtifactSelected,
   compileCatalogModule,
+  renderCatalogModule,
   type CatalogArtifactConfig,
 } from "@palamedes/core-node"
 import { createMissingErrorMessage, transformPalamedesMacros } from "@palamedes/transform"
@@ -32,6 +34,8 @@ import {
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
 const MDX_FILE_REGEX = /\.mdx$/i
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:"
+const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/"
+const RESOLVED_MESSAGES_PREFIX = "\0palamedes:messages/"
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config."
 const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
 function stripQuery(id: string): string {
@@ -182,6 +186,18 @@ export type PalamedesPluginOptions = {
    * @default configuration `mdx` values with React framework defaults
    */
   mdx?: PalamedesMdxConfig | false
+
+  /**
+   * EXPERIMENTAL: emit one generated message sidecar module per transformed
+   * source file, containing only the compiled messages that file references,
+   * and append a static import of it to the transformed output. Messages then
+   * travel through the bundler's module graph with the code that uses them,
+   * so route-level code splitting splits messages without any route
+   * configuration. Requires the application to install its client instance
+   * with `setClientI18n` instead of importing `.po` catalogs eagerly.
+   * @default false
+   */
+  experimentalGraphSplitting?: boolean
 }
 
 /**
@@ -198,6 +214,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     runtimeModule,
     keepSourceFallbacks,
     mdx: mdxOverride,
+    experimentalGraphSplitting = false,
     ...configLoaderOptions
   } = options
   const macroRuntimeModule = resolveMacroRuntimeModule(framework, runtimeModule)
@@ -210,6 +227,21 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   let mdxFilter: ReturnType<typeof createFilter> | null = null
   let macroIds: Set<string> | null = null
   const mdxModuleIds = new Set<string>()
+
+  /*
+   * Message sidecar registry for experimental graph splitting, keyed by a
+   * short hash of the source module id. Entries are written when a module is
+   * transformed and read when the bundler loads the sidecar it imports, so
+   * population always precedes the read within one build. Entries are
+   * overwritten on re-transform and deliberately never cleared: a stale entry
+   * for an untouched module keeps dev-server requests working across config
+   * reloads.
+   */
+  const sidecarModules = new Map<string, { sourceId: string; compiledIds: string[] }>()
+
+  function sidecarKey(sourceId: string): string {
+    return createHash("sha256").update(sourceId).digest("hex").slice(0, 12)
+  }
 
   async function getConfigLazy() {
     if (!config) {
@@ -509,6 +541,16 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return null
         }
 
+        if (experimentalGraphSplitting && result.compiledIds.length > 0) {
+          const key = sidecarKey(cleanId)
+          sidecarModules.set(key, { sourceId: cleanId, compiledIds: result.compiledIds })
+          return {
+            // Appending keeps the native source map valid; imports hoist anyway.
+            code: `${result.code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`,
+            map: result.map as any,
+          }
+        }
+
         return {
           code: result.code,
           map: result.map as any,
@@ -519,6 +561,101 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       }
     },
   })
+
+  // Plugin 4b: message sidecar modules for experimental graph splitting.
+  // Per message-bearing source file, one per-locale module rendered by the
+  // native catalog-module renderer (ADR-022: the single generator, so split
+  // artifacts stay on the branded parser-free compiled ABI) plus one
+  // aggregator that registers the branded exports with the runtime. The
+  // bundler then distributes messages along the module graph.
+  if (experimentalGraphSplitting) {
+    plugins.push({
+      name: "palamedes:message-sidecars",
+
+      resolveId(id) {
+        if (id.startsWith(VIRTUAL_MESSAGES_PREFIX)) {
+          return `${RESOLVED_MESSAGES_PREFIX}${id.slice(VIRTUAL_MESSAGES_PREFIX.length)}`
+        }
+      },
+
+      async load(id) {
+        if (!id.startsWith(RESOLVED_MESSAGES_PREFIX)) {
+          return null
+        }
+
+        const [key, locale] = id.slice(RESOLVED_MESSAGES_PREFIX.length).split("/", 2)
+        const entry = key === undefined ? undefined : sidecarModules.get(key)
+        if (!entry || key === undefined) {
+          this.error(
+            `Palamedes message sidecar "${key}" was requested before its source module was transformed. ` +
+              "This indicates a plugin ordering problem; please report it."
+          )
+        }
+
+        const cfg = await getConfigLazy()
+        this.addWatchFile(cfg.configPath)
+        // Pseudo-locale catalogs are generated, not stored; the selected
+        // compile has no pseudo path yet. Split mode skips them for now.
+        const locales = cfg.locales.filter((candidate) => candidate !== cfg.pseudoLocale)
+
+        if (locale === undefined) {
+          // Aggregator: import each branded per-locale module and register it.
+          const imports = locales
+            .map(
+              (localeName, index) =>
+                `import { messages as m${index} } from "${VIRTUAL_MESSAGES_PREFIX}${key}/${localeName}";`
+            )
+            .join("\n")
+          const registration = locales
+            .map((localeName, index) => `${JSON.stringify(localeName)}: m${index}`)
+            .join(", ")
+          const code =
+            `${imports}\n` +
+            `import { registerMessages } from "@palamedes/runtime";\n` +
+            `registerMessages({ ${registration} });\n`
+          return { code, map: null, moduleSideEffects: true }
+        }
+
+        if (!locales.includes(locale)) {
+          this.error(`Palamedes message sidecar "${key}" requested unknown locale "${locale}".`)
+        }
+
+        const catalogs = cfg.catalogs.filter((catalog) =>
+          catalogMatchesSource(cfg, catalog, entry.sourceId)
+        )
+        if (catalogs.length === 0) {
+          this.warn(
+            `Palamedes graph splitting: ${entry.sourceId} uses messages but is not included in any configured catalog; its messages will be missing at runtime.`
+          )
+          return { code: renderCatalogModule({}), map: null }
+        }
+
+        const selected: Record<string, string> = {}
+        for (const catalog of catalogs) {
+          const artifactConfig = catalogArtifactConfig(cfg, [catalog])
+          const resourcePath = catalogResourcePath(cfg, catalog, locale)
+          const result = compileCatalogArtifactSelected(
+            artifactConfig,
+            resourcePath,
+            entry.compiledIds
+          )
+          result.watchFiles.forEach((file: string) => this.addWatchFile(file))
+          if (result.missing.length > 0) {
+            const message =
+              `${createMissingErrorMessage(locale, result.missing)}\n\n` +
+              `Referenced by ${entry.sourceId}.`
+            if (failOnMissing) {
+              this.error(message)
+            }
+            this.warn(message)
+          }
+          Object.assign(selected, result.messages)
+        }
+
+        return { code: renderCatalogModule(selected), map: null }
+      },
+    })
+  }
 
   // Plugin 4: PO file loader
   if (enablePoLoader) {
