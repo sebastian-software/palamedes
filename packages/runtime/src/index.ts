@@ -10,8 +10,15 @@ const CLIENT_I18N_SNAPSHOT_KEY = Symbol.for("palamedes.runtime.clientI18nSnapsho
 const CLIENT_I18N_LISTENERS_KEY = Symbol.for("palamedes.runtime.clientI18nListeners")
 const SERVER_I18N_GETTER_KEY = Symbol.for("palamedes.runtime.serverI18nGetter")
 const SERVER_SCOPE_STATE_KEY = Symbol.for("palamedes.runtime.serverI18nScopeState")
+const REGISTERED_MESSAGES_KEY = Symbol.for("palamedes.runtime.registeredMessages")
 
 type ClientI18nListener = (i18n: I18nInstance) => void
+
+export type RegisteredMessages = Record<string, Record<string, unknown>>
+
+type MessageLoadingI18n = I18nInstance & {
+  load?: (locale: string, messages: Record<string, unknown>) => void
+}
 
 export type ClientI18nSnapshot = Readonly<{
   i18n: I18nInstance | undefined
@@ -35,6 +42,7 @@ type GlobalRuntimeState = typeof globalThis & {
       getStore(): I18nInstance | undefined
     }
   }
+  [REGISTERED_MESSAGES_KEY]?: Map<string, Record<string, unknown>[]>
 }
 
 function globalRuntimeState(): GlobalRuntimeState {
@@ -56,8 +64,66 @@ function isServerEnvironment(): boolean {
   return typeof window === "undefined"
 }
 
+function getRegisteredMessages(
+  state = globalRuntimeState()
+): Map<string, Record<string, unknown>[]> {
+  const existing = state[REGISTERED_MESSAGES_KEY]
+  if (existing) {
+    return existing
+  }
+
+  const registered = new Map<string, Record<string, unknown>[]>()
+  state[REGISTERED_MESSAGES_KEY] = registered
+  return registered
+}
+
+/**
+ * Register compiled messages at module-evaluation time. Generated message
+ * sidecar modules (experimental graph splitting) call this so messages travel
+ * with the code chunks that use them: registration loads into the active
+ * client instance immediately when one is installed, and buffers otherwise so
+ * `setClientI18n` can flush before the first render.
+ *
+ * Each registered map is buffered and loaded as-is, never copied or merged:
+ * generated catalogs carry the compiled-catalog brand, and the parser-free
+ * runtime rejects unbranded copies. Merging across registrations is the
+ * instance's `load()` responsibility.
+ *
+ * Registrations are module-evaluation facts, not instance state: like the
+ * framework bindings' listener stores, they survive `resetI18nRuntime()`,
+ * because the registering modules will not evaluate a second time.
+ */
+export function registerMessages(catalogs: RegisteredMessages): void {
+  const state = globalRuntimeState()
+  const registered = getRegisteredMessages(state)
+  for (const [locale, messages] of Object.entries(catalogs)) {
+    const existing = registered.get(locale)
+    if (existing) {
+      existing.push(messages)
+    } else {
+      registered.set(locale, [messages])
+    }
+  }
+
+  const active = state[CLIENT_I18N_KEY] as MessageLoadingI18n | undefined
+  if (active?.load) {
+    for (const [locale, messages] of Object.entries(catalogs)) {
+      active.load(locale, messages)
+    }
+  }
+}
+
 export function setClientI18n<T extends I18nInstance>(i18n: T): T {
   const state = globalRuntimeState()
+  const registered = state[REGISTERED_MESSAGES_KEY]
+  const loadable = i18n as MessageLoadingI18n
+  if (registered && loadable.load) {
+    for (const [locale, maps] of registered) {
+      for (const messages of maps) {
+        loadable.load(locale, messages)
+      }
+    }
+  }
   const previousSnapshot = getClientI18nSnapshot()
   const nextSnapshot: ClientI18nSnapshot = {
     i18n,
