@@ -16,7 +16,9 @@ import type {
   PalamedesI18n,
 } from "@palamedes/core/compiled"
 
-export type CompiledTransProps = {
+export type TransProps = {
+  // `id` is optional in authored source: components are written with `message`
+  // and the Palamedes compiler transform injects the resolved id at build time.
   id?: string
   message?: string
   context?: string
@@ -25,8 +27,10 @@ export type CompiledTransProps = {
   components?: Record<string, ReactElement>
 }
 
-/** Creates the parser-free Trans component used by transformed production code. */
-export function createCompiledTrans(useI18n: () => PalamedesI18n) {
+type PatternParser = (pattern: string) => MessageNode[]
+
+/** Creates the shared Trans component for compatibility and compiled entries. */
+export function createTrans(useI18n: () => PalamedesI18n, fallbackParser?: PatternParser) {
   return function Trans({
     id,
     message,
@@ -34,16 +38,16 @@ export function createCompiledTrans(useI18n: () => PalamedesI18n) {
     components,
     context,
     comment,
-  }: CompiledTransProps): ReactNode {
+  }: TransProps): ReactNode {
     const i18n = useI18n()
     const resolvedId = id ?? message ?? ""
     const metadata: MessageMetadata = { message, context, comment }
-    const runtime = createReactMessageRuntime(i18n, components ?? {})
+    const runtime = createReactMessageRuntime(i18n, components ?? {}, fallbackParser)
     return <>{renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)}</>
   }
 }
 
-function renderI18nMessage(
+export function renderI18nMessage(
   i18n: PalamedesI18n,
   id: string,
   values: Record<string, unknown>,
@@ -74,9 +78,10 @@ function renderI18nMessage(
   }
 }
 
-function createReactMessageRuntime(
+export function createReactMessageRuntime(
   i18n: PalamedesI18n,
-  components: Record<string, ReactElement>
+  components: Record<string, ReactElement>,
+  fallbackParser?: PatternParser
 ): CompiledMessageRuntime<ReactNode[]> {
   const locale = i18n.locale
   let nextKey = 0
@@ -84,7 +89,7 @@ function createReactMessageRuntime(
     locale,
     {
       pattern(pattern, values) {
-        const nodes = i18n.getMessageNodes(pattern, { message: pattern, reportMissing: false })
+        const nodes = parsePattern(i18n, pattern, fallbackParser)
         return renderNodes(nodes, values, runtime, locale)
       },
       join(...parts) {
@@ -118,6 +123,22 @@ function createReactMessageRuntime(
     }
   )
   return runtime
+}
+
+function parsePattern(
+  i18n: PalamedesI18n,
+  pattern: string,
+  fallbackParser?: PatternParser
+): MessageNode[] {
+  if (i18n.parsePattern !== undefined) {
+    return i18n.parsePattern(pattern)
+  }
+  if (fallbackParser !== undefined) {
+    return fallbackParser(pattern)
+  }
+  // Older custom instances predate the parse-only capability. Preserve their
+  // compatibility behavior while current full runtimes avoid catalog lookup.
+  return i18n.getMessageNodes(pattern, { message: pattern, reportMissing: false })
 }
 
 function renderNodes(
@@ -167,6 +188,7 @@ function renderVariable(value: unknown, key: number): ReactNode {
   if (isValidElement(value)) {
     return cloneElement(value, { key })
   }
+
   return stringifyValue(value)
 }
 

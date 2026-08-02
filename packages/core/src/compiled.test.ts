@@ -36,6 +36,7 @@ describe("parser-free compiled runtime", () => {
   it("rejects hand-written string catalogs at the load boundary", () => {
     const i18n = createI18n()
 
+    expect(i18n.parsePattern).toBeUndefined()
     expect(() =>
       i18n.load("de", { greeting: "Hallo {name}" } as unknown as CompiledCatalogMessages)
     ).toThrow(/only accepts generated CompiledCatalogMessages/)

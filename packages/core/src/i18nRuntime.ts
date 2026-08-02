@@ -57,6 +57,8 @@ export type PalamedesI18n = {
   activate: (locale: string) => void
   getMessage: (id: string, metadata?: MessageMetadata) => string
   getMessageNodes: (id: string, metadata?: MessageMetadata) => MessageNode[]
+  /** Parse a raw ICU pattern without performing a catalog lookup when supported. */
+  parsePattern?: (pattern: string) => MessageNode[]
   /** Execute a message directly against a host renderer such as React or Solid. */
   renderMessage?: <TResult>(
     id: string,

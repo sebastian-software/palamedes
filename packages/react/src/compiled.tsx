@@ -1,8 +1,8 @@
 "use client"
 
 import { getI18n as useI18n } from "./runtime"
-import { createCompiledTrans } from "./compiledShared"
+import { createTrans } from "./transShared"
 
-export { Fragment, type CompiledTransProps as TransProps } from "./compiledShared"
+export { Fragment, type TransProps } from "./transShared"
 
-export const Trans = createCompiledTrans(useI18n)
+export const Trans = createTrans(useI18n)

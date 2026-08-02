@@ -76,6 +76,26 @@ describe("@palamedes/solid", () => {
     expect([render()].flat(Infinity).join("")).toBe("Hallo Ada")
   })
 
+  it("parses lazy patterns without re-entering catalog lookup", () => {
+    const greeting: CompiledMessage = (values, runtime) => runtime.pattern("Hello {name}", values)
+    const i18n = createI18n({ locale: "de" })
+    i18n.load(
+      "de",
+      defineCompiledCatalog({
+        greeting,
+        "Hello {name}": "Falscher Katalogtreffer",
+      })
+    )
+    setServerI18nGetter(() => i18n)
+
+    const render = CompiledTrans({
+      id: "greeting",
+      values: { name: "Ada" },
+    }) as unknown as () => unknown
+
+    expect([render()].flat(Infinity).join("")).toBe("Hello Ada")
+  })
+
   it("keeps rendering with older i18n instances that have no renderMessage hook", () => {
     const i18n = createI18n({ locale: "de" })
     i18n.load("de", {

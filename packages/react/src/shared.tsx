@@ -1,33 +1,12 @@
 import * as React from "react"
-import { cloneElement, Fragment, isValidElement } from "react"
-import type { ReactElement, ReactNode } from "react"
+import type { ReactNode } from "react"
 
-import {
-  createCompiledMessageRuntime,
-  formatMessageArgument,
-  parseMessagePattern,
-  replacePoundPlaceholders,
-  resolveChoice,
-  stringifyValue,
-} from "@palamedes/core"
-import type {
-  CompiledMessageRuntime,
-  MessageMetadata,
-  MessageNode,
-  PalamedesI18n,
-} from "@palamedes/core"
+import { parseMessagePattern } from "@palamedes/core"
+import type { MessageMetadata, MessageNode, PalamedesI18n } from "@palamedes/core"
 
-export type TransProps = {
-  // `id` is optional in authored source: components are written with `message`
-  // (or choice props) and the Palamedes compiler transform injects the resolved
-  // `id` at build time. Hand-written runtime usage may still pass `id` directly.
-  id?: string
-  message?: string
-  context?: string
-  comment?: string
-  values?: Record<string, unknown>
-  components?: Record<string, ReactElement>
-}
+import { createReactMessageRuntime, createTrans, renderI18nMessage } from "./transShared"
+
+export { Fragment, type TransProps } from "./transShared"
 
 type ChoiceComponentProps = {
   value: string | number
@@ -57,17 +36,7 @@ export type SelectProps = {
 }
 
 export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
-  function Trans({ id, message, values, components, context, comment }: TransProps): ReactNode {
-    const i18n = useI18n()
-    const resolvedId = id ?? message ?? ""
-    const metadata: MessageMetadata = {
-      message,
-      context,
-      comment,
-    }
-    const runtime = createReactMessageRuntime(i18n.locale, components ?? {})
-    return <>{renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)}</>
-  }
+  const Trans = createTrans(useI18n, parseMessagePattern)
 
   /*
    * The choice components resolve through the i18n instance exactly like
@@ -85,7 +54,7 @@ export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
   ): ReactNode {
     const message = buildChoiceMessage("value", kind, choices, offset)
     const metadata: MessageMetadata = { message, reportMissing: false }
-    const runtime = createReactMessageRuntime(i18n.locale, {})
+    const runtime = createReactMessageRuntime(i18n, {}, parseMessagePattern)
     return <>{renderI18nMessage(i18n, message, { value }, runtime, metadata)}</>
   }
 
@@ -197,138 +166,3 @@ function validatePluralOffset(offset: number | undefined): void {
     throw new RangeError("Plural offset must be a non-negative safe integer.")
   }
 }
-
-function renderI18nMessage(
-  i18n: PalamedesI18n,
-  id: string,
-  values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<ReactNode[]>,
-  metadata: MessageMetadata
-): ReactNode[] {
-  if (typeof i18n.renderMessage === "function") {
-    return i18n.renderMessage(id, values, runtime, metadata)
-  }
-
-  const nodes = i18n.getMessageNodes(id, metadata)
-  try {
-    return renderNodes(nodes, values, runtime, i18n.locale)
-  } catch (error) {
-    const fallback = metadata.message ?? id
-    const pattern = i18n.getMessage(id, { ...metadata, reportMissing: false })
-    i18n.reportError?.({ id, error, pattern, fallback, metadata })
-
-    if (pattern !== fallback) {
-      try {
-        return runtime.pattern(fallback, values)
-      } catch {
-        // Fall through to plain source text when the fallback is malformed.
-      }
-    }
-
-    return runtime.join(fallback)
-  }
-}
-
-function createReactMessageRuntime(
-  locale: string,
-  components: Record<string, ReactElement>
-): CompiledMessageRuntime<ReactNode[]> {
-  let nextKey = 0
-  const runtime: CompiledMessageRuntime<ReactNode[]> = createCompiledMessageRuntime<ReactNode[]>(
-    locale,
-    {
-      pattern(pattern, values) {
-        return renderNodes(parseMessagePattern(pattern), values, runtime, locale)
-      },
-      join(...parts) {
-        return parts.flatMap((part) => (typeof part === "string" ? [part] : part))
-      },
-      value(value) {
-        return [renderVariable(value, nextKey++)]
-      },
-      number(value, style) {
-        return [formatMessageArgument("number", value, style, locale)]
-      },
-      date(value, style) {
-        return [formatMessageArgument("date", value, style, locale)]
-      },
-      time(value, style) {
-        return [formatMessageArgument("time", value, style, locale)]
-      },
-      pound(value) {
-        return [replacePoundPlaceholders("#", value, locale)]
-      },
-      literal(value) {
-        return [value]
-      },
-      tag(name, children) {
-        const component = components[name]
-        if (component && isValidElement(component)) {
-          return [cloneElement(component, { key: nextKey++ }, ...children)]
-        }
-        return children
-      },
-    }
-  )
-  return runtime
-}
-
-function renderNodes(
-  nodes: MessageNode[],
-  values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<ReactNode[]>,
-  locale: string,
-  pluralValue?: number
-): ReactNode[] {
-  return nodes.flatMap((node) => renderNode(node, values, runtime, locale, pluralValue))
-}
-
-function renderNode(
-  node: MessageNode,
-  values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<ReactNode[]>,
-  locale: string,
-  pluralValue?: number
-): ReactNode[] {
-  switch (node.type) {
-    case "text": {
-      return [
-        pluralValue === undefined
-          ? node.value
-          : replacePoundPlaceholders(node.value, pluralValue, locale),
-      ]
-    }
-    case "literal": {
-      return runtime.literal(node.value)
-    }
-    case "variable": {
-      return runtime.value(values, node.name)
-    }
-    case "formatted": {
-      return runtime[node.format](values, node.variable, node.style)
-    }
-    case "tag": {
-      return runtime.tag(
-        node.name,
-        renderNodes(node.children, values, runtime, locale, pluralValue)
-      )
-    }
-    case "choice": {
-      const resolved = resolveChoice(node, values[node.variable], locale)
-      const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue
-      return renderNodes(resolved.nodes, values, runtime, locale, nextPluralValue)
-    }
-  }
-}
-
-function renderVariable(value: unknown, key: number): ReactNode {
-  if (isValidElement(value)) {
-    return cloneElement(value, { key })
-  }
-
-  // Same stringification as the core string renderer (`i18n._`), so Dates
-  // render as deterministic ISO strings on server and client alike.
-  return stringifyValue(value)
-}
-
-export { Fragment }

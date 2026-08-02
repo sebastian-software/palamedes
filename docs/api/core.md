@@ -94,10 +94,18 @@ interface PalamedesI18n {
   activate(locale: string): void
   getMessage(id: string, metadata?: MessageMetadata): string
   getMessageNodes(id: string, metadata?: MessageMetadata): MessageNode[]
+  parsePattern?(pattern: string): MessageNode[]
   renderMessage?<TResult>(id, values, runtime, metadata?): TResult
   reportError(info: ReportedMessageError): void
 }
 ```
+
+`parsePattern()` is a parse-only adapter capability exposed by the package-root
+`createI18n()`. Unlike `getMessageNodes()`, its argument is always treated as a
+raw ICU pattern and never as a catalog key. It is optional so custom and older
+instances remain compatible; the parser-free `@palamedes/core/compiled`
+factory deliberately omits it. React and Solid use the capability for lazy
+fallback patterns emitted by generated message functions.
 
 `renderMessage()` executes a generated function directly against a host result
 renderer and applies the same telemetry and fallback behavior as `_()`.

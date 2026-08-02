@@ -2,10 +2,12 @@ import { createI18nRuntime, type CreateI18nOptions } from "./i18nRuntime"
 import { formatMessageArgument, formatMessagePattern, parseMessagePattern } from "./messageFormat"
 
 export function createI18n(options: CreateI18nOptions = {}) {
-  return createI18nRuntime(options, {
+  const i18n = createI18nRuntime(options, {
     formatPattern: formatMessagePattern,
     parsePattern: parseMessagePattern,
   })
+  i18n.parsePattern = parseMessagePattern
+  return i18n
 }
 
 export { DEFAULT_LOCALE } from "./i18nRuntime"
