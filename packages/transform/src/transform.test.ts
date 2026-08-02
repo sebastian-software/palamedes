@@ -218,7 +218,7 @@ const el = <Trans>Hello {name}</Trans>;
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
-    expect(result.code).toContain('import { Trans } from "@palamedes/react"')
+    expect(result.code).toContain('import { Trans } from "@palamedes/react/compiled"')
     expect(result.code).toContain('<Trans id="')
     expect(result.code).toContain('message={"Hello {name}"}')
     expect(result.code).toContain("values={{ name }}")
@@ -244,7 +244,7 @@ const y = <Trans>Hallo Welt</Trans>;
     const result = transformPalamedesMacros(code, "test.tsx")
 
     expect(result.hasChanged).toBe(true)
-    expect(result.code).toContain('import { Trans } from "@palamedes/react"')
+    expect(result.code).toContain('import { Trans } from "@palamedes/react/compiled"')
     expect(result.code).toContain('const x = "äöü";')
     expect(result.code).toContain('message={"Hallo Welt"}')
     const map = normalizeSourceMap(result.map)
@@ -264,7 +264,7 @@ const el = <Trans>Hello <strong>{name}</strong></Trans>;
 `
     const result = transformPalamedesMacros(code, "test.tsx")
 
-    expect(result.code).toContain('import { Trans } from "@palamedes/solid"')
+    expect(result.code).toContain('import { Trans } from "@palamedes/solid/compiled"')
     expect(result.code).toContain('<Trans id="')
     expect(result.code).toContain('message={"Hello <0>{name}</0>"}')
     expect(result.code).toContain("components={{ 0: (children) => <strong>{children}</strong> }}")

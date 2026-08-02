@@ -15,4 +15,9 @@ test("uses hook-free package entries in React Server Components", () => {
     import: "./dist/runtime-server.mjs",
     require: "./dist/runtime-server.cjs",
   })
+  assert.deepEqual(packageJson.exports["./compiled"]["react-server"], {
+    types: "./dist/compiled-server.d.ts",
+    import: "./dist/compiled-server.mjs",
+    require: "./dist/compiled-server.cjs",
+  })
 })

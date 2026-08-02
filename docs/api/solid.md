@@ -35,6 +35,11 @@ components:
 - `Select`
 - `SelectOrdinal`
 
+The transform rewrites `Trans` to `@palamedes/solid/compiled`. That subpath
+exports the compiled-message `Trans` adapter without importing Core's ICU
+parser. The package root remains the full runtime-component compatibility
+surface.
+
 ## Runtime Components
 
 Runtime components read the active i18n instance through the package's reactive

@@ -61,6 +61,10 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Check parser-free browser runtime
+        if: ${{ matrix.full }}
+        run: pnpm --filter @palamedes/example-vite-mdx build && node ./scripts/check-runtime-browser-bundle.mjs
+
       - name: Check published TypeScript declarations
         if: ${{ matrix.full }}
         run: pnpm check:published-types

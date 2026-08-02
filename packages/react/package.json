@@ -27,6 +27,16 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     },
+    "./compiled": {
+      "types": "./dist/compiled.d.ts",
+      "react-server": {
+        "types": "./dist/compiled-server.d.ts",
+        "import": "./dist/compiled-server.mjs",
+        "require": "./dist/compiled-server.cjs"
+      },
+      "import": "./dist/compiled.mjs",
+      "require": "./dist/compiled.cjs"
+    },
     "./client": {
       "types": "./dist/client.d.ts",
       "import": "./dist/client.mjs",

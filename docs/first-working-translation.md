@@ -65,7 +65,7 @@ export default defineConfig({
 
 ```ts
 // src/i18n.ts
-import { createI18n } from "@palamedes/core"
+import { createI18n } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
 const i18n = createI18n()
@@ -112,9 +112,9 @@ TypeScript needs an ambient declaration for `.po` imports. Add it once:
 ```ts
 // src/po.d.ts
 declare module "*.po" {
-  import type { CatalogMessages } from "@palamedes/core"
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
 
-  export const messages: CatalogMessages
+  export const messages: CompiledCatalogMessages
 }
 ```
 

@@ -9,9 +9,15 @@ import {
   type CompiledMessage,
   type PalamedesI18n,
 } from "@palamedes/core"
+import {
+  createI18n as createCompiledI18n,
+  defineCompiledCatalog as defineParserFreeCatalog,
+  type CompiledMessage as ParserFreeMessage,
+} from "@palamedes/core/compiled"
 import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
+import { Trans as CompiledTrans } from "./compiled"
 import { createClientLocaleEffect } from "./client"
 
 describe("@palamedes/solid", () => {
@@ -55,6 +61,21 @@ describe("@palamedes/solid", () => {
     expect([render()].flat(Infinity).join("")).toBe("Hallo Ada, <strong>willkommen</strong>")
   })
 
+  it("renders generated messages through the parser-free production entry", () => {
+    const greeting: ParserFreeMessage = (values, runtime) =>
+      runtime.join("Hallo ", runtime.value(values, "name"))
+    const i18n = createCompiledI18n({ locale: "de" })
+    i18n.load("de", defineParserFreeCatalog({ greeting }))
+    setServerI18nGetter(() => i18n)
+
+    const render = CompiledTrans({
+      id: "greeting",
+      values: { name: "Ada" },
+    }) as unknown as () => unknown
+
+    expect([render()].flat(Infinity).join("")).toBe("Hallo Ada")
+  })
+
   it("keeps rendering with older i18n instances that have no renderMessage hook", () => {
     const i18n = createI18n({ locale: "de" })
     i18n.load("de", {
@@ -72,6 +93,24 @@ describe("@palamedes/solid", () => {
     }) as unknown as () => unknown
 
     expect([render()].flat(Infinity).join("")).toBe("Hallo Ada, <strong>willkommen</strong>")
+  })
+
+  it("formats compiled Trans fallbacks with older parser-capable i18n instances", () => {
+    const i18n = createI18n({ locale: "de" })
+    i18n.load("de", {
+      inbox: "{count, plural, one {Eine Nachricht} other {# Nachrichten}}",
+    })
+    const legacyI18n: PalamedesI18n = { ...i18n }
+    delete legacyI18n.renderMessage
+    setServerI18nGetter(() => legacyI18n)
+
+    const render = CompiledTrans({
+      id: "inbox",
+      message: "Hello {name}",
+      values: { name: "Ada" },
+    }) as unknown as () => unknown
+
+    expect([render()].flat(Infinity).join("")).toBe("Hello Ada")
   })
 
   it("re-renders Trans output when the client locale switches", async () => {

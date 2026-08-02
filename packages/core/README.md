@@ -126,9 +126,29 @@ Solid execute those functions directly without browser ICU parsing or AST
 interpretation. Plural/select branches are allocated once when the module
 loads, not once per render.
 
+Use the parser-free production entrypoint when the application loads only these
+generated catalogs:
+
+```ts
+import { createI18n, type CompiledCatalogMessages } from "@palamedes/core/compiled"
+
+declare module "*.po" {
+  export const messages: CompiledCatalogMessages
+}
+
+const i18n = createI18n()
+```
+
+Generated catalog modules, transformed `Trans` components, and compiled MDX
+select their matching `compiled` entrypoints automatically. The explicit Core
+import above keeps the parser out of the application's own i18n factory too.
+
 Hand-written string catalogs keep the bounded lazy parser and the same
-`onError` fallback behavior. Generated catalogs are executable modules rather
-than JSON data: JSON serialization intentionally omits their function entries.
+`onError` fallback behavior through `createI18n` from `@palamedes/core`. The
+parser-free factory rejects those unbranded catalogs at `load()` so an
+accidental compatibility dependency cannot silently enlarge the browser
+bundle. Generated catalogs are executable modules rather than JSON data: JSON
+serialization intentionally omits their function entries.
 
 Palamedes supports the common ICU argument types that product UIs usually need
 inside translated sentences:

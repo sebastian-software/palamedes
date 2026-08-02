@@ -498,7 +498,7 @@ fn transforms_trans_jsx_macro() {
 
     assert!(result
         .code
-        .contains("import { Trans } from \"@palamedes/react\";"));
+        .contains("import { Trans } from \"@palamedes/react/compiled\";"));
     assert!(result.code.contains("<Trans id=\""));
     assert!(result.code.contains("message={\"Hello {name}\"}"));
     assert!(result.code.contains("values={{ name }}"));
@@ -530,7 +530,7 @@ fn transforms_solid_trans_jsx_macro() {
 
     assert!(result
         .code
-        .contains("import { Trans } from \"@palamedes/solid\";"));
+        .contains("import { Trans } from \"@palamedes/solid/compiled\";"));
     assert!(result.code.contains("<Trans id=\""));
     assert!(result.code.contains("message={\"Hello <0>{name}</0>\"}"));
     assert!(result
@@ -657,7 +657,7 @@ fn preserves_use_client_directive_before_injected_imports() {
 
     let first_import = result
         .code
-        .find("import { Trans } from \"@palamedes/react\";")
+        .find("import { Trans } from \"@palamedes/react/compiled\";")
         .expect("trans import should be injected");
     let directive = result
         .code

@@ -48,7 +48,7 @@ describe("@palamedes/core-node", () => {
     })
 
     expect(code).toContain(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";'
     )
     expect(code).toContain('(v,r)=>r.join("Hallo ",r.value(v,"name"));')
     expect(code).toContain('["plain"]:"Willkommen"')
@@ -152,7 +152,9 @@ Read the **guide**.
         1: 5,
       })
       expect(result.code).toContain(
-        framework === "solid" ? 'from "@palamedes/solid"' : 'from "@palamedes/react"'
+        framework === "solid"
+          ? 'from "@palamedes/solid/compiled"'
+          : 'from "@palamedes/react/compiled"'
       )
       expect(result.compiledIds).toHaveLength(3)
       expect(normalizeSourceMap(result.map)).toMatchObject({
@@ -233,7 +235,7 @@ msgstr "{count, plural, one {# Nachricht} other {# Nachrichten}}"
     )
 
     expect(result.code).toContain(
-      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";'
+      'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";'
     )
     expect(result.code).toContain("export const messages=")
     expect(result.code).toContain("Hallo")
@@ -363,7 +365,7 @@ msgstr "${lineSeparators}"
       .map(([id, message]) => `[${JSON.stringify(id)}]:${JSON.stringify(message)}`)
       .join(",")
     expect(module.code).toBe(
-      `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core";export const messages=__palamedesDefineCompiledCatalog({${entries}});export default { messages };`
+      `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";export const messages=__palamedesDefineCompiledCatalog({${entries}});export default { messages };`
     )
   })
 })

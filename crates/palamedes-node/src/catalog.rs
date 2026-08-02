@@ -1473,7 +1473,7 @@ fn render_catalog_module_with_context(
     }
 
     Ok(format!(
-        "import{{defineCompiledCatalog as __palamedesDefineCompiledCatalog}}from\"@palamedes/core\";{}export const messages=__palamedesDefineCompiledCatalog({{{}}});export default {{ messages }};",
+        "import{{defineCompiledCatalog as __palamedesDefineCompiledCatalog}}from\"@palamedes/core/compiled\";{}export const messages=__palamedesDefineCompiledCatalog({{{}}});export default {{ messages }};",
         renderer.declarations,
         entries.join(",")
     ))

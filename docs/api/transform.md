@@ -36,8 +36,8 @@ first-party loaders call `@palamedes/core-node` directly, and
 `renderCatalogModule()` delegates to that same native generator.
 
 Generated catalog modules import `defineCompiledCatalog()` from
-`@palamedes/core`, so custom integrations must install `@palamedes/core` as a
-direct runtime dependency.
+`@palamedes/core/compiled`, so custom integrations must install
+`@palamedes/core` as a direct runtime dependency.
 
 Most apps should use a framework plugin instead of this package directly.
 

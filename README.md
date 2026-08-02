@@ -222,7 +222,7 @@ catalogs:
 
 ```ts
 // src/i18n.ts
-import { createI18n } from "@palamedes/core"
+import { createI18n } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
 const i18n = createI18n()
@@ -232,9 +232,9 @@ setClientI18n(i18n)
 ```ts
 // src/po.d.ts
 declare module "*.po" {
-  import type { CatalogMessages } from "@palamedes/core"
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
 
-  export const messages: CatalogMessages
+  export const messages: CompiledCatalogMessages
 }
 ```
 
