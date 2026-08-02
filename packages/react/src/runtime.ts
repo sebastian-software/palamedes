@@ -23,4 +23,16 @@ function useReactiveI18n<T extends I18nInstance = I18nInstance>(): T {
   return getRuntimeI18n<T>()
 }
 
-export { useReactiveI18n as getI18n }
+/*
+ * The hook exists only to subscribe: its return value is unused and the
+ * instance always comes from the runtime getter. On the server there is
+ * nothing to subscribe to, but translated code does run outside component
+ * rendering — route actions and loaders — where calling a hook crashes on a
+ * null dispatcher. Server environments therefore resolve the runtime getter
+ * directly; only browsers take the reactive hook path. The `react-server`
+ * export condition already maps RSC bundles to ./runtime-server; this branch
+ * covers non-RSC SSR bundles, which resolve this default entry.
+ */
+const getI18n = typeof window === "undefined" ? getRuntimeI18n : useReactiveI18n
+
+export { getI18n }
