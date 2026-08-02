@@ -1,4 +1,4 @@
-import { useFetcher } from "react-router"
+import { Form, useNavigation } from "react-router"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "~/lib/i18n"
@@ -9,37 +9,41 @@ type LocaleSwitcherProps = {
 }
 
 export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
-  const fetcher = useFetcher()
-  const isPending = fetcher.state !== "idle"
+  const navigation = useNavigation()
+  const isPending = navigation.state !== "idle"
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,
     labels: LOCALE_LABELS,
   })
 
-  function handleLocaleChange(nextLocale: Locale) {
-    fetcher.submit({ intent: "set-locale", locale: nextLocale }, { method: "post" })
-  }
-
   return (
     <div className="switcher">
       <span className="switcher-label">
         <Trans>Locale</Trans>
       </span>
-      <div className="seg" role="group" aria-label="Language">
+      {/*
+       * A document navigation, deliberately: with import-map locale binding
+       * the active locale's message assets are fixed by the import map in the
+       * document head, so switching locales means loading a new document with
+       * the new map. The action sets the cookie and redirects.
+       */}
+      <Form method="post" reloadDocument className="seg" role="group" aria-label="Language">
+        <input type="hidden" name="intent" value="set-locale" />
         {items.map((item) => (
           <button
             key={item.locale}
             data-testid={item.testId}
             aria-pressed={item.active}
             disabled={isPending}
-            onClick={() => handleLocaleChange(item.locale)}
-            type="button"
+            name="locale"
+            value={item.locale}
+            type="submit"
           >
             {item.locale.toUpperCase()}
           </button>
         ))}
-      </div>
+      </Form>
     </div>
   )
 }
