@@ -472,19 +472,61 @@ describe("experimental graph splitting", () => {
     expect(result?.code).toBe("transformed")
   })
 
-  it("aggregates branded per-locale modules into one registration, skipping pseudo", async () => {
+  it("aggregates branded per-locale modules into one registration, including pseudo", async () => {
     const { load, key } = await runSidecarLoad(["id-a"])
     const result = await load(`\0palamedes:messages/${key}`)
 
+    // The pseudo locale is a configured locale like any other here: the native
+    // selected compile resolves its catalog through the fallback chain and
+    // pseudolocalizes the result.
     expect(result?.code).toBe(
       `import { messages as m0 } from "virtual:palamedes-messages/${key}/en";\n` +
         `import { messages as m1 } from "virtual:palamedes-messages/${key}/de";\n` +
+        `import { messages as m2 } from "virtual:palamedes-messages/${key}/pseudo";\n` +
         `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ "en": m0, "de": m1 });\n`
+        `registerMessages({ "en": m0, "de": m1, "pseudo": m2 });\n`
     )
     expect(result?.moduleSideEffects).toBe(true)
     // Message compilation happens in the per-locale modules, not the aggregator.
     expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled()
+  })
+
+  it("appends a sidecar import to MDX modules that reference messages", async () => {
+    const result = (await runMdxTransform({}, { experimentalGraphSplitting: true })) as {
+      code?: string
+    } | null
+
+    // MDX content splits exactly like `t`/`Trans` call sites: analyzeMdx
+    // reports the same compiledIds, so the module carries its own messages.
+    expect(result?.code).toMatch(/import "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/)
+    expect(result?.code).toContain("export default function MDXContent()")
+  })
+
+  it("leaves MDX modules without messages untouched", async () => {
+    mocks.analyzeMdxNative.mockReturnValue({
+      messages: [],
+      diagnostics: [],
+      code: "export default function MDXContent() { return <p>Plain</p> }",
+      compiledIds: [],
+      map: null,
+    })
+
+    const result = (await runMdxTransform({}, { experimentalGraphSplitting: true })) as {
+      code?: string
+    } | null
+
+    expect(result?.code).toBe("export default function MDXContent() { return <p>Plain</p> }")
+  })
+
+  it("registers catalog files as watch dependencies of each sidecar", async () => {
+    // Dev-mode translation updates ride on this: Vite invalidates the
+    // generated modules when a watched catalog changes, so no separate
+    // hot-update hook is needed.
+    const { load, key, addWatchFile } = await runSidecarLoad(["id-a"])
+    await load(`\0palamedes:messages/${key}/de`)
+
+    expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/de.po")
+    expect(addWatchFile).toHaveBeenCalledWith("/repo/palamedes.yaml")
   })
 
   it("renders per-locale modules through the native catalog renderer", async () => {
@@ -634,9 +676,9 @@ describe("experimental graph splitting", () => {
       }
     )
 
-    // One dependency-free asset per (sidecar x locale); pseudo is skipped.
+    // One dependency-free asset per (sidecar x locale), pseudo included.
     const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"))
-    expect(assets).toHaveLength(2)
+    expect(assets).toHaveLength(3)
     const deAsset = assets.find((file) => file.fileName.includes(".de-"))
     expect(deAsset?.source).toBe(
       `export const locale="de";export const messages=({"id-a":"Hallo"});`
@@ -644,13 +686,13 @@ describe("experimental graph splitting", () => {
     expect(deAsset?.source).not.toContain("import")
 
     const maps = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-importmap."))
-    expect(maps).toHaveLength(2)
+    expect(maps).toHaveLength(3)
     const deMap = maps.find((file) => file.fileName.includes(".de-"))
     expect(JSON.parse(deMap!.source).imports[`#pmds/${key}`]).toBe(`/${deAsset!.fileName}`)
 
     const manifest = emitted.find((file) => file.fileName === "palamedes-split-manifest.json")
     const parsed = JSON.parse(manifest!.source)
-    expect(parsed.locales).toEqual(["en", "de"])
+    expect(parsed.locales).toEqual(["en", "de", "pseudo"])
     expect(parsed.importMaps.de).toBe(deMap!.fileName)
     // Only chunks with bare message imports appear, so servers can preload
     // the mapped assets of the chunks they serve.
