@@ -19,7 +19,10 @@ use crate::jsx_message::{
 };
 use crate::mdx::{analyze_mdx, MdxOptions};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
-use crate::source::{SourceAnalysisResult, SourceDiagnostic, SourceDiagnosticSeverity};
+use crate::source::{
+    SourceAnalysisOptions, SourceAnalysisResult, SourceDiagnostic, SourceDiagnosticSeverity,
+    SourceLocator, SourceRange, SourceRuleOptions,
+};
 use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
@@ -129,42 +132,6 @@ struct AggregatedCatalogEntry {
     origins: Vec<CatalogUpdateOrigin>,
 }
 
-struct LineLocator {
-    line_starts: Vec<usize>,
-}
-
-impl LineLocator {
-    fn new(source: &str) -> Self {
-        let mut line_starts = vec![0];
-        // A byte scan: '\n' cannot occur inside a multi-byte UTF-8 sequence,
-        // and decoding every char just to find newlines showed up in profiles.
-        for (index, &byte) in source.as_bytes().iter().enumerate() {
-            if byte == b'\n' {
-                line_starts.push(index + 1);
-            }
-        }
-        Self { line_starts }
-    }
-
-    fn get_line(&self, offset: usize) -> usize {
-        match self.line_starts.binary_search(&offset) {
-            Ok(index) => index + 1,
-            Err(index) => index,
-        }
-    }
-
-    fn get_location(&self, offset: usize) -> (usize, usize) {
-        let line = self.get_line(offset);
-        let line_start = self
-            .line_starts
-            .get(line.saturating_sub(1))
-            .copied()
-            .unwrap_or(0);
-
-        (line, offset.saturating_sub(line_start) + 1)
-    }
-}
-
 struct MacroCollector {
     imported_macros: HashMap<String, ImportedMacro>,
     removed_macro_import: Option<(String, usize)>,
@@ -190,12 +157,68 @@ impl<'a> Visit<'a> for MacroCollector {
     }
 }
 
+#[derive(Clone, Copy)]
+enum SourceMessageSurface {
+    TaggedTemplate,
+    Descriptor,
+    Trans,
+    Runtime,
+    Choice,
+}
+
+enum AuthoredMessagePart {
+    Literal(String),
+    ValuePlaceholder,
+    Component { children: Vec<Self> },
+}
+
+struct AuthoredMessageFacts {
+    surface: SourceMessageSurface,
+    range: SourceRange,
+    parts: Vec<AuthoredMessagePart>,
+}
+
+impl AuthoredMessageFacts {
+    fn has_literal_text(&self) -> bool {
+        fn contains_literal(parts: &[AuthoredMessagePart]) -> bool {
+            parts.iter().any(|part| match part {
+                AuthoredMessagePart::Literal(value) => !value.trim().is_empty(),
+                AuthoredMessagePart::ValuePlaceholder => false,
+                AuthoredMessagePart::Component { children } => contains_literal(children),
+            })
+        }
+
+        contains_literal(&self.parts)
+    }
+
+    fn has_value_placeholder(&self) -> bool {
+        fn contains_value(parts: &[AuthoredMessagePart]) -> bool {
+            parts.iter().any(|part| match part {
+                AuthoredMessagePart::Literal(_) => false,
+                AuthoredMessagePart::ValuePlaceholder => true,
+                AuthoredMessagePart::Component { children } => contains_value(children),
+            })
+        }
+
+        contains_value(&self.parts)
+    }
+
+    fn is_one_empty_component(&self) -> bool {
+        matches!(
+            self.parts.as_slice(),
+            [AuthoredMessagePart::Component { children }] if children.is_empty()
+        )
+    }
+}
+
 struct ExtractionVisitor<'a> {
     filename: String,
     source: &'a str,
-    line_locator: &'a LineLocator,
+    source_locator: &'a SourceLocator<'a>,
     imported_macros: &'a HashMap<String, ImportedMacro>,
+    rules: &'a SourceRuleOptions,
     messages: Vec<ExtractedMessageRecord>,
+    diagnostics: Vec<SourceDiagnostic>,
     error: Option<PalamedesError>,
     scope_stack: Vec<String>,
     reference_scopes: bool,
@@ -205,24 +228,84 @@ impl<'a> ExtractionVisitor<'a> {
     fn new(
         filename: &str,
         source: &'a str,
-        line_locator: &'a LineLocator,
+        source_locator: &'a SourceLocator<'a>,
         imported_macros: &'a HashMap<String, ImportedMacro>,
+        rules: &'a SourceRuleOptions,
         reference_scopes: bool,
     ) -> Self {
         Self {
             filename: filename.to_string(),
             source,
-            line_locator,
+            source_locator,
             imported_macros,
+            rules,
             messages: Vec::new(),
+            diagnostics: Vec::new(),
             error: None,
             scope_stack: Vec::new(),
             reference_scopes,
         }
     }
 
-    fn push(&mut self, message: ExtractedMessageRecord) {
+    fn push(&mut self, message: ExtractedMessageRecord, facts: AuthoredMessageFacts) {
         self.messages.push(message);
+        self.diagnose(facts);
+    }
+
+    fn facts(
+        &self,
+        surface: SourceMessageSurface,
+        start: usize,
+        end: usize,
+        parts: Vec<AuthoredMessagePart>,
+    ) -> AuthoredMessageFacts {
+        AuthoredMessageFacts {
+            surface,
+            range: self.source_locator.range(start, end),
+            parts,
+        }
+    }
+
+    fn diagnose(&mut self, facts: AuthoredMessageFacts) {
+        if !matches!(
+            facts.surface,
+            SourceMessageSurface::TaggedTemplate
+                | SourceMessageSurface::Descriptor
+                | SourceMessageSurface::Trans
+        ) {
+            return;
+        }
+
+        if !facts.has_literal_text() && facts.has_value_placeholder() {
+            if let Some(severity) = self.rules.placeholder_only.severity() {
+                self.diagnostics.push(SourceDiagnostic {
+                    code: "pmds/no-placeholder-only-message".to_owned(),
+                    severity,
+                    file: self.filename.clone(),
+                    primary: facts.range,
+                    message: "This message contains placeholders but no translatable text."
+                        .to_owned(),
+                    help: "Move translation to the surrounding authored sentence, or remove the translation macro if this value should be rendered as-is.".to_owned(),
+                    related: None,
+                });
+            }
+            return;
+        }
+
+        if facts.is_one_empty_component() {
+            if let Some(severity) = self.rules.empty_component_only.severity() {
+                self.diagnostics.push(SourceDiagnostic {
+                    code: "pmds/no-empty-component-only-message".to_owned(),
+                    severity,
+                    file: self.filename.clone(),
+                    primary: facts.range,
+                    message: "This message contains only an empty component placeholder."
+                        .to_owned(),
+                    help: "Add translatable text around or inside the component, or render the component without a translation macro.".to_owned(),
+                    related: None,
+                });
+            }
+        }
     }
 
     fn fail(&mut self, message: PalamedesError) {
@@ -242,7 +325,7 @@ impl<'a> ExtractionVisitor<'a> {
     fn origin(&self, span_start: usize) -> (String, usize, Option<usize>) {
         (
             self.filename.clone(),
-            self.line_locator.get_line(span_start),
+            self.source_locator.line(span_start),
             None,
         )
     }
@@ -260,7 +343,7 @@ impl<'a> ExtractionVisitor<'a> {
     }
 
     fn location(&self, span_start: usize) -> String {
-        let (line, column) = self.line_locator.get_location(span_start);
+        let (line, column) = self.source_locator.location(span_start);
 
         format!("{}:{line}:{column}", self.filename)
     }
@@ -346,7 +429,21 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.source,
                 &self.location(it.span.start as usize),
             ) {
-                Ok(Some(message)) => self.push(message),
+                Ok(Some(message)) => {
+                    let surface = if macro_name == "Trans" {
+                        SourceMessageSurface::Trans
+                    } else {
+                        SourceMessageSurface::Choice
+                    };
+                    let parts = if macro_name == "Trans" {
+                        trans_authored_parts(it)
+                    } else {
+                        Vec::new()
+                    };
+                    let facts =
+                        self.facts(surface, it.span.start as usize, it.span.end as usize, parts);
+                    self.push(message, facts);
+                }
                 Ok(None) => {
                     self.fail_unsupported_macro(&macro_name, it.span.start as usize);
                     return;
@@ -377,7 +474,15 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     self.current_scope(),
                     self.source,
                 ) {
-                    Ok(Some(message)) => self.push(message),
+                    Ok(Some(message)) => {
+                        let facts = self.facts(
+                            SourceMessageSurface::TaggedTemplate,
+                            it.span.start as usize,
+                            it.span.end as usize,
+                            template_authored_parts(&it.quasi),
+                        );
+                        self.push(message, facts);
+                    }
                     Ok(None) => {
                         self.fail_unsupported_macro(&macro_name, it.span.start as usize);
                         return;
@@ -397,7 +502,15 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.current_scope(),
                 self.source,
             ) {
-                Ok(Some(message)) => self.push(message),
+                Ok(Some(message)) => {
+                    let facts = self.facts(
+                        SourceMessageSurface::Runtime,
+                        it.span.start as usize,
+                        it.span.end as usize,
+                        template_authored_parts(&it.quasi),
+                    );
+                    self.push(message, facts);
+                }
                 Ok(None) => {}
                 Err(error) => {
                     self.fail(error);
@@ -439,7 +552,23 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 };
 
                 match message {
-                    Ok(Some(message)) => self.push(message),
+                    Ok(Some(message)) => {
+                        let (surface, parts) = if macro_name == "t" {
+                            (
+                                SourceMessageSurface::Descriptor,
+                                descriptor_authored_parts(it),
+                            )
+                        } else {
+                            (SourceMessageSurface::Choice, Vec::new())
+                        };
+                        let facts = self.facts(
+                            surface,
+                            it.span.start as usize,
+                            it.span.end as usize,
+                            parts,
+                        );
+                        self.push(message, facts);
+                    }
                     Ok(None) => {
                         self.fail_unsupported_macro(&macro_name, it.span.start as usize);
                         return;
@@ -458,7 +587,15 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 self.origin(it.span.start as usize),
                 self.current_scope(),
             ) {
-                Ok(Some(message)) => self.push(message),
+                Ok(Some(message)) => {
+                    let facts = self.facts(
+                        SourceMessageSurface::Runtime,
+                        it.span.start as usize,
+                        it.span.end as usize,
+                        Vec::new(),
+                    );
+                    self.push(message, facts);
+                }
                 Ok(None) => {}
                 Err(error) => {
                     self.fail(error);
@@ -469,6 +606,75 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
 
         walk::walk_call_expression(self, it);
     }
+}
+
+fn template_authored_parts(template: &TemplateLiteral<'_>) -> Vec<AuthoredMessagePart> {
+    let mut parts = Vec::with_capacity(template.quasis.len() + template.expressions.len());
+    for (index, quasi) in template.quasis.iter().enumerate() {
+        let value = quasi
+            .value
+            .cooked
+            .map_or_else(|| quasi.value.raw.as_str(), |value| value.as_str());
+        parts.push(AuthoredMessagePart::Literal(value.to_owned()));
+        if template.expressions.get(index).is_some() {
+            parts.push(AuthoredMessagePart::ValuePlaceholder);
+        }
+    }
+    parts
+}
+
+fn descriptor_authored_parts(call: &CallExpression<'_>) -> Vec<AuthoredMessagePart> {
+    let Some(Argument::ObjectExpression(object)) = call.arguments.first() else {
+        return Vec::new();
+    };
+    let Some(message) = descriptor_property_value(object, "message") else {
+        return Vec::new();
+    };
+    match message.without_parentheses() {
+        Expression::StringLiteral(literal) => {
+            vec![AuthoredMessagePart::Literal(literal.value.to_string())]
+        }
+        Expression::TemplateLiteral(template) => template_authored_parts(template),
+        _ => Vec::new(),
+    }
+}
+
+fn trans_authored_parts(element: &JSXElement<'_>) -> Vec<AuthoredMessagePart> {
+    if let Some(message) = jsx_attributes(&element.opening_element).get("message") {
+        return vec![AuthoredMessagePart::Literal(message.clone())];
+    }
+    jsx_children_authored_parts(&element.children)
+}
+
+fn jsx_children_authored_parts(children: &[JSXChild<'_>]) -> Vec<AuthoredMessagePart> {
+    let mut parts = Vec::new();
+    for child in children {
+        match child {
+            JSXChild::Text(text) => {
+                let value = clean_jsx_text(text.value.as_str());
+                if !value.is_empty() {
+                    parts.push(AuthoredMessagePart::Literal(value));
+                }
+            }
+            JSXChild::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::EmptyExpression(_) => {}
+                JSXExpression::StringLiteral(literal) => {
+                    parts.push(AuthoredMessagePart::Literal(literal.value.to_string()));
+                }
+                _ => parts.push(AuthoredMessagePart::ValuePlaceholder),
+            },
+            JSXChild::Element(element) => {
+                parts.push(AuthoredMessagePart::Component {
+                    children: jsx_children_authored_parts(&element.children),
+                });
+            }
+            JSXChild::Fragment(fragment) => {
+                parts.extend(jsx_children_authored_parts(&fragment.children));
+            }
+            JSXChild::Spread(_) => parts.push(AuthoredMessagePart::ValuePlaceholder),
+        }
+    }
+    parts
 }
 
 fn nested_message_macro_in_children<'a>(
@@ -1333,7 +1539,7 @@ pub fn extract_messages_with_mdx_options(
 /// diagnostics are returned in the structured result to stay compatible with
 /// [`crate::analyze_mdx`].
 pub fn analyze_source(source: &str, filename: &str) -> PalamedesResult<SourceAnalysisResult> {
-    analyze_source_with_mdx_options(source, filename, &MdxOptions::default())
+    analyze_source_with_options(source, filename, &SourceAnalysisOptions::default())
 }
 
 /// Analyze one source file with explicit MDX semantics.
@@ -1348,8 +1554,35 @@ pub fn analyze_source_with_mdx_options(
     filename: &str,
     mdx_options: &MdxOptions,
 ) -> PalamedesResult<SourceAnalysisResult> {
+    analyze_source_with_options(
+        source,
+        filename,
+        &SourceAnalysisOptions {
+            mdx: mdx_options.clone(),
+            ..SourceAnalysisOptions::default()
+        },
+    )
+}
+
+/// Analyze one source file with explicit MDX and rule options.
+///
+/// # Errors
+///
+/// Returns an error under the same conditions as [`analyze_source`].
+pub fn analyze_source_with_options(
+    source: &str,
+    filename: &str,
+    options: &SourceAnalysisOptions,
+) -> PalamedesResult<SourceAnalysisResult> {
     let allocator = Allocator::default();
-    analyze_source_in(&allocator, source, filename, true, mdx_options)
+    analyze_source_in(
+        &allocator,
+        source,
+        filename,
+        true,
+        &options.mdx,
+        &options.rules,
+    )
 }
 
 /*
@@ -1366,7 +1599,14 @@ fn extract_messages_in(
     reference_scopes: bool,
     mdx_options: &MdxOptions,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
-    let result = analyze_source_in(allocator, source, filename, reference_scopes, mdx_options)?;
+    let result = analyze_source_in(
+        allocator,
+        source,
+        filename,
+        reference_scopes,
+        mdx_options,
+        &SourceRuleOptions::disabled(),
+    )?;
 
     if is_mdx_filename(filename) && !result.diagnostics.is_empty() {
         let messages = result
@@ -1406,6 +1646,7 @@ fn analyze_source_in(
     filename: &str,
     reference_scopes: bool,
     mdx_options: &MdxOptions,
+    rules: &SourceRuleOptions,
 ) -> PalamedesResult<SourceAnalysisResult> {
     if is_mdx_filename(filename) {
         let result = analyze_mdx(source, filename, mdx_options.clone());
@@ -1465,9 +1706,9 @@ fn analyze_source_in(
         });
     }
 
-    let line_locator = LineLocator::new(source);
+    let source_locator = SourceLocator::new(source);
     if let Some((macro_name, offset)) = collector.removed_macro_import.as_ref() {
-        let (line, column) = line_locator.get_location(*offset);
+        let (line, column) = source_locator.location(*offset);
         return Err(PalamedesError::UnsupportedMacroSyntax {
             macro_name: macro_name.clone(),
             location: format!("{filename}:{line}:{column}"),
@@ -1485,8 +1726,9 @@ fn analyze_source_in(
     let mut extractor = ExtractionVisitor::new(
         filename,
         source,
-        &line_locator,
+        &source_locator,
         &collector.imported_macros,
+        rules,
         reference_scopes,
     );
     extractor.visit_program(&parsed.program);
@@ -1497,7 +1739,7 @@ fn analyze_source_in(
 
     Ok(SourceAnalysisResult {
         messages: extractor.messages,
-        diagnostics: Vec::new(),
+        diagnostics: extractor.diagnostics,
     })
 }
 
@@ -1960,16 +2202,18 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::{
-        analyze_source, analyze_source_with_mdx_options, extract_catalog_messages_cached,
-        extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
-        extract_messages as extract_messages_raw, resolve_extract_threads,
-        ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractedMessageRecord,
-        DEFAULT_EXTRACT_THREADS,
+        analyze_source, analyze_source_with_mdx_options, analyze_source_with_options,
+        extract_catalog_messages_cached, extract_catalog_messages_from_files,
+        extract_catalog_messages_from_files_with_options, extract_messages as extract_messages_raw,
+        resolve_extract_threads, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
+        ExtractedMessageRecord, DEFAULT_EXTRACT_THREADS,
     };
     use crate::error::PalamedesResult;
     use crate::extract_cache::ExtractCache;
     use crate::mdx::MdxOptions;
-    use crate::source::SourceDiagnosticSeverity;
+    use crate::source::{
+        SourceAnalysisOptions, SourceDiagnosticSeverity, SourceRuleLevel, SourceRuleOptions,
+    };
     use crate::test_support::scope_macro_test_source;
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -2018,6 +2262,106 @@ function Greeting({ name }: { name: string }) {
         assert!(!diagnostic.help.is_empty());
         assert!(diagnostic.primary.line >= 1);
         assert!(diagnostic.primary.column >= 1);
+    }
+
+    #[test]
+    fn diagnoses_placeholder_only_messages_from_semantic_source_parts() {
+        let source = r#"import { t as translate } from "@palamedes/core/macro";
+import { Trans as Translate } from "@palamedes/react/macro";
+function Greeting({ status, firstName, lastName }) {
+  const tagged = translate`${status}`;
+  const descriptor = translate({ message: `${firstName}${lastName}` });
+  return <Translate>{firstName}{lastName}</Translate>;
+}
+"#;
+
+        let result = analyze_source(source, "test.tsx").expect("analyze placeholder-only source");
+
+        assert_eq!(result.messages.len(), 3);
+        assert_eq!(result.diagnostics.len(), 3);
+        for diagnostic in &result.diagnostics {
+            assert_eq!(diagnostic.code, "pmds/no-placeholder-only-message");
+            assert_eq!(diagnostic.severity, SourceDiagnosticSeverity::Warning);
+            let highlighted = &source[diagnostic.primary.start..diagnostic.primary.end];
+            assert!(highlighted.starts_with("translate") || highlighted.starts_with("<Translate>"));
+        }
+    }
+
+    #[test]
+    fn placeholder_only_classification_handles_solid_aliases_and_literal_braces() {
+        let placeholder_source = r#"import { Trans as Translate } from "@palamedes/solid/macro";
+const message = <Translate>{status}</Translate>;
+"#;
+        let placeholder =
+            analyze_source(placeholder_source, "test.tsx").expect("analyze Solid Trans alias");
+        assert_eq!(placeholder.diagnostics.len(), 1);
+
+        let literal_source = r#"import { t } from "@palamedes/core/macro";
+import { Trans } from "@palamedes/react/macro";
+function Greeting({ status }) {
+  const tagged = t`Status: ${status}`;
+  const descriptor = t({ message: "{name}" });
+  return <Trans>{"{name}"}</Trans>;
+}
+"#;
+        let literal = analyze_source(literal_source, "test.tsx").expect("analyze literal text");
+        assert_eq!(literal.messages.len(), 3);
+        assert!(literal.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn empty_component_only_is_opt_in_and_preserves_nested_jsx_semantics() {
+        let source = r#"import { Trans } from "@palamedes/react/macro";
+const icon = <Trans>{/* formatting */}<><Button /></></Trans>;
+const rich = <Trans><strong>Delete project</strong></Trans>;
+"#;
+
+        let recommended = analyze_source(source, "test.tsx").expect("analyze recommended rules");
+        assert!(recommended.diagnostics.is_empty());
+
+        let configured = analyze_source_with_options(
+            source,
+            "test.tsx",
+            &SourceAnalysisOptions {
+                rules: SourceRuleOptions {
+                    empty_component_only: SourceRuleLevel::Warning,
+                    ..SourceRuleOptions::default()
+                },
+                ..SourceAnalysisOptions::default()
+            },
+        )
+        .expect("analyze opt-in component rule");
+
+        assert_eq!(configured.diagnostics.len(), 1);
+        let diagnostic = &configured.diagnostics[0];
+        assert_eq!(diagnostic.code, "pmds/no-empty-component-only-message");
+        assert_eq!(
+            &source[diagnostic.primary.start..diagnostic.primary.end],
+            "<Trans>{/* formatting */}<><Button /></></Trans>"
+        );
+    }
+
+    #[test]
+    fn mdx_rich_text_corpus_keeps_component_only_diagnostics_disabled() {
+        let result = analyze_source(
+            "Delete **project**.\n\nClick <Button /> to continue.",
+            "guide.mdx",
+        )
+        .expect("analyze valid MDX rich text");
+
+        assert!(!result.messages.is_empty());
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn extraction_ignores_non_fatal_source_authoring_diagnostics() {
+        let source = r#"import { t } from "@palamedes/core/macro";
+function Greeting({ status }) { return t`${status}`; }
+"#;
+
+        let messages = extract_messages_raw(source, "test.ts").expect("extract messages");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message, "{status}");
     }
 
     #[test]

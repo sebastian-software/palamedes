@@ -373,6 +373,14 @@ export interface ParsedPoFile {
   headerOrder: Array<string>;
   items: Array<ParsedPoItem>;
 }
+export interface NativeSourceRuleOptions {
+  placeholderOnly?: string;
+  emptyComponentOnly?: string;
+}
+export interface NativeSourceAnalysisOptions {
+  mdx?: NativeMdxOptions;
+  rules?: NativeSourceRuleOptions;
+}
 export interface NativeSourceRange {
   start: number;
   end: number;
@@ -441,6 +449,6 @@ export interface NativeBindings {
   analyzeMdx(source: string, filename: string, options?: NativeMdxOptions | undefined | null): NativeMdxAnalysisResult;
   getNativeInfo(): NativeInfo;
   parsePo(source: string): ParsedPoFile;
-  analyzeSource(source: string, filename: string, mdx?: NativeMdxOptions | undefined | null): NativeSourceAnalysisResult;
+  analyzeSource(source: string, filename: string, options?: NativeSourceAnalysisOptions | undefined | null): NativeSourceAnalysisResult;
   transformMacros(source: string, filename: string, options?: NativeTransformOptions | undefined | null): NativeTransformResult;
 }

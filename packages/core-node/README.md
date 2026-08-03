@@ -105,7 +105,7 @@ console.log(po.headers.Language)
 - `compileCatalogModule(config, resourcePath, options)`
 - `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
-- `analyzeSourceNative(source, filename, mdxOptions?)`
+- `analyzeSourceNative(source, filename, options?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
@@ -137,6 +137,9 @@ diagnostics, React or Solid JSX, compiled message IDs, and a source map.
 point. It returns extracted messages plus deterministic diagnostics with a
 stable code, lowercase severity, filename, exact UTF-8 byte range, one-based
 line and Unicode-scalar column, actionable help, and an optional related range.
+The recommended `placeholderOnly` rule defaults to `"warning"`; the narrower
+`emptyComponentOnly` rule defaults to `"off"`. Both accept `"off"`, `"info"`,
+`"warning"`, or `"error"` through `options.rules`.
 
 `compileCatalogModule(config, resourcePath, options)` is the direct module
 rendering API used by the first-party Vite, Next, and Remix `.po` loaders. Pass

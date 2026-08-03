@@ -53,8 +53,10 @@ import type {
   NativeMdxOptions as GeneratedNativeMdxOptions,
   NativeMdxSourceRange as GeneratedNativeMdxSourceRange,
   NativeSourceAnalysisResult as GeneratedNativeSourceAnalysisResult,
+  NativeSourceAnalysisOptions as GeneratedNativeSourceAnalysisOptions,
   NativeSourceDiagnostic as GeneratedNativeSourceDiagnostic,
   NativeSourceRange as GeneratedNativeSourceRange,
+  NativeSourceRuleOptions as GeneratedNativeSourceRuleOptions,
   NativeTransformEdit as GeneratedNativeTransformEdit,
   NativeTransformOptions as GeneratedNativeTransformOptions,
   NativeTransformResult as GeneratedNativeTransformResult,
@@ -194,6 +196,18 @@ export type SourceAnalysisResult = Omit<
 > & {
   messages: NativeExtractedMessage[]
   diagnostics: SourceDiagnostic[]
+}
+export type SourceRuleLevel = "off" | "info" | "warning" | "error"
+export type SourceRuleOptions = Omit<
+  GeneratedNativeSourceRuleOptions,
+  "placeholderOnly" | "emptyComponentOnly"
+> & {
+  placeholderOnly?: SourceRuleLevel
+  emptyComponentOnly?: SourceRuleLevel
+}
+export type SourceAnalysisOptions = Omit<GeneratedNativeSourceAnalysisOptions, "mdx" | "rules"> & {
+  mdx?: MdxOptions
+  rules?: SourceRuleOptions
 }
 
 export type NativeTransformOptions = GeneratedNativeTransformOptions
@@ -668,9 +682,15 @@ export function extractMessagesNative(
 export function analyzeSourceNative(
   source: string,
   filename: string,
-  options?: MdxOptions
+  options?: SourceAnalysisOptions
 ): SourceAnalysisResult {
-  const result = native.analyzeSource(source, filename, toNativeMdxOptions(options))
+  const nativeOptions: GeneratedNativeSourceAnalysisOptions | undefined = options
+    ? {
+        ...options,
+        mdx: toNativeMdxOptions(options.mdx),
+      }
+    : undefined
+  const result = native.analyzeSource(source, filename, nativeOptions)
   return {
     ...result,
     messages: mapExtractedMessages(result.messages),

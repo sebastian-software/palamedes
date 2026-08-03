@@ -65,6 +65,23 @@ function Greeting({ name }: { name: string }) {
     })
   })
 
+  it("configures source rule levels without changing extraction", () => {
+    const source = `import { Trans } from "@palamedes/react/macro";
+const message = <Trans><Button /></Trans>;`
+    const defaultResult = analyzeSourceNative(source, "component.tsx")
+    const configuredResult = analyzeSourceNative(source, "component.tsx", {
+      rules: { emptyComponentOnly: "error" },
+    })
+
+    expect(defaultResult.diagnostics).toStrictEqual([])
+    expect(configuredResult.diagnostics).toMatchObject([
+      {
+        code: "pmds/no-empty-component-only-message",
+        severity: "error",
+      },
+    ])
+  })
+
   it("renders executable catalog modules from in-memory messages", () => {
     const code = renderCatalogModule({
       greeting: "Hallo {name}",
