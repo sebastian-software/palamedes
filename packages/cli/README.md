@@ -45,6 +45,19 @@ The npm package currently publishes native binaries for:
 - Linux arm64 glibc
 - Windows x64 MSVC
 
+The `pmds` launcher selects the matching optional native package when the
+command runs. Installation does not require npm lifecycle scripts, so package
+managers may safely disable them for `@palamedes/cli`:
+
+```bash
+pnpm install --ignore-scripts
+pnpm exec pmds --version
+```
+
+Keep optional dependencies enabled. If the matching package or its binary is
+missing, `pmds` reports the expected platform package and how to add it
+explicitly.
+
 ## Usage
 
 ```bash

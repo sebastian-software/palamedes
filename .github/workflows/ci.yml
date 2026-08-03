@@ -89,6 +89,10 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm test
 
+      - name: Test lifecycle-free CLI package
+        if: ${{ !matrix.full }}
+        run: pnpm --filter @palamedes/cli test
+
       - name: Check types
         if: ${{ matrix.full }}
         run: pnpm check-types

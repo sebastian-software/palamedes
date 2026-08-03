@@ -1,16 +1,30 @@
 import { existsSync } from "node:fs"
-import path from "node:path"
 
 import { spawnNative } from "./native.mjs"
+import { resolveNativeExecutable } from "./platform.mjs"
 
 const BUILT_IN_COMMANDS = new Set(["extract", "audit", "report", "catalog", "version"])
 
 export async function runCli(argv, options = {}) {
-  const nativeExecutable = options.nativeExecutable ?? resolveNativeExecutable()
+  let nativeExecutable = options.nativeExecutable
+  let nativeResolutionError
+  if (nativeExecutable == null) {
+    try {
+      const resolveExecutable = options.resolveNativeExecutable ?? resolveNativeExecutable
+      nativeExecutable = resolveExecutable()
+    } catch (error) {
+      nativeResolutionError = error
+    }
+  }
   const runNative = options.runNative ?? spawnNative
 
   if (shouldDelegateDirectly(argv)) {
-    return runNativeChecked(argv, { ...options, nativeExecutable, runNative })
+    return runNativeChecked(argv, {
+      ...options,
+      nativeExecutable,
+      nativeResolutionError,
+      runNative,
+    })
   }
 
   let pluginResult
@@ -20,6 +34,7 @@ export async function runCli(argv, options = {}) {
     pluginResult = await tryPlugin(argv, {
       ...options,
       nativeExecutable,
+      nativeResolutionError,
       runNative,
     })
   } catch (error) {
@@ -31,7 +46,12 @@ export async function runCli(argv, options = {}) {
   if (pluginResult.handled) {
     return pluginResult.exitCode
   }
-  return runNativeChecked(argv, { ...options, nativeExecutable, runNative })
+  return runNativeChecked(argv, {
+    ...options,
+    nativeExecutable,
+    nativeResolutionError,
+    runNative,
+  })
 }
 
 function shouldDelegateDirectly(argv) {
@@ -39,6 +59,13 @@ function shouldDelegateDirectly(argv) {
 }
 
 async function runNativeChecked(argv, options) {
+  if (options.nativeResolutionError) {
+    const stderr = options.io?.stderr ?? ((value) => process.stderr.write(value))
+    stderr(
+      `${options.nativeResolutionError instanceof Error ? options.nativeResolutionError.message : String(options.nativeResolutionError)}\n`
+    )
+    return 1
+  }
   if (!options.nativeExecutable || !existsSync(options.nativeExecutable)) {
     const stderr = options.io?.stderr ?? ((value) => process.stderr.write(value))
     stderr("Palamedes CLI native binary was not installed for this platform.\n")
@@ -56,13 +83,4 @@ async function runNativeChecked(argv, options) {
     )
     return 1
   }
-}
-
-function resolveNativeExecutable() {
-  const packageDir = path.resolve(import.meta.dirname, "..")
-  return path.join(
-    packageDir,
-    "bin",
-    process.platform === "win32" ? "pmds-native.exe" : "pmds-native"
-  )
 }

@@ -77,6 +77,25 @@ test("built-in commands bypass plugin config and preserve native exit codes", as
   assert.deepEqual(nativeArgs, ["report", "--json"])
 })
 
+test("native resolution failures are reported without loading plugin code", async () => {
+  let pluginHostCalled = false
+  const io = captureIo()
+  const result = await runCli(["--version"], {
+    io,
+    resolveNativeExecutable() {
+      throw new Error("Palamedes CLI native package @palamedes/cli-darwin-arm64 is not installed.")
+    },
+    async tryRunPluginCommand() {
+      pluginHostCalled = true
+      return { handled: false, exitCode: 0 }
+    },
+  })
+
+  assert.equal(result, 1)
+  assert.equal(pluginHostCalled, false)
+  assert.match(io.stderrText(), /@palamedes\/cli-darwin-arm64 is not installed/u)
+})
+
 test("plugin text, diagnostics, and exit codes use a stable text contract", async () => {
   const io = captureIo()
   const result = await runWithPlugin(
@@ -208,6 +227,33 @@ test("host API can run a built-in command without exposing native internals", as
   assert.equal(builtInInvocation.options.nativeExecutable, "/fixture/pmds-native")
   assert.equal(builtInInvocation.options.captureOutput, true)
   assert.deepEqual(JSON.parse(io.stdoutText()).result, { exitCode: 4 })
+})
+
+test("host API preserves native package resolution errors", async () => {
+  const io = captureIo()
+  const result = await runWithPlugin(
+    {
+      name: "workflow",
+      apiVersion: 1,
+      commands: {
+        report: {
+          run({ host }) {
+            return host.runBuiltIn(["report"])
+          },
+        },
+      },
+    },
+    ["workflow", "report"],
+    {
+      io,
+      nativeResolutionError: new Error(
+        "Palamedes CLI native package @palamedes/cli-linux-x64-musl is not installed."
+      ),
+    }
+  )
+
+  assert.equal(result.exitCode, 1)
+  assert.match(io.stderrText(), /@palamedes\/cli-linux-x64-musl is not installed/u)
 })
 
 test("nested built-in output is captured inside the plugin JSON envelope", async () => {
