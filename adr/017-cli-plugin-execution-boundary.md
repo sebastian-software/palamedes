@@ -77,3 +77,5 @@ broken plugin cannot affect core workflows.
   removed rather than maintained as a parallel compatibility surface.
 - The npm launcher remains a packaging bridge until package managers expose a
   transitive optional dependency's bin as the installed package's public bin.
+  [ADR-024](./024-npm-launcher-is-a-packaging-bridge.md) records the launcher
+  distribution decision and its rejected alternatives.
