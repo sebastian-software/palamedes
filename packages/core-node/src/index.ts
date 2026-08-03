@@ -200,10 +200,11 @@ export type SourceAnalysisResult = Omit<
 export type SourceRuleLevel = "off" | "info" | "warning" | "error"
 export type SourceRuleOptions = Omit<
   GeneratedNativeSourceRuleOptions,
-  "placeholderOnly" | "emptyComponentOnly"
+  "placeholderOnly" | "emptyComponentOnly" | "preferTransInJsx"
 > & {
   placeholderOnly?: SourceRuleLevel
   emptyComponentOnly?: SourceRuleLevel
+  preferTransInJsx?: SourceRuleLevel
 }
 export type SourceAnalysisOptions = Omit<GeneratedNativeSourceAnalysisOptions, "mdx" | "rules"> & {
   mdx?: MdxOptions

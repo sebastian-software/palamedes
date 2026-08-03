@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
@@ -28,9 +28,9 @@ use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, BindingPattern, CallExpression, Declaration, Expression, ImportDeclaration,
-    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, MemberExpression,
-    ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression, TemplateLiteral,
-    VariableDeclarator,
+    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, LogicalOperator,
+    MemberExpression, ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression,
+    TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -221,6 +221,8 @@ struct ExtractionVisitor<'a> {
     diagnostics: Vec<SourceDiagnostic>,
     error: Option<PalamedesError>,
     scope_stack: Vec<String>,
+    jsx_parent_stack: Vec<String>,
+    renderable_t_spans: HashSet<(usize, usize)>,
     reference_scopes: bool,
 }
 
@@ -243,6 +245,8 @@ impl<'a> ExtractionVisitor<'a> {
             diagnostics: Vec::new(),
             error: None,
             scope_stack: Vec::new(),
+            jsx_parent_stack: Vec::new(),
+            renderable_t_spans: HashSet::new(),
             reference_scopes,
         }
     }
@@ -306,6 +310,53 @@ impl<'a> ExtractionVisitor<'a> {
                 });
             }
         }
+    }
+
+    fn diagnose_prefer_trans(&mut self, start: usize, end: usize, macro_source: &str) {
+        if !self.renderable_t_spans.contains(&(start, end)) {
+            return;
+        }
+        let Some(severity) = self.rules.prefer_trans_in_jsx.severity() else {
+            return;
+        };
+        let framework = match macro_source {
+            "@palamedes/react/macro" => "React",
+            "@palamedes/solid/macro" => "Solid",
+            _ => "the active UI framework",
+        };
+        self.diagnostics.push(SourceDiagnostic {
+            code: "pmds/prefer-trans-in-jsx".to_owned(),
+            severity,
+            file: self.filename.clone(),
+            primary: self.source_locator.range(start, end),
+            message: "This `t` message is rendered directly as a JSX child; `<Trans>` is often easier to read here, while `t` remains supported.".to_owned(),
+            help: format!(
+                "Consider {framework}'s `<Trans>` macro for JSX-native readability. `t` remains supported; preserve any comment or context metadata when converting."
+            ),
+            related: None,
+        });
+    }
+
+    fn walk_jsx_element_children(&mut self, element: &JSXElement<'a>, tag_name: Option<&str>) {
+        if let Some(tag_name) = tag_name {
+            self.jsx_parent_stack.push(tag_name.to_owned());
+            walk::walk_jsx_element(self, element);
+            self.jsx_parent_stack.pop();
+        } else {
+            walk::walk_jsx_element(self, element);
+        }
+    }
+
+    fn current_jsx_parent_allows_trans(&self) -> bool {
+        !self.jsx_parent_stack.iter().any(|parent| {
+            is_restricted_trans_parent(parent)
+                || self.imported_macros.get(parent).is_some_and(|macro_info| {
+                    matches!(
+                        macro_info.imported_name.as_str(),
+                        "Trans" | "Plural" | "Select" | "SelectOrdinal"
+                    )
+                })
+        })
     }
 
     fn fail(&mut self, message: PalamedesError) {
@@ -401,15 +452,13 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
         }
 
         let Some(tag_name) = it.opening_element.name.get_identifier_name() else {
-            walk::walk_jsx_element(self, it);
+            self.walk_jsx_element_children(it, None);
             return;
         };
+        let tag_name = tag_name.as_str().to_owned();
 
         if let Some(macro_name) = self
-            .imported_macro_name(
-                tag_name.as_str(),
-                &["Trans", "Plural", "Select", "SelectOrdinal"],
-            )
+            .imported_macro_name(&tag_name, &["Trans", "Plural", "Select", "SelectOrdinal"])
             .map(str::to_string)
         {
             if let Some(nested_start) =
@@ -455,7 +504,21 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             }
         }
 
-        walk::walk_jsx_element(self, it);
+        self.walk_jsx_element_children(it, Some(&tag_name));
+    }
+
+    fn visit_jsx_child(&mut self, it: &JSXChild<'a>) {
+        if let JSXChild::ExpressionContainer(container) = it {
+            if self.current_jsx_parent_allows_trans() {
+                if let Some(expression) = container.expression.as_expression() {
+                    collect_direct_render_expression_spans(
+                        expression,
+                        &mut self.renderable_t_spans,
+                    );
+                }
+            }
+        }
+        walk::walk_jsx_child(self, it);
     }
 
     fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
@@ -468,6 +531,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 .imported_macro_name(tag_name, &["t"])
                 .map(str::to_string)
             {
+                let macro_source = self
+                    .imported_macros
+                    .get(tag_name)
+                    .map(|macro_info| macro_info.source.clone())
+                    .unwrap_or_default();
                 match extract_from_tagged_template(
                     &it.quasi,
                     self.origin(it.span.start as usize),
@@ -482,6 +550,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                             template_authored_parts(&it.quasi),
                         );
                         self.push(message, facts);
+                        self.diagnose_prefer_trans(
+                            it.span.start as usize,
+                            it.span.end as usize,
+                            &macro_source,
+                        );
                     }
                     Ok(None) => {
                         self.fail_unsupported_macro(&macro_name, it.span.start as usize);
@@ -532,6 +605,11 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                 .imported_macro_name(callee_name, &["t", "plural", "select", "selectOrdinal"])
                 .map(str::to_string)
             {
+                let macro_source = self
+                    .imported_macros
+                    .get(callee_name)
+                    .map(|macro_info| macro_info.source.clone())
+                    .unwrap_or_default();
                 let message = match macro_name.as_str() {
                     "plural" | "select" | "selectOrdinal" => extract_from_choice_call(
                         it,
@@ -568,6 +646,13 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                             parts,
                         );
                         self.push(message, facts);
+                        if macro_name == "t" {
+                            self.diagnose_prefer_trans(
+                                it.span.start as usize,
+                                it.span.end as usize,
+                                &macro_source,
+                            );
+                        }
                     }
                     Ok(None) => {
                         self.fail_unsupported_macro(&macro_name, it.span.start as usize);
@@ -605,6 +690,37 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
         }
 
         walk::walk_call_expression(self, it);
+    }
+}
+
+fn is_restricted_trans_parent(parent: &str) -> bool {
+    matches!(
+        parent,
+        "option" | "textarea" | "title" | "desc" | "script" | "style"
+    )
+}
+
+fn collect_direct_render_expression_spans(
+    expression: &Expression<'_>,
+    spans: &mut HashSet<(usize, usize)>,
+) {
+    match expression.without_parentheses() {
+        Expression::TaggedTemplateExpression(expression) => {
+            spans.insert((expression.span.start as usize, expression.span.end as usize));
+        }
+        Expression::CallExpression(expression) => {
+            spans.insert((expression.span.start as usize, expression.span.end as usize));
+        }
+        Expression::ConditionalExpression(expression) => {
+            collect_direct_render_expression_spans(&expression.consequent, spans);
+            collect_direct_render_expression_spans(&expression.alternate, spans);
+        }
+        Expression::LogicalExpression(expression)
+            if expression.operator == LogicalOperator::And =>
+        {
+            collect_direct_render_expression_spans(&expression.right, spans);
+        }
+        _ => {}
     }
 }
 
@@ -1737,6 +1853,14 @@ fn analyze_source_in(
         return Err(error);
     }
 
+    extractor.diagnostics.sort_by(|left, right| {
+        (left.primary.start, left.primary.end, left.code.as_str()).cmp(&(
+            right.primary.start,
+            right.primary.end,
+            right.code.as_str(),
+        ))
+    });
+
     Ok(SourceAnalysisResult {
         messages: extractor.messages,
         diagnostics: extractor.diagnostics,
@@ -2362,6 +2486,93 @@ function Greeting({ status }) { return t`${status}`; }
         let messages = extract_messages_raw(source, "test.ts").expect("extract messages");
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].message, "{status}");
+    }
+
+    #[test]
+    fn suggests_trans_for_direct_conditional_and_logical_jsx_render_positions() {
+        let source = r#"import { t as translate } from "@palamedes/react/macro";
+function Greeting({ name, ready }) {
+  return <section>
+    {translate`Welcome ${name}`}
+    {ready ? translate({ message: "Ready", comment: "Visible state", context: "status" }) : translate`Waiting`}
+    {ready && translate`Done`}
+  </section>;
+}
+"#;
+
+        let result = analyze_source(source, "test.tsx").expect("analyze render positions");
+        let diagnostics = result
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "pmds/prefer-trans-in-jsx")
+            .collect::<Vec<_>>();
+
+        assert_eq!(diagnostics.len(), 4);
+        for diagnostic in diagnostics {
+            assert_eq!(diagnostic.severity, SourceDiagnosticSeverity::Info);
+            assert!(diagnostic.message.contains("`t` remains supported"));
+            assert!(diagnostic.help.contains("React's `<Trans>`"));
+            assert!(diagnostic.help.contains("`t` remains supported"));
+            assert!(
+                source[diagnostic.primary.start..diagnostic.primary.end].starts_with("translate")
+            );
+        }
+    }
+
+    #[test]
+    fn prefer_trans_resolves_solid_and_core_macro_sources_without_guessing_a_fix() {
+        let solid_source = r#"import { t as translate } from "@palamedes/solid/macro";
+function Greeting() { return <p>{translate`Hello`}</p>; }
+"#;
+        let solid = analyze_source(solid_source, "solid.tsx").expect("analyze Solid render");
+        assert!(solid.diagnostics[0].help.contains("Solid's `<Trans>`"));
+
+        let core_source = r#"import { t as translate } from "@palamedes/core/macro";
+function Greeting() { return <p>{translate`Hello`}</p>; }
+"#;
+        let core = analyze_source(core_source, "core.tsx").expect("analyze core render");
+        assert!(core.diagnostics[0]
+            .help
+            .contains("the active UI framework's `<Trans>`"));
+    }
+
+    #[test]
+    fn prefer_trans_excludes_non_render_and_structurally_restricted_positions() {
+        let source = r#"import { t as translate } from "@palamedes/react/macro";
+function Greeting({ ready }) {
+  const render = (value) => value;
+  return <>
+    <Card title={translate`Attribute`} />
+    <div>{render(translate`Argument`)}</div>
+    <div>{[translate`Array`]}</div>
+    <div>{({ label: translate`Object` }).label}</div>
+    <option>{translate`Option`}</option>
+    <textarea>{translate`Textarea`}</textarea>
+    <svg><title>{translate`Title`}</title><desc>{translate`Description`}</desc></svg>
+    <div>{translate`Left side` && <span />}</div>
+    <div>{translate`Fallback` || "fallback"}</div>
+    <div>{translate`Fallback` ?? "fallback"}</div>
+  </>;
+}
+"#;
+
+        let result = analyze_source(source, "test.tsx").expect("analyze excluded positions");
+        assert_eq!(result.messages.len(), 11);
+        assert!(result
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code != "pmds/prefer-trans-in-jsx"));
+    }
+
+    #[test]
+    fn prefer_trans_ignores_unrelated_local_t_functions() {
+        let source = r#"function t(strings) { return strings[0]; }
+function Greeting() { return <p>{t`Hello`}</p>; }
+"#;
+
+        let result = analyze_source(source, "test.tsx").expect("analyze unrelated t");
+        assert!(result.messages.is_empty());
+        assert!(result.diagnostics.is_empty());
     }
 
     #[test]
