@@ -82,6 +82,21 @@ const message = <Trans><Button /></Trans>;`
     ])
   })
 
+  it("suggests Trans for a directly rendered t message", () => {
+    const source = `import { t as translate } from "@palamedes/solid/macro";
+function Greeting({ name }) { return <p>{translate\`Hello \${name}\`}</p>; }`
+    const result = analyzeSourceNative(source, "greeting.tsx")
+
+    expect(result.diagnostics).toMatchObject([
+      {
+        code: "pmds/prefer-trans-in-jsx",
+        severity: "info",
+      },
+    ])
+    expect(result.diagnostics[0]?.message).toContain("`t` remains supported")
+    expect(result.diagnostics[0]?.help).toContain("Solid's `<Trans>`")
+  })
+
   it("renders executable catalog modules from in-memory messages", () => {
     const code = renderCatalogModule({
       greeting: "Hallo {name}",

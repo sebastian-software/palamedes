@@ -62,6 +62,8 @@ pub struct SourceRuleOptions {
     pub placeholder_only: SourceRuleLevel,
     /// Diagnose messages containing only one empty component placeholder.
     pub empty_component_only: SourceRuleLevel,
+    /// Suggest JSX-native `<Trans>` authoring in directly renderable positions.
+    pub prefer_trans_in_jsx: SourceRuleLevel,
 }
 
 impl Default for SourceRuleOptions {
@@ -69,6 +71,7 @@ impl Default for SourceRuleOptions {
         Self {
             placeholder_only: SourceRuleLevel::Warning,
             empty_component_only: SourceRuleLevel::Off,
+            prefer_trans_in_jsx: SourceRuleLevel::Info,
         }
     }
 }
@@ -78,6 +81,7 @@ impl SourceRuleOptions {
         Self {
             placeholder_only: SourceRuleLevel::Off,
             empty_component_only: SourceRuleLevel::Off,
+            prefer_trans_in_jsx: SourceRuleLevel::Off,
         }
     }
 }

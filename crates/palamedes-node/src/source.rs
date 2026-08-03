@@ -9,6 +9,7 @@ use crate::shared::{checked_u32, to_napi_error};
 pub struct NativeSourceRuleOptions {
     pub placeholder_only: Option<String>,
     pub empty_component_only: Option<String>,
+    pub prefer_trans_in_jsx: Option<String>,
 }
 
 #[napi(object)]
@@ -125,6 +126,11 @@ impl TryFrom<NativeSourceRuleOptions> for palamedes::SourceRuleOptions {
                 "rules.emptyComponentOnly",
             )?
             .unwrap_or(defaults.empty_component_only),
+            prefer_trans_in_jsx: source_rule_level(
+                value.prefer_trans_in_jsx,
+                "rules.preferTransInJsx",
+            )?
+            .unwrap_or(defaults.prefer_trans_in_jsx),
         })
     }
 }

@@ -376,6 +376,7 @@ export interface ParsedPoFile {
 export interface NativeSourceRuleOptions {
   placeholderOnly?: string;
   emptyComponentOnly?: string;
+  preferTransInJsx?: string;
 }
 export interface NativeSourceAnalysisOptions {
   mdx?: NativeMdxOptions;
