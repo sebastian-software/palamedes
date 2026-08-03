@@ -10,12 +10,17 @@ mod command;
 mod commands;
 mod config;
 mod error;
+mod plugins;
 
 use clap::Parser;
+use std::process::ExitCode;
 
-fn main() {
-    if let Err(error) = cli::Cli::parse().execute() {
-        eprintln!("Error: {error}");
-        std::process::exit(1);
+fn main() -> ExitCode {
+    match cli::Cli::parse().execute() {
+        Ok(code) => ExitCode::from(code),
+        Err(error) => {
+            eprintln!("Error: {error}");
+            ExitCode::FAILURE
+        }
     }
 }

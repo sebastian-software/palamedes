@@ -1,8 +1,8 @@
 # CLI Reference
 
-The `@palamedes/cli` package publishes `pmds`.
-Built-in commands execute in the native Rust sidecar. The npm wrapper also hosts
-explicitly configured third-party command plugins.
+The `@palamedes/cli` package publishes `pmds`. Its npm launcher selects the
+installed platform binary; the native Rust executable owns built-in and plugin
+command dispatch.
 
 ## Plugin Commands
 
@@ -16,12 +16,11 @@ pmds <plugin> <command> --config ./palamedes.yaml [...args]
 
 `--json`, `--config`, and `-c` are reserved host options after the command; put
 `--` before them to pass them through as plugin arguments. Unknown namespaces
-fall back to the native CLI's normal unknown-command diagnostic.
+produce the native plugin host's unknown-namespace diagnostic.
 
-Plugin loading is explicit and applies only to non-built-in namespaces. See the
-[configuration field](./configuration.md#cli-plugins), the
-[`@palamedes/cli/plugin` API](./api/cli-plugin.md), and the
-[binary plugin protocol](./api/cli-binary-plugin.md) for executable plugins.
+Plugin loading is explicit, binary-only, and applies only to non-built-in
+namespaces. See the [configuration field](./configuration.md#cli-plugins) and
+the [binary plugin protocol](./api/cli-binary-plugin.md).
 
 ## `pmds extract`
 
@@ -177,9 +176,9 @@ pmds --version
 ## Configuration Errors
 
 The native CLI reads only data configs (`palamedes.yaml`, `.yml`, `.json`,
-`.toml`). When the upward search finds only a `palamedes.config.ts`/`.js`, the
-CLI reports that specifically instead of a generic not-found error — create a
-data config next to it for CLI use. Known keys written in camelCase
+`.toml`). When the upward search finds only a JavaScript or TypeScript config,
+the CLI reports that specifically instead of a generic not-found error — create
+a data config next to it for CLI use. Known keys written in camelCase
 (`sourceLocale`, `pseudoLocale`, `fallbackLocales`, `sourceReferenceRoot`,
 `referenceScopes`) are rejected with a kebab-case hint instead of being
 silently ignored; other unknown top-level keys produce a warning.

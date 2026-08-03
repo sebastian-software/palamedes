@@ -2,9 +2,9 @@
 //!
 //! Binary plugins are standalone executables the Palamedes CLI spawns and
 //! drives over a versioned newline-delimited JSON protocol on stdio (ADR 018).
-//! This crate wraps that protocol so a plugin `main` reads like `definePlugin`
-//! does in the JavaScript API: register namespaced commands, receive the
-//! resolved project context, emit diagnostics and output, and return a result.
+//! This crate wraps that protocol so a plugin can register namespaced commands,
+//! receive the resolved project context, emit diagnostics and output, and
+//! return a result without implementing the wire format itself.
 //!
 //! ```no_run
 //! use palamedes_plugin::{CommandResult, Plugin};
@@ -46,8 +46,8 @@ pub use protocol::{Catalog, LocaleCatalog, Request, RequestKind, Severity, PROTO
 
 use protocol::{Event, ManifestCommand};
 
-/// Environment variable carrying the absolute path of the `pmds-native`
-/// sidecar, set by the host for every plugin invocation.
+/// Environment variable carrying the absolute path of the native `pmds`
+/// executable, set by the host for every plugin invocation.
 pub const NATIVE_EXECUTABLE_ENV: &str = "PALAMEDES_NATIVE";
 
 type Handler = Box<dyn Fn(&mut CommandContext) -> CommandResult>;
@@ -269,7 +269,7 @@ impl CommandContext<'_> {
         self.request.interactive
     }
 
-    /// Version of the `@palamedes/cli` host package.
+    /// Version of the native `pmds` host.
     pub fn host_version(&self) -> &str {
         &self.request.host_version
     }
@@ -314,7 +314,7 @@ impl CommandContext<'_> {
         });
     }
 
-    /// The absolute path of the `pmds-native` sidecar, when the host provided
+    /// The absolute path of the native `pmds` executable, when the host provided
     /// one via [`NATIVE_EXECUTABLE_ENV`].
     pub fn native_executable(&self) -> Option<PathBuf> {
         env::var_os(NATIVE_EXECUTABLE_ENV).map(PathBuf::from)

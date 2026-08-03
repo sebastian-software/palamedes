@@ -13,6 +13,7 @@ use crate::commands::extract::ExtractOptions;
 use crate::commands::report::ReportOptions;
 use crate::commands::version::VersionCommand;
 use crate::error::CliError;
+use crate::plugins;
 
 #[derive(Debug, Parser)]
 #[command(name = "pmds")]
@@ -35,21 +36,25 @@ enum Command {
     Catalog(CatalogCommand),
     /// Show version information.
     Version,
+    /// Dispatch an explicitly configured binary plugin namespace.
+    #[command(external_subcommand)]
+    Plugin(Vec<String>),
 }
 
 impl Cli {
     /// Runs the invoked command.
-    pub fn execute(&self) -> Result<(), CliError> {
+    pub fn execute(&self) -> Result<u8, CliError> {
         let context = Context::from_env();
         match &self.command {
-            Command::Extract(options) => execute(options, &context),
-            Command::Audit(options) => execute(options, &context),
-            Command::Report(options) => execute(options, &context),
+            Command::Extract(options) => execute(options, &context).map(|()| 0),
+            Command::Audit(options) => execute(options, &context).map(|()| 0),
+            Command::Report(options) => execute(options, &context).map(|()| 0),
             Command::Catalog(catalog) => match &catalog.command {
-                CatalogSubcommand::Merge(options) => execute(options, &context),
-                CatalogSubcommand::Convert(options) => execute(options, &context),
+                CatalogSubcommand::Merge(options) => execute(options, &context).map(|()| 0),
+                CatalogSubcommand::Convert(options) => execute(options, &context).map(|()| 0),
             },
-            Command::Version => execute(&VersionCommand, &context),
+            Command::Version => execute(&VersionCommand, &context).map(|()| 0),
+            Command::Plugin(args) => Ok(plugins::run(args, &context)),
         }
     }
 }

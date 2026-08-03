@@ -1,78 +1,81 @@
-# 017 — Host Explicit CLI Plugins In The npm Wrapper
+# 017 — Host Explicit Binary CLI Plugins In Rust
 
 - Status: Accepted
 - Date: 2026-07-22
+- Revised: 2026-08-03
 - Issue: [#365](https://github.com/sebastian-software/palamedes/issues/365)
 
 ## Context
 
 The Rust `pmds` binary owns extraction, audits, reports, and catalog operations.
 Third-party workflows need resolved project configuration and semantic catalog
-discovery, but linking independently shipped extensions into the Rust binary or
-exposing N-API internals would couple the extension contract to implementation
-details. An unrestricted lifecycle-hook system would also make ordinary built-in
-commands execute third-party code implicitly.
+discovery, but independently shipped extensions must not link into the CLI or
+execute implicitly during built-in commands.
+
+The first implementation hosted JavaScript plugins in the npm launcher. That
+made the launcher a second CLI runtime, required executable JavaScript config,
+and duplicated configuration and dispatch semantics outside Rust. Palamedes
+plugins are distributed as standalone executables now, so that boundary no
+longer needs a JavaScript host.
 
 ## Decision
 
-Use a hybrid boundary:
+Use one native command boundary:
 
-1. The npm package keeps a small Node.js `pmds` wrapper as the public executable
-   and installs the Rust program as a private `pmds-native` sidecar.
+1. The Rust `pmds` executable owns built-in and plugin command dispatch.
 2. Built-in namespaces (`extract`, `audit`, `report`, `catalog`, and `version`)
-   are delegated directly to the sidecar before configuration or plugin modules
-   are loaded.
-3. Plugins are loaded only for a non-built-in namespace and only when explicitly
-   listed in `plugins` in the resolved Palamedes configuration.
-4. A plugin declares a lowercase kebab-case namespace, plugin API major version,
-   and a record of namespaced commands. API version `1` must match exactly.
-5. Package resolution is deterministic and relative to the config file. Installed
-   packages are never discovered or executed merely because they are present.
-6. Commands receive a versioned capability host: resolved configuration, semantic
-   catalog enumeration, structured diagnostics, cancellation, and a guarded way
-   to invoke documented built-in commands. Rust and N-API internals are not part
-   of the contract.
-7. Text output and a single JSON envelope share explicit exit-code semantics.
-   `SIGINT` and `SIGTERM` are exposed through `AbortSignal`; cooperative
-   cancellation maps to exit codes 130 and 143.
-8. The host never prompts. Commands receive an `interactive` capability that is
-   false for JSON, CI, and non-TTY execution.
+   execute before configuration or plugin resolution.
+3. Any other namespace is resolved only from the explicit `plugins` list in a
+   Palamedes data config (`yaml`, `yml`, `json`, or `toml`). JavaScript and
+   TypeScript files are not CLI configuration.
+4. Every plugin is a standalone executable that speaks the versioned binary
+   plugin protocol from ADR 018. ESM and CJS plugin modules are not supported.
+5. Package resolution is deterministic and relative to the config file.
+   Installed packages are never discovered or executed merely because they are
+   present.
+6. A plugin package declares `palamedes.pluginBinary` in `package.json`. A meta
+   package may instead carry platform-specific optional dependencies whose
+   installed package declares `pluginBinary` and matching `os`, `cpu`, and
+   `libc` constraints.
+7. Text output and one JSON envelope share explicit exit-code semantics.
+   Built-in commands remain available to a trusted plugin through the absolute
+   `pmds` path in `PALAMEDES_NATIVE`.
 
-The plugin API major is independent of the package version. Additive API-1
-capabilities may ship in compatible Palamedes minor releases. Removing or
-changing API-1 behavior requires a Palamedes major release or a parallel newer
-plugin API major with a migration window.
+The npm package keeps only the platform-selection launcher required to expose a
+stable `pmds` bin from a platform-neutral package. It does not parse commands,
+load configuration, or host plugins.
 
 ## Trust Model
 
-Configured plugins are trusted local code with the same filesystem, environment,
-and network permissions as `pmds`. The host is an API boundary, not a sandbox.
-Projects must review and pin plugin packages as they would build scripts. CI
-must not inject untrusted plugin configuration. A missing, incompatible, or
-failing plugin prevents only plugin-command dispatch; built-in commands bypass
-plugin loading entirely.
+Configured plugins are trusted local executables with the same filesystem,
+environment, and network permissions as `pmds`. The protocol is an API
+boundary, not a sandbox. Projects must review and pin plugin packages as they
+would build tools. Built-in commands bypass plugin loading, so a missing or
+broken plugin cannot affect core workflows.
 
 ## Alternatives Considered
 
-- **Rust compile-time extensions:** strongly typed but unsuitable for independent
-  npm delivery and would require rebuilding the CLI.
-- **Language-neutral subprocess protocol:** useful for a future multi-language
-  ecosystem, but adds process lifecycle, discovery, and protocol complexity before
-  the first command API has stabilized.
-- **WASI/WASM sandbox:** a potentially stronger isolation boundary, but current
-  workflows need ordinary package resolution and controlled access to project files.
-- **Unrestricted Node lifecycle hooks:** easy to add but would execute third-party
-  code during built-ins and make ordering/failure behavior part of every core command.
-- **External wrapper CLIs:** avoid changes here but duplicate config discovery,
-  catalogs, output envelopes, diagnostics, and version negotiation.
+- **JavaScript module plugins:** independently deployable, but require a second
+  runtime and executable configuration for behavior already owned by Rust.
+- **Rust compile-time extensions:** strongly typed but require rebuilding the
+  CLI for independently released plugins.
+- **Dynamic libraries:** Rust has no stable ABI and a plugin fault would take
+  down the host process.
+- **WASI/WASM sandbox:** a stronger isolation boundary than the trust model
+  requires, with additional capability wiring for filesystem and network use.
+- **External wrapper CLIs:** duplicate config discovery, catalogs, output
+  envelopes, diagnostics, and version negotiation.
 
 ## Consequences
 
-- Existing built-in behavior remains owned and parsed by Rust.
-- The npm wrapper becomes a small runtime component rather than only a binary
-  installer.
-- Plugin authors can ship ordinary ESM/CJS npm packages without depending on
-  internal native bindings.
-- Hooks such as `beforeExtract` and `afterAudit` remain intentionally out of
-  scope. They can be evaluated later without weakening the explicit-command
-  execution rule.
+- `pmds` has one parser and one dispatch table, both in Rust.
+- Plugins can be written in any language that produces an executable speaking
+  the protocol; the supported SDK is Rust-first.
+- CLI plugin configuration is portable data and cannot execute code while
+  loading.
+- The previous `@palamedes/cli/plugin` JavaScript API and JS/TS CLI configs are
+  removed rather than maintained as a parallel compatibility surface.
+- The npm launcher remains a packaging bridge until package managers expose a
+  transitive optional dependency's bin as the installed package's public bin.
+  [ADR-024](./024-npm-launcher-is-a-packaging-bridge.md) records the launcher
+  distribution decision and its rejected alternatives.
