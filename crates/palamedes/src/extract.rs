@@ -90,6 +90,12 @@ pub struct ExtractCatalogMessagesOptions {
     pub reference_scopes: bool,
     /// MDX translation-unit and configured-field behavior.
     pub mdx: MdxOptions,
+    /// Source-authoring rules evaluated while the shared analysis is cached.
+    ///
+    /// Extraction output never depends on these diagnostics. Keeping them in
+    /// the same pass lets `pmds extract` warm the cache consumed by
+    /// `pmds lint` without parsing an unchanged file twice.
+    pub rules: SourceRuleOptions,
 }
 
 impl Default for ExtractCatalogMessagesOptions {
@@ -97,6 +103,7 @@ impl Default for ExtractCatalogMessagesOptions {
         Self {
             reference_scopes: true,
             mdx: MdxOptions::default(),
+            rules: SourceRuleOptions::disabled(),
         }
     }
 }
@@ -121,6 +128,8 @@ pub struct ExtractCatalogMessagesResult {
     pub file_count: usize,
     /// Non-fatal file failures skipped during extraction.
     pub failed_files: Vec<ExtractCatalogFileFailure>,
+    /// Source-authoring diagnostics collected by the shared analysis pass.
+    pub diagnostics: Vec<SourceDiagnostic>,
 }
 
 #[derive(Debug)]
@@ -1701,6 +1710,82 @@ pub fn analyze_source_with_options(
     )
 }
 
+/// Analyze one source file while reusing the cache shared with batch extraction.
+///
+/// A compatible cache hit skips both reading and parsing. The stored messages
+/// retain the configured extraction semantics, while diagnostics are rewritten
+/// to `filename` on return so callers can choose project-relative display paths.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be read or has the same fatal source
+/// authoring problem as [`analyze_source_with_options`]. Cache failures remain
+/// advisory and degrade to a normal analysis.
+pub fn analyze_source_file_cached(
+    path: &str,
+    filename: &str,
+    root_dir: &str,
+    options: &ExtractCatalogMessagesOptions,
+    cache: &mut ExtractCache,
+) -> PalamedesResult<SourceAnalysisResult> {
+    cache.reset_if_request_differs(root_dir, options);
+    if let Some((_relative_file, messages, diagnostics)) = cache.get(path) {
+        return Ok(analysis_with_display_filename(
+            SourceAnalysisResult {
+                messages,
+                diagnostics,
+            },
+            filename,
+        ));
+    }
+
+    let fingerprint = cache.fingerprint_before_read(path);
+    let source = std::fs::read_to_string(path).map_err(|source| PalamedesError::ReadFile {
+        path: PathBuf::from(path),
+        source,
+    })?;
+    let is_mdx = is_mdx_filename(path);
+    let analysis = if !is_mdx && !source.contains("@palamedes") && !source.contains("i18n") {
+        SourceAnalysisResult {
+            messages: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    } else {
+        EXTRACT_ARENA.with(|arena| {
+            let mut arena = arena.borrow_mut();
+            let analysis = analyze_source_in(
+                &arena,
+                &source,
+                path,
+                options.reference_scopes,
+                &options.mdx,
+                &options.rules,
+            );
+            arena.reset();
+            analysis
+        })?
+    };
+
+    cache.insert(
+        path.to_owned(),
+        relative_origin_file(Path::new(root_dir), path),
+        &analysis.messages,
+        &analysis.diagnostics,
+        fingerprint,
+    );
+    Ok(analysis_with_display_filename(analysis, filename))
+}
+
+fn analysis_with_display_filename(
+    mut analysis: SourceAnalysisResult,
+    filename: &str,
+) -> SourceAnalysisResult {
+    for diagnostic in &mut analysis.diagnostics {
+        diagnostic.file = filename.to_owned();
+    }
+    analysis
+}
+
 /*
  * Extraction against a caller-owned arena. A fresh Allocator per file means a
  * fresh set of bump chunks from the system allocator per file, and on a 1500
@@ -1725,25 +1810,7 @@ fn extract_messages_in(
     )?;
 
     if is_mdx_filename(filename) && !result.diagnostics.is_empty() {
-        let messages = result
-            .diagnostics
-            .iter()
-            .map(|diagnostic| {
-                format!(
-                    "{}:{}:{}: {} ({})",
-                    filename,
-                    diagnostic.primary.line,
-                    diagnostic.primary.column,
-                    diagnostic.message,
-                    diagnostic.code
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        return Err(PalamedesError::ParseModuleSource {
-            filename: filename.to_owned(),
-            messages,
-        });
+        return Err(mdx_diagnostics_error(&result.diagnostics));
     }
 
     Ok(result.messages)
@@ -1754,6 +1821,27 @@ fn is_mdx_filename(filename: &str) -> bool {
         .extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("mdx"))
+}
+
+fn mdx_diagnostics_error(diagnostics: &[SourceDiagnostic]) -> PalamedesError {
+    let filename = diagnostics
+        .first()
+        .map_or_else(String::new, |diagnostic| diagnostic.file.clone());
+    let messages = diagnostics
+        .iter()
+        .map(|diagnostic| {
+            format!(
+                "{}:{}:{}: {} ({})",
+                diagnostic.file,
+                diagnostic.primary.line,
+                diagnostic.primary.column,
+                diagnostic.message,
+                diagnostic.code
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    PalamedesError::ParseModuleSource { filename, messages }
 }
 
 fn analyze_source_in(
@@ -1916,9 +2004,11 @@ pub fn extract_catalog_messages_cached(
     let root_dir = PathBuf::from(&request.root_dir);
     let mut catalog = BTreeMap::<String, AggregatedCatalogEntry>::new();
     let mut failed_files = Vec::new();
+    let mut diagnostics = Vec::new();
     let file_count = request.files.len();
     let reference_scopes = options.reference_scopes;
     let mdx_options = options.mdx;
+    let rules = options.rules;
 
     /*
      * A cache handed to us may have been loaded for a different request — watch
@@ -1931,6 +2021,7 @@ pub fn extract_catalog_messages_cached(
         &ExtractCatalogMessagesOptions {
             reference_scopes,
             mdx: mdx_options.clone(),
+            rules: rules.clone(),
         },
     );
 
@@ -1952,7 +2043,16 @@ pub fn extract_catalog_messages_cached(
         request
             .files
             .iter()
-            .map(|file| extract_one_file(file, &root_dir, reference_scopes, &mdx_options, cache))
+            .map(|file| {
+                extract_one_file(
+                    file,
+                    &root_dir,
+                    reference_scopes,
+                    &mdx_options,
+                    &rules,
+                    cache,
+                )
+            })
             .collect()
     } else {
         rayon::ThreadPoolBuilder::new()
@@ -1966,7 +2066,14 @@ pub fn extract_catalog_messages_cached(
                     .files
                     .par_iter()
                     .map(|file| {
-                        extract_one_file(file, &root_dir, reference_scopes, &mdx_options, cache)
+                        extract_one_file(
+                            file,
+                            &root_dir,
+                            reference_scopes,
+                            &mdx_options,
+                            &rules,
+                            cache,
+                        )
                     })
                     .collect()
             })
@@ -1998,12 +2105,28 @@ pub fn extract_catalog_messages_cached(
                 path,
                 relative_file,
                 messages,
+                diagnostics: file_diagnostics,
                 fresh,
                 fingerprint,
             } => {
                 if fresh {
-                    cache.insert(path, relative_file.clone(), &messages, fingerprint);
+                    cache.insert(
+                        path.clone(),
+                        relative_file.clone(),
+                        &messages,
+                        &file_diagnostics,
+                        fingerprint,
+                    );
                 }
+                if is_mdx_filename(&path) && !file_diagnostics.is_empty() {
+                    failed_files.push(ExtractCatalogFileFailure {
+                        path,
+                        message: mdx_diagnostics_error(&file_diagnostics).to_string(),
+                    });
+                    diagnostics.extend(file_diagnostics);
+                    continue;
+                }
+                diagnostics.extend(file_diagnostics);
                 for message in messages {
                     add_extracted_message(&mut catalog, message, &relative_file);
                 }
@@ -2021,6 +2144,7 @@ pub fn extract_catalog_messages_cached(
             .collect(),
         file_count,
         failed_files,
+        diagnostics,
     })
 }
 
@@ -2039,13 +2163,15 @@ fn extract_one_file(
     root_dir: &Path,
     reference_scopes: bool,
     mdx_options: &MdxOptions,
+    rules: &SourceRuleOptions,
     cache: &ExtractCache,
 ) -> FileExtraction {
-    if let Some((relative_file, messages)) = cache.get(file) {
+    if let Some((relative_file, messages, diagnostics)) = cache.get(file) {
         return FileExtraction::Extracted {
             path: file.clone(),
             relative_file,
             messages,
+            diagnostics,
             fresh: false,
             fingerprint: None,
         };
@@ -2091,27 +2217,30 @@ fn extract_one_file(
             path: file.clone(),
             relative_file: relative_origin_file(root_dir, file),
             messages: Vec::new(),
+            diagnostics: Vec::new(),
             fresh: true,
             fingerprint,
         };
     }
 
-    let extracted = EXTRACT_ARENA.with(|arena| {
+    let analyzed = EXTRACT_ARENA.with(|arena| {
         let mut arena = arena.borrow_mut();
-        let extracted = extract_messages_in(&arena, &source, file, reference_scopes, mdx_options);
+        let analyzed =
+            analyze_source_in(&arena, &source, file, reference_scopes, mdx_options, rules);
         /*
          * Safe to reset here: ExtractedMessageRecord owns its strings, so
          * nothing returned above borrows from the arena.
          */
         arena.reset();
-        extracted
+        analyzed
     });
 
-    match extracted {
-        Ok(messages) => FileExtraction::Extracted {
+    match analyzed {
+        Ok(analysis) => FileExtraction::Extracted {
             path: file.clone(),
             relative_file: relative_origin_file(root_dir, file),
-            messages,
+            messages: analysis.messages,
+            diagnostics: analysis.diagnostics,
             fresh: true,
             fingerprint,
         },
@@ -2159,6 +2288,7 @@ enum FileExtraction {
         path: String,
         relative_file: String,
         messages: Vec<ExtractedMessageRecord>,
+        diagnostics: Vec<SourceDiagnostic>,
         /// False when the result came from the cache and need not be stored again.
         fresh: bool,
         /// File identity observed before reading, used to reject mid-run edits.
@@ -2326,11 +2456,12 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::{
-        analyze_source, analyze_source_with_mdx_options, analyze_source_with_options,
-        extract_catalog_messages_cached, extract_catalog_messages_from_files,
-        extract_catalog_messages_from_files_with_options, extract_messages as extract_messages_raw,
-        resolve_extract_threads, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
-        ExtractedMessageRecord, DEFAULT_EXTRACT_THREADS,
+        analyze_source, analyze_source_file_cached, analyze_source_with_mdx_options,
+        analyze_source_with_options, extract_catalog_messages_cached,
+        extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
+        extract_messages as extract_messages_raw, resolve_extract_threads,
+        ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractedMessageRecord,
+        DEFAULT_EXTRACT_THREADS,
     };
     use crate::error::PalamedesResult;
     use crate::extract_cache::ExtractCache;
@@ -3882,6 +4013,71 @@ const message = t({ message })
         .expect("third extraction");
         assert_eq!(third.messages[0].origins[0].file, "App.tsx");
 
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn extraction_warms_byte_equivalent_cached_source_analysis() {
+        let root = temp_root("shared-analysis-cache");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("src dir");
+        let view = src.join("View.tsx");
+        fs::write(
+            &view,
+            r#"
+              import { t } from "@palamedes/react/macro"
+              function View({ status }) {
+                return <p>{t`${status}`}</p>
+              }
+            "#,
+        )
+        .expect("source");
+        let aged = std::time::SystemTime::now() - std::time::Duration::from_secs(10);
+        fs::File::options()
+            .write(true)
+            .open(&view)
+            .expect("open source")
+            .set_modified(aged)
+            .expect("age source");
+
+        let path = view.to_string_lossy().into_owned();
+        let root_dir = root.to_string_lossy().into_owned();
+        let options = ExtractCatalogMessagesOptions {
+            rules: SourceRuleOptions::default(),
+            ..ExtractCatalogMessagesOptions::default()
+        };
+        let mut cache =
+            ExtractCache::load_with_options(&root.join("cache.json"), &root_dir, &options);
+        let extracted = extract_catalog_messages_cached(
+            ExtractCatalogMessagesRequest {
+                root_dir: root_dir.clone(),
+                files: vec![path.clone()],
+                max_threads: Some(1),
+            },
+            options.clone(),
+            &mut cache,
+        )
+        .expect("extract and warm cache");
+        assert_eq!(extracted.diagnostics.len(), 2);
+        assert_eq!(cache.len(), 1);
+
+        let cached =
+            analyze_source_file_cached(&path, "src/View.tsx", &root_dir, &options, &mut cache)
+                .expect("cached analysis");
+        let uncached = analyze_source_file_cached(
+            &path,
+            "src/View.tsx",
+            &root_dir,
+            &options,
+            &mut ExtractCache::disabled(),
+        )
+        .expect("uncached analysis");
+
+        assert_eq!(
+            serde_json::to_vec(&cached).expect("serialize cached"),
+            serde_json::to_vec(&uncached).expect("serialize uncached"),
+            "cached and uncached analysis must be byte-for-byte equivalent"
+        );
         fs::remove_dir_all(root).expect("cleanup");
     }
 

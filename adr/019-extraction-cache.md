@@ -1,6 +1,6 @@
 # ADR-019: Extraction Cache
 
-**Status:** Accepted
+**Status:** Accepted (extended to shared source analysis)
 
 ## Context
 
@@ -33,18 +33,23 @@ non-i18n files stop being reported. It is not in the codebase.
 
 ## Decision
 
-Extraction keeps a per-file cache of its own results, validated by `stat`.
+Native source analysis keeps a per-file cache of its results, validated by
+`stat`. Extraction and source lint share it.
 
-An entry stores the extracted messages and the origin path for one source file,
-keyed by absolute path and guarded by size plus modification time. A hit skips
-both the read and the parse. The cache lives at `.palamedes/extract-cache.json`
-under the project root and is written atomically through a temporary file.
+An entry stores the extracted messages, source-authoring diagnostics, and the
+origin path for one source file, keyed by absolute path and guarded by size plus
+modification time. A compatible hit skips the parse; extraction also skips the
+read, while lint still reads the small source text needed to apply inline
+suppressions. The cache keeps its established location at
+`.palamedes/extract-cache.json` under the project root and is written atomically
+through a temporary file.
 
 Validation is deliberately `stat`-based rather than content-hashed. Hashing
 requires reading the file, which is the cost being avoided.
 
-The same cache serves both shapes of use. A single `pmds extract` loads it,
-uses it, and saves it. Watch mode loads it once and holds it for the life of the
+The same cache serves all three shapes of use. `pmds extract` and `pmds lint`
+load, use, and save it, so either command can reuse a compatible analysis
+produced by the other. Watch mode loads it once and holds it for the life of the
 process, so every rebuild after the first skips unchanged files without touching
 disk for them.
 
@@ -55,11 +60,11 @@ trusted is simply not used.
 
 Correctness rests on discarding aggressively rather than reasoning cleverly:
 
-- A stamp covering the schema version, the extractor version, and the source
-  reference root is compared on load. Any mismatch discards everything. The
-  extractor version matters because a release can legitimately change what a
-  given file extracts to; the reference root matters because it determines the
-  stored origin paths.
+- A stamp covering the schema version, extractor version, source reference
+  root, reference-scope behavior, MDX options, and source-rule levels is
+  compared on load. Any mismatch discards everything. The extractor version
+  matters because a release can legitimately change what a given file produces;
+  the remaining fields determine stored origins, messages, or diagnostics.
 - The file identity is captured before the contents are read and re-checked
   before the entry is stored; if it moved in between, the file is not cached.
   Storing the identity observed only after extraction would pair the contents
@@ -70,15 +75,18 @@ Correctness rests on discarding aggressively rather than reasoning cleverly:
   modification time cannot be distinguished from an edit landing immediately
   afterwards — the hazard Git documents as racy timestamps. Nanosecond
   timestamps make the window small; refusing to cache closes it.
-- Failed files are never cached, so a file that stops parsing is retried on the
-  next run rather than remembered as broken.
+- Read failures and fatal JS/TS parse or authoring failures are never cached, so
+  they are retried on the next run rather than remembered as broken. Structured
+  MDX diagnostics are a successful analysis result and are cached; extraction
+  still treats them as a failed source file, while lint reports their ranges.
 - Entries for files no longer in the extraction set are dropped, so a long-lived
   watch process does not grow without bound. Retention runs once over the union
   of every catalog's files; doing it per catalog would make each catalog evict
   the entries of its siblings, so a multi-catalog project would re-extract
   almost everything on every run.
 
-It can be turned off with `--no-cache` or `extract-cache: false`.
+It can be turned off with `--no-cache` on either command or with
+`extract-cache: false`.
 
 ## Benchmark Consequences
 
@@ -120,17 +128,18 @@ faster". The report states this in place.
   quotes, and it is recorded here rather than absorbed quietly. Reducing it
   means avoiding the record copy and using a more compact payload; neither is
   done here.
-- Catalog output is unaffected. Cold-with-cache, warm, and `--no-cache` runs
-  produce byte-identical catalogs.
+- Catalog and lint output are unaffected. Cold-with-cache, warm, and
+  `--no-cache` runs produce byte-identical results.
 - Writing catalogs now dominates the warm run at roughly 40 of 70 ms. The same
   reasoning applies there: if the message set is unchanged the rendered catalog
   is unchanged, and that could be established without re-rendering it. That is
   the next thing worth doing, and it is not done here.
 - The project gains an on-disk artifact. `.palamedes/` belongs in `.gitignore`.
-- The cache file is roughly the size of the extracted data — about 1.8 MB for
-  6,000 messages. Loading it is part of the 5 ms above, so JSON is fast enough
-  to read at this scale; writing it is the larger half of the cold cost above,
-  which is where a more compact format would pay off first.
+- The cache file is roughly the size of the extracted messages plus any emitted
+  source diagnostics — about 1.8 MB for the original 6,000-message benchmark.
+  Loading it is part of the 5 ms above, so JSON is fast enough to read at this
+  scale; writing it is the larger half of the cold cost above, which is where a
+  more compact format would pay off first.
 - Stale entries are impossible to observe through normal editing, but a tool
   that rewrites a file preserving both size and modification time would defeat
   the check. `--no-cache` exists for that case.

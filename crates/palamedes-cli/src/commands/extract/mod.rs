@@ -246,6 +246,7 @@ fn extract_from_catalog(
         palamedes::ExtractCatalogMessagesOptions {
             reference_scopes: config.reference_scopes,
             mdx: config.mdx.clone(),
+            rules: config.lint.rules.clone().into(),
         },
         cache,
     )?;

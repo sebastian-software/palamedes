@@ -80,6 +80,7 @@ pnpm exec pmds extract --verbose
 pnpm exec pmds lint
 pnpm exec pmds lint --json
 pnpm exec pmds lint --fail-on warning
+pnpm exec pmds lint --no-cache
 pnpm exec pmds audit
 pnpm exec pmds audit --json
 pnpm exec pmds audit --fail-on warning
@@ -103,8 +104,9 @@ review markers such as `fuzzy` when converting PO catalogs to FCL.
 
 `--threads <COUNT>` sets the worker threads for the parallel extraction pass,
 overriding `extract-threads` in the config; it defaults to `4` and `1` runs
-serial. `--no-cache` ignores and does not write the extraction cache in
-`.palamedes/` — use it for a cold run; the cache is on by default.
+serial. `--no-cache` on `extract` or `lint` ignores and does not write their
+shared source-analysis cache in `.palamedes/` — use it for a cold run; the cache
+is on by default.
 
 For local performance checks, set `PALAMEDES_TIMING_JSON=1` on `pmds extract`.
 The command prints a machine-readable timing line with total, glob, extract,

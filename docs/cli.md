@@ -62,15 +62,43 @@ pmds lint --fail-on warning
 
 Options:
 
-| Option                | Description                                                     |
-| --------------------- | --------------------------------------------------------------- |
-| `-c, --config <path>` | Use a specific config file.                                     |
-| `--json`              | Print one deterministic result document.                        |
-| `--fail-on <level>`   | Fail on `error` or `warning`. Default: `error`.                  |
+| Option                | Description                                               |
+| --------------------- | --------------------------------------------------------- |
+| `-c, --config <path>` | Use a specific config file.                               |
+| `--json`              | Print one deterministic result document.                  |
+| `--fail-on <level>`   | Fail on `error` or `warning`. Default: `error`.           |
+| `--no-cache`          | Ignore and do not write the shared source-analysis cache. |
 
 Human diagnostics contain file, line, column, severity, stable code, message,
 and actionable help. JSON contains `diagnostics`, `failedFiles`, and a
 `summary` with file and severity counts plus the number of suppressed findings.
+Diagnostics are ordered by file, byte range, and code; failed files are ordered
+by file. The document shape is stable:
+
+```json
+{
+  "diagnostics": [
+    {
+      "code": "pmds/no-placeholder-only-message",
+      "severity": "warning",
+      "file": "src/view.tsx",
+      "primary": { "start": 91, "end": 103, "line": 3, "column": 14 },
+      "message": "This message contains placeholders but no translatable text.",
+      "help": "Move translation to the surrounding authored sentence, or remove the translation macro if this value should be rendered as-is."
+    }
+  ],
+  "failedFiles": [],
+  "summary": {
+    "files": 1,
+    "errors": 0,
+    "warnings": 1,
+    "infos": 0,
+    "suppressed": 0,
+    "failedFiles": 0
+  }
+}
+```
+
 Exit code `0` means the configured threshold passed, `1` means diagnostics met
 the threshold or a file could not be analyzed, and `2` is reserved by Clap for
 invalid command-line usage.
@@ -84,7 +112,10 @@ const label = t`${status}`
 const inline = t`${status}` // palamedes-lint-disable-line pmds/no-placeholder-only-message
 ```
 
-Unknown codes and directives without a code are reported by `pmds lint`.
+Unknown codes, directives without a code, and valid suppressions that no longer
+match a finding are reported by `pmds lint`.
+The default `.palamedes/extract-cache.json` stores compatible messages and
+diagnostics together, so `extract` and `lint` can reuse the same native parse.
 
 ## `pmds audit`
 
