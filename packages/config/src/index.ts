@@ -41,6 +41,16 @@ export type PalamedesMdxConfig = {
   ignoreDirective?: string
 }
 
+export type PalamedesSourceRuleLevel = "off" | "info" | "warning" | "error"
+
+export type PalamedesLintConfig = {
+  rules?: {
+    placeholderOnly?: PalamedesSourceRuleLevel
+    emptyComponentOnly?: PalamedesSourceRuleLevel
+    preferTransInJsx?: PalamedesSourceRuleLevel
+  }
+}
+
 export type PalamedesPluginDeclaration = string | readonly [specifier: string, options: unknown]
 
 export type PalamedesConfig = {
@@ -51,6 +61,7 @@ export type PalamedesConfig = {
   sourceReferenceRoot?: PalamedesSourceReferenceRoot
   referenceScopes?: boolean
   mdx?: PalamedesMdxConfig
+  lint?: PalamedesLintConfig
   catalogs: PalamedesCatalogConfig[]
   plugins?: PalamedesPluginDeclaration[]
 }
@@ -68,6 +79,7 @@ type PalamedesDataConfig = {
   "reference-scopes"?: unknown
   reference_scopes?: unknown
   mdx?: unknown
+  lint?: unknown
   catalogs?: unknown
   plugins?: unknown
 }
@@ -208,6 +220,8 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
   )
   const referenceScopes = getConfigValue(config, "reference-scopes", "reference_scopes")
   const mdx = config.mdx === undefined ? undefined : normalizeMdxDataConfig(config.mdx, configPath)
+  const lint =
+    config.lint === undefined ? undefined : normalizeLintDataConfig(config.lint, configPath)
 
   return {
     locales: config.locales as string[],
@@ -221,6 +235,7 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
       : {}),
     ...(referenceScopes !== undefined ? { referenceScopes: referenceScopes as boolean } : {}),
     ...(mdx !== undefined ? { mdx } : {}),
+    ...(lint !== undefined ? { lint } : {}),
     catalogs: normalizeDataCatalogs(config.catalogs, configPath) as PalamedesCatalogConfig[],
     ...(config.plugins !== undefined
       ? { plugins: config.plugins as PalamedesPluginDeclaration[] }
@@ -326,6 +341,47 @@ function normalizeMdxDataConfig(value: unknown, configPath: string): PalamedesMd
     ...(transModule !== undefined ? { transModule: transModule as string } : {}),
     ...(runtimeModule !== undefined ? { runtimeModule: runtimeModule as string } : {}),
     ...(ignoreDirective !== undefined ? { ignoreDirective: ignoreDirective as string } : {}),
+  }
+}
+
+function normalizeLintDataConfig(value: unknown, configPath: string): PalamedesLintConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "lint" must be an object.`)
+  }
+  const lint = value as Record<string, unknown>
+  const rules = lint.rules
+  if (rules === undefined) {
+    return {}
+  }
+  if (!rules || typeof rules !== "object" || Array.isArray(rules)) {
+    throw new TypeError(
+      `Invalid Palamedes config in ${configPath}: "lint.rules" must be an object.`
+    )
+  }
+  const record = rules as Record<string, unknown>
+  for (const [camel, kebab] of [
+    ["placeholderOnly", "placeholder-only"],
+    ["emptyComponentOnly", "empty-component-only"],
+    ["preferTransInJsx", "prefer-trans-in-jsx"],
+  ]) {
+    if (camel in record) {
+      throw new Error(
+        `Invalid Palamedes config in ${configPath}: unknown key "lint.rules.${camel}". Data configs use kebab-case: "lint.rules.${kebab}".`
+      )
+    }
+  }
+  return {
+    rules: {
+      ...(record["placeholder-only"] !== undefined
+        ? { placeholderOnly: record["placeholder-only"] as PalamedesSourceRuleLevel }
+        : {}),
+      ...(record["empty-component-only"] !== undefined
+        ? { emptyComponentOnly: record["empty-component-only"] as PalamedesSourceRuleLevel }
+        : {}),
+      ...(record["prefer-trans-in-jsx"] !== undefined
+        ? { preferTransInJsx: record["prefer-trans-in-jsx"] as PalamedesSourceRuleLevel }
+        : {}),
+    },
   }
 }
 
@@ -464,6 +520,7 @@ async function normalizeConfig(
     sourceReferenceRoot: await resolveSourceReferenceRoot(config.sourceReferenceRoot, rootDir),
     referenceScopes: config.referenceScopes ?? true,
     ...(config.mdx ? { mdx: cloneMdxConfig(config.mdx) } : {}),
+    ...(config.lint ? { lint: cloneLintConfig(config.lint) } : {}),
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       ...(catalog.format !== undefined ? { format: catalog.format } : {}),
@@ -487,6 +544,7 @@ function normalizeConfigSync(config: PalamedesConfig, configPath: string): Loade
     sourceReferenceRoot: resolveSourceReferenceRootSync(config.sourceReferenceRoot, rootDir),
     referenceScopes: config.referenceScopes ?? true,
     ...(config.mdx ? { mdx: cloneMdxConfig(config.mdx) } : {}),
+    ...(config.lint ? { lint: cloneLintConfig(config.lint) } : {}),
     catalogs: config.catalogs.map((catalog) => ({
       path: catalog.path,
       ...(catalog.format !== undefined ? { format: catalog.format } : {}),
@@ -505,6 +563,13 @@ function cloneMdxConfig(config: PalamedesMdxConfig): PalamedesMdxConfig {
       ? { translatableAttributes: [...config.translatableAttributes] }
       : {}),
     ...(config.frontMatterFields ? { frontMatterFields: [...config.frontMatterFields] } : {}),
+  }
+}
+
+function cloneLintConfig(config: PalamedesLintConfig): PalamedesLintConfig {
+  return {
+    ...config,
+    ...(config.rules ? { rules: { ...config.rules } } : {}),
   }
 }
 
@@ -638,6 +703,7 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
   }
 
   validateMdx(record.mdx, configPath)
+  validateLint(record.lint, configPath)
   validateFallbackLocales(record.fallbackLocales, configPath, record.locales as string[])
   validatePlugins(record.plugins, configPath)
 
@@ -683,6 +749,33 @@ function validateMdx(value: unknown, configPath: string): void {
     ) {
       throw new TypeError(
         `Invalid Palamedes config in ${configPath}: "mdx.${field}" must be a non-empty string.`
+      )
+    }
+  }
+}
+
+function validateLint(value: unknown, configPath: string): void {
+  if (value === undefined) {
+    return
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`Invalid Palamedes config in ${configPath}: "lint" must be an object.`)
+  }
+  const rules = (value as Record<string, unknown>).rules
+  if (rules === undefined) {
+    return
+  }
+  if (!rules || typeof rules !== "object" || Array.isArray(rules)) {
+    throw new TypeError(
+      `Invalid Palamedes config in ${configPath}: "lint.rules" must be an object.`
+    )
+  }
+  const record = rules as Record<string, unknown>
+  for (const field of ["placeholderOnly", "emptyComponentOnly", "preferTransInJsx"] as const) {
+    const level = record[field]
+    if (level !== undefined && !["off", "info", "warning", "error"].includes(level as string)) {
+      throw new TypeError(
+        `Invalid Palamedes config in ${configPath}: "lint.rules.${field}" must be "off", "info", "warning", or "error".`
       )
     }
   }

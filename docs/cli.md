@@ -48,6 +48,44 @@ Options:
 | `--no-cache`          | Ignore and do not write the extraction cache in `.palamedes/`. Use for a cold run; the cache is on by default.                                               |
 | `-v, --verbose`       | Print verbose extraction details.                                                                                                                            |
 
+## `pmds lint`
+
+Checks Palamedes source authoring without creating or updating catalogs. It
+uses the union of the configured `catalogs[].include` and `exclude` file sets,
+deduplicates overlapping catalogs, and supports JS, TS, JSX, TSX, and MDX.
+
+```bash
+pmds lint
+pmds lint --json
+pmds lint --fail-on warning
+```
+
+Options:
+
+| Option                | Description                                                     |
+| --------------------- | --------------------------------------------------------------- |
+| `-c, --config <path>` | Use a specific config file.                                     |
+| `--json`              | Print one deterministic result document.                        |
+| `--fail-on <level>`   | Fail on `error` or `warning`. Default: `error`.                  |
+
+Human diagnostics contain file, line, column, severity, stable code, message,
+and actionable help. JSON contains `diagnostics`, `failedFiles`, and a
+`summary` with file and severity counts plus the number of suppressed findings.
+Exit code `0` means the configured threshold passed, `1` means diagnostics met
+the threshold or a file could not be analyzed, and `2` is reserved by Clap for
+invalid command-line usage.
+
+Suppressions are deliberately code-specific and line-scoped:
+
+```tsx
+// palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+const label = t`${status}`
+
+const inline = t`${status}` // palamedes-lint-disable-line pmds/no-placeholder-only-message
+```
+
+Unknown codes and directives without a code are reported by `pmds lint`.
+
 ## `pmds audit`
 
 Audits catalogs for missing translations, fuzzy review markers, and ICU

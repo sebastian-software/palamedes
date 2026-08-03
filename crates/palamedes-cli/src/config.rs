@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use ::config as config_rs;
 use palamedes::{
     CatalogArtifactConfig, CatalogConfig, FallbackLocales, MdxOptions, PalamedesCatalogFormat,
-    PoLineBreaks, PoOutputOptions,
+    PoLineBreaks, PoOutputOptions, SourceRuleLevel, SourceRuleOptions,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -59,6 +59,8 @@ pub struct LoadedConfig {
     pub catalogs: Vec<ConfigCatalog>,
     /// Shared MDX extraction and compilation semantics.
     pub mdx: MdxOptions,
+    /// Source-authoring lint rule configuration.
+    pub lint: ConfigLintOptions,
     /// Worker threads for the parallel extraction pass; `None` uses the
     /// measured default in the core.
     pub extract_threads: Option<usize>,
@@ -66,6 +68,49 @@ pub struct LoadedConfig {
     pub extract_cache: bool,
     /// Explicit binary plugins resolved only for external command namespaces.
     pub plugins: Vec<ConfigPluginDeclaration>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ConfigLintOptions {
+    pub rules: ConfigLintRules,
+}
+
+impl Default for ConfigLintOptions {
+    fn default() -> Self {
+        Self {
+            rules: ConfigLintRules::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ConfigLintRules {
+    pub placeholder_only: SourceRuleLevel,
+    pub empty_component_only: SourceRuleLevel,
+    pub prefer_trans_in_jsx: SourceRuleLevel,
+}
+
+impl Default for ConfigLintRules {
+    fn default() -> Self {
+        let defaults = SourceRuleOptions::default();
+        Self {
+            placeholder_only: defaults.placeholder_only,
+            empty_component_only: defaults.empty_component_only,
+            prefer_trans_in_jsx: defaults.prefer_trans_in_jsx,
+        }
+    }
+}
+
+impl From<ConfigLintRules> for SourceRuleOptions {
+    fn from(value: ConfigLintRules) -> Self {
+        Self {
+            placeholder_only: value.placeholder_only,
+            empty_component_only: value.empty_component_only,
+            prefer_trans_in_jsx: value.prefer_trans_in_jsx,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -149,6 +194,8 @@ struct RawConfig {
     extract_cache: bool,
     #[serde(default)]
     mdx: MdxOptions,
+    #[serde(default)]
+    lint: ConfigLintOptions,
     catalogs: Vec<ConfigCatalog>,
     #[serde(default)]
     plugins: Vec<ConfigPluginDeclaration>,
@@ -245,6 +292,7 @@ fn unknown_top_level_keys(value: &serde_json::Value) -> Vec<String> {
         "extract-cache",
         "extract_cache",
         "mdx",
+        "lint",
         "catalogs",
         "plugins",
     ];
@@ -386,6 +434,7 @@ fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig
         pseudo_locale: raw.pseudo_locale,
         catalogs: raw.catalogs,
         mdx: raw.mdx,
+        lint: raw.lint,
         extract_threads: raw.extract_threads,
         extract_cache: raw.extract_cache,
         plugins: raw.plugins,
@@ -622,6 +671,42 @@ catalogs:
         let config = load_config(&app, None).expect("load config");
 
         assert!(!config.reference_scopes);
+    }
+
+    #[test]
+    fn loads_kebab_case_source_lint_rule_levels() {
+        let app = temp_dir("lint-rules");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+lint:
+  rules:
+    placeholder-only: error
+    empty-component-only: warning
+    prefer-trans-in-jsx: off
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("load config");
+
+        assert_eq!(
+            config.lint.rules.placeholder_only,
+            palamedes::SourceRuleLevel::Error
+        );
+        assert_eq!(
+            config.lint.rules.empty_component_only,
+            palamedes::SourceRuleLevel::Warning
+        );
+        assert_eq!(
+            config.lint.rules.prefer_trans_in_jsx,
+            palamedes::SourceRuleLevel::Off
+        );
     }
 
     #[test]

@@ -77,6 +77,9 @@ pnpm exec pmds extract --config ./palamedes.yaml
 pnpm exec pmds extract --threads 1
 pnpm exec pmds extract --no-cache
 pnpm exec pmds extract --verbose
+pnpm exec pmds lint
+pnpm exec pmds lint --json
+pnpm exec pmds lint --fail-on warning
 pnpm exec pmds audit
 pnpm exec pmds audit --json
 pnpm exec pmds audit --fail-on warning
@@ -90,6 +93,10 @@ pnpm exec pmds catalog convert src/locales/de.po --to fcl --output src/locales/d
 `pmds audit` reports missing translations, extra catalog entries, obsolete
 messages, fuzzy review markers, and ICU compatibility issues through the same `ferrocat`
 catalog engine that powers Palamedes builds.
+
+`pmds lint` is non-mutating and checks Palamedes authoring across the same
+configured sources as extraction. It supports stable human and JSON output,
+configured rule levels, code-specific line suppressions, and CI thresholds.
 
 `pmds catalog convert` preserves translator comments, obsolete state, and
 review markers such as `fuzzy` when converting PO catalogs to FCL.

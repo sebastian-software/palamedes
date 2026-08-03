@@ -7,6 +7,7 @@ commands.
 ## Commands
 
 - `pmds extract`
+- `pmds lint`
 - `pmds audit`
 - `pmds report`
 - `pmds catalog merge`

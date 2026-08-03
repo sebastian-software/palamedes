@@ -86,6 +86,35 @@ describe("loadPalamedesConfig", () => {
     ])
   })
 
+  it("normalizes source lint rules from data configs", async () => {
+    const fixtureDir = await createTempDir()
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        locales: [en]
+        source-locale: en
+        lint:
+          rules:
+            placeholder-only: error
+            empty-component-only: warning
+            prefer-trans-in-jsx: off
+        catalogs:
+          - path: src/locales/{locale}
+            include: [src]
+      `
+    )
+
+    const config = await loadPalamedesConfig({ cwd: fixtureDir })
+
+    expect(config.lint).toStrictEqual({
+      rules: {
+        placeholderOnly: "error",
+        emptyComponentOnly: "warning",
+        preferTransInJsx: "off",
+      },
+    })
+  })
+
   it("loads PO output options from JavaScript and data configs", async () => {
     const jsDir = await createTempDir()
     await writeFile(

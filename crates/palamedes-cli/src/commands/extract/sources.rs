@@ -10,7 +10,7 @@ use ignore::WalkBuilder;
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
 
-pub(super) fn collect_source_files(
+pub(crate) fn collect_source_files(
     catalog: &ConfigCatalog,
     config: &LoadedConfig,
 ) -> Result<Vec<PathBuf>, CliError> {
@@ -57,7 +57,7 @@ pub(super) fn collect_source_files(
  * order and the resulting file order — and with it catalog origin order — is
  * unchanged. Other platforms keep Path's own ordering.
  */
-pub(super) fn sort_and_dedupe_paths<P: AsRef<Path> + Ord>(paths: &mut Vec<P>) {
+pub(crate) fn sort_and_dedupe_paths<P: AsRef<Path> + Ord>(paths: &mut Vec<P>) {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;

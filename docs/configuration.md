@@ -41,6 +41,7 @@ catalogs:
 | `source-reference-root` | No       | `git \| config \| lingui \| path`      | Root used for catalog source references. Defaults to nearest Git root, then config. |
 | `reference-scopes`      | No       | `boolean`                              | Adds stable source scopes to catalog references. Defaults to `true`.                |
 | `mdx`                   | No       | MDX options                            | Shared native MDX extraction and Vite compilation behavior.                         |
+| `lint`                  | No       | source lint options                    | Source-authoring rule levels used by `pmds lint`.                                   |
 | `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                |
 | `extract-threads`       | No       | `number`                               | Worker threads for the parallel extraction pass. Defaults to `4`; `1` runs serial.  |
 | `extract-cache`         | No       | `boolean`                              | Reuse the on-disk extraction cache. Defaults to `true`.                             |
@@ -72,6 +73,26 @@ reference root, or extraction-relevant MDX options change. Use `--no-cache` for 
 this to `false` if a tool in your pipeline rewrites files without changing their
 size or modification time. See
 [ADR-019](https://github.com/sebastian-software/palamedes/blob/main/adr/019-extraction-cache.md).
+
+## Source Lint
+
+`pmds lint` scans the same configured source files as extraction without
+writing catalogs. Rule levels use `off`, `info`, `warning`, or `error`:
+
+```yaml
+lint:
+  rules:
+    placeholder-only: warning
+    empty-component-only: off
+    prefer-trans-in-jsx: info
+```
+
+Those are also the defaults. `placeholder-only` catches messages made only of
+runtime values. `empty-component-only` is opt-in because component-only
+authoring needs more project context. `prefer-trans-in-jsx` is an informational
+readability suggestion for safe direct render positions; `t` remains fully
+supported. Advanced dictionary and ambiguity policies are not part of this
+open-source config surface.
 
 ## Catalogs
 
