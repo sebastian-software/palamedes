@@ -40,6 +40,12 @@ pub enum CliError {
     CompletenessBelowThreshold { threshold: String, locales: String },
     #[error("Extraction failed for {failures} source file(s); catalogs were not updated.")]
     ExtractionFailed { failures: usize },
+    #[error("Source lint failed with {errors} error diagnostic(s).")]
+    LintFailedOnError { errors: usize },
+    #[error("Source lint failed with {errors} error(s) and {warnings} warning(s).")]
+    LintFailedOnWarning { errors: usize, warnings: usize },
+    #[error("Source lint could not analyze {failures} source file(s).")]
+    LintAnalysisFailed { failures: usize },
     #[error("Could not build glob pattern {pattern}: {source}")]
     GlobPattern {
         pattern: String,

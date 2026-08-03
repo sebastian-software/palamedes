@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 pub mod audit;
 pub mod catalog;
 pub mod extract;
+pub mod lint;
 pub mod report;
 #[cfg(test)]
 mod test_support;

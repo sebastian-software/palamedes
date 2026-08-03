@@ -1,7 +1,7 @@
 //! `pmds extract` — read source files, update catalogs.
 
 mod cache;
-mod sources;
+pub(crate) mod sources;
 #[cfg(test)]
 mod test_support;
 mod watch;
