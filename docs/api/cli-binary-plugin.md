@@ -26,13 +26,13 @@ plugins:
 ```
 
 Per-platform binaries follow the same `optionalDependencies` pattern the CLI
-itself uses for `pmds-native`. For local development, a config-relative path to
-a directory containing such a `package.json` — or directly to a non-JavaScript
-executable file — is accepted. A `pluginBinary` ending in `.js`, `.mjs`, or
-`.cjs` is spawned through the current Node executable, which keeps fixtures and
-prototypes cross-platform. Packages without `palamedes.pluginBinary` are
-loaded as ESM plugins as before. Nothing is ever discovered via `PATH` or
-executed merely because it is installed.
+itself uses for its native executable. For local development, a config-relative
+path to a directory containing such a `package.json` — or directly to a
+non-JavaScript executable file — is accepted. A `pluginBinary` ending in `.js`,
+`.mjs`, or `.cjs` is spawned through the current Node executable, which keeps
+fixtures and prototypes cross-platform. Packages without
+`palamedes.pluginBinary` are loaded as ESM plugins as before. Nothing is ever
+discovered via `PATH` or executed merely because it is installed.
 
 ## Protocol
 
@@ -115,7 +115,7 @@ The plugin answers with newline-delimited events on stdout — zero or more
 ## Built-In Commands And Trust
 
 Instead of a bidirectional channel, the host exports the resolved
-`pmds-native` executable path as the `PALAMEDES_NATIVE` environment variable.
+native `pmds` executable path as the `PALAMEDES_NATIVE` environment variable.
 Binary plugins are trusted local code — the trust model from
 [ADR 017](../../adr/017-cli-plugin-execution-boundary.md) applies unchanged — so
 they may invoke documented built-in commands directly as subprocesses. In JSON
@@ -134,6 +134,6 @@ commands with descriptions and handlers, read typed request context (arguments,
 options, resolved configuration, catalogs), emit diagnostics and output, and
 return a result with optional text, data, and exit code. `Plugin::run()` handles
 stdin/stdout; `Plugin::dispatch()` exposes the same path for in-process tests.
-`CommandContext::built_in_command()` prepares a `pmds-native` subprocess from
+`CommandContext::built_in_command()` prepares a native `pmds` subprocess from
 the `PALAMEDES_NATIVE` handoff. See the crate documentation and
 `crates/palamedes-plugin/examples/inspect.rs` for a complete plugin.

@@ -18,10 +18,11 @@ commands execute third-party code implicitly.
 Use a hybrid boundary:
 
 1. The npm package keeps a small Node.js `pmds` wrapper as the public executable
-   and installs the Rust program as a private `pmds-native` sidecar.
+   and resolves the Rust program from the matching platform-specific optional
+   package at runtime. The wrapper does not require install lifecycle scripts.
 2. Built-in namespaces (`extract`, `audit`, `report`, `catalog`, and `version`)
-   are delegated directly to the sidecar before configuration or plugin modules
-   are loaded.
+   are delegated directly to the native executable before configuration or
+   plugin modules are loaded.
 3. Plugins are loaded only for a non-built-in namespace and only when explicitly
    listed in `plugins` in the resolved Palamedes configuration.
 4. A plugin declares a lowercase kebab-case namespace, plugin API major version,

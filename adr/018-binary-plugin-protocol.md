@@ -34,7 +34,7 @@ host spawns per invocation and talks to over a versioned stdio protocol.
    package exports a plugin object as today, while a binary package declares a
    `palamedes.pluginBinary` path in its `package.json` pointing at the
    executable (per-platform packages follow the same `optionalDependencies`
-   pattern the CLI itself uses for `pmds-native`). An absolute or
+   pattern the CLI itself uses for its native executable). An absolute or
    config-relative file path is accepted for local development. Nothing is ever
    discovered via `PATH` or executed merely because it is installed.
 2. The protocol is newline-delimited JSON with a strict request/response shape:
@@ -61,7 +61,7 @@ host spawns per invocation and talks to over a versioned stdio protocol.
    diagnostics. The process exit code is the authoritative fallback when no
    valid `result` event arrives.
 4. Instead of a bidirectional `runBuiltIn` channel, the host hands the plugin
-   the resolved `pmds-native` executable path via an environment variable.
+   the resolved native `pmds` executable path via an environment variable.
    Binary plugins are trusted local code (see ADR 017's trust model), so they
    may invoke documented built-in commands directly as subprocesses; the
    protocol stays unidirectional and simple.
@@ -74,8 +74,8 @@ host spawns per invocation and talks to over a versioned stdio protocol.
    Node API onto the same protocol via a generic shim is possible later but is
    not part of this decision.
 7. Dispatch stays in the npm wrapper for now. Moving binary-plugin dispatch
-   into `pmds-native` would enable a Node-free distribution and remains an
-   explicit future option this protocol does not foreclose.
+   into the native `pmds` executable would enable a Node-free distribution and
+   remains an explicit future option this protocol does not foreclose.
 
 ## Trust Model
 

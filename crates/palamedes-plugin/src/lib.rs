@@ -46,8 +46,8 @@ pub use protocol::{Catalog, LocaleCatalog, Request, RequestKind, Severity, PROTO
 
 use protocol::{Event, ManifestCommand};
 
-/// Environment variable carrying the absolute path of the `pmds-native`
-/// sidecar, set by the host for every plugin invocation.
+/// Environment variable carrying the absolute path of the native `pmds`
+/// executable, set by the host for every plugin invocation.
 pub const NATIVE_EXECUTABLE_ENV: &str = "PALAMEDES_NATIVE";
 
 type Handler = Box<dyn Fn(&mut CommandContext) -> CommandResult>;
@@ -314,7 +314,7 @@ impl CommandContext<'_> {
         });
     }
 
-    /// The absolute path of the `pmds-native` sidecar, when the host provided
+    /// The absolute path of the native `pmds` executable, when the host provided
     /// one via [`NATIVE_EXECUTABLE_ENV`].
     pub fn native_executable(&self) -> Option<PathBuf> {
         env::var_os(NATIVE_EXECUTABLE_ENV).map(PathBuf::from)

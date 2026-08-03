@@ -95,6 +95,7 @@ export async function tryRunPluginCommand(argv, options = {}) {
     abortController,
     runNative,
     nativeExecutable,
+    nativeResolutionError: options.nativeResolutionError,
     cwd: options.cwd ?? process.cwd(),
     json: invocation.json,
   })
@@ -227,6 +228,7 @@ function createHost({
   abortController,
   runNative,
   nativeExecutable,
+  nativeResolutionError,
   cwd,
   json,
 }) {
@@ -250,6 +252,9 @@ function createHost({
         throw new Error(
           `runBuiltIn requires a built-in command (${[...BUILT_IN_NAMESPACES].join(", ")}).`
         )
+      }
+      if (nativeResolutionError) {
+        throw nativeResolutionError
       }
       const nativeResult = await runNative(args, {
         cwd,
