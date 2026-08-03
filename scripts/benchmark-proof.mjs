@@ -33,6 +33,7 @@ const coreNode = await import(
 )
 
 const {
+  analyzeSourceNative,
   compileCatalogArtifact,
   extractMessagesNative,
   getNativeInfo,
@@ -189,6 +190,17 @@ async function runLargeCatalogBenchmark({ messageCount, sourceFileCount, warmup,
     runs
   )
 
+  const analyzeResult = await benchmark(
+    "large-source-analysis",
+    () => {
+      for (const fixture of largeFixture.fixtures) {
+        analyzeSourceNative(fixture.source, fixture.filename)
+      }
+    },
+    warmup,
+    runs
+  )
+
   const updateResult = await benchmark(
     "large-catalog-update",
     async () => {
@@ -222,7 +234,7 @@ async function runLargeCatalogBenchmark({ messageCount, sourceFileCount, warmup,
   )
   console.log("Fixture generator: benchmarks/large-catalog/fixture.mjs")
   console.log("")
-  printResults([transformResult, extractResult, updateResult, artifactResult])
+  printResults([transformResult, extractResult, analyzeResult, updateResult, artifactResult])
 }
 
 async function main() {
@@ -275,6 +287,17 @@ async function main() {
       runs
     )
 
+    const analyzeResult = await benchmark(
+      "source-analysis",
+      () => {
+        for (const fixture of fixtures) {
+          analyzeSourceNative(fixture.source, fixture.filename)
+        }
+      },
+      warmup,
+      runs
+    )
+
     const updateResult = await benchmark(
       "catalog-update",
       async () => {
@@ -316,7 +339,7 @@ async function main() {
     console.log(`Runs: ${runs}`)
     console.log("")
 
-    printResults([transformResult, extractResult, updateResult, artifactResult])
+    printResults([transformResult, extractResult, analyzeResult, updateResult, artifactResult])
 
     await runLargeCatalogBenchmark({
       messageCount: largeMessages,

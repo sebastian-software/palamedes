@@ -6,6 +6,18 @@ use crate::mdx::NativeMdxOptions;
 use crate::shared::{checked_u32, to_napi_error};
 
 #[napi(object)]
+pub struct NativeSourceRuleOptions {
+    pub placeholder_only: Option<String>,
+    pub empty_component_only: Option<String>,
+}
+
+#[napi(object)]
+pub struct NativeSourceAnalysisOptions {
+    pub mdx: Option<NativeMdxOptions>,
+    pub rules: Option<NativeSourceRuleOptions>,
+}
+
+#[napi(object)]
 pub struct NativeSourceRange {
     pub start: u32,
     pub end: u32,
@@ -83,6 +95,55 @@ impl TryFrom<palamedes::SourceAnalysisResult> for NativeSourceAnalysisResult {
     }
 }
 
+fn source_rule_level(
+    value: Option<String>,
+    field: &str,
+) -> Result<Option<palamedes::SourceRuleLevel>> {
+    value
+        .map(|value| match value.as_str() {
+            "off" => Ok(palamedes::SourceRuleLevel::Off),
+            "info" => Ok(palamedes::SourceRuleLevel::Info),
+            "warning" => Ok(palamedes::SourceRuleLevel::Warning),
+            "error" => Ok(palamedes::SourceRuleLevel::Error),
+            _ => Err(napi::Error::from_reason(format!(
+                "{field} must be one of: off, info, warning, error"
+            ))),
+        })
+        .transpose()
+}
+
+impl TryFrom<NativeSourceRuleOptions> for palamedes::SourceRuleOptions {
+    type Error = napi::Error;
+
+    fn try_from(value: NativeSourceRuleOptions) -> Result<Self> {
+        let defaults = Self::default();
+        Ok(Self {
+            placeholder_only: source_rule_level(value.placeholder_only, "rules.placeholderOnly")?
+                .unwrap_or(defaults.placeholder_only),
+            empty_component_only: source_rule_level(
+                value.empty_component_only,
+                "rules.emptyComponentOnly",
+            )?
+            .unwrap_or(defaults.empty_component_only),
+        })
+    }
+}
+
+impl TryFrom<NativeSourceAnalysisOptions> for palamedes::SourceAnalysisOptions {
+    type Error = napi::Error;
+
+    fn try_from(value: NativeSourceAnalysisOptions) -> Result<Self> {
+        Ok(Self {
+            mdx: value.mdx.map(Into::into).unwrap_or_default(),
+            rules: value
+                .rules
+                .map(TryInto::try_into)
+                .transpose()?
+                .unwrap_or_default(),
+        })
+    }
+}
+
 #[napi]
 #[allow(clippy::needless_pass_by_value)]
 /// Analyze source-first messages and authoring diagnostics in one native pass.
@@ -94,10 +155,13 @@ impl TryFrom<palamedes::SourceAnalysisResult> for NativeSourceAnalysisResult {
 pub fn analyze_source(
     source: String,
     filename: String,
-    mdx: Option<NativeMdxOptions>,
+    options: Option<NativeSourceAnalysisOptions>,
 ) -> Result<NativeSourceAnalysisResult> {
-    let mdx = mdx.map(Into::into).unwrap_or_default();
-    palamedes::analyze_source_with_mdx_options(&source, &filename, &mdx)
+    let options = options
+        .map(TryInto::try_into)
+        .transpose()?
+        .unwrap_or_default();
+    palamedes::analyze_source_with_options(&source, &filename, &options)
         .map_err(to_napi_error)
         .and_then(NativeSourceAnalysisResult::try_from)
 }

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::extract::ExtractedMessageRecord;
+use crate::mdx::MdxOptions;
 
 /// Source range with an exact UTF-8 byte span and one-based start location.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -26,6 +27,69 @@ pub enum SourceDiagnosticSeverity {
     Warning,
     /// Informational authoring guidance.
     Info,
+}
+
+/// Configurable level for one source-authoring rule.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SourceRuleLevel {
+    /// Do not run the rule.
+    Off,
+    /// Emit an informational diagnostic.
+    Info,
+    /// Emit a warning diagnostic.
+    Warning,
+    /// Emit an error diagnostic.
+    Error,
+}
+
+impl SourceRuleLevel {
+    pub(crate) fn severity(self) -> Option<SourceDiagnosticSeverity> {
+        match self {
+            Self::Off => None,
+            Self::Info => Some(SourceDiagnosticSeverity::Info),
+            Self::Warning => Some(SourceDiagnosticSeverity::Warning),
+            Self::Error => Some(SourceDiagnosticSeverity::Error),
+        }
+    }
+}
+
+/// Levels for the built-in source-authoring rules.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SourceRuleOptions {
+    /// Diagnose messages whose authored content consists only of values.
+    pub placeholder_only: SourceRuleLevel,
+    /// Diagnose messages containing only one empty component placeholder.
+    pub empty_component_only: SourceRuleLevel,
+}
+
+impl Default for SourceRuleOptions {
+    fn default() -> Self {
+        Self {
+            placeholder_only: SourceRuleLevel::Warning,
+            empty_component_only: SourceRuleLevel::Off,
+        }
+    }
+}
+
+impl SourceRuleOptions {
+    pub(crate) fn disabled() -> Self {
+        Self {
+            placeholder_only: SourceRuleLevel::Off,
+            empty_component_only: SourceRuleLevel::Off,
+        }
+    }
+}
+
+/// Options controlling source analysis and built-in diagnostics.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SourceAnalysisOptions {
+    /// MDX extraction and compilation semantics.
+    pub mdx: MdxOptions,
+    /// Built-in source-authoring rule levels.
+    pub rules: SourceRuleOptions,
 }
 
 /// Structured diagnostic produced while analyzing an authored source file.
@@ -88,6 +152,10 @@ impl<'a> SourceLocator<'a> {
         let line_start = self.line_starts[line_index];
         let column = self.source[line_start..offset].chars().count() + 1;
         (line_index + 1, column)
+    }
+
+    pub(crate) fn line(&self, offset: usize) -> usize {
+        self.location(offset).0
     }
 
     pub(crate) fn range(&self, start: usize, end: usize) -> SourceRange {

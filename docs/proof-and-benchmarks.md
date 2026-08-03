@@ -14,7 +14,7 @@ This repo can credibly prove five things:
 - Palamedes is browser-verified across Next.js, TanStack Start, SolidStart, Waku, and React Router, with server-first Remix v3 smoke-verified
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
-- transform, extract, catalog update, and catalog compile steps are measured locally and reproducibly
+- transform, extract, source analysis, catalog update, and catalog compile steps are measured locally and reproducibly
 - nested ICU semantics survive source, extraction, macro transformation, PO catalog update, catalog compile, and runtime rendering
 
 This page is not here to manufacture headline numbers. It is here to make the
@@ -51,6 +51,7 @@ The benchmark flow here focuses on the operations Palamedes claims to improve:
 
 - transform
 - extract
+- source analysis, including the incremental cost of semantic authoring facts and diagnostics
 - catalog update
 - catalog artifact compile
 - end-to-end extract and catalog update workflows

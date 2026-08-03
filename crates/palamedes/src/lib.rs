@@ -78,11 +78,11 @@ pub use catalog_update::{
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
 pub use extract::{
-    analyze_source, analyze_source_with_mdx_options, extract_catalog_messages_cached,
-    extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
-    extract_messages, extract_messages_with_mdx_options, ExtractCatalogFileFailure,
-    ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult,
-    ExtractedMessageRecord,
+    analyze_source, analyze_source_with_mdx_options, analyze_source_with_options,
+    extract_catalog_messages_cached, extract_catalog_messages_from_files,
+    extract_catalog_messages_from_files_with_options, extract_messages,
+    extract_messages_with_mdx_options, ExtractCatalogFileFailure, ExtractCatalogMessagesOptions,
+    ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult, ExtractedMessageRecord,
 };
 pub use extract_cache::{default_cache_path, ExtractCache};
 pub use mdx::{
@@ -100,7 +100,10 @@ pub use runtime_message::{
     compile_runtime_catalog_messages, RuntimeCompiledMessage, RuntimeCompiledMessages,
     RuntimeMessageChoiceKind, RuntimeMessageFormat, RuntimeMessageNode,
 };
-pub use source::{SourceAnalysisResult, SourceDiagnostic, SourceDiagnosticSeverity, SourceRange};
+pub use source::{
+    SourceAnalysisOptions, SourceAnalysisResult, SourceDiagnostic, SourceDiagnosticSeverity,
+    SourceRange, SourceRuleLevel, SourceRuleOptions,
+};
 pub use transform::{
     transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,
     NativeTransformSourceMap,
