@@ -28,7 +28,7 @@
   ],
   "scripts": {
     "build": "node ./scripts/build.mjs",
-    "test": "node --test ./scripts/platform.test.mjs && node ./scripts/smoke.mjs"
+    "test": "node --test ./scripts/platform.test.mjs ./scripts/native.test.mjs && node ./scripts/smoke.mjs"
   },
   "engines": {
     "node": ">=22.0.0"

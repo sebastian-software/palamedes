@@ -119,8 +119,9 @@ one result event:
 - A result exit code is authoritative. Without a result, the process exit code
   is the fallback and the host emits `PLUGIN_BINARY_PROTOCOL`.
 - Exit codes range from 0 through 255. Terminal cancellation keeps the usual
-  130 (`SIGINT`) and 143 (`SIGTERM`) meanings, and the host forwards `SIGINT`
-  and `SIGTERM` aimed directly at `pmds` to the running plugin process.
+  130 (`SIGINT`) and 143 (`SIGTERM`) meanings. On Unix the host isolates the
+  plugin process group and forwards `SIGINT` and `SIGTERM` to that group, so
+  direct and terminal signals reach the plugin tree exactly once.
 
 ## Built-In Commands And Trust
 

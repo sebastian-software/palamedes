@@ -9,6 +9,8 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{self, BufRead, BufReader, IsTerminal, Write};
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 #[cfg(unix)]
@@ -402,23 +404,24 @@ fn invoke_binary(
         )
     })?;
     request_bytes.push(b'\n');
-    let mut child = Command::new(&resolved.binary_path)
+    let mut command = Command::new(&resolved.binary_path);
+    command
         .current_dir(cwd)
         .env(NATIVE_EXECUTABLE_ENV, native_executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|error| {
-            PluginFailure::new(
-                "PLUGIN_BINARY_SPAWN_FAILED",
-                format!(
-                    "Could not run binary plugin \"{}\" at {}: {error}",
-                    resolved.specifier,
-                    resolved.binary_path.display()
-                ),
-            )
-        })?;
+        .stderr(Stdio::inherit());
+    isolate_process_group(&mut command);
+    let mut child = command.spawn().map_err(|error| {
+        PluginFailure::new(
+            "PLUGIN_BINARY_SPAWN_FAILED",
+            format!(
+                "Could not run binary plugin \"{}\" at {}: {error}",
+                resolved.specifier,
+                resolved.binary_path.display()
+            ),
+        )
+    })?;
     #[cfg(unix)]
     let _signal_guard = ChildSignalGuard::arm(&child);
 
@@ -518,17 +521,24 @@ fn invoke_binary(
     })
 }
 
+#[cfg(unix)]
+fn isolate_process_group(command: &mut Command) {
+    command.process_group(0);
+}
+
+#[cfg(not(unix))]
+fn isolate_process_group(_command: &mut Command) {}
+
 fn parse_event_line(line: &str, resolved: &ResolvedPlugin) -> Result<PluginEvent, PluginFailure> {
     let value: Value = serde_json::from_str(line)
         .map_err(|_| protocol_failure(resolved, format!("invalid JSON event line: {line}")))?;
     parse_event(value).map_err(|detail| protocol_failure(resolved, detail))
 }
 
-/// Forwards `SIGINT` and `SIGTERM` to the running plugin child, so a signal
-/// aimed directly at `pmds` never orphans the plugin process. Terminal Ctrl+C
-/// already reaches both processes through the foreground process group.
+/// Forwards `SIGINT` and `SIGTERM` to the isolated plugin process group, so
+/// direct and terminal signals reach the plugin tree exactly once.
 #[cfg(unix)]
-static ACTIVE_PLUGIN_CHILD: AtomicI32 = AtomicI32::new(0);
+static ACTIVE_PLUGIN_GROUP: AtomicI32 = AtomicI32::new(0);
 
 #[cfg(unix)]
 struct ChildSignalGuard;
@@ -546,11 +556,11 @@ impl ChildSignalGuard {
             };
             thread::spawn(move || {
                 for signal in signals.forever() {
-                    let child = ACTIVE_PLUGIN_CHILD.load(Ordering::SeqCst);
-                    if child > 0 {
-                        // SAFETY: forwards a standard signal to the child
-                        // recorded by the currently running invocation.
-                        unsafe { libc::kill(child, signal) };
+                    let group = ACTIVE_PLUGIN_GROUP.load(Ordering::SeqCst);
+                    if group > 0 {
+                        // SAFETY: a negative PID addresses the isolated process
+                        // group led by the currently running plugin child.
+                        unsafe { libc::kill(-group, signal) };
                     } else {
                         // No child is running; restore the shell-compatible
                         // default outcome for the signal.
@@ -559,7 +569,7 @@ impl ChildSignalGuard {
                 }
             });
         });
-        ACTIVE_PLUGIN_CHILD.store(
+        ACTIVE_PLUGIN_GROUP.store(
             i32::try_from(child.id()).unwrap_or_default(),
             Ordering::SeqCst,
         );
@@ -570,7 +580,7 @@ impl ChildSignalGuard {
 #[cfg(unix)]
 impl Drop for ChildSignalGuard {
     fn drop(&mut self) {
-        ACTIVE_PLUGIN_CHILD.store(0, Ordering::SeqCst);
+        ACTIVE_PLUGIN_GROUP.store(0, Ordering::SeqCst);
     }
 }
 
@@ -1447,6 +1457,35 @@ mod tests {
         assert_eq!(streamed, ["one", "two"]);
         assert_eq!(invocation.exit_code, 0);
         assert_eq!(invocation.events.len(), 3);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runs_plugins_in_an_isolated_process_group() {
+        use std::process::{Command, Stdio};
+
+        use super::isolate_process_group;
+
+        let mut command = Command::new("/bin/sh");
+        command
+            .args(["-c", "while :; do sleep 1; done"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        isolate_process_group(&mut command);
+        let mut child = command.spawn().expect("isolated child");
+        let child_id = i32::try_from(child.id()).expect("child PID");
+
+        // SAFETY: queries the process group of the child we just spawned.
+        let child_group = unsafe { libc::getpgid(child_id) };
+        if child_group == child_id {
+            // SAFETY: terminates the isolated fixture group and its shell child.
+            unsafe { libc::kill(-child_group, libc::SIGTERM) };
+        } else {
+            child.kill().expect("fixture child cleanup");
+        }
+        child.wait().expect("isolated child exit");
+        assert_eq!(child_group, child_id);
     }
 
     #[cfg(unix)]

@@ -35,7 +35,8 @@ lists and long-running watch workflows.
 1. `@palamedes/cli` keeps the minimal Node launcher as its public `pmds` bin:
    platform selection, spawn, exit-code propagation, and `SIGINT`/`SIGTERM`
    forwarding to the native child. It never parses commands or loads
-   configuration.
+   configuration. On Unix it isolates the native process group before
+   forwarding so terminal signals are delivered exactly once.
 2. Every platform package additionally declares its own `bin` entry pointing at
    the native executable. Environments that know their platform ahead of time —
    CI images, deployment targets — may depend on the platform package directly
