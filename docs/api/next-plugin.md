@@ -52,6 +52,47 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 module.exports = withPalamedes({})
 ```
 
+## App Router Client Catalog Boundary
+
+After resolving and activating the request-local server i18n instance, wrap
+translated Client Components in a boundary created by the shared React runtime:
+
+```tsx
+// src/components/ClientCatalogBoundary.tsx
+"use client"
+
+import { createClientCatalogBoundary } from "@palamedes/react/client"
+
+export const ClientCatalogBoundary = createClientCatalogBoundary<"en" | "de">({
+  loadCatalog: (locale) => import(`../locales/${locale}.po`),
+})
+```
+
+```tsx
+// app/page.tsx (Server Component)
+const { locale } = await createActiveServerI18n()
+
+return (
+  <ClientCatalogBoundary locale={locale}>
+    <TranslatedClientContent />
+  </ClientCatalogBoundary>
+)
+```
+
+The dynamic import is the serialization boundary: generated messages remain
+executable module code and only the active locale chunk loads in the browser.
+React suspends hydration until it is ready, so boundary-local translated
+consumers see the catalog on their first render. The shared client runtime is
+updated from an effect after commit; speculative renders cannot activate a
+locale or notify external-store subscribers.
+
+No inline script, `eval`, JSON serialization, or application-owned i18n proxy
+is involved. This keeps the bootstrap compatible with strict CSP and the
+parser-free generated catalog representation. Pass a changed string or number
+as `catalogRevision` when same-locale contents must be reloaded. The boundary
+passes that value to `loadCatalog(locale, catalogRevision)` so version-aware
+loaders can resolve the matching module; static imports may ignore it.
+
 Production output strips authored messages from generated runtime calls by
 default and therefore requires compiled catalogs to be loaded before translated
 code renders. It also omits translator comments and context metadata from

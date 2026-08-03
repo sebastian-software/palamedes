@@ -254,6 +254,13 @@ Use dynamic imports such as `await import(\`../locales/${locale}.po\`)` when
 the browser only needs one locale at a time. That gives bundlers a chance to
 split catalogs into per-locale chunks.
 
+The `nextjs-route` example combines that import with
+`createClientCatalogBoundary()` from `@palamedes/react/client`. The boundary
+holds hydration until the requested module is ready, serves a scoped i18n
+instance during the first translated Client Component render, and activates
+the shared client runtime only after commit. It therefore needs neither the
+old inline locale bootstrap nor static imports of every catalog.
+
 Static imports are still useful for tiny demos or server-only modules, but they
 make every imported locale reachable from that module. In copied app code with
 large catalogs, prefer the dynamic import pattern unless all locales are
