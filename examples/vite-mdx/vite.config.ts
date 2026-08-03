@@ -3,5 +3,5 @@ import { palamedes } from "@palamedes/vite-plugin"
 import { defineConfig } from "vite"
 
 export default defineConfig({
-  plugins: [palamedes(), react()],
+  plugins: [palamedes({ experimentalGraphSplitting: true }), react()],
 })

@@ -559,9 +559,9 @@ runtime (rebased onto `7e697a1`). What was built:
   locale) a subset module produced by `compileCatalogArtifactSelected` + the
   native `renderCatalogModule` — so split artifacts are branded, precompiled,
   and parser-free — plus one aggregator that imports the per-locale modules
-  and registers their exports. `failOnMissing` and watch files honored;
-  pseudo-locale skipped for now (the selected compile has no generated-pseudo
-  path). Six new tests.
+  and registers their exports. `failOnMissing` and watch files honored.
+  Six new tests. (Pseudo-locale was skipped in the first iteration; see the
+  hardening appendix — it never needed to be.)
 - **Example**: `examples/react-router-cookie` gained a second route
   (`/insights`) with its own messages, a shared message with home, client
   bootstrap without any catalog import (`lib/i18n.ts`), and server-only eager
@@ -709,6 +709,39 @@ the same millisecond as the route chunk instead of one waterfall step later.
 Still open: the manifest-reading server helper is example-code that belongs
 in an adapter surface, and non-navigation locale switching would need an
 async ensure path (Stage 0 territory).
+
+## Appendix: hardening pass (2026-08-03)
+
+Three items from the Stage-2 gap list, each checked against reality rather
+than against the assumption that produced it:
+
+- **MDX now splits like macros do.** `analyzeMdx` reports the same
+  `compiledIds` the macro transform does, so MDX modules get the same sidecar
+  import; both paths share one helper. Verified on `examples/vite-mdx`, which
+  now runs with splitting and imports no catalog at all: prose, rich text and
+  attribute translations render, and the locale switch works across all three
+  pages.
+- **Pseudo-locale was never actually blocked.** The first iteration skipped it
+  "because the selected compile has no generated-pseudo path". Probing the
+  native binding directly disproved that: `compileCatalogArtifactSelected`
+  pseudolocalizes through the same `build_artifact_result` path as the full
+  compile, resolving the catalog through the fallback chain
+  (`pseudo → en` yields `[!! Àŧŧéñðàñçé ïñšïğĥŧš······ !!]`). The one real
+  constraint is that the catalog file must exist — and `pmds extract` writes
+  `pseudo.po` like any other configured locale. The skip is gone; pseudo is a
+  locale like the others.
+- **No hot-update hook is needed for dev.** A `handleHotUpdate` that
+  invalidated every sidecar of a changed catalog was written, then deleted
+  after a counterfactual test: with the hook removed and the plugin rebuilt,
+  editing a German translation in a running dev server still repainted the
+  browser. The sidecars' `addWatchFile` calls already establish the dependency
+  Vite invalidates on. A test now pins those watch registrations, since that
+  is what dev-mode updates actually rest on.
+
+Found while verifying, unrelated to splitting: the MDX example's **dev server
+is broken on Vite 8** — `vite:import-analysis` cannot parse the JSX the MDX
+transform returns, so the page stays empty (production builds are fine).
+Reproduced identically with splitting disabled; tracked separately.
 
 ## Prior art (references, not blueprints)
 
