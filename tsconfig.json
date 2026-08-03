@@ -20,6 +20,7 @@
     { "path": "packages/remix" },
     { "path": "packages/vite-plugin" },
     { "path": "packages/next-plugin" },
-    { "path": "packages/cli" }
+    { "path": "packages/cli" },
+    { "path": "packages/eslint-plugin" }
   ]
 }
