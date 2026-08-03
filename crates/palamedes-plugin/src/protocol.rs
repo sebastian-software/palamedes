@@ -19,7 +19,7 @@ pub struct Request {
     /// Protocol major the host speaks; must match [`PROTOCOL_VERSION`].
     #[serde(rename = "palamedesBinaryPluginProtocol")]
     pub protocol_version: u64,
-    /// Version of the `@palamedes/cli` host package.
+    /// Version of the native `pmds` host.
     #[serde(default)]
     pub host_version: String,
     /// Whether the host asks for the manifest or a command run.
@@ -91,7 +91,7 @@ pub struct LocaleCatalog {
     pub path: String,
 }
 
-/// Diagnostic severities shared with the ESM plugin API.
+/// Diagnostic severities rendered consistently by the native CLI host.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {

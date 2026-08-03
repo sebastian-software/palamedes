@@ -2,9 +2,9 @@
 //!
 //! Binary plugins are standalone executables the Palamedes CLI spawns and
 //! drives over a versioned newline-delimited JSON protocol on stdio (ADR 018).
-//! This crate wraps that protocol so a plugin `main` reads like `definePlugin`
-//! does in the JavaScript API: register namespaced commands, receive the
-//! resolved project context, emit diagnostics and output, and return a result.
+//! This crate wraps that protocol so a plugin can register namespaced commands,
+//! receive the resolved project context, emit diagnostics and output, and
+//! return a result without implementing the wire format itself.
 //!
 //! ```no_run
 //! use palamedes_plugin::{CommandResult, Plugin};

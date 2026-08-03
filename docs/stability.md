@@ -41,7 +41,7 @@ may change faster than Stable surfaces.
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                        |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                          |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                  |
-| `@palamedes/cli/plugin`                               | Stable   | Plugin API v1 is version-negotiated; compatible capabilities may be added in minor releases.                                  |
+| `pmds` binary plugin protocol                         | Preview  | Protocol v1 is version-negotiated; native package resolution and capabilities may evolve before promotion.                    |
 | Source-string-first PO catalogs                       | Stable   | Message identity is `message + context`. Catalog files remain user-owned.                                                     |
 | FCL catalog storage                                   | Preview  | Supported through config, CLI, and native catalog APIs; app-facing framework imports remain PO-loader based for now.          |
 | Macro syntax                                          | Stable   | Supported macros remain the authoring model. Unsupported explicit IDs are not a compatibility target.                         |
@@ -82,7 +82,7 @@ adoption:
 - benchmark fixture shape and reporting fields
 - internal package boundaries between plugins and transform/core-node helpers
 - optional Palamedes+ workflow bridges
-- CLI plugin host capabilities beyond API v1
+- binary plugin host capabilities beyond protocol v1
 
 ## Deprecation Policy
 

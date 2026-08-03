@@ -86,8 +86,9 @@ Options include `cwd`, `configPath`, and `skipValidation`. Use
 config files.
 
 `plugins` is returned in declaration order. Each entry is a package specifier
-or `[specifier, options]`; the CLI plugin host resolves it relative to
-`configPath`.
+or `[specifier, options]`; the native CLI resolves binary plugins relative to a
+data config's `configPath`. JavaScript hosts may inspect the same field but do
+not execute CLI plugins.
 
 ## `loadPalamedesConfigSync(options?)`
 

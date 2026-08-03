@@ -1,8 +1,8 @@
 # `@palamedes/cli`
 
-`@palamedes/cli` publishes the `pmds` command. A small Node.js wrapper delegates
-built-in commands to the native Rust sidecar and hosts explicitly configured
-third-party command plugins.
+`@palamedes/cli` publishes the `pmds` command. A minimal npm launcher selects
+the packaged native executable; Rust owns built-ins and explicit binary plugin
+commands.
 
 ## Commands
 
@@ -15,11 +15,8 @@ third-party command plugins.
 
 See the [CLI reference](../cli.md) for flags and examples.
 
-## Programmatic Exports
+## Plugins
 
-- `@palamedes/cli/plugin`: `definePlugin()` and
-  `PALAMEDES_PLUGIN_API_VERSION`, plus TypeScript types for the versioned command
-  host.
-
-See [CLI plugin API](./cli-plugin.md). For lower-level custom JavaScript tooling,
-use `@palamedes/core-node` directly.
+CLI plugins are native executables using binary plugin protocol version 1 over
+newline-delimited JSON. See the [binary plugin protocol](./cli-binary-plugin.md).
+For lower-level custom JavaScript tooling, use `@palamedes/core-node` directly.

@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-28
+**Revised:** 2026-08-03
 
 ## Context
 
@@ -70,9 +71,10 @@ directory when no Git root is present. `config` and `lingui` remain explicit
 config-directory-relative modes for migration compatibility.
 
 The npm package `@palamedes/cli` remains a distribution mechanism for JavaScript
-projects, but it is not the runtime implementation of the CLI. It installs or
-points to platform-specific native binary packages and exposes the `pmds` bin.
-Running `pmds` should execute the native binary, not a Node.js wrapper.
+projects, but it is not the runtime implementation of the CLI. Its minimal
+launcher selects the installed platform-specific native package and forwards
+the process invocation without parsing commands or loading config. All CLI
+semantics execute in the native binary.
 
 `@palamedes/config` remains available for JavaScript host integrations and can
 load the same YAML, JSON, and TOML data files as well as legacy

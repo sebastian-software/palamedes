@@ -5,12 +5,10 @@
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
 
-The Palamedes command-line interface for keeping local catalogs healthy and
-hosting explicitly configured workflow commands.
-
-The npm package keeps a small Node.js dispatcher in front of the Rust `pmds`
-sidecar. Built-in commands go directly to Rust; namespaced plugin commands use a
-versioned JavaScript host API.
+The native Palamedes command-line interface for keeping local catalogs healthy
+and hosting explicitly configured binary workflow commands. The npm launcher
+only selects the installed platform package; Rust owns all command parsing,
+configuration, plugin dispatch, output, and exit codes.
 
 ## When To Use This Package
 
@@ -98,7 +96,7 @@ and catalog-write timings.
 See [Catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 for when to keep PO storage and when to opt into FCL.
 
-### CLI Plugins
+### Binary CLI Plugins
 
 Plugins are loaded only when they are explicitly declared and a non-built-in
 namespace is invoked:
@@ -114,34 +112,26 @@ pnpm exec pmds acme sync --json
 pnpm exec pmds acme sync --config ./palamedes.yaml
 ```
 
-A minimal plugin exports `@palamedes/cli/plugin` API version 1:
+A plugin package points at a native executable:
 
-```js
-import { definePlugin } from "@palamedes/cli/plugin"
-
-export default definePlugin({
-  name: "acme",
-  apiVersion: 1,
-  commands: {
-    inspect: {
-      run({ host, options }) {
-        return {
-          text: `Found ${host.catalogs().length} catalog definitions`,
-          data: { catalogs: host.catalogs(), options },
-        }
-      },
-    },
-  },
-})
+```json
+{
+  "name": "@acme/palamedes-workflows-darwin-arm64",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "palamedes": { "pluginBinary": "./bin/palamedes-workflows" }
+}
 ```
 
-The host exposes resolved config, catalog discovery, structured diagnostics,
-cooperative cancellation, and guarded built-in command execution. It does not
-expose native internals or sandbox plugin code. A configured plugin has the same
-local permissions as a build script, so review and pin plugin dependencies.
+The executable answers the versioned JSON-lines protocol on stdin/stdout. The
+Rust [`palamedes-plugin`](https://github.com/sebastian-software/palamedes/tree/main/crates/palamedes-plugin)
+crate provides the supported SDK for command registration, resolved config,
+catalog discovery, structured diagnostics, results, and built-in command
+execution. A configured plugin has the same local permissions as a build tool,
+so review and pin plugin dependencies.
 
-See the [CLI plugin API](https://github.com/sebastian-software/palamedes/blob/main/docs/api/cli-plugin.md)
-for output envelopes, exit codes, collision rules, and author types.
+See the [binary plugin protocol](https://github.com/sebastian-software/palamedes/blob/main/docs/api/cli-binary-plugin.md)
+for packaging, output envelopes, exit codes, and collision rules.
 
 ### Completeness Report
 
@@ -194,6 +184,7 @@ the configured Palamedes config when available, then `en`.
 
 `@palamedes/cli` uses `palamedes.yaml` by default. It also supports
 `palamedes.yml`, `palamedes.json`, and `palamedes.toml`.
+JavaScript and TypeScript files are not CLI configuration.
 
 ```yaml
 locales: [en, de]

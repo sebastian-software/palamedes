@@ -1188,6 +1188,7 @@ dependencies = [
  "ignore",
  "notify",
  "palamedes",
+ "palamedes-plugin",
  "serde",
  "serde_json",
  "thiserror",

@@ -6,7 +6,7 @@ use palamedes::{
     CatalogArtifactConfig, CatalogConfig, FallbackLocales, MdxOptions, PalamedesCatalogFormat,
     PoLineBreaks, PoOutputOptions,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const CONFIG_FILENAME: &str = "palamedes.yaml";
@@ -31,7 +31,7 @@ const JS_CONFIG_FILENAMES: &[&str] = &[
 pub enum ConfigError {
     #[error("Could not find a Palamedes config. Expected one of palamedes.yaml, palamedes.yml, palamedes.json, palamedes.toml.")]
     NotFound,
-    #[error("Found {path}, but the native pmds CLI cannot load JavaScript/TypeScript configs. Create a palamedes.yaml (or .yml/.json/.toml) config for the CLI; the JS plugin loaders keep reading the existing file.")]
+    #[error("Found {path}, but pmds only loads data configs. Create palamedes.yaml, palamedes.yml, palamedes.json, or palamedes.toml; JavaScript and TypeScript configs are not executable CLI configuration.")]
     JsConfigUnsupported { path: PathBuf },
     #[error("Palamedes config does not exist: {path}")]
     MissingExplicit { path: PathBuf },
@@ -45,7 +45,8 @@ pub enum ConfigError {
     Invalid { path: PathBuf, message: String },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoadedConfig {
     pub config_path: PathBuf,
     pub root_dir: PathBuf,
@@ -63,9 +64,11 @@ pub struct LoadedConfig {
     pub extract_threads: Option<usize>,
     /// Whether extraction may reuse the on-disk cache.
     pub extract_cache: bool,
+    /// Explicit binary plugins resolved only for external command namespaces.
+    pub plugins: Vec<ConfigPluginDeclaration>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ConfigCatalog {
     pub path: String,
@@ -78,8 +81,11 @@ pub struct ConfigCatalog {
     pub exclude: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(
+    rename_all(serialize = "camelCase", deserialize = "kebab-case"),
+    deny_unknown_fields
+)]
 pub struct ConfigPoOutputOptions {
     #[serde(default, alias = "line_breaks")]
     pub line_breaks: PoLineBreaks,
@@ -93,11 +99,34 @@ impl From<ConfigPoOutputOptions> for PoOutputOptions {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ConfigFallbackLocales {
     Shared(Vec<String>),
     PerLocale(BTreeMap<String, Vec<String>>),
+}
+
+/// A configured binary plugin package or executable plus optional JSON data.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum ConfigPluginDeclaration {
+    Specifier(String),
+    Configured(String, serde_json::Value),
+}
+
+impl ConfigPluginDeclaration {
+    pub fn specifier(&self) -> &str {
+        match self {
+            Self::Specifier(specifier) | Self::Configured(specifier, _) => specifier,
+        }
+    }
+
+    pub fn options(&self) -> serde_json::Value {
+        match self {
+            Self::Specifier(_) => serde_json::Value::Null,
+            Self::Configured(_, options) => options.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,6 +150,8 @@ struct RawConfig {
     #[serde(default)]
     mdx: MdxOptions,
     catalogs: Vec<ConfigCatalog>,
+    #[serde(default)]
+    plugins: Vec<ConfigPluginDeclaration>,
 }
 
 const fn default_true() -> bool {
@@ -357,6 +388,7 @@ fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig
         mdx: raw.mdx,
         extract_threads: raw.extract_threads,
         extract_cache: raw.extract_cache,
+        plugins: raw.plugins,
     })
 }
 
@@ -383,6 +415,16 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
     }
     if raw.catalogs.is_empty() {
         return invalid(path, "\"catalogs\" must contain at least one catalog.");
+    }
+    for (index, plugin) in raw.plugins.iter().enumerate() {
+        if plugin.specifier().trim().is_empty() {
+            return invalid(
+                path,
+                &format!(
+                    "\"plugins[{index}]\" must contain a non-empty package or path specifier."
+                ),
+            );
+        }
     }
     for (index, catalog) in raw.catalogs.iter().enumerate() {
         if catalog.format != PalamedesCatalogFormat::Po && catalog.po.is_some() {
@@ -824,7 +866,7 @@ include = ["src"]
     }
 
     #[test]
-    fn ignores_explicit_plugin_declarations_for_native_commands() {
+    fn loads_binary_plugin_declarations_as_data() {
         let app = temp_dir("plugin-config");
         fs::write(
             app.join(CONFIG_FILENAME),
@@ -836,15 +878,19 @@ catalogs:
     include: [src]
 plugins:
   - "@acme/palamedes-workflows"
-  - ["./local-plugin.mjs", { mode: strict }]
+  - ["./local-plugin", { mode: strict }]
 "#,
         )
         .expect("write config");
 
-        let config = load_config(&app, None).expect("load native config with plugins");
+        let config = load_config(&app, None).expect("load config with binary plugins");
 
         assert_eq!(config.locales, ["en", "de"]);
         assert_eq!(config.catalogs.len(), 1);
+        assert_eq!(config.plugins.len(), 2);
+        assert_eq!(config.plugins[0].specifier(), "@acme/palamedes-workflows");
+        assert_eq!(config.plugins[1].specifier(), "./local-plugin");
+        assert_eq!(config.plugins[1].options()["mode"], "strict");
     }
 
     #[test]
@@ -856,7 +902,10 @@ plugins:
 
         let message = error.to_string();
         assert!(message.contains("palamedes.config.ts"), "got: {message}");
-        assert!(message.contains("cannot load JavaScript"), "got: {message}");
+        assert!(
+            message.contains("only loads data configs"),
+            "got: {message}"
+        );
     }
 
     #[test]

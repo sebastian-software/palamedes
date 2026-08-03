@@ -234,17 +234,17 @@ a package specifier or a `[specifier, options]` pair:
 ```yaml
 plugins:
   - "@acme/palamedes-workflows"
-  - ["./local-workflows.mjs", { policy: strict }]
+  - ["./local-workflows", { policy: strict }]
 ```
 
-The npm CLI resolves each specifier relative to this config file. Built-in
-commands do not load plugin code. Configuring a plugin grants it the same local
-permissions as another project build script; the plugin host is not a sandbox.
-Plugin-command dispatch uses `@palamedes/config`, so legacy
-`palamedes.config.ts/js/mjs/cjs` files remain available there even though native
-built-in commands intentionally accept only data config files.
+The native CLI resolves each package or executable relative to this data config
+and runs it through the binary plugin protocol. Built-in commands do not load
+config or plugin code. Configuring a plugin grants it the same local permissions
+as another project build tool; the plugin host is not a sandbox. JavaScript and
+TypeScript files are rejected as plugin executables and are not CLI configs.
 
-See [CLI plugins](./api/cli-plugin.md) for the command and author API.
+See the [binary plugin protocol](./api/cli-binary-plugin.md) for package layout,
+commands, output, and the Rust author SDK.
 
 ## Other Data Formats
 

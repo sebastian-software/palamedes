@@ -1,97 +1,102 @@
 # `pmds` Binary Plugin Protocol
 
 Binary plugins are standalone executables that extend `pmds` with namespaced
-commands, following [ADR 018](../../adr/018-binary-plugin-protocol.md). They speak
-a versioned newline-delimited JSON protocol over stdio, so Rust-first
-extensions can link the `palamedes` crates directly without maintaining Node
-bindings. The [ESM plugin API](./cli-plugin.md) remains fully supported; both
-kinds share one configuration, one registry, and the same output contract.
+commands. The native Rust CLI spawns them and exchanges newline-delimited JSON
+over stdio. The protocol is the only CLI plugin boundary; JavaScript modules
+and executable JavaScript/TypeScript configs are not supported.
 
-## Declare A Binary Plugin
+## Configure A Plugin
 
-Configuration keeps the familiar tuple form. The plugin kind is a property of
-the resolved package: a binary plugin package declares `palamedes.pluginBinary`
-in its `package.json`, pointing at the executable relative to the package root.
+Configuration uses a package or config-relative executable, optionally paired
+with JSON-compatible options:
 
 ```yaml
 plugins:
   - ["@acme/palamedes-plus", { license: "…" }]
 ```
 
+A direct plugin package declares its executable relative to `package.json`:
+
 ```json
 {
-  "name": "@acme/palamedes-plus",
+  "name": "@acme/palamedes-plus-darwin-arm64",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
   "palamedes": { "pluginBinary": "./bin/palamedes-plus" }
 }
 ```
 
-Per-platform binaries follow the same `optionalDependencies` pattern the CLI
-itself uses for its native executable. For local development, a config-relative
-path to a directory containing such a `package.json` — or directly to a
-non-JavaScript executable file — is accepted. A `pluginBinary` ending in `.js`,
-`.mjs`, or `.cjs` is spawned through the current Node executable, which keeps
-fixtures and prototypes cross-platform. Packages without
-`palamedes.pluginBinary` are loaded as ESM plugins as before. Nothing is ever
-discovered via `PATH` or executed merely because it is installed.
+A platform-neutral meta package may list native packages in
+`optionalDependencies`. The Rust host follows the installed dependency whose
+`os`, `cpu`, and `libc` fields match the running native CLI and whose manifest
+declares `palamedes.pluginBinary`.
+
+Resolution starts next to the Palamedes data config and walks parent
+`node_modules` directories. pnpm symlinks are supported. A local package
+directory or a direct native executable path can be used for development.
+Nothing is discovered via `PATH`, and merely installing a package never causes
+it to run.
 
 ## Protocol
 
-Protocol version `1` must match exactly. It is versioned independently of both
-the package version and the ESM plugin API major.
+Protocol version `1` must match exactly. It is versioned independently of the
+CLI and plugin package versions.
 
-The host spawns the executable once per request and writes a single JSON
-object to stdin, then closes it:
+The host spawns the executable once per request and writes one JSON object to
+stdin before closing it. `describe` asks for the plugin manifest:
 
 ```json
 {
   "palamedesBinaryPluginProtocol": 1,
-  "hostVersion": "1.5.1",
+  "hostVersion": "1.10.0",
   "kind": "describe"
 }
 ```
 
-`describe` must answer with exactly one manifest event on stdout:
+The plugin answers with exactly one manifest event:
 
 ```json
 {
   "event": "manifest",
   "name": "acme",
   "protocolVersion": 1,
-  "commands": { "inspect": { "description": "Inspect configured catalogs." } }
+  "commands": {
+    "inspect": { "description": "Inspect configured catalogs." }
+  }
 }
 ```
 
-Manifests are validated like ESM plugin definitions: lowercase kebab-case
-names, no built-in namespaces (`extract`, `audit`, `report`, `catalog`,
-`version`), no duplicates across configured plugins.
+Namespaces and commands must be lowercase kebab-case. Plugin namespaces cannot
+collide with built-ins (`extract`, `audit`, `report`, `catalog`, `version`) or
+another configured plugin.
 
 A `run` request carries the invocation and resolved project context:
 
 ```json
 {
   "palamedesBinaryPluginProtocol": 1,
-  "hostVersion": "1.5.1",
+  "hostVersion": "1.10.0",
   "kind": "run",
   "command": "inspect",
   "args": ["one", "two"],
   "options": { "license": "…" },
   "json": false,
   "interactive": false,
-  "config": { "…": "resolved LoadedPalamedesConfig" },
+  "config": { "rootDir": "/project" },
   "catalogs": [
     {
-      "path": "…",
+      "path": "locales/{locale}/messages",
       "format": "po",
       "include": ["src"],
       "exclude": [],
-      "locales": [{ "locale": "en", "path": "/abs/path" }]
+      "locales": [{ "locale": "en", "path": "/project/locales/en/messages" }]
     }
   ]
 }
 ```
 
-The plugin answers with newline-delimited events on stdout — zero or more
-`diagnostic` and `output` events, then at most one `result` event:
+The plugin emits zero or more diagnostic and output events followed by at most
+one result event:
 
 ```json
 { "event": "diagnostic", "severity": "info", "code": "ACME_INSPECTED", "message": "Inspected 2 catalogs." }
@@ -101,39 +106,31 @@ The plugin answers with newline-delimited events on stdout — zero or more
 
 - stdout is reserved for protocol events; free-form progress belongs on
   stderr, which passes through to the terminal.
-- Diagnostics use the same `severity`/`code`/`message`/`details` shape and
-  rendering as the ESM API. With `--json`, everything is folded into the same
-  single host envelope.
-- Without an explicit `exitCode`, error diagnostics produce `1` and other
-  results produce `0`. Exit codes must be integers from 0 through 255.
-- If no valid `result` event arrives, the process exit code is the
-  authoritative fallback and the host reports a `PLUGIN_BINARY_PROTOCOL`
-  diagnostic.
-- `SIGINT` and `SIGTERM` are forwarded to the child; cooperative cancellation
-  maps to exit codes 130 and 143.
+- Diagnostics use `info`, `warning`, or `error` severity and may include
+  `code` and structured `details`.
+- `--json` folds the result and diagnostics into one host envelope.
+- A result exit code is authoritative. Without a result, the process exit code
+  is the fallback and the host emits `PLUGIN_BINARY_PROTOCOL`.
+- Exit codes range from 0 through 255. Terminal cancellation keeps the usual
+  130 (`SIGINT`) and 143 (`SIGTERM`) meanings.
 
 ## Built-In Commands And Trust
 
-Instead of a bidirectional channel, the host exports the resolved
-native `pmds` executable path as the `PALAMEDES_NATIVE` environment variable.
-Binary plugins are trusted local code — the trust model from
-[ADR 017](../../adr/017-cli-plugin-execution-boundary.md) applies unchanged — so
-they may invoke documented built-in commands directly as subprocesses. In JSON
-mode a plugin should capture that output rather than let it corrupt the single
-envelope on its own stdout.
+The host sets `PALAMEDES_NATIVE` to the absolute path of the running `pmds`
+executable. Trusted plugins may invoke documented built-in commands through
+that path. In JSON mode they should capture built-in output so it does not
+corrupt the plugin protocol on stdout.
 
-Built-in commands bypass configuration and plugin loading entirely, so a
-missing, incompatible, or crashing binary plugin never affects `pmds extract`,
-`audit`, `report`, `catalog`, or `version`.
+Configured plugins are trusted local code with the same filesystem,
+environment, and network permissions as `pmds`. The protocol is a compatibility
+boundary, not a sandbox. Built-ins bypass config and plugin resolution, so a
+missing or broken plugin cannot affect core commands.
 
 ## Rust SDK
 
-The `palamedes-plugin` crate in `crates/palamedes-plugin` wraps the protocol so
-a Rust plugin does not implement the wire format by hand: register namespaced
-commands with descriptions and handlers, read typed request context (arguments,
-options, resolved configuration, catalogs), emit diagnostics and output, and
-return a result with optional text, data, and exit code. `Plugin::run()` handles
-stdin/stdout; `Plugin::dispatch()` exposes the same path for in-process tests.
-`CommandContext::built_in_command()` prepares a native `pmds` subprocess from
-the `PALAMEDES_NATIVE` handoff. See the crate documentation and
+The `palamedes-plugin` crate wraps the plugin side: command registration, typed
+request context, catalogs, diagnostics, results, and protocol I/O.
+`Plugin::run()` handles stdin/stdout; `Plugin::dispatch()` exposes the same path
+for tests. `CommandContext::built_in_command()` prepares a `pmds` subprocess
+from `PALAMEDES_NATIVE`. See
 `crates/palamedes-plugin/examples/inspect.rs` for a complete plugin.

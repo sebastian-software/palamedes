@@ -1,7 +1,7 @@
 {
   "name": "@palamedes/cli",
   "version": "1.10.0",
-  "description": "Palamedes CLI for extraction, audits, reports, catalog workflows, and explicit command plugins",
+  "description": "Palamedes CLI for extraction, audits, reports, catalog workflows, and native command plugins",
   "keywords": [
     "i18n",
     "internationalization",
@@ -24,30 +24,17 @@
     "LICENSE",
     "README.md",
     "bin/pmds",
-    "scripts/",
-    "fixtures/",
-    "plugin-api.mjs",
-    "plugin-api.d.ts"
+    "scripts/"
   ],
-  "exports": {
-    "./plugin": {
-      "types": "./plugin-api.d.ts",
-      "import": "./plugin-api.mjs"
-    }
-  },
   "scripts": {
     "build": "node ./scripts/build.mjs",
-    "test": "node --test ./scripts/platform.test.mjs ./scripts/plugin-host.test.mjs ./scripts/binary-plugin.test.mjs && node ./scripts/smoke.mjs"
+    "test": "node --test ./scripts/platform.test.mjs && node ./scripts/smoke.mjs"
   },
   "engines": {
     "node": ">=22.0.0"
   },
   "publishConfig": {
     "access": "public"
-  },
-  "dependencies": {
-    "@palamedes/config": "workspace:^",
-    "import-meta-resolve": "^4.2.0"
   },
   "optionalDependencies": {
     "@palamedes/cli-darwin-arm64": "workspace:^",

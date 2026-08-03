@@ -1,5 +1,15 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -28,6 +38,10 @@ execFileSync(process.execPath, [path.join(packageDir, "scripts", "build-native.m
 })
 execFileSync(process.execPath, [path.join(packageDir, "scripts", "build.mjs")], {
   cwd: packageDir,
+  stdio: "inherit",
+})
+execFileSync("cargo", ["build", "--package", "palamedes-plugin", "--example", "inspect"], {
+  cwd: repoRoot,
   stdio: "inherit",
 })
 
@@ -80,6 +94,56 @@ try {
   if (!/^pmds \d/u.test(flagOutput)) {
     throw new Error(`Unexpected packed pmds --version output: ${flagOutput}`)
   }
+
+  const pluginPackageDir = path.join(fixtureRoot, "project", "node_modules", "@fixture", "acme")
+  const pluginBinDir = path.join(pluginPackageDir, "bin")
+  mkdirSync(pluginBinDir, { recursive: true })
+  const pluginBinaryName = process.platform === "win32" ? "acme.exe" : "acme"
+  const builtPlugin = path.join(
+    repoRoot,
+    "target",
+    "debug",
+    "examples",
+    process.platform === "win32" ? "inspect.exe" : "inspect"
+  )
+  const installedPlugin = path.join(pluginBinDir, pluginBinaryName)
+  copyFileSync(builtPlugin, installedPlugin)
+  if (process.platform !== "win32") chmodSync(installedPlugin, 0o755)
+  writeFileSync(
+    path.join(pluginPackageDir, "package.json"),
+    `${JSON.stringify({
+      name: "@fixture/acme",
+      private: true,
+      palamedes: { pluginBinary: `./bin/${pluginBinaryName}` },
+    })}\n`
+  )
+  const fixtureConfig = path.join(fixtureRoot, "project", "palamedes.yaml")
+  writeFileSync(
+    fixtureConfig,
+    [
+      "locales: [en, de]",
+      "source-locale: en",
+      "catalogs:",
+      "  - path: locales/{locale}/messages",
+      "    include: [src]",
+      "plugins:",
+      '  - ["@fixture/acme", { policy: strict }]',
+      "",
+    ].join("\n")
+  )
+  const pluginArgs = ["acme", "inspect", "--config", fixtureConfig, "--json", "smoke"]
+  const pluginOutput = execFileSync(
+    installedCommand,
+    process.platform === "win32" ? [installedBin, ...pluginArgs] : pluginArgs,
+    {
+      cwd: path.dirname(fixtureConfig),
+      encoding: "utf8",
+    }
+  )
+  const pluginResult = JSON.parse(pluginOutput)
+  if (!pluginResult.ok || pluginResult.result?.args?.[0] !== "smoke") {
+    throw new Error(`Unexpected native pmds plugin output: ${pluginOutput}`)
+  }
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true })
 }
@@ -106,21 +170,6 @@ if (!output.includes("pmds (Palamedes)")) {
 }
 if (output !== nativeOutput) {
   throw new Error("The npm wrapper changed built-in version output.")
-}
-
-const fixtureConfig = path.join(packageDir, "fixtures", "plugin-project", "palamedes.config.mjs")
-const pluginArgs = ["example", "inspect", "--config", fixtureConfig, "--json", "smoke"]
-const pluginOutput = execFileSync(
-  command,
-  process.platform === "win32" ? [publicBin, ...pluginArgs] : pluginArgs,
-  {
-    cwd: packageDir,
-    encoding: "utf8",
-  }
-)
-const pluginResult = JSON.parse(pluginOutput)
-if (!pluginResult.ok || pluginResult.result?.args?.[0] !== "smoke") {
-  throw new Error(`Unexpected pmds plugin output: ${pluginOutput}`)
 }
 
 function packPackage(packagePath, archiveDir) {
