@@ -75,6 +75,21 @@ try {
     throw new Error("The packed @palamedes/cli package contains a copied native sidecar.")
   }
 
+  // The platform package must expose the native binary as its own `pmds` bin
+  // so known-platform environments can skip the Node launcher (ADR-024).
+  const nativeManifest = JSON.parse(
+    readFileSync(path.join(nativeInstallDir, "package.json"), "utf8")
+  )
+  const declaredNativeBin = nativeManifest.bin?.pmds
+  if (!declaredNativeBin) {
+    throw new Error(`The packed ${platformPackage} package declares no pmds bin.`)
+  }
+  const nativeBinPath = path.join(nativeInstallDir, declaredNativeBin)
+  const nativeBinOutput = execFileSync(nativeBinPath, ["--version"], { encoding: "utf8" })
+  if (!/^pmds \d/u.test(nativeBinOutput)) {
+    throw new Error(`Unexpected packed platform bin output: ${nativeBinOutput}`)
+  }
+
   const installedBin = path.join(cliInstallDir, "bin", "pmds")
   const installedCommand = process.platform === "win32" ? process.execPath : installedBin
   const versionArgs = process.platform === "win32" ? [installedBin, "version"] : ["version"]

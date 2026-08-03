@@ -56,6 +56,16 @@ Keep optional dependencies enabled. If the matching package or its binary is
 missing, `pmds` reports the expected platform package and how to add it
 explicitly.
 
+When the platform is known ahead of time — CI images, deployment targets — the
+platform package can be installed directly instead. Each platform package
+declares its own `pmds` bin, so the native binary runs without any Node
+launcher process:
+
+```bash
+pnpm add -D @palamedes/cli-linux-x64-musl
+pnpm exec pmds --version
+```
+
 ## Usage
 
 ```bash

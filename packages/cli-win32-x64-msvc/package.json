@@ -11,6 +11,9 @@
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
   "license": "MIT",
   "type": "commonjs",
+  "bin": {
+    "pmds": "./bin/pmds.exe"
+  },
   "files": [
     "README.md",
     "bin/"

@@ -26,8 +26,18 @@ export async function spawnNative(args, options = {}) {
       stderr += chunk
     })
     const onAbort = () => child.kill(options.signal?.reason?.signal ?? "SIGTERM")
-    const cleanup = () => options.signal?.removeEventListener("abort", onAbort)
+    // Forward direct signals so killing the launcher never orphans the native
+    // process; terminal Ctrl+C already reaches both via the process group.
+    const forwardInterrupt = () => child.kill("SIGINT")
+    const forwardTerminate = () => child.kill("SIGTERM")
+    const cleanup = () => {
+      options.signal?.removeEventListener("abort", onAbort)
+      process.off("SIGINT", forwardInterrupt)
+      process.off("SIGTERM", forwardTerminate)
+    }
     options.signal?.addEventListener("abort", onAbort, { once: true })
+    process.on("SIGINT", forwardInterrupt)
+    process.on("SIGTERM", forwardTerminate)
     if (options.signal?.aborted) onAbort()
     child.once("error", (error) => {
       cleanup()
