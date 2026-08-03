@@ -8,15 +8,20 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
-use std::io::{self, IsTerminal, Read, Write};
+use std::io::{self, BufRead, BufReader, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
+#[cfg(unix)]
+use std::sync::atomic::{AtomicI32, Ordering};
+#[cfg(unix)]
+use std::sync::Once;
+use std::thread;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::command::Context;
-use crate::config::LoadedConfig;
+use crate::config::{ConfigPluginDeclaration, LoadedConfig};
 
 const BUILT_IN_NAMESPACES: &[&str] = &["extract", "audit", "report", "catalog", "version"];
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
@@ -70,14 +75,32 @@ fn run_invocation(
         )
     })?;
     let registry = load_registry(&config, &cwd, &native_executable)?;
-    let Some(plugin) = registry.get(&invocation.namespace) else {
-        return Err(PluginFailure::with_exit_code(
-            "PLUGIN_NAMESPACE_UNKNOWN",
-            format!(
-                "No configured Palamedes binary plugin declares the namespace \"{}\".",
-                invocation.namespace
-            ),
-            2,
+    let Some(plugin) = registry.plugins.get(&invocation.namespace) else {
+        if registry.skipped.is_empty() {
+            return Err(PluginFailure::with_exit_code(
+                "PLUGIN_NAMESPACE_UNKNOWN",
+                format!(
+                    "No configured Palamedes binary plugin declares the namespace \"{}\".",
+                    invocation.namespace
+                ),
+                2,
+            ));
+        }
+        // The namespace may belong to a plugin that failed to load, so the
+        // load failure is the actionable error here, not an unknown namespace.
+        let mut message = format!(
+            "No loaded Palamedes binary plugin declares the namespace \"{}\".",
+            invocation.namespace
+        );
+        for skipped in &registry.skipped {
+            message.push_str(&format!(
+                " Configured plugin \"{}\" failed to load: {}",
+                skipped.specifier, skipped.failure.message
+            ));
+        }
+        return Err(PluginFailure::new(
+            registry.skipped[0].failure.code,
+            message,
         ));
     };
 
@@ -121,34 +144,66 @@ fn run_invocation(
         })?,
         "catalogs": plugin_catalogs(&config),
     });
-    let result = invoke_binary(&plugin.resolved, &request, &cwd, &native_executable)?;
-    finish_run(&plugin.resolved, result)
+    let mut print_output = |text: &str| println!("{text}");
+    let stream: Option<&mut dyn FnMut(&str)> = if invocation.json {
+        None
+    } else {
+        Some(&mut print_output)
+    };
+    let result = invoke_binary(&plugin.resolved, &request, &cwd, &native_executable, stream)?;
+    let mut output = finish_run(&plugin.resolved, result, !invocation.json)?;
+    if !registry.skipped.is_empty() {
+        let mut diagnostics = skipped_diagnostics(&registry.skipped);
+        diagnostics.append(&mut output.diagnostics);
+        output.diagnostics = diagnostics;
+    }
+    Ok(output)
+}
+
+fn skipped_diagnostics(skipped: &[SkippedPlugin]) -> Vec<PluginDiagnostic> {
+    skipped
+        .iter()
+        .map(|skipped| PluginDiagnostic {
+            severity: Severity::Warning,
+            code: Some("PLUGIN_UNAVAILABLE".to_owned()),
+            message: format!(
+                "Configured plugin \"{}\" was skipped: {}",
+                skipped.specifier, skipped.failure.message
+            ),
+            details: None,
+        })
+        .collect()
 }
 
 fn load_registry(
     config: &LoadedConfig,
     cwd: &Path,
     native_executable: &Path,
-) -> Result<BTreeMap<String, LoadedPlugin>, PluginFailure> {
-    let mut registry = BTreeMap::new();
+) -> Result<PluginRegistry, PluginFailure> {
+    let mut registry = PluginRegistry::default();
     for declaration in &config.plugins {
-        let resolved = resolve_binary_plugin(declaration.specifier(), &config.config_path)?;
-        let request = json!({
-            "palamedesBinaryPluginProtocol": PROTOCOL_VERSION,
-            "hostVersion": env!("CARGO_PKG_VERSION"),
-            "kind": "describe",
-        });
-        let invocation = invoke_binary(&resolved, &request, cwd, native_executable)?;
-        let manifest = manifest_from_invocation(&resolved, invocation)?;
-        validate_manifest(&resolved, &manifest)?;
+        // A plugin that cannot resolve or describe blocks only its own
+        // namespace; other configured commands keep working and surface the
+        // skipped plugin as a warning diagnostic.
+        let (resolved, manifest) =
+            match describe_plugin(declaration, config, cwd, native_executable) {
+                Ok(loaded) => loaded,
+                Err(failure) => {
+                    registry.skipped.push(SkippedPlugin {
+                        specifier: declaration.specifier().to_owned(),
+                        failure,
+                    });
+                    continue;
+                }
+            };
         let namespace = manifest.name.clone();
-        if registry.contains_key(&namespace) {
+        if registry.plugins.contains_key(&namespace) {
             return Err(PluginFailure::new(
                 "PLUGIN_NAMESPACE_COLLISION",
                 format!("Multiple configured plugins declare the namespace \"{namespace}\"."),
             ));
         }
-        registry.insert(
+        registry.plugins.insert(
             namespace,
             LoadedPlugin {
                 resolved,
@@ -158,6 +213,24 @@ fn load_registry(
         );
     }
     Ok(registry)
+}
+
+fn describe_plugin(
+    declaration: &ConfigPluginDeclaration,
+    config: &LoadedConfig,
+    cwd: &Path,
+    native_executable: &Path,
+) -> Result<(ResolvedPlugin, PluginManifest), PluginFailure> {
+    let resolved = resolve_binary_plugin(declaration.specifier(), &config.config_path)?;
+    let request = json!({
+        "palamedesBinaryPluginProtocol": PROTOCOL_VERSION,
+        "hostVersion": env!("CARGO_PKG_VERSION"),
+        "kind": "describe",
+    });
+    let invocation = invoke_binary(&resolved, &request, cwd, native_executable, None)?;
+    let manifest = manifest_from_invocation(&resolved, invocation)?;
+    validate_manifest(&resolved, &manifest)?;
+    Ok((resolved, manifest))
 }
 
 fn manifest_from_invocation(
@@ -240,6 +313,7 @@ fn validate_manifest(
 fn finish_run(
     resolved: &ResolvedPlugin,
     invocation: BinaryInvocation,
+    streamed: bool,
 ) -> Result<PluginOutput, PluginFailure> {
     let mut diagnostics = Vec::new();
     let mut outputs = Vec::new();
@@ -287,6 +361,7 @@ fn finish_run(
             data: None,
             exit_code,
             diagnostics,
+            streamed,
         });
     };
 
@@ -306,6 +381,7 @@ fn finish_run(
         data: result.data,
         exit_code,
         diagnostics,
+        streamed,
     })
 }
 
@@ -314,6 +390,7 @@ fn invoke_binary(
     request: &Value,
     cwd: &Path,
     native_executable: &Path,
+    mut stream_output: Option<&mut dyn FnMut(&str)>,
 ) -> Result<BinaryInvocation, PluginFailure> {
     let mut request_bytes = serde_json::to_vec(request).map_err(|error| {
         PluginFailure::new(
@@ -342,41 +419,65 @@ fn invoke_binary(
                 ),
             )
         })?;
+    #[cfg(unix)]
+    let _signal_guard = ChildSignalGuard::arm(&child);
 
-    if let Some(mut stdin) = child.stdin.take() {
-        if let Err(error) = stdin.write_all(&request_bytes) {
+    // The request is written from a helper thread while this thread consumes
+    // stdout, so a plugin that emits events before draining its stdin cannot
+    // deadlock against a request larger than the pipe buffers.
+    let stdin = child.stdin.take();
+    let writer = thread::spawn(move || -> io::Result<()> {
+        let Some(mut stdin) = stdin else {
+            return Ok(());
+        };
+        match stdin.write_all(&request_bytes) {
             // A plugin may terminate before consuming its request. Preserve its
             // real exit status and protocol output instead of replacing those
             // with the resulting closed-pipe error.
-            if error.kind() != io::ErrorKind::BrokenPipe {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(PluginFailure::new(
+            Err(error) if error.kind() != io::ErrorKind::BrokenPipe => Err(error),
+            _ => Ok(()),
+        }
+    });
+
+    let stdout = BufReader::new(child.stdout.take().expect("piped plugin stdout"));
+    let mut events = Vec::new();
+    let mut failure = None;
+    for line in stdout.lines() {
+        let line = match line {
+            Ok(line) => line,
+            Err(error) => {
+                failure = Some(PluginFailure::new(
                     "PLUGIN_BINARY_PROTOCOL",
                     format!(
-                        "Could not write a request to binary plugin \"{}\": {error}",
+                        "Could not read binary plugin \"{}\" output: {error}",
                         resolved.specifier
                     ),
                 ));
+                break;
+            }
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        match parse_event_line(&line, resolved) {
+            Ok(event) => {
+                if let PluginEvent::Output(text) = &event {
+                    if let Some(stream) = stream_output.as_mut() {
+                        stream(text);
+                    }
+                }
+                events.push(event);
+            }
+            Err(error) => {
+                failure = Some(error);
+                break;
             }
         }
     }
+    if failure.is_some() {
+        let _ = child.kill();
+    }
 
-    let mut stdout = String::new();
-    child
-        .stdout
-        .take()
-        .expect("piped plugin stdout")
-        .read_to_string(&mut stdout)
-        .map_err(|error| {
-            PluginFailure::new(
-                "PLUGIN_BINARY_PROTOCOL",
-                format!(
-                    "Could not read binary plugin \"{}\" output: {error}",
-                    resolved.specifier
-                ),
-            )
-        })?;
     let status = child.wait().map_err(|error| {
         PluginFailure::new(
             "PLUGIN_BINARY_SPAWN_FAILED",
@@ -386,27 +487,91 @@ fn invoke_binary(
             ),
         )
     })?;
+    if let Some(failure) = failure {
+        return Err(failure);
+    }
+    match writer.join() {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            return Err(PluginFailure::new(
+                "PLUGIN_BINARY_PROTOCOL",
+                format!(
+                    "Could not write a request to binary plugin \"{}\": {error}",
+                    resolved.specifier
+                ),
+            ));
+        }
+        Err(_) => {
+            return Err(PluginFailure::new(
+                "PLUGIN_HOST_FAILED",
+                format!(
+                    "The request writer for binary plugin \"{}\" panicked.",
+                    resolved.specifier
+                ),
+            ));
+        }
+    }
 
     Ok(BinaryInvocation {
         exit_code: exit_code(status),
-        events: parse_events(&stdout, resolved)?,
+        events,
     })
 }
 
-fn parse_events(
-    stdout: &str,
-    resolved: &ResolvedPlugin,
-) -> Result<Vec<PluginEvent>, PluginFailure> {
-    stdout
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            let value: Value = serde_json::from_str(line).map_err(|_| {
-                protocol_failure(resolved, format!("invalid JSON event line: {line}"))
-            })?;
-            parse_event(value).map_err(|detail| protocol_failure(resolved, detail))
-        })
-        .collect()
+fn parse_event_line(line: &str, resolved: &ResolvedPlugin) -> Result<PluginEvent, PluginFailure> {
+    let value: Value = serde_json::from_str(line)
+        .map_err(|_| protocol_failure(resolved, format!("invalid JSON event line: {line}")))?;
+    parse_event(value).map_err(|detail| protocol_failure(resolved, detail))
+}
+
+/// Forwards `SIGINT` and `SIGTERM` to the running plugin child, so a signal
+/// aimed directly at `pmds` never orphans the plugin process. Terminal Ctrl+C
+/// already reaches both processes through the foreground process group.
+#[cfg(unix)]
+static ACTIVE_PLUGIN_CHILD: AtomicI32 = AtomicI32::new(0);
+
+#[cfg(unix)]
+struct ChildSignalGuard;
+
+#[cfg(unix)]
+impl ChildSignalGuard {
+    fn arm(child: &std::process::Child) -> Self {
+        static INSTALL: Once = Once::new();
+        INSTALL.call_once(|| {
+            let Ok(mut signals) = signal_hook::iterator::Signals::new([
+                signal_hook::consts::SIGINT,
+                signal_hook::consts::SIGTERM,
+            ]) else {
+                return;
+            };
+            thread::spawn(move || {
+                for signal in signals.forever() {
+                    let child = ACTIVE_PLUGIN_CHILD.load(Ordering::SeqCst);
+                    if child > 0 {
+                        // SAFETY: forwards a standard signal to the child
+                        // recorded by the currently running invocation.
+                        unsafe { libc::kill(child, signal) };
+                    } else {
+                        // No child is running; restore the shell-compatible
+                        // default outcome for the signal.
+                        std::process::exit(128 + signal);
+                    }
+                }
+            });
+        });
+        ACTIVE_PLUGIN_CHILD.store(
+            i32::try_from(child.id()).unwrap_or_default(),
+            Ordering::SeqCst,
+        );
+        Self
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ChildSignalGuard {
+    fn drop(&mut self) {
+        ACTIVE_PLUGIN_CHILD.store(0, Ordering::SeqCst);
+    }
 }
 
 fn parse_event(value: Value) -> Result<PluginEvent, String> {
@@ -563,7 +728,7 @@ fn resolved_executable(
         binary_path
             .extension()
             .and_then(|extension| extension.to_str()),
-        Some("js" | "mjs" | "cjs" | "ts")
+        Some("js" | "mjs" | "cjs" | "jsx" | "ts" | "tsx" | "mts" | "cts")
     ) {
         return Err(PluginFailure::new(
             "PLUGIN_BINARY_REQUIRED",
@@ -727,8 +892,10 @@ fn emit_result(invocation: &PluginInvocation, output: &PluginOutput) {
         return;
     }
 
-    for text in &output.outputs {
-        println!("{text}");
+    if !output.streamed {
+        for text in &output.outputs {
+            println!("{text}");
+        }
     }
     if let Some(text) = &output.text {
         println!("{text}");
@@ -896,6 +1063,18 @@ impl From<&PluginInvocation> for InvocationHint {
     }
 }
 
+#[derive(Debug, Default)]
+struct PluginRegistry {
+    plugins: BTreeMap<String, LoadedPlugin>,
+    skipped: Vec<SkippedPlugin>,
+}
+
+#[derive(Debug)]
+struct SkippedPlugin {
+    specifier: String,
+    failure: PluginFailure,
+}
+
 #[derive(Debug)]
 struct LoadedPlugin {
     resolved: ResolvedPlugin,
@@ -990,6 +1169,8 @@ struct PluginOutput {
     data: Option<Value>,
     exit_code: u8,
     diagnostics: Vec<PluginDiagnostic>,
+    /// Whether output events were already rendered while the plugin ran.
+    streamed: bool,
 }
 
 #[derive(Debug)]
@@ -1041,9 +1222,12 @@ mod tests {
 
     use serde_json::json;
 
+    use std::collections::BTreeMap;
+
     use super::{
         finish_run, is_kebab_name, matches_constraint, parse_event, resolve_binary_plugin,
-        BinaryInvocation, PluginEvent, PluginInvocation, ResolvedPlugin,
+        validate_manifest, BinaryInvocation, ManifestCommand, PluginEvent, PluginInvocation,
+        PluginManifest, ResolvedPlugin, PROTOCOL_VERSION,
     };
 
     #[test]
@@ -1098,6 +1282,7 @@ mod tests {
                 exit_code: 5,
                 events: Vec::new(),
             },
+            false,
         )
         .expect("fallback output");
 
@@ -1160,13 +1345,158 @@ mod tests {
     #[test]
     fn rejects_script_plugins() {
         let root = temp_dir("script-plugin");
-        let script = root.join("plugin.mjs");
-        fs::write(&script, "export {};").expect("script fixture");
         let config = root.join("palamedes.yaml");
         fs::write(&config, "fixture").expect("config");
 
-        let error = resolve_binary_plugin("./plugin.mjs", &config).expect_err("script rejected");
-        assert_eq!(error.code, "PLUGIN_BINARY_REQUIRED");
+        for name in [
+            "plugin.mjs",
+            "plugin.cjs",
+            "plugin.mts",
+            "plugin.cts",
+            "plugin.tsx",
+        ] {
+            fs::write(root.join(name), "export {};").expect("script fixture");
+            let error =
+                resolve_binary_plugin(&format!("./{name}"), &config).expect_err("script rejected");
+            assert_eq!(error.code, "PLUGIN_BINARY_REQUIRED", "for {name}");
+        }
+    }
+
+    #[test]
+    fn validates_manifest_protocol_names_and_built_in_collisions() {
+        let resolved = ResolvedPlugin {
+            specifier: "@acme/plugin".to_owned(),
+            binary_path: "/fixture/plugin".into(),
+        };
+        let manifest = |name: &str, protocol_version: u64| PluginManifest {
+            name: name.to_owned(),
+            protocol_version,
+            commands: BTreeMap::from([(
+                "inspect".to_owned(),
+                ManifestCommand { description: None },
+            )]),
+        };
+
+        assert!(validate_manifest(&resolved, &manifest("acme", PROTOCOL_VERSION)).is_ok());
+        assert_eq!(
+            validate_manifest(&resolved, &manifest("acme", PROTOCOL_VERSION + 1))
+                .expect_err("foreign protocol rejected")
+                .code,
+            "PLUGIN_PROTOCOL_INCOMPATIBLE"
+        );
+        assert_eq!(
+            validate_manifest(&resolved, &manifest("Acme", PROTOCOL_VERSION))
+                .expect_err("non-kebab namespace rejected")
+                .code,
+            "PLUGIN_INVALID"
+        );
+        assert_eq!(
+            validate_manifest(&resolved, &manifest("extract", PROTOCOL_VERSION))
+                .expect_err("built-in collision rejected")
+                .code,
+            "PLUGIN_NAMESPACE_COLLISION"
+        );
+
+        let mut invalid_command = manifest("acme", PROTOCOL_VERSION);
+        invalid_command
+            .commands
+            .insert("Bad".to_owned(), ManifestCommand { description: None });
+        assert_eq!(
+            validate_manifest(&resolved, &invalid_command)
+                .expect_err("invalid command rejected")
+                .code,
+            "PLUGIN_INVALID"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn streams_output_events_while_the_plugin_runs() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
+
+        use super::invoke_binary;
+
+        let root = temp_dir("streaming-plugin");
+        let script = root.join("plugin");
+        fs::write(
+            &script,
+            "#!/bin/sh\nread _request\n\
+             printf '{\"event\":\"output\",\"text\":\"one\"}\\n'\n\
+             printf '{\"event\":\"output\",\"text\":\"two\"}\\n'\n\
+             printf '{\"event\":\"result\",\"text\":\"done\",\"exitCode\":0}\\n'\n",
+        )
+        .expect("plugin script");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        let resolved = ResolvedPlugin {
+            specifier: "./plugin".to_owned(),
+            binary_path: script,
+        };
+
+        let mut streamed = Vec::new();
+        let mut capture = |text: &str| streamed.push(text.to_owned());
+        let invocation = invoke_binary(
+            &resolved,
+            &json!({ "palamedesBinaryPluginProtocol": 1, "kind": "run" }),
+            &root,
+            Path::new("pmds"),
+            Some(&mut capture),
+        )
+        .expect("invocation");
+
+        assert_eq!(streamed, ["one", "two"]);
+        assert_eq!(invocation.exit_code, 0);
+        assert_eq!(invocation.events.len(), 3);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_broken_plugin_blocks_only_its_own_namespace() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
+
+        use super::load_registry;
+        use crate::config::load_config;
+
+        let root = temp_dir("degraded-registry");
+        let good = root.join("good");
+        fs::create_dir_all(&good).expect("plugin directory");
+        fs::write(
+            good.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./describe"}}"#,
+        )
+        .expect("plugin manifest");
+        let script = good.join("describe");
+        fs::write(
+            &script,
+            "#!/bin/sh\nread _request\n\
+             printf '{\"event\":\"manifest\",\"name\":\"good\",\"protocolVersion\":1,\
+             \"commands\":{\"inspect\":{\"description\":\"d\"}}}\\n'\n",
+        )
+        .expect("describe script");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        fs::write(
+            root.join("palamedes.yaml"),
+            r"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+plugins:
+  - './good'
+  - './missing'
+",
+        )
+        .expect("config");
+
+        let config = load_config(&root, None).expect("config with plugins");
+        let registry = load_registry(&config, &root, Path::new("pmds")).expect("degraded registry");
+
+        assert!(registry.plugins.contains_key("good"));
+        assert_eq!(registry.skipped.len(), 1);
+        assert_eq!(registry.skipped[0].specifier, "./missing");
+        assert_eq!(registry.skipped[0].failure.code, "PLUGIN_MISSING");
     }
 
     #[test]

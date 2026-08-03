@@ -269,7 +269,7 @@ impl CommandContext<'_> {
         self.request.interactive
     }
 
-    /// Version of the `@palamedes/cli` host package.
+    /// Version of the native `pmds` host.
     pub fn host_version(&self) -> &str {
         &self.request.host_version
     }

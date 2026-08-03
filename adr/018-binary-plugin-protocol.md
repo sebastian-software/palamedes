@@ -39,7 +39,13 @@ Rust ABI and prevents one plugin crash from corrupting the host process.
 7. The host sets `PALAMEDES_NATIVE` to the absolute path of its own executable.
    Trusted plugins may invoke documented built-ins directly as subprocesses.
 8. `SIGINT` and `SIGTERM` reach plugins as members of the invoking terminal's
-   process group; shell-compatible cancellation codes remain 130 and 143.
+   process group, and the host forwards both to the running plugin child when
+   they target `pmds` directly; shell-compatible cancellation codes remain 130
+   and 143.
+9. A configured plugin that fails to resolve or describe blocks only its own
+   namespace. Commands of other configured plugins run and surface the skipped
+   plugin as a warning diagnostic; the failure is fatal only when it may own
+   the requested namespace.
 
 ## Packaging And Resolution
 

@@ -37,6 +37,11 @@ directory or a direct native executable path can be used for development.
 Nothing is discovered via `PATH`, and merely installing a package never causes
 it to run.
 
+A configured plugin that fails to resolve or describe blocks only its own
+namespace. Commands of other configured plugins still run and report the
+skipped plugin as a `PLUGIN_UNAVAILABLE` warning; the failure is fatal only
+when the requested namespace cannot be served.
+
 ## Protocol
 
 Protocol version `1` must match exactly. It is versioned independently of the
@@ -106,13 +111,16 @@ one result event:
 
 - stdout is reserved for protocol events; free-form progress belongs on
   stderr, which passes through to the terminal.
+- In text mode the host renders `output` events as they arrive; result text,
+  data, and diagnostics follow after the plugin exits.
 - Diagnostics use `info`, `warning`, or `error` severity and may include
   `code` and structured `details`.
 - `--json` folds the result and diagnostics into one host envelope.
 - A result exit code is authoritative. Without a result, the process exit code
   is the fallback and the host emits `PLUGIN_BINARY_PROTOCOL`.
 - Exit codes range from 0 through 255. Terminal cancellation keeps the usual
-  130 (`SIGINT`) and 143 (`SIGTERM`) meanings.
+  130 (`SIGINT`) and 143 (`SIGTERM`) meanings, and the host forwards `SIGINT`
+  and `SIGTERM` aimed directly at `pmds` to the running plugin process.
 
 ## Built-In Commands And Trust
 
