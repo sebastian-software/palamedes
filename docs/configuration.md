@@ -44,7 +44,7 @@ catalogs:
 | `lint`                  | No       | source lint options                    | Source-authoring rule levels used by `pmds lint`.                                   |
 | `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                |
 | `extract-threads`       | No       | `number`                               | Worker threads for the parallel extraction pass. Defaults to `4`; `1` runs serial.  |
-| `extract-cache`         | No       | `boolean`                              | Reuse the on-disk extraction cache. Defaults to `true`.                             |
+| `extract-cache`         | No       | `boolean`                              | Reuse the shared extraction/source-analysis cache. Defaults to `true`.              |
 
 The native CLI and JS config loader both accept snake_case aliases for these
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
@@ -63,15 +63,16 @@ hardware; see
 [ADR-013](https://github.com/sebastian-software/palamedes/blob/main/adr/013-bounded-parallel-extraction.md)
 for the numbers. `--threads` on the command line overrides this value.
 
-`extract-cache` controls whether extraction reuses its own results for files
-that have not changed. The cache lives at `.palamedes/extract-cache.json` under
-the project root — add `.palamedes/` to your `.gitignore`. Entries are validated
-with a `stat` (size and modification time), so a repeat run skips both reading
-and parsing unchanged files; watch mode holds the cache for the life of the
-process. It is discarded automatically whenever the extractor version, source
-reference root, or extraction-relevant MDX options change. Use `--no-cache` for a one-off cold run, or set
-this to `false` if a tool in your pipeline rewrites files without changing their
-size or modification time. See
+`extract-cache` controls whether extraction and source lint reuse their shared
+analysis for files that have not changed. The cache lives at
+`.palamedes/extract-cache.json` under the project root — add `.palamedes/` to
+your `.gitignore`. Entries are validated with a `stat` (size and modification
+time), so a repeat run skips parsing unchanged files; watch mode holds the cache
+for the life of the process. It is discarded automatically whenever the
+extractor version, source reference root, reference-scope behavior, MDX options,
+or lint rule levels change. Use `--no-cache` on `pmds extract` or `pmds lint` for
+a one-off cold run, or set this to `false` if a tool in your pipeline rewrites
+files without changing their size or modification time. See
 [ADR-019](https://github.com/sebastian-software/palamedes/blob/main/adr/019-extraction-cache.md).
 
 ## Source Lint

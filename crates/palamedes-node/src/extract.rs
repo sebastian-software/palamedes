@@ -140,6 +140,7 @@ pub fn extract_catalog_messages_from_files(
     let options = palamedes::ExtractCatalogMessagesOptions {
         reference_scopes: request.reference_scopes.unwrap_or(true),
         mdx: request.mdx.map(Into::into).unwrap_or_default(),
+        ..palamedes::ExtractCatalogMessagesOptions::default()
     };
     let request = palamedes::ExtractCatalogMessagesRequest {
         root_dir: request.root_dir,

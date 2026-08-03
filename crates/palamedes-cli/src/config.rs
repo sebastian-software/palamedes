@@ -70,18 +70,10 @@ pub struct LoadedConfig {
     pub plugins: Vec<ConfigPluginDeclaration>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ConfigLintOptions {
     pub rules: ConfigLintRules,
-}
-
-impl Default for ConfigLintOptions {
-    fn default() -> Self {
-        Self {
-            rules: ConfigLintRules::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -1,11 +1,11 @@
-//! Per-file extraction cache.
+//! Per-file extraction and source-analysis cache.
 //!
 //! Extraction is dominated by reading and parsing source. On a repeat run most
 //! files are untouched, so their result is still valid and the work is pure
-//! waste. This caches the extracted messages per file and validates entries
-//! with a `stat` instead of a read: on the realistic benchmark corpus, reading
-//! all 1500 files costs ~25 ms and parsing them ~94 ms, against ~2.7 ms to stat
-//! them.
+//! waste. This caches extracted messages and source diagnostics per file and
+//! validates entries with a `stat` instead of a parse: on the realistic
+//! benchmark corpus, reading all 1500 files costs ~25 ms and parsing them ~94
+//! ms, against ~2.7 ms to stat them.
 //!
 //! The cache is advisory. Anything unexpected — missing file, unreadable
 //! directory, corrupt or stale payload, schema change — degrades to a miss and
@@ -18,10 +18,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::extract::{ExtractCatalogMessagesOptions, ExtractedMessageRecord};
+use crate::source::{SourceDiagnostic, SourceRuleOptions};
 
 /// Bumped whenever the cached payload shape or the extractor's output changes
 /// in a way that makes previously stored entries wrong.
-const CACHE_SCHEMA: u32 = 2;
+const CACHE_SCHEMA: u32 = 3;
 
 /*
  * A file modified in the same instant it was cached cannot be distinguished
@@ -78,6 +79,7 @@ struct CacheEntry {
     /// Origin path as stored in catalogs, which depends on the reference root.
     relative_file: String,
     messages: Vec<ExtractedMessageRecord>,
+    diagnostics: Vec<SourceDiagnostic>,
 }
 
 /*
@@ -95,6 +97,8 @@ struct CacheStamp {
     reference_scopes: bool,
     /// Configured MDX fields and opt-out semantics also change records.
     mdx_stamp: String,
+    /// Rule levels affect diagnostics but never extracted messages.
+    rules: SourceRuleOptions,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -103,11 +107,11 @@ struct CachePayload {
     entries: HashMap<String, CacheEntry>,
 }
 
-/// Extraction cache for one project root.
+/// Extraction and source-analysis cache for one project root.
 ///
 /// Load once per process and keep it alive: a single `pmds extract` saves the
-/// read and parse of every unchanged file, and watch mode reuses the same
-/// instance across rebuilds so later runs never touch disk for them.
+/// read and parse of every unchanged file, `pmds lint` reuses its diagnostics,
+/// and watch mode reuses the same instance across rebuilds.
 #[derive(Debug)]
 pub struct ExtractCache {
     stamp: CacheStamp,
@@ -127,6 +131,7 @@ impl ExtractCache {
                 root_dir: String::new(),
                 reference_scopes: false,
                 mdx_stamp: String::new(),
+                rules: SourceRuleOptions::disabled(),
             },
             entries: HashMap::new(),
             dirty: false,
@@ -167,6 +172,7 @@ impl ExtractCache {
             root_dir: root_dir.to_owned(),
             reference_scopes: options.reference_scopes,
             mdx_stamp: options.mdx.extraction_stamp(),
+            rules: options.rules.clone(),
         };
 
         let entries = std::fs::read(path)
@@ -185,7 +191,10 @@ impl ExtractCache {
     }
 
     /// Cached result for `path`, if the file still looks exactly as it did.
-    pub(crate) fn get(&self, path: &str) -> Option<(String, Vec<ExtractedMessageRecord>)>
+    pub(crate) fn get(
+        &self,
+        path: &str,
+    ) -> Option<(String, Vec<ExtractedMessageRecord>, Vec<SourceDiagnostic>)>
     where
         ExtractedMessageRecord: Clone,
     {
@@ -197,7 +206,11 @@ impl ExtractCache {
         if current != entry.fingerprint {
             return None;
         }
-        Some((entry.relative_file.clone(), entry.messages.clone()))
+        Some((
+            entry.relative_file.clone(),
+            entry.messages.clone(),
+            entry.diagnostics.clone(),
+        ))
     }
 
     /// Identity of `path` before its contents are read, or `None` when the cache
@@ -229,7 +242,8 @@ impl ExtractCache {
         if !self.enabled
             || (self.stamp.root_dir == root_dir
                 && self.stamp.reference_scopes == options.reference_scopes
-                && self.stamp.mdx_stamp == mdx_stamp)
+                && self.stamp.mdx_stamp == mdx_stamp
+                && self.stamp.rules == options.rules)
         {
             return;
         }
@@ -237,6 +251,7 @@ impl ExtractCache {
         self.stamp.root_dir = root_dir.to_owned();
         self.stamp.reference_scopes = options.reference_scopes;
         self.stamp.mdx_stamp = mdx_stamp;
+        self.stamp.rules = options.rules.clone();
         if !self.entries.is_empty() {
             self.entries.clear();
             self.dirty = true;
@@ -256,6 +271,7 @@ impl ExtractCache {
         path: String,
         relative_file: String,
         messages: &[ExtractedMessageRecord],
+        diagnostics: &[SourceDiagnostic],
         before: Option<ReadStartFingerprint>,
     ) where
         ExtractedMessageRecord: Clone,
@@ -282,6 +298,7 @@ impl ExtractCache {
                 fingerprint,
                 relative_file,
                 messages: messages.to_vec(),
+                diagnostics: diagnostics.to_vec(),
             },
         );
         self.dirty = true;
@@ -412,7 +429,13 @@ mod tests {
 
         let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
         let before = cache.fingerprint_before_read(&key);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Hello")],
+            &[],
+            before,
+        );
 
         let hit = cache.get(&key).expect("cache hit");
         assert_eq!(hit.0, "a.tsx");
@@ -436,7 +459,13 @@ mod tests {
 
         let mut cache = ExtractCache::load(&cache_path, "root-one", true);
         let before = cache.fingerprint_before_read(&key);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Hello")],
+            &[],
+            before,
+        );
         cache.save(&cache_path).expect("save");
 
         // Same file, different reference root: origins would differ, so the
@@ -461,11 +490,28 @@ mod tests {
                     translatable_attributes: vec!["alt".to_owned(), "title".to_owned()],
                     ..crate::MdxOptions::default()
                 },
+                ..ExtractCatalogMessagesOptions::default()
             },
         );
         assert!(
             mdx_changed.is_empty(),
             "changed MDX extraction semantics must discard entries"
+        );
+
+        let rules_changed = ExtractCache::load_with_options(
+            &cache_path,
+            "root-one",
+            &ExtractCatalogMessagesOptions {
+                rules: SourceRuleOptions {
+                    placeholder_only: crate::SourceRuleLevel::Error,
+                    ..SourceRuleOptions::default()
+                },
+                ..ExtractCatalogMessagesOptions::default()
+            },
+        );
+        assert!(
+            rules_changed.is_empty(),
+            "changed source rule levels must discard cached diagnostics"
         );
 
         std::fs::remove_dir_all(root).expect("cleanup");
@@ -483,7 +529,13 @@ mod tests {
 
         let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
         let before = cache.fingerprint_before_read(&key);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Hello")],
+            &[],
+            before,
+        );
         assert!(cache.is_empty(), "young files must not be cached");
         assert!(cache.get(&key).is_none());
 
@@ -511,7 +563,13 @@ mod tests {
         // guard alone would not catch it.
         write_aged(&source, "const a = 999999\n");
 
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Stale")], before);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Stale")],
+            &[],
+            before,
+        );
         assert!(
             cache.is_empty(),
             "a file edited between read and insert must not be cached"
@@ -543,7 +601,13 @@ mod tests {
         // Extraction takes long enough for the window to pass before the insert.
         std::thread::sleep(RACY_WINDOW + Duration::from_millis(100));
 
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Hello")],
+            &[],
+            before,
+        );
         assert!(
             cache.is_empty(),
             "a file that was young when it was read must not be cached"
@@ -562,7 +626,13 @@ mod tests {
 
         let mut cache = ExtractCache::load(&root.join("cache.json"), "root-one", true);
         let before = cache.fingerprint_before_read(&key);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Hello")],
+            &[],
+            before,
+        );
         assert_eq!(cache.len(), 1);
 
         // Same stamp: entries survive.
@@ -576,7 +646,13 @@ mod tests {
         assert!(cache.get(&key).is_none());
 
         let before = cache.fingerprint_before_read(&key);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Hello")],
+            &[],
+            before,
+        );
         cache.reset_if_request_differs("root-two", &options(true));
         assert_eq!(cache.len(), 1, "matching requests keep their entries");
         cache.reset_if_request_differs("root-two", &options(false));
@@ -605,7 +681,7 @@ mod tests {
         for path in [&first, &second, &dropped] {
             let key = path.to_string_lossy().into_owned();
             let before = cache.fingerprint_before_read(&key);
-            cache.insert(key, "file.tsx".to_owned(), &[record("Hello")], before);
+            cache.insert(key, "file.tsx".to_owned(), &[record("Hello")], &[], before);
         }
         assert_eq!(cache.len(), 3);
 
@@ -657,7 +733,13 @@ mod tests {
 
         let mut cache = ExtractCache::disabled();
         let before = cache.fingerprint_before_read(&key);
-        cache.insert(key.clone(), "a.tsx".to_owned(), &[record("Hello")], before);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Hello")],
+            &[],
+            before,
+        );
         assert!(cache.get(&key).is_none());
         assert!(!cache.is_dirty());
 

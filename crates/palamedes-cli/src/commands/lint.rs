@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    analyze_source_with_options, SourceAnalysisOptions, SourceDiagnostic, SourceDiagnosticSeverity,
-    SourceRange,
+    analyze_source_file_cached, default_cache_path, ExtractCache, ExtractCatalogMessagesOptions,
+    SourceDiagnostic, SourceDiagnosticSeverity, SourceRange,
 };
 use serde::Serialize;
 
@@ -32,6 +32,9 @@ pub struct LintOptions {
     /// Fail on error or warning diagnostics.
     #[arg(long, default_value = "error")]
     fail_on: LintFailOn,
+    /// Ignore and do not write the shared source-analysis cache.
+    #[arg(long)]
+    no_cache: bool,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -40,7 +43,7 @@ enum LintFailOn {
     Warning,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LintResult {
     diagnostics: Vec<SourceDiagnostic>,
@@ -48,14 +51,14 @@ pub struct LintResult {
     summary: LintSummary,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LintFileFailure {
     file: String,
     message: String,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LintSummary {
     files: usize,
@@ -80,9 +83,20 @@ impl Command for LintOptions {
         let mut diagnostics = Vec::new();
         let mut failed_files = Vec::new();
         let mut suppressed = 0usize;
-        let analysis_options = SourceAnalysisOptions {
+        let analysis_options = ExtractCatalogMessagesOptions {
+            reference_scopes: config.reference_scopes,
             mdx: config.mdx.clone(),
             rules: config.lint.rules.clone().into(),
+        };
+        let cache_path = default_cache_path(&config.root_dir);
+        let mut cache = if self.no_cache || !config.extract_cache {
+            ExtractCache::disabled()
+        } else {
+            ExtractCache::load_with_options(
+                &cache_path,
+                &config.source_reference_root.to_string_lossy(),
+                &analysis_options,
+            )
         };
 
         for path in &files {
@@ -97,7 +111,13 @@ impl Command for LintOptions {
                     continue;
                 }
             };
-            match analyze_source_with_options(&source, &filename, &analysis_options) {
+            match analyze_source_file_cached(
+                &path.to_string_lossy(),
+                &filename,
+                &config.source_reference_root.to_string_lossy(),
+                &analysis_options,
+                &mut cache,
+            ) {
                 Ok(result) => {
                     let (mut file_diagnostics, file_suppressed) =
                         apply_suppressions(&source, &filename, result.diagnostics);
@@ -110,6 +130,13 @@ impl Command for LintOptions {
                 }),
             }
         }
+
+        let cache_keys = files
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        cache.retain_paths(&cache_keys.iter().map(String::as_str).collect());
+        let _ = cache.save(&cache_path);
 
         diagnostics.sort_by(|left, right| {
             (
@@ -222,6 +249,7 @@ fn severity_name(severity: SourceDiagnosticSeverity) -> &'static str {
 struct Suppression {
     line: usize,
     code: String,
+    primary: SourceRange,
 }
 
 fn apply_suppressions(
@@ -230,14 +258,27 @@ fn apply_suppressions(
     diagnostics: Vec<SourceDiagnostic>,
 ) -> (Vec<SourceDiagnostic>, usize) {
     let (suppressions, mut suppression_diagnostics) = parse_suppressions(source, filename);
+    let mut used = vec![false; suppressions.len()];
     let mut suppressed = 0usize;
     for diagnostic in diagnostics {
-        if suppressions.iter().any(|suppression| {
+        if let Some(index) = suppressions.iter().position(|suppression| {
             suppression.line == diagnostic.primary.line && suppression.code == diagnostic.code
         }) {
+            used[index] = true;
             suppressed += 1;
         } else {
             suppression_diagnostics.push(diagnostic);
+        }
+    }
+    for (suppression, used) in suppressions.into_iter().zip(used) {
+        if !used {
+            suppression_diagnostics.push(suppression_diagnostic(
+                filename,
+                suppression.primary,
+                "pmds/unused-suppression",
+                &format!("Unused suppression for `{}`.", suppression.code),
+                "Remove the directive or move it to the exact line that emits this diagnostic.",
+            ));
         }
     }
     (suppression_diagnostics, suppressed)
@@ -292,6 +333,7 @@ fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<So
                     suppressions.push(Suppression {
                         line: line_index + 1 + line_delta,
                         code: code.to_owned(),
+                        primary: range.clone(),
                     });
                 } else {
                     diagnostics.push(suppression_diagnostic(
@@ -366,6 +408,7 @@ function View({ status }) {
             config: None,
             json: false,
             fail_on: LintFailOn::Error,
+            no_cache: true,
         }
         .run(&Context::with_cwd(&app))
         .expect("run lint");
@@ -387,6 +430,108 @@ function View({ status }) {
     }
 
     #[test]
+    fn lint_discovers_all_supported_source_extensions() {
+        let app = temp_dir("source-lint-extensions");
+        fs::create_dir_all(app.join("src")).expect("create source dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/app
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        for extension in ["js", "ts", "jsx", "tsx"] {
+            fs::write(
+                app.join(format!("src/source.{extension}")),
+                "export const value = 1\n",
+            )
+            .expect("write source");
+        }
+        fs::write(app.join("src/guide.mdx"), "# Hello\n").expect("write MDX");
+
+        let output = LintOptions {
+            config: None,
+            json: false,
+            fail_on: LintFailOn::Error,
+            no_cache: true,
+        }
+        .run(&Context::with_cwd(&app))
+        .expect("run lint");
+
+        assert_eq!(output.summary.files, 5);
+        assert!(output.failed_files.is_empty());
+        fs::remove_dir_all(app).expect("cleanup");
+    }
+
+    #[test]
+    fn lint_reports_unused_suppressions() {
+        let source =
+            "// palamedes-lint-disable-next-line pmds/no-placeholder-only-message\nconst ok = 1\n";
+        let (diagnostics, suppressed) = super::apply_suppressions(source, "view.tsx", Vec::new());
+        assert_eq!(suppressed, 0);
+        assert_eq!(diagnostics[0].code, "pmds/unused-suppression");
+    }
+
+    #[test]
+    fn cached_and_uncached_json_results_are_byte_equivalent() {
+        let app = temp_dir("source-lint-cache");
+        fs::create_dir_all(app.join("src")).expect("create source dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/app
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let source = app.join("src/view.tsx");
+        fs::write(
+            &source,
+            r#"import { t } from "@palamedes/core/macro";
+function View({ status }) { return <p>{t`${status}`}</p>; }
+"#,
+        )
+        .expect("write source");
+        let aged = std::time::SystemTime::now() - std::time::Duration::from_secs(10);
+        fs::File::options()
+            .write(true)
+            .open(&source)
+            .expect("open source")
+            .set_modified(aged)
+            .expect("age source");
+
+        let context = Context::with_cwd(&app);
+        let cached = LintOptions {
+            config: None,
+            json: true,
+            fail_on: LintFailOn::Error,
+            no_cache: false,
+        }
+        .run(&context)
+        .expect("cached lint");
+        let cold = LintOptions {
+            config: None,
+            json: true,
+            fail_on: LintFailOn::Error,
+            no_cache: true,
+        }
+        .run(&context)
+        .expect("uncached lint");
+
+        assert_eq!(
+            serde_json::to_vec(&cached).expect("cached json"),
+            serde_json::to_vec(&cold).expect("uncached json")
+        );
+        assert!(app.join(".palamedes/extract-cache.json").exists());
+        fs::remove_dir_all(app).expect("cleanup");
+    }
+
+    #[test]
     fn warning_threshold_fails_after_building_the_result() {
         let mut result = super::LintResult {
             diagnostics: Vec::new(),
@@ -398,6 +543,7 @@ function View({ status }) {
             config: None,
             json: false,
             fail_on: LintFailOn::Warning,
+            no_cache: true,
         };
 
         assert!(options.verdict(&result).is_err());
