@@ -105,6 +105,7 @@ console.log(po.headers.Language)
 - `compileCatalogModule(config, resourcePath, options)`
 - `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
+- `analyzeSourceNative(source, filename, mdxOptions?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
@@ -131,6 +132,11 @@ mapping to the native Ferrocat-backed API internally.
 `analyzeMdxNative` uses the same FerroMark-backed semantic workflow as native
 catalog extraction. It returns extracted messages, structured source-ranged
 diagnostics, React or Solid JSX, compiled message IDs, and a source map.
+
+`analyzeSourceNative` is the shared JS, TS, JSX, TSX, and MDX authoring entry
+point. It returns extracted messages plus deterministic diagnostics with a
+stable code, lowercase severity, filename, exact UTF-8 byte range, one-based
+line and Unicode-scalar column, actionable help, and an optional related range.
 
 `compileCatalogModule(config, resourcePath, options)` is the direct module
 rendering API used by the first-party Vite, Next, and Remix `.po` loaders. Pass

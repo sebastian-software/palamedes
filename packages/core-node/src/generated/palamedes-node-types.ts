@@ -373,6 +373,25 @@ export interface ParsedPoFile {
   headerOrder: Array<string>;
   items: Array<ParsedPoItem>;
 }
+export interface NativeSourceRange {
+  start: number;
+  end: number;
+  line: number;
+  column: number;
+}
+export interface NativeSourceDiagnostic {
+  code: string;
+  severity: string;
+  file: string;
+  primary: NativeSourceRange;
+  message: string;
+  help: string;
+  related?: NativeSourceRange;
+}
+export interface NativeSourceAnalysisResult {
+  messages: Array<NativeExtractedMessage>;
+  diagnostics: Array<NativeSourceDiagnostic>;
+}
 export interface NativeTransformOptions {
   runtimeModule?: string;
   runtimeImportName?: string;
@@ -422,5 +441,6 @@ export interface NativeBindings {
   analyzeMdx(source: string, filename: string, options?: NativeMdxOptions | undefined | null): NativeMdxAnalysisResult;
   getNativeInfo(): NativeInfo;
   parsePo(source: string): ParsedPoFile;
+  analyzeSource(source: string, filename: string, mdx?: NativeMdxOptions | undefined | null): NativeSourceAnalysisResult;
   transformMacros(source: string, filename: string, options?: NativeTransformOptions | undefined | null): NativeTransformResult;
 }

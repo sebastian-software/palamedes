@@ -15,6 +15,7 @@ use crate::extract::ExtractedMessageRecord;
 use crate::icu_text::{compiled_message_key, escape_icu_literal, escape_icu_source_literal};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
+use crate::source::{SourceLocator, SourceRange};
 use crate::transform::NativeTransformSourceMap;
 
 const DEFAULT_IGNORE_DIRECTIVE: &str = "palamedes-ignore";
@@ -110,19 +111,8 @@ impl MdxOptions {
     }
 }
 
-/// Source range with an exact UTF-8 byte span and one-based start location.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MdxSourceRange {
-    /// Inclusive start byte.
-    pub start: usize,
-    /// Exclusive end byte.
-    pub end: usize,
-    /// One-based source line.
-    pub line: usize,
-    /// One-based Unicode scalar column.
-    pub column: usize,
-}
+/// Backward-compatible name for the shared source diagnostic range.
+pub type MdxSourceRange = SourceRange;
 
 /// Structured source-ranged MDX diagnostic.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -240,13 +230,7 @@ fn diagnostic_record(locator: &SourceLocator, diagnostic: MdxDiagnostic) -> MdxD
 }
 
 fn source_range(locator: &SourceLocator, range: Range) -> MdxSourceRange {
-    let (line, column) = locator.location(range.start_usize());
-    MdxSourceRange {
-        start: range.start_usize(),
-        end: range.end_usize(),
-        line,
-        column,
-    }
+    locator.range(range.start_usize(), range.end_usize())
 }
 
 #[derive(Debug)]
@@ -272,7 +256,7 @@ struct MdxCompiler<'a> {
     filename: &'a str,
     options: MdxOptions,
     link_references: &'a [ferromark::LinkRefDef],
-    locator: SourceLocator,
+    locator: SourceLocator<'a>,
     body: ModuleWriter,
     esm: Vec<(usize, String)>,
     messages: Vec<ExtractedMessageRecord>,
@@ -1794,33 +1778,6 @@ fn generated_position(source: &str) -> (usize, usize) {
     let line = source.bytes().filter(|byte| *byte == b'\n').count();
     let column_source = source.rsplit_once('\n').map_or(source, |(_, tail)| tail);
     (line, column_source.encode_utf16().count())
-}
-
-struct SourceLocator {
-    line_starts: Vec<usize>,
-}
-
-impl SourceLocator {
-    fn new(source: &str) -> Self {
-        let mut line_starts = vec![0];
-        for (index, byte) in source.bytes().enumerate() {
-            if byte == b'\n' {
-                line_starts.push(index + 1);
-            }
-        }
-        Self { line_starts }
-    }
-
-    fn location(&self, offset: usize) -> (usize, usize) {
-        let line_index = match self.line_starts.binary_search(&offset) {
-            Ok(index) => index,
-            Err(index) => index.saturating_sub(1),
-        };
-        (
-            line_index + 1,
-            offset.saturating_sub(self.line_starts[line_index]) + 1,
-        )
-    }
 }
 
 fn source_position_utf16(source: &str, offset: usize) -> (usize, usize) {

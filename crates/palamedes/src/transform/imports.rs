@@ -1,22 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::source_macros::record_macro_import_declaration;
+pub(super) use crate::source_macros::ImportedMacro;
 use oxc_ast::ast::{
     BindingIdentifier, IdentifierReference, ImportDeclaration, ImportDeclarationSpecifier,
     ImportOrExportKind, JSXIdentifier,
 };
 use oxc_ast_visit::{walk, Visit};
-
-pub(super) const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
-    "@palamedes/core/macro",
-    "@palamedes/react/macro",
-    "@palamedes/solid/macro",
-];
-
-#[derive(Debug, Clone)]
-pub(super) struct ImportedMacro {
-    pub imported_name: String,
-    pub source: String,
-}
 
 pub(super) struct ImportCollector {
     runtime_module: String,
@@ -71,31 +61,12 @@ impl<'a> Visit<'a> for ImportCollector {
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         let source = it.source.value.as_str();
 
-        if PALAMEDES_MACRO_PACKAGES.contains(&source) {
-            self.macro_import_ranges
-                .push((it.span.start as usize, it.span.end as usize));
-
-            if let Some(specifiers) = &it.specifiers {
-                for specifier in specifiers {
-                    if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
-                        let imported_name = specifier.imported.name().to_string();
-                        if matches!(imported_name.as_str(), "msg" | "defineMessage")
-                            && self.removed_macro_import.is_none()
-                        {
-                            self.removed_macro_import =
-                                Some((imported_name.clone(), it.span.start as usize));
-                        }
-                        self.macro_imports.insert(
-                            specifier.local.name.to_string(),
-                            ImportedMacro {
-                                imported_name,
-                                source: source.to_string(),
-                            },
-                        );
-                    }
-                }
-            }
-        }
+        record_macro_import_declaration(
+            it,
+            &mut self.macro_imports,
+            &mut self.removed_macro_import,
+            Some(&mut self.macro_import_ranges),
+        );
 
         if source == self.runtime_module && it.import_kind == ImportOrExportKind::Value {
             if let Some(specifiers) = &it.specifiers {
