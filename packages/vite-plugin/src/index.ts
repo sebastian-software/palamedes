@@ -295,6 +295,21 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     return createHash("sha256").update(sourceId).digest("hex").slice(0, 12)
   }
 
+  /*
+   * Register a module's message set and append the import of its generated
+   * sidecar. Appending keeps native source maps valid; imports hoist anyway.
+   * Both the macro transform and MDX compilation route through here, so MDX
+   * content splits exactly like `t`/`Trans` call sites do.
+   */
+  function withSidecarImport(code: string, sourceId: string, compiledIds: string[]): string {
+    if (!graphSplitting || compiledIds.length === 0) {
+      return code
+    }
+    const key = sidecarKey(sourceId)
+    sidecarModules.set(key, { sourceId, compiledIds })
+    return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`
+  }
+
   async function getConfigLazy() {
     if (!config) {
       config = await loadPalamedesConfig(configLoaderOptions)
@@ -521,7 +536,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         return {
-          code: result.code,
+          code: withSidecarImport(result.code, cleanId, result.compiledIds),
           map: result.map,
           ...((mdx.framework ?? "react") === "react" ? { moduleType: "jsx" as const } : {}),
         }
@@ -595,18 +610,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return null
         }
 
-        if (graphSplitting && result.compiledIds.length > 0) {
-          const key = sidecarKey(cleanId)
-          sidecarModules.set(key, { sourceId: cleanId, compiledIds: result.compiledIds })
-          return {
-            // Appending keeps the native source map valid; imports hoist anyway.
-            code: `${result.code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`,
-            map: result.map as any,
-          }
-        }
-
         return {
-          code: result.code,
+          code: withSidecarImport(result.code, cleanId, result.compiledIds),
           map: result.map as any,
         }
       } catch (error) {
@@ -665,12 +670,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       return selected
     }
 
-    function splitLocales(cfg: LoadedPalamedesConfig): string[] {
-      // Pseudo-locale catalogs are generated, not stored; the selected
-      // compile has no pseudo path yet. Split mode skips them for now.
-      return cfg.locales.filter((candidate) => candidate !== cfg.pseudoLocale)
-    }
-
     plugins.push({
       name: "palamedes:message-sidecars",
 
@@ -697,6 +696,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
       },
 
+      /*
+       * Sidecars are generated modules: they carry compiled messages but have
+       * no import edge to the catalog they came from, so the dev server does
+       * not know a `.po` edit concerns them and translated UI would keep
+       * showing stale messages until a restart. Invalidate them here instead.
+       *
+       * Every sidecar of a changed catalog is invalidated rather than only
+       * those whose ids actually moved: deciding that needs a before/after
+       * diff of the catalog, and re-rendering a handful of small generated
+       * modules is cheaper than keeping that state correct.
+       */
       async load(id, loadOptions) {
         if (!id.startsWith(RESOLVED_MESSAGES_PREFIX)) {
           return null
@@ -713,7 +723,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         const cfg = await getConfigLazy()
         this.addWatchFile(cfg.configPath)
-        const locales = splitLocales(cfg)
+        const locales = cfg.locales
 
         if (locale === undefined) {
           const ssr =
@@ -777,7 +787,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         const cfg = await getConfigLazy()
-        const locales = splitLocales(cfg)
+        const locales = cfg.locales
         const importMaps = new Map<string, Record<string, string>>(
           locales.map((locale) => [locale, {}])
         )
