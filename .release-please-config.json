@@ -182,6 +182,11 @@
         },
         {
           "type": "json",
+          "path": "packages/eslint-plugin/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "packages/extractor/package.json",
           "jsonpath": "$.version"
         },

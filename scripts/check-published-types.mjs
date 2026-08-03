@@ -40,6 +40,7 @@ function checkProgram(fileName, compilerOptions) {
 try {
   mkdirSync(scopeDirectory, { recursive: true })
   linkPackage("core")
+  linkPackage("eslint-plugin")
   linkPackage("next-plugin")
   linkPackage("vite-plugin")
 
@@ -47,6 +48,7 @@ try {
   writeFileSync(
     esmFixture,
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
+import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
 import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
 
@@ -59,6 +61,8 @@ export const lengths = [
 
 export default withPalamedes({})
 export const vitePlugins = [vitePalamedes(), palamedes()]
+export const lintPlugin = palamedesLint
+export const lintConfig = palamedesLintConfigs.recommended
 `
   )
   checkProgram(esmFixture, {
