@@ -55,6 +55,13 @@ catalogs:
 
 Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure the active i18n instance is available on both the client and the server before translated code executes.
 
+For translated Client Components, pair the request-local server setup below
+with `createClientCatalogBoundary()` from `@palamedes/react/client`. The
+boundary loads only the requested generated catalog module, makes it available
+to its descendants on their first hydration render, and publishes committed
+changes to the shared client runtime. It does not serialize executable catalog
+functions or require an inline bootstrap script.
+
 Catalog storage can be PO or FCL in `palamedes.yaml`, but the current Next
 loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
 future adapter release explicitly documents `.fcl` imports.
@@ -97,10 +104,34 @@ function DownstreamServerTitle() {
 }
 
 export default async function Page() {
-  await createActiveServerI18n()
-  return <DownstreamServerTitle />
+  const { locale } = await createActiveServerI18n()
+  return (
+    <ClientCatalogBoundary locale={locale}>
+      <DownstreamServerTitle />
+      <TranslatedClientContent />
+    </ClientCatalogBoundary>
+  )
 }
 ```
+
+Create the boundary in a separate Client Component module so Next can see the
+locale import context:
+
+```tsx
+"use client"
+
+import { createClientCatalogBoundary } from "@palamedes/react/client"
+
+export const ClientCatalogBoundary = createClientCatalogBoundary<"en" | "de">({
+  loadCatalog: (locale) => import(`../locales/${locale}.po`),
+})
+```
+
+Only `locale` and the optional string/number `catalogRevision` cross the RSC
+boundary. The generated catalog remains executable module code in its own
+chunk, which preserves the parser-free runtime and lets Turbopack omit inactive
+locale catalogs from the initial client bundle. Change `catalogRevision` to
+refresh the active locale's contents without changing the locale.
 
 Do not call `setServerI18nGetter()` inside every Server Component render. Create
 one server scope at module level, activate it during request-local server

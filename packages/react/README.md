@@ -92,8 +92,9 @@ primitives that repeat across apps:
 - building render-ready locale switch models for buttons, links, or forms
 
 `useClientLocale` does not run its sync callback during SSR. If the initial HTML
-contains translated client components, initialize `setClientI18n()` before
-hydration; all hook-driven locale synchronization happens after commit.
+contains translated client components, use `createClientCatalogBoundary()` for
+generated catalogs or initialize `setClientI18n()` before hydration. All
+hook-driven locale synchronization happens after commit.
 
 ```tsx
 import { buildLocaleSwitchItems } from "@palamedes/react"
@@ -125,6 +126,56 @@ function LocaleToolbar({
   )
 }
 ```
+
+## Render-Safe Client Catalogs
+
+Next.js App Router applications can keep generated catalogs in per-locale
+chunks while giving translated Client Components the right catalog on their
+first hydration render. Define the boundary once in a `"use client"` module:
+
+```tsx
+"use client"
+
+import { createClientCatalogBoundary } from "@palamedes/react/client"
+
+type Locale = "en" | "de"
+
+export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
+  loadCatalog: (locale) => import(`../locales/${locale}.po`),
+})
+```
+
+Then render it from the Server Component after activating the same request
+locale through `@palamedes/runtime/server`:
+
+```tsx
+const { locale } = await createActiveServerI18n()
+
+return (
+  <ClientCatalogBoundary locale={locale}>
+    <TranslatedClientContent />
+  </ClientCatalogBoundary>
+)
+```
+
+The dynamic import keeps executable generated messages in a module chunk; they
+are not serialized through React Server Components. The boundary suspends
+hydration until that one module is available, creates a scoped parser-free i18n
+instance, and only bridges it to `setClientI18n()` after commit. A discarded
+concurrent render can load a module, but cannot activate it or notify runtime
+subscribers.
+
+Pass a changed `catalogRevision` string or number when the contents can refresh
+without a locale change. The boundary will request a fresh resource and publish
+the new instance after that render commits. The loader receives the revision as
+its second argument, so version-aware sources can select fresh contents while
+ordinary static imports can ignore it. Because this path uses module loading
+rather than inline scripts, JSON source, or `eval`, it works with strict Content
+Security Policies and with executable generated catalogs.
+
+A rejected dynamic import is thrown to the nearest React error boundary. A
+module without a generated, branded `messages` export fails through the
+parser-free Core loader instead of silently falling back to runtime parsing.
 
 ## License
 

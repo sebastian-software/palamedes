@@ -9,6 +9,7 @@ import {
   getServerI18nSnapshot,
   subscribeReactiveI18n,
 } from "./clientStore"
+import { useScopedClientI18n } from "./clientScope"
 
 /**
  * React-aware replacement for `@palamedes/runtime`'s `getI18n`.
@@ -19,8 +20,9 @@ import {
  * implementation instead.
  */
 function useReactiveI18n<T extends I18nInstance = I18nInstance>(): T {
+  const scopedI18n = useScopedClientI18n<T>()
   useSyncExternalStore(subscribeReactiveI18n, getReactiveI18nSnapshot, getServerI18nSnapshot)
-  return getRuntimeI18n<T>()
+  return scopedI18n ?? getRuntimeI18n<T>()
 }
 
 /*

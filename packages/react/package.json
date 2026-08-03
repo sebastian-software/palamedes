@@ -68,7 +68,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.tsx src/runtime.test.ts && node --test scripts/exports.test.mjs",
+    "test": "vitest run --globals src/index.test.tsx src/runtime.test.ts src/clientCatalog.test.tsx src/clientCatalogServer.test.tsx && node --test scripts/exports.test.mjs",
     "stub": "unbuild --stub"
   },
   "engines": {
