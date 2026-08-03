@@ -52,6 +52,9 @@ import type {
   NativeMdxFramework as GeneratedNativeMdxFramework,
   NativeMdxOptions as GeneratedNativeMdxOptions,
   NativeMdxSourceRange as GeneratedNativeMdxSourceRange,
+  NativeSourceAnalysisResult as GeneratedNativeSourceAnalysisResult,
+  NativeSourceDiagnostic as GeneratedNativeSourceDiagnostic,
+  NativeSourceRange as GeneratedNativeSourceRange,
   NativeTransformEdit as GeneratedNativeTransformEdit,
   NativeTransformOptions as GeneratedNativeTransformOptions,
   NativeTransformResult as GeneratedNativeTransformResult,
@@ -178,6 +181,19 @@ export type MdxSourceRange = GeneratedNativeMdxSourceRange
 export type MdxDiagnostic = GeneratedNativeMdxDiagnostic
 export type MdxAnalysisResult = Omit<GeneratedNativeMdxAnalysisResult, "messages"> & {
   messages: NativeExtractedMessage[]
+}
+
+export type SourceRange = GeneratedNativeSourceRange
+export type SourceDiagnosticSeverity = "error" | "warning" | "info"
+export type SourceDiagnostic = Omit<GeneratedNativeSourceDiagnostic, "severity"> & {
+  severity: SourceDiagnosticSeverity
+}
+export type SourceAnalysisResult = Omit<
+  GeneratedNativeSourceAnalysisResult,
+  "messages" | "diagnostics"
+> & {
+  messages: NativeExtractedMessage[]
+  diagnostics: SourceDiagnostic[]
 }
 
 export type NativeTransformOptions = GeneratedNativeTransformOptions
@@ -647,6 +663,19 @@ export function extractMessagesNative(
   options?: MdxOptions
 ): NativeExtractedMessage[] {
   return mapExtractedMessages(native.extractMessages(source, filename, toNativeMdxOptions(options)))
+}
+
+export function analyzeSourceNative(
+  source: string,
+  filename: string,
+  options?: MdxOptions
+): SourceAnalysisResult {
+  const result = native.analyzeSource(source, filename, toNativeMdxOptions(options))
+  return {
+    ...result,
+    messages: mapExtractedMessages(result.messages),
+    diagnostics: result.diagnostics as SourceDiagnostic[],
+  }
 }
 
 export function analyzeMdxNative(

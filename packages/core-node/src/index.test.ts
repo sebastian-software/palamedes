@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import {
   analyzeMdxNative,
+  analyzeSourceNative,
   compileCatalogArtifact,
   compileCatalogModule,
   extractMessagesNative,
@@ -39,6 +40,29 @@ describe("@palamedes/core-node", () => {
 
     expect(info.palamedesVersion).toMatch(/^\d+\.\d+\.\d+/)
     expect(info.ferrocatVersion).toMatch(/^\d+\.\d+\.\d+/)
+  })
+
+  it("analyzes extracted messages and source diagnostics through one native contract", () => {
+    const source = `import { t as translate } from "@palamedes/core/macro";
+function Greeting({ name }: { name: string }) {
+  return translate\`Hello \${name}\`;
+}`
+    const result = analyzeSourceNative(source, "greeting.tsx")
+
+    expect(result.messages).toHaveLength(1)
+    expect(result.messages[0]?.message).toBe("Hello {name}")
+    expect(result.diagnostics).toStrictEqual([])
+  })
+
+  it("maps MDX structural failures to the shared source diagnostic schema", () => {
+    const result = analyzeSourceNative("# Good\n\n<Component\n", "broken.mdx")
+
+    expect(result.messages).toStrictEqual([])
+    expect(result.diagnostics[0]).toMatchObject({
+      severity: "error",
+      file: "broken.mdx",
+      primary: { line: 3, column: 1 },
+    })
   })
 
   it("renders executable catalog modules from in-memory messages", () => {

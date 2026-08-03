@@ -17,15 +17,17 @@ use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
 };
-use crate::mdx::{extract_mdx_messages, MdxOptions};
+use crate::mdx::{analyze_mdx, MdxOptions};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
+use crate::source::{SourceAnalysisResult, SourceDiagnostic, SourceDiagnosticSeverity};
+use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, BindingPattern, CallExpression, Declaration, Expression, ImportDeclaration,
-    ImportDeclarationSpecifier, JSXAttributeValue, JSXChild, JSXElement, JSXExpression,
-    JSXOpeningElement, MemberExpression, ObjectExpression, ObjectPropertyKind,
-    TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
+    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, MemberExpression,
+    ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression, TemplateLiteral,
+    VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -33,11 +35,6 @@ use oxc_span::{GetSpan, SourceType};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
-    "@palamedes/core/macro",
-    "@palamedes/react/macro",
-    "@palamedes/solid/macro",
-];
 type ChoiceOptions = Vec<(String, String)>;
 const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
 
@@ -45,11 +42,6 @@ struct ExtractedChoiceOptions {
     options: ChoiceOptions,
     placeholders: BTreeMap<String, String>,
     offset: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-struct ImportedMacro {
-    imported_name: String,
 }
 
 /// Extracted source-first message record emitted by the JS/TS/MDX extractor.
@@ -189,28 +181,12 @@ impl MacroCollector {
 
 impl<'a> Visit<'a> for MacroCollector {
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
-        let source = it.source.value.as_str();
-        if !PALAMEDES_MACRO_PACKAGES.contains(&source) {
-            return;
-        }
-
-        if let Some(specifiers) = &it.specifiers {
-            for specifier in specifiers {
-                if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
-                    let imported_name = specifier.imported.name().to_string();
-                    if matches!(imported_name.as_str(), "msg" | "defineMessage")
-                        && self.removed_macro_import.is_none()
-                    {
-                        self.removed_macro_import =
-                            Some((imported_name.clone(), it.span.start as usize));
-                    }
-                    self.imported_macros.insert(
-                        specifier.local.name.to_string(),
-                        ImportedMacro { imported_name },
-                    );
-                }
-            }
-        }
+        record_macro_import_declaration(
+            it,
+            &mut self.imported_macros,
+            &mut self.removed_macro_import,
+            None,
+        );
     }
 }
 
@@ -1344,6 +1320,38 @@ pub fn extract_messages_with_mdx_options(
     extract_messages_in(&allocator, source, filename, true, mdx_options)
 }
 
+/// Analyze one JavaScript, TypeScript, JSX, TSX, or MDX source file.
+///
+/// Extraction and non-type-aware source diagnostics share one native parse and
+/// Palamedes macro classification. Parse failures and unsupported macro syntax
+/// remain fatal errors.
+///
+/// # Errors
+///
+/// Returns an error when JavaScript or TypeScript cannot be parsed, or when the
+/// source uses non-extractable Palamedes authoring syntax. MDX structural
+/// diagnostics are returned in the structured result to stay compatible with
+/// [`crate::analyze_mdx`].
+pub fn analyze_source(source: &str, filename: &str) -> PalamedesResult<SourceAnalysisResult> {
+    analyze_source_with_mdx_options(source, filename, &MdxOptions::default())
+}
+
+/// Analyze one source file with explicit MDX semantics.
+///
+/// JavaScript and TypeScript analysis is unaffected by `mdx_options`.
+///
+/// # Errors
+///
+/// Returns an error under the same conditions as [`analyze_source`].
+pub fn analyze_source_with_mdx_options(
+    source: &str,
+    filename: &str,
+    mdx_options: &MdxOptions,
+) -> PalamedesResult<SourceAnalysisResult> {
+    let allocator = Allocator::default();
+    analyze_source_in(&allocator, source, filename, true, mdx_options)
+}
+
 /*
  * Extraction against a caller-owned arena. A fresh Allocator per file means a
  * fresh set of bump chunks from the system allocator per file, and on a 1500
@@ -1358,16 +1366,64 @@ fn extract_messages_in(
     reference_scopes: bool,
     mdx_options: &MdxOptions,
 ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
-    if Path::new(filename)
+    let result = analyze_source_in(allocator, source, filename, reference_scopes, mdx_options)?;
+
+    if is_mdx_filename(filename) && !result.diagnostics.is_empty() {
+        let messages = result
+            .diagnostics
+            .iter()
+            .map(|diagnostic| {
+                format!(
+                    "{}:{}:{}: {} ({})",
+                    filename,
+                    diagnostic.primary.line,
+                    diagnostic.primary.column,
+                    diagnostic.message,
+                    diagnostic.code
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(PalamedesError::ParseModuleSource {
+            filename: filename.to_owned(),
+            messages,
+        });
+    }
+
+    Ok(result.messages)
+}
+
+fn is_mdx_filename(filename: &str) -> bool {
+    Path::new(filename)
         .extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("mdx"))
-    {
-        return extract_mdx_messages(source, filename, mdx_options.clone()).map_err(|messages| {
-            PalamedesError::ParseModuleSource {
-                filename: filename.to_owned(),
-                messages,
-            }
+}
+
+fn analyze_source_in(
+    allocator: &Allocator,
+    source: &str,
+    filename: &str,
+    reference_scopes: bool,
+    mdx_options: &MdxOptions,
+) -> PalamedesResult<SourceAnalysisResult> {
+    if is_mdx_filename(filename) {
+        let result = analyze_mdx(source, filename, mdx_options.clone());
+        return Ok(SourceAnalysisResult {
+            messages: result.messages,
+            diagnostics: result
+                .diagnostics
+                .into_iter()
+                .map(|diagnostic| SourceDiagnostic {
+                    code: diagnostic.code,
+                    severity: SourceDiagnosticSeverity::Error,
+                    file: filename.to_owned(),
+                    primary: diagnostic.primary,
+                    message: diagnostic.message,
+                    help: "Fix the MDX syntax at the highlighted source range.".to_owned(),
+                    related: diagnostic.related,
+                })
+                .collect(),
         });
     }
 
@@ -1403,7 +1459,10 @@ fn extract_messages_in(
         && collector.removed_macro_import.is_none()
         && !source.contains("i18n")
     {
-        return Ok(Vec::new());
+        return Ok(SourceAnalysisResult {
+            messages: Vec::new(),
+            diagnostics: Vec::new(),
+        });
     }
 
     let line_locator = LineLocator::new(source);
@@ -1436,7 +1495,10 @@ fn extract_messages_in(
         return Err(error);
     }
 
-    Ok(extractor.messages)
+    Ok(SourceAnalysisResult {
+        messages: extractor.messages,
+        diagnostics: Vec::new(),
+    })
 }
 
 /// Extracts and aggregates source-first catalog update messages from files.
@@ -1898,13 +1960,16 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::{
-        extract_catalog_messages_cached, extract_catalog_messages_from_files,
-        extract_catalog_messages_from_files_with_options, extract_messages as extract_messages_raw,
-        resolve_extract_threads, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
-        ExtractedMessageRecord, DEFAULT_EXTRACT_THREADS,
+        analyze_source, analyze_source_with_mdx_options, extract_catalog_messages_cached,
+        extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
+        extract_messages as extract_messages_raw, resolve_extract_threads,
+        ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractedMessageRecord,
+        DEFAULT_EXTRACT_THREADS,
     };
     use crate::error::PalamedesResult;
     use crate::extract_cache::ExtractCache;
+    use crate::mdx::MdxOptions;
+    use crate::source::SourceDiagnosticSeverity;
     use crate::test_support::scope_macro_test_source;
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -1914,6 +1979,45 @@ mod tests {
         filename: &str,
     ) -> PalamedesResult<Vec<ExtractedMessageRecord>> {
         extract_messages_raw(&scope_macro_test_source(source, filename), filename)
+    }
+
+    #[test]
+    fn shared_source_analysis_returns_extracted_messages_and_diagnostics() {
+        let source = scope_macro_test_source(
+            r#"import { t as translate } from "@palamedes/core/macro";
+function Greeting({ name }: { name: string }) {
+  return translate`Hello ${name}`;
+}
+"#,
+            "test.tsx",
+        );
+
+        let result = analyze_source(&source, "test.tsx").expect("analyze source");
+
+        assert_eq!(result.messages.len(), 1);
+        assert_eq!(result.messages[0].message, "Hello {name}");
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn shared_source_analysis_maps_mdx_errors_to_the_common_diagnostic_shape() {
+        let result = analyze_source_with_mdx_options(
+            "# Intro\n\n<Component\n",
+            "guide.mdx",
+            &MdxOptions::default(),
+        )
+        .expect("MDX diagnostics are structured results");
+
+        assert!(result.messages.is_empty());
+        assert_eq!(result.diagnostics.len(), 1);
+        let diagnostic = &result.diagnostics[0];
+        assert_eq!(diagnostic.file, "guide.mdx");
+        assert_eq!(diagnostic.severity, SourceDiagnosticSeverity::Error);
+        assert!(!diagnostic.code.is_empty());
+        assert!(!diagnostic.message.is_empty());
+        assert!(!diagnostic.help.is_empty());
+        assert!(diagnostic.primary.line >= 1);
+        assert!(diagnostic.primary.column >= 1);
     }
 
     #[test]
