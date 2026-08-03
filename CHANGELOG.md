@@ -80,6 +80,35 @@
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.11.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.10.0...palamedes-v1.11.0) (2026-08-03)
+
+
+### Features
+
+* **cli:** host binary plugins in Rust ([#512](https://github.com/sebastian-software/palamedes/issues/512)) ([138ff22](https://github.com/sebastian-software/palamedes/commit/138ff22001f795a92cb0ca3cfb1c7182e99b5552))
+* **examples:** bind react-router-cookie locales through import maps ([c297b6d](https://github.com/sebastian-software/palamedes/commit/c297b6d47c0f4ccdcb9786f3bdfd65af3526aeeb))
+* **examples:** preload mapped message assets from the stream injector ([58077e1](https://github.com/sebastian-software/palamedes/commit/58077e15ce2842bc4c36abc63bb46e61e3991d71))
+* **examples:** run the MDX example on graph splitting ([1162a4f](https://github.com/sebastian-software/palamedes/commit/1162a4f773aa61838a9a6cacae83a2d7c1bccf81))
+* **examples:** split react-router-cookie messages along the route graph ([34eea1a](https://github.com/sebastian-software/palamedes/commit/34eea1a83ca13b2ef49c6105a8316e1dceb756dd))
+* **next:** add render-safe client catalog bootstrap ([#509](https://github.com/sebastian-software/palamedes/issues/509)) ([e6904f1](https://github.com/sebastian-software/palamedes/commit/e6904f16907cbf9cc77bdf240774ca9407233390))
+* **runtime:** buffer generated message registrations ([ce858d6](https://github.com/sebastian-software/palamedes/commit/ce858d6b33edbc6d930f45b14cd3fe023f48a640))
+* **vite-plugin:** experimental graph splitting for messages ([c886e55](https://github.com/sebastian-software/palamedes/commit/c886e55c2d9579bb77f8f030c425578305c977b2))
+* **vite-plugin:** import-map locale binding for graph splitting ([8d06fc5](https://github.com/sebastian-software/palamedes/commit/8d06fc59284bb39758c9129348bb87c866f8e06e))
+* **vite-plugin:** record chunk message imports in the split manifest ([26d60d3](https://github.com/sebastian-software/palamedes/commit/26d60d3bc2b003d34f835b4bad4fb612db037a4f))
+* **vite-plugin:** split MDX messages and stop skipping the pseudo locale ([23be99e](https://github.com/sebastian-software/palamedes/commit/23be99ebf408da35760f4cfad5a76142966b384b))
+
+
+### Bug Fixes
+
+* **runtime:** resolve server-side getI18n without a React hook ([89b4263](https://github.com/sebastian-software/palamedes/commit/89b4263ee7143080f9c4c08da458d19b105ff0fa))
+* **transform:** avoid runtime import collisions ([#498](https://github.com/sebastian-software/palamedes/issues/498)) ([9192916](https://github.com/sebastian-software/palamedes/commit/9192916c529e87eb1fc6a98cf9a9213e4a3ac5db))
+
+
+### Performance Improvements
+
+* **runtime:** keep generated browser bundles parser-free ([84c2fa3](https://github.com/sebastian-software/palamedes/commit/84c2fa3d002e39e7c4159486090846f52ed18700))
+* **runtime:** precompile generated catalog messages ([6f5c55f](https://github.com/sebastian-software/palamedes/commit/6f5c55f6ec86337fec3115269dbe1d91d2ec679b))
+
 ## [1.10.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.9.0...palamedes-v1.10.0) (2026-07-31)
 
 
