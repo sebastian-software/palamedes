@@ -1,25 +1,18 @@
 //! `pmds lint` — non-mutating Palamedes source-authoring diagnostics.
 
 use std::collections::BTreeSet;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
     analyze_source_file_cached, default_cache_path, ExtractCache, ExtractCatalogMessagesOptions,
-    SourceDiagnostic, SourceDiagnosticSeverity, SourceRange,
+    SourceDiagnostic, SourceDiagnosticSeverity, SourceRange, SOURCE_DIAGNOSTIC_CODES,
 };
 use serde::Serialize;
 
 use crate::command::{render_json, Command, Context};
 use crate::commands::extract::sources::{collect_source_files, sort_and_dedupe_paths};
 use crate::error::CliError;
-
-const KNOWN_DIAGNOSTIC_CODES: &[&str] = &[
-    "pmds/no-placeholder-only-message",
-    "pmds/no-empty-component-only-message",
-    "pmds/prefer-trans-in-jsx",
-];
 
 #[derive(Debug, Args)]
 pub struct LintOptions {
@@ -101,16 +94,6 @@ impl Command for LintOptions {
 
         for path in &files {
             let filename = display_source_path(path, &config.root_dir);
-            let source = match fs::read_to_string(path) {
-                Ok(source) => source,
-                Err(error) => {
-                    failed_files.push(LintFileFailure {
-                        file: filename,
-                        message: error.to_string(),
-                    });
-                    continue;
-                }
-            };
             match analyze_source_file_cached(
                 &path.to_string_lossy(),
                 &filename,
@@ -120,7 +103,7 @@ impl Command for LintOptions {
             ) {
                 Ok(result) => {
                     let (mut file_diagnostics, file_suppressed) =
-                        apply_suppressions(&source, &filename, result.diagnostics);
+                        apply_suppressions(&result.source, &filename, result.analysis.diagnostics);
                     diagnostics.append(&mut file_diagnostics);
                     suppressed += file_suppressed;
                 }
@@ -329,7 +312,7 @@ fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<So
                 continue;
             }
             for code in codes {
-                if KNOWN_DIAGNOSTIC_CODES.contains(&code) {
+                if SOURCE_DIAGNOSTIC_CODES.contains(&code) {
                     suppressions.push(Suppression {
                         line: line_index + 1 + line_delta,
                         code: code.to_owned(),

@@ -213,6 +213,31 @@ impl ExtractCache {
         ))
     }
 
+    /// Returns an entry only when `path` stayed unchanged across a caller-owned read.
+    pub(crate) fn get_after_read(
+        &self,
+        path: &str,
+        before: Option<ReadStartFingerprint>,
+    ) -> Option<(String, Vec<ExtractedMessageRecord>, Vec<SourceDiagnostic>)>
+    where
+        ExtractedMessageRecord: Clone,
+    {
+        if !self.enabled {
+            return None;
+        }
+        let before = before?;
+        let entry = self.entries.get(path)?;
+        let current = FileFingerprint::read(Path::new(path))?;
+        if current != before.fingerprint || current != entry.fingerprint {
+            return None;
+        }
+        Some((
+            entry.relative_file.clone(),
+            entry.messages.clone(),
+            entry.diagnostics.clone(),
+        ))
+    }
+
     /// Identity of `path` before its contents are read, or `None` when the cache
     /// is disabled and the `stat` would be wasted.
     pub(crate) fn fingerprint_before_read(&self, path: &str) -> Option<ReadStartFingerprint> {
@@ -445,6 +470,33 @@ mod tests {
         write_aged(&source, "const a = 22222\n");
         assert!(cache.get(&key).is_none());
 
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn misses_when_a_file_changes_during_a_caller_owned_read() {
+        let root = temp_root("changed-during-read");
+        std::fs::create_dir_all(&root).expect("root");
+        let source = root.join("a.tsx");
+        write_aged(&source, "const a = 1\n");
+        let key = source.to_string_lossy().into_owned();
+
+        let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
+        let cached_read = cache.fingerprint_before_read(&key);
+        cache.insert(
+            key.clone(),
+            "a.tsx".to_owned(),
+            &[record("Hello")],
+            &[],
+            cached_read,
+        );
+
+        let before = cache.fingerprint_before_read(&key);
+        let read_source = std::fs::read_to_string(&source).expect("read source");
+        assert_eq!(read_source, "const a = 1\n");
+        write_aged(&source, "const a = 22222\n");
+
+        assert!(cache.get_after_read(&key, before).is_none());
         std::fs::remove_dir_all(root).expect("cleanup");
     }
 

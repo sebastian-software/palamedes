@@ -103,7 +103,9 @@ pub use runtime_message::{
 };
 pub use source::{
     SourceAnalysisOptions, SourceAnalysisResult, SourceDiagnostic, SourceDiagnosticSeverity,
-    SourceRange, SourceRuleLevel, SourceRuleOptions,
+    SourceFileAnalysisResult, SourceRange, SourceRuleLevel, SourceRuleOptions,
+    SOURCE_DIAGNOSTIC_CODES, SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
+    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
 };
 pub use transform::{
     transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,

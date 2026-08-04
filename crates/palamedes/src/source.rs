@@ -3,6 +3,21 @@ use serde::{Deserialize, Serialize};
 use crate::extract::ExtractedMessageRecord;
 use crate::mdx::MdxOptions;
 
+/// Diagnostic code for messages made only of runtime placeholders.
+pub const SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE: &str =
+    "pmds/no-placeholder-only-message";
+/// Diagnostic code for messages made only of one empty component placeholder.
+pub const SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE: &str =
+    "pmds/no-empty-component-only-message";
+/// Diagnostic code for JSX render positions where `<Trans>` may be clearer.
+pub const SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX: &str = "pmds/prefer-trans-in-jsx";
+/// All diagnostic codes emitted by built-in source-authoring rules.
+pub const SOURCE_DIAGNOSTIC_CODES: &[&str] = &[
+    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE,
+    SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
+    SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
+];
+
 /// Source range with an exact UTF-8 byte span and one-based start location.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -125,6 +140,15 @@ pub struct SourceAnalysisResult {
     pub messages: Vec<ExtractedMessageRecord>,
     /// Source-authoring diagnostics in deterministic source order.
     pub diagnostics: Vec<SourceDiagnostic>,
+}
+
+/// Source text and structured result produced by one cached file analysis.
+#[derive(Debug)]
+pub struct SourceFileAnalysisResult {
+    /// Exact source text used for both analysis and caller-side suppressions.
+    pub source: String,
+    /// Messages and diagnostics derived from `source`.
+    pub analysis: SourceAnalysisResult,
 }
 
 /// Byte-offset to source-location index shared by source analyzers.

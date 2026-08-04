@@ -21,7 +21,9 @@ use crate::mdx::{analyze_mdx, MdxOptions};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
 use crate::source::{
     SourceAnalysisOptions, SourceAnalysisResult, SourceDiagnostic, SourceDiagnosticSeverity,
-    SourceLocator, SourceRange, SourceRuleOptions,
+    SourceFileAnalysisResult, SourceLocator, SourceRange, SourceRuleOptions,
+    SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
+    SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
 };
 use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
 use crate::translation_scope::validate_translation_macro_scopes;
@@ -230,7 +232,7 @@ struct ExtractionVisitor<'a> {
     diagnostics: Vec<SourceDiagnostic>,
     error: Option<PalamedesError>,
     scope_stack: Vec<String>,
-    jsx_parent_stack: Vec<String>,
+    jsx_parent_stack: Vec<&'a str>,
     renderable_t_spans: HashSet<(usize, usize)>,
     reference_scopes: bool,
 }
@@ -292,7 +294,7 @@ impl<'a> ExtractionVisitor<'a> {
         if !facts.has_literal_text() && facts.has_value_placeholder() {
             if let Some(severity) = self.rules.placeholder_only.severity() {
                 self.diagnostics.push(SourceDiagnostic {
-                    code: "pmds/no-placeholder-only-message".to_owned(),
+                    code: SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE.to_owned(),
                     severity,
                     file: self.filename.clone(),
                     primary: facts.range,
@@ -308,7 +310,7 @@ impl<'a> ExtractionVisitor<'a> {
         if facts.is_one_empty_component() {
             if let Some(severity) = self.rules.empty_component_only.severity() {
                 self.diagnostics.push(SourceDiagnostic {
-                    code: "pmds/no-empty-component-only-message".to_owned(),
+                    code: SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE.to_owned(),
                     severity,
                     file: self.filename.clone(),
                     primary: facts.range,
@@ -334,7 +336,7 @@ impl<'a> ExtractionVisitor<'a> {
             _ => "the active UI framework",
         };
         self.diagnostics.push(SourceDiagnostic {
-            code: "pmds/prefer-trans-in-jsx".to_owned(),
+            code: SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX.to_owned(),
             severity,
             file: self.filename.clone(),
             primary: self.source_locator.range(start, end),
@@ -346,9 +348,9 @@ impl<'a> ExtractionVisitor<'a> {
         });
     }
 
-    fn walk_jsx_element_children(&mut self, element: &JSXElement<'a>, tag_name: Option<&str>) {
+    fn walk_jsx_element_children(&mut self, element: &JSXElement<'a>, tag_name: Option<&'a str>) {
         if let Some(tag_name) = tag_name {
-            self.jsx_parent_stack.push(tag_name.to_owned());
+            self.jsx_parent_stack.push(tag_name);
             walk::walk_jsx_element(self, element);
             self.jsx_parent_stack.pop();
         } else {
@@ -359,7 +361,7 @@ impl<'a> ExtractionVisitor<'a> {
     fn current_jsx_parent_allows_trans(&self) -> bool {
         !self.jsx_parent_stack.iter().any(|parent| {
             is_restricted_trans_parent(parent)
-                || self.imported_macros.get(parent).is_some_and(|macro_info| {
+                || self.imported_macros.get(*parent).is_some_and(|macro_info| {
                     matches!(
                         macro_info.imported_name.as_str(),
                         "Trans" | "Plural" | "Select" | "SelectOrdinal"
@@ -464,10 +466,10 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             self.walk_jsx_element_children(it, None);
             return;
         };
-        let tag_name = tag_name.as_str().to_owned();
+        let tag_name = tag_name.as_str();
 
         if let Some(macro_name) = self
-            .imported_macro_name(&tag_name, &["Trans", "Plural", "Select", "SelectOrdinal"])
+            .imported_macro_name(tag_name, &["Trans", "Plural", "Select", "SelectOrdinal"])
             .map(str::to_string)
         {
             if let Some(nested_start) =
@@ -513,10 +515,14 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             }
         }
 
-        self.walk_jsx_element_children(it, Some(&tag_name));
+        self.walk_jsx_element_children(it, Some(tag_name));
     }
 
     fn visit_jsx_child(&mut self, it: &JSXChild<'a>) {
+        if self.rules.prefer_trans_in_jsx.severity().is_none() {
+            walk::walk_jsx_child(self, it);
+            return;
+        }
         if let JSXChild::ExpressionContainer(container) = it {
             if self.current_jsx_parent_allows_trans() {
                 if let Some(expression) = container.expression.as_expression() {
@@ -1712,9 +1718,10 @@ pub fn analyze_source_with_options(
 
 /// Analyze one source file while reusing the cache shared with batch extraction.
 ///
-/// A compatible cache hit skips both reading and parsing. The stored messages
-/// retain the configured extraction semantics, while diagnostics are rewritten
-/// to `filename` on return so callers can choose project-relative display paths.
+/// The source is read exactly once so callers can apply suppressions to the same
+/// text that was analyzed. A compatible cache hit still skips parsing. Stored
+/// diagnostics are rewritten to `filename` on return so callers can choose
+/// project-relative display paths.
 ///
 /// # Errors
 ///
@@ -1727,23 +1734,26 @@ pub fn analyze_source_file_cached(
     root_dir: &str,
     options: &ExtractCatalogMessagesOptions,
     cache: &mut ExtractCache,
-) -> PalamedesResult<SourceAnalysisResult> {
+) -> PalamedesResult<SourceFileAnalysisResult> {
     cache.reset_if_request_differs(root_dir, options);
-    if let Some((_relative_file, messages, diagnostics)) = cache.get(path) {
-        return Ok(analysis_with_display_filename(
-            SourceAnalysisResult {
-                messages,
-                diagnostics,
-            },
-            filename,
-        ));
-    }
-
     let fingerprint = cache.fingerprint_before_read(path);
     let source = std::fs::read_to_string(path).map_err(|source| PalamedesError::ReadFile {
         path: PathBuf::from(path),
         source,
     })?;
+    if let Some((_relative_file, messages, diagnostics)) = cache.get_after_read(path, fingerprint) {
+        return Ok(SourceFileAnalysisResult {
+            source,
+            analysis: analysis_with_display_filename(
+                SourceAnalysisResult {
+                    messages,
+                    diagnostics,
+                },
+                filename,
+            ),
+        });
+    }
+
     let is_mdx = is_mdx_filename(path);
     let analysis = if !is_mdx && !source.contains("@palamedes") && !source.contains("i18n") {
         SourceAnalysisResult {
@@ -1773,7 +1783,10 @@ pub fn analyze_source_file_cached(
         &analysis.diagnostics,
         fingerprint,
     );
-    Ok(analysis_with_display_filename(analysis, filename))
+    Ok(SourceFileAnalysisResult {
+        source,
+        analysis: analysis_with_display_filename(analysis, filename),
+    })
 }
 
 fn analysis_with_display_filename(
@@ -4073,9 +4086,10 @@ const message = t({ message })
         )
         .expect("uncached analysis");
 
+        assert_eq!(cached.source, uncached.source);
         assert_eq!(
-            serde_json::to_vec(&cached).expect("serialize cached"),
-            serde_json::to_vec(&uncached).expect("serialize uncached"),
+            serde_json::to_vec(&cached.analysis).expect("serialize cached"),
+            serde_json::to_vec(&uncached.analysis).expect("serialize uncached"),
             "cached and uncached analysis must be byte-for-byte equivalent"
         );
         fs::remove_dir_all(root).expect("cleanup");
