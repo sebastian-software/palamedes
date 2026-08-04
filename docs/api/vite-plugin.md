@@ -26,6 +26,7 @@ interface PalamedesPluginOptions {
   failOnMissing?: boolean
   failOnCompileError?: boolean
   framework?: "react" | "solid" | "none"
+  localeSwitching?: "reload" | "live"
   runtimeModule?: string
   keepSourceFallbacks?: boolean
   mdx?: PalamedesMdxConfig | false
@@ -40,16 +41,19 @@ Defaults:
 - `failOnMissing`: `false`
 - `failOnCompileError`: `false`
 - `framework`: `"react"`
-- `runtimeModule`: derived from `framework`
+- `localeSwitching`: `"reload"`
+- `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true` during `vite serve`, `false` during `vite build`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 
-`framework` states which UI framework the app compiles for. It selects the
-reactive runtime for the macro transform — so inline `t` / `plural` follow a
-live locale switch, see [Locale strategies](../locale-strategies.md) — and the
+`framework` states which UI framework the app compiles for and selects the
 component contract for generated MDX modules. Solid apps must set
-`framework: "solid"`; `"none"` restores the framework-agnostic runtime.
+`framework: "solid"`.
 
+`localeSwitching: "reload"` keeps macro and generated MDX runtime lookups on
+the plain, hook-free getter. Set `localeSwitching: "live"` when client-side
+locale navigation must update inline `t` / `plural` calls; this selects the
+framework's reactive runtime. See [Locale strategies](../locale-strategies.md).
 `runtimeModule` overrides only the macro transform's module path.
 
 `keepSourceFallbacks` applies to both macro transforms and generated MDX.
@@ -59,9 +63,7 @@ renders. They also omit translator comments and context metadata from runtime
 descriptors. Set `keepSourceFallbacks` to `true` when production must retain
 readable source-message fallbacks.
 
-Generated MDX modules are independent: they already default to the framework's
-reactive runtime subpath, because their frontmatter, image alt text, and
-translated attributes call `getI18n()` directly. Override that with
+Generated MDX modules follow `localeSwitching` unless they set
 `mdx.runtime-module` in `palamedes.yaml` or `mdx.runtimeModule` on the plugin.
 
 With `failOnMissing: true`, compiled MDX IDs are checked against every target

@@ -14,6 +14,7 @@ import {
   PALAMEDES_MACRO_PACKAGES,
   resolveMacroRuntimeModule,
   type PalamedesFramework,
+  type PalamedesLocaleSwitching,
 } from "@palamedes/transform"
 
 const require = createRequire(import.meta.url)
@@ -130,17 +131,24 @@ export type WithPalamedesOptions = {
   failOnCompileError?: boolean
 
   /**
-   * UI framework this app compiles for. Next.js is always React, so this only
-   * exists to opt out with `"none"` — inline `t` / `plural` then stop
-   * following a live locale switch.
+   * UI framework this app compiles for. Next.js is always React, so this is
+   * mainly exposed for advanced integrations and explicit overrides.
    * @default "react"
    */
   framework?: PalamedesFramework
 
   /**
-   * Module to import the runtime getter from. Overrides the module derived
-   * from `framework`.
-   * @default derived from `framework`
+   * Locale changes reload the document by default, keeping inline macros
+   * hook-free. Set `"live"` only when the whole application is designed to
+   * react to in-document locale changes.
+   * @default "reload"
+   */
+  localeSwitching?: PalamedesLocaleSwitching
+
+  /**
+   * Module to import the runtime getter from. Overrides `localeSwitching` and
+   * `framework` runtime selection.
+   * @default "@palamedes/runtime"
    */
   runtimeModule?: string
 
@@ -238,12 +246,13 @@ export function withPalamedes(
     failOnMissing = false,
     failOnCompileError = false,
     framework = "react",
+    localeSwitching = "reload",
     runtimeModule: explicitRuntimeModule,
     keepSourceFallbacks: explicitKeepSourceFallbacks,
     workspaceRoot: explicitWorkspaceRoot,
   } = options
 
-  const runtimeModule = resolveMacroRuntimeModule(framework, explicitRuntimeModule)
+  const runtimeModule = resolveMacroRuntimeModule(framework, explicitRuntimeModule, localeSwitching)
   const keepSourceFallbacks = explicitKeepSourceFallbacks ?? process.env.NODE_ENV !== "production"
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
   const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)

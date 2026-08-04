@@ -34,8 +34,8 @@ function ensureSubscribed(): void {
  * memo, or the thunks the macro transform emits for `t`/`plural`) subscribes that
  * scope to client locale switches, so the output re-renders in the new locale.
  *
- * Wire it up by pointing the Palamedes transform at this module:
- * `palamedes({ runtimeModule: "@palamedes/solid/runtime" })`.
+ * Wire it up through the explicit live-switching policy:
+ * `palamedes({ framework: "solid", localeSwitching: "live" })`.
  */
 export function getI18n<T extends I18nInstance = I18nInstance>(): T {
   ensureSubscribed()

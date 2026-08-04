@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
-import { startTransition, useState } from "react"
+import { startTransition, Suspense, useState } from "react"
 import { hydrateRoot } from "react-dom/client"
 import { renderToString } from "react-dom/server"
-import { act, render } from "@testing-library/react"
+import { act, render, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { defineCompiledCatalog } from "@palamedes/core/compiled"
-import { getClientI18nSnapshot, resetI18nRuntime, subscribeClientI18n } from "@palamedes/runtime"
+import {
+  getClientI18nSnapshot,
+  getI18n as getRuntimeI18n,
+  resetI18nRuntime,
+  subscribeClientI18n,
+} from "@palamedes/runtime"
 
-import { createClientCatalogBoundary } from "./client"
+import { createClientCatalogBoundary, createReloadClientCatalogBoundary } from "./client"
 import { Trans } from "./compiled"
 import { getI18n } from "./runtime"
 
@@ -215,5 +220,85 @@ describe("createClientCatalogBoundary", () => {
 
     expect(loadCatalog).toHaveBeenCalledOnce()
     expect(loadCatalog).toHaveBeenCalledWith("en", undefined)
+  })
+})
+
+describe("createReloadClientCatalogBoundary", () => {
+  afterEach(() => {
+    resetI18nRuntime()
+    document.documentElement.lang = ""
+  })
+
+  it("initializes the hook-free getter before the first client render", async () => {
+    document.documentElement.lang = "de"
+    const de = deferred<CatalogModule>()
+    const loadCatalog = vi.fn(() => de.promise)
+    const Boundary = createReloadClientCatalogBoundary<Locale>({
+      loadCatalog,
+      resolveClientLocale: () => document.documentElement.lang as Locale,
+    })
+    const renderedLocales: string[] = []
+
+    function HookFreeGreeting() {
+      const i18n = getRuntimeI18n()
+      renderedLocales.push(i18n.locale)
+      return <span>{String(i18n._("greeting"))}</span>
+    }
+
+    let view!: ReturnType<typeof render>
+    await act(async () => {
+      view = render(
+        <Suspense fallback={<span>Loading</span>}>
+          <Boundary locale="de">
+            <HookFreeGreeting />
+          </Boundary>
+        </Suspense>
+      )
+    })
+
+    expect(view.container.textContent).toBe("Loading")
+    expect(renderedLocales).toStrictEqual([])
+    expect(loadCatalog).toHaveBeenCalledOnce()
+    expect(loadCatalog).toHaveBeenCalledWith("de", undefined)
+
+    await act(async () => {
+      de.resolve(catalog("Hallo"))
+      await de.promise
+    })
+
+    expect(getClientI18nSnapshot()).toMatchObject({ revision: 1 })
+    await waitFor(() => expect(view.container.textContent).toBe("Hallo"))
+
+    expect(renderedLocales).toStrictEqual(["de"])
+    expect(getClientI18nSnapshot()).toMatchObject({ revision: 1 })
+
+    view.rerender(
+      <Suspense fallback={<span>Loading</span>}>
+        <Boundary locale="de">
+          <HookFreeGreeting />
+        </Boundary>
+      </Suspense>
+    )
+
+    expect(getClientI18nSnapshot()).toMatchObject({ revision: 1 })
+    expect(loadCatalog).toHaveBeenCalledOnce()
+  })
+
+  it("fails fast when a render tries to change the document locale", async () => {
+    document.documentElement.lang = "en"
+    const Boundary = createReloadClientCatalogBoundary<Locale>({
+      loadCatalog: () => fulfilled(catalog("Hello")),
+      resolveClientLocale: () => document.documentElement.lang as Locale,
+    })
+
+    await expect(
+      act(async () => {
+        render(
+          <Boundary locale="de">
+            <span>Mismatch</span>
+          </Boundary>
+        )
+      })
+    ).rejects.toThrow(/Perform a document navigation to change locale/)
   })
 })

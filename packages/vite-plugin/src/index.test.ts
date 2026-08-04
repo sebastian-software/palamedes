@@ -160,20 +160,25 @@ describe("palamedes vite plugin", () => {
     }
   )
 
-  it("keeps the macro runtime module out of MDX options", async () => {
+  it("keeps generated MDX hook-free in reload mode", async () => {
     mocks.analyzeMdxNative.mockClear()
     await runMdxTransform({}, { runtimeModule: "@acme/macro-runtime" })
 
-    /*
-     * The macro option is an opt-in that swaps a framework-agnostic default for
-     * a reactive one. MDX already defaults to the framework's reactive runtime,
-     * so inheriting the macro target would silently downgrade it.
-     */
     const mdxOptions = mocks.analyzeMdxNative.mock.calls[0]?.[2] as
       | Record<string, unknown>
       | undefined
     expect(mdxOptions).toBeDefined()
-    expect(mdxOptions).not.toHaveProperty("runtimeModule")
+    expect(mdxOptions).toHaveProperty("runtimeModule", "@palamedes/runtime")
+  })
+
+  it("opts generated MDX into the framework runtime in live mode", async () => {
+    await runMdxTransform({}, { framework: "solid", localeSwitching: "live" })
+
+    expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
+      "# Welcome",
+      "/repo/src/guide.mdx",
+      expect.objectContaining({ runtimeModule: "@palamedes/solid/runtime" })
+    )
   })
 
   it("lets MDX configuration set its own runtime module", async () => {
@@ -356,8 +361,8 @@ describe("palamedes vite plugin", () => {
   })
 
   it.each([
-    ["react", undefined, "@palamedes/react/runtime"],
-    ["solid", "solid", "@palamedes/solid/runtime"],
+    ["react", undefined, "@palamedes/runtime"],
+    ["solid", "solid", "@palamedes/runtime"],
     ["none", "none", "@palamedes/runtime"],
   ] as const)(
     "derives the macro runtime module for %s",
@@ -371,6 +376,32 @@ describe("palamedes vite plugin", () => {
       )
     }
   )
+
+  it.each([
+    ["react", undefined, "@palamedes/react/runtime"],
+    ["solid", "solid", "@palamedes/solid/runtime"],
+  ] as const)(
+    "opts %s macros into live locale switching",
+    (_label, framework, expectedRuntimeModule) => {
+      runMacroTransform(
+        framework === undefined
+          ? { localeSwitching: "live" }
+          : { framework, localeSwitching: "live" }
+      )
+
+      expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.objectContaining({ runtimeModule: expectedRuntimeModule })
+      )
+    }
+  )
+
+  it("rejects live switching without a framework or custom runtime", () => {
+    expect(() => palamedes({ framework: "none", localeSwitching: "live" })).toThrow(
+      /requires framework="react" or framework="solid"/
+    )
+  })
 
   it("lets an explicit runtime module override the framework default", () => {
     runMacroTransform({ framework: "react", runtimeModule: "@acme/custom-runtime" })

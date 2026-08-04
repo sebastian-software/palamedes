@@ -255,11 +255,12 @@ the browser only needs one locale at a time. That gives bundlers a chance to
 split catalogs into per-locale chunks.
 
 The `nextjs-route` example combines that import with
-`createClientCatalogBoundary()` from `@palamedes/react/client`. The boundary
-holds hydration until the requested module is ready, serves a scoped i18n
-instance during the first translated Client Component render, and activates
-the shared client runtime only after commit. It therefore needs neither the
-old inline locale bootstrap nor static imports of every catalog.
+`createReloadClientCatalogBoundary()` from `@palamedes/react/client`. The
+boundary begins loading the document locale before hydration, holds hydration
+until the module is ready, and initializes the hook-free runtime before any
+translated Client Component renders. Its locale links deliberately use full
+document navigation, so it needs neither live hooks nor static imports of every
+catalog.
 
 Static imports are still useful for tiny demos or server-only modules, but they
 make every imported locale reachable from that module. In copied app code with

@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { buildLocaleSwitchItems } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import type { Locale } from "@/lib/i18n"
@@ -24,7 +23,7 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
       </span>
       <div className="seg" role="group" aria-label="Language">
         {items.map((item) => (
-          <Link
+          <a
             key={item.locale}
             data-testid={item.testId}
             aria-current={item.active ? "page" : undefined}
@@ -34,7 +33,7 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
             }}
           >
             {item.locale.toUpperCase()}
-          </Link>
+          </a>
         ))}
       </div>
     </div>

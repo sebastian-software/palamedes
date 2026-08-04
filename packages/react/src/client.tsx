@@ -32,6 +32,11 @@ export type ClientCatalogBoundaryProps<TLocale extends string> = {
   catalogRevision?: ClientCatalogRevision
 }
 
+export type ReloadClientCatalogBoundaryProps<TLocale extends string> = {
+  children: ReactNode
+  locale: TLocale
+}
+
 export type CreateClientCatalogBoundaryOptions<TLocale extends string> = {
   /**
    * Keep each locale behind its own dynamic import so the bundler can emit a
@@ -44,7 +49,26 @@ export type CreateClientCatalogBoundaryOptions<TLocale extends string> = {
   ) => Promise<ClientCatalogModule>
 }
 
+export type CreateReloadClientCatalogBoundaryOptions<TLocale extends string> =
+  CreateClientCatalogBoundaryOptions<TLocale> & {
+    /**
+     * Resolve the locale already selected for this browser document. This is
+     * called once when the client module evaluates, before React hydrates.
+     */
+    resolveClientLocale: () => TLocale
+  }
+
 const DEFAULT_CATALOG_REVISION = Symbol("palamedes.defaultCatalogRevision")
+
+function createCatalogI18n<TLocale extends string>(
+  locale: TLocale,
+  catalog: ClientCatalogModule
+): CompiledPalamedesI18n {
+  const i18n = createI18n()
+  i18n.load(locale, catalog.messages)
+  i18n.activate(locale)
+  return i18n
+}
 
 /**
  * Create a render-safe client catalog boundary for generated catalogs.
@@ -88,10 +112,7 @@ export function createClientCatalogBoundary<TLocale extends string>({
       // A revision must replace the scoped instance even when an HMR-aware or
       // application loader resolves to a module object with stable identity.
       void catalogRevision
-      const scopedI18n = createI18n()
-      scopedI18n.load(locale, catalog.messages)
-      scopedI18n.activate(locale)
-      return scopedI18n
+      return createCatalogI18n(locale, catalog)
     }, [catalog, catalogRevision, locale])
 
     if (typeof window === "undefined") {
@@ -116,6 +137,70 @@ export function createClientCatalogBoundary<TLocale extends string>({
 
   ClientCatalogBoundary.displayName = "PalamedesClientCatalogBoundary"
   return ClientCatalogBoundary
+}
+
+/**
+ * Create a catalog boundary for applications whose locale is fixed for the
+ * lifetime of a browser document.
+ *
+ * The active locale starts loading when this client module evaluates. Before
+ * the resource resolves, the boundary suspends; when it resolves, the shared
+ * hook-free runtime is initialized before descendants can render or hydrate.
+ * Locale changes must perform a document navigation.
+ */
+export function createReloadClientCatalogBoundary<TLocale extends string>({
+  loadCatalog,
+  resolveClientLocale,
+}: CreateReloadClientCatalogBoundaryOptions<TLocale>) {
+  const serverResources = new Map<TLocale, Promise<ClientCatalogModule>>()
+  const clientLocale = typeof window === "undefined" ? undefined : resolveClientLocale()
+  const clientI18nResource =
+    clientLocale === undefined
+      ? undefined
+      : loadCatalog(clientLocale, undefined).then((catalog) =>
+          setClientI18n(createCatalogI18n(clientLocale, catalog))
+        )
+
+  function getServerCatalogResource(locale: TLocale): Promise<ClientCatalogModule> {
+    let resource = serverResources.get(locale)
+    if (!resource) {
+      resource = loadCatalog(locale, undefined)
+      serverResources.set(locale, resource)
+    }
+    return resource
+  }
+
+  function ReloadClientCatalogBoundary({
+    children,
+    locale,
+  }: ReloadClientCatalogBoundaryProps<TLocale>) {
+    const isClient = typeof window !== "undefined"
+    if (isClient && locale !== clientLocale) {
+      throw new Error(
+        `Palamedes reload catalog boundary received locale "${locale}", but this document was initialized for "${clientLocale}". Perform a document navigation to change locale.`
+      )
+    }
+
+    const resource = (isClient ? clientI18nResource! : getServerCatalogResource(locale)) as Promise<
+      ClientCatalogModule | CompiledPalamedesI18n
+    >
+    const catalogOrI18n = use(resource)
+    const i18n = useMemo<CompiledPalamedesI18n>(() => {
+      if (isClient) {
+        return catalogOrI18n as CompiledPalamedesI18n
+      }
+      return createCatalogI18n(locale, catalogOrI18n as ClientCatalogModule)
+    }, [catalogOrI18n, isClient, locale])
+
+    if (!isClient) {
+      activateServerI18n(i18n)
+    }
+
+    return children
+  }
+
+  ReloadClientCatalogBoundary.displayName = "PalamedesReloadClientCatalogBoundary"
+  return ReloadClientCatalogBoundary
 }
 
 export function useClientLocale<TLocale>(

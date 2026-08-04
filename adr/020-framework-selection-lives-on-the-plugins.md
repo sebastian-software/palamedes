@@ -1,75 +1,89 @@
-# ADR-020: Framework Selection Lives On The Plugins
+# ADR-020: Framework Selection And Locale Switching Are Separate
 
 **Status:** Accepted
 
 ## Context
 
-Two runtime getters exist. `@palamedes/runtime` exports a plain `getI18n()`.
-The framework subpaths wrap it: `@palamedes/react/runtime` bridges through
-`useSyncExternalStore`, `@palamedes/solid/runtime` through a signal. Both make
-inline `t` / `plural` output follow a live locale switch. `<Trans>` and friends
-subscribe on their own and never needed either.
+`@palamedes/runtime` exports a plain `getI18n()`. Framework runtime subpaths
+wrap it: `@palamedes/react/runtime` subscribes through
+`useSyncExternalStore`, while `@palamedes/solid/runtime` reads a signal. These
+bridges make inline `t` / `plural` output follow an in-document locale change.
 
-The macro transform therefore had a `runtimeModule` option defaulting to the
-framework-agnostic `@palamedes/runtime`, and every app that wanted live
-switching wrote the subpath by hand — seven of our own examples did.
+Palamedes 1.9 made a plugin's `framework` option select both the MDX component
+contract and the macro runtime. That removed manual module paths, but coupled
+two independent decisions. Selecting React implicitly turned every transformed
+`getI18n()` call in browser code into a hook, including calls in helpers,
+callbacks, and codebases whose locale only changes through a document
+navigation.
 
-MDX compilation then arrived with its own framework notion. Generated modules
-call `getI18n()` directly for frontmatter, image alt text, and translated
-attributes, so they must have the reactive runtime; `mdx.framework` in
-`palamedes.yaml` selected it and defaulted to React.
+That default optimized for a comparatively rare operation. Live locale
+switching is also a whole-application contract: non-React caches, memoized
+formatters, fetched data, and third-party components must all be locale-aware.
+Making macro calls reactive cannot guarantee that contract and can create a
+misleading partially reactive UI.
 
-That left two settings that look like one. Briefly the macro `runtimeModule`
-was made a fallback for MDX, which put the two defaults in conflict: an app
-pinning the macro target to `@palamedes/runtime` — the value our own README
-showed — silently downgraded its MDX modules, and a live locale switch stopped
-updating translated frontmatter with no error.
+Generated MDX still needs a framework component contract for rich messages,
+but its direct runtime lookups do not need subscriptions when locale changes
+reload the document.
 
 ## Decision
 
-Framework selection is a single `framework` option on the bundler plugins:
+Framework selection remains a plugin option:
 
 ```ts
 palamedes({ framework: "solid" })
 ```
 
-It derives the macro transform's runtime module and seeds the MDX component
-contract. `runtimeModule` remains as a narrow override for the macro path only,
-and `mdx.framework` remains as a per-config override for MDX only.
+It selects the React or Solid component contract for generated MDX. It does not
+implicitly opt transformed runtime lookups into framework reactivity.
 
-It does not move into `palamedes.yaml`. Extraction produces byte-identical
-messages for React and Solid — `MdxOptions::extraction_stamp()` deliberately
-omits `framework` for exactly this reason — so the catalog config has no reason
-to know. Sourcing it from the config would also force `@palamedes/next-plugin`
-and `@palamedes/remix` to load a config on their macro path, which they do not
-do today, reintroducing the configless-startup coupling we had just removed.
+Locale switching is a separate option:
 
-Defaults differ per plugin, because the safe assumption differs:
+```ts
+palamedes({ framework: "react", localeSwitching: "live" })
+```
 
-| Plugin                   | Default | Why                                                 |
-| ------------------------ | ------- | --------------------------------------------------- |
-| `@palamedes/vite-plugin` | `react` | React and Solid hosts; React is the common case     |
-| `@palamedes/next-plugin` | `react` | Next.js is React by construction                    |
-| `@palamedes/remix`       | `none`  | Remix 3 ships its own UI layer, no React dependency |
+`localeSwitching` has two values:
 
-`"none"` selects the framework-agnostic runtime for projects that are neither.
+- `"reload"` is the default and imports the plain `getI18n()` from
+  `@palamedes/runtime` for macros and generated MDX runtime access.
+- `"live"` imports the selected framework's reactive runtime. It requires
+  `framework: "react"` or `framework: "solid"`.
+
+An explicit macro `runtimeModule` remains an advanced escape hatch and wins
+over both options. `mdx.runtimeModule` remains the independent MDX override.
+
+Neither choice moves into `palamedes.yaml`. Extraction produces identical
+messages for React and Solid, and locale switching is application runtime
+policy rather than catalog data.
+
+Framework defaults still differ per plugin:
+
+| Plugin                   | Framework | Locale switching |
+| ------------------------ | --------- | ---------------- |
+| `@palamedes/vite-plugin` | `react`   | `reload`         |
+| `@palamedes/next-plugin` | `react`   | `reload`         |
+| `@palamedes/remix`       | `none`    | `reload`         |
 
 ## Consequences
 
-Apps stop naming runtime module paths: all seven examples that did now say
-`framework: "solid"` or nothing at all.
+The common path is hook-free again. A transformed macro is a normal getter
+call and is valid in component helpers, event handlers, route actions, and
+other non-hook contexts as long as the runtime has been initialized.
 
-React and Next apps become reactive by default. This is a behavior change for
-existing projects that relied on the neutral default, and is safe because the
-React subpath resolves to a hook-free implementation under the `react-server`
-condition.
+Applications that intentionally preserve the mounted tree across a locale
+change must opt in with `localeSwitching: "live"` and keep every
+locale-derived cache reactive or keyed by locale. The route examples that
+exercise client-side locale navigation make that choice explicit.
 
-Solid apps **must** set `framework: "solid"`. Under the previous neutral
-default a Solid app that set nothing still worked; under a React default it
-would pull React's runtime into the build. `examples/solidstart-cookie` was
-exactly that case and is updated in this change.
+Reload-oriented React applications can use
+`createReloadClientCatalogBoundary()`. It begins loading the document locale at
+client module evaluation, initializes the shared parser-free getter before
+descendants hydrate, and rejects a locale prop that differs from the document.
+`createClientCatalogBoundary()` remains available for commit-safe live locale
+navigation and same-locale catalog revisions.
 
-The cost is one asymmetry: three plugins, two defaults. It is documented at
-each option and pinned by tests, and it beats the alternative of either
-breaking Remix or making every React app configure what Palamedes already
-knows.
+This changes the plugin default introduced in Palamedes 1.9. Applications that
+depended on implicit live macro updates must add `localeSwitching: "live"`.
+Applications that never supported live switching lose framework subscriptions
+without changing their locale behavior.

@@ -55,12 +55,11 @@ catalogs:
 
 Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure the active i18n instance is available on both the client and the server before translated code executes.
 
-For translated Client Components, pair the request-local server setup below
-with `createClientCatalogBoundary()` from `@palamedes/react/client`. The
-boundary loads only the requested generated catalog module, makes it available
-to its descendants on their first hydration render, and publishes committed
-changes to the shared client runtime. It does not serialize executable catalog
-functions or require an inline bootstrap script.
+For translated Client Components in the recommended reload model, pair the
+request-local server setup below with `createReloadClientCatalogBoundary()`
+from `@palamedes/react/client`. The boundary loads only the document's generated
+catalog module and initializes the plain getter before descendants hydrate. It
+does not serialize executable catalog functions or require an inline script.
 
 Catalog storage can be PO or FCL in `palamedes.yaml`, but the current Next
 loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
@@ -120,18 +119,23 @@ locale import context:
 ```tsx
 "use client"
 
-import { createClientCatalogBoundary } from "@palamedes/react/client"
+import { createReloadClientCatalogBoundary } from "@palamedes/react/client"
 
-export const ClientCatalogBoundary = createClientCatalogBoundary<"en" | "de">({
+export const ClientCatalogBoundary = createReloadClientCatalogBoundary<"en" | "de">({
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
+  resolveClientLocale: () => {
+    const locale = document.documentElement.lang
+    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`)
+    return locale
+  },
 })
 ```
 
-Only `locale` and the optional string/number `catalogRevision` cross the RSC
-boundary. The generated catalog remains executable module code in its own
-chunk, which preserves the parser-free runtime and lets Turbopack omit inactive
-locale catalogs from the initial client bundle. Change `catalogRevision` to
-refresh the active locale's contents without changing the locale.
+Only `locale` crosses the RSC boundary. The generated catalog remains executable
+module code in its own chunk, which preserves the parser-free runtime and lets
+Turbopack omit inactive locale catalogs from the initial client bundle. Use
+`localeSwitching: "live"` with `createClientCatalogBoundary()` only when locale
+or catalog revisions intentionally change without a document navigation.
 
 Do not call `setServerI18nGetter()` inside every Server Component render. Create
 one server scope at module level, activate it during request-local server
@@ -157,6 +161,7 @@ module.exports = withPalamedes(
     failOnMissing: false,
     failOnCompileError: false,
     framework: "react",
+    localeSwitching: "reload",
     keepSourceFallbacks: undefined,
     workspaceRoot: undefined,
   }

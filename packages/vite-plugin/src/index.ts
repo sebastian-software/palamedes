@@ -29,6 +29,7 @@ import {
   mdxFrameworkFor,
   resolveMacroRuntimeModule,
   type PalamedesFramework,
+  type PalamedesLocaleSwitching,
 } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
@@ -189,20 +190,26 @@ export type PalamedesPluginOptions = {
   failOnCompileError?: boolean
 
   /**
-   * UI framework this app compiles for. Selects the reactive runtime for the
-   * macro transform and the component contract for generated MDX modules, so
-   * inline `t` / `plural` and MDX follow a live locale switch without naming
-   * module paths by hand. Use `"none"` for a project that is neither React nor
-   * Solid; inline macros then stop following a live switch.
+   * UI framework this app compiles for. Selects the component contract for
+   * generated MDX modules. Use `"none"` for a project that is neither React
+   * nor Solid.
    * @default "react"
    */
   framework?: PalamedesFramework
 
   /**
-   * Module the macro transform imports the runtime getter from. Overrides the
-   * module derived from `framework`. Generated MDX modules are not affected;
+   * Locale changes reload the document by default, keeping inline macros and
+   * generated MDX runtime access hook-free. Set `"live"` only when the whole
+   * application is designed to react to in-document locale changes.
+   * @default "reload"
+   */
+  localeSwitching?: PalamedesLocaleSwitching
+
+  /**
+   * Module the macro transform imports the runtime getter from. Overrides
+   * `localeSwitching` and `framework`. Generated MDX modules are not affected;
    * configure those through `mdx.runtimeModule`.
-   * @default derived from `framework`
+   * @default "@palamedes/runtime"
    */
   runtimeModule?: string
 
@@ -257,13 +264,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     failOnMissing = false,
     failOnCompileError = false,
     framework = "react",
+    localeSwitching = "reload",
     runtimeModule,
     keepSourceFallbacks,
     mdx: mdxOverride,
     experimentalGraphSplitting = false,
     ...configLoaderOptions
   } = options
-  const macroRuntimeModule = resolveMacroRuntimeModule(framework, runtimeModule)
+  const macroRuntimeModule = resolveMacroRuntimeModule(framework, runtimeModule, localeSwitching)
   const graphSplitting = experimentalGraphSplitting !== false
   const importMapBinding =
     typeof experimentalGraphSplitting === "object" &&
@@ -340,21 +348,19 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   }
 
   function resolveMdxOptions(cfg: LoadedPalamedesConfig): PalamedesMdxConfig {
-    /*
-     * The macro `runtimeModule` is deliberately not a fallback here. It is an
-     * override for one specific module path, while generated MDX modules
-     * already default to the framework's reactive runtime subpath. Letting the
-     * macro option leak in would silently downgrade MDX whenever a project
-     * pins the macro target.
-     *
-     * `framework` is different: it states which framework the app compiles
-     * for, which is exactly what MDX needs, so it seeds the MDX options and
-     * stays overridable per config and per call.
-     */
-    return {
+    const resolved = {
       ...(mdxFrameworkFor(framework) ? { framework: mdxFrameworkFor(framework) } : {}),
       ...cfg.mdx,
       ...mdxOverride,
+    }
+    if (resolved.runtimeModule) {
+      return resolved
+    }
+
+    const mdxFramework = resolved.framework ?? "react"
+    return {
+      ...resolved,
+      runtimeModule: resolveMacroRuntimeModule(mdxFramework, undefined, localeSwitching),
     }
   }
 

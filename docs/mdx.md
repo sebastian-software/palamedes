@@ -36,10 +36,11 @@ export default defineConfig({
 ```
 
 The plugin compiles for React unless told otherwise, so this option is required
-for Solid. It also selects the reactive runtime for macro `t` / `plural` calls,
-which is why it lives on the plugin rather than in `palamedes.yaml`: extraction
-produces identical messages for both frameworks, so the catalog config has no
-reason to know.
+for Solid. Framework selection controls the rich-component contract; runtime
+lookups stay hook-free unless the plugin also sets
+`localeSwitching: "live"`. Extraction produces identical messages for both
+frameworks, so the catalog config has no reason to know either application
+runtime choice.
 
 Do not add React's JSX module type for Solid. Rolldown would otherwise lower
 the module with React's automatic runtime before Solid's Babel preset sees it.
@@ -101,18 +102,18 @@ mdx:
   translatable-attributes: [alt, title, aria-label]
   front-matter-fields: [title, description]
   trans-module: "@palamedes/react/compiled"
-  runtime-module: "@palamedes/react/runtime"
+  runtime-module: "@palamedes/runtime"
   ignore-directive: palamedes-ignore
 ```
 
-| Field                     | Default                      | Purpose                                                     |
-| ------------------------- | ---------------------------- | ----------------------------------------------------------- |
-| `framework`               | `react`                      | Generates React or Solid rich-component bindings.           |
-| `translatable-attributes` | `[alt]`                      | Static JSX attributes extracted as standalone messages.     |
-| `front-matter-fields`     | `[]`                         | Scalar frontmatter values extracted as standalone messages. |
-| `trans-module`            | framework `/compiled` path   | Module exporting parser-free `Trans`.                       |
-| `runtime-module`          | framework `/runtime` subpath | Module exporting the reactive `getI18n`.                    |
-| `ignore-directive`        | `palamedes-ignore`           | Marker used for an explicit per-unit opt-out.               |
+| Field                     | Default                    | Purpose                                                             |
+| ------------------------- | -------------------------- | ------------------------------------------------------------------- |
+| `framework`               | `react`                    | Generates React or Solid rich-component bindings.                   |
+| `translatable-attributes` | `[alt]`                    | Static JSX attributes extracted as standalone messages.             |
+| `front-matter-fields`     | `[]`                       | Scalar frontmatter values extracted as standalone messages.         |
+| `trans-module`            | framework `/compiled` path | Module exporting parser-free `Trans`.                               |
+| `runtime-module`          | `@palamedes/runtime`       | Module exporting `getI18n`; plugins override it for live switching. |
+| `ignore-directive`        | `palamedes-ignore`         | Marker used for an explicit per-unit opt-out.                       |
 
 TypeScript configs use the camelCase equivalents:
 `translatableAttributes`, `frontMatterFields`, `transModule`,
@@ -123,8 +124,9 @@ Include `alt` explicitly when adding fields such as `title` or `aria-label`.
 `href` and `src` remain structural attributes and are never extracted.
 In Vite, the plugin's `framework` option selects the component contract for
 compiled MDX; `mdx.framework` overrides it per config. The plugin's
-`runtimeModule` option applies to macros only — use `mdx.runtime-module` to
-point MDX at a different runtime.
+`localeSwitching` option selects hook-free reload or reactive live runtime
+access for generated MDX. Its `runtimeModule` option applies to macros only —
+use `mdx.runtime-module` to point MDX at a different runtime explicitly.
 
 The Vite plugin preserves inline source-message fallbacks in development and
 strips them from generated MDX during production builds. Configure
@@ -160,7 +162,7 @@ Footnotes currently produce an `UnsupportedFootnote` diagnostic instead of
 silently compiling incorrect links. The Vite adapter reports diagnostic
 locations as build errors and returns the native v3 source map for valid
 modules. It watches the Palamedes config; catalog modules remain owned by the
-normal PO loader and reactive runtime.
+normal PO loader and configured runtime.
 
 Generated modules currently use the built-in HTML element mapping. They do not
 yet implement MDXProvider or a `components` prop, and extracted messages do not

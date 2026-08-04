@@ -99,7 +99,7 @@ transform at Solid's reactive runtime:
 
 ```ts
 // app.config.ts
-palamedes({ framework: "solid" })
+palamedes({ framework: "solid", localeSwitching: "live" })
 ```
 
 Reload-based apps do not need this. See `docs/locale-strategies.md` for the
