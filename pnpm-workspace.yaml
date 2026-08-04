@@ -18,8 +18,8 @@ overrides:
   "@vercel/blob>undici": "6.28.0"
   # vinxi 0.5.11 pins h3 1.15.3; remove once vinxi permits a patched h3.
   "vinxi>h3": "1.15.10"
-  "waku>vite": "^8.0.16"
-  "waku>@vitejs/plugin-react": "^6.0.1"
+  "waku>vite": "^8.2.0"
+  "waku>@vitejs/plugin-react": "^6.0.5"
 
 peerDependencyRules:
   allowedVersions:
