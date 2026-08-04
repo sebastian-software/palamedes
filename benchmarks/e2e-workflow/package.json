@@ -13,7 +13,7 @@
     "validate": "node ./src/run.mjs --validate-only --profile small"
   },
   "dependencies": {
-    "@formatjs/cli": "6.16.14",
+    "@formatjs/cli": "6.16.16",
     "@lingui/cli": "6.6.0",
     "@lingui/conf": "6.6.0",
     "@lingui/format-po": "6.6.0",

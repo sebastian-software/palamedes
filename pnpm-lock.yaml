@@ -22,8 +22,8 @@ importers:
   .:
     devDependencies:
       '@playwright/test':
-        specifier: ^1.61.1
-        version: 1.62.0
+        specifier: ^1.62.1
+        version: 1.62.1
       concurrently:
         specifier: ^10.0.3
         version: 10.0.4
@@ -49,8 +49,8 @@ importers:
   benchmarks/e2e-workflow:
     dependencies:
       '@formatjs/cli':
-        specifier: 6.16.14
-        version: 6.16.14
+        specifier: 6.16.16
+        version: 6.16.16
       '@lingui/cli':
         specifier: 6.6.0
         version: 6.6.0(esbuild@0.28.1)(rolldown@1.2.2)(supports-color@10.2.2)
@@ -83,7 +83,7 @@ importers:
         version: 6.6.0
       '@lingui/swc-plugin':
         specifier: 6.6.0
-        version: 6.6.0(@lingui/core@6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0))(@swc/core@1.15.47)(next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
+        version: 6.6.0(@lingui/core@6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0))(@swc/core@1.15.47)(next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
       '@palamedes/core-node':
         specifier: workspace:^
         version: link:../../packages/core-node
@@ -107,7 +107,7 @@ importers:
         version: link:../../packages/runtime
       next:
         specifier: ^16.2.12
-        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -156,7 +156,7 @@ importers:
         version: link:../../packages/runtime
       next:
         specifier: ^16.2.12
-        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -205,7 +205,7 @@ importers:
         version: link:../../packages/runtime
       next:
         specifier: ^16.2.12
-        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -254,7 +254,7 @@ importers:
         version: link:../../packages/runtime
       next:
         specifier: ^16.2.12
-        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -556,7 +556,7 @@ importers:
         version: link:../../packages/runtime
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -584,7 +584,7 @@ importers:
         version: link:../../packages/runtime
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -612,7 +612,7 @@ importers:
         version: link:../../packages/runtime
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -640,7 +640,7 @@ importers:
         version: link:../../packages/runtime
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -1470,7 +1470,7 @@ importers:
     devDependencies:
       next:
         specifier: 16.2.12
-        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -1543,7 +1543,7 @@ importers:
         version: 24.13.3
       remix:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
+        version: 3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2788,42 +2788,42 @@ packages:
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
-  '@formatjs/cli-native-darwin-arm64@1.1.8':
-    resolution: {integrity: sha512-uIHA6JFbG5vE3GlQodIrbYMmQc50mhBBVJ++ze99Tetfj4eFmIOtVKz2UMt8P8QmvCUZQMyEH95Jm+FbBDY46A==}
+  '@formatjs/cli-native-darwin-arm64@1.1.10':
+    resolution: {integrity: sha512-1xjZiWT29rFhk80Jl6uwmrAixvj/eFmjV5/TY9bpegH5XzWOt4NqW20BX75L25l+5griTxSHZJ8pugXmmI2/rg==}
     cpu: [arm64]
     os: [darwin]
 
-  '@formatjs/cli-native-linux-arm64-musl@1.0.6':
-    resolution: {integrity: sha512-ZiM2H4w61rrvkAwhDFWjFEhW43/AphNNHa3lTdZvNOttst1mQ2gUS4+bLGBOfMqKG8+AU+6B9PCF67AbDOlwPg==}
+  '@formatjs/cli-native-linux-arm64-musl@1.0.8':
+    resolution: {integrity: sha512-/zL1eidQZdF7/u7dWCHjCa8a/TSJWglvm2klYUEOdiArHWmS1taii9K9NfObiCjBeMI6VSZ7aldjtjoXHBCUBA==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@formatjs/cli-native-linux-arm64@1.2.8':
-    resolution: {integrity: sha512-EfrurpWY66hjWvtlO9BjWMDze0SBw4dMMZkUnAZYNdBmOTTRJC+CLi62nRxiSoSVV7QzP8BN6W/zZ5qLySYl0w==}
+  '@formatjs/cli-native-linux-arm64@1.2.10':
+    resolution: {integrity: sha512-RJ5WkhBEjlVLNxC9xfolxbmTxJEMJVBjYOh0d+KDyibOjTNZ0Z36lPyHDhRpmijC1kqv7wzHJOl8hCAAuRxnOA==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@formatjs/cli-native-linux-x64-musl@1.0.6':
-    resolution: {integrity: sha512-Va4rt4gL5p02gixW73VFLCvhgvXhsaT9dMdGfQE32/dqn4NYxg/8gquhauIBvTCkKPYgOhtXRcMWKQINxMB8oA==}
+  '@formatjs/cli-native-linux-x64-musl@1.0.8':
+    resolution: {integrity: sha512-YPifaxFHadlYgMpw/1Lsn/funGfMKgYUPWUCRNY3vM8fnFthDNUuZekOpPH1YfMqW7K7m7VlO7cnwlWT2CQJjA==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@formatjs/cli-native-linux-x64@1.1.8':
-    resolution: {integrity: sha512-J3aInCY7VKSyBrjpXedz/AYNbr+X82zLpSwfeO3obnOqUxn6dko9tnHlaQxuSnZHMx4sAOjJyTzUqDHD6Ft2GA==}
+  '@formatjs/cli-native-linux-x64@1.1.10':
+    resolution: {integrity: sha512-KOxAu9MelGvIDKE6HdcjDKpXguBTkuZXrVbdFbhO8+97aZBzPBaFDWa7Id6Wyus/T+vLnwyXkUPJzzsiE9A3cw==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@formatjs/cli-native-win32-x64@1.1.9':
-    resolution: {integrity: sha512-EUH4z1WhKmjJ4FIn+dvzmgbtJRZ4YHCP3kbHiZv0tgmrQiQ5Q4Flv0Smt66kwYMEnyEf9/mY1JmKdBIjPaQM6A==}
+  '@formatjs/cli-native-win32-x64@1.1.11':
+    resolution: {integrity: sha512-OI7wgYBTCbDSKE/tSo96XQ7j2NUocLO4bDCiteN4LlZMRjIRbVdXHfRgmIN8hmNA2VYRbUbDW5ueUI61onMhJQ==}
     cpu: [x64]
     os: [win32]
 
-  '@formatjs/cli@6.16.14':
-    resolution: {integrity: sha512-aortaTMdCWuGtHnksxpznioudRVvSVkY2/6AQrpUR3tpATGl8sWCuhU9XUEG4ba7UWbFGMv7XLME93rCPfIrJw==}
+  '@formatjs/cli@6.16.16':
+    resolution: {integrity: sha512-qOdknD+qan7Hcd9VjqnyeR3GuktRpd+kSmbD46Dbg4mEVfiUuCC0kJjO0J32As84zfwMFlHpBNdYjns90l7mDw==}
     engines: {node: '>= 20.12.0'}
     hasBin: true
     peerDependencies:
@@ -4494,8 +4494,8 @@ packages:
     resolution: {integrity: sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA==}
     engines: {node: ^14.18.0 || >=16.0.0}
 
-  '@playwright/test@1.62.0':
-    resolution: {integrity: sha512-9zOJ6ZQRAena31MpOH9VSzIz8Ou3YJ/wtY/eQm5T2uhfhG7/U3COrMS8xOtUrZrp9OgdmzEnIYODye3nY1VqzA==}
+  '@playwright/test@1.62.1':
+    resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -9673,13 +9673,13 @@ packages:
   pkg-types@2.3.1:
     resolution: {integrity: sha512-y+ichcgc2LrADuhLNAx8DFjVfgz91pRxfZdI3UDhxHvcVEZsenLO+7XaU5vOp0u/7V/wZ+plyuQxtrDlZJ+yeg==}
 
-  playwright-core@1.62.0:
-    resolution: {integrity: sha512-nsNRyq0r2zsG8AcRHWknc9QRA5XCueC7gWMrs+Gx2tlZn9hcl8zudfh00lhJPY1DE7NmZ6bDsT9g2yey8mXljA==}
+  playwright-core@1.62.1:
+    resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
     engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.62.0:
-    resolution: {integrity: sha512-Z14dG305dgaLu6foB1TXQagFiW8JfSUIUaUuPaKQ6NtBPKF1P/qXcqfh6c6K/icPqdy37JmjbiBXf6JNg6Sylw==}
+  playwright@1.62.1:
+    resolution: {integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -12699,32 +12699,32 @@ snapshots:
 
   '@floating-ui/utils@0.2.11': {}
 
-  '@formatjs/cli-native-darwin-arm64@1.1.8':
+  '@formatjs/cli-native-darwin-arm64@1.1.10':
     optional: true
 
-  '@formatjs/cli-native-linux-arm64-musl@1.0.6':
+  '@formatjs/cli-native-linux-arm64-musl@1.0.8':
     optional: true
 
-  '@formatjs/cli-native-linux-arm64@1.2.8':
+  '@formatjs/cli-native-linux-arm64@1.2.10':
     optional: true
 
-  '@formatjs/cli-native-linux-x64-musl@1.0.6':
+  '@formatjs/cli-native-linux-x64-musl@1.0.8':
     optional: true
 
-  '@formatjs/cli-native-linux-x64@1.1.8':
+  '@formatjs/cli-native-linux-x64@1.1.10':
     optional: true
 
-  '@formatjs/cli-native-win32-x64@1.1.9':
+  '@formatjs/cli-native-win32-x64@1.1.11':
     optional: true
 
-  '@formatjs/cli@6.16.14':
+  '@formatjs/cli@6.16.16':
     optionalDependencies:
-      '@formatjs/cli-native-darwin-arm64': 1.1.8
-      '@formatjs/cli-native-linux-arm64': 1.2.8
-      '@formatjs/cli-native-linux-arm64-musl': 1.0.6
-      '@formatjs/cli-native-linux-x64': 1.1.8
-      '@formatjs/cli-native-linux-x64-musl': 1.0.6
-      '@formatjs/cli-native-win32-x64': 1.1.9
+      '@formatjs/cli-native-darwin-arm64': 1.1.10
+      '@formatjs/cli-native-linux-arm64': 1.2.10
+      '@formatjs/cli-native-linux-arm64-musl': 1.0.8
+      '@formatjs/cli-native-linux-x64': 1.1.10
+      '@formatjs/cli-native-linux-x64-musl': 1.0.8
+      '@formatjs/cli-native-win32-x64': 1.1.11
 
   '@gerrit0/mini-shiki@3.23.0':
     dependencies:
@@ -13109,13 +13109,13 @@ snapshots:
       '@messageformat/parser': 5.1.1
       js-sha256: 0.10.1
 
-  '@lingui/swc-plugin@6.6.0(@lingui/core@6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0))(@swc/core@1.15.47)(next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))':
+  '@lingui/swc-plugin@6.6.0(@lingui/core@6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0))(@swc/core@1.15.47)(next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))':
     dependencies:
       '@lingui/conf': 6.6.0
       '@lingui/core': 6.6.0(@babel/core@8.0.1)(@babel/types@8.0.0)
     optionalDependencies:
       '@swc/core': 1.15.47
-      next: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      next: 16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
 
   '@mapbox/node-pre-gyp@2.0.3(supports-color@10.2.2)':
     dependencies:
@@ -13903,9 +13903,9 @@ snapshots:
 
   '@pkgr/core@0.3.6': {}
 
-  '@playwright/test@1.62.0':
+  '@playwright/test@1.62.1':
     dependencies:
-      playwright: 1.62.0
+      playwright: 1.62.1
 
   '@polka/url@1.0.0-next.29': {}
 
@@ -14027,10 +14027,10 @@ snapshots:
       '@remix-run/fetch-router': 0.20.1
       '@remix-run/session': 0.4.2
 
-  '@remix-run/cli@0.3.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)':
+  '@remix-run/cli@0.3.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)':
     dependencies:
       '@remix-run/terminal': 0.1.1
-      '@remix-run/test': 0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
+      '@remix-run/test': 0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)
       semver: 7.8.5
     transitivePeerDependencies:
       - '@emnapi/core'
@@ -14186,7 +14186,7 @@ snapshots:
 
   '@remix-run/terminal@0.1.1': {}
 
-  '@remix-run/test@0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)':
+  '@remix-run/test@0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)':
     dependencies:
       '@remix-run/node-tsx': 0.1.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@remix-run/terminal': 0.1.1
@@ -14201,7 +14201,7 @@ snapshots:
       source-map-js: 1.2.1
       v8-to-istanbul: 9.3.0
     optionalDependencies:
-      playwright: 1.62.0
+      playwright: 1.62.1
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
@@ -19429,7 +19429,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  next@16.2.12(@babel/core@8.0.1)(@playwright/test@1.62.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:
       '@next/env': 16.2.12
       '@swc/helpers': 0.5.15
@@ -19448,7 +19448,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.2.12
       '@next/swc-win32-arm64-msvc': 16.2.12
       '@next/swc-win32-x64-msvc': 16.2.12
-      '@playwright/test': 1.62.0
+      '@playwright/test': 1.62.1
       sharp: 0.34.5
     transitivePeerDependencies:
       - '@babel/core'
@@ -20077,11 +20077,11 @@ snapshots:
       exsolve: 1.1.0
       pathe: 2.0.3
 
-  playwright-core@1.62.0: {}
+  playwright-core@1.62.1: {}
 
-  playwright@1.62.0:
+  playwright@1.62.1:
     dependencies:
-      playwright-core: 1.62.0
+      playwright-core: 1.62.1
     optionalDependencies:
       fsevents: 2.3.2
 
@@ -20621,14 +20621,14 @@ snapshots:
       mdast-util-to-markdown: 2.1.2
       unified: 11.0.5
 
-  remix@3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0):
+  remix@3.0.0-beta.5(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1):
     dependencies:
       '@remix-run/assert': 0.3.0
       '@remix-run/assets': 0.4.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@remix-run/async-context-middleware': 0.3.4
       '@remix-run/auth': 0.2.6
       '@remix-run/auth-middleware': 0.2.4
-      '@remix-run/cli': 0.3.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
+      '@remix-run/cli': 0.3.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)
       '@remix-run/compression-middleware': 0.1.12
       '@remix-run/cookie': 0.5.4
       '@remix-run/cop-middleware': 0.1.7
@@ -20665,10 +20665,10 @@ snapshots:
       '@remix-run/static-middleware': 0.4.13
       '@remix-run/tar-parser': 0.7.1
       '@remix-run/terminal': 0.1.1
-      '@remix-run/test': 0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.0)
+      '@remix-run/test': 0.5.0(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(playwright@1.62.1)
       '@remix-run/ui': 0.4.0
     optionalDependencies:
-      playwright: 1.62.0
+      playwright: 1.62.1
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
