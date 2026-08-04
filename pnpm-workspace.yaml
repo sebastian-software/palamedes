@@ -6,6 +6,14 @@ packages:
 
 overrides:
   "eslint-config-setup>eslint-plugin-oxlint": "1.76.0"
+  # Security patches permitted by each parent's existing dependency line.
+  # Remove these once the parent lock resolutions reach the patched versions.
+  "@remix-run/test>esbuild": "0.28.1"
+  "ajv>fast-uri": "3.1.5"
+  "jsdom>undici": "7.29.0"
+  "next>postcss": "8.5.23"
+  "postcss-svgo>svgo": "4.0.2"
+  "tsx>esbuild": "0.28.1"
   # @vercel/blob 2.4 permits this patched Undici line; remove after its lock resolves >=6.28.
   "@vercel/blob>undici": "6.28.0"
   # vinxi 0.5.11 pins h3 1.15.3; remove once vinxi permits a patched h3.
