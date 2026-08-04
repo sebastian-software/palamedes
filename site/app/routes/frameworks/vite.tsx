@@ -79,7 +79,7 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [
-    palamedes({ runtimeModule: "@palamedes/react/runtime" }),
+    palamedes(),
     react(),
   ],
 })
@@ -89,7 +89,7 @@ import solid from "vite-plugin-solid"
 
 export default defineConfig({
   plugins: [
-    palamedes({ runtimeModule: "@palamedes/solid/runtime" }),
+    palamedes({ framework: "solid" }),
     solid(),
   ],
 })`,

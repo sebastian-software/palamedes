@@ -42,16 +42,6 @@
       "import": "./dist/client.mjs",
       "require": "./dist/client.cjs"
     },
-    "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "react-server": {
-        "types": "./dist/runtime-server.d.ts",
-        "import": "./dist/runtime-server.mjs",
-        "require": "./dist/runtime-server.cjs"
-      },
-      "import": "./dist/runtime.mjs",
-      "require": "./dist/runtime.cjs"
-    },
     "./macro": {
       "types": "./dist/macro.d.ts",
       "import": "./dist/macro.mjs",
@@ -68,7 +58,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.tsx src/runtime.test.ts src/clientCatalog.test.tsx src/clientCatalogServer.test.tsx && node --test scripts/exports.test.mjs",
+    "test": "vitest run --globals src/index.test.tsx src/clientCatalog.test.tsx src/clientCatalogServer.test.tsx && node --test scripts/exports.test.mjs",
     "stub": "unbuild --stub"
   },
   "engines": {

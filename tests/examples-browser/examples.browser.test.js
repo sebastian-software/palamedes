@@ -143,12 +143,12 @@ test("matrix example browser contract", async () => {
     await page.getByTestId("page-link-runtime").click()
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
-      .toContain("Switch languages at runtime")
+      .toContain("One locale per document")
 
     await page.getByTestId("locale-switch-de").click()
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
-      .toContain("Sprachen zur Laufzeit wechseln")
+      .toContain("Eine Sprache pro Dokument")
 
     await page.getByTestId("page-link-welcome").click()
     await expect

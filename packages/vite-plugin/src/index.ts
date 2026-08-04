@@ -29,7 +29,6 @@ import {
   mdxFrameworkFor,
   resolveMacroRuntimeModule,
   type PalamedesFramework,
-  type PalamedesLocaleSwitching,
 } from "@palamedes/transform"
 
 const PO_FILE_REGEX = /(\.po|\?palamedes)$/
@@ -198,16 +197,8 @@ export type PalamedesPluginOptions = {
   framework?: PalamedesFramework
 
   /**
-   * Locale changes reload the document by default, keeping inline macros and
-   * generated MDX runtime access hook-free. Set `"live"` only when the whole
-   * application is designed to react to in-document locale changes.
-   * @default "reload"
-   */
-  localeSwitching?: PalamedesLocaleSwitching
-
-  /**
-   * Module the macro transform imports the runtime getter from. Overrides
-   * `localeSwitching` and `framework`. Generated MDX modules are not affected;
+   * Advanced override for the module the macro transform imports. Generated
+   * MDX modules are not affected;
    * configure those through `mdx.runtimeModule`.
    * @default "@palamedes/runtime"
    */
@@ -264,14 +255,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     failOnMissing = false,
     failOnCompileError = false,
     framework = "react",
-    localeSwitching = "reload",
     runtimeModule,
     keepSourceFallbacks,
     mdx: mdxOverride,
     experimentalGraphSplitting = false,
     ...configLoaderOptions
   } = options
-  const macroRuntimeModule = resolveMacroRuntimeModule(framework, runtimeModule, localeSwitching)
+  const macroRuntimeModule = resolveMacroRuntimeModule(runtimeModule)
   const graphSplitting = experimentalGraphSplitting !== false
   const importMapBinding =
     typeof experimentalGraphSplitting === "object" &&
@@ -357,10 +347,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       return resolved
     }
 
-    const mdxFramework = resolved.framework ?? "react"
     return {
       ...resolved,
-      runtimeModule: resolveMacroRuntimeModule(mdxFramework, undefined, localeSwitching),
+      runtimeModule: resolveMacroRuntimeModule(),
     }
   }
 

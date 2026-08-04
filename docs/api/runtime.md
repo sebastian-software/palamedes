@@ -6,14 +6,11 @@ macro output.
 ## Exports
 
 - `getI18n<T>()`
-- `getClientI18nSnapshot()`
 - `setClientI18n(i18n)`
-- `subscribeClientI18n(listener)`
 - `activateServerI18n(i18n)`
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
 - `I18nInstance`
-- `ClientI18nSnapshot`
 
 The server subpath `@palamedes/runtime/server` exports:
 
@@ -47,27 +44,6 @@ getter result is available. Initialize the runtime before translated code runs.
 server runtime must expose an initialized `locale: string`; adapters that
 previously omitted the property or declared it as optional need to initialize it
 before registration.
-
-## `subscribeClientI18n(listener)`
-
-Registers a listener invoked on every `setClientI18n()` call, including
-re-activation of the same instance in place. Returns an unsubscribe function.
-
-This is the bridge framework bindings use to connect the framework-agnostic
-client runtime to their own reactivity system. `@palamedes/react/runtime` feeds
-the snapshot into `useSyncExternalStore`, while `@palamedes/solid/runtime` feeds
-activations into a Solid signal. Application code rarely calls this directly.
-
-```ts
-const unsubscribe = subscribeClientI18n((i18n) => {
-  // react to the newly activated client instance
-})
-```
-
-`getClientI18nSnapshot()` returns the current client instance plus a monotonic
-activation revision. The snapshot changes on every `setClientI18n()` call, even
-when an application reuses and mutates the same i18n object. Framework bindings
-use it with external-store APIs; application code rarely needs it directly.
 
 ## Server Runtime
 

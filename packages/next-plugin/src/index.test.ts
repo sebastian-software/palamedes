@@ -21,37 +21,14 @@ function conditionList(rule: RuleItem): unknown[] {
 }
 
 describe("withPalamedes turbopack config", () => {
-  it.each([
-    ["react", undefined, "@palamedes/runtime"],
-    ["solid", "solid", "@palamedes/runtime"],
-    ["none", "none", "@palamedes/runtime"],
-  ] as const)("derives the macro runtime module for %s", (_label, framework, expected) => {
-    const config = withPalamedes({}, framework === undefined ? {} : { framework })
+  it("uses the hook-free macro runtime", () => {
+    const config = withPalamedes()
 
     const rule = getRules(config)["*"] as RuleItem
-    expect(rule.loaders?.[0]?.options).toMatchObject({ runtimeModule: expected })
+    expect(rule.loaders?.[0]?.options).toMatchObject({ runtimeModule: "@palamedes/runtime" })
   })
 
-  it.each([
-    ["react", undefined, "@palamedes/react/runtime"],
-    ["solid", "solid", "@palamedes/solid/runtime"],
-  ] as const)("opts %s macros into live locale switching", (_label, framework, expected) => {
-    const config = withPalamedes(
-      {},
-      framework === undefined ? { localeSwitching: "live" } : { framework, localeSwitching: "live" }
-    )
-
-    const rule = getRules(config)["*"] as RuleItem
-    expect(rule.loaders?.[0]?.options).toMatchObject({ runtimeModule: expected })
-  })
-
-  it("rejects live switching without a framework or custom runtime", () => {
-    expect(() => withPalamedes({}, { framework: "none", localeSwitching: "live" })).toThrow(
-      /requires framework="react" or framework="solid"/
-    )
-  })
-
-  it("lets an explicit runtime module win over the framework default", () => {
+  it("lets an explicit runtime module override the default", () => {
     const config = withPalamedes({}, { runtimeModule: "@acme/custom-runtime" })
 
     const rule = getRules(config)["*"] as RuleItem

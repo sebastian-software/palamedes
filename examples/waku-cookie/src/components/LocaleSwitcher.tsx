@@ -1,12 +1,10 @@
 "use client"
 
 import { buildLocaleSwitchItems } from "@palamedes/react"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
-import { LOCALES, LOCALE_LABELS, syncClientI18n, type Locale } from "../lib/i18n"
+import { LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n"
 
 export const LocaleSwitcher = ({ locale }: { locale: Locale }) => {
-  useClientLocale(locale, syncClientI18n)
   const items = buildLocaleSwitchItems({
     locales: LOCALES,
     currentLocale: locale,

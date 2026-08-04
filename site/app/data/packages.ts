@@ -13,7 +13,7 @@ export interface PackageCard {
 export const PACKAGES: PackageCard[] = [
   { name: "@palamedes/cli", role: "Extraction CLI for workflows and CI" },
   { name: "@palamedes/core", role: "App-facing i18n instance" },
-  { name: "@palamedes/runtime", role: "Runtime bridge for transformed code" },
+  { name: "@palamedes/runtime", role: "Hook-free runtime getter for transformed code" },
   { name: "@palamedes/react", role: "React translation components" },
   { name: "@palamedes/solid", role: "Solid translation components" },
   { name: "@palamedes/vite-plugin", role: "Recommended Vite entry point" },

@@ -9,9 +9,9 @@ const page: FrameworkLanding = {
   eyebrow: "SolidStart i18n · TypeScript",
   metaTitle: "SolidStart i18n with TypeScript | Palamedes",
   metaDescription:
-    "Add i18n to SolidStart with TypeScript macros, fine-grained locale reactivity, server-side translation, PO catalogs, and verified locale strategies.",
+    "Add i18n to SolidStart with TypeScript macros, hook-free client lookup, server-side translation, PO catalogs, and verified locale strategies.",
   headline: "SolidStart i18n that stays native to Solid.",
-  lede: "Palamedes pairs a Vite build integration with dedicated Solid authoring and runtime packages. Components keep Solid's fine-grained reactivity while server routes, client effects, and catalogs follow one source-to-runtime model.",
+  lede: "Palamedes pairs a Vite build integration with dedicated Solid authoring and runtime packages. Solid-native components and hook-free lookups share one catalog model across request-local SSR and hydration.",
   primary: {
     label: "Open the SolidStart demo",
     href: "https://solidstart-route.examples.palamedes.dev/en",
@@ -34,7 +34,7 @@ const page: FrameworkLanding = {
     {
       label: "Rendering",
       value: "SSR + client",
-      note: "Isomorphic routes with fine-grained client updates.",
+      note: "Isomorphic routes with one locale per document.",
     },
     {
       label: "Locale models",
@@ -45,24 +45,24 @@ const page: FrameworkLanding = {
   problem: {
     title:
       "SolidStart i18n has to cross the server boundary without importing a React mental model.",
-    lede: "A Solid application should not need provider patterns designed for another renderer. Locale state must still agree across the server response, hydration, route navigation, and fine-grained updates in the browser.",
+    lede: "A Solid application should not need provider patterns designed for another renderer. Locale state must still agree across the server response, hydration, and a later document navigation.",
     points: [
       "Server-side macros need the request's active catalog before an isomorphic route renders.",
-      "The client locale must update Solid signals and translated computations without remounting the application.",
+      "The client locale must be initialized before hydration without turning ordinary translation getters into Solid dependencies.",
       "Rich messages and locale controls need Solid-specific primitives rather than a thin React compatibility layer.",
     ],
   },
   approach: {
     title: "Share catalog semantics, not renderer internals.",
-    lede: "The native core and Vite adapter stay common across hosts. @palamedes/solid owns the renderer-facing surface so the application uses Solid components, effects, and signals directly.",
+    lede: "The native core and Vite adapter stay common across hosts. @palamedes/solid owns rich-message rendering while the active locale remains framework-neutral document bootstrap state.",
     points: [
       {
         title: "Solid-native authoring",
         body: "Use t, plural, and the Solid Trans macro beside JSX. Rich messages compile for Solid instead of passing through a React adapter.",
       },
       {
-        title: "Fine-grained locale sync",
-        body: "Client helpers connect the active i18n instance to Solid reactivity, so dependent text updates when the locale changes.",
+        title: "Hook-free document locale",
+        body: "Translations read one active instance through a plain getter. Locale controls navigate the document so Solid state and external caches restart together.",
       },
       {
         title: "One catalog pipeline",
@@ -80,7 +80,7 @@ import { palamedes } from "@palamedes/vite-plugin"
 export default defineConfig({
   vite: {
     plugins: [
-      palamedes({ runtimeModule: "@palamedes/solid/runtime" }),
+      palamedes({ framework: "solid" }),
     ],
   },
 })
@@ -91,7 +91,7 @@ import { Trans } from "@palamedes/solid/macro"
 export default function LocalePage() {
   return <h1><Trans>Welcome to Palamedes</Trans></h1>
 }`,
-    note: "The route example activates a server i18n instance for SSR and uses the public Solid client helpers to keep the browser locale synchronized after hydration.",
+    note: "The route example activates a request-local server instance for SSR, initializes the browser locale once, and uses normal links for locale navigation.",
   },
   strategies: {
     matrixSlug: "solidstart",
@@ -113,8 +113,8 @@ export default function LocalePage() {
       },
       {
         label: "Interaction",
-        value: "Signals checked",
-        note: "Client-visible content follows the active locale.",
+        value: "Navigation checked",
+        note: "A new document renders consistently in the selected locale.",
       },
       {
         label: "Server behavior",

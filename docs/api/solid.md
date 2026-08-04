@@ -19,14 +19,6 @@
 The locale-switch helper and related types are re-exported from
 `@palamedes/core/locale`.
 
-The client subpath `@palamedes/solid/client` exports:
-
-- `createClientLocaleEffect(localeAccessor, sync)`
-
-The runtime subpath `@palamedes/solid/runtime` exports:
-
-- `getI18n<T>()` — a reactive replacement for `@palamedes/runtime`'s `getI18n`
-
 The macro subpath `@palamedes/solid/macro` exports compile-time macro
 components:
 
@@ -42,8 +34,9 @@ surface.
 
 ## Runtime Components
 
-Runtime components read the active i18n instance through the package's reactive
-runtime wrapper, which bridges `@palamedes/runtime` into Solid updates.
+Runtime components read the active i18n instance through the plain
+`@palamedes/runtime` getter. They do not install signal dependencies for locale
+changes; changing locale requires a document navigation.
 
 ```tsx
 import { Trans } from "@palamedes/solid"
@@ -77,30 +70,15 @@ smaller than the number counted:
 `RangeError` rather than rendering a wrong count. `Select` has no numeric
 operand and takes no `offset`.
 
-## Client Locale Effect
+## Framework Selection
 
-```ts
-import { createClientLocaleEffect } from "@palamedes/solid/client"
-
-createClientLocaleEffect(() => props.locale, syncClientI18n)
-```
-
-The sync function may return a promise. Routing, cookies, and loading UI stay in
-the host app.
-
-## Reactive Runtime And Live Switching
-
-`Trans`, `Plural`, `Select`, and `SelectOrdinal` track the active client i18n, so
-they follow a live (no-reload) locale switch out of the box.
-
-Macro `t` / `plural` calls resolve through whichever `getI18n` the transform is
-configured to import. To make them follow a live switch too, point the Palamedes
-transform at Solid's reactive runtime:
+Set the framework only so generated MDX uses Solid's component contract:
 
 ```ts
 // app.config.ts
-palamedes({ framework: "solid", localeSwitching: "live" })
+palamedes({ framework: "solid" })
 ```
 
-Reload-based apps do not need this. See `docs/locale-strategies.md` for the
-reload-vs-live tradeoff and why reload is the recommended default.
+Macro `t` / `plural` calls still use the same framework-neutral, hook-free
+runtime getter. See `docs/locale-strategies.md` for document navigation and the
+unsupported root-key escape hatch.

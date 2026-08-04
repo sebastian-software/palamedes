@@ -2,8 +2,8 @@ import type { JSX } from "solid-js"
 
 import { parseMessagePattern } from "@palamedes/core"
 import type { MessageMetadata, MessageNode, PalamedesI18n } from "@palamedes/core"
+import { getI18n } from "@palamedes/runtime"
 
-import { getI18n } from "./runtime"
 import {
   createSolidMessageRuntime,
   createTrans,
@@ -17,11 +17,7 @@ export {
   type LocaleSwitchItem,
 } from "@palamedes/core/locale"
 
-// Read the active i18n while registering the enclosing Solid computation as a
-// subscriber, so it re-runs when the client locale changes. The components below
-// return accessors (plain functions), which Solid tracks — that is where this
-// read is picked up.
-function useReactiveI18n(): PalamedesI18n {
+function getActiveI18n(): PalamedesI18n {
   return getI18n<PalamedesI18n>()
 }
 
@@ -54,7 +50,7 @@ export type SelectProps = {
   [key: string]: string | number | undefined
 }
 
-const RuntimeTrans = createTrans(useReactiveI18n, parseMessagePattern)
+const RuntimeTrans = createTrans(getActiveI18n, parseMessagePattern)
 
 export function Trans(props: TransProps): JSX.Element {
   return RuntimeTrans(props)
@@ -74,7 +70,7 @@ function renderChoice(
   offset?: number
 ): JSX.Element {
   return (() => {
-    const i18n = useReactiveI18n()
+    const i18n = getActiveI18n()
     const message = buildChoiceMessage("value", kind, choices, offset)
     const metadata: MessageMetadata = { message, reportMissing: false }
     const runtime = createSolidMessageRuntime(i18n, {}, parseMessagePattern)

@@ -155,21 +155,17 @@ is a compile/build concern and must never leak into authoring or translation.
 
 Not a variant — the enabler for all of them. Smallest sufficient surface:
 
-- **A shared message store with a revision.** Message registration moves to a
-  store that instances read through (today catalogs live inside the
-  `createI18n` closure). `load()` keeps its signature, bumps a revision, and
-  the existing `subscribeClientI18n` reactivity
-  (`packages/runtime/src/index.ts`) notifies on message arrival, not only on
-  instance replacement. This makes late-arriving chunks re-render correctly
-  and lets sidecar modules register messages before any instance exists.
+- **A shared registration buffer.** Sidecar modules can register messages
+  before a client instance exists; `setClientI18n()` flushes that buffer before
+  translated code renders. Locale and message chunks do not arrive after the
+  localized tree has mounted.
 - **A loader registry + `ensureLocale(locale): Promise<void>`.** Adapters (or
   apps) register how a locale's messages are fetched; the runtime dedupes and
   tracks in-flight loads. `activate()` stays sync; an async `activateLocale()`
   convenience awaits `ensureLocale` first.
-- **Framework wiring.** React: a suspense-compatible read (throw the in-flight
-  promise) plus the existing `useSyncExternalStore` bridge. Solid: the signal
-  bridge already exists. Server entries for the initial locale must resolve
-  before hydration — route loaders or inline bootstrap, per adapter.
+- **Framework wiring.** React uses a suspense-compatible catalog boundary for
+  the initial document locale. Other adapters initialize synchronously in their
+  client entry. There is no post-mount locale or catalog reactivity contract.
 
 This stage has standalone value even if no further splitting ships: it is what
 the "Larger apps would dynamically import per-locale chunks instead" comment in
@@ -603,11 +599,10 @@ files; 41 references to 37 unique messages; 4 messages (10.8%) live in two
 modules each — two of those collapse into the same chunk anyway, and the
 remaining cross-route duplication is the V2b atom candidate.
 
-Browser-verified on the production build: SSR renders localized, hydration is
-clean (no console errors), a client-side locale switch re-renders without a
-reload from sidecar-registered messages (buffer flush path), and navigating to
-the other route lazy-loads that route's chunk together with its messages
-(network-verified).
+At this stage of the spike, the production build still verified an in-document
+locale switch from sidecar-registered messages. ADR-020 later removed that
+reactive contract; the retained result is localized SSR, clean hydration, and
+route navigation that lazy-loads the route chunk together with its messages.
 
 Corrections the spike feeds back into the body above:
 
@@ -628,16 +623,10 @@ Corrections the spike feeds back into the body above:
    render, so buffer + flush suffices. Stage 0 in full remains the
    prerequisite for V1/V3, not for V2.
 3. **Unrelated pre-existing finding**, hit while verifying: transformed macro
-   calls inside react-router _actions_ crashed in production because
-   `@palamedes/react/runtime` exported a hook-shaped `getI18n`
-   (`useSyncExternalStore` outside render). Reproduced identically on an
-   unmodified eager build — and fixed on this branch: the hook exists only to
-   subscribe and its return value is unused, so server environments now
-   resolve the runtime getter directly (`typeof window` branch at module
-   scope), mirroring what the `react-server` condition already does for RSC.
-   Verified end to end: the example's server action renders its translated
-   proof message in the production build. Solid is unaffected (signal read,
-   no dispatcher).
+   calls inside react-router _actions_ crashed because the temporary React
+   binding had made a normal `getI18n()` call hook-shaped. The final resolution
+   is ADR-020: built-in macro and component runtime access is framework-neutral
+   and hook-free, and locale changes navigate the document.
 
 ### Addendum (2026-08-02): rebased onto ADR-022/023 and reworked
 
@@ -656,10 +645,11 @@ from the rebased state. What the upgrade changed:
   runtime) to native-rendered per-locale modules plus an aggregator, and the
   `registerMessages` buffer became brand-preserving (maps buffered and loaded
   as-is instead of spread-merged; the ADR-022 `load()` merges per entry).
-- **Browser-verified again on the rebased production build**: SSR localized,
-  hydration clean, client-side locale switch without reload through the
-  buffered branded catalogs, route navigation lazy-loading the route chunk
-  with its messages, plurals rendering from compiled functions.
+- **Browser-verified again on the rebased production build**: this historical
+  spike still exercised a client-side locale switch without reload through the
+  buffered branded catalogs. ADR-020 later replaced that lifecycle with
+  document navigation; the catalog buffering and lazy route-chunk results
+  remain valid.
 - The main-branch runtime refactors did **not** change the pre-existing
   hook-`getI18n` action crash; it reproduced identically on `7e697a1` and is
   now fixed on this branch (finding 3 above).
@@ -707,8 +697,8 @@ emits `<link rel="modulepreload">` for the mapped assets of the chunks the
 document already preloads — measured in the browser, message assets start in
 the same millisecond as the route chunk instead of one waterfall step later.
 Still open: the manifest-reading server helper is example-code that belongs
-in an adapter surface, and non-navigation locale switching would need an
-async ensure path (Stage 0 territory).
+in an adapter surface. The previously considered async ensure path for
+non-navigation locale switching was rejected by ADR-020.
 
 ## Appendix: hardening pass (2026-08-03)
 
@@ -719,8 +709,8 @@ than against the assumption that produced it:
   `compiledIds` the macro transform does, so MDX modules get the same sidecar
   import; both paths share one helper. Verified on `examples/vite-mdx`, which
   now runs with splitting and imports no catalog at all: prose, rich text and
-  attribute translations render, and the locale switch works across all three
-  pages.
+  attribute translations render, and a document-level locale switch works
+  across all three pages.
 - **Pseudo-locale was never actually blocked.** The first iteration skipped it
   "because the selected compile has no generated-pseudo path". Probing the
   native binding directly disproved that: `compileCatalogArtifactSelected`

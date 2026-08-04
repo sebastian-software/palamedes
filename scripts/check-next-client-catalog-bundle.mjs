@@ -27,8 +27,8 @@ const initialSource = (
 ).join("\n")
 
 const inactiveCatalogSentinels = [
-  "Live lokalisiert mit Palamedes",
-  "Localizado en vivo con Palamedes",
+  "Für dieses Dokument mit Palamedes lokalisiert",
+  "Localizado para este documento con Palamedes",
 ]
 for (const sentinel of inactiveCatalogSentinels) {
   assert.equal(

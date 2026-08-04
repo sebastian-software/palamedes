@@ -215,12 +215,8 @@ React-based and Remix's UI adapter is not implemented. They prove the same
 server-side locale strategies, checked-in `.po` catalogs, and request-local i18n
 through Remix's default Node loader path.
 
-The matrix does not only prove core/runtime behavior. It also proves public
-frontend primitives from the first-party UI packages:
-
-- `useClientLocale()` in `@palamedes/react/client`
-- `createClientLocaleEffect()` in `@palamedes/solid/client`
-- `buildLocaleSwitchItems()` in both UI packages
+The matrix does not only prove core/runtime behavior. It also proves
+`buildLocaleSwitchItems()` from both first-party UI packages.
 
 Those helpers stay headless on purpose. The examples still own routing, form
 submission, and locale policy, but they no longer need to reimplement the same
@@ -239,8 +235,8 @@ tracked separately:
 The booking surfaces every common i18n need in a real context: translated
 copy, plural seat counts, a personalized greeting variable, and locale-aware
 number, currency, date, and time formatting through ICU message arguments
-(`{amount, number, ::currency/EUR}`, `{when, date, full}`). One locale switch
-re-renders all of it at once.
+(`{amount, number, ::currency/EUR}`, `{when, date, full}`). A locale switch
+loads one coherent new document for all of it.
 
 Each demo wires its locale controls through the public
 [`@palamedes/core/locale`](../packages/core/src/locale.ts) surface
@@ -255,7 +251,7 @@ the browser only needs one locale at a time. That gives bundlers a chance to
 split catalogs into per-locale chunks.
 
 The `nextjs-route` example combines that import with
-`createReloadClientCatalogBoundary()` from `@palamedes/react/client`. The
+`createClientCatalogBoundary()` from `@palamedes/react/client`. The
 boundary begins loading the document locale before hydration, holds hydration
 until the module is ready, and initializes the hook-free runtime before any
 translated Client Component renders. Its locale links deliberately use full

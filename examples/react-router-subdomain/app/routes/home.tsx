@@ -1,5 +1,4 @@
 import { t } from "@palamedes/core/macro"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
 import type { Route } from "./+types/home"
@@ -13,7 +12,6 @@ import {
   DEFAULT_LOCALE,
   getLocaleLabel,
   resolveSubdomainLocale,
-  syncClientI18n,
 } from "~/lib/i18n"
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -55,8 +53,6 @@ export async function action({ request }: Route.ActionArgs) {
 export default function LocaleHome({ loaderData }: Route.ComponentProps) {
   const { banner, host, locale, localeLabel } = loaderData
 
-  useClientLocale(locale, syncClientI18n)
-
   return (
     <main className="page-shell">
       {banner ? (
@@ -79,7 +75,7 @@ export default function LocaleHome({ loaderData }: Route.ComponentProps) {
       <section className="hero">
         <p className="eyebrow">
           <span className="dot" aria-hidden="true" />
-          <Trans>Localized live with Palamedes</Trans>
+          <Trans>Localized for this document with Palamedes</Trans>
         </p>
         <h1>
           <Trans>Book your seat at Frontend Stage 2026</Trans>

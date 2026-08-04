@@ -42,7 +42,7 @@ export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale)
 }
 
-export function syncClientI18n(locale: Locale) {
+export function initializeClientI18n(locale: Locale) {
   if (typeof window === "undefined") {
     return
   }
@@ -63,7 +63,7 @@ function bootstrapClientI18n() {
     strategy: "subdomain",
     requestHost: window.location.host,
   })
-  syncClientI18n(locale)
+  initializeClientI18n(locale)
 }
 
 bootstrapClientI18n()

@@ -563,11 +563,11 @@ function buyLabel(seats) {
     researched: "July 2026",
     metaTitle: "Palamedes vs Paraglide — smaller bundles, bigger constraints",
     metaDescription:
-      "Paraglide compiles messages into tree-shakable functions with no runtime library, and wins on bundle size. Palamedes keeps a runtime layer and gets in-place locale switching, .po catalogs and source-string identity for it.",
+      "Paraglide compiles messages into tree-shakable functions with no runtime library and wins on bundle size. Palamedes keeps a hook-free runtime lookup, .po catalogs, and source-string identity.",
     eyebrow: "Compare · Paraglide",
     headline: "Smaller bundles. Bigger constraints.",
-    lede: "Paraglide compiles each message into its own tree-shakable function and ships no i18n runtime at all. The bundle-size win is real and we will not argue with it. The tradeoff is a full page reload every time a user changes language, a catalog format tied to its toolchain, and a key namespace you still have to design.",
-    card: "Zero runtime and smaller bundles, against in-place locale switching and .po catalogs.",
+    lede: "Paraglide compiles each message into its own tree-shakable function and ships no i18n runtime at all. The bundle-size win is real and we will not argue with it. The tradeoffs are a catalog format tied to its toolchain and a key namespace you still have to design; both libraries deliberately load a new document when the locale changes.",
+    card: "Zero runtime and smaller bundles, against source-string authoring and standard .po catalogs.",
     facts: [
       { label: "Licence", value: "Apache-2.0" },
       { label: "Architecture", value: "Compile-time codegen" },
@@ -575,7 +575,7 @@ function buyLabel(seats) {
       { label: "Locale switch", value: "Full page reload" },
     ],
     thesis:
-      "Both projects are compile-time by conviction, so this is not the usual runtime-versus-compiler argument — it is a disagreement about which cost is worth paying. Paraglide spends the user's locale switch to save kilobytes. Palamedes spends kilobytes to keep the switch instant and to emit standard PO catalogs. Which side is right depends on whether users change language in-session and which catalog handover the toolchain requires.",
+      "Both projects are compile-time by conviction and both treat locale as document bootstrap state. The disagreement is which build artifact and authoring model are worth paying for: Paraglide emits independently tree-shakable named functions, while Palamedes keeps source sentences at the call site and emits standard PO catalogs behind one small hook-free lookup contract.",
     respectTitle: "What Paraglide earned",
     respect: [
       "A genuinely zero-runtime architecture: messages become plain ESM functions, so unused ones are tree-shaken away entirely.",
@@ -584,14 +584,14 @@ function buyLabel(seats) {
     ],
     flipsideTitle: "What that architecture costs you",
     flipside: [
-      "Locale switching is a full page reload by design. If your product switches language in-session, every user pays for the bundle saving in latency and lost scroll position.",
+      "Generated function names remain part of the application API, so teams still design and maintain a key namespace even though the calls are fully typed.",
       "The tree-shaking promise has documented gaps: a maintainer confirmed that re-exporting messages from a shared file — an ordinary pattern — defeats it, and per-locale build splitting is still an open feature request years in.",
       "The .inlang project format requires inlang-aware tooling or a conversion step when the rest of the localization pipeline expects PO.",
     ],
     differences: [
       {
-        title: "Locale switching without a reload",
-        body: "Paraglide's v2 architecture switches locale by reloading the page — a deliberate design choice, not an oversight. Palamedes activates a new catalog in place: React components re-render through an external-store bridge, Solid through a signal. If a user can change language inside your product, that difference is not architectural trivia, it is something they feel.",
+        title: "A document-level locale lifecycle",
+        body: "Paraglide's v2 architecture and Palamedes both switch locale by loading a new document. Palamedes treats that as a stability boundary: framework state, module singletons, formatters, and application caches restart under one locale instead of attempting a partial reactive update.",
       },
       {
         title: "Standard PO catalogs as the handover",
@@ -606,7 +606,7 @@ function buyLabel(seats) {
       {
         criterion: "Client runtime",
         rival: "None — compiled message functions",
-        palamedes: "Runtime lookup and in-place activation",
+        palamedes: "Hook-free runtime lookup",
       },
       {
         criterion: "Bundle size",
@@ -616,7 +616,7 @@ function buyLabel(seats) {
       {
         criterion: "Locale switching",
         rival: "Full page reload by design",
-        palamedes: "In-place activation, reactive re-render",
+        palamedes: "Full document navigation by design",
       },
       {
         criterion: "Message identity",
@@ -658,18 +658,18 @@ function buyLabel(seats) {
     },
     pickRival: [
       "Bundle size is the number you are judged on. Paraglide wins that axis, clearly and by construction.",
-      "A full page reload on locale switch is acceptable, or your product switches language rarely.",
+      "You prefer independently generated message functions over a shared runtime lookup.",
       "You want the .inlang ecosystem: Sherlock in VS Code, Fink for translators.",
       "You need framework coverage beyond React and Solid from a single plugin.",
     ],
     pickPalamedes: [
-      "Users switch language in-session and a page reload would be a visible regression.",
       "Your localization workflow consumes .po and you would rather not convert on every round trip.",
       "You want source strings as identity instead of a key namespace to design and defend.",
       "You want catalog audits and ICU diagnostics as part of the toolchain, not as a separate product.",
+      "You want one hook-free runtime contract across client code, RSC, SSR, and backend handlers.",
     ],
     honest:
-      "Paraglide's bundle-size story is better than ours and we are not going to claim otherwise — zero runtime beats a runtime layer on that axis by construction, and that is a fine reason to pick them. We spend those kilobytes on in-place locale switching and .po interoperability because we think most products get more back from those than from the bytes. Nothing in the checked benchmark harness measures Paraglide, so there is no speed claim on this page.",
+      "Paraglide's bundle-size story is better than ours and we are not going to claim otherwise — zero runtime beats a runtime layer on that axis by construction, and that is a fine reason to pick it. Palamedes spends those kilobytes on source-string lookup, compiled PO catalogs, rich-message adapters, and a shared server/client contract. Both libraries use document navigation for locale changes. Nothing in the checked benchmark harness measures Paraglide, so there is no speed claim on this page.",
   },
   {
     slug: "tolgee",

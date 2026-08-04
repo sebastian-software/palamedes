@@ -25,9 +25,7 @@
       "@palamedes/runtime": ["packages/runtime/src/index.ts"],
       "@palamedes/runtime/server": ["packages/runtime/src/server.ts"],
       "@palamedes/solid": ["packages/solid/src/index.tsx"],
-      "@palamedes/solid/client": ["packages/solid/src/client.ts"],
       "@palamedes/solid/macro": ["packages/solid/src/macro.ts"],
-      "@palamedes/solid/runtime": ["packages/solid/src/runtime.ts"],
       "@palamedes/transform": ["packages/transform/src/index.ts"],
       "@palamedes/transform/catalog-loader": ["packages/transform/src/catalogLoader.ts"],
       "@palamedes/vite-plugin": ["packages/vite-plugin/src/index.ts"]

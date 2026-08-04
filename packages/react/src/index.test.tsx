@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
-import { memo } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { act, render } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -16,12 +14,9 @@ import {
   type CompiledMessage as ParserFreeMessage,
 } from "@palamedes/core/compiled"
 import { resetI18nRuntime, setClientI18n } from "@palamedes/runtime"
-import { createServerI18nScope } from "@palamedes/runtime/server"
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
 import { Trans as CompiledTrans } from "./compiled"
-import { useClientLocale } from "./client"
-import { getI18n as getReactiveI18n } from "./runtime"
 
 describe("@palamedes/react", () => {
   afterEach(() => {
@@ -418,139 +413,5 @@ describe("@palamedes/react", () => {
       { active: false, label: "English", locale: "en", testId: "locale-switch-en" },
       { active: true, label: "Deutsch", locale: "de", testId: "locale-switch-de" },
     ])
-  })
-
-  it("syncs the active client locale through useClientLocale", () => {
-    const i18n = createI18n()
-    i18n.load("en", { greeting: "Hello" })
-    i18n.load("de", { greeting: "Hallo" })
-    i18n.activate("en")
-    setClientI18n(i18n)
-    const sync = vi.fn((locale: "en" | "de") => {
-      i18n.activate(locale)
-      setClientI18n(i18n)
-    })
-
-    function Probe({ locale }: { locale: "en" | "de" }) {
-      useClientLocale(locale, sync)
-      return <Trans id="greeting" message="Greeting" />
-    }
-
-    const view = render(<Probe locale="en" />)
-    expect(sync).toHaveBeenCalledWith("en")
-    expect(view.container.textContent).toBe("Hello")
-
-    view.rerender(<Probe locale="de" />)
-    expect(sync).toHaveBeenLastCalledWith("de")
-    expect(view.container.textContent).toBe("Hallo")
-  })
-
-  it("re-renders memoized macro output after a client locale switch", () => {
-    const i18n = createI18n()
-    i18n.load("en", { greeting: "Hello" })
-    i18n.load("de", { greeting: "Hallo" })
-    i18n.activate("en")
-    setClientI18n(i18n)
-
-    const MacroOutput = memo(function MacroOutput() {
-      return <span>{String(getReactiveI18n<typeof i18n>()._("greeting"))}</span>
-    })
-
-    const view = render(<MacroOutput />)
-    expect(view.container.textContent).toBe("Hello")
-
-    act(() => {
-      i18n.activate("de")
-      setClientI18n(i18n)
-    })
-
-    expect(view.container.textContent).toBe("Hallo")
-  })
-
-  it("re-renders memoized Trans output after a client locale switch", () => {
-    const i18n = createI18n()
-    i18n.load("en", { greeting: "Hello" })
-    i18n.load("de", { greeting: "Hallo" })
-    i18n.activate("en")
-    setClientI18n(i18n)
-
-    const MemoizedTrans = memo(function MemoizedTrans() {
-      return <Trans id="greeting" message="Greeting" />
-    })
-
-    const view = render(<MemoizedTrans />)
-    expect(view.container.textContent).toBe("Hello")
-
-    act(() => {
-      i18n.activate("de")
-      setClientI18n(i18n)
-    })
-
-    expect(view.container.textContent).toBe("Hallo")
-  })
-
-  it("reconnects Trans reactivity after resetI18nRuntime discards shared listeners", () => {
-    const i18n = createI18n()
-    i18n.load("en", { greeting: "Hello" })
-    i18n.load("de", { greeting: "Hallo" })
-    i18n.activate("en")
-    setClientI18n(i18n)
-
-    function Probe({ label }: { label: string }) {
-      return (
-        <span data-label={label}>
-          <Trans id="greeting" message="Greeting" />
-        </span>
-      )
-    }
-
-    const view = render(<Probe label="first" />)
-    expect(view.container.textContent).toBe("Hello")
-
-    // The reset throws away the listener Set this tree subscribed into.
-    // `useSyncExternalStore` never re-subscribes on its own, so the binding has
-    // to reattach on its next read instead of staying orphaned forever.
-    resetI18nRuntime()
-    setClientI18n(i18n)
-    view.rerender(<Probe label="second" />)
-
-    act(() => {
-      i18n.activate("de")
-      setClientI18n(i18n)
-    })
-
-    expect(view.container.textContent).toBe("Hallo")
-  })
-
-  it("does not mutate client state during server rendering", async () => {
-    vi.stubGlobal("window", undefined)
-    const scope = createServerI18nScope<ReturnType<typeof createI18n>>()
-    const deI18n = createI18n()
-    const enI18n = createI18n()
-    deI18n.load("de", { greeting: "Hallo" })
-    enI18n.load("en", { greeting: "Hello" })
-    deI18n.activate("de")
-    enI18n.activate("en")
-    const sync = vi.fn()
-
-    function Probe({ locale }: { locale: "en" | "de" }) {
-      useClientLocale(locale, sync)
-      return <Trans id="greeting" message="Greeting" />
-    }
-
-    const [deHtml, enHtml] = await Promise.all([
-      scope.run(deI18n, async () => {
-        await Promise.resolve()
-        return renderToStaticMarkup(<Probe locale="de" />)
-      }),
-      scope.run(enI18n, async () => {
-        await Promise.resolve()
-        return renderToStaticMarkup(<Probe locale="en" />)
-      }),
-    ])
-
-    expect(deHtml).toBe("Hallo")
-    expect(enHtml).toBe("Hello")
-    expect(sync).not.toHaveBeenCalled()
   })
 })

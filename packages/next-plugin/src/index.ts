@@ -10,12 +10,7 @@ import path from "node:path"
 import { createRequire } from "node:module"
 import type { NextConfig } from "next"
 
-import {
-  PALAMEDES_MACRO_PACKAGES,
-  resolveMacroRuntimeModule,
-  type PalamedesFramework,
-  type PalamedesLocaleSwitching,
-} from "@palamedes/transform"
+import { PALAMEDES_MACRO_PACKAGES, resolveMacroRuntimeModule } from "@palamedes/transform"
 
 const require = createRequire(import.meta.url)
 
@@ -131,23 +126,7 @@ export type WithPalamedesOptions = {
   failOnCompileError?: boolean
 
   /**
-   * UI framework this app compiles for. Next.js is always React, so this is
-   * mainly exposed for advanced integrations and explicit overrides.
-   * @default "react"
-   */
-  framework?: PalamedesFramework
-
-  /**
-   * Locale changes reload the document by default, keeping inline macros
-   * hook-free. Set `"live"` only when the whole application is designed to
-   * react to in-document locale changes.
-   * @default "reload"
-   */
-  localeSwitching?: PalamedesLocaleSwitching
-
-  /**
-   * Module to import the runtime getter from. Overrides `localeSwitching` and
-   * `framework` runtime selection.
+   * Advanced override for the module that exports the runtime getter.
    * @default "@palamedes/runtime"
    */
   runtimeModule?: string
@@ -245,14 +224,12 @@ export function withPalamedes(
     configPath,
     failOnMissing = false,
     failOnCompileError = false,
-    framework = "react",
-    localeSwitching = "reload",
     runtimeModule: explicitRuntimeModule,
     keepSourceFallbacks: explicitKeepSourceFallbacks,
     workspaceRoot: explicitWorkspaceRoot,
   } = options
 
-  const runtimeModule = resolveMacroRuntimeModule(framework, explicitRuntimeModule, localeSwitching)
+  const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule)
   const keepSourceFallbacks = explicitKeepSourceFallbacks ?? process.env.NODE_ENV !== "production"
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
   const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)

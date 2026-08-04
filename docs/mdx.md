@@ -36,11 +36,9 @@ export default defineConfig({
 ```
 
 The plugin compiles for React unless told otherwise, so this option is required
-for Solid. Framework selection controls the rich-component contract; runtime
-lookups stay hook-free unless the plugin also sets
-`localeSwitching: "live"`. Extraction produces identical messages for both
-frameworks, so the catalog config has no reason to know either application
-runtime choice.
+for Solid. Framework selection controls only the rich-component contract;
+runtime lookups stay hook-free. Extraction produces identical messages for both
+frameworks, so the catalog config has no reason to know the application runtime.
 
 Do not add React's JSX module type for Solid. Rolldown would otherwise lower
 the module with React's automatic runtime before Solid's Babel preset sees it.
@@ -106,14 +104,14 @@ mdx:
   ignore-directive: palamedes-ignore
 ```
 
-| Field                     | Default                    | Purpose                                                             |
-| ------------------------- | -------------------------- | ------------------------------------------------------------------- |
-| `framework`               | `react`                    | Generates React or Solid rich-component bindings.                   |
-| `translatable-attributes` | `[alt]`                    | Static JSX attributes extracted as standalone messages.             |
-| `front-matter-fields`     | `[]`                       | Scalar frontmatter values extracted as standalone messages.         |
-| `trans-module`            | framework `/compiled` path | Module exporting parser-free `Trans`.                               |
-| `runtime-module`          | `@palamedes/runtime`       | Module exporting `getI18n`; plugins override it for live switching. |
-| `ignore-directive`        | `palamedes-ignore`         | Marker used for an explicit per-unit opt-out.                       |
+| Field                     | Default                    | Purpose                                                     |
+| ------------------------- | -------------------------- | ----------------------------------------------------------- |
+| `framework`               | `react`                    | Generates React or Solid rich-component bindings.           |
+| `translatable-attributes` | `[alt]`                    | Static JSX attributes extracted as standalone messages.     |
+| `front-matter-fields`     | `[]`                       | Scalar frontmatter values extracted as standalone messages. |
+| `trans-module`            | framework `/compiled` path | Module exporting parser-free `Trans`.                       |
+| `runtime-module`          | `@palamedes/runtime`       | Advanced override for the module exporting `getI18n`.       |
+| `ignore-directive`        | `palamedes-ignore`         | Marker used for an explicit per-unit opt-out.               |
 
 TypeScript configs use the camelCase equivalents:
 `translatableAttributes`, `frontMatterFields`, `transModule`,
@@ -123,10 +121,9 @@ TypeScript configs use the camelCase equivalents:
 Include `alt` explicitly when adding fields such as `title` or `aria-label`.
 `href` and `src` remain structural attributes and are never extracted.
 In Vite, the plugin's `framework` option selects the component contract for
-compiled MDX; `mdx.framework` overrides it per config. The plugin's
-`localeSwitching` option selects hook-free reload or reactive live runtime
-access for generated MDX. Its `runtimeModule` option applies to macros only —
-use `mdx.runtime-module` to point MDX at a different runtime explicitly.
+compiled MDX; `mdx.framework` overrides it per config. Runtime access remains
+hook-free. The plugin's `runtimeModule` option applies to macros only — use
+`mdx.runtime-module` to point MDX at a different custom runtime explicitly.
 
 The Vite plugin preserves inline source-message fallbacks in development and
 strips them from generated MDX during production builds. Configure
@@ -174,7 +171,7 @@ rendering.
 [`examples/vite-mdx`](../examples/vite-mdx) is a complete three-page React/Vite
 handbook with linked MDX modules, a shared English/German catalog, imported JSX
 components, expressions, translated attributes, image alt text, code blocks,
-and an in-place locale switch. It is part of `pnpm verify:examples`.
+and a document-level locale switch. It is part of `pnpm verify:examples`.
 
 ## Architecture Boundary
 

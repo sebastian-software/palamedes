@@ -6,7 +6,12 @@ export type Locale = (typeof LOCALES)[number]
 
 export const i18n = createI18n()
 
-export function activateLocale(locale: Locale) {
+export function resolveDocumentLocale(): Locale {
+  const locale = new URLSearchParams(window.location.search).get("locale")
+  return locale === "de" ? "de" : "en"
+}
+
+export function initializeDocumentLocale(locale: Locale) {
   i18n.activate(locale)
   setClientI18n(i18n)
   document.documentElement.lang = locale

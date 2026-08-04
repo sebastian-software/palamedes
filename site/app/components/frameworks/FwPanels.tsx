@@ -34,7 +34,7 @@ const PANELS: FwPanel[] = [
     slug: "solidstart",
     matrixSlug: "solidstart",
     sourcePath: "examples/solidstart-route",
-    body: "Fine-grained reactivity with @palamedes/solid — the same macro authoring and catalogs as React, no fork of your i18n strategy for a different renderer.",
+    body: "Solid-native rich-message rendering with @palamedes/solid — the same macro authoring, hook-free lookup, and catalogs as React.",
   },
   {
     name: "Waku",

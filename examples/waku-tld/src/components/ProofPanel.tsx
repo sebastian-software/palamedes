@@ -2,11 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { plural } from "@palamedes/core/macro"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans as Fmt } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
-import { syncClientI18n, type Locale } from "../lib/i18n"
+import type { Locale } from "../lib/i18n"
 
 type ProbeResult = {
   handledAt: string
@@ -16,12 +15,10 @@ type ProbeResult = {
 }
 
 type ProofPanelProps = {
-  locale: Locale
   runProbe: () => Promise<ProbeResult>
 }
 
-export function ProofPanel({ locale, runProbe }: ProofPanelProps) {
-  useClientLocale(locale, syncClientI18n)
+export function ProofPanel({ runProbe }: ProofPanelProps) {
   const when = new Date(EVENT.startsAt)
   const seats = EVENT.seatsLeft
   const [message, setMessage] = useState<string | null>(null)

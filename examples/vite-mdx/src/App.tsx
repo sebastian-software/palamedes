@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import Extraction from "./content/extraction.mdx"
 import Runtime from "./content/runtime.mdx"
 import Welcome from "./content/welcome.mdx"
-import { activateLocale, type Locale } from "./i18n"
+import type { Locale } from "./i18n"
 
 const pages = {
   extraction: Extraction,
@@ -18,8 +18,13 @@ function pageFromHash(): PageId {
   return page in pages ? (page as PageId) : "welcome"
 }
 
-export function App() {
-  const [locale, setLocale] = useState<Locale>("en")
+function localeHref(locale: Locale): string {
+  const url = new URL(window.location.href)
+  url.searchParams.set("locale", locale)
+  return `${url.pathname}${url.search}${url.hash}`
+}
+
+export function App({ locale }: { locale: Locale }) {
   const [page, setPage] = useState<PageId>(pageFromHash)
 
   useEffect(() => {
@@ -27,11 +32,6 @@ export function App() {
     window.addEventListener("hashchange", handleHashChange)
     return () => window.removeEventListener("hashchange", handleHashChange)
   }, [])
-
-  function switchLocale(nextLocale: Locale) {
-    activateLocale(nextLocale)
-    setLocale(nextLocale)
-  }
 
   const Page = pages[page]
 
@@ -43,22 +43,20 @@ export function App() {
           <span>Palamedes · MDX</span>
         </a>
         <div className="locale-switcher" role="group" aria-label="Language">
-          <button
-            aria-pressed={locale === "en"}
+          <a
+            aria-current={locale === "en" ? "true" : undefined}
             data-testid="locale-switch-en"
-            onClick={() => switchLocale("en")}
-            type="button"
+            href={localeHref("en")}
           >
             EN
-          </button>
-          <button
-            aria-pressed={locale === "de"}
+          </a>
+          <a
+            aria-current={locale === "de" ? "true" : undefined}
             data-testid="locale-switch-de"
-            onClick={() => switchLocale("de")}
-            type="button"
+            href={localeHref("de")}
           >
             DE
-          </button>
+          </a>
         </div>
       </header>
 
@@ -93,7 +91,7 @@ export function App() {
             <br />
             Vite compilation
             <br />
-            Reactive runtime
+            Hook-free runtime
           </p>
         </aside>
 

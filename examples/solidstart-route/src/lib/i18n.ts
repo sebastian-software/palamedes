@@ -44,7 +44,7 @@ export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale)
 }
 
-export function syncClientI18n(locale: Locale) {
+export function initializeClientI18n(locale: Locale) {
   if (typeof window === "undefined") {
     return
   }
@@ -60,7 +60,7 @@ function bootstrapClientI18n() {
   }
 
   const pathLocale = window.location.pathname.split("/").filter(Boolean)[0] ?? DEFAULT_LOCALE
-  syncClientI18n(normalizeLocale(pathLocale))
+  initializeClientI18n(normalizeLocale(pathLocale))
 }
 
 bootstrapClientI18n()

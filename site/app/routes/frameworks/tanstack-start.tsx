@@ -80,7 +80,7 @@ import { palamedes } from "@palamedes/vite-plugin"
 export default {
   plugins: [
     tanstackStart(),
-    palamedes({ runtimeModule: "@palamedes/react/runtime" }),
+    palamedes(),
     react(),
   ],
 }

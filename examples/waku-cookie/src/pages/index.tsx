@@ -54,7 +54,7 @@ export default async function CookiePage() {
       <section className="hero">
         <p className="eyebrow">
           <span className="dot" aria-hidden="true" />
-          <Trans>Localized live with Palamedes</Trans>
+          <Trans>Localized for this document with Palamedes</Trans>
         </p>
         <h1>
           <Trans>Book your seat at Frontend Stage 2026</Trans>
@@ -68,8 +68,8 @@ export default async function CookiePage() {
       </section>
 
       <div className="grid">
-        <TicketPanel locale={locale} />
-        <ProofPanel locale={locale} runProbe={runProbe} />
+        <TicketPanel />
+        <ProofPanel runProbe={runProbe} />
       </div>
 
       <footer className="foot">

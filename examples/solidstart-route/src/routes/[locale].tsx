@@ -1,7 +1,6 @@
 import { Show } from "solid-js"
 import { createAsync, useParams } from "@solidjs/router"
 import { t } from "@palamedes/core/macro"
-import { createClientLocaleEffect } from "@palamedes/solid/client"
 import { Trans } from "@palamedes/solid/macro"
 import { EVENT } from "@palamedes/example-ui"
 import { ClientReady } from "../components/ClientReady"
@@ -9,7 +8,6 @@ import { LocaleSwitcher } from "../components/LocaleSwitcher"
 import { ProofPanel } from "../components/ProofPanel"
 import { SuggestionBanner } from "../components/SuggestionBanner"
 import { TicketPanel } from "../components/TicketPanel"
-import { syncClientI18n } from "../lib/i18n"
 import { loadRoutePageData } from "../lib/server"
 
 type RoutePageData = {
@@ -23,8 +21,6 @@ type RoutePageData = {
 }
 
 function RoutePageContent(props: { data: RoutePageData }) {
-  createClientLocaleEffect(() => props.data.locale, syncClientI18n)
-
   return (
     <main class="page-shell">
       <Show when={props.data.banner}>
@@ -49,7 +45,7 @@ function RoutePageContent(props: { data: RoutePageData }) {
       <section class="hero">
         <p class="eyebrow">
           <span class="dot" aria-hidden="true" />
-          <Trans>Localized live with Palamedes</Trans>
+          <Trans>Localized for this document with Palamedes</Trans>
         </p>
         <h1>
           <Trans>Book your seat at Frontend Stage 2026</Trans>

@@ -78,7 +78,7 @@ import { palamedes } from "@palamedes/vite-plugin"
 
 export default {
   plugins: [
-    palamedes({ runtimeModule: "@palamedes/react/runtime" }),
+    palamedes(),
     reactRouter(),
   ],
 }

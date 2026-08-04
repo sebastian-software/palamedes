@@ -3,8 +3,8 @@ import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
   vite: {
-    // Point the macro transform at Solid's reactive `getI18n` so `t`/`plural`
-    // output follows client-side locale switches, matching the `<Trans>` runtime.
+    // Select Solid's component contract for compiled rich messages. Macro
+    // lookups keep using the framework-neutral, hook-free runtime getter.
     plugins: [palamedes({ framework: "solid" })],
     // The subdomain strategy serves each locale from its own host label
     // (`de.lvh.me`, `en.lvh.me`, …). Allow those hosts plus the deployed

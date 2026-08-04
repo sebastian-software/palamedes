@@ -45,7 +45,7 @@ export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale)
 }
 
-export function syncClientI18n(locale: Locale) {
+export function initializeClientI18n(locale: Locale) {
   if (typeof window === "undefined") {
     return
   }
@@ -53,4 +53,13 @@ export function syncClientI18n(locale: Locale) {
   clientI18n.load(locale, loadMessages(locale))
   clientI18n.activate(locale)
   setClientI18n(clientI18n)
+}
+
+if (typeof window !== "undefined") {
+  const cookieLocale = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${LOCALE_COOKIE}=`))
+    ?.slice(`${LOCALE_COOKIE}=`.length)
+  initializeClientI18n(normalizeLocale(cookieLocale ?? navigator.language.split("-")[0]))
 }

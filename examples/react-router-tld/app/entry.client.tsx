@@ -1,7 +1,7 @@
 import { startTransition, StrictMode } from "react"
 import { hydrateRoot } from "react-dom/client"
 import { HydratedRouter } from "react-router/dom"
-import { DEFAULT_LOCALE, LOCALES, syncClientI18n, type Locale } from "~/lib/i18n"
+import { DEFAULT_LOCALE, LOCALES, initializeClientI18n, type Locale } from "~/lib/i18n"
 
 declare global {
   interface Window {
@@ -14,7 +14,7 @@ function bootstrap() {
   const locale: Locale = LOCALES.includes(candidate as Locale)
     ? (candidate as Locale)
     : DEFAULT_LOCALE
-  syncClientI18n(locale)
+  initializeClientI18n(locale)
 
   startTransition(() => {
     hydrateRoot(

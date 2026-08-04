@@ -101,9 +101,7 @@ For a fuller walkthrough, including Hono and Express examples, see:
 ## API
 
 - `getI18n()`
-- `getClientI18nSnapshot()`
 - `setClientI18n(i18n)`
-- `subscribeClientI18n(listener)`
 - `activateServerI18n(i18n)`
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
@@ -121,12 +119,6 @@ the main entry point to enter an existing request scope without importing the
 Node-only subpath. The server entry point must first configure the shared scope
 with `createServerI18nScope()`. The helper does not make a shared i18n singleton
 request-safe, so pass a fresh request-local instance.
-
-`subscribeClientI18n(listener)` is intended for framework bindings such as the
-Solid reactivity bridge. It fires when `setClientI18n()` is called and returns
-an unsubscribe function. `getClientI18nSnapshot()` pairs the active instance
-with a monotonic revision so external-store bindings can also observe
-re-activation of the same mutable instance.
 
 ## Related Packages
 

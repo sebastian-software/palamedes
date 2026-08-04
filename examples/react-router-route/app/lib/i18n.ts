@@ -58,7 +58,7 @@ export function activateServerI18n(locale: Locale) {
 
 const clientI18n = createExampleI18n()
 
-export function syncClientI18n(locale: Locale) {
+export function initializeClientI18n(locale: Locale) {
   if (typeof document === "undefined") {
     return
   }

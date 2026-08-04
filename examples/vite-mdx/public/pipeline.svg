@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 260" role="img" aria-labelledby="title desc">
   <title id="title">MDX translation pipeline</title>
-  <desc id="desc">MDX source flows through native semantics into catalogs and the reactive runtime.</desc>
+  <desc id="desc">MDX source flows through native semantics into compiled catalogs and the hook-free runtime.</desc>
   <defs>
     <linearGradient id="surface" x1="0" x2="1">
       <stop offset="0" stop-color="#15223d"/>

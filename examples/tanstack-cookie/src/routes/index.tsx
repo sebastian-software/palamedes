@@ -1,13 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { t } from "@palamedes/core/macro"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
 import { ClientReady } from "../components/ClientReady"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
 import { ProofPanel } from "../components/ProofPanel"
 import { TicketPanel } from "../components/TicketPanel"
-import { syncClientI18n } from "../lib/i18n"
 import { loadHomePageData } from "../lib/server-functions"
 
 export const Route = createFileRoute("/")({
@@ -17,8 +15,6 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const { locale, localeLabel } = Route.useLoaderData()
-  useClientLocale(locale, syncClientI18n)
-
   return (
     <main className="page-shell">
       <header className="topbar">
@@ -32,7 +28,7 @@ function Home() {
       <section className="hero">
         <p className="eyebrow">
           <span className="dot" aria-hidden="true" />
-          <Trans>Localized live with Palamedes</Trans>
+          <Trans>Localized for this document with Palamedes</Trans>
         </p>
         <h1>
           <Trans>Book your seat at Frontend Stage 2026</Trans>

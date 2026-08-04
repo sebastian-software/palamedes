@@ -1,6 +1,5 @@
 import { Link, redirect } from "react-router"
 import { t } from "@palamedes/core/macro"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
 import type { Route } from "./+types/home"
@@ -8,7 +7,7 @@ import { ClientReady } from "~/components/ClientReady"
 import { LocaleSwitcher } from "~/components/LocaleSwitcher"
 import { ProofPanel } from "~/components/ProofPanel"
 import { TicketPanel } from "~/components/TicketPanel"
-import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest, syncClientI18n } from "~/lib/i18n"
+import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n"
 import { activateServerI18n } from "~/lib/i18n.server"
 
 export function meta(_args: Route.MetaArgs) {
@@ -61,8 +60,6 @@ export async function action({ request }: Route.ActionArgs) {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { locale, localeLabel } = loaderData
 
-  useClientLocale(locale, syncClientI18n)
-
   return (
     <main className="page-shell">
       <header className="topbar">
@@ -76,7 +73,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <section className="hero">
         <p className="eyebrow">
           <span className="dot" aria-hidden="true" />
-          <Trans>Localized live with Palamedes</Trans>
+          <Trans>Localized for this document with Palamedes</Trans>
         </p>
         <h1>
           <Trans>Book your seat at Frontend Stage 2026</Trans>
