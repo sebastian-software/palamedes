@@ -14,6 +14,7 @@
       "@palamedes/cli": ["packages/cli/src/index.ts"],
       "@palamedes/config": ["packages/config/src/index.ts"],
       "@palamedes/core": ["packages/core/src/index.ts"],
+      "@palamedes/core/compiled": ["packages/core/src/compiled.ts"],
       "@palamedes/core/locale": ["packages/core/src/locale.ts"],
       "@palamedes/core/macro": ["packages/core/src/macro.ts"],
       "@palamedes/core-node": ["packages/core-node/src/index.ts"],
