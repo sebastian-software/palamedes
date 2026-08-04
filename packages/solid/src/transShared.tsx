@@ -94,32 +94,32 @@ export function createSolidMessageRuntime(
   const runtime: CompiledMessageRuntime<JSX.Element[]> = createCompiledMessageRuntime<
     JSX.Element[]
   >(locale, {
-    pattern(pattern, values) {
+    pattern(pattern: string, values: Record<string, unknown>) {
       const nodes = parsePattern(i18n, pattern, fallbackParser)
       return renderNodes(nodes, values, runtime, locale)
     },
-    join(...parts) {
+    join(...parts: Array<string | JSX.Element[]>) {
       return parts.flatMap((part) => (typeof part === "string" ? [part] : part))
     },
-    value(value) {
+    value(value: unknown) {
       return [renderVariable(value)]
     },
-    number(value, style) {
+    number(value: unknown, style?: string) {
       return [formatMessageArgument("number", value, style, locale)]
     },
-    date(value, style) {
+    date(value: unknown, style?: string) {
       return [formatMessageArgument("date", value, style, locale)]
     },
-    time(value, style) {
+    time(value: unknown, style?: string) {
       return [formatMessageArgument("time", value, style, locale)]
     },
-    pound(value) {
+    pound(value: number) {
       return [replacePoundPlaceholders("#", value, locale)]
     },
-    literal(value) {
+    literal(value: string) {
       return [value]
     },
-    tag(name, children) {
+    tag(name: string, children: JSX.Element[]) {
       const component = components[name]
       if (typeof component === "function") {
         return [component(children as unknown as JSX.Element)]
@@ -190,6 +190,8 @@ function renderNode(
       return renderNodes(resolved.nodes, values, runtime, locale, nextPluralValue)
     }
   }
+
+  return []
 }
 
 function renderVariable(value: unknown): JSX.Element {
