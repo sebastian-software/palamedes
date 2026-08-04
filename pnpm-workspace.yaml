@@ -6,6 +6,10 @@ packages:
 
 overrides:
   "eslint-config-setup>eslint-plugin-oxlint": "1.76.0"
+  # @vercel/blob 2.4 permits this patched Undici line; remove after its lock resolves >=6.28.
+  "@vercel/blob>undici": "6.28.0"
+  # vinxi 0.5.11 pins h3 1.15.3; remove once vinxi permits a patched h3.
+  "vinxi>h3": "1.15.10"
   "waku>vite": "^8.0.16"
   "waku>@vitejs/plugin-react": "^6.0.1"
 
