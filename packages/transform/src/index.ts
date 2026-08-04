@@ -10,7 +10,7 @@ export type { TransformOptions, TransformResult, SourceMap } from "./types"
 export { PALAMEDES_MACRO_PACKAGES, JS_MACROS, JSX_MACROS } from "./types"
 export { mightContainPalamedesMacros, findMacroImports } from "./detect"
 export { resolveMacroRuntimeModule, mdxFrameworkFor } from "./framework"
-export type { PalamedesFramework } from "./framework"
+export type { PalamedesFramework, PalamedesLocaleSwitching } from "./framework"
 export {
   createCatalogLoaderResult,
   createCompileErrorMessage,

@@ -98,6 +98,7 @@ palamedes({
   failOnMissing: false,
   failOnCompileError: false,
   framework: "react",
+  localeSwitching: "reload",
   keepSourceFallbacks: undefined,
   mdx: {
     translatableAttributes: ["alt", "title"],
@@ -115,15 +116,16 @@ explicitly to override the command-based default.
 sets the directory the config search starts from, and `skipValidation` loads
 partially-authored config files without validation (tooling only).
 
-`framework` says which UI framework the app compiles for. It selects the
-reactive runtime for macros, so inline `t` / `plural` follow a live locale
-switch, and the component contract for compiled `.mdx`. It defaults to
-`"react"`, so **Solid apps must set `framework: "solid"`**; use `"none"` for a
-project that is neither.
+`framework` says which UI framework the app compiles for and selects the
+component contract for compiled `.mdx`. It defaults to `"react"`, so **Solid
+apps must set `framework: "solid"`**; use `"none"` for a project that is
+neither. Macro and generated MDX runtime access stays hook-free by default.
+Set `localeSwitching: "live"` only when locale changes keep the document and
+mounted component tree alive.
 
 The separate `runtimeModule` option overrides only the macro transform's module
-path. Generated MDX modules are independent; configure those through
-`mdx.runtimeModule`.
+path. Generated MDX follows `localeSwitching`; override it independently
+through `mdx.runtimeModule`.
 
 When `failOnMissing` is enabled, MDX compiled IDs are validated against every
 target locale in the catalogs that include the source file, even before a

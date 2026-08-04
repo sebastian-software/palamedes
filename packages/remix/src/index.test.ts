@@ -98,8 +98,8 @@ describe("createPalamedesRemixLoadHook", () => {
 
   it.each([
     ["none by default", undefined, "@palamedes/runtime"],
-    ["react when asked", "react", "@palamedes/react/runtime"],
-    ["solid when asked", "solid", "@palamedes/solid/runtime"],
+    ["react when asked", "react", "@palamedes/runtime"],
+    ["solid when asked", "solid", "@palamedes/runtime"],
   ] as const)("targets the %s runtime", (_label, framework, expected) => {
     /*
      * Unlike the Vite and Next plugins this defaults to "none": Remix 3 ships
@@ -119,6 +119,26 @@ describe("createPalamedesRemixLoadHook", () => {
     }))
 
     expect(String(loaded.source)).toContain(`import { getI18n } from "${expected}"`)
+  })
+
+  it.each([
+    ["react", "@palamedes/react/runtime"],
+    ["solid", "@palamedes/solid/runtime"],
+  ] as const)("opts %s macros into live locale switching", (framework, expected) => {
+    const load = createPalamedesRemixLoadHook({ framework, localeSwitching: "live" })
+    const loaded = load(new URL("file:///repo/app/routes/home.tsx").href, loadContext, () => ({
+      format: "module",
+      source:
+        'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }',
+    }))
+
+    expect(String(loaded.source)).toContain(`import { getI18n } from "${expected}"`)
+  })
+
+  it("rejects live switching without a framework or custom runtime", () => {
+    expect(() => createPalamedesRemixLoadHook({ localeSwitching: "live" })).toThrow(
+      /requires framework="react" or framework="solid"/
+    )
   })
 
   it("compiles PO catalog imports without delegating to the default loader", () => {

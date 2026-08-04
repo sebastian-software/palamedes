@@ -27,6 +27,8 @@ The locale-switch helper and related types are re-exported from
 The client subpath `@palamedes/react/client` exports:
 
 - `useClientLocale(locale, sync)`
+- `createReloadClientCatalogBoundary(options)` for a document-fixed locale
+- `createClientCatalogBoundary(options)` for live locale or catalog revisions
 
 The runtime subpath `@palamedes/react/runtime` exports:
 
@@ -113,13 +115,12 @@ not own loading UI or routing policy.
 
 ## Reactive Macro Runtime
 
-Macro `t` / `plural` calls use the runtime module derived from the plugin's
-`framework` option, which defaults to React.
-Point it at the React runtime when a client-side locale switch must update
-memoized translated components:
+Macro `t` / `plural` calls use the plain, hook-free runtime by default. Opt into
+the React runtime only when a client-side locale switch must update memoized
+translated components:
 
 ```ts
-palamedes()
+palamedes({ localeSwitching: "live" })
 ```
 
 The bridge observes the activation revision rather than only object identity, so
@@ -128,7 +129,39 @@ the `react-server` condition, the subpath resolves to the hook-free
 `@palamedes/runtime` getter so Server Components and server actions retain
 request-local runtime behavior.
 
-The reactive getter is a custom hook. Inline `t` / `plural` macros transformed
-to this runtime must execute unconditionally during a function-component or
-custom-hook render. For conditional translated output, render a child component
-such as `<Trans>` in the branch instead of invoking an inline macro conditionally.
+The live reactive getter is a custom hook. Inline `t` / `plural` macros
+transformed to this runtime must execute unconditionally during a
+function-component or custom-hook render. Reload mode has no such hook
+constraint.
+
+## Client Catalog Boundaries
+
+For the recommended document-reload model, create a boundary once in a
+`"use client"` module:
+
+```tsx
+import { createReloadClientCatalogBoundary } from "@palamedes/react/client"
+
+type Locale = "en" | "de"
+
+export const ClientCatalogBoundary = createReloadClientCatalogBoundary<Locale>({
+  loadCatalog: (locale) => import(`../locales/${locale}.po`),
+  resolveClientLocale: () => {
+    const locale = document.documentElement.lang
+    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`)
+    return locale
+  },
+})
+```
+
+The active locale starts loading when the browser module evaluates. The
+boundary suspends until it can initialize the shared parser-free i18n instance,
+then renders descendants. Hook-free macro calls therefore have a valid getter
+on their first hydration render. A different `locale` prop fails fast because
+changing language in this model requires document navigation.
+
+`createClientCatalogBoundary()` is the live alternative. It creates a scoped
+instance for the rendered locale and publishes it globally only after commit,
+so discarded concurrent renders cannot change external state. It also accepts
+`catalogRevision` for refreshing same-locale contents. Pair it with
+`localeSwitching: "live"` when inline macros must follow those commits.

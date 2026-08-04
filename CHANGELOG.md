@@ -4,6 +4,14 @@
 
 ### Compatibility Notes
 
+- Vite, Next, and Remix macro transforms now default to the plain hook-free
+  `getI18n()` from `@palamedes/runtime`. Framework selection continues to
+  choose the React or Solid MDX component contract, but no longer implies live
+  locale reactivity. Applications that intentionally change locale without a
+  document navigation must set `localeSwitching: "live"`; reload-oriented apps
+  need no plugin option. React applications can use the new
+  `createReloadClientCatalogBoundary()` to load one parser-free locale chunk
+  and initialize the getter before hydration.
 - Production integrations now strip inline source-message fallbacks from macro
   and MDX output by default. Vite preserves them during `vite serve`; Vite
   builds, Next production, and Remix production emit compact lookup calls.

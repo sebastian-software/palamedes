@@ -40,7 +40,7 @@ For live client-side locale switches, point the macro transform at React's
 external-store bridge:
 
 ```ts
-palamedes()
+palamedes({ localeSwitching: "live" })
 ```
 
 The `@palamedes/react/runtime` subpath exports a React-aware `getI18n()` that
@@ -49,10 +49,11 @@ including re-activation of the same mutable instance. React Server Components
 resolve the hook-free server implementation through the `react-server` export
 condition.
 
-`<Trans>`, `<Plural>`, `<Select>`, and `<SelectOrdinal>` use the same subscription
-automatically. The transform override is needed for inline `t` / `plural` macro
-calls. Because the reactive getter is a custom hook, those inline calls must run
-unconditionally during a function-component or custom-hook render.
+`<Trans>`, `<Plural>`, `<Select>`, and `<SelectOrdinal>` subscribe automatically.
+The opt-in is needed for inline `t` / `plural` macro calls. Because the live
+getter is a custom hook, those calls must run unconditionally during a
+function-component or custom-hook render. The default reload mode uses the
+plain getter and has no hook constraint.
 
 Rich JSX children are transformed to numeric component slots in the message, for
 example `<0>Palamedes</0>`, while the React component is passed separately.
@@ -92,9 +93,11 @@ primitives that repeat across apps:
 - building render-ready locale switch models for buttons, links, or forms
 
 `useClientLocale` does not run its sync callback during SSR. If the initial HTML
-contains translated client components, use `createClientCatalogBoundary()` for
-generated catalogs or initialize `setClientI18n()` before hydration. All
-hook-driven locale synchronization happens after commit.
+contains translated client components, use
+`createReloadClientCatalogBoundary()` for a document-fixed locale,
+`createClientCatalogBoundary()` for live navigation, or initialize
+`setClientI18n()` before hydration. Hook-driven locale synchronization happens
+after commit.
 
 ```tsx
 import { buildLocaleSwitchItems } from "@palamedes/react"
@@ -136,12 +139,17 @@ first hydration render. Define the boundary once in a `"use client"` module:
 ```tsx
 "use client"
 
-import { createClientCatalogBoundary } from "@palamedes/react/client"
+import { createReloadClientCatalogBoundary } from "@palamedes/react/client"
 
 type Locale = "en" | "de"
 
-export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
+export const ClientCatalogBoundary = createReloadClientCatalogBoundary<Locale>({
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
+  resolveClientLocale: () => {
+    const locale = document.documentElement.lang
+    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`)
+    return locale
+  },
 })
 ```
 
@@ -159,19 +167,17 @@ return (
 ```
 
 The dynamic import keeps executable generated messages in a module chunk; they
-are not serialized through React Server Components. The boundary suspends
-hydration until that one module is available, creates a scoped parser-free i18n
-instance, and only bridges it to `setClientI18n()` after commit. A discarded
-concurrent render can load a module, but cannot activate it or notify runtime
-subscribers.
+are not serialized through React Server Components. The reload boundary starts
+that import at client module evaluation, suspends hydration until it is ready,
+and initializes the hook-free runtime before descendants render. It rejects an
+attempt to render a locale other than the document locale; switching language
+must navigate the document.
 
-Pass a changed `catalogRevision` string or number when the contents can refresh
-without a locale change. The boundary will request a fresh resource and publish
-the new instance after that render commits. The loader receives the revision as
-its second argument, so version-aware sources can select fresh contents while
-ordinary static imports can ignore it. Because this path uses module loading
-rather than inline scripts, JSON source, or `eval`, it works with strict Content
-Security Policies and with executable generated catalogs.
+Use `createClientCatalogBoundary()` instead with
+`localeSwitching: "live"` when locale or `catalogRevision` can change inside
+the mounted tree. It creates a scoped instance during render and publishes only
+committed changes. Both paths avoid inline scripts, JSON source, and `eval`, so
+they work with strict Content Security Policies and executable catalogs.
 
 A rejected dynamic import is thrown to the nearest React error boundary. A
 module without a generated, branded `messages` export fails through the

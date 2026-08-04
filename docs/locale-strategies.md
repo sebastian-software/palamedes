@@ -180,12 +180,11 @@ Live switching in React has two pieces:
 
 - `useClientLocale(locale, syncClientI18n)` pushes committed locale changes into
   the client runtime
-- nothing else: the Vite and Next plugins compile for React by default, so the
-  macro transform already points at React's external-store bridge and memoized
-  `t` / `plural` output follows every activation
+- opt the plugin into React's external-store bridge so inline `t` / `plural`
+  output follows every activation
 
   ```ts
-  palamedes()
+  palamedes({ localeSwitching: "live" })
   ```
 
 The runtime subpath selects a hook-free implementation under the `react-server`
@@ -198,10 +197,10 @@ need the reactive transform target. Those calls are hook-backed and therefore
 must execute unconditionally during a React function-component or custom-hook
 render.
 
-A project that is neither React nor Solid opts out with
-`palamedes({ framework: "none" })`, which restores the framework-agnostic
-`@palamedes/runtime`. `@palamedes/remix` defaults to `"none"` already, because
-Remix 3 ships its own UI layer and does not depend on React.
+Reload mode is already framework-agnostic and hook-free. A project that is
+neither React nor Solid can additionally state `framework: "none"` for its MDX
+component contract. `@palamedes/remix` defaults to `"none"` because Remix 3
+ships its own UI layer and does not depend on React.
 
 ### Enabling live switching (Solid)
 
@@ -210,12 +209,12 @@ two opt-in pieces:
 
 - `createClientLocaleEffect(localeAccessor, syncClientI18n)` pushes locale changes
   into the client runtime
-- tell the plugin it compiles for Solid, which points the macro transform at
-  Solid's reactive runtime so `t` / `plural` output follows the switch:
+- tell the plugin it compiles for Solid and opt into live switching, which
+  points the macro transform at Solid's reactive runtime:
 
   ```ts
   // app.config.ts
-  palamedes({ framework: "solid" })
+  palamedes({ framework: "solid", localeSwitching: "live" })
   ```
 
 Setting `framework` is required for Solid apps: the plugin compiles for React

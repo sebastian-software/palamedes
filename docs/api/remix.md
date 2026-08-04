@@ -31,6 +31,7 @@ interface PalamedesRemixRegisterOptions {
   include?: RegExp
   exclude?: RegExp
   framework?: "react" | "solid" | "none"
+  localeSwitching?: "reload" | "live"
   runtimeModule?: string
   keepSourceFallbacks?: boolean
   configPath?: string
@@ -44,7 +45,8 @@ Defaults:
 - `include`: `/\.(tsx?|jsx?|mjs)$/`
 - `exclude`: `/[/\\]node_modules[/\\]/`
 - `framework`: `"none"` — Remix 3 ships its own UI layer and does not depend on React
-- `runtimeModule`: derived from `framework`
+- `localeSwitching`: `"reload"`
+- `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true` in development, `false` in production
 - `configPath`: unset — `.po` imports discover the Palamedes config from the
   imported catalog file's directory; relative paths resolve from there
@@ -54,6 +56,10 @@ Defaults:
 The default intentionally excludes `.cjs` because the macro transform injects
 ESM imports. Pass a custom `include` only if your hook also provides a
 CommonJS-compatible runtime binding.
+
+Set both `framework` and `localeSwitching: "live"` only when the mounted UI
+must react to an in-document locale change. Reload mode keeps macro calls as
+plain getter calls.
 
 Production register hooks strip authored messages from generated runtime calls
 and omit translator comments and context metadata by default. Set

@@ -18,10 +18,9 @@ use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart}
 use crate::transform::NativeTransformSourceMap;
 
 const DEFAULT_IGNORE_DIRECTIVE: &str = "palamedes-ignore";
+const DEFAULT_RUNTIME_MODULE: &str = "@palamedes/runtime";
 const REACT_TRANS_MODULE: &str = "@palamedes/react/compiled";
-const REACT_RUNTIME_MODULE: &str = "@palamedes/react/runtime";
 const SOLID_TRANS_MODULE: &str = "@palamedes/solid/compiled";
-const SOLID_RUNTIME_MODULE: &str = "@palamedes/solid/runtime";
 
 /// Framework contract used for generated rich-text component bindings.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
@@ -49,7 +48,7 @@ pub struct MdxOptions {
     /// Module exporting the framework's `Trans` component.
     #[serde(alias = "trans-module", alias = "trans_module")]
     pub trans_module: Option<String>,
-    /// Module exporting the framework-aware `getI18n` accessor.
+    /// Module exporting the `getI18n` accessor.
     #[serde(alias = "runtime-module", alias = "runtime_module")]
     pub runtime_module: Option<String>,
     /// Explicit opt-out marker used in an immediately preceding comment.
@@ -86,10 +85,7 @@ impl MdxOptions {
     fn runtime_module(&self) -> &str {
         self.runtime_module
             .as_deref()
-            .unwrap_or(match self.framework {
-                MdxFramework::React => REACT_RUNTIME_MODULE,
-                MdxFramework::Solid => SOLID_RUNTIME_MODULE,
-            })
+            .unwrap_or(DEFAULT_RUNTIME_MODULE)
     }
 
     /// Stable cache stamp for semantics that affect extracted records.
@@ -2070,11 +2066,12 @@ Do not translate this.
 
     #[test]
     fn react_and_solid_use_their_runtime_component_contracts() {
-        let source = "Hello **world**.";
+        let source = "![Diagram](./diagram.png)\n\nHello **world**.";
         let react = analyze_valid(source, MdxOptions::default())
             .code
             .expect("React compile");
         assert!(react.contains(r#"from "@palamedes/react/compiled""#));
+        assert!(react.contains(r#"from "@palamedes/runtime""#));
         assert!(react.contains("0: <strong />"));
 
         let solid = analyze_valid(
@@ -2087,6 +2084,7 @@ Do not translate this.
         .code
         .expect("Solid compile");
         assert!(solid.contains(r#"from "@palamedes/solid/compiled""#));
+        assert!(solid.contains(r#"from "@palamedes/runtime""#));
         assert!(solid.contains("0: (children) => <strong>{children}</strong>"));
     }
 
