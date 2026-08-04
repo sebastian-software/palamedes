@@ -46,22 +46,29 @@ Then read the product boundary, CLI, and diagnostics decisions:
 15. [ADR-015: Runtime Formatter Subset Diagnostics](./adr/015-runtime-formatter-subset-diagnostics.md)
 16. [ADR-016: Native CLI And YAML-First Configuration](./adr/016-native-cli-and-yaml-first-configuration.md)
 
-Then read the CLI extension decisions:
+Then read the remaining cross-cutting decisions:
 
 17. [ADR-017: Host Explicit CLI Plugins in the npm Wrapper](./adr/017-cli-plugin-execution-boundary.md)
 18. [ADR-018: Binary Plugin Protocol for Rust-First Extensions](./adr/018-binary-plugin-protocol.md)
 19. [ADR-019: Extraction Cache](./adr/019-extraction-cache.md)
-20. [ADR-020: Locale Is Fixed For A Browser Document](./adr/020-framework-selection-lives-on-the-plugins.md)
+20. [ADR-020: Locale Is Fixed for a Browser Document](./adr/020-framework-selection-lives-on-the-plugins.md)
 21. [ADR-021: Shared Cross-Repository Site UI](./adr/021-shared-cross-repository-site-ui.md)
+22. [ADR-022: Generated Catalogs Use Executable Message Functions](./adr/022-generated-catalogs-use-executable-message-functions.md)
+23. [ADR-023: Generated Production Runtime Is Parser-Free](./adr/023-generated-production-runtime-is-parser-free.md)
+24. [ADR-024: The npm Launcher Is A Packaging Bridge With A Node-Free Escape Hatch](./adr/024-npm-launcher-is-a-packaging-bridge.md)
 
 ## ADR Policy
 
 Each ADR should explain:
 
 - the problem or pressure that made the decision necessary
-- the alternatives that were seriously considered
-- the decision itself
+- the current decision and the invariants it establishes
+- enough durable rationale to understand the chosen boundary and its relevant alternatives
 - the consequences for maintainers and users
+
+ADRs do not chronicle experiments, rollout steps, removed APIs, or the sequence
+of earlier implementations. Keep that history in the pull request and Git
+history unless it remains necessary to understand a current constraint.
 
 Product, communication, and operational choices belong here when they are as
 durable and cross-cutting as an architectural choice. If a decision stops being
