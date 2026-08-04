@@ -80,6 +80,28 @@
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.12.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.11.0...palamedes-v1.12.0) (2026-08-04)
+
+
+### Features
+
+* **cli:** add native source lint command ([b1fa7f5](https://github.com/sebastian-software/palamedes/commit/b1fa7f5ddbb834c381eee01ffbf9ca85c35ac8d5))
+* **core:** add shared source analysis ([d497b38](https://github.com/sebastian-software/palamedes/commit/d497b388fcad6c7a52baf518b2237c90fcbff157))
+* **core:** diagnose messages without translatable content ([02e1155](https://github.com/sebastian-software/palamedes/commit/02e1155bf8fb643b239934b97c848bd4a2bce7f6))
+* **core:** share source analysis cache ([b5c1d64](https://github.com/sebastian-software/palamedes/commit/b5c1d64eb3a07fb73c57167f9524c7eae7af4ee1))
+* **core:** suggest Trans in JSX render positions ([a795c57](https://github.com/sebastian-software/palamedes/commit/a795c575f683b86aaccb1efbb5f3b6ed61244875))
+* **lint:** add ESLint and Oxlint adapter ([229db2d](https://github.com/sebastian-software/palamedes/commit/229db2d9f332df8d48eb87d973d5faddf430664f))
+
+
+### Bug Fixes
+
+* **deps:** patch shared tooling vulnerabilities ([#529](https://github.com/sebastian-software/palamedes/issues/529)) ([18134c5](https://github.com/sebastian-software/palamedes/commit/18134c5cd9f929cb65c63498aebf9e12faa4ebf9))
+* **deps:** patch SolidStart transitive vulnerabilities ([#528](https://github.com/sebastian-software/palamedes/issues/528)) ([41a72dc](https://github.com/sebastian-software/palamedes/commit/41a72dc6a8745a589155f7da12fb1743fe8d03ce))
+* **lint:** address source analysis review feedback ([ece85e2](https://github.com/sebastian-software/palamedes/commit/ece85e2fb253e63842cf012eb89fc868517f923f))
+* **lint:** refresh adapter lockfile resolution ([3d56d74](https://github.com/sebastian-software/palamedes/commit/3d56d7491e46499f8ad66da14ee9eb16ad1936df))
+* **runtime:** restore hook-free locale access ([2866b7d](https://github.com/sebastian-software/palamedes/commit/2866b7ddfc9ad02206ae9f4aa297e82c878a34a6))
+* **solid:** type compiled runtime renderer ([#522](https://github.com/sebastian-software/palamedes/issues/522)) ([9b4d47a](https://github.com/sebastian-software/palamedes/commit/9b4d47a8ea05066b33038c7a193a63440181bb8e))
+
 ## [1.11.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.10.0...palamedes-v1.11.0) (2026-08-03)
 
 
