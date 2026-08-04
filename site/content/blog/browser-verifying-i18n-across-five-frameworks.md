@@ -32,7 +32,7 @@ That gives 24 example apps. Each one has visible checks for the parts that
 usually hide i18n bugs:
 
 - server-rendered localized text before hydration
-- client-side locale switching
+- document-level locale switching
 - server-side localized action or query output
 - the same runtime model behind the framework-specific wiring
 

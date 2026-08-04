@@ -75,10 +75,7 @@ const page: FrameworkLanding = {
     source: `// next.config.ts
 import { withPalamedes } from "@palamedes/next-plugin"
 
-export default withPalamedes(
-  {},
-  { runtimeModule: "@palamedes/react/runtime" },
-)
+export default withPalamedes({})
 
 // app/page.tsx — a Server Component
 import { t } from "@palamedes/core/macro"

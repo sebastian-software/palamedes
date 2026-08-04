@@ -65,8 +65,7 @@ Subdomain examples follow this rule set:
 - an unknown or missing leftmost label falls back to the best `Accept-Language`
   match, then the default locale
 - switching locale loads a different host (the control swaps the leftmost label
-  via `canonicalUrl`), so it is always a full document load — the live switching
-  mechanism below does not apply
+  via `canonicalUrl`), so it is always a full document load
 - `canonicalUrl` and `suggest` return protocol-relative URLs (`//de.example.com/…`)
   unless the config sets `protocol` (for example `protocol: "https"`). The
   default keeps the same configuration correct on http locally and https in
@@ -129,103 +128,55 @@ opt-in through the same `tld` map. This is why the tld strategy resolves through
 an explicit, three-tiered policy rather than the subdomain strategy's pure
 label-is-locale rule.
 
-## Switching Mechanism: Reload vs. Live
+## Switching Locale
 
-Locale _strategy_ (cookie vs. route) is independent from the _switching
-mechanism_ — how a new locale reaches an already-running client. There are two
-mechanisms, and the choice matters more for robustness than the strategy does.
-
-### Reload (recommended default)
-
-A switch triggers a full document load in the new locale: writing the cookie and
-calling `window.location.assign(...)`, or hard-loading the new locale URL.
+Locale _strategy_ (cookie, route, subdomain, or TLD) is independent from the
+browser lifecycle. Palamedes treats the selected locale as immutable document
+bootstrap state. A switch updates the strategy input and loads a new document:
+write the cookie and call `window.location.assign(...)`, submit a normal form,
+or follow a plain locale URL.
 
 - the whole app re-renders from a single, consistent server locale
 - there is no client-side reactivity contract to uphold
 - module-level caches, memoized `Intl` formatters, and already-fetched data are
   discarded and rebuilt, so mixed-locale states cannot occur
-- the only cost is the reload UX: a brief flash, scroll reset, and refetch
+- the tradeoff is the navigation UX: scroll and transient client state reset,
+  and data may be fetched again
 
-The cookie examples use this mechanism.
+All official examples use this mechanism.
 
-### Live (opt-in)
+### Why Palamedes Does Not Provide Live Switching
 
-A switch swaps the active client i18n in place and re-renders reactively, with no
-document load. The route examples use this mechanism — client-side navigation via
-the router keeps the app mounted.
-
-Live switching is a whole-app reactivity contract: **every** value derived from
-the locale must either live in the reactive graph or be keyed by locale. In
-practice the failure mode is rarely the translation components — it is the larger
-components with their own state or caches:
+Changing only the active i18n instance would require **every** locale-derived
+value in the application to be reactive or keyed by locale. Translation
+components are only one part of that state. Common stale values include:
 
 - memoized `Intl.NumberFormat` / `Intl.DateTimeFormat` instances not keyed by locale
 - data fetched server-side or cached client-side in the previous locale
 - third-party components that snapshot strings on mount
 
-Any of these silently goes stale and produces a mixed-locale UI. The library
-cannot enforce this discipline for you; it is an ongoing cost you accept per app.
+Any of these can silently retain the previous language. Palamedes therefore
+does not expose framework subscriptions or claim that an i18n-instance swap is
+a safe locale change.
 
-### Recommendation
+### Unsupported Root-Key Escape Hatch
 
-Prefer reload. It is simpler, has no reactivity contract, and structurally rules
-out the mixed-locale class of bugs. Because locale changes are rare and
-deliberate, that robustness is almost always worth the small reload UX cost.
-Reach for live only when instant, state-preserving switches are a genuine product
-requirement and the team is prepared to key every locale-derived value.
+If an application knowingly accepts the responsibility, it can initialize a
+new client i18n instance and remount its entire localized UI:
 
-### Enabling live switching (React)
+```tsx
+<LocalizedApplication key={locale}>{children}</LocalizedApplication>
+```
 
-Live switching in React has two pieces:
+The new instance must be active **before** the keyed subtree mounts. The key
+only resets framework-owned state below that point; module caches, external
+stores, query clients, browser state, and third-party code remain the
+application's responsibility. Palamedes intentionally provides no convenience
+API or correctness guarantee for this pattern.
 
-- `useClientLocale(locale, syncClientI18n)` pushes committed locale changes into
-  the client runtime
-- opt the plugin into React's external-store bridge so inline `t` / `plural`
-  output follows every activation
-
-  ```ts
-  palamedes({ localeSwitching: "live" })
-  ```
-
-The runtime subpath selects a hook-free implementation under the `react-server`
-condition, so the same transform target remains valid for React Server
-Components and server actions.
-
-`<Trans>` / `<Plural>` / `<Select>` / `<SelectOrdinal>` subscribe on their own
-and follow a live switch under any setting. Only inline `t` / `plural` calls
-need the reactive transform target. Those calls are hook-backed and therefore
-must execute unconditionally during a React function-component or custom-hook
-render.
-
-Reload mode is already framework-agnostic and hook-free. A project that is
-neither React nor Solid can additionally state `framework: "none"` for its MDX
-component contract. `@palamedes/remix` defaults to `"none"` because Remix 3
+A project that is neither React nor Solid can state `framework: "none"` for its
+MDX component contract. `@palamedes/remix` defaults to `"none"` because Remix 3
 ships its own UI layer and does not depend on React.
-
-### Enabling live switching (Solid)
-
-Reload needs nothing beyond a normal server render. Live switching in Solid has
-two opt-in pieces:
-
-- `createClientLocaleEffect(localeAccessor, syncClientI18n)` pushes locale changes
-  into the client runtime
-- tell the plugin it compiles for Solid and opt into live switching, which
-  points the macro transform at Solid's reactive runtime:
-
-  ```ts
-  // app.config.ts
-  palamedes({ framework: "solid", localeSwitching: "live" })
-  ```
-
-Setting `framework` is required for Solid apps: the plugin compiles for React
-unless told otherwise, and that would pull React's runtime into a Solid build.
-The same option also selects Solid's component contract for compiled `.mdx`
-modules.
-
-`<Trans>` / `<Plural>` / `<Select>` / `<SelectOrdinal>` track the active instance
-on their own and follow a live switch under any setting. Only the macro
-`t` / `plural` calls depend on the reactive runtime — so wire both, or use
-reload.
 
 ## Why The Matrix Is Split Per Framework
 

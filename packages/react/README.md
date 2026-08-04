@@ -36,24 +36,9 @@ export function Footer() {
 }
 ```
 
-For live client-side locale switches, point the macro transform at React's
-external-store bridge:
-
-```ts
-palamedes({ localeSwitching: "live" })
-```
-
-The `@palamedes/react/runtime` subpath exports a React-aware `getI18n()` that
-subscribes the rendering component to every `setClientI18n()` activation,
-including re-activation of the same mutable instance. React Server Components
-resolve the hook-free server implementation through the `react-server` export
-condition.
-
-`<Trans>`, `<Plural>`, `<Select>`, and `<SelectOrdinal>` subscribe automatically.
-The opt-in is needed for inline `t` / `plural` macro calls. Because the live
-getter is a custom hook, those calls must run unconditionally during a
-function-component or custom-hook render. The default reload mode uses the
-plain getter and has no hook constraint.
+All translated code reads the plain, hook-free `@palamedes/runtime` getter.
+Locale changes load a new document; the package does not install React
+subscriptions for in-document instance replacement.
 
 Rich JSX children are transformed to numeric component slots in the message, for
 example `<0>Palamedes</0>`, while the React component is passed separately.
@@ -81,7 +66,6 @@ transformed modules need no extra `react` import.
 This package also exposes small, style-agnostic React helpers that the example
 matrix uses directly:
 
-- `useClientLocale(locale, sync)` from `@palamedes/react/client`
 - `buildLocaleSwitchItems({ locales, currentLocale, labels, testIdPrefix? })`
 - `LocaleSwitchItem<TLocale>`
 
@@ -89,29 +73,12 @@ These helpers are intentionally headless. They do not own routing, form
 submission, styling, or cookie policy. They only cover the stable frontend
 primitives that repeat across apps:
 
-- keeping the active client locale synchronized
 - building render-ready locale switch models for buttons, links, or forms
-
-`useClientLocale` does not run its sync callback during SSR. If the initial HTML
-contains translated client components, use
-`createReloadClientCatalogBoundary()` for a document-fixed locale,
-`createClientCatalogBoundary()` for live navigation, or initialize
-`setClientI18n()` before hydration. Hook-driven locale synchronization happens
-after commit.
 
 ```tsx
 import { buildLocaleSwitchItems } from "@palamedes/react"
-import { useClientLocale } from "@palamedes/react/client"
 
-function LocaleToolbar({
-  locale,
-  sync,
-}: {
-  locale: "en" | "de"
-  sync: (locale: "en" | "de") => void | Promise<void>
-}) {
-  useClientLocale(locale, sync)
-
+function LocaleToolbar({ locale }: { locale: "en" | "de" }) {
   const items = buildLocaleSwitchItems({
     locales: ["en", "de"] as const,
     currentLocale: locale,
@@ -121,9 +88,9 @@ function LocaleToolbar({
   return (
     <nav>
       {items.map((item) => (
-        <button key={item.locale} data-testid={item.testId}>
+        <a key={item.locale} data-testid={item.testId} href={`/${item.locale}`}>
           {item.label}
-        </button>
+        </a>
       ))}
     </nav>
   )
@@ -139,11 +106,11 @@ first hydration render. Define the boundary once in a `"use client"` module:
 ```tsx
 "use client"
 
-import { createReloadClientCatalogBoundary } from "@palamedes/react/client"
+import { createClientCatalogBoundary } from "@palamedes/react/client"
 
 type Locale = "en" | "de"
 
-export const ClientCatalogBoundary = createReloadClientCatalogBoundary<Locale>({
+export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
   resolveClientLocale: () => {
     const locale = document.documentElement.lang
@@ -167,17 +134,17 @@ return (
 ```
 
 The dynamic import keeps executable generated messages in a module chunk; they
-are not serialized through React Server Components. The reload boundary starts
+are not serialized through React Server Components. The boundary starts
 that import at client module evaluation, suspends hydration until it is ready,
 and initializes the hook-free runtime before descendants render. It rejects an
 attempt to render a locale other than the document locale; switching language
 must navigate the document.
 
-Use `createClientCatalogBoundary()` instead with
-`localeSwitching: "live"` when locale or `catalogRevision` can change inside
-the mounted tree. It creates a scoped instance during render and publishes only
-committed changes. Both paths avoid inline scripts, JSON source, and `eval`, so
-they work with strict Content Security Policies and executable catalogs.
+Palamedes intentionally provides no live boundary. An application can implement
+its own keyed root remount, but owns invalidation of every cache outside that
+subtree. Document navigation is the supported locale-switching path. The
+boundary avoids inline scripts, JSON source, and `eval`, so it works with strict
+Content Security Policies and executable catalogs.
 
 A rejected dynamic import is thrown to the nearest React error boundary. A
 module without a generated, branded `messages` export fails through the

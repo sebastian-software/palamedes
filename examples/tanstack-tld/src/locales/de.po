@@ -39,8 +39,8 @@ msgstr "Weniger Tickets"
 msgid "Locale"
 msgstr "Sprache"
 
-msgid "Localized live with Palamedes"
-msgstr "Live lokalisiert mit Palamedes"
+msgid "Localized for this document with Palamedes"
+msgstr "Für dieses Dokument mit Palamedes lokalisiert"
 
 msgid "More tickets"
 msgstr "Mehr Tickets"

@@ -26,7 +26,6 @@ interface PalamedesPluginOptions {
   failOnMissing?: boolean
   failOnCompileError?: boolean
   framework?: "react" | "solid" | "none"
-  localeSwitching?: "reload" | "live"
   runtimeModule?: string
   keepSourceFallbacks?: boolean
   mdx?: PalamedesMdxConfig | false
@@ -41,7 +40,6 @@ Defaults:
 - `failOnMissing`: `false`
 - `failOnCompileError`: `false`
 - `framework`: `"react"`
-- `localeSwitching`: `"reload"`
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true` during `vite serve`, `false` during `vite build`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
@@ -50,11 +48,9 @@ Defaults:
 component contract for generated MDX modules. Solid apps must set
 `framework: "solid"`.
 
-`localeSwitching: "reload"` keeps macro and generated MDX runtime lookups on
-the plain, hook-free getter. Set `localeSwitching: "live"` when client-side
-locale navigation must update inline `t` / `plural` calls; this selects the
-framework's reactive runtime. See [Locale strategies](../locale-strategies.md).
-`runtimeModule` overrides only the macro transform's module path.
+Macro and generated MDX runtime lookups always use the plain, hook-free getter.
+Locale changes require document navigation. `runtimeModule` is an advanced
+override for only the macro transform's module path.
 
 `keepSourceFallbacks` applies to both macro transforms and generated MDX.
 Production builds strip authored messages from runtime calls by default and
@@ -63,8 +59,8 @@ renders. They also omit translator comments and context metadata from runtime
 descriptors. Set `keepSourceFallbacks` to `true` when production must retain
 readable source-message fallbacks.
 
-Generated MDX modules follow `localeSwitching` unless they set
-`mdx.runtime-module` in `palamedes.yaml` or `mdx.runtimeModule` on the plugin.
+Generated MDX modules can set `mdx.runtime-module` in `palamedes.yaml` or
+`mdx.runtimeModule` on the plugin when integrating a custom runtime.
 
 With `failOnMissing: true`, compiled MDX IDs are checked against every target
 locale in each catalog whose `include` patterns cover that MDX file. This

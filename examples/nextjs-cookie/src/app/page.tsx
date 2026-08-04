@@ -10,7 +10,7 @@ import { getLocaleLabel } from "@/lib/i18n"
 
 // These functions run only inside `runWithServerI18n()`'s request-local scope.
 function translateEyebrow(): string {
-  return t`Localized live with Palamedes`
+  return t`Localized for this document with Palamedes`
 }
 
 function translateHeadline(): string {

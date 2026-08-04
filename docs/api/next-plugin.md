@@ -26,8 +26,6 @@ interface WithPalamedesOptions {
   configPath?: string
   failOnMissing?: boolean
   failOnCompileError?: boolean
-  framework?: "react" | "solid" | "none"
-  localeSwitching?: "reload" | "live"
   runtimeModule?: string
   keepSourceFallbacks?: boolean
   workspaceRoot?: string
@@ -41,8 +39,6 @@ Defaults:
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
 - `failOnCompileError`: `false`
-- `framework`: `"react"`
-- `localeSwitching`: `"reload"`
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true` in development, `false` in production
 
@@ -63,9 +59,9 @@ translated Client Components in a boundary created by the shared React runtime:
 // src/components/ClientCatalogBoundary.tsx
 "use client"
 
-import { createReloadClientCatalogBoundary } from "@palamedes/react/client"
+import { createClientCatalogBoundary } from "@palamedes/react/client"
 
-export const ClientCatalogBoundary = createReloadClientCatalogBoundary<"en" | "de">({
+export const ClientCatalogBoundary = createClientCatalogBoundary<"en" | "de">({
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
   resolveClientLocale: () => {
     const locale = document.documentElement.lang
@@ -97,9 +93,9 @@ No inline script, `eval`, JSON serialization, or application-owned i18n proxy
 is involved. This keeps the bootstrap compatible with strict CSP and the
 parser-free generated catalog representation.
 
-For intentional in-document locale navigation, set
-`localeSwitching: "live"` and use `createClientCatalogBoundary()` instead. That
-boundary publishes only committed locale or catalog-revision changes.
+Palamedes intentionally provides no in-document locale-switching mode. See
+[Locale strategies](../locale-strategies.md#unsupported-root-key-escape-hatch)
+for the unsupported root-key escape hatch and its limitations.
 
 Production output strips authored messages from generated runtime calls by
 default and therefore requires compiled catalogs to be loaded before translated

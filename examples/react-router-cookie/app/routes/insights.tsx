@@ -1,12 +1,11 @@
 import { Link, redirect } from "react-router"
 import { plural } from "@palamedes/core/macro"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans as Fmt } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
 import type { Route } from "./+types/insights"
 import { LocaleSwitcher } from "~/components/LocaleSwitcher"
-import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest, syncClientI18n } from "~/lib/i18n"
+import { LOCALE_COOKIE, getLocaleLabel, resolveLocaleFromRequest } from "~/lib/i18n"
 import { activateServerI18n } from "~/lib/i18n.server"
 
 const TALKS_SCHEDULED = 48
@@ -54,8 +53,6 @@ export default function Insights({ loaderData }: Route.ComponentProps) {
   const { locale, localeLabel } = loaderData
   const workshops = WORKSHOPS_WITH_SEATS
 
-  useClientLocale(locale, syncClientI18n)
-
   return (
     <main className="page-shell">
       <header className="topbar">
@@ -69,7 +66,7 @@ export default function Insights({ loaderData }: Route.ComponentProps) {
       <section className="hero">
         <p className="eyebrow">
           <span className="dot" aria-hidden="true" />
-          <Trans>Localized live with Palamedes</Trans>
+          <Trans>Localized for this document with Palamedes</Trans>
         </p>
         <h1 data-testid="insights-heading">
           <Trans>Attendance insights</Trans>

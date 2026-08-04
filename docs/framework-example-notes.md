@@ -36,7 +36,7 @@ The `solidstart-cookie`, `solidstart-route`, `solidstart-subdomain`, and
 `solidstart-tld` examples verify:
 
 - Vite-based Palamedes integration in SolidStart
-- SSR plus client reactivity through the Solid runtime bridge
+- request-local SSR plus a hook-free, document-fixed client locale
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 

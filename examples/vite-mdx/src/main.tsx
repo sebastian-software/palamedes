@@ -2,10 +2,11 @@ import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 
 import { App } from "./App"
-import { activateLocale } from "./i18n"
+import { initializeDocumentLocale, resolveDocumentLocale } from "./i18n"
 import "./styles.css"
 
-activateLocale("en")
+const locale = resolveDocumentLocale()
+initializeDocumentLocale(locale)
 
 const root = document.querySelector("#root")
 if (!root) {
@@ -14,6 +15,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <App locale={locale} />
   </StrictMode>
 )

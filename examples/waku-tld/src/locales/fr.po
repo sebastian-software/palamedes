@@ -39,8 +39,8 @@ msgstr "Moins de billets"
 msgid "Locale"
 msgstr "Langue"
 
-msgid "Localized live with Palamedes"
-msgstr "Localisé en direct avec Palamedes"
+msgid "Localized for this document with Palamedes"
+msgstr "Localisé pour ce document avec Palamedes"
 
 msgid "More tickets"
 msgstr "Plus de billets"
@@ -60,8 +60,8 @@ msgstr "Rendu avec Waku"
 msgid "Server"
 msgstr "Serveur"
 
-msgid "Server action confirmed locale {locale}."
-msgstr "L'action serveur a confirmé la langue {locale}."
+msgid "Server action confirmed locale {currentLocale}."
+msgstr "L'action serveur a confirmé la langue {currentLocale}."
 
 msgid "Switch to the recommended locale"
 msgstr "Passer à la langue recommandée"

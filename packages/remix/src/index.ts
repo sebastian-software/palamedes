@@ -7,8 +7,6 @@ import { compileCatalogModule } from "@palamedes/core-node"
 import {
   resolveMacroRuntimeModule,
   transformPalamedesMacros,
-  type PalamedesFramework,
-  type PalamedesLocaleSwitching,
   type SourceMap,
 } from "@palamedes/transform"
 
@@ -26,25 +24,7 @@ export type PalamedesRemixRegisterOptions = {
   exclude?: RegExp
 
   /**
-   * UI framework this app compiles for. Unlike the Vite and Next plugins this
-   * defaults to `"none"`: Remix 3 ships its own UI layer and does not depend
-   * on React, so assuming React here would pull in a package the app may not
-   * have.
-   * @default "none"
-   */
-  framework?: PalamedesFramework
-
-  /**
-   * Locale changes reload the document by default, keeping inline macros
-   * hook-free. Set `"live"` only when the UI framework is explicitly selected
-   * and the whole application supports in-document locale changes.
-   * @default "reload"
-   */
-  localeSwitching?: PalamedesLocaleSwitching
-
-  /**
-   * Module imported for the runtime i18n getter. Overrides `localeSwitching`
-   * and `framework` runtime selection.
+   * Advanced override for the module imported for the runtime i18n getter.
    * @default "@palamedes/runtime"
    */
   runtimeModule?: string
@@ -90,11 +70,7 @@ export function createPalamedesRemixLoadHook(
 ): LoadHook {
   const include = options.include ?? DEFAULT_INCLUDE
   const exclude = options.exclude ?? DEFAULT_EXCLUDE
-  const runtimeModule = resolveMacroRuntimeModule(
-    options.framework ?? "none",
-    options.runtimeModule,
-    options.localeSwitching ?? "reload"
-  )
+  const runtimeModule = resolveMacroRuntimeModule(options.runtimeModule)
   const keepSourceFallbacks = options.keepSourceFallbacks ?? process.env.NODE_ENV !== "production"
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
   const configCache = new Map<string, LoadedPalamedesConfig>()

@@ -1,5 +1,4 @@
 import { t } from "@palamedes/core/macro"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
 import type { LocaleSuggestion } from "@palamedes/core/locale"
@@ -8,7 +7,7 @@ import { LocaleSwitcher } from "./LocaleSwitcher"
 import { ProofPanel } from "./ProofPanel"
 import { SuggestionBanner } from "./SuggestionBanner"
 import { TicketPanel } from "./TicketPanel"
-import { syncClientI18n, type Locale } from "../lib/i18n"
+import type { Locale } from "../lib/i18n"
 
 export function RouteLocalePage({
   banner,
@@ -22,8 +21,6 @@ export function RouteLocalePage({
   localeLabel: string
   renderedAt: string
 }) {
-  useClientLocale(locale, syncClientI18n)
-
   return (
     <main className="page-shell">
       {banner ? (
@@ -46,7 +43,7 @@ export function RouteLocalePage({
       <section className="hero">
         <p className="eyebrow">
           <span className="dot" aria-hidden="true" />
-          <Trans>Localized live with Palamedes</Trans>
+          <Trans>Localized for this document with Palamedes</Trans>
         </p>
         <h1>
           <Trans>Book your seat at Frontend Stage 2026</Trans>

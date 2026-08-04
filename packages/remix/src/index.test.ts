@@ -96,17 +96,8 @@ describe("createPalamedesRemixLoadHook", () => {
     expect(String(preserved.source)).toContain('message: "Production fallback"')
   })
 
-  it.each([
-    ["none by default", undefined, "@palamedes/runtime"],
-    ["react when asked", "react", "@palamedes/runtime"],
-    ["solid when asked", "solid", "@palamedes/runtime"],
-  ] as const)("targets the %s runtime", (_label, framework, expected) => {
-    /*
-     * Unlike the Vite and Next plugins this defaults to "none": Remix 3 ships
-     * its own UI layer and does not depend on React, so defaulting to React
-     * would import a package the app may not have installed.
-     */
-    const load = createPalamedesRemixLoadHook(framework === undefined ? {} : { framework })
+  it("targets the hook-free runtime", () => {
+    const load = createPalamedesRemixLoadHook()
     const loaded = load(new URL("file:///repo/app/routes/home.tsx").href, loadContext, () => ({
       format: "module",
       shortCircuit: true,
@@ -118,27 +109,7 @@ describe("createPalamedesRemixLoadHook", () => {
       ].join("\n"),
     }))
 
-    expect(String(loaded.source)).toContain(`import { getI18n } from "${expected}"`)
-  })
-
-  it.each([
-    ["react", "@palamedes/react/runtime"],
-    ["solid", "@palamedes/solid/runtime"],
-  ] as const)("opts %s macros into live locale switching", (framework, expected) => {
-    const load = createPalamedesRemixLoadHook({ framework, localeSwitching: "live" })
-    const loaded = load(new URL("file:///repo/app/routes/home.tsx").href, loadContext, () => ({
-      format: "module",
-      source:
-        'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }',
-    }))
-
-    expect(String(loaded.source)).toContain(`import { getI18n } from "${expected}"`)
-  })
-
-  it("rejects live switching without a framework or custom runtime", () => {
-    expect(() => createPalamedesRemixLoadHook({ localeSwitching: "live" })).toThrow(
-      /requires framework="react" or framework="solid"/
-    )
+    expect(String(loaded.source)).toContain('import { getI18n } from "@palamedes/runtime"')
   })
 
   it("compiles PO catalog imports without delegating to the default loader", () => {

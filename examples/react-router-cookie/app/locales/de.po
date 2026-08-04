@@ -90,8 +90,8 @@ msgstr "Sprache"
 
 #: examples/react-router-cookie/app/routes/home.tsx
 #: examples/react-router-cookie/app/routes/insights.tsx
-msgid "Localized live with Palamedes"
-msgstr "Live lokalisiert mit Palamedes"
+msgid "Localized for this document with Palamedes"
+msgstr "Für dieses Dokument mit Palamedes lokalisiert"
 
 #: examples/react-router-cookie/app/components/TicketPanel.tsx#TicketPanel
 msgid "More tickets"

@@ -155,7 +155,7 @@ const msg = t`Hello`;
         source,
         "test.ts",
         Some(NativeTransformOptions {
-            runtime_module: Some("@palamedes/react/runtime".to_string()),
+            runtime_module: Some("@acme/custom-runtime".to_string()),
             ..NativeTransformOptions::default()
         }),
     )
@@ -164,7 +164,7 @@ const msg = t`Hello`;
     assert!(result.has_changed);
     assert!(result
         .code
-        .contains(r#"import { getI18n as __palamedesGetI18n } from "@palamedes/react/runtime";"#));
+        .contains(r#"import { getI18n as __palamedesGetI18n } from "@acme/custom-runtime";"#));
     assert!(result
         .code
         .contains(r#"import { getI18n } from "@palamedes/runtime";"#));
@@ -190,15 +190,15 @@ const msg = t`Hello`;
             &source,
             "test.ts",
             Some(NativeTransformOptions {
-                runtime_module: Some("@palamedes/react/runtime".to_string()),
+                runtime_module: Some("@acme/custom-runtime".to_string()),
                 ..NativeTransformOptions::default()
             }),
         )
         .expect("transform should avoid all import binding collisions");
 
-        assert!(result.code.contains(
-            r#"import { getI18n as __palamedesGetI18n } from "@palamedes/react/runtime";"#
-        ));
+        assert!(result
+            .code
+            .contains(r#"import { getI18n as __palamedesGetI18n } from "@acme/custom-runtime";"#));
         assert!(result.code.contains(conflicting_import));
         assert!(result.code.contains(r#"__palamedesGetI18n()._("#));
     }
@@ -238,7 +238,7 @@ const msg = t`Hello`;
         source,
         "test.ts",
         Some(NativeTransformOptions {
-            runtime_module: Some("@palamedes/react/runtime".to_string()),
+            runtime_module: Some("@acme/custom-runtime".to_string()),
             ..NativeTransformOptions::default()
         }),
     )
@@ -246,7 +246,7 @@ const msg = t`Hello`;
 
     assert!(result
         .code
-        .contains(r#"import { getI18n as __palamedesGetI18n3 } from "@palamedes/react/runtime";"#));
+        .contains(r#"import { getI18n as __palamedesGetI18n3 } from "@acme/custom-runtime";"#));
     assert!(result.code.contains(r#"__palamedesGetI18n3()._("#));
     assert!(result.code.contains("console.log(__palamedesGetI18n2);"));
 }
@@ -254,7 +254,7 @@ const msg = t`Hello`;
 #[test]
 fn reuses_matching_runtime_import_when_it_is_not_shadowed() {
     let source = r#"import { t } from "@palamedes/core/macro";
-import { getI18n } from "@palamedes/react/runtime";
+import { getI18n } from "@acme/custom-runtime";
 
 const msg = t`Hello`;
 "#;
@@ -263,7 +263,7 @@ const msg = t`Hello`;
         source,
         "test.ts",
         Some(NativeTransformOptions {
-            runtime_module: Some("@palamedes/react/runtime".to_string()),
+            runtime_module: Some("@acme/custom-runtime".to_string()),
             ..NativeTransformOptions::default()
         }),
     )
@@ -272,7 +272,7 @@ const msg = t`Hello`;
     assert_eq!(
         result
             .code
-            .matches(r#"from "@palamedes/react/runtime""#)
+            .matches(r#"from "@acme/custom-runtime""#)
             .count(),
         1
     );

@@ -4,13 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   type I18nInstance,
-  getClientI18nSnapshot,
   getI18n,
   registerMessages,
   resetI18nRuntime,
   setClientI18n,
   setServerI18nGetter,
-  subscribeClientI18n,
 } from "./index"
 
 function createTestI18n(locale = "en"): I18nInstance {
@@ -43,55 +41,15 @@ describe("@palamedes/runtime", () => {
     expect(getI18n()).toBe(i18n)
   })
 
-  it("notifies subscribers on every setClientI18n call, including re-activation", () => {
-    const seen: string[] = []
-    const unsubscribe = subscribeClientI18n((clientI18n) => seen.push(clientI18n.locale))
-
-    const i18n = createTestI18n("en")
-    setClientI18n(i18n)
-    const firstSnapshot = getClientI18nSnapshot()
-
-    // Same instance, re-activated in place: still notifies so bindings re-render.
-    i18n.locale = "de"
-    setClientI18n(i18n)
-    const secondSnapshot = getClientI18nSnapshot()
-
-    unsubscribe()
-    setClientI18n(createTestI18n("es"))
-
-    expect(seen).toStrictEqual(["en", "de"])
-    expect(firstSnapshot.i18n).toBe(i18n)
-    expect(secondSnapshot.i18n).toBe(i18n)
-    expect(secondSnapshot.revision).toBe(firstSnapshot.revision + 1)
-  })
-
-  it("shares client snapshots and listeners across isolated module graphs", async () => {
+  it("shares the active client instance across isolated module graphs", async () => {
     ;(globalThis as Record<string, unknown>).window = {}
-    const seen: string[] = []
-    const unsubscribe = subscribeClientI18n((clientI18n) => seen.push(clientI18n.locale))
     vi.resetModules()
     const isolatedRuntime = await import("./index")
     const i18n = createTestI18n("de")
 
-    try {
-      isolatedRuntime.setClientI18n(i18n)
+    isolatedRuntime.setClientI18n(i18n)
 
-      expect(seen).toStrictEqual(["de"])
-      expect(getClientI18nSnapshot()).toBe(isolatedRuntime.getClientI18nSnapshot())
-      expect(getI18n()).toBe(i18n)
-    } finally {
-      unsubscribe()
-    }
-  })
-
-  it("clears client listeners when the runtime is reset", () => {
-    const listener = vi.fn()
-    subscribeClientI18n(listener)
-
-    resetI18nRuntime()
-    setClientI18n(createTestI18n())
-
-    expect(listener).not.toHaveBeenCalled()
+    expect(getI18n()).toBe(i18n)
   })
 
   it("resolves the request-local server instance", () => {

@@ -76,26 +76,18 @@ safe integer. `Select` has no numeric operand and takes no `offset`.
 This package also exposes small Solid-native helpers that stay deliberately
 headless:
 
-- `createClientLocaleEffect(localeAccessor, sync)` from `@palamedes/solid/client`
 - `buildLocaleSwitchItems({ locales, currentLocale, labels, testIdPrefix? })`
 - `LocaleSwitchItem<TLocale>`
 
 They do not own routing, styling, cookie policy, or server decisions. They only
 cover the stable frontend primitives that repeat across apps:
 
-- synchronizing the active client locale
 - building render-ready locale switch models for links, buttons, or forms
 
 ```tsx
 import { buildLocaleSwitchItems } from "@palamedes/solid"
-import { createClientLocaleEffect } from "@palamedes/solid/client"
 
-function LocaleToolbar(props: {
-  locale: "en" | "de"
-  sync: (locale: "en" | "de") => void | Promise<void>
-}) {
-  createClientLocaleEffect(() => props.locale, props.sync)
-
+function LocaleToolbar(props: { locale: "en" | "de" }) {
   const items = () =>
     buildLocaleSwitchItems({
       locales: ["en", "de"] as const,
@@ -106,12 +98,17 @@ function LocaleToolbar(props: {
   return (
     <nav>
       {items().map((item) => (
-        <button data-testid={item.testId}>{item.label}</button>
+        <a data-testid={item.testId} href={`/${item.locale}`}>
+          {item.label}
+        </a>
       ))}
     </nav>
   )
 }
 ```
+
+Locale links deliberately navigate the document. Components and macros read the
+plain runtime getter and do not subscribe to in-document locale replacement.
 
 ## Related Docs
 

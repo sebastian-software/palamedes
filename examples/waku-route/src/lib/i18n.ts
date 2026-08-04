@@ -46,7 +46,7 @@ export function activateServerI18n(locale: Locale) {
   return i18n
 }
 
-export function syncClientI18n(locale: Locale) {
+export function initializeClientI18n(locale: Locale) {
   clientI18n.load(locale, localeMessages[locale])
   clientI18n.activate(locale)
 
@@ -57,6 +57,11 @@ export function syncClientI18n(locale: Locale) {
   }
 
   return clientI18n
+}
+
+if (typeof window !== "undefined") {
+  const pathLocale = window.location.pathname.split("/").filter(Boolean)[0]
+  initializeClientI18n(normalizeLocale(pathLocale))
 }
 
 export function createBanner(headers: Record<string, string | undefined>, locale: Locale) {

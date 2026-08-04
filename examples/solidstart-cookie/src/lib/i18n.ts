@@ -45,7 +45,7 @@ export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale)
 }
 
-export function syncClientI18n(locale: Locale) {
+export function initializeClientI18n(locale: Locale) {
   if (typeof window === "undefined") {
     return
   }
@@ -67,7 +67,7 @@ function bootstrapClientI18n() {
     ?.slice(`${LOCALE_COOKIE}=`.length)
 
   const preferredLanguage = navigator.language.split("-")[0] ?? DEFAULT_LOCALE
-  void syncClientI18n(normalizeLocale(cookieValue ?? preferredLanguage))
+  void initializeClientI18n(normalizeLocale(cookieValue ?? preferredLanguage))
 }
 
 bootstrapClientI18n()

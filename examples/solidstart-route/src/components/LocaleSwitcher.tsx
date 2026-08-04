@@ -1,5 +1,4 @@
 import { For } from "solid-js"
-import { A } from "@solidjs/router"
 import { buildLocaleSwitchItems } from "@palamedes/solid"
 import { Trans } from "@palamedes/solid/macro"
 import { LOCALES, LOCALE_LABELS, type Locale, locales } from "../lib/i18n"
@@ -24,7 +23,7 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
       <div class="seg" role="group" aria-label="Language">
         <For each={localeSwitchItems()}>
           {(item) => (
-            <A
+            <a
               data-testid={item.testId}
               aria-current={item.active ? "page" : undefined}
               href={`/${item.locale}`}
@@ -33,7 +32,7 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
               }}
             >
               {item.locale.toUpperCase()}
-            </A>
+            </a>
           )}
         </For>
       </div>

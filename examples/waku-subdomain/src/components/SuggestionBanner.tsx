@@ -1,9 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans } from "@palamedes/react/macro"
-import { type Locale, locales, syncClientI18n } from "../lib/i18n"
+import { type Locale, locales } from "../lib/i18n"
 
 type SuggestionBannerProps = {
   currentLocale: Locale
@@ -13,7 +12,6 @@ type SuggestionBannerProps = {
 }
 
 export function SuggestionBanner(props: SuggestionBannerProps) {
-  useClientLocale(props.currentLocale, syncClientI18n)
   const [dismissed, setDismissed] = useState(false)
   if (dismissed) {
     return null

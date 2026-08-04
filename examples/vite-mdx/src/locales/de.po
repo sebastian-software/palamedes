@@ -24,12 +24,13 @@ msgstr "<0>← Einführung</0> · <1>Weiter zur Laufzeit →</1>"
 
 #: examples/vite-mdx/src/content/runtime.mdx
 msgid ""
-"All {pageCount} pages react to the active locale. Use the switcher above and "
-"the MDX content updates without rebuilding or reloading the application."
+"All {pageCount} pages share the locale selected when this document starts. "
+"The switcher loads a new document so framework state and non-React caches "
+"cannot retain the previous language."
 msgstr ""
-"Alle {pageCount} Seiten reagieren auf die aktive Sprache. Nutze den Umschalter"
-" oben und der MDX-Inhalt aktualisiert sich, ohne die Anwendung neu zu bauen "
-"oder zu laden."
+"Alle {pageCount} Seiten verwenden die beim Start dieses Dokuments gewählte "
+"Sprache. Der Umschalter lädt ein neues Dokument, damit Framework-Zustand und "
+"Nicht-React-Caches die vorherige Sprache nicht beibehalten können."
 
 #: examples/vite-mdx/src/content/extraction.mdx
 msgid "Code stays code"
@@ -69,16 +70,18 @@ msgstr ""
 "Palamedes verwandelt gerenderte Semantik in stabile Übersetzungseinheiten:"
 
 #: examples/vite-mdx/src/content/runtime.mdx
-msgid "Switch languages at runtime"
-msgstr "Sprachen zur Laufzeit wechseln"
+msgid "One locale per document"
+msgstr "Eine Sprache pro Dokument"
 
 #: examples/vite-mdx/src/content/runtime.mdx
 msgid ""
 "The plugin selects <0/>, asks the native compiler for JSX, and lets the "
-"framework own rendering and reactivity."
+"framework own rich rendering while translations use the same hook-free "
+"runtime getter as regular modules."
 msgstr ""
-"Das Plugin wählt <0/> aus, fordert JSX vom nativen Compiler an und "
-"überlässt Rendering und Reaktivität dem Framework."
+"Das Plugin wählt <0/> aus, fordert JSX vom nativen Compiler an und überlässt "
+"Rich-Text-Rendering dem Framework, während Übersetzungen denselben Hook-freien "
+"Runtime-Getter wie normale Module verwenden."
 
 #: examples/vite-mdx/src/content/welcome.mdx
 msgid ""

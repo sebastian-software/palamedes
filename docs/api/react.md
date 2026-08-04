@@ -26,14 +26,7 @@ The locale-switch helper and related types are re-exported from
 
 The client subpath `@palamedes/react/client` exports:
 
-- `useClientLocale(locale, sync)`
-- `createReloadClientCatalogBoundary(options)` for a document-fixed locale
-- `createClientCatalogBoundary(options)` for live locale or catalog revisions
-
-The runtime subpath `@palamedes/react/runtime` exports:
-
-- `getI18n<T>()` — a React-aware transform target backed by
-  `useSyncExternalStore`
+- `createClientCatalogBoundary(options)` for the document-fixed locale
 
 The macro subpath `@palamedes/react/macro` exports compile-time macro
 components:
@@ -50,9 +43,9 @@ full runtime-component compatibility surface.
 
 ## Runtime Components
 
-Runtime components subscribe to the client activation snapshot and read the
-active request-local instance during server rendering. They therefore update
-independently when nested below `React.memo` components with unchanged props.
+Runtime components read the plain active runtime getter. They do not install
+external-store subscriptions or update independently after an i18n-instance
+replacement; changing locale requires a document navigation.
 
 ```tsx
 import { Trans } from "@palamedes/react"
@@ -103,36 +96,10 @@ const items = buildLocaleSwitchItems({
 })
 ```
 
-`useClientLocale(locale, sync)` never calls `sync` during server rendering.
-After the client commits, it synchronizes the locale and subscribes to
-`setClientI18n()` activations so translated descendants re-render.
-
 Initialize the client i18n before hydration when translated client components
-render in the initial HTML. The hook never invokes the sync callback during
-render; this avoids external-store mutations during both SSR and client render
-retries. The sync function may return a promise; the hook intentionally does
-not own loading UI or routing policy.
-
-## Reactive Macro Runtime
-
-Macro `t` / `plural` calls use the plain, hook-free runtime by default. Opt into
-the React runtime only when a client-side locale switch must update memoized
-translated components:
-
-```ts
-palamedes({ localeSwitching: "live" })
-```
-
-The bridge observes the activation revision rather than only object identity, so
-mutating and re-activating the same i18n instance still schedules a render. Under
-the `react-server` condition, the subpath resolves to the hook-free
-`@palamedes/runtime` getter so Server Components and server actions retain
-request-local runtime behavior.
-
-The live reactive getter is a custom hook. Inline `t` / `plural` macros
-transformed to this runtime must execute unconditionally during a
-function-component or custom-hook render. Reload mode has no such hook
-constraint.
+render in the initial HTML. Prefer `createClientCatalogBoundary()` for compiled
+catalog chunks; it owns the loading boundary and initializes the getter before
+translated descendants hydrate.
 
 ## Client Catalog Boundaries
 
@@ -140,11 +107,11 @@ For the recommended document-reload model, create a boundary once in a
 `"use client"` module:
 
 ```tsx
-import { createReloadClientCatalogBoundary } from "@palamedes/react/client"
+import { createClientCatalogBoundary } from "@palamedes/react/client"
 
 type Locale = "en" | "de"
 
-export const ClientCatalogBoundary = createReloadClientCatalogBoundary<Locale>({
+export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
   resolveClientLocale: () => {
     const locale = document.documentElement.lang
@@ -158,10 +125,8 @@ The active locale starts loading when the browser module evaluates. The
 boundary suspends until it can initialize the shared parser-free i18n instance,
 then renders descendants. Hook-free macro calls therefore have a valid getter
 on their first hydration render. A different `locale` prop fails fast because
-changing language in this model requires document navigation.
+changing language requires document navigation.
 
-`createClientCatalogBoundary()` is the live alternative. It creates a scoped
-instance for the rendered locale and publishes it globally only after commit,
-so discarded concurrent renders cannot change external state. It also accepts
-`catalogRevision` for refreshing same-locale contents. Pair it with
-`localeSwitching: "live"` when inline macros must follow those commits.
+Palamedes does not provide a live alternative. See
+[`locale-strategies.md`](../locale-strategies.md#unsupported-root-key-escape-hatch)
+for the unsupported root-key pattern and its cache-safety limitations.

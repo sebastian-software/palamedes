@@ -80,16 +80,17 @@ a {
   background: #07101f;
 }
 
-.locale-switcher button {
+.locale-switcher a {
   padding: 8px 13px;
   border: 0;
   border-radius: 999px;
   color: #94a3b8;
   background: transparent;
   cursor: pointer;
+  text-decoration: none;
 }
 
-.locale-switcher button[aria-pressed="true"] {
+.locale-switcher a[aria-current="true"] {
   color: #07101f;
   background: #7dd3fc;
 }

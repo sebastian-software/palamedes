@@ -37,7 +37,7 @@ export function createExampleI18n() {
 // in lib/i18n.server.ts.
 const clientI18n = createExampleI18n()
 
-export function syncClientI18n(locale: Locale) {
+export function initializeClientI18n(locale: Locale) {
   if (typeof document === "undefined") {
     return
   }

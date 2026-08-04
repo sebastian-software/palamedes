@@ -1,8 +1,8 @@
 import type { JSX } from "solid-js"
 
 import type { PalamedesI18n } from "@palamedes/core/compiled"
+import { getI18n } from "@palamedes/runtime"
 
-import { getI18n } from "./runtime"
 import { createTrans, type TransProps } from "./transShared"
 
 export type { TransProps } from "./transShared"

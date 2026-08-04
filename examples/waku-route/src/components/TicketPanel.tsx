@@ -2,18 +2,11 @@
 
 import { useState } from "react"
 import { plural, t } from "@palamedes/core/macro"
-import { useClientLocale } from "@palamedes/react/client"
 import { Trans as Fmt } from "@palamedes/react"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
-import { syncClientI18n, type Locale } from "../lib/i18n"
 
-type TicketPanelProps = {
-  locale: Locale
-}
-
-export function TicketPanel({ locale }: TicketPanelProps) {
-  useClientLocale(locale, syncClientI18n)
+export function TicketPanel() {
   const [quantity, setQuantity] = useState(1)
   const when = new Date(EVENT.startsAt)
   const seats = EVENT.seatsLeft

@@ -1,6 +1,6 @@
 import { mount, StartClient } from "@solidjs/start/client"
 
-import { DEFAULT_LOCALE, LOCALE_COOKIE, normalizeLocale, syncClientI18n } from "./lib/i18n"
+import { DEFAULT_LOCALE, LOCALE_COOKIE, normalizeLocale, initializeClientI18n } from "./lib/i18n"
 
 function resolveInitialLocale() {
   const cookieValue = document.cookie
@@ -18,7 +18,7 @@ function resolveInitialLocale() {
 }
 
 function ClientEntry() {
-  void syncClientI18n(resolveInitialLocale())
+  void initializeClientI18n(resolveInitialLocale())
   return <StartClient />
 }
 

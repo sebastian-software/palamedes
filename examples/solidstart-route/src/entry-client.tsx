@@ -1,6 +1,6 @@
 import { mount, StartClient } from "@solidjs/start/client"
 
-import { DEFAULT_LOCALE, normalizeLocale, syncClientI18n } from "./lib/i18n"
+import { DEFAULT_LOCALE, normalizeLocale, initializeClientI18n } from "./lib/i18n"
 
 function resolveInitialLocale() {
   const pathLocale = window.location.pathname.split("/").filter(Boolean)[0] ?? DEFAULT_LOCALE
@@ -8,7 +8,7 @@ function resolveInitialLocale() {
 }
 
 function ClientEntry() {
-  syncClientI18n(resolveInitialLocale())
+  initializeClientI18n(resolveInitialLocale())
   return <StartClient />
 }
 

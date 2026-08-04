@@ -42,7 +42,7 @@ export function getLocaleLabel(locale: Locale): string {
   return locales.label(locale)
 }
 
-export function syncClientI18n(locale: Locale) {
+export function initializeClientI18n(locale: Locale) {
   if (typeof window === "undefined") {
     return
   }
@@ -50,4 +50,8 @@ export function syncClientI18n(locale: Locale) {
   clientI18n.load(locale, localeMessages[locale])
   clientI18n.activate(locale)
   setClientI18n(clientI18n)
+}
+
+if (typeof window !== "undefined") {
+  initializeClientI18n(normalizeLocale(window.location.hostname.split(".")[0]))
 }

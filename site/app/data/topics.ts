@@ -88,8 +88,8 @@ export const TOPICS: Topic[] = [
           body: "On the server the active locale lives in request-local async context, so concurrent requests in different languages never see each other's state. This is the mechanism Context cannot provide and the reason no bypass is needed — the lookup was never tied to the render tree in the first place.",
         },
         {
-          title: "Reactive activation on the client",
-          body: "In the browser the same accessor is backed by an external-store bridge in React and a signal in Solid, so switching locale re-renders in place. No page reload, and no divergence between what the server rendered and what the client shows.",
+          title: "One locale for the client document",
+          body: "In the browser the same accessor is a plain getter initialized before translated UI hydrates. Locale changes navigate the document, which keeps framework state, module caches, and the server-rendered language aligned.",
         },
         {
           title: "Not a Next.js feature",

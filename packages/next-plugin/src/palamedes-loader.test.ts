@@ -33,7 +33,7 @@ afterEach(() => {
 describe("palamedes-loader.cjs", () => {
   it("forwards the source fallback policy to the native transform", async () => {
     const output = await runLoader({
-      runtimeModule: "@palamedes/react/runtime",
+      runtimeModule: "@acme/custom-runtime",
       keepSourceFallbacks: false,
       stripNonEssentialProps: true,
     })
@@ -43,7 +43,7 @@ describe("palamedes-loader.cjs", () => {
       expect.any(String),
       "/repo/src/page.tsx",
       expect.objectContaining({
-        runtimeModule: "@palamedes/react/runtime",
+        runtimeModule: "@acme/custom-runtime",
         keepSourceFallbacks: false,
         stripNonEssentialProps: true,
       })
