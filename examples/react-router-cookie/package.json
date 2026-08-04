@@ -31,6 +31,6 @@
     "@types/react-dom": "^19.2.3",
     "react-server-dom-webpack": "^19.2.8",
     "typescript": "^6.0.3",
-    "vite": "^8.1.5"
+    "vite": "^8.2.0"
   }
 }
