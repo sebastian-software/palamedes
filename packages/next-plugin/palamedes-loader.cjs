@@ -77,12 +77,75 @@ function catalogResourcePath(config, catalog, locale) {
   const extension = catalog.format ?? "po"
   if (extension !== "po") {
     throw new Error(
-      `Palamedes Next Server Function message splitting currently supports PO catalogs only. Catalog ${catalog.path} uses format ${extension}.`
+      `Palamedes Next message splitting currently supports PO catalogs only. Catalog ${catalog.path} uses format ${extension}.`
     )
   }
   const configuredPath = path.resolve(config.rootDir, catalog.path.replace("{locale}", locale))
   const parsed = path.parse(configuredPath)
   return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
+}
+
+function selectedMessageImports(config, sourcePath, compiledIds) {
+  const catalogs = config.catalogs.filter((catalog) =>
+    catalogMatchesSource(config, catalog, sourcePath)
+  )
+  if (catalogs.length === 0) {
+    return null
+  }
+
+  const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url")
+  return catalogs.map((catalog) =>
+    config.locales.map((locale) => {
+      const resourcePath = catalogResourcePath(config, catalog, locale)
+      return {
+        locale,
+        specifier: `${relativeImport(sourcePath, resourcePath)}?${SELECTED_MESSAGES_QUERY}=${selection}`,
+      }
+    })
+  )
+}
+
+function clientMessageBootstrap(config, sourcePath, compiledIds) {
+  const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds)
+  if (!importsByCatalog) {
+    return null
+  }
+
+  const loaderGroups = importsByCatalog.map((imports) => {
+    const loaders = imports
+      .map(
+        ({ locale, specifier }) =>
+          `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)})`
+      )
+      .join(", ")
+    return `{ ${loaders} }`
+  })
+  const supportedLocales = config.locales.map((locale) => JSON.stringify(locale)).join(", ")
+  const modulePath = normalizePath(
+    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath))
+  )
+  const identifier = `__pmds_${createHash("sha256").update(modulePath).digest("hex").slice(0, 12)}`
+
+  return (
+    `\nconst ${identifier}_locale = document.documentElement.lang;\n` +
+    `const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];\n` +
+    `const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => loaders[${identifier}_locale]);\n` +
+    `if (${identifier}_activeLoaders.some((loader) => loader === undefined)) {\n` +
+    `  throw new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`);\n` +
+    `}\n` +
+    `const ${identifier}_modules = await Promise.all([\n` +
+    `  import("@palamedes/core/compiled"),\n` +
+    `  import("@palamedes/runtime"),\n` +
+    `  ...${identifier}_activeLoaders.map((load) => load()),\n` +
+    `]);\n` +
+    `const ${identifier}_i18n = ${identifier}_modules[1].initializeClientI18n(\n` +
+    `  ${identifier}_locale,\n` +
+    `  ${identifier}_modules[0].createI18n,\n` +
+    `);\n` +
+    `for (const { messages } of ${identifier}_modules.slice(2)) {\n` +
+    `  ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
+    `}\n`
+  )
 }
 
 function relativeImport(fromFile, targetFile) {
@@ -94,25 +157,21 @@ function relativeImport(fromFile, targetFile) {
 }
 
 function messageLoaderRegistration(config, sourcePath, compiledIds) {
-  const catalogs = config.catalogs.filter((catalog) =>
-    catalogMatchesSource(config, catalog, sourcePath)
-  )
-  if (catalogs.length === 0) {
+  const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds)
+  if (!importsByCatalog) {
     return null
   }
 
-  const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url")
   const modulePath = normalizePath(
     path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath))
   )
   const moduleKey = createHash("sha256").update(modulePath).digest("hex").slice(0, 12)
-  const registrations = catalogs.map((catalog, catalogIndex) => {
-    const loaders = config.locales
-      .map((locale) => {
-        const resourcePath = catalogResourcePath(config, catalog, locale)
-        const specifier = `${relativeImport(sourcePath, resourcePath)}?${SELECTED_MESSAGES_QUERY}=${selection}`
-        return `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)}).then(({ messages }) => messages)`
-      })
+  const registrations = importsByCatalog.map((imports, catalogIndex) => {
+    const loaders = imports
+      .map(
+        ({ locale, specifier }) =>
+          `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)}).then(({ messages }) => messages)`
+      )
       .join(", ")
     return `registerMessageLoaders(${JSON.stringify(`${moduleKey}:${catalogIndex}`)}, { ${loaders} });`
   })
@@ -144,7 +203,9 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
     throw error
   }
 
-  if (options.serverMessageSplitting !== true || !result.compiledIds?.length) {
+  const serverMessageSplitting = options.serverMessageSplitting === true
+  const clientMessageSplitting = options.clientMessageSplitting === true
+  if ((!serverMessageSplitting && !clientMessageSplitting) || !result.compiledIds?.length) {
     if (callback) {
       callback(null, result.code, result.map ?? inputSourceMap ?? null)
       return
@@ -157,14 +218,16 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
     if (typeof this.addDependency === "function" && config.configPath) {
       this.addDependency(config.configPath)
     }
-    const registration = messageLoaderRegistration(config, this.resourcePath, result.compiledIds)
+    const registration = serverMessageSplitting
+      ? messageLoaderRegistration(config, this.resourcePath, result.compiledIds)
+      : clientMessageBootstrap(config, this.resourcePath, result.compiledIds)
     let code = result.code
     if (registration) {
       code += registration
     } else if (typeof this.emitWarning === "function") {
       this.emitWarning(
         new Error(
-          `Palamedes Server Function message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`
+          `Palamedes ${serverMessageSplitting ? "Server Function" : "client graph"} message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`
         )
       )
     }

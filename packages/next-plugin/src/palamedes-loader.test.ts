@@ -94,6 +94,24 @@ describe("palamedes-loader.cjs", () => {
     expect(dependencies).toEqual(["/repo/palamedes.yaml"])
   })
 
+  it("blocks a client module on only the document locale's compiled fragments", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "export const translated = true",
+      map: null,
+      compiledIds: ["id-a", "id-b"],
+    })
+
+    const output = await runLoader({ clientMessageSplitting: true })
+
+    expect(output).toContain("_locale = document.documentElement.lang")
+    expect(output).toContain("_modules = await Promise.all")
+    expect(output).toContain('"en": () => import("./locales/en.po?palamedes-selected=')
+    expect(output).toContain('"de": () => import("./locales/de.po?palamedes-selected=')
+    expect(output).toContain(".initializeClientI18n(")
+    expect(output).toContain("_i18n.load(")
+    expect(output).not.toContain("registerMessageLoaders")
+  })
+
   it("does not add server message imports to a client transform", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "export const translated = true",
@@ -179,7 +197,7 @@ describe("palamedes-loader.cjs", () => {
     })
 
     await expect(runLoader({ serverMessageSplitting: true })).rejects.toThrow(
-      "Palamedes Next Server Function message splitting currently supports PO catalogs only"
+      "Palamedes Next message splitting currently supports PO catalogs only"
     )
   })
 })

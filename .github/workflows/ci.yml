@@ -69,6 +69,10 @@ jobs:
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm --filter @palamedes/example-nextjs-cookie test:rsc-scope:webpack
 
+      - name: Verify Next.js development catalog invalidation
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm --filter @palamedes/example-nextjs-cookie test:message-splitting:development
+
       - name: Test ESLint and Oxlint adapter
         run: pnpm --filter @palamedes/eslint-plugin test
 

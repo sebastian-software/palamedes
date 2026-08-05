@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
-import { plural } from "@palamedes/core/macro"
-import { Trans as Fmt } from "@palamedes/react"
+import { plural, t } from "@palamedes/core/macro"
 import { Trans } from "@palamedes/react/macro"
 import { EVENT } from "@palamedes/example-ui"
 import type { Locale } from "@/lib/i18n"
@@ -58,10 +57,7 @@ export function ProofPanel({ locale }: ProofPanelProps) {
             <Trans>Currency</Trans>
           </span>
           <span className="feat-out">
-            <Fmt
-              message="{amount, number, ::currency/EUR}"
-              values={{ amount: EVENT.ticketPrice }}
-            />
+            {t({ message: "{amount, number, ::currency/EUR}" }, { amount: EVENT.ticketPrice })}
           </span>
         </div>
         <code>{`{amount, number, ::currency/EUR}`}</code>
@@ -73,7 +69,7 @@ export function ProofPanel({ locale }: ProofPanelProps) {
             <Trans>Number</Trans>
           </span>
           <span className="feat-out">
-            <Fmt message="{count, number}" values={{ count: EVENT.attendeeCount }} />
+            {t({ message: "{count, number}" }, { count: EVENT.attendeeCount })}
           </span>
         </div>
         <code>{`{count, number}`}</code>
@@ -85,7 +81,7 @@ export function ProofPanel({ locale }: ProofPanelProps) {
             <Trans>Date</Trans>
           </span>
           <span className="feat-out is-text">
-            <Fmt message="{when, date, medium}" values={{ when }} />
+            {t({ message: "{when, date, medium}" }, { when })}
           </span>
         </div>
         <code>{`{when, date, medium}`}</code>

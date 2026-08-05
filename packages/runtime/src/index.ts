@@ -17,6 +17,11 @@ type MessageLoadingI18n = I18nInstance & {
   load?: (locale: string, messages: Record<string, unknown>) => void
 }
 
+type InitializableClientI18n = I18nInstance & {
+  activate(locale: string): unknown
+  load(locale: string, messages: Record<string, unknown>): unknown
+}
+
 export type RegisteredMessageLoader = () => Promise<Record<string, unknown>>
 
 type RegisteredMessageLoaderState = {
@@ -211,6 +216,39 @@ export function setClientI18n<T extends I18nInstance>(i18n: T): T {
   }
   state[CLIENT_I18N_KEY] = i18n
   return i18n
+}
+
+/**
+ * Create the shared parser-free client instance used by graph-split modules.
+ * Multiple modules can bootstrap concurrently; the first one installs the
+ * instance and every later module reuses it before loading its own fragment.
+ */
+export function initializeClientI18n<T extends InitializableClientI18n>(
+  locale: string,
+  createI18n: () => T
+): T {
+  if (isServerEnvironment()) {
+    throw new Error("Palamedes client graph bootstrap can only run in a browser environment.")
+  }
+
+  const active = globalRuntimeState()[CLIENT_I18N_KEY] as T | undefined
+  if (active) {
+    if (active.locale !== locale) {
+      throw new Error(
+        `Palamedes client graph bootstrap requested locale "${locale}", but this document was initialized for "${active.locale}". Perform a document navigation to change locale.`
+      )
+    }
+    if (typeof active.load !== "function") {
+      throw new TypeError(
+        "The active client i18n instance cannot load generated graph-split messages. Provide an instance with load(locale, messages)."
+      )
+    }
+    return active
+  }
+
+  const i18n = createI18n()
+  i18n.activate(locale)
+  return setClientI18n(i18n)
 }
 
 export function setServerI18nGetter<T extends I18nInstance>(getter: ServerI18nGetter<T>): void {

@@ -1,5 +1,9 @@
+import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
+import { existsSync } from "node:fs"
 import { createRequire } from "node:module"
+
+import { chromium } from "@playwright/test"
 
 const port = 4198
 const baseUrl = `http://127.0.0.1:${port}`
@@ -88,6 +92,141 @@ async function assertServerActionLocale(locale, expected) {
   }
 }
 
+async function assertClientGraphSplitting() {
+  const executablePath = [
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+    "/opt/pw-browsers/chromium",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  ].find((candidate) => candidate && existsSync(candidate))
+  const browser = await chromium.launch(executablePath ? { executablePath } : undefined)
+
+  try {
+    for (const proof of [
+      {
+        locale: "en",
+        activeHome: "Add to cart",
+        inactiveHome: ["In den Warenkorb", "Añadir al carrito"],
+        activeLazy: "Loaded only after client navigation",
+        inactiveLazy: [
+          "Erst nach Client-Navigation geladen",
+          "Cargado solo después de la navegación del cliente",
+        ],
+      },
+      {
+        locale: "de",
+        activeHome: "In den Warenkorb",
+        inactiveHome: ["Add to cart", "Añadir al carrito"],
+        activeLazy: "Erst nach Client-Navigation geladen",
+        inactiveLazy: [
+          "Loaded only after client navigation",
+          "Cargado solo después de la navegación del cliente",
+        ],
+      },
+    ]) {
+      const context = await browser.newContext({
+        extraHTTPHeaders: { "accept-language": proof.locale },
+        locale: proof.locale,
+      })
+      const page = await context.newPage()
+      const errors = []
+      const chunkResponses = []
+
+      page.on("console", (message) => {
+        if (message.type() !== "error") return
+
+        const text = message.text()
+        // Chromium reports optional document assets (for example favicon.ico)
+        // without exposing their URL in this console message. Relevant Next.js
+        // assets are checked explicitly in the response listener below.
+        if (text.startsWith("Failed to load resource: the server responded with a status of 404")) {
+          return
+        }
+        errors.push(`console: ${text}`)
+      })
+      page.on("pageerror", (error) => errors.push(`page: ${error.message}`))
+      page.on("requestfailed", (request) => {
+        const failure = request.failure()?.errorText ?? "unknown"
+        if (failure !== "net::ERR_ABORTED" || request.url().includes("/_next/static/")) {
+          errors.push(`request: ${request.url()} (${failure})`)
+        }
+      })
+      page.on("response", (response) => {
+        const url = response.url()
+        if (response.status() >= 400 && url.includes("/_next/static/")) {
+          errors.push(`response: ${url} (${response.status()})`)
+        }
+        if (!url.includes("/_next/static/") || !url.endsWith(".js")) return
+        chunkResponses.push(
+          response
+            .body()
+            .then((body) => ({ source: body.toString("utf8"), url }))
+            .catch(() => ({ source: "", url }))
+        )
+      })
+
+      await page.goto(baseUrl)
+      try {
+        await page.getByTestId("client-ready").waitFor({ state: "attached" })
+      } catch (error) {
+        const html = await page.locator("html").innerHTML()
+        throw new Error(
+          `${proof.locale}: hydration marker did not appear. Browser errors: ${errors.join(" | ") || "none"}. HTML: ${html.slice(0, 500)}`,
+          { cause: error }
+        )
+      }
+      await page.waitForLoadState("networkidle")
+
+      const initialResponseCount = chunkResponses.length
+      const initialChunks = await Promise.all(chunkResponses.slice(0, initialResponseCount))
+      const initialSource = initialChunks.map(({ source }) => source).join("\n")
+
+      assert(
+        initialSource.includes(proof.activeHome),
+        `${proof.locale}: initial client requests did not include the active home fragment`
+      )
+      for (const sentinel of [...proof.inactiveHome, proof.activeLazy, ...proof.inactiveLazy]) {
+        assert.equal(
+          initialSource.includes(sentinel),
+          false,
+          `${proof.locale}: initial client requests unexpectedly included ${JSON.stringify(sentinel)}`
+        )
+      }
+
+      await page.getByTestId("open-lazy-client-probe").evaluate((button) => button.click())
+      await page.getByTestId("lazy-client-message").waitFor()
+      await page.waitForLoadState("networkidle")
+
+      assert.equal(
+        await page.getByTestId("lazy-client-message").textContent(),
+        proof.activeLazy,
+        `${proof.locale}: client navigation rendered before its active message fragment loaded`
+      )
+      const navigationChunks = await Promise.all(chunkResponses.slice(initialResponseCount))
+      const navigationSource = navigationChunks.map(({ source }) => source).join("\n")
+      assert(
+        navigationSource.includes(proof.activeLazy),
+        `${proof.locale}: client navigation did not request its active message fragment`
+      )
+      for (const sentinel of proof.inactiveLazy) {
+        assert.equal(
+          navigationSource.includes(sentinel),
+          false,
+          `${proof.locale}: client navigation requested inactive fragment ${JSON.stringify(sentinel)}`
+        )
+      }
+      assert.deepEqual(errors, [], `${proof.locale}: browser errors during hydration or navigation`)
+      await context.close()
+    }
+  } finally {
+    await browser.close()
+  }
+}
+
 const server = spawn(process.execPath, [nextCli, "start", "--port", String(port)], {
   cwd: new URL("..", import.meta.url),
   env: { ...process.env, NODE_ENV: "production" },
@@ -115,8 +254,9 @@ try {
         : assertServerActionLocale("de", "Server-Action bestätigte Sprache de.")
     )
   )
+  await assertClientGraphSplitting()
   console.log(
-    "Next.js production RSC and Server Action scopes remained request-local across suspension"
+    "Next.js production scopes stayed request-local and client requests followed locale × route graphs"
   )
 } catch (error) {
   console.error(serverOutput)

@@ -7,6 +7,7 @@
     "build": "next build && node ../../scripts/normalize-next-required-server-files.mjs",
     "start": "next start --port 4010",
     "extract": "pmds extract",
+    "test:message-splitting:development": "node ./scripts/message-splitting-development.test.mjs",
     "test:rsc-scope": "next build && node ./scripts/rsc-scope-production.test.mjs",
     "test:rsc-scope:webpack": "next build --webpack && node ./scripts/rsc-scope-production.test.mjs"
   },
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
+    "@swc/helpers": "0.5.15",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

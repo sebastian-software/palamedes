@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   type I18nInstance,
   getI18n,
+  initializeClientI18n,
   loadRegisteredMessages,
   registerMessageLoaders,
   registerMessages,
@@ -52,6 +53,31 @@ describe("@palamedes/runtime", () => {
     isolatedRuntime.setClientI18n(i18n)
 
     expect(getI18n()).toBe(i18n)
+  })
+
+  it("initializes one client instance for graph-split modules", () => {
+    ;(globalThis as Record<string, unknown>).window = {}
+    const activate = vi.fn<(locale: string) => void>()
+    const load = vi.fn()
+    const createI18n = vi.fn(() => ({
+      locale: "",
+      _: (message: string) => message,
+      activate(locale: string) {
+        activate(locale)
+        this.locale = locale
+      },
+      load,
+    }))
+
+    const first = initializeClientI18n("de", createI18n)
+    const second = initializeClientI18n("de", createI18n)
+
+    expect(first).toBe(second)
+    expect(createI18n).toHaveBeenCalledOnce()
+    expect(activate).toHaveBeenCalledWith("de")
+    expect(() => initializeClientI18n("en", createI18n)).toThrow(
+      /document was initialized for "de"/
+    )
   })
 
   it("resolves the request-local server instance", () => {

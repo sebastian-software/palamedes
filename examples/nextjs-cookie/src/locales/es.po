@@ -42,6 +42,9 @@ msgstr "Idioma"
 msgid "Localized for this document with Palamedes"
 msgstr "Localizado para este documento con Palamedes"
 
+msgid "Loaded only after client navigation"
+msgstr "Cargado solo después de la navegación del cliente"
+
 msgid "More tickets"
 msgstr "Más entradas"
 
@@ -89,3 +92,18 @@ msgstr "{quantity, plural, one {# entrada} other {# entradas}}"
 
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {queda # plaza} other {quedan # plazas}}"
+
+msgid "{amount, number, ::currency/EUR}"
+msgstr "{amount, number, ::currency/EUR}"
+
+msgid "{count, number}"
+msgstr "{count, number}"
+
+msgid "{when, date, full}"
+msgstr "{when, date, full}"
+
+msgid "{when, date, medium}"
+msgstr "{when, date, medium}"
+
+msgid "{when, time, short}"
+msgstr "{when, time, short}"
