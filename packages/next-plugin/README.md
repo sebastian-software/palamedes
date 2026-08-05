@@ -158,6 +158,70 @@ before adopting that Next release.
 
 References: [Next.js Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components), [Next.js data fetching and request-scoped React cache](https://nextjs.org/docs/app/getting-started/fetching-data), and [React `cache`](https://react.dev/reference/react/cache).
 
+### Server Functions and Actions
+
+A Server Function starts a separate request, so initialization performed while
+rendering a page does not cover it. Add a conventional server entry module in
+the project root or `src` directory:
+
+```ts
+// src/palamedes.server.ts
+import { createActiveServerI18n } from "./lib/i18n.server"
+
+export async function initializeServerFunctionI18n(): Promise<void> {
+  await createActiveServerI18n()
+}
+```
+
+Then opt into automatic initialization with a flag:
+
+```js
+const { withPalamedes } = require("@palamedes/next-plugin")
+
+module.exports = withPalamedes(
+  {},
+  {
+    serverFunctions: true,
+  }
+)
+```
+
+Palamedes instruments directive-visible async functions: direct exports and
+locally declared named exports in a module with a top-level `"use server"`
+directive, async callbacks nested in an exported initializer such as
+`export const save = withAuth(async () => ...)`, and async functions with their
+own `"use server"` directive. It injects one initializer import per module and
+awaits the initializer after the function's directive prologue. This also
+covers actions without a local macro; sync and async helper calls then inherit
+the initialized request scope.
+
+A re-export such as `export { save } from "./save"` has no function body to
+instrument at the re-export site. Put `"use server"` in the implementation
+module or on the implementation function itself. Likewise, a wrapper call that
+only receives an imported callback has no local async body for Palamedes to
+instrument; keep the callback inline or mark its implementation explicitly.
+
+The initializer belongs to the application. It should resolve the request
+locale, load and activate a fresh catalog, and be request-memoized or otherwise
+idempotent. The plugin resolves exactly one `palamedes.server` module from the
+project root or `src` directory and keeps its absolute import address internal.
+
+Parameter defaults execute before the function body. Palamedes therefore
+rejects eager macros in Server Function parameter initializers, including
+nested destructuring defaults. Move such defaults into the body and preserve
+JavaScript default-parameter semantics explicitly:
+
+```ts
+export async function save(message?: string) {
+  "use server"
+  if (message === undefined) message = t`Fallback`
+}
+```
+
+Do not replace this guard with `??=` unless `null` should also select the
+fallback. Server Function instrumentation is opt-in and currently targets the
+Next.js integration.
+
 ## Options
 
 ```js
@@ -174,6 +238,7 @@ module.exports = withPalamedes(
     failOnCompileError: false,
     keepSourceFallbacks: undefined,
     workspaceRoot: undefined,
+    serverFunctions: true,
   }
 )
 ```

@@ -21,6 +21,14 @@ export function mightContainPalamedesMacros(code: string): boolean {
 }
 
 /**
+ * Quickly check whether source may contain a Server Function directive.
+ * The native pass performs the semantic AST check.
+ */
+export function mightContainServerFunctions(code: string): boolean {
+  return code.includes('"use server"') || code.includes("'use server'")
+}
+
+/**
  * Find all Palamedes macro imports in an AST
  */
 export function findMacroImports(program: unknown): Map<string, ImportInfo> {

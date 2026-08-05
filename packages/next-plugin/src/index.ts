@@ -26,6 +26,19 @@ type TurbopackLoaderItem = Exclude<TurbopackRuleConfigItem["loaders"], undefined
 const MACRO_CONTENT_PATTERN = new RegExp(
   PALAMEDES_MACRO_PACKAGES.map((name) => name.replaceAll(/[.*+?^${}()|[\]\\/]/gu, "\\$&")).join("|")
 )
+const SERVER_FUNCTION_CONTENT_PATTERN = /["']use server["']/
+const SERVER_FUNCTION_INITIALIZER_MODULE = "@palamedes/next-plugin/server-function-initializer"
+const SERVER_FUNCTION_INITIALIZER_EXPORT = "initializeServerFunctionI18n"
+const SERVER_FUNCTION_ENTRY_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mts",
+  ".mjs",
+  ".cts",
+  ".cjs",
+] as const
 
 /*
  * A Turbopack rule array is either the loader "shorthand" (a flat list of
@@ -142,6 +155,43 @@ export type WithPalamedesOptions = {
    * If omitted, Palamedes will try to detect a workspace root from process.cwd().
    */
   workspaceRoot?: string
+
+  /**
+   * Initialize request-local i18n at the start of every recognized Next.js
+   * Server Function. Requires a `palamedes.server` entry module exporting
+   * `initializeServerFunctionI18n`.
+   *
+   * @default false
+   */
+  serverFunctions?: boolean
+}
+
+function resolveServerFunctionInitializer(enabled: boolean | undefined) {
+  if (!enabled) return
+
+  const projectRoot = process.cwd()
+  const candidates = ["src", ""].flatMap((directory) =>
+    SERVER_FUNCTION_ENTRY_EXTENSIONS.map((extension) =>
+      path.join(projectRoot, directory, `palamedes.server${extension}`)
+    )
+  )
+  const matches = candidates.filter((candidate) => existsSync(candidate))
+
+  if (matches.length === 0) {
+    throw new Error(
+      "Palamedes Server Function instrumentation requires a palamedes.server module in the project root or src directory. Export initializeServerFunctionI18n from that module."
+    )
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `Palamedes found multiple Server Function entry modules: ${matches.join(", ")}. Keep exactly one palamedes.server module.`
+    )
+  }
+
+  return {
+    absolutePath: matches[0]!,
+    turbopackAlias: `./${path.relative(projectRoot, matches[0]!).split(path.sep).join("/")}`,
+  }
 }
 
 function resolveWorkspaceRoot(explicitRoot?: string) {
@@ -227,11 +277,19 @@ export function withPalamedes(
     runtimeModule: explicitRuntimeModule,
     keepSourceFallbacks: explicitKeepSourceFallbacks,
     workspaceRoot: explicitWorkspaceRoot,
+    serverFunctions: serverFunctionOptions,
   } = options
 
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule)
   const keepSourceFallbacks = explicitKeepSourceFallbacks ?? process.env.NODE_ENV !== "production"
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
+  const serverFunctionEntry = resolveServerFunctionInitializer(serverFunctionOptions)
+  const serverFunctions = serverFunctionEntry
+    ? {
+        initializerModule: SERVER_FUNCTION_INITIALIZER_MODULE,
+        initializerExport: SERVER_FUNCTION_INITIALIZER_EXPORT,
+      }
+    : undefined
   const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)
   const configuredTurbopackRoot = baseConfig.turbopack?.root ?? workspaceRoot
   const outputFileTracingRoot =
@@ -258,13 +316,24 @@ export function withPalamedes(
         { not: "foreign" },
         { path: include },
         { not: { path: exclude } },
-        { content: MACRO_CONTENT_PATTERN },
+        {
+          content: serverFunctions
+            ? new RegExp(
+                `${MACRO_CONTENT_PATTERN.source}|${SERVER_FUNCTION_CONTENT_PATTERN.source}`
+              )
+            : MACRO_CONTENT_PATTERN,
+        },
       ],
     },
     loaders: [
       {
         loader: oxcLoaderPath,
-        options: { runtimeModule, keepSourceFallbacks, stripNonEssentialProps },
+        options: {
+          runtimeModule,
+          keepSourceFallbacks,
+          stripNonEssentialProps,
+          ...(serverFunctions ? { serverFunctions } : {}),
+        },
       },
     ],
   })
@@ -293,11 +362,34 @@ export function withPalamedes(
     turbopack: {
       ...baseConfig.turbopack,
       ...(configuredTurbopackRoot ? { root: configuredTurbopackRoot } : {}),
+      ...(serverFunctionEntry
+        ? {
+            resolveAlias: {
+              ...baseConfig.turbopack?.resolveAlias,
+              [SERVER_FUNCTION_INITIALIZER_MODULE]: serverFunctionEntry.turbopackAlias,
+            },
+          }
+        : {}),
       rules,
     },
 
     // Webpack configuration
     webpack(config, context) {
+      if (serverFunctionEntry) {
+        config.resolve ??= {}
+        if (Array.isArray(config.resolve.alias)) {
+          config.resolve.alias.push({
+            name: SERVER_FUNCTION_INITIALIZER_MODULE,
+            alias: serverFunctionEntry.absolutePath,
+          })
+        } else {
+          config.resolve.alias = {
+            ...config.resolve.alias,
+            [SERVER_FUNCTION_INITIALIZER_MODULE]: serverFunctionEntry.absolutePath,
+          }
+        }
+      }
+
       // Add the OXC transform loader for JS/TS files
       config.module.rules.push({
         test: include,
@@ -306,7 +398,12 @@ export function withPalamedes(
         use: [
           {
             loader: oxcLoaderPath,
-            options: { runtimeModule, keepSourceFallbacks, stripNonEssentialProps },
+            options: {
+              runtimeModule,
+              keepSourceFallbacks,
+              stripNonEssentialProps,
+              ...(serverFunctions ? { serverFunctions } : {}),
+            },
           },
         ],
       })

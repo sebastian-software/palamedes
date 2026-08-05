@@ -401,6 +401,10 @@ export interface NativeSourceAnalysisResult {
   messages: Array<NativeExtractedMessage>;
   diagnostics: Array<NativeSourceDiagnostic>;
 }
+export interface NativeServerFunctionTransformOptions {
+  initializerModule: string;
+  initializerExport: string;
+}
 export interface NativeTransformOptions {
   runtimeModule?: string;
   runtimeImportName?: string;
@@ -409,6 +413,7 @@ export interface NativeTransformOptions {
   keepSourceFallbacks?: boolean;
   /** @deprecated Use `keepSourceFallbacks` with the inverse value. */
   stripMessageField?: boolean;
+  serverFunctions?: NativeServerFunctionTransformOptions;
 }
 export interface NativeTransformEdit {
   start: number;

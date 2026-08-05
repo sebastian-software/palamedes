@@ -36,6 +36,10 @@ describe("palamedes-loader.cjs", () => {
       runtimeModule: "@acme/custom-runtime",
       keepSourceFallbacks: false,
       stripNonEssentialProps: true,
+      serverFunctions: {
+        initializerModule: "@/i18n/server-action",
+        initializerExport: "initServerActionI18n",
+      },
     })
 
     expect(output).toBe("export const translated = true")
@@ -46,6 +50,10 @@ describe("palamedes-loader.cjs", () => {
         runtimeModule: "@acme/custom-runtime",
         keepSourceFallbacks: false,
         stripNonEssentialProps: true,
+        serverFunctions: {
+          initializerModule: "@/i18n/server-action",
+          initializerExport: "initServerActionI18n",
+        },
       })
     )
   })

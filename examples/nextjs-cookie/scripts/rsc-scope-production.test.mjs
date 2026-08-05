@@ -53,6 +53,41 @@ async function assertLocale(locale, expected) {
   }
 }
 
+async function assertServerActionLocale(locale, expected) {
+  const initialResponse = await fetch(`${baseUrl}/server-action-probe`, {
+    headers: { "accept-language": locale },
+  })
+  const initialBody = await initialResponse.text()
+  const actionName = initialBody.match(/name="(\$ACTION_ID_[^"]+)"/)?.[1]
+
+  if (!actionName) {
+    throw new Error(`Could not find the generated Server Action form field for ${locale}`)
+  }
+
+  const formData = new FormData()
+  formData.set(actionName, "")
+
+  const actionResponse = await fetch(`${baseUrl}/server-action-probe`, {
+    method: "POST",
+    headers: {
+      "accept-language": locale,
+      origin: baseUrl,
+    },
+    body: formData,
+  })
+  const actionBody = await actionResponse.text()
+
+  if (
+    actionResponse.status !== 200 ||
+    !actionBody.includes(`data-action-locale="${locale}"`) ||
+    !actionBody.includes(`>${expected}</output>`)
+  ) {
+    throw new Error(
+      `Expected ${locale} Server Action to return its localized request result, got ${actionResponse.status} at ${actionResponse.url}: ${actionBody.slice(0, 500)}`
+    )
+  }
+}
+
 const server = spawn(process.execPath, [nextCli, "start", "--port", String(port)], {
   cwd: new URL("..", import.meta.url),
   env: { ...process.env, NODE_ENV: "production" },
@@ -73,7 +108,16 @@ try {
       index % 2 === 0 ? assertLocale("en", "More tickets") : assertLocale("de", "Mehr Tickets")
     )
   )
-  console.log("Next.js production RSC scope remained request-local across suspension")
+  await Promise.all(
+    Array.from({ length: 12 }, (_, index) =>
+      index % 2 === 0
+        ? assertServerActionLocale("en", "Server action confirmed locale en.")
+        : assertServerActionLocale("de", "Server-Action bestätigte Sprache de.")
+    )
+  )
+  console.log(
+    "Next.js production RSC and Server Action scopes remained request-local across suspension"
+  )
 } catch (error) {
   console.error(serverOutput)
   throw error

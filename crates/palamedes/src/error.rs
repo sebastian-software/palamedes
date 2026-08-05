@@ -189,6 +189,24 @@ pub enum PalamedesError {
         /// Source filename, line, and column.
         location: String,
     },
+    /// A macro in a Server Function parameter runs before body instrumentation.
+    #[error(
+        "Eager Palamedes macro in a Server Function parameter initializer executes before request i18n initialization. Move the default into the function body. Location: {location}. Use an explicit `if (value === undefined)` guard when only undefined should trigger the default; do not use `??=`."
+    )]
+    ServerFunctionParameterMacro {
+        /// Source filename, line, and column.
+        location: String,
+    },
+    /// Server Function instrumentation received an invalid import target.
+    #[error(
+        "Invalid Server Function initializer import: module `{initializer_module}` and export `{initializer_export}` must identify a non-empty module and a valid named JavaScript export."
+    )]
+    InvalidServerFunctionInitializer {
+        /// Configured module specifier.
+        initializer_module: String,
+        /// Configured named export.
+        initializer_export: String,
+    },
     /// A JSX message macro was nested inside another JSX message macro.
     #[error(
         "Nested i18n macro is not extractable as a single message at {location}. Move the full sentence into <Plural> branches or use plural() so translators receive the complete sentence."

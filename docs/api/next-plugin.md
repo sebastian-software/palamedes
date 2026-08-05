@@ -30,6 +30,7 @@ interface WithPalamedesOptions {
   runtimeModule?: string
   keepSourceFallbacks?: boolean
   workspaceRoot?: string
+  serverFunctions?: boolean
 }
 ```
 
@@ -42,6 +43,7 @@ Defaults:
 - `failOnCompileError`: `false`
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true` in development, `false` in production
+- `serverFunctions`: `false`
 
 ## Usage
 
@@ -50,6 +52,49 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 
 module.exports = withPalamedes({})
 ```
+
+## Server Functions
+
+Next Server Functions and Actions execute as requests separate from the page
+render. First expose the application-owned initializer through the conventional
+server entry module:
+
+```ts
+// src/palamedes.server.ts
+import { createActiveServerI18n } from "./lib/i18n.server"
+
+export async function initializeServerFunctionI18n(): Promise<void> {
+  await createActiveServerI18n()
+}
+```
+
+Then enable instrumentation once in the Next configuration:
+
+```js
+module.exports = withPalamedes(
+  {},
+  {
+    serverFunctions: true,
+  }
+)
+```
+
+The entry can be named `palamedes.server.ts`, `.tsx`, `.js`, `.jsx`, `.mts`,
+`.mjs`, `.cts`, or `.cjs` and live in either the project root or `src`.
+Exactly one entry must exist, and it must export
+`initializeServerFunctionI18n`. The initializer should resolve the locale,
+load and activate a fresh request-local i18n instance, and be request-memoized
+or idempotent. Palamedes keeps the module address internal and awaits the
+initializer at the start of every recognized async Server Function, whether or
+not that function contains a macro itself. Recognition covers inline
+`"use server"` directives and async exports from top-level `"use server"`
+modules.
+
+Eager macros in formal parameter initializers are rejected because parameter
+defaults execute before injected body statements. Move the fallback into the
+function body with `if (value === undefined)` when matching JavaScript's
+default-parameter behavior; `??=` also treats `null` as absent and is not an
+equivalent rewrite.
 
 ## App Router Client Catalog Boundary
 

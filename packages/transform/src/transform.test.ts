@@ -65,6 +65,27 @@ function View() { return <Select value={kind} other="Other" />; }
     expect(result.map).toBeNull()
   })
 
+  it("runs Server Function instrumentation without a macro import when configured", () => {
+    const code = `export async function save() { "use server"; await persist(); }`
+    const result = transformPalamedesMacrosRaw(code, "action.ts", {
+      serverFunctions: {
+        initializerModule: "@/i18n/server-action",
+        initializerExport: "initServerActionI18n",
+      },
+    })
+
+    expect(result.hasChanged).toBe(true)
+    expect(result.code).toContain("await __palamedesServerFunctionInitializer()")
+  })
+
+  it("does not instrument Server Functions without opt-in", () => {
+    const code = `export async function save() { "use server"; await persist(); }`
+    const result = transformPalamedesMacrosRaw(code, "action.ts")
+
+    expect(result.hasChanged).toBe(false)
+    expect(result.code).toBe(code)
+  })
+
   it("transforms tagged templates into compact runtime lookups", () => {
     const code = `
 import { t } from "@palamedes/core/macro";

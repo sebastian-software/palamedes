@@ -1,6 +1,7 @@
 mod imports;
 mod messages;
 mod runtime;
+mod server_functions;
 mod visitor;
 
 #[cfg(test)]
@@ -19,6 +20,7 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::translation_scope::{source_location, validate_translation_macro_scopes};
 
 use self::imports::ImportCollector;
+use self::server_functions::{initializer_import, ServerFunctionTransform};
 use self::visitor::TransformVisitor;
 
 #[derive(Debug, Clone)]
@@ -53,6 +55,20 @@ pub struct NativeTransformOptions {
     /// should use the positive option instead.
     #[serde(rename = "stripMessageField")]
     pub strip_message_field: Option<bool>,
+    /// Instruments recognized Server Functions with a request initializer.
+    #[serde(rename = "serverFunctions")]
+    pub server_functions: Option<ServerFunctionTransformOptions>,
+}
+
+/// Configuration for framework Server Function instrumentation.
+#[derive(Debug, Deserialize)]
+pub struct ServerFunctionTransformOptions {
+    /// Module that exports the initializer.
+    #[serde(rename = "initializerModule")]
+    pub initializer_module: String,
+    /// Named initializer export.
+    #[serde(rename = "initializerExport")]
+    pub initializer_export: String,
 }
 
 impl NativeTransformOptions {
@@ -128,6 +144,17 @@ pub fn transform_macros(
 ) -> PalamedesResult<NativeTransformResult> {
     let options = options.unwrap_or_default();
 
+    if let Some(server_functions) = &options.server_functions {
+        if server_functions.initializer_module.is_empty()
+            || !oxc_syntax::identifier::is_identifier_name(&server_functions.initializer_export)
+        {
+            return Err(PalamedesError::InvalidServerFunctionInitializer {
+                initializer_module: server_functions.initializer_module.clone(),
+                initializer_export: server_functions.initializer_export.clone(),
+            });
+        }
+    }
+
     let runtime_module = options
         .runtime_module
         .clone()
@@ -180,16 +207,18 @@ pub fn transform_macros(
         });
     }
 
-    if collector.macro_imports.is_empty() {
+    if collector.macro_imports.is_empty() && options.server_functions.is_none() {
         return Ok(unchanged_result(source));
     }
 
-    validate_translation_macro_scopes(&parsed.program, filename, source, |local_name| {
-        collector
-            .macro_imports
-            .get(local_name)
-            .map(|macro_info| macro_info.imported_name.clone())
-    })?;
+    if !collector.macro_imports.is_empty() {
+        validate_translation_macro_scopes(&parsed.program, filename, source, |local_name| {
+            collector
+                .macro_imports
+                .get(local_name)
+                .map(|macro_info| macro_info.imported_name.clone())
+        })?;
+    }
 
     let mut visitor = TransformVisitor::new(filename, source, &collector.macro_imports, &options);
     visitor.visit_program(&parsed.program);
@@ -198,17 +227,34 @@ pub fn transform_macros(
         return Err(error);
     }
 
-    if visitor.replacements.is_empty() {
-        return Ok(unchanged_result(source));
+    let mut server_function_transform = options.server_functions.as_ref().map(|_| {
+        ServerFunctionTransform::run(
+            &parsed.program,
+            source,
+            filename,
+            &collector.macro_imports,
+            &collector.used_identifier_names,
+        )
+    });
+    if let Some(error) = server_function_transform
+        .as_mut()
+        .and_then(|transform| transform.error.take())
+    {
+        return Err(error);
     }
 
     let mut replacements = visitor.replacements;
-    for (start, end) in collector.macro_import_ranges {
-        replacements.push(Replacement {
-            start,
-            end,
-            text: String::new(),
-        });
+    if !replacements.is_empty() {
+        for (start, end) in collector.macro_import_ranges {
+            replacements.push(Replacement {
+                start,
+                end,
+                text: String::new(),
+            });
+        }
+    }
+    if let Some(transform) = &server_function_transform {
+        replacements.extend(transform.replacements.iter().cloned());
     }
 
     if replacements.is_empty() {
@@ -216,6 +262,17 @@ pub fn transform_macros(
     }
 
     let mut prefix = String::new();
+
+    if let (Some(server_options), Some(transform)) =
+        (&options.server_functions, &server_function_transform)
+    {
+        if !transform.replacements.is_empty() {
+            prefix.push_str(&initializer_import(
+                server_options,
+                &transform.initializer_alias,
+            ));
+        }
+    }
 
     let needs_runtime_import = !collector.has_reusable_runtime_import
         || effective_runtime_import_name != runtime_import_name;
