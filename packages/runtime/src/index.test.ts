@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   type I18nInstance,
   getI18n,
+  loadRegisteredMessages,
+  registerMessageLoaders,
   registerMessages,
   resetI18nRuntime,
   setClientI18n,
@@ -152,5 +154,94 @@ describe("registerMessages", () => {
     registerMessages({ "reg-plain": { keyF: "F" } })
 
     expect(() => setClientI18n(createTestI18n("reg-plain"))).not.toThrow()
+  })
+
+  it("loads eager registrations into a request-local server instance", async () => {
+    const messages = { keyG: "G" }
+    registerMessages({ "reg-server-eager": messages })
+    const i18n = createLoadableI18n("reg-server-eager")
+
+    await expect(loadRegisteredMessages(i18n, "reg-server-eager")).resolves.toBe(i18n)
+    expect(i18n.loaded["reg-server-eager"]).toEqual([messages])
+    expect(i18n.loaded["reg-server-eager"]?.[0]).toBe(messages)
+  })
+
+  it("loads only the requested locale from lazy module registrations", async () => {
+    const en = { keyH: "H" }
+    const de = { keyH: "H-de" }
+    const loadEn = vi.fn(async () => en)
+    const loadDe = vi.fn(async () => de)
+    registerMessageLoaders("reg-server-locale", {
+      en: loadEn,
+      de: loadDe,
+    })
+    const i18n = createLoadableI18n("de")
+
+    await loadRegisteredMessages(i18n, "de")
+
+    expect(loadEn).not.toHaveBeenCalled()
+    expect(loadDe).toHaveBeenCalledOnce()
+    expect(i18n.loaded.de).toEqual([de])
+  })
+
+  it("deduplicates lazy imports across concurrent and later requests", async () => {
+    const messages = { keyI: "I" }
+    const load = vi.fn(async () => messages)
+    registerMessageLoaders("reg-server-dedupe", { "reg-server-dedupe": load })
+    const first = createLoadableI18n("reg-server-dedupe")
+    const second = createLoadableI18n("reg-server-dedupe")
+
+    await Promise.all([
+      loadRegisteredMessages(first, "reg-server-dedupe"),
+      loadRegisteredMessages(second, "reg-server-dedupe"),
+    ])
+    await loadRegisteredMessages(first, "reg-server-dedupe")
+
+    expect(load).toHaveBeenCalledOnce()
+    expect(first.loaded["reg-server-dedupe"]).toEqual([messages, messages])
+    expect(second.loaded["reg-server-dedupe"]).toEqual([messages])
+  })
+
+  it("retries a failed lazy import", async () => {
+    const load = vi
+      .fn<() => Promise<Record<string, string>>>()
+      .mockRejectedValueOnce(new Error("temporary import failure"))
+      .mockResolvedValueOnce({ keyJ: "J" })
+    registerMessageLoaders("reg-server-retry", { "reg-server-retry": load })
+    const i18n = createLoadableI18n("reg-server-retry")
+
+    await expect(loadRegisteredMessages(i18n, "reg-server-retry")).rejects.toThrow(
+      "temporary import failure"
+    )
+    await expect(loadRegisteredMessages(i18n, "reg-server-retry")).resolves.toBe(i18n)
+
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it("replaces a stable loader registration during HMR", async () => {
+    const first = vi.fn(async () => ({ keyK: "old" }))
+    const second = vi.fn(async () => ({ keyK: "new" }))
+    registerMessageLoaders("reg-server-hmr", { "reg-server-hmr": first })
+    const i18n = createLoadableI18n("reg-server-hmr")
+    await loadRegisteredMessages(i18n, "reg-server-hmr")
+
+    registerMessageLoaders("reg-server-hmr", { "reg-server-hmr": second })
+    await loadRegisteredMessages(i18n, "reg-server-hmr")
+
+    expect(first).toHaveBeenCalledOnce()
+    expect(second).toHaveBeenCalledOnce()
+    expect(i18n.loaded["reg-server-hmr"]).toEqual([{ keyK: "old" }, { keyK: "new" }])
+  })
+
+  it("rejects a non-loadable instance only when graph messages exist", async () => {
+    const i18n = createTestI18n("reg-server-unloadable")
+
+    await expect(loadRegisteredMessages(i18n, "reg-server-empty")).resolves.toBe(i18n)
+    registerMessageLoaders("reg-server-unloadable", {
+      "reg-server-unloadable": async () => ({ keyL: "L" }),
+    })
+    await expect(loadRegisteredMessages(i18n, "reg-server-unloadable")).rejects.toThrow(
+      "cannot load generated graph-split messages"
+    )
   })
 })
