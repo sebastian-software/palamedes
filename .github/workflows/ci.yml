@@ -61,9 +61,13 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Verify Next.js RSC request scope in production
+      - name: Verify Next.js RSC request scope with Turbopack
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm --filter @palamedes/example-nextjs-cookie test:rsc-scope
+
+      - name: Verify Next.js RSC request scope with Webpack
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm --filter @palamedes/example-nextjs-cookie test:rsc-scope:webpack
 
       - name: Test ESLint and Oxlint adapter
         run: pnpm --filter @palamedes/eslint-plugin test

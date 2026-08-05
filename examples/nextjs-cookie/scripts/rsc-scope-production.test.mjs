@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process"
+import { createRequire } from "node:module"
 
 const port = 4198
 const baseUrl = `http://127.0.0.1:${port}`
+const require = createRequire(import.meta.url)
+const nextCli = require.resolve("next/dist/bin/next")
 let serverOutput = ""
 
 function waitForExit(child) {
@@ -50,7 +53,7 @@ async function assertLocale(locale, expected) {
   }
 }
 
-const server = spawn("pnpm", ["exec", "next", "start", "--port", String(port)], {
+const server = spawn(process.execPath, [nextCli, "start", "--port", String(port)], {
   cwd: new URL("..", import.meta.url),
   env: { ...process.env, NODE_ENV: "production" },
   stdio: ["ignore", "pipe", "pipe"],

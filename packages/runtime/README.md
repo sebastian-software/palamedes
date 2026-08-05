@@ -122,6 +122,12 @@ For a fuller walkthrough, including Hono and Express examples, see:
   - `requestKeyProvider` is an adapter-only escape hatch for a stable host render
     identity; its symbol ID makes repeat registration bounded during dev HMR
 
+When a request key is available, `scope.activate()` updates the instance stored
+for that key. Multiple activations under the same key are last-write-wins, which
+matches hosts such as Next where one render has one active instance.
+`scope.run()` remains isolated to its callback and takes precedence over that
+request-key fallback.
+
 The `@palamedes/runtime/server` implementation imports Node `async_hooks`. In
 non-Node bundles, the subpath resolves to a small fallback module that throws an
 actionable Node-only error when called.

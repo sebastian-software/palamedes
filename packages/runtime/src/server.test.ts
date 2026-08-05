@@ -44,6 +44,34 @@ describe("@palamedes/runtime/server", () => {
     isolatedRuntime.resetI18nRuntime()
   })
 
+  it("upgrades shared state from an older runtime copy without disconnecting it", () => {
+    const stateKey = Symbol.for("palamedes.runtime.serverI18nScopeState")
+    const globalState = globalThis as typeof globalThis & Record<symbol, unknown>
+    const previousState = globalState[stateKey]
+    const legacyActive = new AsyncLocalStorage<I18nInstance>()
+    globalState[stateKey] = { active: legacyActive }
+
+    try {
+      const scope = createServerI18nScope<I18nInstance>()
+      const i18n = createTestI18n("de")
+
+      scope.run(i18n, () => {
+        expect(legacyActive.getStore()).toBe(i18n)
+        expect(scope.get()).toBe(i18n)
+        expect(getI18n()).toBe(i18n)
+      })
+
+      expect(globalState[stateKey]).toMatchObject({
+        active: legacyActive,
+        activate: expect.any(Function),
+        get: expect.any(Function),
+        run: expect.any(Function),
+      })
+    } finally {
+      globalState[stateKey] = previousState
+    }
+  })
+
   it("activates an i18n instance for the current async server context", async () => {
     const scope = createServerI18nScope<I18nInstance>()
     const i18n = createTestI18n()

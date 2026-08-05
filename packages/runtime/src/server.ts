@@ -21,18 +21,26 @@ type ServerScopeState = {
   run<Result>(i18n: I18nInstance, callback: () => Result): Result
 }
 
-function getServerScopeState(): ServerScopeState {
-  const globalState = globalThis as typeof globalThis & Record<symbol, ServerScopeState | undefined>
-  const existing = globalState[SERVER_SCOPE_STATE_KEY]
-  if (existing) {
-    return existing
-  }
+type LegacyServerScopeState = Pick<ServerScopeState, "active">
 
-  const active = new AsyncLocalStorage<I18nInstance>()
+function isCurrentServerScopeState(
+  state: LegacyServerScopeState | ServerScopeState
+): state is ServerScopeState {
+  return (
+    typeof (state as ServerScopeState).activate === "function" &&
+    typeof (state as ServerScopeState).get === "function" &&
+    typeof (state as ServerScopeState).getRun === "function" &&
+    typeof (state as ServerScopeState).run === "function" &&
+    (state as ServerScopeState).requestI18n instanceof WeakMap &&
+    (state as ServerScopeState).requestKeyProviders instanceof Map
+  )
+}
+
+function createServerScopeState(active: AsyncLocalStorage<I18nInstance>): ServerScopeState {
   const running = new AsyncLocalStorage<I18nInstance>()
   const requestI18n = new WeakMap<object, I18nInstance>()
   const requestKeyProviders = new Map<symbol, () => object | undefined>()
-  const state: ServerScopeState = {
+  return {
     active,
     activate(i18n) {
       if (running.getStore()) running.enterWith(i18n)
@@ -58,6 +66,19 @@ function getServerScopeState(): ServerScopeState {
     requestKeyProviders,
     run: (i18n, callback) => running.run(i18n, () => active.run(i18n, callback)),
   }
+}
+
+function getServerScopeState(): ServerScopeState {
+  const globalState = globalThis as typeof globalThis &
+    Record<symbol, LegacyServerScopeState | ServerScopeState | undefined>
+  const existing = globalState[SERVER_SCOPE_STATE_KEY]
+  if (existing && isCurrentServerScopeState(existing)) {
+    return existing
+  }
+
+  // Runtime copies share this symbol across module graphs and versions. Reuse
+  // an older state's storage so scopes created before this upgrade stay linked.
+  const state = createServerScopeState(existing?.active ?? new AsyncLocalStorage<I18nInstance>())
   globalState[SERVER_SCOPE_STATE_KEY] = state
   return state
 }
@@ -90,6 +111,8 @@ export function createServerI18nScope<T extends I18nInstance = I18nInstance>(
       if (runI18n) return runI18n as T
       const requestKey = getRequestKey?.()
       if (requestKey) {
+        // A host render key is more precise than an AsyncLocalStorage context,
+        // which may have been captured before activation or reused after it.
         const requestScopedI18n = sharedState.requestI18n.get(requestKey)
         if (requestScopedI18n) return requestScopedI18n as T
       }
