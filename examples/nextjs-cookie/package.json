@@ -6,11 +6,13 @@
     "dev": "next dev --port 4010",
     "build": "next build && node ../../scripts/normalize-next-required-server-files.mjs",
     "start": "next start --port 4010",
-    "extract": "pmds extract"
+    "extract": "pmds extract",
+    "test:rsc-scope": "next build --webpack && node ./scripts/rsc-scope-production.test.mjs"
   },
   "dependencies": {
     "@palamedes/core": "workspace:^",
     "@palamedes/example-ui": "workspace:^",
+    "@palamedes/next-plugin": "workspace:^",
     "@palamedes/react": "workspace:^",
     "@palamedes/runtime": "workspace:^",
     "next": "^16.2.12",
@@ -21,7 +23,6 @@
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
-    "@palamedes/next-plugin": "workspace:^",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

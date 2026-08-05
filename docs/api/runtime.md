@@ -15,6 +15,7 @@ macro output.
 The server subpath `@palamedes/runtime/server` exports:
 
 - `createServerI18nScope<T>()`
+- `CreateServerI18nScopeOptions`
 - `ServerI18nScope`
 
 ## Client Runtime
@@ -59,7 +60,17 @@ serverI18n.activate(i18n)
 ```
 
 `createServerI18nScope()` uses Node `AsyncLocalStorage`, so keep it out of
-client bundles and Edge-only runtime paths.
+client bundles and Edge-only runtime paths. `scope.activate()` lasts for the
+current inherited async context; `scope.run()` lasts for its callback. A host
+adapter can supply `requestKeyProvider` when the framework exposes a stable
+render identity across context changes. Provider IDs replace earlier
+registrations from the same adapter, so repeated dev/HMR scope creation stays
+bounded, and instances are stored against weak request keys.
+
+Next.js App Router rendering has separate RSC and Client Component server
+passes and can resume work from a context captured before activation. Use
+`createNextServerI18nScope()` from `@palamedes/next-plugin/server` there rather
+than configuring `requestKeyProvider` in application code.
 
 Isomorphic SSR client-component bundles can call `activateServerI18n(i18n)` to
 enter that existing request scope without importing the Node-only server

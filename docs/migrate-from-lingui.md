@@ -183,17 +183,17 @@ setServerI18nGetter(() => getRequestScopedI18n())
 ```
 
 For Next.js App Router Server Components on the Node runtime, prefer the
-server-only helper:
+Next render-lifetime helper:
 
 ```ts
 // src/lib/i18n.server.ts
 import "server-only"
 
 import { cache } from "react"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
 import type { PalamedesI18n } from "@palamedes/core"
 
-export const serverI18n = createServerI18nScope<PalamedesI18n>()
+export const serverI18n = createNextServerI18nScope<PalamedesI18n>()
 
 const loadActiveServerI18n = cache(async () => {
   const locale = await resolveLocaleFromCookiesOrHeaders()
@@ -224,10 +224,11 @@ export default async function Page() {
 ```
 
 This follows the official RSC model: server-only modules prevent accidental
-client imports, React `cache()` memoizes work within the current request, and
-the runtime scope is activated before downstream Server Components call direct
-macros. Do not register a new global server getter from every Server Component
-render.
+client imports, React `cache()` memoizes setup work within the current request,
+and the Next adapter keeps the active instance bound through the RSC and Client
+Component server-render passes, including suspension and resumption. Create one
+scope at module level, activate a fresh instance per request, and do not register
+a global server getter from every Server Component render.
 
 For backend servers outside React frameworks, use the same runtime getter with
 request-local storage. The Hono/Express pattern is documented here:

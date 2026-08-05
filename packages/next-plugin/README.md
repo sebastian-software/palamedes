@@ -66,19 +66,19 @@ loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
 future adapter release explicitly documents `.fcl` imports.
 
 For App Router Server Components on the Node runtime, use a server-only module
-with `@palamedes/runtime/server`. This follows the official RSC shape: keep
+with `@palamedes/next-plugin/server`. This follows the official RSC shape: keep
 server code behind `server-only`, memoize request work with React `cache()`, and
-bind direct macro calls to the active request scope while rendering.
+bind direct macro calls to the complete Next render lifetime.
 
 ```ts
 // src/lib/i18n.server.ts
 import "server-only"
 
 import { cache } from "react"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
 import type { PalamedesI18n } from "@palamedes/core"
 
-export const serverI18n = createServerI18nScope<PalamedesI18n>()
+export const serverI18n = createNextServerI18nScope<PalamedesI18n>()
 
 const loadActiveServerI18n = cache(async () => {
   const locale = await resolveLocaleFromCookiesOrHeaders()
@@ -136,12 +136,25 @@ module code in its own chunk, which preserves the parser-free runtime and lets
 Turbopack omit inactive locale catalogs from the initial client bundle. Locale
 changes require a document navigation.
 
-Do not call `setServerI18nGetter()` inside every Server Component render. Create
-one server scope at module level, activate it during request-local server
-initialization, and let downstream Server Components call macros normally. Use
-`serverI18n.run(i18n, callback)` for tightly scoped helper callbacks or classic
-Node request handlers. The `@palamedes/runtime/server` subpath imports Node
-`async_hooks`, so keep it out of Client Components and Edge runtime code.
+Create one Next server scope at module level and activate a fresh i18n instance
+during request-local server initialization. Its lifetime is the complete App
+Router render, including the RSC pass, Client Component server prerender, and
+React suspension/resumption. Next render objects are held as weak request keys;
+there is no process-global "last request" instance to leak another locale.
+
+Do not call `setServerI18nGetter()` inside every Server Component render. Use
+`serverI18n.run(i18n, callback)` only for tightly scoped helper callbacks. Use
+the generic `createServerI18nScope()` from `@palamedes/runtime/server` for
+classic Node request handlers outside Next. Both server subpaths are Node-only,
+so keep them out of Client Components and Edge runtime code.
+
+The Next render-lifetime adapter supports the package's declared Next 16 peer
+range and is verified against Next 16.2. It intentionally binds to Next's
+server render storage because public React async context does not span both
+App Router render passes. If a future Next 16 release removes that server
+storage module, the import fails during the application build instead of
+silently falling back to stale or cross-request i18n state; upgrade Palamedes
+before adopting that Next release.
 
 References: [Next.js Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components), [Next.js data fetching and request-scoped React cache](https://nextjs.org/docs/app/getting-started/fetching-data), and [React `cache`](https://react.dev/reference/react/cache).
 
