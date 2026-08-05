@@ -84,6 +84,7 @@ pnpm exec pmds lint --no-cache
 pnpm exec pmds audit
 pnpm exec pmds audit --json
 pnpm exec pmds audit --fail-on warning
+pnpm exec pmds audit --fail-on info
 pnpm exec pmds report
 pnpm exec pmds report --locale de,fr --fail-if-below 95
 pnpm exec pmds report --json
@@ -94,6 +95,8 @@ pnpm exec pmds catalog convert src/locales/de.po --to fcl --output src/locales/d
 `pmds audit` reports missing translations, extra catalog entries, obsolete
 messages, fuzzy review markers, and ICU compatibility issues through the same `ferrocat`
 catalog engine that powers Palamedes builds.
+Use `--fail-on info` when informational findings such as `catalog.fuzzy_flag`
+must fail CI; the default continues to fail only on errors.
 
 `pmds lint` is non-mutating and checks Palamedes authoring across the same
 configured sources as extraction. It supports stable human and JSON output,
