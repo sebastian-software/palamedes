@@ -21,7 +21,7 @@ pub struct AuditOptions {
     /// Print the machine-readable audit result as JSON.
     #[arg(long)]
     json: bool,
-    /// Fail on error or warning diagnostics.
+    /// Fail on error, warning, or info diagnostics.
     #[arg(long, default_value = "error")]
     fail_on: FailOn,
 }
@@ -30,6 +30,7 @@ pub struct AuditOptions {
 enum FailOn {
     Error,
     Warning,
+    Info,
 }
 
 impl Command for AuditOptions {
@@ -55,6 +56,17 @@ impl Command for AuditOptions {
 
     fn verdict(&self, output: &Self::Output) -> Result<(), CliError> {
         match self.fail_on {
+            FailOn::Info
+                if output.summary.errors > 0
+                    || output.summary.warnings > 0
+                    || output.summary.infos > 0 =>
+            {
+                Err(CliError::AuditFailedOnInfo {
+                    errors: output.summary.errors,
+                    warnings: output.summary.warnings,
+                    infos: output.summary.infos,
+                })
+            }
             FailOn::Warning if output.summary.errors > 0 || output.summary.warnings > 0 => {
                 Err(CliError::AuditFailedOnWarning {
                     errors: output.summary.errors,

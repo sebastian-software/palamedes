@@ -128,6 +128,7 @@ pmds audit --locale de fr
 pmds audit --locale de,fr
 pmds audit --json
 pmds audit --fail-on warning
+pmds audit --fail-on info
 ```
 
 Options:
@@ -137,7 +138,12 @@ Options:
 | `-c, --config <path>`  | Use a specific config file.                                                                  |
 | `--locale <locale...>` | Audit only selected target locales. Space-separated and comma-separated values are accepted. |
 | `--json`               | Print the machine-readable audit result.                                                     |
-| `--fail-on <level>`    | Fail on `error` or `warning`. Default: `error`.                                              |
+| `--fail-on <level>`    | Fail on `error`, `warning`, or `info`. Default: `error`.                                     |
+
+`--fail-on info` makes informational diagnostics such as
+`catalog.fuzzy_flag` fail the command, which is useful when CI must reject every
+catalog entry that still carries a review marker. The default remains
+`--fail-on error`.
 
 ## `pmds report`
 

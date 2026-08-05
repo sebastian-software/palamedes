@@ -36,6 +36,14 @@ pub enum CliError {
     AuditFailedOnError { errors: usize },
     #[error("Catalog audit failed with {errors} error(s) and {warnings} warning(s).")]
     AuditFailedOnWarning { errors: usize, warnings: usize },
+    #[error(
+        "Catalog audit failed with {errors} error(s), {warnings} warning(s), and {infos} info diagnostic(s)."
+    )]
+    AuditFailedOnInfo {
+        errors: usize,
+        warnings: usize,
+        infos: usize,
+    },
     #[error("Catalog completeness below {threshold} for {locales}.")]
     CompletenessBelowThreshold { threshold: String, locales: String },
     #[error("Extraction failed for {failures} source file(s); catalogs were not updated.")]
