@@ -91,10 +91,6 @@ export async function createActiveServerI18n() {
   serverI18n.activate(active.i18n)
   return active
 }
-
-export async function initServerActionI18n() {
-  await createActiveServerI18n()
-}
 ```
 
 ```tsx
@@ -165,8 +161,19 @@ References: [Next.js Server and Client Components](https://nextjs.org/docs/app/g
 ### Server Functions and Actions
 
 A Server Function starts a separate request, so initialization performed while
-rendering a page does not cover it. Opt into automatic initialization with a
-named async initializer:
+rendering a page does not cover it. Add a conventional server entry module in
+the project root or `src` directory:
+
+```ts
+// src/palamedes.server.ts
+import { createActiveServerI18n } from "./lib/i18n.server"
+
+export async function initializeServerFunctionI18n(): Promise<void> {
+  await createActiveServerI18n()
+}
+```
+
+Then opt into automatic initialization with a flag:
 
 ```js
 const { withPalamedes } = require("@palamedes/next-plugin")
@@ -174,9 +181,7 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 module.exports = withPalamedes(
   {},
   {
-    serverFunctions: {
-      initializer: "@/lib/i18n.server#initServerActionI18n",
-    },
+    serverFunctions: true,
   }
 )
 ```
@@ -190,8 +195,8 @@ calls then inherit the initialized request scope.
 
 The initializer belongs to the application. It should resolve the request
 locale, load and activate a fresh catalog, and be request-memoized or otherwise
-idempotent. The `module#namedExport` value must resolve from every instrumented
-module.
+idempotent. The plugin resolves exactly one `palamedes.server` module from the
+project root or `src` directory and keeps its absolute import address internal.
 
 Parameter defaults execute before the function body. Palamedes therefore
 rejects eager macros in Server Function parameter initializers, including
@@ -225,9 +230,7 @@ module.exports = withPalamedes(
     failOnCompileError: false,
     keepSourceFallbacks: undefined,
     workspaceRoot: undefined,
-    serverFunctions: {
-      initializer: "@/lib/i18n.server#initServerActionI18n",
-    },
+    serverFunctions: true,
   }
 )
 ```

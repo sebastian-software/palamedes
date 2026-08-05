@@ -27,6 +27,18 @@ const MACRO_CONTENT_PATTERN = new RegExp(
   PALAMEDES_MACRO_PACKAGES.map((name) => name.replaceAll(/[.*+?^${}()|[\]\\/]/gu, "\\$&")).join("|")
 )
 const SERVER_FUNCTION_CONTENT_PATTERN = /["']use server["']/
+const SERVER_FUNCTION_INITIALIZER_MODULE = "@palamedes/next-plugin/server-function-initializer"
+const SERVER_FUNCTION_INITIALIZER_EXPORT = "initializeServerFunctionI18n"
+const SERVER_FUNCTION_ENTRY_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mts",
+  ".mjs",
+  ".cts",
+  ".cjs",
+] as const
 
 /*
  * A Turbopack rule array is either the loader "shorthand" (a flat list of
@@ -146,32 +158,40 @@ export type WithPalamedesOptions = {
 
   /**
    * Initialize request-local i18n at the start of every recognized Next.js
-   * Server Function. The value uses `module#namedExport` syntax.
+   * Server Function. Requires a `palamedes.server` entry module exporting
+   * `initializeServerFunctionI18n`.
    *
-   * @example { initializer: "@/i18n/server-action#initServerActionI18n" }
+   * @default false
    */
-  serverFunctions?: {
-    initializer: string
-  }
+  serverFunctions?: boolean
 }
 
-function parseServerFunctionInitializer(initializer: string) {
-  const separator = initializer.lastIndexOf("#")
-  const initializerModule = initializer.slice(0, separator)
-  const initializerExport = initializer.slice(separator + 1)
-  const identifierPattern = /^(?:[$_]|\p{ID_Start})(?:[$_]|\p{ID_Continue}|\u200C|\u200D)*$/u
+function resolveServerFunctionInitializer(enabled: boolean | undefined) {
+  if (!enabled) return
 
-  if (
-    separator <= 0 ||
-    separator === initializer.length - 1 ||
-    !identifierPattern.test(initializerExport)
-  ) {
+  const projectRoot = process.cwd()
+  const candidates = ["src", ""].flatMap((directory) =>
+    SERVER_FUNCTION_ENTRY_EXTENSIONS.map((extension) =>
+      path.join(projectRoot, directory, `palamedes.server${extension}`)
+    )
+  )
+  const matches = candidates.filter((candidate) => existsSync(candidate))
+
+  if (matches.length === 0) {
     throw new Error(
-      `Invalid Palamedes Server Function initializer ${JSON.stringify(initializer)}. Expected "module#namedExport".`
+      "Palamedes Server Function instrumentation requires a palamedes.server module in the project root or src directory. Export initializeServerFunctionI18n from that module."
+    )
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `Palamedes found multiple Server Function entry modules: ${matches.join(", ")}. Keep exactly one palamedes.server module.`
     )
   }
 
-  return { initializerModule, initializerExport }
+  return {
+    absolutePath: matches[0]!,
+    turbopackAlias: `./${path.relative(projectRoot, matches[0]!).split(path.sep).join("/")}`,
+  }
 }
 
 function resolveWorkspaceRoot(explicitRoot?: string) {
@@ -263,8 +283,12 @@ export function withPalamedes(
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule)
   const keepSourceFallbacks = explicitKeepSourceFallbacks ?? process.env.NODE_ENV !== "production"
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
-  const serverFunctions = serverFunctionOptions
-    ? parseServerFunctionInitializer(serverFunctionOptions.initializer)
+  const serverFunctionEntry = resolveServerFunctionInitializer(serverFunctionOptions)
+  const serverFunctions = serverFunctionEntry
+    ? {
+        initializerModule: SERVER_FUNCTION_INITIALIZER_MODULE,
+        initializerExport: SERVER_FUNCTION_INITIALIZER_EXPORT,
+      }
     : undefined
   const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)
   const configuredTurbopackRoot = baseConfig.turbopack?.root ?? workspaceRoot
@@ -338,11 +362,34 @@ export function withPalamedes(
     turbopack: {
       ...baseConfig.turbopack,
       ...(configuredTurbopackRoot ? { root: configuredTurbopackRoot } : {}),
+      ...(serverFunctionEntry
+        ? {
+            resolveAlias: {
+              ...baseConfig.turbopack?.resolveAlias,
+              [SERVER_FUNCTION_INITIALIZER_MODULE]: serverFunctionEntry.turbopackAlias,
+            },
+          }
+        : {}),
       rules,
     },
 
     // Webpack configuration
     webpack(config, context) {
+      if (serverFunctionEntry) {
+        config.resolve ??= {}
+        if (Array.isArray(config.resolve.alias)) {
+          config.resolve.alias.push({
+            name: SERVER_FUNCTION_INITIALIZER_MODULE,
+            alias: serverFunctionEntry.absolutePath,
+          })
+        } else {
+          config.resolve.alias = {
+            ...config.resolve.alias,
+            [SERVER_FUNCTION_INITIALIZER_MODULE]: serverFunctionEntry.absolutePath,
+          }
+        }
+      }
+
       // Add the OXC transform loader for JS/TS files
       config.module.rules.push({
         test: include,

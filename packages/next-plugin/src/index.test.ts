@@ -1,10 +1,21 @@
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { withPalamedes } from "./index"
 
 afterEach(() => {
   vi.unstubAllEnvs()
+  vi.restoreAllMocks()
 })
+
+const nextExampleRoot = fileURLToPath(new URL("../../../examples/nextjs-cookie", import.meta.url))
+const serverEntryModule = "@palamedes/next-plugin/server-function-initializer"
+
+function useNextExampleProject(): void {
+  vi.spyOn(process, "cwd").mockReturnValue(nextExampleRoot)
+}
 
 type RuleItem = {
   condition?: unknown
@@ -90,14 +101,8 @@ describe("withPalamedes turbopack config", () => {
   })
 
   it("matches Server Function directives and forwards the initializer when configured", () => {
-    const config = withPalamedes(
-      {},
-      {
-        serverFunctions: {
-          initializer: "@/i18n/server-action#initServerActionI18n",
-        },
-      }
-    )
+    useNextExampleProject()
+    const config = withPalamedes({}, { serverFunctions: true })
     const rule = getRules(config)["*"] as RuleItem
     const content = (
       conditionList(rule).find(
@@ -108,19 +113,21 @@ describe("withPalamedes turbopack config", () => {
     expect(content.test('async function save() { "use server" }')).toBe(true)
     expect(rule.loaders?.[0]?.options).toMatchObject({
       serverFunctions: {
-        initializerModule: "@/i18n/server-action",
-        initializerExport: "initServerActionI18n",
+        initializerModule: serverEntryModule,
+        initializerExport: "initializeServerFunctionI18n",
       },
+    })
+    expect(config.turbopack?.resolveAlias).toMatchObject({
+      [serverEntryModule]: "./src/palamedes.server.ts",
     })
   })
 
-  it("rejects malformed Server Function initializer specifiers", () => {
-    expect(() =>
-      withPalamedes({}, { serverFunctions: { initializer: "@/i18n/server-action" } })
-    ).toThrow('Expected "module#namedExport"')
-    expect(() =>
-      withPalamedes({}, { serverFunctions: { initializer: "module#not-valid()" } })
-    ).toThrow('Expected "module#namedExport"')
+  it("requires the conventional Server Function entry module when enabled", () => {
+    vi.spyOn(process, "cwd").mockReturnValue(path.join(nextExampleRoot, "missing"))
+
+    expect(() => withPalamedes({}, { serverFunctions: true })).toThrow(
+      "requires a palamedes.server module"
+    )
   })
 
   it("appends to user-supplied turbopack rules instead of overwriting them", () => {
@@ -209,15 +216,14 @@ function collectWebpackRules(config: ReturnType<typeof withPalamedes>): WebpackR
 
 describe("withPalamedes webpack config", () => {
   it("forwards Server Function instrumentation to webpack", () => {
-    const rules = collectWebpackRules(
-      withPalamedes({}, { serverFunctions: { initializer: "./i18n#initServerActionI18n" } })
-    )
+    useNextExampleProject()
+    const rules = collectWebpackRules(withPalamedes({}, { serverFunctions: true }))
     const transformRule = rules.find((rule) => rule.use?.[0]?.loader.includes("palamedes-loader"))
 
     expect(transformRule?.use?.[0]?.options).toMatchObject({
       serverFunctions: {
-        initializerModule: "./i18n",
-        initializerExport: "initServerActionI18n",
+        initializerModule: serverEntryModule,
+        initializerExport: "initializeServerFunctionI18n",
       },
     })
   })
