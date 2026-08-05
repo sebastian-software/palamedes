@@ -1,0 +1,44 @@
+msgid ""
+msgstr ""
+"Language: de\n"
+"X-Custom: keep-me\n"
+
+#. Greeting shown on the home page
+#: src/home.tsx#HomePage
+#: src/shared.ts#formatGreeting
+msgid "Hello"
+msgstr ""
+
+#. Action label
+#: src/menu.tsx#Menu
+msgctxt "verb"
+msgid "Open"
+msgstr ""
+
+#. State label
+msgctxt "adjective"
+msgid "Open"
+msgstr "Offen"
+
+#. File count
+#: src/files.tsx#FileCount
+msgid "{count, plural, one {# file} other {# files}}"
+msgstr ""
+
+# Translator-owned review note
+#. Existing translated entry
+#: src/review.tsx#ReviewPanel
+#, fuzzy, x-custom
+msgid "Review me"
+msgstr "Bitte prüfen"
+
+#. Machine-managed entry
+#@ lock: {{LOCK}}
+#@ ai: example/model:0.75
+msgid "Machine"
+msgstr "Maschinell"
+
+#~ #. Historic entry
+#~ #, fuzzy
+#~ msgid "Old"
+#~ msgstr "Alt"

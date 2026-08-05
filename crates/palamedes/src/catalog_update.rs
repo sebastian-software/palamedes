@@ -189,7 +189,7 @@ pub struct ParsedCatalogMessage {
 }
 
 /// Machine metadata attached to one translated catalog entry.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MachineMetadata {
     /// Integrity lock for the current translation payload.
@@ -200,7 +200,7 @@ pub struct MachineMetadata {
 }
 
 /// AI provenance for machine-managed content.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiProvenance {
     /// Model identifier used to produce the translation.
