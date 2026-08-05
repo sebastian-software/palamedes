@@ -48,9 +48,12 @@ function loadConfigCached(configPath) {
 }
 
 function catalogMatchesSource(config, catalog, sourcePath) {
+  // Keep catalog include/exclude matching in sync with catalogMatchesSource in
+  // packages/vite-plugin/src/index.ts.
+  const rootDir = canonicalPath(config.rootDir)
   const source = normalizePath(canonicalPath(sourcePath))
   const include = catalog.include.map((pattern) => {
-    const absolute = path.resolve(config.rootDir, pattern)
+    const absolute = path.resolve(rootDir, pattern)
     try {
       if (statSync(absolute).isDirectory()) {
         return `${normalizePath(absolute)}/**/*.{js,jsx,ts,tsx,mdx}`
@@ -61,7 +64,7 @@ function catalogMatchesSource(config, catalog, sourcePath) {
     return normalizePath(absolute)
   })
   const exclude = (catalog.exclude ?? ["**/node_modules/**"]).map((pattern) =>
-    normalizePath(path.resolve(config.rootDir, pattern))
+    normalizePath(path.resolve(rootDir, pattern))
   )
 
   return (
@@ -141,7 +144,7 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
     throw error
   }
 
-  if (options.serverMessageSplitting !== true || result.compiledIds?.length === 0) {
+  if (options.serverMessageSplitting !== true || !result.compiledIds?.length) {
     if (callback) {
       callback(null, result.code, result.map ?? inputSourceMap ?? null)
       return

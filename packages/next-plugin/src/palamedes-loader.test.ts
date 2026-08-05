@@ -1,5 +1,8 @@
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import Module from "node:module"
+import os from "node:os"
+import path from "node:path"
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -104,6 +107,57 @@ describe("palamedes-loader.cjs", () => {
     expect(loadPalamedesConfigSync).not.toHaveBeenCalled()
   })
 
+  it("skips server splitting when the transform does not report compiled ids", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "export const translated = true",
+      map: null,
+    })
+
+    const output = await runLoader({ serverMessageSplitting: true })
+
+    expect(output).toBe("export const translated = true")
+    expect(loadPalamedesConfigSync).not.toHaveBeenCalled()
+  })
+
+  it("matches catalogs when the configured root resolves through a symlink", async () => {
+    const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-loader-"))
+    const realRoot = path.join(fixtureDirectory, "real-root")
+    const linkedRoot = path.join(fixtureDirectory, "linked-root")
+    const resourcePath = path.join(realRoot, "src", "page.tsx")
+
+    try {
+      await mkdir(path.dirname(resourcePath), { recursive: true })
+      await writeFile(resourcePath, "")
+      await symlink(realRoot, linkedRoot, process.platform === "win32" ? "junction" : "dir")
+      transformPalamedesMacros.mockReturnValue({
+        code: "export const translated = true",
+        map: null,
+        compiledIds: ["id-a"],
+      })
+      loadPalamedesConfigSync.mockReturnValue({
+        configPath: path.join(linkedRoot, "palamedes.yaml"),
+        rootDir: linkedRoot,
+        locales: ["en"],
+        sourceLocale: "en",
+        catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*.tsx"] }],
+      })
+      const warnings: Error[] = []
+
+      const output = await runLoader(
+        { serverMessageSplitting: true },
+        {
+          resourcePath,
+          emitWarning: (warning: Error) => warnings.push(warning),
+        }
+      )
+
+      expect(output).toContain('import { registerMessageLoaders } from "@palamedes/runtime";')
+      expect(warnings).toEqual([])
+    } finally {
+      await rm(fixtureDirectory, { force: true, recursive: true })
+    }
+  })
+
   it("rejects server splitting for catalog formats without a Next loader", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "export const translated = true",
@@ -140,8 +194,8 @@ async function runLoader(
   return new Promise<string>((resolve, reject) => {
     loader.call(
       {
-        ...extraContext,
         resourcePath: "/repo/src/page.tsx",
+        ...extraContext,
         sourceMap: true,
         getOptions() {
           return options

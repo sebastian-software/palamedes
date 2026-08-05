@@ -167,13 +167,13 @@ the project root or `src` directory:
 ```ts
 // src/palamedes.server.ts
 import { createI18n } from "@palamedes/core/compiled"
-import { getLocale, serverI18n } from "./lib/i18n.server"
+import { getLocale, serverI18nScope } from "./lib/i18n.server"
 
 export async function initializeServerFunctionI18n(): Promise<void> {
-  const locale = await getLocale()
+  const { locale } = await getLocale()
   const i18n = createI18n()
   i18n.activate(locale)
-  serverI18n.activate(i18n)
+  serverI18nScope.activate(i18n)
 }
 ```
 
@@ -213,6 +213,13 @@ lazy import per locale containing only that module's compiled ids. Static ESM
 imports naturally bring along registrations from transitive helpers. After the
 application initializer activates its instance, Palamedes imports only the
 active locale's registered fragments and loads them into that instance.
+
+Registration must happen before the initializer runs to affect the current
+request. A module first reached through a dynamic import inside the action body
+registers its fragments too late for that invocation; those registrations are
+available to subsequent requests. Keep translating helpers in the static ESM
+dependency graph, or load their messages explicitly before translating during
+the first request.
 
 Generated locale imports are deduplicated across concurrent and later requests
 by the server module runtime. The request-local `load()` calls still merge each
