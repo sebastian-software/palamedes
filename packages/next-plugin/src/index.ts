@@ -26,6 +26,7 @@ type TurbopackLoaderItem = Exclude<TurbopackRuleConfigItem["loaders"], undefined
 const MACRO_CONTENT_PATTERN = new RegExp(
   PALAMEDES_MACRO_PACKAGES.map((name) => name.replaceAll(/[.*+?^${}()|[\]\\/]/gu, "\\$&")).join("|")
 )
+const SERVER_FUNCTION_CONTENT_PATTERN = /["']use server["']/
 
 /*
  * A Turbopack rule array is either the loader "shorthand" (a flat list of
@@ -142,6 +143,35 @@ export type WithPalamedesOptions = {
    * If omitted, Palamedes will try to detect a workspace root from process.cwd().
    */
   workspaceRoot?: string
+
+  /**
+   * Initialize request-local i18n at the start of every recognized Next.js
+   * Server Function. The value uses `module#namedExport` syntax.
+   *
+   * @example { initializer: "@/i18n/server-action#initServerActionI18n" }
+   */
+  serverFunctions?: {
+    initializer: string
+  }
+}
+
+function parseServerFunctionInitializer(initializer: string) {
+  const separator = initializer.lastIndexOf("#")
+  const initializerModule = initializer.slice(0, separator)
+  const initializerExport = initializer.slice(separator + 1)
+  const identifierPattern = /^(?:[$_]|\p{ID_Start})(?:[$_]|\p{ID_Continue}|\u200C|\u200D)*$/u
+
+  if (
+    separator <= 0 ||
+    separator === initializer.length - 1 ||
+    !identifierPattern.test(initializerExport)
+  ) {
+    throw new Error(
+      `Invalid Palamedes Server Function initializer ${JSON.stringify(initializer)}. Expected "module#namedExport".`
+    )
+  }
+
+  return { initializerModule, initializerExport }
 }
 
 function resolveWorkspaceRoot(explicitRoot?: string) {
@@ -227,11 +257,15 @@ export function withPalamedes(
     runtimeModule: explicitRuntimeModule,
     keepSourceFallbacks: explicitKeepSourceFallbacks,
     workspaceRoot: explicitWorkspaceRoot,
+    serverFunctions: serverFunctionOptions,
   } = options
 
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule)
   const keepSourceFallbacks = explicitKeepSourceFallbacks ?? process.env.NODE_ENV !== "production"
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
+  const serverFunctions = serverFunctionOptions
+    ? parseServerFunctionInitializer(serverFunctionOptions.initializer)
+    : undefined
   const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)
   const configuredTurbopackRoot = baseConfig.turbopack?.root ?? workspaceRoot
   const outputFileTracingRoot =
@@ -258,13 +292,24 @@ export function withPalamedes(
         { not: "foreign" },
         { path: include },
         { not: { path: exclude } },
-        { content: MACRO_CONTENT_PATTERN },
+        {
+          content: serverFunctions
+            ? new RegExp(
+                `${MACRO_CONTENT_PATTERN.source}|${SERVER_FUNCTION_CONTENT_PATTERN.source}`
+              )
+            : MACRO_CONTENT_PATTERN,
+        },
       ],
     },
     loaders: [
       {
         loader: oxcLoaderPath,
-        options: { runtimeModule, keepSourceFallbacks, stripNonEssentialProps },
+        options: {
+          runtimeModule,
+          keepSourceFallbacks,
+          stripNonEssentialProps,
+          ...(serverFunctions ? { serverFunctions } : {}),
+        },
       },
     ],
   })
@@ -306,7 +351,12 @@ export function withPalamedes(
         use: [
           {
             loader: oxcLoaderPath,
-            options: { runtimeModule, keepSourceFallbacks, stripNonEssentialProps },
+            options: {
+              runtimeModule,
+              keepSourceFallbacks,
+              stripNonEssentialProps,
+              ...(serverFunctions ? { serverFunctions } : {}),
+            },
           },
         ],
       })

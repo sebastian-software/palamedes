@@ -60,6 +60,11 @@ export async function createActiveServerI18n(locale?: Locale): Promise<{
   return active
 }
 
+/** Request initializer injected into every recognized Server Function. */
+export async function initServerActionI18n(): Promise<void> {
+  await createActiveServerI18n()
+}
+
 export function runWithServerI18n<Result>(i18n: PalamedesI18n, callback: () => Result): Result {
   return serverI18nScope.run(i18n, callback)
 }

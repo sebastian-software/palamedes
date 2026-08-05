@@ -91,6 +91,10 @@ export async function createActiveServerI18n() {
   serverI18n.activate(active.i18n)
   return active
 }
+
+export async function initServerActionI18n() {
+  await createActiveServerI18n()
+}
 ```
 
 ```tsx
@@ -158,6 +162,53 @@ before adopting that Next release.
 
 References: [Next.js Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components), [Next.js data fetching and request-scoped React cache](https://nextjs.org/docs/app/getting-started/fetching-data), and [React `cache`](https://react.dev/reference/react/cache).
 
+### Server Functions and Actions
+
+A Server Function starts a separate request, so initialization performed while
+rendering a page does not cover it. Opt into automatic initialization with a
+named async initializer:
+
+```js
+const { withPalamedes } = require("@palamedes/next-plugin")
+
+module.exports = withPalamedes(
+  {},
+  {
+    serverFunctions: {
+      initializer: "@/lib/i18n.server#initServerActionI18n",
+    },
+  }
+)
+```
+
+Palamedes instruments every async function recognized by Next or React: async
+exports in a module with a top-level `"use server"` directive, and async
+functions with their own `"use server"` directive. It injects one initializer
+import per module and awaits the initializer after the function's directive
+prologue. This also covers actions without a local macro; sync and async helper
+calls then inherit the initialized request scope.
+
+The initializer belongs to the application. It should resolve the request
+locale, load and activate a fresh catalog, and be request-memoized or otherwise
+idempotent. The `module#namedExport` value must resolve from every instrumented
+module.
+
+Parameter defaults execute before the function body. Palamedes therefore
+rejects eager macros in Server Function parameter initializers, including
+nested destructuring defaults. Move such defaults into the body and preserve
+JavaScript default-parameter semantics explicitly:
+
+```ts
+export async function save(message?: string) {
+  "use server"
+  if (message === undefined) message = t`Fallback`
+}
+```
+
+Do not replace this guard with `??=` unless `null` should also select the
+fallback. Server Function instrumentation is opt-in and currently targets the
+Next.js integration.
+
 ## Options
 
 ```js
@@ -174,6 +225,9 @@ module.exports = withPalamedes(
     failOnCompileError: false,
     keepSourceFallbacks: undefined,
     workspaceRoot: undefined,
+    serverFunctions: {
+      initializer: "@/lib/i18n.server#initServerActionI18n",
+    },
   }
 )
 ```

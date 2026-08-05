@@ -2,9 +2,10 @@
 
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 import { t } from "@palamedes/core/macro"
 import { getLocaleLabel, type Locale, LOCALES, LOCALE_COOKIE } from "./i18n"
-import { createActiveServerI18n, runWithServerI18n } from "./i18n.server"
+import { getLocale } from "./i18n.server"
 
 export async function setLocaleAction(locale: Locale) {
   if (!LOCALES.includes(locale)) {
@@ -22,12 +23,27 @@ export async function setLocaleAction(locale: Locale) {
 }
 
 export async function getServerActionProof() {
-  const { i18n, locale } = await createActiveServerI18n()
+  return createServerActionProof()
+}
 
-  return runWithServerI18n(i18n, () => ({
+export async function redirectServerActionProof() {
+  const proof = await createServerActionProof()
+  const query = new URLSearchParams({ locale: proof.locale, message: proof.message })
+  redirect(`/server-action-probe?${query}`)
+}
+
+async function createServerActionProof() {
+  await Promise.resolve()
+  const { locale } = await getLocale()
+
+  return {
     locale,
     localeLabel: getLocaleLabel(locale),
     handledAt: new Date().toISOString(),
-    message: t`Server action confirmed locale ${locale}.`,
-  }))
+    message: translateServerActionProof(locale),
+  }
+}
+
+function translateServerActionProof(locale: Locale) {
+  return t`Server action confirmed locale ${locale}.`
 }

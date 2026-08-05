@@ -30,6 +30,9 @@ interface WithPalamedesOptions {
   runtimeModule?: string
   keepSourceFallbacks?: boolean
   workspaceRoot?: string
+  serverFunctions?: {
+    initializer: string
+  }
 }
 ```
 
@@ -42,6 +45,7 @@ Defaults:
 - `failOnCompileError`: `false`
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true` in development, `false` in production
+- `serverFunctions`: disabled unless an initializer is configured
 
 ## Usage
 
@@ -50,6 +54,36 @@ const { withPalamedes } = require("@palamedes/next-plugin")
 
 module.exports = withPalamedes({})
 ```
+
+## Server Functions
+
+Next Server Functions and Actions execute as requests separate from the page
+render. Configure a request initializer when those functions use Palamedes
+directly or through helpers:
+
+```js
+module.exports = withPalamedes(
+  {},
+  {
+    serverFunctions: {
+      initializer: "@/lib/i18n.server#initServerActionI18n",
+    },
+  }
+)
+```
+
+The initializer is a named async export owned by the application. It should
+resolve the locale, load and activate a fresh request-local i18n instance, and
+be request-memoized or idempotent. Palamedes awaits it at the start of every
+recognized async Server Function, whether or not that function contains a
+macro itself. Recognition covers inline `"use server"` directives and async
+exports from top-level `"use server"` modules.
+
+Eager macros in formal parameter initializers are rejected because parameter
+defaults execute before injected body statements. Move the fallback into the
+function body with `if (value === undefined)` when matching JavaScript's
+default-parameter behavior; `??=` also treats `null` as absent and is not an
+equivalent rewrite.
 
 ## App Router Client Catalog Boundary
 

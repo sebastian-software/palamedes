@@ -11,6 +11,7 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
       runtimeModule: options.runtimeModule,
       keepSourceFallbacks: options.keepSourceFallbacks,
       stripNonEssentialProps: options.stripNonEssentialProps,
+      serverFunctions: options.serverFunctions,
       sourceMap: this.sourceMap,
     })
 

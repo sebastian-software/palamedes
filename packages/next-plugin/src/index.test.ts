@@ -89,6 +89,40 @@ describe("withPalamedes turbopack config", () => {
     expect(content.test('import { t } from "other-i18n"')).toBe(false)
   })
 
+  it("matches Server Function directives and forwards the initializer when configured", () => {
+    const config = withPalamedes(
+      {},
+      {
+        serverFunctions: {
+          initializer: "@/i18n/server-action#initServerActionI18n",
+        },
+      }
+    )
+    const rule = getRules(config)["*"] as RuleItem
+    const content = (
+      conditionList(rule).find(
+        (condition) => typeof condition === "object" && condition !== null && "content" in condition
+      ) as { content: RegExp }
+    ).content
+
+    expect(content.test('async function save() { "use server" }')).toBe(true)
+    expect(rule.loaders?.[0]?.options).toMatchObject({
+      serverFunctions: {
+        initializerModule: "@/i18n/server-action",
+        initializerExport: "initServerActionI18n",
+      },
+    })
+  })
+
+  it("rejects malformed Server Function initializer specifiers", () => {
+    expect(() =>
+      withPalamedes({}, { serverFunctions: { initializer: "@/i18n/server-action" } })
+    ).toThrow('Expected "module#namedExport"')
+    expect(() =>
+      withPalamedes({}, { serverFunctions: { initializer: "module#not-valid()" } })
+    ).toThrow('Expected "module#namedExport"')
+  })
+
   it("appends to user-supplied turbopack rules instead of overwriting them", () => {
     const userRule = {
       condition: { path: /\.svg$/ },
@@ -174,6 +208,20 @@ function collectWebpackRules(config: ReturnType<typeof withPalamedes>): WebpackR
 }
 
 describe("withPalamedes webpack config", () => {
+  it("forwards Server Function instrumentation to webpack", () => {
+    const rules = collectWebpackRules(
+      withPalamedes({}, { serverFunctions: { initializer: "./i18n#initServerActionI18n" } })
+    )
+    const transformRule = rules.find((rule) => rule.use?.[0]?.loader.includes("palamedes-loader"))
+
+    expect(transformRule?.use?.[0]?.options).toMatchObject({
+      serverFunctions: {
+        initializerModule: "./i18n",
+        initializerExport: "initServerActionI18n",
+      },
+    })
+  })
+
   it("excludes node_modules from the po loader rule", () => {
     const poRule = collectWebpackRules(withPalamedes()).find((rule) =>
       rule.test?.source.includes("po")
