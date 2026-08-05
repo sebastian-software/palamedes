@@ -5,7 +5,8 @@ use napi::bindgen_prelude::{Either, Result};
 use napi_derive::napi;
 
 use crate::catalog_config::{
-    CatalogArtifactRequest, CatalogArtifactSelectedRequest, CatalogConfigFormat,
+    CatalogArtifactConfig, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
+    CatalogConfigFormat,
 };
 use crate::shared::{checked_u32, to_napi_error};
 
@@ -109,6 +110,134 @@ pub struct CatalogParseResult {
     pub headers: HashMap<String, String>,
     pub messages: Vec<ParsedCatalogMessage>,
     pub diagnostics: Vec<CatalogDiagnostic>,
+}
+
+#[napi(object)]
+pub struct TranslationCandidateId {
+    pub catalog: String,
+    pub locale: String,
+    pub message: String,
+    pub context: Option<String>,
+}
+
+#[napi(object)]
+pub struct TranslationCandidateRequest {
+    pub config: CatalogArtifactConfig,
+    pub locales: Option<Vec<String>>,
+    pub targets: Option<Vec<TranslationCandidateId>>,
+    pub max_origins: Option<u32>,
+}
+
+#[napi(string_enum)]
+pub enum TranslationValueKind {
+    Singular,
+    Plural,
+}
+
+#[napi(string_enum)]
+pub enum TranslationPluralKind {
+    Cardinal,
+    Ordinal,
+}
+
+#[napi(object)]
+pub struct TranslationValue {
+    pub kind: TranslationValueKind,
+    pub value: Option<String>,
+    pub variable: Option<String>,
+    pub plural_kind: Option<TranslationPluralKind>,
+    pub offset: Option<u32>,
+    pub values: Option<HashMap<String, String>>,
+}
+
+#[napi(object)]
+pub struct TranslationWorkflowOrigin {
+    pub file: String,
+    pub scope: Option<String>,
+}
+
+#[napi(object)]
+pub struct TranslationReviewState {
+    pub translated: bool,
+    pub fuzzy: bool,
+    pub obsolete: bool,
+}
+
+#[napi(object)]
+pub struct TranslationCandidate {
+    pub id: TranslationCandidateId,
+    pub target_path: String,
+    pub format: CatalogConfigFormat,
+    pub source: TranslationValue,
+    pub translation: TranslationValue,
+    pub comments: Vec<String>,
+    pub origins: Vec<TranslationWorkflowOrigin>,
+    pub review: TranslationReviewState,
+    pub machine: Option<MachineMetadata>,
+    pub fingerprint: String,
+}
+
+#[napi(object)]
+pub struct TranslationWorkflowDiagnostic {
+    pub code: String,
+    pub message: String,
+    pub id: Option<TranslationCandidateId>,
+}
+
+#[napi(object)]
+pub struct TranslationCandidateResult {
+    pub candidates: Vec<TranslationCandidate>,
+    pub diagnostics: Vec<TranslationWorkflowDiagnostic>,
+}
+
+#[napi(object)]
+pub struct TranslationMachineProvenance {
+    pub ai: Option<AiProvenance>,
+}
+
+#[napi(object)]
+pub struct TranslationPatch {
+    pub id: TranslationCandidateId,
+    pub fingerprint: String,
+    pub translation: TranslationValue,
+    pub machine: Option<TranslationMachineProvenance>,
+}
+
+#[napi(object)]
+pub struct TranslationPatchRequest {
+    pub config: CatalogArtifactConfig,
+    pub patches: Vec<TranslationPatch>,
+    pub po: Option<PoOutputOptions>,
+}
+
+#[napi(string_enum)]
+pub enum TranslationPatchOutcomeStatus {
+    Applied,
+    Unchanged,
+    Rejected,
+    NotApplied,
+}
+
+#[napi(object)]
+pub struct TranslationPatchOutcome {
+    pub id: TranslationCandidateId,
+    pub status: TranslationPatchOutcomeStatus,
+}
+
+#[napi(object)]
+pub struct TranslationPatchStats {
+    pub requested: u32,
+    pub applied: u32,
+    pub unchanged: u32,
+    pub catalogs_updated: u32,
+}
+
+#[napi(object)]
+pub struct TranslationPatchResult {
+    pub updated: bool,
+    pub stats: TranslationPatchStats,
+    pub outcomes: Vec<TranslationPatchOutcome>,
+    pub diagnostics: Vec<TranslationWorkflowDiagnostic>,
 }
 
 #[napi(object)]
@@ -604,6 +733,292 @@ impl From<palamedes::CatalogParseResult> for CatalogParseResult {
                 .map(CatalogDiagnostic::from)
                 .collect(),
         }
+    }
+}
+
+impl From<TranslationCandidateId> for palamedes::TranslationCandidateId {
+    fn from(value: TranslationCandidateId) -> Self {
+        Self {
+            catalog: value.catalog,
+            locale: value.locale,
+            message: value.message,
+            context: value.context,
+        }
+    }
+}
+
+impl From<palamedes::TranslationCandidateId> for TranslationCandidateId {
+    fn from(value: palamedes::TranslationCandidateId) -> Self {
+        Self {
+            catalog: value.catalog,
+            locale: value.locale,
+            message: value.message,
+            context: value.context,
+        }
+    }
+}
+
+impl TryFrom<TranslationCandidateRequest> for palamedes::TranslationCandidateRequest {
+    type Error = napi::Error;
+
+    fn try_from(value: TranslationCandidateRequest) -> Result<Self> {
+        Ok(Self {
+            config: value.config.into(),
+            locales: value.locales.unwrap_or_default(),
+            targets: value
+                .targets
+                .unwrap_or_default()
+                .into_iter()
+                .map(palamedes::TranslationCandidateId::from)
+                .collect(),
+            max_origins: value.max_origins.map_or(8, |limit| limit as usize),
+        })
+    }
+}
+
+impl TryFrom<TranslationValue> for palamedes::TranslationValue {
+    type Error = napi::Error;
+
+    fn try_from(value: TranslationValue) -> Result<Self> {
+        match value.kind {
+            TranslationValueKind::Singular => {
+                let Some(value) = value.value else {
+                    return Err(napi::Error::from_reason(
+                        "Singular translation values require `value`.",
+                    ));
+                };
+                Ok(Self::Singular { value })
+            }
+            TranslationValueKind::Plural => {
+                let Some(variable) = value.variable else {
+                    return Err(napi::Error::from_reason(
+                        "Plural translation values require `variable`.",
+                    ));
+                };
+                let Some(plural_kind) = value.plural_kind else {
+                    return Err(napi::Error::from_reason(
+                        "Plural translation values require `pluralKind`.",
+                    ));
+                };
+                let Some(values) = value.values else {
+                    return Err(napi::Error::from_reason(
+                        "Plural translation values require `values`.",
+                    ));
+                };
+                Ok(Self::Plural {
+                    variable,
+                    plural_kind: match plural_kind {
+                        TranslationPluralKind::Cardinal => {
+                            palamedes::TranslationPluralKind::Cardinal
+                        }
+                        TranslationPluralKind::Ordinal => palamedes::TranslationPluralKind::Ordinal,
+                    },
+                    offset: value.offset.unwrap_or(0),
+                    values: values.into_iter().collect(),
+                })
+            }
+        }
+    }
+}
+
+impl From<palamedes::TranslationValue> for TranslationValue {
+    fn from(value: palamedes::TranslationValue) -> Self {
+        match value {
+            palamedes::TranslationValue::Singular { value } => Self {
+                kind: TranslationValueKind::Singular,
+                value: Some(value),
+                variable: None,
+                plural_kind: None,
+                offset: None,
+                values: None,
+            },
+            palamedes::TranslationValue::Plural {
+                variable,
+                plural_kind,
+                offset,
+                values,
+            } => Self {
+                kind: TranslationValueKind::Plural,
+                value: None,
+                variable: Some(variable),
+                plural_kind: Some(match plural_kind {
+                    palamedes::TranslationPluralKind::Cardinal => TranslationPluralKind::Cardinal,
+                    palamedes::TranslationPluralKind::Ordinal => TranslationPluralKind::Ordinal,
+                }),
+                offset: Some(offset),
+                values: Some(values.into_iter().collect()),
+            },
+        }
+    }
+}
+
+impl From<palamedes::TranslationWorkflowOrigin> for TranslationWorkflowOrigin {
+    fn from(value: palamedes::TranslationWorkflowOrigin) -> Self {
+        Self {
+            file: value.file,
+            scope: value.scope,
+        }
+    }
+}
+
+impl From<palamedes::TranslationReviewState> for TranslationReviewState {
+    fn from(value: palamedes::TranslationReviewState) -> Self {
+        Self {
+            translated: value.translated,
+            fuzzy: value.fuzzy,
+            obsolete: value.obsolete,
+        }
+    }
+}
+
+impl From<palamedes::TranslationCandidate> for TranslationCandidate {
+    fn from(value: palamedes::TranslationCandidate) -> Self {
+        Self {
+            id: value.id.into(),
+            target_path: value.target_path,
+            format: match value.format {
+                palamedes::PalamedesCatalogFormat::Po => CatalogConfigFormat::Po,
+                palamedes::PalamedesCatalogFormat::Fcl => CatalogConfigFormat::Fcl,
+            },
+            source: value.source.into(),
+            translation: value.translation.into(),
+            comments: value.comments,
+            origins: value
+                .origins
+                .into_iter()
+                .map(TranslationWorkflowOrigin::from)
+                .collect(),
+            review: value.review.into(),
+            machine: value.machine.map(MachineMetadata::from),
+            fingerprint: value.fingerprint,
+        }
+    }
+}
+
+impl From<palamedes::TranslationWorkflowDiagnostic> for TranslationWorkflowDiagnostic {
+    fn from(value: palamedes::TranslationWorkflowDiagnostic) -> Self {
+        Self {
+            code: value.code,
+            message: value.message,
+            id: value.id.map(TranslationCandidateId::from),
+        }
+    }
+}
+
+impl From<palamedes::TranslationCandidateResult> for TranslationCandidateResult {
+    fn from(value: palamedes::TranslationCandidateResult) -> Self {
+        Self {
+            candidates: value
+                .candidates
+                .into_iter()
+                .map(TranslationCandidate::from)
+                .collect(),
+            diagnostics: value
+                .diagnostics
+                .into_iter()
+                .map(TranslationWorkflowDiagnostic::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<AiProvenance> for palamedes::AiProvenance {
+    fn from(value: AiProvenance) -> Self {
+        Self {
+            model: value.model,
+            confidence: value.confidence.map(|confidence| confidence as f32),
+        }
+    }
+}
+
+impl From<TranslationMachineProvenance> for palamedes::TranslationMachineProvenance {
+    fn from(value: TranslationMachineProvenance) -> Self {
+        Self {
+            ai: value.ai.map(palamedes::AiProvenance::from),
+        }
+    }
+}
+
+impl TryFrom<TranslationPatch> for palamedes::TranslationPatch {
+    type Error = napi::Error;
+
+    fn try_from(value: TranslationPatch) -> Result<Self> {
+        Ok(Self {
+            id: value.id.into(),
+            fingerprint: value.fingerprint,
+            translation: value.translation.try_into()?,
+            machine: value.machine.map(Into::into),
+        })
+    }
+}
+
+impl TryFrom<TranslationPatchRequest> for palamedes::TranslationPatchRequest {
+    type Error = napi::Error;
+
+    fn try_from(value: TranslationPatchRequest) -> Result<Self> {
+        Ok(Self {
+            config: value.config.into(),
+            patches: value
+                .patches
+                .into_iter()
+                .map(palamedes::TranslationPatch::try_from)
+                .collect::<Result<Vec<_>>>()?,
+            po: value.po.map(Into::into),
+        })
+    }
+}
+
+impl From<palamedes::TranslationPatchOutcomeStatus> for TranslationPatchOutcomeStatus {
+    fn from(value: palamedes::TranslationPatchOutcomeStatus) -> Self {
+        match value {
+            palamedes::TranslationPatchOutcomeStatus::Applied => Self::Applied,
+            palamedes::TranslationPatchOutcomeStatus::Unchanged => Self::Unchanged,
+            palamedes::TranslationPatchOutcomeStatus::Rejected => Self::Rejected,
+            palamedes::TranslationPatchOutcomeStatus::NotApplied => Self::NotApplied,
+        }
+    }
+}
+
+impl From<palamedes::TranslationPatchOutcome> for TranslationPatchOutcome {
+    fn from(value: palamedes::TranslationPatchOutcome) -> Self {
+        Self {
+            id: value.id.into(),
+            status: value.status.into(),
+        }
+    }
+}
+
+impl TryFrom<palamedes::TranslationPatchStats> for TranslationPatchStats {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::TranslationPatchStats) -> Result<Self> {
+        Ok(Self {
+            requested: checked_u32(value.requested, "stats.requested")?,
+            applied: checked_u32(value.applied, "stats.applied")?,
+            unchanged: checked_u32(value.unchanged, "stats.unchanged")?,
+            catalogs_updated: checked_u32(value.catalogs_updated, "stats.catalogsUpdated")?,
+        })
+    }
+}
+
+impl TryFrom<palamedes::TranslationPatchResult> for TranslationPatchResult {
+    type Error = napi::Error;
+
+    fn try_from(value: palamedes::TranslationPatchResult) -> Result<Self> {
+        Ok(Self {
+            updated: value.updated,
+            stats: value.stats.try_into()?,
+            outcomes: value
+                .outcomes
+                .into_iter()
+                .map(TranslationPatchOutcome::from)
+                .collect(),
+            diagnostics: value
+                .diagnostics
+                .into_iter()
+                .map(TranslationWorkflowDiagnostic::from)
+                .collect(),
+        })
     }
 }
 
@@ -1207,6 +1622,38 @@ pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult>
     palamedes::parse_catalog(&request)
         .map(CatalogParseResult::from)
         .map_err(to_napi_error)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Enumerates provider-neutral translation candidates across configured catalogs.
+///
+/// # Errors
+///
+/// Returns an error when a configured catalog cannot be read or parsed.
+pub fn list_translation_candidates(
+    request: TranslationCandidateRequest,
+) -> Result<TranslationCandidateResult> {
+    let request = request.try_into()?;
+    palamedes::list_translation_candidates(&request)
+        .map(TranslationCandidateResult::from)
+        .map_err(to_napi_error)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Validates and atomically applies provider-neutral translation patches.
+///
+/// # Errors
+///
+/// Returns an error when a configured catalog cannot be read, rendered, or replaced.
+pub fn apply_translation_patches(
+    request: TranslationPatchRequest,
+) -> Result<TranslationPatchResult> {
+    let request = request.try_into()?;
+    palamedes::apply_translation_patches(request)
+        .map_err(to_napi_error)
+        .and_then(TranslationPatchResult::try_from)
 }
 
 #[napi]

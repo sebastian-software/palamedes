@@ -74,6 +74,89 @@ export interface CatalogParseResult {
   messages: Array<ParsedCatalogMessage>;
   diagnostics: Array<CatalogDiagnostic>;
 }
+export interface TranslationCandidateId {
+  catalog: string;
+  locale: string;
+  message: string;
+  context?: string;
+}
+export interface TranslationCandidateRequest {
+  config: CatalogArtifactConfig;
+  locales?: Array<string>;
+  targets?: Array<TranslationCandidateId>;
+  maxOrigins?: number;
+}
+export type TranslationValueKind = "Singular" | "Plural"
+export type TranslationPluralKind = "Cardinal" | "Ordinal"
+export interface TranslationValue {
+  kind: TranslationValueKind;
+  value?: string;
+  variable?: string;
+  pluralKind?: TranslationPluralKind;
+  offset?: number;
+  values?: Record<string, string>;
+}
+export interface TranslationWorkflowOrigin {
+  file: string;
+  scope?: string;
+}
+export interface TranslationReviewState {
+  translated: boolean;
+  fuzzy: boolean;
+  obsolete: boolean;
+}
+export interface TranslationCandidate {
+  id: TranslationCandidateId;
+  targetPath: string;
+  format: CatalogConfigFormat;
+  source: TranslationValue;
+  translation: TranslationValue;
+  comments: Array<string>;
+  origins: Array<TranslationWorkflowOrigin>;
+  review: TranslationReviewState;
+  machine?: MachineMetadata;
+  fingerprint: string;
+}
+export interface TranslationWorkflowDiagnostic {
+  code: string;
+  message: string;
+  id?: TranslationCandidateId;
+}
+export interface TranslationCandidateResult {
+  candidates: Array<TranslationCandidate>;
+  diagnostics: Array<TranslationWorkflowDiagnostic>;
+}
+export interface TranslationMachineProvenance {
+  ai?: AiProvenance;
+}
+export interface TranslationPatch {
+  id: TranslationCandidateId;
+  fingerprint: string;
+  translation: TranslationValue;
+  machine?: TranslationMachineProvenance;
+}
+export interface TranslationPatchRequest {
+  config: CatalogArtifactConfig;
+  patches: Array<TranslationPatch>;
+  po?: PoOutputOptions;
+}
+export type TranslationPatchOutcomeStatus = "Applied" | "Unchanged" | "Rejected" | "NotApplied"
+export interface TranslationPatchOutcome {
+  id: TranslationCandidateId;
+  status: TranslationPatchOutcomeStatus;
+}
+export interface TranslationPatchStats {
+  requested: number;
+  applied: number;
+  unchanged: number;
+  catalogsUpdated: number;
+}
+export interface TranslationPatchResult {
+  updated: boolean;
+  stats: TranslationPatchStats;
+  outcomes: Array<TranslationPatchOutcome>;
+  diagnostics: Array<TranslationWorkflowDiagnostic>;
+}
 export interface CatalogCombineInput {
   content: string;
   label?: string;
@@ -440,6 +523,8 @@ export interface NativeTransformResult {
 export interface NativeBindings {
   updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult;
   parseCatalog(request: CatalogParseRequest): CatalogParseResult;
+  listTranslationCandidates(request: TranslationCandidateRequest): TranslationCandidateResult;
+  applyTranslationPatches(request: TranslationPatchRequest): TranslationPatchResult;
   auditCatalogs(request: CatalogAuditRequest): CatalogAuditResult;
   deriveMessageMetadata(message: string, context?: string | undefined | null): MessageMetadata;
   normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata;
