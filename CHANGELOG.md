@@ -65,6 +65,12 @@
 
 ### Performance Improvements
 
+- Next.js Client Components can now opt into automatic graph-split PO loading
+  with `messageSplitting: true`. Turbopack and webpack load only the active
+  document locale's compiled fragments for the evaluated client module graph,
+  including fragments discovered by later client navigation, without an
+  application-owned catalog boundary or RSC serialization of executable
+  messages.
 - Next.js Server Functions now compile per-source message fragments and follow
   the server ESM graph through locale-specific lazy imports. Action requests
   load only the active locale's fragments for evaluated action modules and

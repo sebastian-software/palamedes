@@ -165,6 +165,15 @@ export type WithPalamedesOptions = {
    * @default false
    */
   serverFunctions?: boolean
+
+  /**
+   * Split client messages with the Next.js module graph. Each transformed
+   * browser module loads only its own compiled fragment for the document
+   * locale before it evaluates.
+   *
+   * @default false
+   */
+  messageSplitting?: boolean
 }
 
 function resolveServerFunctionInitializer(enabled: boolean | undefined) {
@@ -279,6 +288,7 @@ export function withPalamedes(
     keepSourceFallbacks: explicitKeepSourceFallbacks,
     workspaceRoot: explicitWorkspaceRoot,
     serverFunctions: serverFunctionOptions,
+    messageSplitting = false,
   } = options
 
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule)
@@ -328,21 +338,32 @@ export function withPalamedes(
         : MACRO_CONTENT_PATTERN,
     },
   ]
-  if (serverFunctions) {
+  if (serverFunctions || messageSplitting) {
     // Turbopack's built-in browser condition lets one unified graph produce a
     // plain client transform and a server transform with lazy message
     // sidecars. Keeping the rules disjoint prevents server-only catalog
     // loaders from entering browser chunks.
     appendTurbopackRule(rules, "*", {
       condition: { all: [...transformConditions, "browser"] },
-      loaders: [{ loader: oxcLoaderPath, options: transformLoaderOptions }],
+      loaders: [
+        {
+          loader: oxcLoaderPath,
+          options: {
+            ...transformLoaderOptions,
+            ...(messageSplitting ? { clientMessageSplitting: true } : {}),
+          },
+        },
+      ],
     })
     appendTurbopackRule(rules, "*", {
       condition: { all: [...transformConditions, { not: "browser" }] },
       loaders: [
         {
           loader: oxcLoaderPath,
-          options: { ...transformLoaderOptions, serverMessageSplitting: true },
+          options: {
+            ...transformLoaderOptions,
+            ...(serverFunctions ? { serverMessageSplitting: true } : {}),
+          },
         },
       ],
     })
@@ -390,6 +411,14 @@ export function withPalamedes(
 
     // Webpack configuration
     webpack(config, context) {
+      if (messageSplitting && !context.isServer) {
+        config.experiments ??= {}
+        config.experiments.topLevelAwait = true
+        config.output ??= {}
+        config.output.environment ??= {}
+        config.output.environment.asyncFunction = true
+      }
+
       if (serverFunctionEntry) {
         config.resolve ??= {}
         if (Array.isArray(config.resolve.alias)) {
@@ -416,6 +445,7 @@ export function withPalamedes(
             options: {
               ...transformLoaderOptions,
               ...(serverFunctions && context.isServer ? { serverMessageSplitting: true } : {}),
+              ...(messageSplitting && !context.isServer ? { clientMessageSplitting: true } : {}),
             },
           },
         ],

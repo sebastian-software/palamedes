@@ -33,6 +33,24 @@ deployment mode that pairs naturally with the `subdomain`/`tld` locale
 strategies, not as the primary mechanism. Author-facing namespaces
 (the Lingui/next-intl answer) are explicitly rejected.
 
+### Implementation update (2026-08-05)
+
+The Next.js 16 adapter now implements the load-time locale binding directly in
+the browser module graph behind `messageSplitting: true`. Each transformed
+Client Component or transitive browser helper awaits a statically enumerable
+PO subset import selected by `document.documentElement.lang`; its exports do
+not evaluate until that active-locale fragment has initialized or extended the
+shared parser-free client instance. This removes the application-owned catalog
+boundary without sending executable messages through RSC.
+
+The production proof covers Turbopack and webpack, initial hydration in English
+and German, and client navigation to a separately translated route. Captured JS
+responses contain the active home fragments on first load, add only the active
+route fragment after navigation, and contain neither inactive locales nor the
+unvisited route beforehand. Server Function splitting remains the complementary
+server-graph path. PO is the currently supported selected-catalog format; other
+formats retain the complete-catalog compatibility path.
+
 ## Where the weight comes from today
 
 Three layers stack on top of each other. Only the first is app code; the other

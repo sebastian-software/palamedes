@@ -20,7 +20,9 @@ and catalog problems show up while the app is still easy to fix.
   `turbopack.rules` conditions and `outputFileTracingRoot` need the Next 16
   config surface
 - Uses Turbopack as the verified default path on Next.js 16.2
-- The shipped example proves both server-rendered i18n and localized `"use server"` action output
+- Graph-split client messages are verified under Turbopack and webpack
+- The shipped example proves server rendering, localized `"use server"`
+  actions, hydration, and client navigation
 - Also supports webpack as an opt-out / fallback path
 - Not a full Next.js starter or scaffolding tool
 
@@ -55,11 +57,11 @@ catalogs:
 
 Transformed code expects `getI18n()` from `@palamedes/runtime`, so make sure the active i18n instance is available on both the client and the server before translated code executes.
 
-For translated Client Components in the recommended reload model, pair the
-request-local server setup below with `createClientCatalogBoundary()`
-from `@palamedes/react/client`. The boundary loads only the document's generated
-catalog module and initializes the plain getter before descendants hydrate. It
-does not serialize executable catalog functions or require an inline script.
+For translated Client Components using PO catalogs, enable
+`messageSplitting: true`. Palamedes then owns the browser bootstrap: it loads
+only the document locale's fragments for Client Components and helpers that are
+actually present in the evaluated module graph. No application-owned catalog
+boundary, executable RSC payload, or inline script is required.
 
 Catalog storage can be PO or FCL in `palamedes.yaml`, but the current Next
 loader is still a `.po` import loader. Keep direct app imports on `.po` unless a
@@ -105,36 +107,39 @@ function DownstreamServerTitle() {
 export default async function Page() {
   const { locale } = await createActiveServerI18n()
   return (
-    <ClientCatalogBoundary locale={locale}>
+    <>
       <DownstreamServerTitle />
-      <TranslatedClientContent />
-    </ClientCatalogBoundary>
+      <TranslatedClientContent locale={locale} />
+    </>
   )
 }
 ```
 
-Create the boundary in a separate Client Component module so Next can see the
-locale import context:
+Enable the client graph bootstrap once in the Next configuration:
 
-```tsx
-"use client"
-
-import { createClientCatalogBoundary } from "@palamedes/react/client"
-
-export const ClientCatalogBoundary = createClientCatalogBoundary<"en" | "de">({
-  loadCatalog: (locale) => import(`../locales/${locale}.po`),
-  resolveClientLocale: () => {
-    const locale = document.documentElement.lang
-    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`)
-    return locale
-  },
-})
+```js
+module.exports = withPalamedes(
+  {},
+  {
+    messageSplitting: true,
+  }
+)
 ```
 
-Only `locale` crosses the RSC boundary. The generated catalog remains executable
-module code in its own chunk, which preserves the parser-free runtime and lets
-Turbopack omit inactive locale catalogs from the initial client bundle. Locale
-changes require a document navigation.
+Each message-bearing browser module gets statically enumerable imports for its
+selected PO subset. It awaits only the import matching
+`document.documentElement.lang`, loads the fragment into a shared parser-free
+instance, and only then exposes the component to hydration or client
+navigation. Turbopack and webpack therefore omit inactive locale catalogs and
+unvisited route messages from network requests. Locale changes require a
+document navigation.
+
+`messageSplitting` currently supports PO catalogs and defaults to `false` for
+compatibility. Keep using `createClientCatalogBoundary()` from
+`@palamedes/react/client` when an app needs a complete active-locale catalog or
+a custom loading strategy. Parser-free split apps should author client messages
+with macros or compiled adapters; raw ICU strings passed to compatibility
+runtime components still require the full parser.
 
 Create one Next server scope at module level and activate a fresh i18n instance
 during request-local server initialization. Its lifetime is the complete App
@@ -268,6 +273,7 @@ module.exports = withPalamedes(
     keepSourceFallbacks: undefined,
     workspaceRoot: undefined,
     serverFunctions: true,
+    messageSplitting: true,
   }
 )
 ```

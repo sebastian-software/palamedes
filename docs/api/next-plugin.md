@@ -31,6 +31,7 @@ interface WithPalamedesOptions {
   keepSourceFallbacks?: boolean
   workspaceRoot?: string
   serverFunctions?: boolean
+  messageSplitting?: boolean
 }
 ```
 
@@ -44,6 +45,7 @@ Defaults:
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true` in development, `false` in production
 - `serverFunctions`: `false`
+- `messageSplitting`: `false`
 
 ## Usage
 
@@ -96,7 +98,7 @@ function body with `if (value === undefined)` when matching JavaScript's
 default-parameter behavior; `??=` also treats `null` as absent and is not an
 equivalent rewrite.
 
-## App Router Client Catalog Boundary
+## App Router Client Message Splitting
 
 Create the request scope once in a server-only module. Unlike the generic Node
 scope, this adapter keys the instance to Next's complete render lifetime, so it
@@ -119,46 +121,52 @@ verified against Next 16.2. If a later Next 16 build removes that internal
 module, the application build fails with a module-resolution error; upgrade
 Palamedes before adopting that Next release.
 
-After resolving and activating the request-local server i18n instance, wrap
-translated Client Components in a boundary created by the shared React runtime:
+For PO catalogs, enable graph-split client delivery next to the server setup:
 
-```tsx
-// src/components/ClientCatalogBoundary.tsx
-"use client"
-
-import { createClientCatalogBoundary } from "@palamedes/react/client"
-
-export const ClientCatalogBoundary = createClientCatalogBoundary<"en" | "de">({
-  loadCatalog: (locale) => import(`../locales/${locale}.po`),
-  resolveClientLocale: () => {
-    const locale = document.documentElement.lang
-    if (locale !== "en" && locale !== "de") throw new Error(`Unsupported locale: ${locale}`)
-    return locale
-  },
-})
+```js
+module.exports = withPalamedes(
+  {},
+  {
+    messageSplitting: true,
+    serverFunctions: true,
+  }
+)
 ```
 
 ```tsx
 // app/page.tsx (Server Component)
 const { locale } = await createActiveServerI18n()
 
-return (
-  <ClientCatalogBoundary locale={locale}>
-    <TranslatedClientContent />
-  </ClientCatalogBoundary>
-)
+return <TranslatedClientContent locale={locale} />
 ```
 
-The dynamic import is the serialization boundary: generated messages remain
-executable module code and only the active locale chunk loads in the browser.
-React suspends hydration until it is ready, so hook-free translated consumers
-see the catalog on their first render. The shared client runtime is initialized
-once before descendants render. Changing locale requires a document navigation;
-the boundary rejects a prop that differs from the resolved document locale.
+No application-owned client catalog boundary is required. For every
+message-bearing Client Component or transitive browser helper, the loader emits
+one selected PO import per configured locale. Module evaluation awaits only the
+import selected by `document.documentElement.lang`, initializes one shared
+parser-free client instance, and loads that source module's fragment before its
+exports can render. Initial hydration and later client navigation therefore
+follow `active locale × evaluated client module graph`; other locales and
+unvisited route messages remain in separate chunks.
+
+The bootstrap is generated for browser modules only. Server Components keep
+using the request-local scope above, and no executable message function crosses
+the RSC serialization boundary. Changing locale still requires a document
+navigation. Both Turbopack and webpack are covered by production browser tests;
+the webpack client compilation enables async modules because the bootstrap uses
+top-level await.
 
 No inline script, `eval`, JSON serialization, or application-owned i18n proxy
 is involved. This keeps the bootstrap compatible with strict CSP and the
 parser-free generated catalog representation.
+
+`messageSplitting` currently supports PO catalogs. Keep it disabled for other
+catalog formats or for a custom client-loading strategy. The compatibility
+fallback is `createClientCatalogBoundary()` from `@palamedes/react/client`,
+which loads one complete active-locale catalog. Graph-split apps should author
+client messages through Palamedes macros or compiled adapters; raw ICU strings
+passed to compatibility runtime components require the full parser and are not
+part of the parser-free bootstrap contract.
 
 Palamedes intentionally provides no in-document locale-switching mode. See
 [Locale strategies](../locale-strategies.md#unsupported-root-key-escape-hatch)
