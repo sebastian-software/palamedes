@@ -166,10 +166,14 @@ the project root or `src` directory:
 
 ```ts
 // src/palamedes.server.ts
-import { createActiveServerI18n } from "./lib/i18n.server"
+import { createI18n } from "@palamedes/core/compiled"
+import { getLocale, serverI18n } from "./lib/i18n.server"
 
 export async function initializeServerFunctionI18n(): Promise<void> {
-  await createActiveServerI18n()
+  const locale = await getLocale()
+  const i18n = createI18n()
+  i18n.activate(locale)
+  serverI18n.activate(i18n)
 }
 ```
 
@@ -202,9 +206,27 @@ only receives an imported callback has no local async body for Palamedes to
 instrument; keep the callback inline or mark its implementation explicitly.
 
 The initializer belongs to the application. It should resolve the request
-locale, load and activate a fresh catalog, and be request-memoized or otherwise
-idempotent. The plugin resolves exactly one `palamedes.server` module from the
+locale, create and activate a fresh request-local i18n instance, and be
+request-memoized or otherwise idempotent. It does not load a whole locale
+catalog: for each message-bearing server module, the transform registers one
+lazy import per locale containing only that module's compiled ids. Static ESM
+imports naturally bring along registrations from transitive helpers. After the
+application initializer activates its instance, Palamedes imports only the
+active locale's registered fragments and loads them into that instance.
+
+Generated locale imports are deduplicated across concurrent and later requests
+by the server module runtime. The request-local `load()` calls still merge each
+fragment into the fresh instance; they scale with the messages represented in
+the currently evaluated server graph rather than with the complete locale
+catalog. The plugin resolves exactly one `palamedes.server` module from the
 project root or `src` directory and keeps its absolute import address internal.
+
+Registration follows module evaluation, not a per-action bundler manifest. A
+long-lived server runtime can therefore retain registrations from more than one
+action graph, so a later action may load a superset of its own dependency
+closure. This affects the upper performance bound, not lookup correctness:
+Palamedes still imports only the active locale and only the selected ids from
+each registered source module.
 
 Parameter defaults execute before the function body. Palamedes therefore
 rejects eager macros in Server Function parameter initializers, including

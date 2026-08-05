@@ -13,9 +13,13 @@ const moduleLoader = Module as unknown as {
 const originalLoad = moduleLoader._load
 
 const loadPalamedesConfig = vi.fn()
+const compileCatalogArtifactSelected = vi.fn()
 const compileCatalogModule = vi.fn()
+const createCatalogLoaderResult = vi.fn()
+const createMissingErrorMessage = vi.fn()
 
 beforeEach(() => {
+  vi.clearAllMocks()
   loadPalamedesConfig.mockResolvedValue({
     configPath: "/repo/palamedes.yaml",
     rootDir: "/repo",
@@ -30,6 +34,18 @@ beforeEach(() => {
     warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
+  compileCatalogArtifactSelected.mockReturnValue({
+    messages: { greeting: "Hallo" },
+    missing: [],
+    diagnostics: [],
+    watchFiles: ["/repo/src/locales/de.po"],
+    resolvedLocaleChain: ["de"],
+  })
+  createCatalogLoaderResult.mockReturnValue({
+    code: 'export const messages={"greeting":"Hallo"};export default { messages };',
+    warnings: [],
+  })
+  createMissingErrorMessage.mockReturnValue("Missing selected translation")
   vi.spyOn(console, "warn").mockImplementation(() => {})
 
   moduleLoader._load = (request, parent, isMain) => {
@@ -37,7 +53,10 @@ beforeEach(() => {
       return { loadPalamedesConfig }
     }
     if (request === "@palamedes/core-node") {
-      return { compileCatalogModule }
+      return { compileCatalogArtifactSelected, compileCatalogModule }
+    }
+    if (request === "@palamedes/transform") {
+      return { createCatalogLoaderResult, createMissingErrorMessage }
     }
     return originalLoad.call(Module, request, parent, isMain)
   }
@@ -104,6 +123,42 @@ describe("palamedes-po-loader.cjs", () => {
       /Compilation error for 1 translation/
     )
     expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it("compiles only the ids encoded by a generated sidecar import", async () => {
+    const selection = Buffer.from(JSON.stringify(["id-a", "id-b"])).toString("base64url")
+
+    const result = await runLoader({}, { resourceQuery: `?palamedes-selected=${selection}` })
+
+    expect(compileCatalogArtifactSelected).toHaveBeenCalledWith(
+      expect.objectContaining({ rootDir: "/repo" }),
+      "/repo/src/locales/de.po",
+      ["id-a", "id-b"]
+    )
+    expect(createCatalogLoaderResult).toHaveBeenCalledWith(
+      expect.objectContaining({ messages: { greeting: "Hallo" } }),
+      expect.objectContaining({ locale: "de" })
+    )
+    expect(compileCatalogModule).not.toHaveBeenCalled()
+    expect(result.code).toContain('"greeting":"Hallo"')
+  })
+
+  it("warns about selected messages missing from a non-pseudo locale", async () => {
+    compileCatalogArtifactSelected.mockReturnValue({
+      messages: {},
+      missing: [{ sourceKey: { message: "Missing" } }],
+      diagnostics: [],
+      watchFiles: [],
+      resolvedLocaleChain: ["de"],
+    })
+    const selection = Buffer.from(JSON.stringify(["id-missing"])).toString("base64url")
+    const emitWarning = vi.fn()
+
+    await runLoader({}, { resourceQuery: `?palamedes-selected=${selection}`, emitWarning })
+
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Missing selected translation" })
+    )
   })
 })
 

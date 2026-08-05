@@ -3,7 +3,7 @@
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { t } from "@palamedes/core/macro"
+import { translateServerActionProof } from "./action-messages"
 import { getLocaleLabel, type Locale, LOCALES, LOCALE_COOKIE } from "./i18n"
 import { getLocale } from "./i18n.server"
 
@@ -42,8 +42,4 @@ async function createServerActionProof() {
     handledAt: new Date().toISOString(),
     message: translateServerActionProof(locale),
   }
-}
-
-function translateServerActionProof(locale: Locale) {
-  return t`Server action confirmed locale ${locale}.`
 }

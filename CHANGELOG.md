@@ -65,6 +65,10 @@
 
 ### Performance Improvements
 
+- Next.js Server Functions now compile per-source message fragments and follow
+  the server ESM graph through locale-specific lazy imports. Action requests
+  load only the active locale's fragments for evaluated action modules and
+  transitive helpers instead of copying the complete locale catalog.
 - React and Solid now share one internal message renderer between their root
   and `compiled` entrypoints. This removes parallel runtime implementations
   while preserving the parser-free production boundary; lazy raw patterns use
