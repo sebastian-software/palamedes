@@ -7,13 +7,22 @@ would run to update catalogs:
 - Lingui: `lingui extract`
 - React Intl: `formatjs extract`
 - i18next-cli: `i18next-cli extract`
+- General Translation: `gtx-cli generate`
 
 The harness generates the same logical source inventory for each tool, renders
 it into each tool's idiomatic source shape, resets catalogs before every timed
-run, then measures scan, extract, and output writes together. Palamedes,
-Lingui, and i18next-cli update `en` and `de` catalogs. The React Intl lane uses
-`@formatjs/cli` to write one aggregated extracted-message JSON artifact instead;
-the generated report records that narrower scope explicitly.
+run, then measures scan, extract, and output writes together. Palamedes, Lingui,
+i18next-cli, and General Translation update `en` and `de` catalogs. The React
+Intl lane uses `@formatjs/cli` to write one aggregated extracted-message JSON
+artifact instead; the generated report records that narrower scope explicitly.
+
+The General Translation lane runs `gtx-cli generate`, GT's path for teams
+handling their own translations: it extracts and merges catalogs entirely
+locally, with no API key and no network access. GT's default workflow
+(`gtx-cli translate`) sends content to the GT API and is out of scope here.
+Because GT keys catalogs by a content hash it computes itself, the baseline
+catalogs for that lane are derived from a real `gtx-cli generate` run rather
+than from a reimplementation of its hashing.
 
 The timed median does not include runtime catalog/artifact compilation, linting,
 type-checking, bundling, or the post-run semantic validation. The validation is

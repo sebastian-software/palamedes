@@ -114,14 +114,16 @@ See the full methodology here:
 
 - [Benchmarking against Lingui v6](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
 
-For the broader architectural picture, including `next-intl` and General Translation, see:
+For the broader architectural picture, including `next-intl` and where General
+Translation's measured lane ends, see:
 
 - [Comparing modern i18n approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
 
 That separate harness measures Lingui macro rewrite through distinct Babel and
 SWC lanes instead of folding them into one number.
 
-For the end-to-end workflow comparison against Lingui, React Intl, and i18next-cli:
+For the end-to-end workflow comparison against Lingui, React Intl, i18next-cli,
+and General Translation:
 
 ```bash
 pnpm benchmark:e2e-workflow

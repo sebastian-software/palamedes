@@ -123,14 +123,23 @@ translation for content that is known before deploy, plus a wider product
 surface around template generation, local files, hosted translation, and
 dynamic translation paths for content that cannot be fixed ahead of time.
 
-That makes GT broader in product scope and less clean as a direct benchmark
-target.
+That makes GT broader in product scope than Palamedes. It does not, however,
+make GT unmeasurable: `gtx-cli generate` extracts from source and merges the
+configured locale catalogs entirely locally, with no API key and no network
+access, which is why it has its own lane in the
+[end-to-end workflow benchmark](./benchmark-e2e-workflow.md). GT documents that
+command for teams handling their own translations; its default path
+(`gtx-cli translate`) sends content to the GT API and is a different category of
+operation that the benchmark deliberately leaves alone.
 
-If you compare GT's compiler to Palamedes, you are only comparing one slice of
-what GT is trying to do. If you compare GT's translation workflow to Palamedes,
-you are no longer comparing the same category of product at all. GT is much
-closer to an integrated translation system with local-library escape hatches
-than to a narrowly scoped compile-and-runtime architecture.
+So the comparison has to name which GT you mean. Comparing GT's compiler to
+Palamedes covers one slice of what GT is trying to do. Comparing GT's hosted
+translation workflow to Palamedes compares two different products. Comparing
+`gtx-cli generate` to `pmds extract` is a fair like-for-like on the local
+extract-and-update step, and that is the only GT comparison this repository
+makes numerically. Beyond that step GT remains much closer to an integrated
+translation system with local-library escape hatches than to a narrowly scoped
+compile-and-runtime architecture.
 
 Still, GT is worth studying because it points at adjacent product opportunities.
 Its local template generation for inline-authored strings, richer translator
@@ -181,8 +190,11 @@ React Intl, i18next, Crowdin, Phrase, and Weblate documentation.
 That is the right way to read the benchmark story as well. The Lingui benchmark
 is not meant to imply that every i18n library should be forced into the same
 race. It exists because Lingui and Palamedes actually run on comparable
-operations. The broader comparison with `next-intl` and GT is better handled as
-an explanation of product shape, semantic choices, and architectural tradeoffs.
+operations, and the same test decides every other lane: GT earns a measured row
+because `gtx-cli generate` is a comparable local operation, while `next-intl`
+does not, because its extraction only exists inside a bundler build. Where the
+operations do not line up, the comparison belongs in product shape, semantic
+choices, and architectural tradeoffs instead of in a number.
 
 ## Further Reading
 

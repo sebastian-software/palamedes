@@ -26,13 +26,15 @@ const readmePath = join(repoRoot, "README.md")
 const report = readFileSync(reportPath, "utf8")
 const benchTs = readFileSync(benchTsPath, "utf8")
 const readme = readFileSync(readmePath, "utf8")
-const tools = ["Palamedes", "Lingui", "React Intl", "i18next-cli"]
+const tools = ["Palamedes", "Lingui", "React Intl", "i18next-cli", "General Translation"]
 const comparedTools = tools.filter((tool) => tool !== "Palamedes")
 const ratioFields = {
   Lingui: "lingui",
   "React Intl": "formatjs",
   "i18next-cli": "i18nextCli",
+  "General Translation": "gt",
 }
+const toolPattern = tools.join("|")
 
 function parseSection(name) {
   const section = report.split(new RegExp(`^## ${name}$`, "m"))[1]
@@ -55,13 +57,16 @@ function parseSection(name) {
   const body = warmStart === -1 ? afterCold : afterCold.slice(0, warmStart)
   const medians = {}
   for (const match of body.matchAll(
-    /^\|\s+(Palamedes|Lingui|React Intl|i18next-cli)\s+\|\s+([\d.]+) ms\s+\|/gm
+    new RegExp(String.raw`^\|\s+(${toolPattern})\s+\|\s+([\d.]+) ms\s+\|`, "gm")
   )) {
     medians[match[1]] = Number(match[2])
   }
   const speedups = {}
   for (const match of body.matchAll(
-    /^\|\s+Palamedes vs (Lingui|React Intl|i18next-cli)\s+\|\s+Palamedes\s+\|\s+([\d.]+)x\s+\|/gm
+    new RegExp(
+      String.raw`^\|\s+Palamedes vs (${toolPattern})\s+\|\s+Palamedes\s+\|\s+([\d.]+)x\s+\|`,
+      "gm"
+    )
   )) {
     speedups[match[1]] = match[2]
   }
@@ -193,7 +198,7 @@ function parseBenchSection(name) {
   }
   const medians = {}
   for (const match of body.matchAll(
-    /\{ tool: "(Palamedes|Lingui|React Intl|i18next-cli)", medianMs: ([\d.]+)/g
+    new RegExp(String.raw`\{ tool: "(${toolPattern})", medianMs: ([\d.]+)`, "g")
   )) {
     medians[match[1]] = Number(match[2])
   }
