@@ -158,6 +158,10 @@ The first public or semi-public Core surface should include:
 The purpose is not to freeze every field forever. The purpose is to keep the
 rewrite from losing the behavior downstream workflows already rely on.
 
+The first public implementation of `translation_candidates`, including its
+provider-neutral patch boundary, is documented in
+[Translation Candidates and Patches](./translation-candidate-patches.md).
+
 ## Boundary rules
 
 These modules belong in Core only while they remain:

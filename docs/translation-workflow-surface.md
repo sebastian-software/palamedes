@@ -6,6 +6,9 @@ Palamedes+.
 
 For the first concrete module split, see [Translation Module Boundaries](./translation-module-boundaries.md).
 
+The implemented candidate-enumeration and atomic writeback contract is documented in
+[Translation Candidates and Patches](./translation-candidate-patches.md).
+
 ## Purpose
 
 Palamedes should make it unnecessary for downstream translation products to
