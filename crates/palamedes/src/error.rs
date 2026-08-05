@@ -26,6 +26,15 @@ pub enum PalamedesError {
         /// Underlying filesystem error.
         source: std::io::Error,
     },
+    /// Preparing an atomic translation-catalog replacement failed.
+    #[error("Failed to prepare catalog update for {path}: {source}")]
+    WriteFile {
+        /// Catalog path whose replacement was being prepared.
+        path: PathBuf,
+        #[source]
+        /// Underlying filesystem error.
+        source: std::io::Error,
+    },
     /// The worker pool for parallel extraction could not be created.
     #[error("Could not create the extraction worker pool: {message}")]
     ExtractionPool {

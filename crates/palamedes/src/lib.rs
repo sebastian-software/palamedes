@@ -42,6 +42,7 @@ mod source_macros;
 #[cfg(test)]
 mod test_support;
 mod transform;
+mod translation_candidates;
 mod translation_scope;
 
 use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
@@ -110,6 +111,14 @@ pub use source::{
 pub use transform::{
     transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,
     NativeTransformSourceMap, ServerFunctionTransformOptions,
+};
+pub use translation_candidates::{
+    apply_translation_patches, list_translation_candidates, TranslationCandidate,
+    TranslationCandidateId, TranslationCandidateRequest, TranslationCandidateResult,
+    TranslationMachineProvenance, TranslationPatch, TranslationPatchOutcome,
+    TranslationPatchOutcomeStatus, TranslationPatchRequest, TranslationPatchResult,
+    TranslationPatchStats, TranslationPluralKind, TranslationReviewState, TranslationValue,
+    TranslationWorkflowDiagnostic, TranslationWorkflowOrigin,
 };
 
 /// Published `ferrocat` version used by the Rust core.
