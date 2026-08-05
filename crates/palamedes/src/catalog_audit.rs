@@ -3,8 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use ferrocat::{
-    parse_catalog_for_review, CatalogAuditIcuOptions, CatalogAuditOptions, IcuSyntaxPolicy,
-    NormalizedParsedCatalog, ParseCatalogOptions,
+    canonicalize_icu_with_policy, parse_catalog_for_review, parse_icu, CatalogAuditIcuOptions,
+    CatalogAuditOptions, CatalogMessage, EffectiveTranslationRef, IcuMessage, IcuNode,
+    IcuSyntaxPolicy, NormalizedParsedCatalog, ParseCatalogOptions,
 };
 use ferrocat_po::audit_catalogs as ferrocat_audit_catalogs;
 use serde::{Deserialize, Serialize};
@@ -183,9 +184,144 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
                 name: diagnostic.name,
             });
         }
+        if request.checks.icu_compatibility.unwrap_or(true) {
+            add_plain_argument_occurrence_diagnostics(
+                &loaded,
+                &request.config.source_locale,
+                &target_locales,
+                &paths_by_locale,
+                &mut result,
+            );
+        }
     }
 
     Ok(result)
+}
+
+fn add_plain_argument_occurrence_diagnostics(
+    loaded: &[LoadedAuditCatalog],
+    source_locale: &str,
+    target_locales: &[String],
+    paths_by_locale: &BTreeMap<String, PathBuf>,
+    result: &mut CatalogAuditResult,
+) {
+    let Some(source_catalog) = loaded
+        .iter()
+        .find(|loaded| loaded.catalog.parsed_catalog().locale.as_deref() == Some(source_locale))
+        .map(|loaded| &loaded.catalog)
+    else {
+        return;
+    };
+
+    for target_locale in target_locales {
+        let Some(target_catalog) = loaded
+            .iter()
+            .find(|loaded| {
+                loaded.catalog.parsed_catalog().locale.as_deref() == Some(target_locale.as_str())
+            })
+            .map(|loaded| &loaded.catalog)
+        else {
+            continue;
+        };
+        let Some(target_path) = paths_by_locale.get(target_locale) else {
+            continue;
+        };
+
+        for (key, source_message) in source_catalog.iter() {
+            if source_message.obsolete.is_some() {
+                continue;
+            }
+            let Some(target_message) = target_catalog
+                .get(key)
+                .filter(|message| message.obsolete.is_none())
+            else {
+                continue;
+            };
+            let Some(target_value) = singular_translation(target_message)
+                .filter(|translation| !translation.trim().is_empty())
+            else {
+                continue;
+            };
+            let Some(source_counts) = plain_argument_occurrences(&key.msgid) else {
+                continue;
+            };
+            let Some(target_counts) = plain_argument_occurrences(target_value) else {
+                continue;
+            };
+
+            for (name, source_count) in source_counts {
+                let Some(target_count) = target_counts.get(&name).copied() else {
+                    continue;
+                };
+                if source_count == target_count {
+                    continue;
+                }
+
+                result.summary.diagnostics += 1;
+                result.summary.errors += 1;
+                result.diagnostics.push(CatalogAuditDiagnostic {
+                    severity: CatalogDiagnosticSeverity::Error,
+                    code: "icu.argument_occurrence_mismatch".to_owned(),
+                    message: format!(
+                        "ICU argument `{name}` appears {source_count} occurrence(s) in the source and {target_count} in the translation."
+                    ),
+                    catalog_path: target_path.to_string_lossy().into_owned(),
+                    locale: Some(target_locale.clone()),
+                    source_key: Some(CatalogDiagnosticSourceKey {
+                        message: key.msgid.clone(),
+                        context: key.msgctxt.clone(),
+                    }),
+                    name: Some(name),
+                });
+            }
+        }
+    }
+}
+
+fn singular_translation(message: &CatalogMessage) -> Option<&str> {
+    match message.effective_translation() {
+        EffectiveTranslationRef::Singular(value) => Some(value),
+        EffectiveTranslationRef::Plural(_) => None,
+    }
+}
+
+fn plain_argument_occurrences(value: &str) -> Option<BTreeMap<String, usize>> {
+    let canonical = canonicalize_icu_with_policy(value, IcuSyntaxPolicy::RuntimeLiteralApostrophes);
+    let message = parse_icu(&canonical).ok()?;
+    let mut counts = BTreeMap::new();
+    count_plain_arguments(&message, &mut counts).then_some(counts)
+}
+
+fn count_plain_arguments(message: &IcuMessage, counts: &mut BTreeMap<String, usize>) -> bool {
+    count_plain_argument_nodes(&message.nodes, counts)
+}
+
+fn count_plain_argument_nodes(nodes: &[IcuNode], counts: &mut BTreeMap<String, usize>) -> bool {
+    for node in nodes {
+        let name = match node {
+            IcuNode::Argument { name }
+            | IcuNode::Number { name, .. }
+            | IcuNode::Date { name, .. }
+            | IcuNode::Time { name, .. }
+            | IcuNode::List { name, .. }
+            | IcuNode::Duration { name, .. }
+            | IcuNode::Ago { name, .. }
+            | IcuNode::Name { name, .. } => Some(name),
+            IcuNode::Select { .. } | IcuNode::Plural { .. } => return false,
+            IcuNode::Tag { children, .. } => {
+                if !count_plain_argument_nodes(children, counts) {
+                    return false;
+                }
+                None
+            }
+            IcuNode::Literal(_) | IcuNode::Pound => None,
+            _ => None,
+        };
+        if let Some(name) = name {
+            *counts.entry(name.clone()).or_default() += 1;
+        }
+    }
+    true
 }
 
 impl CatalogAuditCheckOptions {
@@ -361,6 +497,112 @@ msgstr "Hallo {firstName}"
             .iter()
             .any(|diagnostic| diagnostic.code == "catalog.missing_locale"
                 && diagnostic.locale.as_deref() == Some("es")));
+    }
+
+    #[test]
+    fn reports_changed_argument_occurrences_in_plain_messages() {
+        let fixture = create_fixture_dir("catalog-audit-repeated-arguments");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+        fs::write(
+            locale_dir.join("en.po"),
+            r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "{count} of {count} sites covered"
+msgstr ""
+
+msgid "Owner: {name}"
+msgstr ""
+"#,
+        )
+        .expect("write en");
+        fs::write(
+            locale_dir.join("de.po"),
+            r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "{count} of {count} sites covered"
+msgstr "{count} Standorte abgedeckt"
+
+msgid "Owner: {name}"
+msgstr "{name}, Eigentümer: {name}"
+"#,
+        )
+        .expect("write de");
+
+        let result = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec!["de".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit");
+
+        let occurrence_diagnostics = result
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "icu.argument_occurrence_mismatch")
+            .collect::<Vec<_>>();
+        assert_eq!(occurrence_diagnostics.len(), 2);
+        assert!(occurrence_diagnostics.iter().all(|diagnostic| {
+            diagnostic.severity == crate::CatalogDiagnosticSeverity::Error
+                && diagnostic.locale.as_deref() == Some("de")
+        }));
+        assert!(occurrence_diagnostics.iter().any(|diagnostic| {
+            diagnostic.name.as_deref() == Some("count")
+                && diagnostic.message.contains("2 occurrence(s) in the source")
+                && diagnostic.message.contains("1 in the translation")
+        }));
+        assert!(occurrence_diagnostics.iter().any(|diagnostic| {
+            diagnostic.name.as_deref() == Some("name")
+                && diagnostic.message.contains("1 occurrence(s) in the source")
+                && diagnostic.message.contains("2 in the translation")
+        }));
+    }
+
+    #[test]
+    fn allows_argument_occurrence_differences_in_choice_messages() {
+        let fixture = create_fixture_dir("catalog-audit-choice-arguments");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+        fs::write(
+            locale_dir.join("en.po"),
+            r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "{count, plural, one {{site} is covered} other {{site} and {count} sites are covered}}"
+msgstr ""
+"#,
+        )
+        .expect("write en");
+        fs::write(
+            locale_dir.join("de.po"),
+            r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "{count, plural, one {{site} is covered} other {{site} and {count} sites are covered}}"
+msgstr "{count, plural, one {Eine Site ist abgedeckt} other {{site} und weitere Sites sind abgedeckt}}"
+"#,
+        )
+        .expect("write de");
+
+        let result = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec!["de".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit");
+
+        assert!(!result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "icu.argument_occurrence_mismatch"));
     }
 
     #[test]
