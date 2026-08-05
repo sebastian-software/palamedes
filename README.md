@@ -47,8 +47,8 @@ The current proof:
 every cache cleared, every tool doing the same work — and that is the lane the
 comparison numbers come from. But it is not the run you actually make. You edit
 a few files and extract again. On the realistic corpus (1,500 files, 6,000
-messages) a cold extract and catalog update takes `82.14 ms`; touching `5`
-source files and re-running takes `33.11 ms`, because extraction is cached per
+messages) a cold extract and catalog update takes `83.89 ms`; touching `5`
+source files and re-running takes `33.08 ms`, because extraction is cached per
 file and validated by a `stat` — unchanged files are neither read nor parsed
 ([ADR-019](https://palamedes.dev/decisions/019-extraction-cache)). In watch
 mode that cache is held in memory for the life of the process.

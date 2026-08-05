@@ -11,10 +11,10 @@ import {
 } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
 import { DEFAULT_SEED, PROFILE_DEFINITIONS, createWorkflowCorpus } from "./corpus.mjs"
+import { runCommand } from "./exec.mjs"
 import { parsePoMsgids } from "./po.mjs"
 
 const __dirname = import.meta.dirname
@@ -28,9 +28,10 @@ const TOOL_LABELS = {
   lingui: "Lingui",
   formatjs: "React Intl",
   i18nextCli: "i18next-cli",
+  gt: "General Translation",
 }
 
-const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "i18nextCli"]
+const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "i18nextCli", "gt"]
 /*
  * Directories any measured tool may leave behind as reusable state. Only
  * Palamedes writes one today; the others are listed so a future cache in one of
@@ -62,6 +63,7 @@ async function main() {
         profileName,
         rootDir: tempRoot,
         seed: args.seed,
+        toolPaths,
       })
       const validation = await validateCorpus(corpus, toolPaths)
       const profileResults = []
@@ -127,7 +129,8 @@ async function main() {
           "active catalog messages are normalized after each tool run and compared with the generated current inventory",
         toolScopes: {
           formatjs:
-            "source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; the React Intl extraction workflow does not update locale translation catalogs",
+            "source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; the React Intl extraction workflow does not update locale translation catalogs, so this lane covers less work than every other lane in the table",
+          gt: "source scan, extraction, content-hash keying, and merge/update of existing en/de catalogs; gtx-cli generate runs fully locally, seeds new entries with the source text, and drops removed entries immediately instead of marking them obsolete",
           otherTools:
             "source scan, extraction, merge/update of existing en/de catalogs, and catalog writes",
         },
@@ -196,6 +199,7 @@ async function resolveToolPaths(args) {
     lingui: path.join(benchmarkRoot, "node_modules", ".bin", `lingui${commandSuffix}`),
     formatjs: path.join(benchmarkRoot, "node_modules", ".bin", `formatjs${commandSuffix}`),
     i18nextCli: path.join(benchmarkRoot, "node_modules", ".bin", `i18next-cli${commandSuffix}`),
+    gt: path.join(benchmarkRoot, "node_modules", ".bin", `gtx-cli${commandSuffix}`),
   }
 
   for (const [tool, filename] of Object.entries(paths)) {
@@ -216,11 +220,13 @@ async function assertExecutable(tool, filename) {
 }
 
 async function readVersions(toolPaths) {
-  const [formatjsCli, linguiCli, i18nextCli, benchmarkPackage, palamedesVersion] =
+  const [formatjsCli, linguiCli, i18nextCli, gtxCli, gtReact, benchmarkPackage, palamedesVersion] =
     await Promise.all([
       readJson(path.join(benchmarkRoot, "node_modules", "@formatjs", "cli", "package.json")),
       readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "cli", "package.json")),
       readJson(path.join(benchmarkRoot, "node_modules", "i18next-cli", "package.json")),
+      readJson(path.join(benchmarkRoot, "node_modules", "gtx-cli", "package.json")),
+      readJson(path.join(benchmarkRoot, "node_modules", "gt-react", "package.json")),
       readJson(path.join(benchmarkRoot, "package.json")),
       readCommandVersion(toolPaths.palamedes, ["version"]),
     ])
@@ -238,6 +244,10 @@ async function readVersions(toolPaths) {
     },
     i18nextCli: {
       cli: i18nextCli.version,
+    },
+    gt: {
+      cli: gtxCli.version,
+      react: gtReact.version,
     },
   }
 }
@@ -259,6 +269,9 @@ async function validateCorpus(corpus, toolPaths) {
     }
     tools[tool] = {
       activeMessagesByTarget,
+      ...(tool === "gt"
+        ? { preservedTranslations: await readGtPreservedTranslations(corpus) }
+        : {}),
     }
   }
 
@@ -266,6 +279,27 @@ async function validateCorpus(corpus, toolPaths) {
     expectedActiveMessages: corpus.currentMessages.length,
     tools,
   }
+}
+
+/*
+ * General Translation keys its catalogs by a content hash it computes itself.
+ * If that hash ever changes shape, every baseline key stops matching: the merge
+ * would reseed each entry with source text, the lane would quietly stop doing
+ * the catalog work it is timed against, and the message comparison above would
+ * still pass. Counting surviving translations pins that down.
+ */
+async function readGtPreservedTranslations(corpus) {
+  const catalog = await readJson(path.join(corpus.roots.gt, "src", "locales", "de.json"))
+  const preserved = Object.values(catalog).filter((value) => value.startsWith("[de] ")).length
+  const expected = corpus.sourceMessageCount - corpus.changedCount - corpus.newCount
+
+  if (preserved !== expected) {
+    throw new Error(
+      `${corpus.profileName}/gt: expected the merge to preserve ${expected} existing translations, found ${preserved}`
+    )
+  }
+
+  return preserved
 }
 
 /*
@@ -429,46 +463,13 @@ async function runTool(tool, cwd, toolPaths) {
         { cwd }
       )
     }
+    case "gt": {
+      return runCommand(toolPaths.gt, ["generate", "--quiet"], { cwd })
+    }
     default: {
       throw new Error(`Unknown tool: ${tool}`)
     }
   }
-}
-
-async function runCommand(command, args, options) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: {
-        ...process.env,
-        ...options.env,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    })
-    let stdout = ""
-    let stderr = ""
-
-    child.stdout.setEncoding("utf8")
-    child.stderr.setEncoding("utf8")
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk
-    })
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk
-    })
-    child.on("error", reject)
-    child.on("close", (code, signal) => {
-      if (code !== 0) {
-        reject(
-          new Error(
-            `${path.basename(command)} ${args.join(" ")} failed with ${signal ?? code}\n${stdout}\n${stderr}`
-          )
-        )
-        return
-      }
-      resolve({ stdout, stderr })
-    })
-  })
 }
 
 function parsePalamedesTiming(stdout) {
@@ -491,6 +492,23 @@ async function readActiveMessages(tool, rootDir, locale) {
   if (tool === "i18nextCli") {
     const catalog = await readJson(path.join(rootDir, "src", "locales", locale, "translation.json"))
     return Object.keys(catalog).sort()
+  }
+
+  /*
+   * General Translation catalogs are keyed by content hash, so message identity
+   * lives in the source catalog. Target catalogs hold translations under those
+   * keys; mapping their keys back through the source catalog yields the message
+   * set, which is the same check the PO lanes get from comparing msgids.
+   */
+  if (tool === "gt") {
+    const source = await readJson(path.join(rootDir, "src", "locales", "en.json"))
+    if (locale === "en") {
+      return Object.values(source).sort()
+    }
+    const catalog = await readJson(path.join(rootDir, "src", "locales", `${locale}.json`))
+    return Object.keys(catalog)
+      .map((key) => source[key] ?? `<key ${key} missing from the source catalog>`)
+      .sort()
   }
 
   const source = await readFile(path.join(rootDir, "src", "locales", `${locale}.po`), "utf8")
@@ -549,6 +567,7 @@ function toolVersion(tool, versions) {
   if (tool === "palamedes") return versions.palamedes.cli
   if (tool === "lingui") return versions.lingui.cli
   if (tool === "formatjs") return versions.formatjs.cli
+  if (tool === "gt") return versions.gt.cli
   return versions.i18nextCli.cli
 }
 
@@ -648,6 +667,7 @@ function renderMarkdown(report) {
     `- Lingui CLI: ${report.versions.lingui.cli}`,
     `- React Intl extraction CLI (@formatjs/cli): ${report.versions.formatjs.cli}`,
     `- i18next-cli: ${report.versions.i18nextCli.cli}`,
+    `- General Translation CLI (gtx-cli): ${report.versions.gt.cli} (corpus authored against gt-react ${report.versions.gt.react})`,
     "",
     "## Methodology",
     "",
@@ -656,6 +676,7 @@ function renderMarkdown(report) {
     `- Reset: ${report.methodology.reset}`,
     `- Semantic check: ${report.methodology.semanticCheck}`,
     `- React Intl scope: ${report.methodology.toolScopes.formatjs}`,
+    `- General Translation scope: ${report.methodology.toolScopes.gt}`,
     `- Other tool scope: ${report.methodology.toolScopes.otherTools}`,
   ]
 
@@ -740,7 +761,10 @@ function renderMarkdown(report) {
     "- The i18next-cli corpus uses natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes."
   )
   lines.push(
-    "- The React Intl extraction workflow writes one extracted-message JSON artifact and does not update locale translation catalogs; its result is reported with that narrower scope instead of being presented as a catalog-merge equivalent."
+    "- **React Intl covers less work than every other lane.** `formatjs extract` writes one aggregated extracted-message JSON artifact and never reads or merges a locale catalog, so its median is not comparable to the catalog-update medians around it and must not be read as one."
+  )
+  lines.push(
+    "- The General Translation lane runs `gtx-cli generate`, which extracts and merges en/de catalogs entirely locally with no API key and no network access. It is GT's path for teams handling their own translations; GT's default workflow (`gtx-cli translate`) sends content to the GT API and is deliberately out of scope here."
   )
   lines.push(
     "- The harness reports source-message equivalence after each run instead of assuming every parser extracts the same result."

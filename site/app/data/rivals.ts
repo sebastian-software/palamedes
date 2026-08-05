@@ -85,7 +85,7 @@ function speedup(tool: string): string {
 }
 
 const NO_BENCHMARK =
-  "Not measured. The checked harness covers Lingui, React Intl, and i18next-cli; anything else would be a guess."
+  "Not measured. The checked harness covers Lingui, React Intl, i18next-cli, and General Translation; anything else would be a guess."
 
 /*
  * The argument that applies to every page: extraction and catalog work is
@@ -409,7 +409,7 @@ plural(seats, {
       {
         criterion: "Extract + update speed",
         rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, React Intl and i18next only",
+        palamedes: "Checked report covers Lingui, React Intl, i18next and General Translation",
       },
       {
         criterion: "Host boundary",
@@ -636,7 +636,7 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update speed",
         rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, React Intl and i18next only",
+        palamedes: "Checked report covers Lingui, React Intl, i18next and General Translation",
       },
     ],
     code: {
@@ -745,8 +745,9 @@ function buyLabel(seats) {
       },
       {
         criterion: "Extract + update speed",
-        rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, React Intl and i18next only",
+        rival:
+          "Not measurable locally. `tolgee extract print` reports to the console and writes no files; catalogs arrive through `tolgee pull` from the platform.",
+        palamedes: "Checked report covers Lingui, React Intl, i18next and General Translation",
       },
     ],
     code: {
@@ -863,7 +864,7 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update speed",
         rival: "Not applicable — there is nothing to extract",
-        palamedes: "Checked report covers Lingui, React Intl and i18next only",
+        palamedes: "Checked report covers Lingui, React Intl, i18next and General Translation",
       },
     ],
     code: {

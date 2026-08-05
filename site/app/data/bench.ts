@@ -24,7 +24,7 @@ export interface BenchCorpus {
    * asserted against the checked-in report by scripts/verify-site-bench-data.mjs
    * so the numbers quoted in prose (hero, ProofStrip) can't silently drift.
    */
-  ratios: { lingui: string; formatjs: string; i18nextCli: string }
+  ratios: { lingui: string; formatjs: string; i18nextCli: string; gt: string }
 }
 
 /*
@@ -49,7 +49,7 @@ export interface BenchWarm {
 }
 
 export const BENCH_META = {
-  generated: "2026-07-31",
+  generated: "2026-08-05",
   node: "v24.18.0",
   platform: "darwin/arm64",
   runs: 7,
@@ -68,15 +68,17 @@ export const BENCH_SMALL: BenchCorpus = {
   title: "Small corpus — 80 files, 640 messages (median of 7 runs)",
   corpus: "80 files, 640 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 12.82, accent: true },
-    { tool: "Lingui", medianMs: 690.97 },
-    { tool: "React Intl", medianMs: 282.84 },
-    { tool: "i18next-cli", medianMs: 404.93 },
+    { tool: "Palamedes", medianMs: 14.11, accent: true },
+    { tool: "Lingui", medianMs: 747.18 },
+    { tool: "React Intl", medianMs: 288.59 },
+    { tool: "i18next-cli", medianMs: 625.87 },
+    { tool: "General Translation", medianMs: 577.89 },
   ],
   ratios: {
-    lingui: "53.91×",
-    formatjs: "22.07×",
-    i18nextCli: "31.59×",
+    lingui: "52.94×",
+    formatjs: "20.45×",
+    i18nextCli: "44.35×",
+    gt: "40.95×",
   },
 }
 
@@ -85,15 +87,17 @@ export const BENCH_MEDIUM: BenchCorpus = {
   title: "Medium corpus — 240 files, 1920 messages (median of 7 runs)",
   corpus: "240 files, 1920 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 22.22, accent: true },
-    { tool: "Lingui", medianMs: 761.69 },
-    { tool: "React Intl", medianMs: 305.9 },
-    { tool: "i18next-cli", medianMs: 618.69 },
+    { tool: "Palamedes", medianMs: 23.8, accent: true },
+    { tool: "Lingui", medianMs: 836.69 },
+    { tool: "React Intl", medianMs: 344.09 },
+    { tool: "i18next-cli", medianMs: 658.4 },
+    { tool: "General Translation", medianMs: 669.27 },
   ],
   ratios: {
-    lingui: "34.27×",
-    formatjs: "13.76×",
-    i18nextCli: "27.84×",
+    lingui: "35.15×",
+    formatjs: "14.46×",
+    i18nextCli: "27.66×",
+    gt: "28.12×",
   },
 }
 
@@ -102,15 +106,17 @@ export const BENCH_REALISTIC: BenchCorpus = {
   title: "Realistic corpus — 1,500 files across ~400k lines, 6,000 messages (median of 7 runs)",
   corpus: "1,500 files (750 with i18n), ~400k lines, 6,000 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 82.14, accent: true },
-    { tool: "Lingui", medianMs: 2405.52 },
-    { tool: "React Intl", medianMs: 470.81 },
-    { tool: "i18next-cli", medianMs: 6256.98 },
+    { tool: "Palamedes", medianMs: 83.89, accent: true },
+    { tool: "Lingui", medianMs: 2480.24 },
+    { tool: "React Intl", medianMs: 475.85 },
+    { tool: "i18next-cli", medianMs: 6644.63 },
+    { tool: "General Translation", medianMs: 6116.43 },
   ],
   ratios: {
-    lingui: "29.29×",
-    formatjs: "5.73×",
-    i18nextCli: "76.18×",
+    lingui: "29.57×",
+    formatjs: "5.67×",
+    i18nextCli: "79.21×",
+    gt: "72.91×",
   },
 }
 
@@ -125,22 +131,22 @@ export const BENCH_SMALL_WARM: BenchWarm = {
   id: "small",
   corpus: "80 files, 640 messages",
   touchedFiles: 5,
-  coldMs: 12.82,
-  warmMs: 10.27,
+  coldMs: 14.11,
+  warmMs: 10.76,
 }
 
 export const BENCH_MEDIUM_WARM: BenchWarm = {
   id: "medium",
   corpus: "240 files, 1920 messages",
   touchedFiles: 5,
-  coldMs: 22.22,
-  warmMs: 14.05,
+  coldMs: 23.8,
+  warmMs: 15.16,
 }
 
 export const BENCH_REALISTIC_WARM: BenchWarm = {
   id: "realistic",
   corpus: "1,500 files (750 with i18n), ~400k lines, 6,000 messages",
   touchedFiles: 5,
-  coldMs: 82.14,
-  warmMs: 33.11,
+  coldMs: 83.89,
+  warmMs: 33.08,
 }

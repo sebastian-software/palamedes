@@ -1,6 +1,8 @@
-import { cp, mkdir, writeFile } from "node:fs/promises"
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import path from "node:path"
+
+import { runCommand } from "./exec.mjs"
 
 export const DEFAULT_SEED = 20_260_703
 
@@ -51,7 +53,12 @@ const ACTIONS = ["approve", "publish", "archive", "sync", "route", "stage", "ass
 const SURFACES = ["toolbar", "panel", "modal", "summary", "sidebar", "header", "detail", "overview"]
 const linguiFormatPoImport = JSON.stringify(import.meta.resolve("@lingui/format-po"))
 
-export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAULT_SEED }) {
+export async function createWorkflowCorpus({
+  profileName,
+  rootDir,
+  seed = DEFAULT_SEED,
+  toolPaths,
+}) {
   const profile = PROFILE_DEFINITIONS[profileName]
 
   if (!profile) {
@@ -66,6 +73,7 @@ export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAUL
     lingui: path.join(profileRoot, "lingui"),
     formatjs: path.join(profileRoot, "formatjs"),
     i18nextCli: path.join(profileRoot, "i18next-cli"),
+    gt: path.join(profileRoot, "gt"),
   }
 
   await Promise.all(
@@ -79,6 +87,7 @@ export async function createWorkflowCorpus({ profileName, rootDir, seed = DEFAUL
     writeLinguiWorkspace(toolRoots.lingui, generated, profile),
     writeFormatJsWorkspace(toolRoots.formatjs, generated, profile),
     writeI18nextCliWorkspace(toolRoots.i18nextCli, generated, profile),
+    writeGtWorkspace(toolRoots.gt, generated, profile, toolPaths?.gt),
   ])
 
   const fileCount =
@@ -206,6 +215,129 @@ async function writeI18nextCliWorkspace(rootDir, inventory, profile) {
   )
   await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderI18nextSource)
   await writeJsonCatalogs(rootDir, inventory.baselineMessages)
+}
+
+/*
+ * General Translation keys its catalogs by a content hash the CLI computes
+ * itself, and the hash covers the authoring shape — the same text extracted
+ * from `<T>` and from `t()` lands under different keys. Reimplementing that
+ * here would couple the corpus to a private hashing detail, so the baseline is
+ * derived from a real `gtx-cli generate` run against the finished source tree
+ * instead: whatever keys GT produces for the unchanged messages are the keys
+ * its own merge will later recognize.
+ *
+ * Entries that must disappear during the measured run (the previous text of a
+ * changed message, and removed messages) get a synthetic key. GT drops stale
+ * entries by key lookup alone, so a synthetic key exercises that path exactly
+ * like a real one would, and the values stay real message text so the baseline
+ * keeps a realistic size.
+ */
+async function writeGtWorkspace(rootDir, inventory, profile, gtxCliPath) {
+  if (!gtxCliPath) {
+    throw new Error("The General Translation lane needs a resolved gtx-cli path")
+  }
+
+  await writeFile(
+    path.join(rootDir, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "gt-e2e-workflow",
+        private: true,
+        version: "0.0.0",
+        dependencies: { "gt-react": await readGtReactVersion() },
+      },
+      null,
+      2
+    )}\n`,
+    "utf8"
+  )
+  await writeFile(
+    path.join(rootDir, "gt.config.json"),
+    `${JSON.stringify(
+      {
+        defaultLocale: "en",
+        locales: ["en", "de"],
+        src: ["src/generated/**/*.{js,jsx,ts,tsx}"],
+        files: { gt: { output: "src/locales/[locale].json" } },
+      },
+      null,
+      2
+    )}\n`,
+    "utf8"
+  )
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderGtSource)
+
+  const localeRoot = path.join(rootDir, "src", "locales")
+  await runCommand(gtxCliPath, ["generate", "--quiet"], { cwd: rootDir })
+  const currentKeysByMessage = invertGtCatalog(
+    JSON.parse(await readFile(path.join(localeRoot, "en.json"), "utf8"))
+  )
+  await rm(localeRoot, { recursive: true, force: true })
+
+  const baseline = toGtBaselineCatalog(inventory.baselineMessages, currentKeysByMessage)
+  await mkdir(localeRoot, { recursive: true })
+  await Promise.all(
+    ["en", "de"].map((locale) =>
+      writeFile(
+        path.join(localeRoot, `${locale}.json`),
+        `${JSON.stringify(
+          Object.fromEntries(
+            Object.entries(baseline).map(([key, message]) => [key, translate(locale, message)])
+          ),
+          null,
+          2
+        )}\n`,
+        "utf8"
+      )
+    )
+  )
+  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
+}
+
+async function readGtReactVersion() {
+  const manifest = new URL("../node_modules/gt-react/package.json", import.meta.url)
+  try {
+    return JSON.parse(await readFile(manifest, "utf8")).version
+  } catch {
+    throw new Error(
+      "Missing gt-react in the benchmark workspace. Run the repo-level benchmark script so dependencies are installed."
+    )
+  }
+}
+
+function invertGtCatalog(catalog) {
+  const keysByMessage = new Map()
+  for (const [key, message] of Object.entries(catalog)) {
+    if (typeof message !== "string") {
+      throw new TypeError(
+        `General Translation extracted a non-string source for ${key}; the corpus is meant to stay flat`
+      )
+    }
+    if (keysByMessage.has(message)) {
+      throw new Error(`General Translation extracted ${JSON.stringify(message)} under two keys`)
+    }
+    keysByMessage.set(message, key)
+  }
+  return keysByMessage
+}
+
+export function toGtBaselineCatalog(baselineMessages, currentKeysByMessage) {
+  const catalog = {}
+  for (const message of baselineMessages) {
+    const key = currentKeysByMessage.get(message) ?? syntheticGtKey(message)
+    if (catalog[key]) {
+      throw new Error(`General Translation baseline key collision at ${key}`)
+    }
+    catalog[key] = message
+  }
+  return catalog
+}
+
+/* Stale entries are only ever looked up by key, so any stable 16-hex key models
+ * one. Hashing the raw text keeps it deterministic; GT hashes a structured
+ * source descriptor instead, so the two cannot coincide. */
+function syntheticGtKey(message) {
+  return createHash("sha256").update(`stale:${message}`).digest("hex").slice(0, 16)
 }
 
 async function writeToolSourceFiles(rootDir, sourceMessages, profile, renderer) {
@@ -468,6 +600,54 @@ function renderI18nextSource(fileIndex, messages, extension, targetLines) {
 
   if (extension === "tsx") {
     body.push('  return <section>{values.join("\\\\n")}</section>')
+  } else {
+    body.push('  return values.join("\\n")')
+  }
+
+  body.push("}", "")
+  return withFiller(imports, body, fileIndex, targetLines)
+}
+
+export function renderGtSource(fileIndex, messages, extension, targetLines) {
+  const suffix = String(fileIndex).padStart(4, "0")
+
+  /*
+   * <T> only wraps a plain message. GT rejects a `{name}` placeholder in JSX
+   * children outright — it reads as a runtime expression and the CLI fails with
+   * "use a variable component like <Var>" — so a file whose messages are all
+   * interpolated keeps its JSX but skips the <T>. The chosen message is then
+   * left out of the t() list: GT keys JSX and string content separately, so
+   * authoring the same text both ways would put one logical message into the
+   * catalog under two keys and break the inventory comparison.
+   */
+  const transMessage =
+    extension === "tsx"
+      ? (messages.find((entry) => !entry.current.includes("{name}")) ?? null)
+      : null
+
+  const imports = [`import { ${transMessage ? "T, " : ""}useGT } from "gt-react"`]
+  const body = [
+    `export function ${extension === "tsx" ? "G" : "g"}tFixture${suffix}() {`,
+    "  const t = useGT()",
+    "  const values = [",
+  ]
+
+  for (const entry of messages) {
+    if (entry === transMessage) continue
+    body.push(`    t(${JSON.stringify(entry.current)}),`)
+  }
+
+  body.push("  ]")
+
+  if (extension === "tsx") {
+    body.push(
+      "  return (",
+      "    <section>",
+      ...(transMessage ? [`      <T>${escapeJsxText(transMessage.current)}</T>`] : []),
+      "      <span>{values.length}</span>",
+      "    </section>",
+      "  )"
+    )
   } else {
     body.push('  return values.join("\\n")')
   }

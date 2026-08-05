@@ -3,9 +3,11 @@ import test from "node:test"
 
 import {
   formatJsId,
+  renderGtSource,
   renderLinguiSource,
   renderPalamedesSource,
   toFormatJsCatalog,
+  toGtBaselineCatalog,
 } from "./corpus.mjs"
 import { parsePoMsgids } from "./po.mjs"
 
@@ -72,6 +74,48 @@ test("React Intl baseline catalog uses the @formatjs/cli content-hash ID convent
     "t/eDuu": { defaultMessage: "Hello world" },
     QM7ITA: { defaultMessage: "Hello {name}" },
   })
+})
+
+test("General Translation lane authors every message exactly once", () => {
+  /*
+   * GT keys `<T>` children and `t()` strings separately, so a message authored
+   * both ways would reach the catalog under two keys and inflate the extracted
+   * inventory past the generated one.
+   */
+  const source = renderGtSource(1, SAMPLE_MESSAGES, "tsx", 0)
+
+  for (const message of SAMPLE_MESSAGES) {
+    const occurrences = source.split(message.current).length - 1
+    assert.equal(occurrences, 1, `${message.current} must be authored exactly once`)
+  }
+  assert.match(source, /import \{ T, useGT \} from "gt-react"/u)
+  assert.ok(source.includes("<T>Plain toolbar message</T>"))
+})
+
+test("General Translation lane skips <T> when every message is interpolated", () => {
+  /*
+   * GT rejects a `{name}` placeholder in JSX children — it reads as a runtime
+   * expression — so an all-interpolated file must keep its JSX but author the
+   * messages through t() only. Message index 0-14 of the generated inventory
+   * are all interpolated, which puts whole files in this state.
+   */
+  const interpolated = SAMPLE_MESSAGES.filter((entry) => entry.current.includes("{name}"))
+  const source = renderGtSource(1, interpolated, "tsx", 0)
+
+  assert.ok(!source.includes("<T>"), "no <T> may wrap an interpolated message")
+  assert.match(source, /import \{ useGT \} from "gt-react"/u)
+  assert.ok(source.includes("<section>"), "the file stays a JSX module")
+})
+
+test("General Translation baseline reuses real keys and synthesizes stale ones", () => {
+  const currentKeys = new Map([["Unchanged message", "aaaabbbbccccdddd"]])
+  const catalog = toGtBaselineCatalog(["Unchanged message", "Previous message"], currentKeys)
+
+  assert.equal(catalog.aaaabbbbccccdddd, "Unchanged message")
+
+  const staleKey = Object.keys(catalog).find((key) => key !== "aaaabbbbccccdddd")
+  assert.match(staleKey, /^[0-9a-f]{16}$/u, "a stale entry must look like a GT content hash")
+  assert.equal(catalog[staleKey], "Previous message")
 })
 
 test("parsePoMsgids reads multiline ICU msgids", () => {
