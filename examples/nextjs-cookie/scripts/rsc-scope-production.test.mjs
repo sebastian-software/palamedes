@@ -137,7 +137,16 @@ async function assertClientGraphSplitting() {
       const chunkResponses = []
 
       page.on("console", (message) => {
-        if (message.type() === "error") errors.push(`console: ${message.text()}`)
+        if (message.type() !== "error") return
+
+        const text = message.text()
+        // Chromium reports optional document assets (for example favicon.ico)
+        // without exposing their URL in this console message. Relevant Next.js
+        // assets are checked explicitly in the response listener below.
+        if (text.startsWith("Failed to load resource: the server responded with a status of 404")) {
+          return
+        }
+        errors.push(`console: ${text}`)
       })
       page.on("pageerror", (error) => errors.push(`page: ${error.message}`))
       page.on("requestfailed", (request) => {
@@ -148,6 +157,9 @@ async function assertClientGraphSplitting() {
       })
       page.on("response", (response) => {
         const url = response.url()
+        if (response.status() >= 400 && url.includes("/_next/static/")) {
+          errors.push(`response: ${url} (${response.status()})`)
+        }
         if (!url.includes("/_next/static/") || !url.endsWith(".js")) return
         chunkResponses.push(
           response
