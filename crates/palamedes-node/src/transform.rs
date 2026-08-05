@@ -4,6 +4,12 @@ use napi_derive::napi;
 use crate::shared::{checked_u32, to_napi_error};
 
 #[napi(object)]
+pub struct NativeServerFunctionTransformOptions {
+    pub initializer_module: String,
+    pub initializer_export: String,
+}
+
+#[napi(object)]
 pub struct NativeTransformOptions {
     pub runtime_module: Option<String>,
     pub runtime_import_name: Option<String>,
@@ -12,6 +18,7 @@ pub struct NativeTransformOptions {
     pub keep_source_fallbacks: Option<bool>,
     /// @deprecated Use `keepSourceFallbacks` with the inverse value.
     pub strip_message_field: Option<bool>,
+    pub server_functions: Option<NativeServerFunctionTransformOptions>,
 }
 
 #[napi(object)]
@@ -49,6 +56,12 @@ impl From<NativeTransformOptions> for palamedes::NativeTransformOptions {
             strip_non_essential_props: value.strip_non_essential_props,
             keep_source_fallbacks: value.keep_source_fallbacks,
             strip_message_field: value.strip_message_field,
+            server_functions: value.server_functions.map(|options| {
+                palamedes::ServerFunctionTransformOptions {
+                    initializer_module: options.initializer_module,
+                    initializer_export: options.initializer_export,
+                }
+            }),
         }
     }
 }

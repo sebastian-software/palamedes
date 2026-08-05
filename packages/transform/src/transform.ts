@@ -1,7 +1,7 @@
 import { transformMacrosNative, type NativeTransformResult } from "@palamedes/core-node"
 
 import type { SourceMap, TransformOptions, TransformResult } from "./types"
-import { mightContainPalamedesMacros } from "./detect"
+import { mightContainPalamedesMacros, mightContainServerFunctions } from "./detect"
 
 function buildTransformOutput(
   filename: string,
@@ -38,7 +38,10 @@ export function transformPalamedesMacros(
   filename: string,
   options: TransformOptions = {}
 ): TransformResult {
-  if (!mightContainPalamedesMacros(code)) {
+  const mightNeedServerFunctionTransform =
+    options.serverFunctions !== undefined && mightContainServerFunctions(code)
+
+  if (!mightContainPalamedesMacros(code) && !mightNeedServerFunctionTransform) {
     return { code, hasChanged: false, compiledIds: [], map: null }
   }
 

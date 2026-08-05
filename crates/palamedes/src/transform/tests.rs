@@ -1,5 +1,6 @@
 use super::{
     transform_macros as transform_macros_raw, NativeTransformOptions, NativeTransformResult,
+    ServerFunctionTransformOptions,
 };
 use crate::error::PalamedesResult;
 use crate::icu_text::compiled_message_key;
@@ -26,6 +27,194 @@ fn transform_macros(
     }
 
     Ok(result)
+}
+
+fn server_function_options() -> NativeTransformOptions {
+    NativeTransformOptions {
+        server_functions: Some(ServerFunctionTransformOptions {
+            initializer_module: "@/i18n/server-action".to_string(),
+            initializer_export: "initServerActionI18n".to_string(),
+        }),
+        keep_source_fallbacks: Some(true),
+        ..NativeTransformOptions::default()
+    }
+}
+
+#[test]
+fn instruments_inline_server_functions_without_macros() {
+    let source = r#"export function Component() {
+  return async function save() {
+    "use server";
+    await persist();
+  };
+}
+"#;
+    let result = transform_macros_raw(source, "action.ts", Some(server_function_options()))
+        .expect("inline Server Function should be instrumented");
+
+    assert!(result.has_changed);
+    assert_eq!(
+        result.code.matches("from \"@/i18n/server-action\"").count(),
+        1
+    );
+    assert!(result.code.contains(
+        "\"use server\";\n  await __palamedesServerFunctionInitializer();\n    await persist();"
+    ));
+}
+
+#[test]
+fn instruments_only_exported_async_functions_in_server_modules() {
+    let source = r#""use server";
+
+export async function save() { await persist(); }
+export const remove = async () => destroy();
+async function renamed() { await rename(); }
+export { renamed as renameAction };
+const hidden = async () => hide();
+export function syncFunction() {}
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("server module exports should be instrumented");
+
+    assert_eq!(
+        result
+            .code
+            .matches("await __palamedesServerFunctionInitializer();")
+            .count(),
+        3
+    );
+    assert!(result.code.contains(
+        "export const remove = async () => {\n  await __palamedesServerFunctionInitializer();\n  return destroy();\n};"
+    ));
+    assert!(result.code.contains("const hidden = async () => hide();"));
+    assert!(result.code.contains("export function syncFunction() {}"));
+}
+
+#[test]
+fn instruments_async_functions_exported_by_default_identifier() {
+    let source = r#""use server";
+async function save() { await persist(); }
+export default save;
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("default-exported local Server Function should be instrumented");
+
+    assert_eq!(
+        result
+            .code
+            .matches("await __palamedesServerFunctionInitializer();")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn imports_the_initializer_once_and_avoids_authored_bindings() {
+    let source = r#""use server";
+const __palamedesServerFunctionInitializer = "occupied";
+export async function first() {}
+export async function second() {}
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("initializer alias should avoid collisions");
+
+    assert_eq!(
+        result.code.matches("from \"@/i18n/server-action\"").count(),
+        1
+    );
+    assert!(result
+        .code
+        .contains("import { initServerActionI18n as __palamedesServerFunctionInitializer2 }"));
+    assert_eq!(
+        result
+            .code
+            .matches("await __palamedesServerFunctionInitializer2();")
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn rejects_eager_macros_in_server_function_parameter_defaults() {
+    for source in [
+        r#"import { t } from "@palamedes/core/macro";
+export async function save(message = t`Fallback`) { "use server"; return message; }
+"#,
+        r#"import { t } from "@palamedes/core/macro";
+export async function save({ nested: { message = t`Fallback` } } = {}) { "use server"; return message; }
+"#,
+    ] {
+        let error = transform_macros_raw(source, "action.ts", Some(server_function_options()))
+            .expect_err("eager parameter macro must fail");
+        let message = error.to_string();
+        assert!(message.contains(
+            "Eager Palamedes macro in a Server Function parameter initializer executes before request i18n initialization"
+        ));
+        assert!(message.contains("Move the default into the function body"));
+        assert!(message.contains("if (value === undefined)"));
+    }
+}
+
+#[test]
+fn permits_deferred_macros_inside_parameter_callbacks() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+export async function save(format = () => t`Fallback`) { "use server"; return format(); }
+"#;
+    let result = transform_macros_raw(source, "action.ts", Some(server_function_options()))
+        .expect("a callback default does not run the macro before initialization");
+
+    assert!(result.has_changed);
+    assert!(result
+        .code
+        .contains("await __palamedesServerFunctionInitializer();"));
+    assert!(result.code.contains("getI18n()._("));
+}
+
+#[test]
+fn combines_concise_server_action_and_macro_transforms() {
+    let source = r#""use server";
+import { t } from "@palamedes/core/macro";
+export const label = async () => t`Saved`;
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("overlapping concise arrow and macro transforms should compose");
+
+    assert!(result
+        .code
+        .contains("await __palamedesServerFunctionInitializer();"));
+    assert!(result.code.contains("return getI18n()._("));
+    assert!(!result.code.contains("@palamedes/core/macro"));
+}
+
+#[test]
+fn leaves_server_functions_unchanged_without_opt_in() {
+    let source = r#"export async function save() { "use server"; await persist(); }
+"#;
+    let result = transform_macros_raw(source, "action.ts", None)
+        .expect("unconfigured transform should leave Server Functions alone");
+
+    assert!(!result.has_changed);
+    assert_eq!(result.code, source);
+}
+
+#[test]
+fn rejects_invalid_server_function_initializer_exports() {
+    let error = transform_macros_raw(
+        r#"export async function save() { "use server"; }"#,
+        "action.ts",
+        Some(NativeTransformOptions {
+            server_functions: Some(ServerFunctionTransformOptions {
+                initializer_module: "./i18n".to_string(),
+                initializer_export: "init();".to_string(),
+            }),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect_err("invalid generated import syntax must be rejected");
+
+    assert!(error
+        .to_string()
+        .contains("Invalid Server Function initializer import"));
 }
 
 #[test]
