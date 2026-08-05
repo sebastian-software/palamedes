@@ -109,6 +109,30 @@ export default save;
 }
 
 #[test]
+fn instruments_async_callbacks_inside_exported_action_initializers() {
+    let source = r#""use server";
+const hidden = withAuth(async () => hide());
+export const save = withAuth(async () => persist());
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("wrapped Server Function callback should be instrumented");
+
+    assert_eq!(
+        result
+            .code
+            .matches("await __palamedesServerFunctionInitializer();")
+            .count(),
+        1
+    );
+    assert!(result.code.contains(
+        "export const save = withAuth(async () => {\n  await __palamedesServerFunctionInitializer();\n  return persist();\n})"
+    ));
+    assert!(result
+        .code
+        .contains("const hidden = withAuth(async () => hide())"));
+}
+
+#[test]
 fn imports_the_initializer_once_and_avoids_authored_bindings() {
     let source = r#""use server";
 const __palamedesServerFunctionInitializer = "occupied";

@@ -201,14 +201,29 @@ fn record_function(function: &Function<'_>, spans: &mut HashSet<(u32, u32)>) {
 }
 
 fn record_expression_function(expression: &Expression<'_>, spans: &mut HashSet<(u32, u32)>) {
-    match expression.get_inner_expression() {
-        Expression::ArrowFunctionExpression(function) if function.r#async => {
-            spans.insert((function.span.start, function.span.end));
+    let mut collector = ExportedInitializerFunctionCollector { spans };
+    collector.visit_expression(expression.get_inner_expression());
+}
+
+struct ExportedInitializerFunctionCollector<'a> {
+    spans: &'a mut HashSet<(u32, u32)>,
+}
+
+impl<'a> Visit<'a> for ExportedInitializerFunctionCollector<'_> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+        if it.r#async && it.body.is_some() {
+            record_function(it, self.spans);
+            return;
         }
-        Expression::FunctionExpression(function) if function.r#async && function.body.is_some() => {
-            spans.insert((function.span.start, function.span.end));
+        walk::walk_function(self, it, flags);
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        if it.r#async {
+            self.spans.insert((it.span.start, it.span.end));
+            return;
         }
-        _ => {}
+        walk::walk_arrow_function_expression(self, it);
     }
 }
 

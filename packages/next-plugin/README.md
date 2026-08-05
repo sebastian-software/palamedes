@@ -186,12 +186,20 @@ module.exports = withPalamedes(
 )
 ```
 
-Palamedes instruments every async function recognized by Next or React: async
-exports in a module with a top-level `"use server"` directive, and async
-functions with their own `"use server"` directive. It injects one initializer
-import per module and awaits the initializer after the function's directive
-prologue. This also covers actions without a local macro; sync and async helper
-calls then inherit the initialized request scope.
+Palamedes instruments directive-visible async functions: direct exports and
+locally declared named exports in a module with a top-level `"use server"`
+directive, async callbacks nested in an exported initializer such as
+`export const save = withAuth(async () => ...)`, and async functions with their
+own `"use server"` directive. It injects one initializer import per module and
+awaits the initializer after the function's directive prologue. This also
+covers actions without a local macro; sync and async helper calls then inherit
+the initialized request scope.
+
+A re-export such as `export { save } from "./save"` has no function body to
+instrument at the re-export site. Put `"use server"` in the implementation
+module or on the implementation function itself. Likewise, a wrapper call that
+only receives an imported callback has no local async body for Palamedes to
+instrument; keep the callback inline or mark its implementation explicitly.
 
 The initializer belongs to the application. It should resolve the request
 locale, load and activate a fresh catalog, and be request-memoized or otherwise
