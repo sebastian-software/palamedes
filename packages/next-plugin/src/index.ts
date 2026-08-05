@@ -28,6 +28,7 @@ const MACRO_CONTENT_PATTERN = new RegExp(
 )
 const SERVER_FUNCTION_CONTENT_PATTERN = /["']use server["']/
 const SERVER_FUNCTION_INITIALIZER_MODULE = "@palamedes/next-plugin/server-function-initializer"
+const SERVER_FUNCTION_ENTRY_MODULE = "@palamedes/next-plugin/server-function-entry"
 const SERVER_FUNCTION_INITIALIZER_EXPORT = "initializeServerFunctionI18n"
 const SERVER_FUNCTION_ENTRY_EXTENSIONS = [
   ".ts",
@@ -304,39 +305,53 @@ export function withPalamedes(
     failOnCompileError,
     ...(configPath ? { configPath } : {}),
   }
+  const transformLoaderOptions = {
+    runtimeModule,
+    keepSourceFallbacks,
+    stripNonEssentialProps,
+    ...(configPath ? { configPath } : {}),
+    ...(serverFunctions ? { serverFunctions } : {}),
+  }
 
   const rules: TurbopackRules = { ...baseConfig.turbopack?.rules }
 
   // Transform local JS/TS files that actually import Palamedes macros. The
   // include/exclude options translate into the rule condition so they behave
   // the same under Turbopack as in the webpack branch below.
-  appendTurbopackRule(rules, "*", {
-    condition: {
-      all: [
-        { not: "foreign" },
-        { path: include },
-        { not: { path: exclude } },
+  const transformConditions = [
+    { not: "foreign" },
+    { path: include },
+    { not: { path: exclude } },
+    {
+      content: serverFunctions
+        ? new RegExp(`${MACRO_CONTENT_PATTERN.source}|${SERVER_FUNCTION_CONTENT_PATTERN.source}`)
+        : MACRO_CONTENT_PATTERN,
+    },
+  ]
+  if (serverFunctions) {
+    // Turbopack's built-in browser condition lets one unified graph produce a
+    // plain client transform and a server transform with lazy message
+    // sidecars. Keeping the rules disjoint prevents server-only catalog
+    // loaders from entering browser chunks.
+    appendTurbopackRule(rules, "*", {
+      condition: { all: [...transformConditions, "browser"] },
+      loaders: [{ loader: oxcLoaderPath, options: transformLoaderOptions }],
+    })
+    appendTurbopackRule(rules, "*", {
+      condition: { all: [...transformConditions, { not: "browser" }] },
+      loaders: [
         {
-          content: serverFunctions
-            ? new RegExp(
-                `${MACRO_CONTENT_PATTERN.source}|${SERVER_FUNCTION_CONTENT_PATTERN.source}`
-              )
-            : MACRO_CONTENT_PATTERN,
+          loader: oxcLoaderPath,
+          options: { ...transformLoaderOptions, serverMessageSplitting: true },
         },
       ],
-    },
-    loaders: [
-      {
-        loader: oxcLoaderPath,
-        options: {
-          runtimeModule,
-          keepSourceFallbacks,
-          stripNonEssentialProps,
-          ...(serverFunctions ? { serverFunctions } : {}),
-        },
-      },
-    ],
-  })
+    })
+  } else {
+    appendTurbopackRule(rules, "*", {
+      condition: { all: transformConditions },
+      loaders: [{ loader: oxcLoaderPath, options: transformLoaderOptions }],
+    })
+  }
 
   // Compile local .po files
   if (enablePoLoader) {
@@ -366,7 +381,7 @@ export function withPalamedes(
         ? {
             resolveAlias: {
               ...baseConfig.turbopack?.resolveAlias,
-              [SERVER_FUNCTION_INITIALIZER_MODULE]: serverFunctionEntry.turbopackAlias,
+              [SERVER_FUNCTION_ENTRY_MODULE]: serverFunctionEntry.turbopackAlias,
             },
           }
         : {}),
@@ -379,13 +394,13 @@ export function withPalamedes(
         config.resolve ??= {}
         if (Array.isArray(config.resolve.alias)) {
           config.resolve.alias.push({
-            name: SERVER_FUNCTION_INITIALIZER_MODULE,
+            name: SERVER_FUNCTION_ENTRY_MODULE,
             alias: serverFunctionEntry.absolutePath,
           })
         } else {
           config.resolve.alias = {
             ...config.resolve.alias,
-            [SERVER_FUNCTION_INITIALIZER_MODULE]: serverFunctionEntry.absolutePath,
+            [SERVER_FUNCTION_ENTRY_MODULE]: serverFunctionEntry.absolutePath,
           }
         }
       }
@@ -399,10 +414,8 @@ export function withPalamedes(
           {
             loader: oxcLoaderPath,
             options: {
-              runtimeModule,
-              keepSourceFallbacks,
-              stripNonEssentialProps,
-              ...(serverFunctions ? { serverFunctions } : {}),
+              ...transformLoaderOptions,
+              ...(serverFunctions && context.isServer ? { serverMessageSplitting: true } : {}),
             },
           },
         ],

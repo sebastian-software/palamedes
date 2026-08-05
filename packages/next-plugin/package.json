@@ -63,6 +63,26 @@
         "default": "./dist/server.cjs"
       }
     },
+    "./server-function-initializer": {
+      "import": {
+        "types": "./dist/server-function-initializer.d.mts",
+        "default": "./dist/server-function-initializer.mjs"
+      },
+      "require": {
+        "types": "./dist/server-function-initializer.d.cts",
+        "default": "./dist/server-function-initializer.cjs"
+      }
+    },
+    "./server-function-entry": {
+      "import": {
+        "types": "./dist/server-function-entry.d.mts",
+        "default": "./dist/server-function-entry.mjs"
+      },
+      "require": {
+        "types": "./dist/server-function-entry.d.cts",
+        "default": "./dist/server-function-entry.cjs"
+      }
+    },
     "./palamedes-loader": "./palamedes-loader.cjs",
     "./palamedes-po-loader": "./palamedes-po-loader.cjs"
   },
@@ -70,7 +90,8 @@
     "@palamedes/config": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "@palamedes/transform": "workspace:^"
+    "@palamedes/transform": "workspace:^",
+    "picomatch": "^4.0.5"
   },
   "peerDependencies": {
     "next": "^16"

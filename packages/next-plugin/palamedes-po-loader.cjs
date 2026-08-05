@@ -3,7 +3,10 @@
 const { statSync } = require("node:fs")
 const path = require("node:path")
 const { loadPalamedesConfig } = require("@palamedes/config")
-const { compileCatalogModule } = require("@palamedes/core-node")
+const { compileCatalogArtifactSelected, compileCatalogModule } = require("@palamedes/core-node")
+const { createCatalogLoaderResult, createMissingErrorMessage } = require("@palamedes/transform")
+
+const SELECTED_MESSAGES_QUERY = "palamedes-selected"
 
 /*
  * Loading the config walks the filesystem upward and parses the file; doing
@@ -43,29 +46,49 @@ module.exports = function palamedesPoLoader() {
   ;(async () => {
     const cfg = await loadConfigCached(options.configPath)
     const locale = path.basename(this.resourcePath, ".po")
-    const result = compileCatalogModule(
-      {
-        rootDir: cfg.rootDir,
-        locales: cfg.locales,
-        sourceLocale: cfg.sourceLocale,
-        fallbackLocales: cfg.fallbackLocales,
-        pseudoLocale: cfg.pseudoLocale,
-        catalogs: cfg.catalogs,
-      },
-      this.resourcePath,
-      {
-        locale,
-        pseudoLocale: cfg.pseudoLocale,
-        failOnMissing,
-        failOnCompileError,
-        missingFailureHint:
-          "You see this error because `failOnMissing=true` in Palamedes Next plugin configuration.",
-        compileFailureHint:
-          "These errors fail the build because `failOnCompileError=true` in the Palamedes Next plugin configuration.",
-        diagnosticsWarningHint:
-          "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Next plugin configuration.",
+    const artifactConfig = {
+      rootDir: cfg.rootDir,
+      locales: cfg.locales,
+      sourceLocale: cfg.sourceLocale,
+      fallbackLocales: cfg.fallbackLocales,
+      pseudoLocale: cfg.pseudoLocale,
+      catalogs: cfg.catalogs,
+    }
+    const loaderOptions = {
+      locale,
+      pseudoLocale: cfg.pseudoLocale,
+      failOnMissing,
+      failOnCompileError,
+      missingFailureHint:
+        "You see this error because `failOnMissing=true` in Palamedes Next plugin configuration.",
+      compileFailureHint:
+        "These errors fail the build because `failOnCompileError=true` in the Palamedes Next plugin configuration.",
+      diagnosticsWarningHint:
+        "You can fail the build on error diagnostics by setting `failOnCompileError=true` in the Palamedes Next plugin configuration.",
+    }
+    const selection = new URLSearchParams(this.resourceQuery ?? "").get(SELECTED_MESSAGES_QUERY)
+    let result
+    if (selection) {
+      const compiledIds = JSON.parse(Buffer.from(selection, "base64url").toString("utf8"))
+      if (!Array.isArray(compiledIds) || !compiledIds.every((id) => typeof id === "string")) {
+        throw new TypeError("Invalid Palamedes selected-message query.")
       }
-    )
+      const artifact = compileCatalogArtifactSelected(
+        artifactConfig,
+        this.resourcePath,
+        compiledIds
+      )
+      result = {
+        ...createCatalogLoaderResult(artifact, loaderOptions),
+        watchFiles: artifact.watchFiles,
+      }
+      const resolvedLocale = artifact.resolvedLocaleChain?.[0] ?? locale
+      if (!failOnMissing && resolvedLocale !== cfg.pseudoLocale && artifact.missing.length > 0) {
+        result.warnings.push(createMissingErrorMessage(resolvedLocale, artifact.missing))
+      }
+    } else {
+      result = compileCatalogModule(artifactConfig, this.resourcePath, loaderOptions)
+    }
     if (typeof this.addDependency === "function") {
       if (cfg.configPath) {
         this.addDependency(cfg.configPath)

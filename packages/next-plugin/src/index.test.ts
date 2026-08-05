@@ -11,7 +11,8 @@ afterEach(() => {
 })
 
 const nextExampleRoot = fileURLToPath(new URL("../../../examples/nextjs-cookie", import.meta.url))
-const serverEntryModule = "@palamedes/next-plugin/server-function-initializer"
+const serverInitializerModule = "@palamedes/next-plugin/server-function-initializer"
+const serverEntryModule = "@palamedes/next-plugin/server-function-entry"
 
 function useNextExampleProject(): void {
   vi.spyOn(process, "cwd").mockReturnValue(nextExampleRoot)
@@ -103,7 +104,16 @@ describe("withPalamedes turbopack config", () => {
   it("matches Server Function directives and forwards the initializer when configured", () => {
     useNextExampleProject()
     const config = withPalamedes({}, { serverFunctions: true })
-    const rule = getRules(config)["*"] as RuleItem
+    const configuredRules = getRules(config)["*"] as RuleItem[]
+    const rule = configuredRules.find((candidate) =>
+      conditionList(candidate).some(
+        (condition) =>
+          typeof condition === "object" &&
+          condition !== null &&
+          "not" in condition &&
+          condition.not === "browser"
+      )
+    )!
     const content = (
       conditionList(rule).find(
         (condition) => typeof condition === "object" && condition !== null && "content" in condition
@@ -113,13 +123,26 @@ describe("withPalamedes turbopack config", () => {
     expect(content.test('async function save() { "use server" }')).toBe(true)
     expect(rule.loaders?.[0]?.options).toMatchObject({
       serverFunctions: {
-        initializerModule: serverEntryModule,
+        initializerModule: serverInitializerModule,
         initializerExport: "initializeServerFunctionI18n",
       },
+      serverMessageSplitting: true,
     })
     expect(config.turbopack?.resolveAlias).toMatchObject({
       [serverEntryModule]: "./src/palamedes.server.ts",
     })
+  })
+
+  it("keeps server message loaders out of the Turbopack browser graph", () => {
+    useNextExampleProject()
+    const configuredRules = getRules(withPalamedes({}, { serverFunctions: true }))[
+      "*"
+    ] as RuleItem[]
+    const browserRule = configuredRules.find((candidate) =>
+      conditionList(candidate).includes("browser")
+    )
+
+    expect(browserRule?.loaders?.[0]?.options).not.toHaveProperty("serverMessageSplitting")
   })
 
   it("requires the conventional Server Function entry module when enabled", () => {
@@ -204,28 +227,44 @@ type WebpackRule = {
   use?: { loader: string; options?: Record<string, unknown> }[]
 }
 
-function collectWebpackRules(config: ReturnType<typeof withPalamedes>): WebpackRule[] {
+function collectWebpackRules(
+  config: ReturnType<typeof withPalamedes>,
+  context: Record<string, unknown> = {}
+): WebpackRule[] {
   const rules: WebpackRule[] = []
   const webpack = config.webpack as (
     config: { module: { rules: WebpackRule[] } },
     context: unknown
   ) => unknown
-  webpack({ module: { rules } }, {})
+  webpack({ module: { rules } }, context)
   return rules
 }
 
 describe("withPalamedes webpack config", () => {
   it("forwards Server Function instrumentation to webpack", () => {
     useNextExampleProject()
-    const rules = collectWebpackRules(withPalamedes({}, { serverFunctions: true }))
+    const rules = collectWebpackRules(withPalamedes({}, { serverFunctions: true }), {
+      isServer: true,
+    })
     const transformRule = rules.find((rule) => rule.use?.[0]?.loader.includes("palamedes-loader"))
 
     expect(transformRule?.use?.[0]?.options).toMatchObject({
       serverFunctions: {
-        initializerModule: serverEntryModule,
+        initializerModule: serverInitializerModule,
         initializerExport: "initializeServerFunctionI18n",
       },
+      serverMessageSplitting: true,
     })
+  })
+
+  it("keeps server message loaders out of the webpack client compiler", () => {
+    useNextExampleProject()
+    const rules = collectWebpackRules(withPalamedes({}, { serverFunctions: true }), {
+      isServer: false,
+    })
+    const transformRule = rules.find((rule) => rule.use?.[0]?.loader.includes("palamedes-loader"))
+
+    expect(transformRule?.use?.[0]?.options).not.toHaveProperty("serverMessageSplitting")
   })
 
   it("excludes node_modules from the po loader rule", () => {

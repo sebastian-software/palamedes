@@ -9,11 +9,19 @@ const CLIENT_I18N_KEY = Symbol.for("palamedes.runtime.clientI18n")
 const SERVER_I18N_GETTER_KEY = Symbol.for("palamedes.runtime.serverI18nGetter")
 const SERVER_SCOPE_STATE_KEY = Symbol.for("palamedes.runtime.serverI18nScopeState")
 const REGISTERED_MESSAGES_KEY = Symbol.for("palamedes.runtime.registeredMessages")
+const REGISTERED_MESSAGE_LOADERS_KEY = Symbol.for("palamedes.runtime.registeredMessageLoaders")
 
 export type RegisteredMessages = Record<string, Record<string, unknown>>
 
 type MessageLoadingI18n = I18nInstance & {
   load?: (locale: string, messages: Record<string, unknown>) => void
+}
+
+export type RegisteredMessageLoader = () => Promise<Record<string, unknown>>
+
+type RegisteredMessageLoaderState = {
+  loaders: Record<string, RegisteredMessageLoader>
+  resources: Map<string, Promise<Record<string, unknown>>>
 }
 
 export type ServerI18nScope<T extends I18nInstance = I18nInstance> = {
@@ -45,6 +53,7 @@ type GlobalRuntimeState = typeof globalThis & {
     get(): I18nInstance | undefined
   }
   [REGISTERED_MESSAGES_KEY]?: Map<string, Record<string, unknown>[]>
+  [REGISTERED_MESSAGE_LOADERS_KEY]?: Map<string, RegisteredMessageLoaderState>
 }
 
 function globalRuntimeState(): GlobalRuntimeState {
@@ -65,6 +74,19 @@ function getRegisteredMessages(
 
   const registered = new Map<string, Record<string, unknown>[]>()
   state[REGISTERED_MESSAGES_KEY] = registered
+  return registered
+}
+
+function getRegisteredMessageLoaders(
+  state = globalRuntimeState()
+): Map<string, RegisteredMessageLoaderState> {
+  const existing = state[REGISTERED_MESSAGE_LOADERS_KEY]
+  if (existing) {
+    return existing
+  }
+
+  const registered = new Map<string, RegisteredMessageLoaderState>()
+  state[REGISTERED_MESSAGE_LOADERS_KEY] = registered
   return registered
 }
 
@@ -102,6 +124,78 @@ export function registerMessages(catalogs: RegisteredMessages): void {
       active.load(locale, messages)
     }
   }
+}
+
+/**
+ * Register locale-specific message loaders for one generated source-module
+ * sidecar. Server adapters use these lazy resources so the ESM graph
+ * determines message membership while each request materializes only its
+ * active locale.
+ *
+ * `key` is stable across rebuilds. Re-registering it replaces the prior
+ * loaders and their resources, which keeps development HMR from retaining a
+ * stale sidecar forever.
+ */
+export function registerMessageLoaders(
+  key: string,
+  loaders: Record<string, RegisteredMessageLoader>
+): void {
+  getRegisteredMessageLoaders().set(key, {
+    loaders,
+    resources: new Map(),
+  })
+}
+
+/**
+ * Load every message fragment currently present in the server module graph for
+ * `locale` into a request-local i18n instance. Resources are deduplicated
+ * across concurrent and later requests; loading into the instance remains
+ * additive and preserves each generated compiled-catalog object as-is.
+ */
+export async function loadRegisteredMessages<T extends I18nInstance>(
+  i18n: T,
+  locale: string
+): Promise<T> {
+  const loadable = i18n as MessageLoadingI18n
+  const registered = globalRuntimeState()[REGISTERED_MESSAGES_KEY]
+  const eagerMessages = registered?.get(locale) ?? []
+  const lazyResources: Promise<Record<string, unknown>>[] = []
+
+  for (const state of getRegisteredMessageLoaders().values()) {
+    const loader = state.loaders[locale]
+    if (!loader) {
+      continue
+    }
+
+    let resource = state.resources.get(locale)
+    if (!resource) {
+      resource = loader().catch((error: unknown) => {
+        state.resources.delete(locale)
+        throw error
+      })
+      state.resources.set(locale, resource)
+    }
+    lazyResources.push(resource)
+  }
+
+  if (eagerMessages.length === 0 && lazyResources.length === 0) {
+    return i18n
+  }
+  if (!loadable.load) {
+    throw new TypeError(
+      "The active i18n instance cannot load generated graph-split messages. Provide an instance with load(locale, messages)."
+    )
+  }
+
+  const lazyMessages = await Promise.all(lazyResources)
+  for (const messages of eagerMessages) {
+    loadable.load(locale, messages)
+  }
+  for (const messages of lazyMessages) {
+    loadable.load(locale, messages)
+  }
+
+  return i18n
 }
 
 export function setClientI18n<T extends I18nInstance>(i18n: T): T {
