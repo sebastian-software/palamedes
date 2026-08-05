@@ -119,7 +119,7 @@ export default async function Page() {
   },
   boundary: {
     title: "Current boundary: the request scope targets the Node runtime.",
-    body: "The @palamedes/runtime/server entry uses Node async hooks and must stay out of Edge and Client Components. Direct catalog imports currently use PO files even when FCL is configured for other catalog workflows.",
+    body: "The @palamedes/next-plugin/server entry binds i18n to the complete Node render lifetime and must stay out of Edge and Client Components. Direct catalog imports currently use PO files even when FCL is configured for other catalog workflows.",
     link: {
       label: "Read the Next.js integration notes",
       href: docsHref("api/next-plugin"),

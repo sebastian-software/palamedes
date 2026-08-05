@@ -3,12 +3,12 @@ import "server-only"
 import { cache } from "react"
 import { cookies } from "next/headers"
 import { headers } from "next/headers"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
 import type { PalamedesI18n } from "@palamedes/core"
 import type { LocaleSource } from "@palamedes/core/locale"
 import { createExampleI18n, type Locale, loadMessages, locales } from "./i18n"
 
-export const serverI18nScope = createServerI18nScope<PalamedesI18n>()
+export const serverI18nScope = createNextServerI18nScope<PalamedesI18n>()
 
 /**
  * Get the current locale from cookies (server-side only)

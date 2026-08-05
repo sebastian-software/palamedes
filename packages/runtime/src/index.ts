@@ -22,6 +22,17 @@ export type ServerI18nScope<T extends I18nInstance = I18nInstance> = {
   get(): T | undefined
 }
 
+export type CreateServerI18nScopeOptions = {
+  /**
+   * A framework adapter's stable request/render identity. The provider ID
+   * replaces an earlier registration from the same adapter during dev HMR.
+   */
+  requestKeyProvider?: {
+    get(): object | undefined
+    id: symbol
+  }
+}
+
 type GlobalRuntimeState = typeof globalThis & {
   [CLIENT_I18N_KEY]?: I18nInstance
   [SERVER_I18N_GETTER_KEY]?: ServerI18nGetter
@@ -30,6 +41,8 @@ type GlobalRuntimeState = typeof globalThis & {
       enterWith(i18n: I18nInstance): void
       getStore(): I18nInstance | undefined
     }
+    activate(i18n: I18nInstance): void
+    get(): I18nInstance | undefined
   }
   [REGISTERED_MESSAGES_KEY]?: Map<string, Record<string, unknown>[]>
 }
@@ -122,12 +135,12 @@ export function activateServerI18n<T extends I18nInstance>(i18n: T): T {
       "No server i18n scope is configured. Create one with createServerI18nScope() from @palamedes/runtime/server before activating SSR client components."
     )
   }
-  state[SERVER_I18N_GETTER_KEY] ??= () => scopeState.active.getStore()
-  const activeI18n = scopeState.active.getStore()
+  state[SERVER_I18N_GETTER_KEY] ??= () => scopeState.get()
+  const activeI18n = scopeState.get()
   if (activeI18n === i18n) {
     return i18n
   }
-  scopeState.active.enterWith(i18n)
+  scopeState.activate(i18n)
   return i18n
 }
 

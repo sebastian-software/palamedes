@@ -12,6 +12,7 @@ storage/import boundary.
 - `withPalamedes(baseConfig?, options?)`
 - default export `withPalamedes`
 - `WithPalamedesOptions`
+- `createNextServerI18nScope<T>()` from `@palamedes/next-plugin/server`
 - internal loader subpaths used by plugin wiring:
   `@palamedes/next-plugin/palamedes-loader` and
   `@palamedes/next-plugin/palamedes-po-loader`
@@ -51,6 +52,27 @@ module.exports = withPalamedes({})
 ```
 
 ## App Router Client Catalog Boundary
+
+Create the request scope once in a server-only module. Unlike the generic Node
+scope, this adapter keys the instance to Next's complete render lifetime, so it
+survives suspension and the handoff from the RSC pass to Client Component
+server rendering:
+
+```ts
+import "server-only"
+
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
+import type { PalamedesI18n } from "@palamedes/core"
+
+export const serverI18n = createNextServerI18nScope<PalamedesI18n>()
+```
+
+Activate a fresh instance during each request's initialization. The adapter
+stores it under a weak Next render key, never as a process-global last request.
+Its server-storage integration supports the declared Next 16 peer range and is
+verified against Next 16.2. If a later Next 16 build removes that internal
+module, the application build fails with a module-resolution error; upgrade
+Palamedes before adopting that Next release.
 
 After resolving and activating the request-local server i18n instance, wrap
 translated Client Components in a boundary created by the shared React runtime:

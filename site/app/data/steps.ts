@@ -183,9 +183,9 @@ export default withPalamedes({})
 // src/lib/i18n.server.ts
 import "server-only"
 import { createI18n } from "@palamedes/core"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
 
-export const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()`,
+export const serverI18n = createNextServerI18nScope<ReturnType<typeof createI18n>>()`,
     },
     {
       title: "Write & extract",

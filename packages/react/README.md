@@ -121,7 +121,8 @@ export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
 ```
 
 Then render it from the Server Component after activating the same request
-locale through `@palamedes/runtime/server`:
+locale. In Next.js, use the render-lifetime scope from
+`@palamedes/next-plugin/server`:
 
 ```tsx
 const { locale } = await createActiveServerI18n()

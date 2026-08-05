@@ -72,7 +72,15 @@ await serverI18n.run(i18n, async () => {
 
 All scopes created by this helper share the same runtime getter, so independently
 created scopes do not disconnect transformed `getI18n()` calls from the scope
-that was activated for the current async context.
+that was activated for the current async context. Framework adapters can also
+provide a stable request key for hosts that resume rendering from an earlier
+async context; application code should use the framework adapter rather than
+constructing that provider itself.
+
+Next.js App Router applications must use
+`createNextServerI18nScope()` from `@palamedes/next-plugin/server`. A plain
+`AsyncLocalStorage.enterWith()` lifetime does not cover Next's separate RSC and
+Client Component server-render passes after suspension.
 
 ## Backend Servers
 
@@ -90,9 +98,11 @@ const serverI18n = createServerI18nScope<ReturnType<typeof createI18n>>()
 ```
 
 Per request, resolve the locale from `Accept-Language`, cookies, session data,
-or the user profile. Use `serverI18n.activate(i18n)` when framework rendering
-continues after the initializer returns, as in React Server Components. Use
-`serverI18n.run(i18n, ...)` for tightly scoped request-handler callbacks.
+or the user profile. Use `serverI18n.activate(i18n)` only when the host preserves
+the current Node async context after the initializer returns. Use
+`serverI18n.run(i18n, ...)` for tightly scoped request-handler callbacks. Hosts
+with multi-pass rendering or suspension need a framework adapter with a stable
+request key; Next applications use `@palamedes/next-plugin/server`.
 
 For a fuller walkthrough, including Hono and Express examples, see:
 
@@ -109,6 +119,14 @@ For a fuller walkthrough, including Hono and Express examples, see:
   - `scope.activate(i18n)` binds an i18n instance to the current async context
   - `scope.run(i18n, callback)` runs a callback inside a scoped async context
   - `scope.get()` returns the current scoped i18n instance, if one is active
+  - `requestKeyProvider` is an adapter-only escape hatch for a stable host render
+    identity; its symbol ID makes repeat registration bounded during dev HMR
+
+When a request key is available, `scope.activate()` updates the instance stored
+for that key. Multiple activations under the same key are last-write-wins, which
+matches hosts such as Next where one render has one active instance.
+`scope.run()` remains isolated to its callback and takes precedence over that
+request-key fallback.
 
 The `@palamedes/runtime/server` implementation imports Node `async_hooks`. In
 non-Node bundles, the subpath resolves to a small fallback module that throws an

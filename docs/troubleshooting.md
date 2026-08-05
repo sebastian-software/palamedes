@@ -74,12 +74,12 @@ available.
 Fix:
 
 - For Next.js App Router Server Components, use a server-only module with
-  `@palamedes/runtime/server`.
+  `createNextServerI18nScope()` from `@palamedes/next-plugin/server`.
 - Create the server scope once at module level.
 - Activate the request-local i18n instance before downstream Server Components
   render translated code.
-- Keep `@palamedes/runtime/server` out of Client Components and Edge runtime
-  code because it uses Node server APIs.
+- Keep both Next and generic server scope subpaths out of Client Components and
+  Edge runtime code because they use Node server APIs.
 
 Direct server runtimes can register the getter explicitly:
 

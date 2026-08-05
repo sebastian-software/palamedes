@@ -99,6 +99,9 @@ importers:
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
+      '@palamedes/next-plugin':
+        specifier: workspace:^
+        version: link:../../packages/next-plugin
       '@palamedes/react':
         specifier: workspace:^
         version: link:../../packages/react
@@ -124,9 +127,6 @@ importers:
       '@palamedes/config':
         specifier: workspace:^
         version: link:../../packages/config
-      '@palamedes/next-plugin':
-        specifier: workspace:^
-        version: link:../../packages/next-plugin
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -148,6 +148,9 @@ importers:
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
+      '@palamedes/next-plugin':
+        specifier: workspace:^
+        version: link:../../packages/next-plugin
       '@palamedes/react':
         specifier: workspace:^
         version: link:../../packages/react
@@ -173,9 +176,6 @@ importers:
       '@palamedes/config':
         specifier: workspace:^
         version: link:../../packages/config
-      '@palamedes/next-plugin':
-        specifier: workspace:^
-        version: link:../../packages/next-plugin
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -197,6 +197,9 @@ importers:
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
+      '@palamedes/next-plugin':
+        specifier: workspace:^
+        version: link:../../packages/next-plugin
       '@palamedes/react':
         specifier: workspace:^
         version: link:../../packages/react
@@ -222,9 +225,6 @@ importers:
       '@palamedes/config':
         specifier: workspace:^
         version: link:../../packages/config
-      '@palamedes/next-plugin':
-        specifier: workspace:^
-        version: link:../../packages/next-plugin
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -246,6 +246,9 @@ importers:
       '@palamedes/example-ui':
         specifier: workspace:^
         version: link:../../packages/example-ui
+      '@palamedes/next-plugin':
+        specifier: workspace:^
+        version: link:../../packages/next-plugin
       '@palamedes/react':
         specifier: workspace:^
         version: link:../../packages/react
@@ -271,9 +274,6 @@ importers:
       '@palamedes/config':
         specifier: workspace:^
         version: link:../../packages/config
-      '@palamedes/next-plugin':
-        specifier: workspace:^
-        version: link:../../packages/next-plugin
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
