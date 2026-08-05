@@ -64,6 +64,15 @@ import type {
   ParsedCatalogMessage as GeneratedParsedCatalogMessage,
   ParsedPoFile as GeneratedParsedPoFile,
   ParsedPoItem as GeneratedParsedPoItem,
+  TranslationCandidate as GeneratedTranslationCandidate,
+  TranslationCandidateId as GeneratedTranslationCandidateId,
+  TranslationCandidateRequest as GeneratedTranslationCandidateRequest,
+  TranslationCandidateResult as GeneratedTranslationCandidateResult,
+  TranslationPatch as GeneratedTranslationPatch,
+  TranslationPatchOutcome as GeneratedTranslationPatchOutcome,
+  TranslationPatchRequest as GeneratedTranslationPatchRequest,
+  TranslationPatchResult as GeneratedTranslationPatchResult,
+  TranslationValue as GeneratedTranslationValue,
 } from "./generated/palamedes-node-types"
 
 export type NativeInfo = GeneratedNativeInfo
@@ -90,6 +99,78 @@ export type CatalogUpdateResult = Omit<GeneratedCatalogUpdateResult, "diagnostic
 }
 export type CatalogParseResult = Omit<GeneratedCatalogParseResult, "diagnostics"> & {
   diagnostics: CatalogDiagnostic[]
+}
+export type TranslationCandidateId = GeneratedTranslationCandidateId
+export type TranslationPluralKind = "cardinal" | "ordinal"
+export type TranslationValue =
+  | { kind: "singular"; value: string }
+  | {
+      kind: "plural"
+      variable: string
+      pluralKind: TranslationPluralKind
+      offset: number
+      values: Record<string, string>
+    }
+export type TranslationWorkflowOrigin = {
+  file: string
+  scope?: string
+}
+export type TranslationReviewState = {
+  translated: boolean
+  fuzzy: boolean
+  obsolete: boolean
+}
+export type TranslationCandidate = Omit<
+  GeneratedTranslationCandidate,
+  "format" | "source" | "translation" | "origins"
+> & {
+  format: CatalogConfigFormat
+  source: TranslationValue
+  translation: TranslationValue
+  origins: TranslationWorkflowOrigin[]
+}
+export type TranslationWorkflowDiagnostic = {
+  code: string
+  message: string
+  id?: TranslationCandidateId
+}
+export type TranslationCandidateRequest = {
+  config: CatalogArtifactConfig
+  locales?: string[]
+  targets?: TranslationCandidateId[]
+  maxOrigins?: number
+}
+export type TranslationCandidateResult = {
+  candidates: TranslationCandidate[]
+  diagnostics: TranslationWorkflowDiagnostic[]
+}
+export type TranslationMachineProvenance = {
+  ai?: {
+    model: string
+    confidence?: number
+  }
+}
+export type TranslationPatch = {
+  id: TranslationCandidateId
+  fingerprint: string
+  translation: TranslationValue
+  machine?: TranslationMachineProvenance
+}
+export type TranslationPatchRequest = {
+  config: CatalogArtifactConfig
+  patches: TranslationPatch[]
+  po?: PoOutputOptions
+}
+export type TranslationPatchOutcomeStatus = "applied" | "unchanged" | "rejected" | "notApplied"
+export type TranslationPatchOutcome = Omit<GeneratedTranslationPatchOutcome, "status"> & {
+  status: TranslationPatchOutcomeStatus
+}
+export type TranslationPatchResult = Omit<
+  GeneratedTranslationPatchResult,
+  "outcomes" | "diagnostics"
+> & {
+  outcomes: TranslationPatchOutcome[]
+  diagnostics: TranslationWorkflowDiagnostic[]
 }
 export type CatalogAuditDiagnostic = Omit<GeneratedCatalogAuditDiagnostic, "severity"> & {
   severity: CatalogDiagnosticSeverity
@@ -253,6 +334,8 @@ type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequ
 type NativeCatalogModuleRequest = GeneratedCatalogModuleRequest
 type NativeCatalogUpdateRequest = GeneratedCatalogUpdateRequest
 type NativeCatalogParseRequest = GeneratedCatalogParseRequest
+type NativeTranslationCandidateRequest = GeneratedTranslationCandidateRequest
+type NativeTranslationPatchRequest = GeneratedTranslationPatchRequest
 
 function detectLinuxLibc(): "gnu" | "musl" | null {
   if (process.platform !== "linux") {
@@ -386,6 +469,120 @@ export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
+  }
+}
+
+export function listTranslationCandidates(
+  request: TranslationCandidateRequest
+): TranslationCandidateResult {
+  const nativeRequest: NativeTranslationCandidateRequest = {
+    config: toNativeArtifactConfig(request.config),
+    locales: request.locales,
+    targets: request.targets,
+    maxOrigins: request.maxOrigins,
+  }
+  const result: GeneratedTranslationCandidateResult =
+    native.listTranslationCandidates(nativeRequest)
+  return {
+    candidates: result.candidates.map(fromNativeTranslationCandidate),
+    diagnostics: result.diagnostics,
+  }
+}
+
+export function applyTranslationPatches(request: TranslationPatchRequest): TranslationPatchResult {
+  const nativeRequest: NativeTranslationPatchRequest = {
+    config: toNativeArtifactConfig(request.config),
+    patches: request.patches.map(toNativeTranslationPatch),
+    po: toNativePoOptions(request.po),
+  }
+  const result: GeneratedTranslationPatchResult = native.applyTranslationPatches(nativeRequest)
+  return {
+    ...result,
+    outcomes: result.outcomes.map((outcome) => ({
+      ...outcome,
+      status: fromNativeTranslationPatchOutcomeStatus(outcome.status),
+    })),
+    diagnostics: result.diagnostics,
+  }
+}
+
+function fromNativeTranslationCandidate(
+  candidate: GeneratedTranslationCandidate
+): TranslationCandidate {
+  return {
+    ...candidate,
+    format: fromNativeFileFormat(candidate.format),
+    source: fromNativeTranslationValue(candidate.source),
+    translation: fromNativeTranslationValue(candidate.translation),
+  }
+}
+
+function fromNativeTranslationValue(value: GeneratedTranslationValue): TranslationValue {
+  switch (value.kind) {
+    case "Singular": {
+      if (value.value === undefined) {
+        throw new TypeError("Native singular translation value is missing `value`.")
+      }
+      return { kind: "singular", value: value.value }
+    }
+    case "Plural": {
+      if (
+        value.variable === undefined ||
+        value.pluralKind === undefined ||
+        value.offset === undefined ||
+        value.values === undefined
+      ) {
+        throw new TypeError("Native plural translation value is incomplete.")
+      }
+      return {
+        kind: "plural",
+        variable: value.variable,
+        pluralKind: value.pluralKind === "Cardinal" ? "cardinal" : "ordinal",
+        offset: value.offset,
+        values: value.values,
+      }
+    }
+  }
+}
+
+function toNativeTranslationPatch(patch: TranslationPatch): GeneratedTranslationPatch {
+  return {
+    id: patch.id,
+    fingerprint: patch.fingerprint,
+    translation: toNativeTranslationValue(patch.translation),
+    machine: patch.machine,
+  }
+}
+
+function toNativeTranslationValue(value: TranslationValue): GeneratedTranslationValue {
+  switch (value.kind) {
+    case "singular": {
+      return { kind: "Singular", value: value.value }
+    }
+    case "plural": {
+      return {
+        kind: "Plural",
+        variable: value.variable,
+        pluralKind: value.pluralKind === "cardinal" ? "Cardinal" : "Ordinal",
+        offset: value.offset,
+        values: value.values,
+      }
+    }
+  }
+}
+
+function fromNativeTranslationPatchOutcomeStatus(
+  status: GeneratedTranslationPatchOutcome["status"]
+): TranslationPatchOutcomeStatus {
+  switch (status) {
+    case "Applied":
+      return "applied"
+    case "Unchanged":
+      return "unchanged"
+    case "Rejected":
+      return "rejected"
+    case "NotApplied":
+      return "notApplied"
   }
 }
 

@@ -7,10 +7,12 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   analyzeMdxNative,
   analyzeSourceNative,
+  applyTranslationPatches,
   compileCatalogArtifact,
   compileCatalogModule,
   extractMessagesNative,
   getNativeInfo,
+  listTranslationCandidates,
   parsePo,
   renderCatalogModule,
   transformMacrosNative,
@@ -159,6 +161,81 @@ msgstr "Oeffnen"
       long,
       "Zebra",
     ])
+  })
+
+  it("enumerates and atomically applies typed translation patches", async () => {
+    const rootDir = await createTempDir()
+    const catalogDir = path.join(rootDir, "locales", "de")
+    const targetPath = path.join(catalogDir, "messages.po")
+    await mkdir(catalogDir, { recursive: true })
+    await writeFile(
+      targetPath,
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+#. Home greeting
+#: src/home.tsx#HomePage
+msgid "Hello"
+msgstr ""
+
+msgid "{count, plural, one {# file} other {# files}}"
+msgstr ""
+`
+    )
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+    const listed = listTranslationCandidates({ config })
+    const hello = listed.candidates.find((candidate) => candidate.id.message === "Hello")
+    const plural = listed.candidates.find((candidate) => candidate.source.kind === "plural")
+
+    expect(listed.diagnostics).toStrictEqual([])
+    expect(hello).toMatchObject({
+      source: { kind: "singular", value: "Hello" },
+      review: { translated: false, fuzzy: false, obsolete: false },
+      origins: [{ file: "src/home.tsx", scope: "HomePage" }],
+    })
+    expect(plural?.source).toMatchObject({
+      kind: "plural",
+      variable: "count",
+      values: { one: "# file", other: "# files" },
+    })
+    if (!hello || !plural || plural.source.kind !== "plural") {
+      throw new Error("Expected singular and plural translation candidates")
+    }
+
+    const applied = applyTranslationPatches({
+      config,
+      patches: [
+        {
+          id: hello.id,
+          fingerprint: hello.fingerprint,
+          translation: { kind: "singular", value: "Hallo" },
+        },
+        {
+          id: plural.id,
+          fingerprint: plural.fingerprint,
+          translation: {
+            ...plural.source,
+            values: { one: "# Datei", other: "# Dateien" },
+          },
+        },
+      ],
+    })
+
+    expect(applied).toMatchObject({
+      updated: true,
+      stats: { requested: 2, applied: 2, catalogsUpdated: 1 },
+      outcomes: [{ status: "applied" }, { status: "applied" }],
+      diagnostics: [],
+    })
+    const output = await readFile(targetPath, "utf8")
+    expect(output).toContain('msgstr "Hallo"')
+    expect(output).toContain("{count, plural, one {# Datei} other {# Dateien}}")
   })
 
   it("maps native transform results into JavaScript strings and source maps", () => {
