@@ -133,6 +133,9 @@ importers:
       '@palamedes/config':
         specifier: workspace:^
         version: link:../../packages/config
+      '@swc/helpers':
+        specifier: 0.5.15
+        version: 0.5.15
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3

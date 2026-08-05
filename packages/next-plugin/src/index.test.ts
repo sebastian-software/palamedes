@@ -164,6 +164,7 @@ describe("withPalamedes turbopack config", () => {
 
     expect(browserRule?.loaders?.[0]?.options).toMatchObject({ clientMessageSplitting: true })
     expect(serverRule?.loaders?.[0]?.options).not.toHaveProperty("clientMessageSplitting")
+    expect(serverRule?.loaders?.[0]?.options).not.toHaveProperty("serverMessageSplitting")
   })
 
   it("requires the conventional Server Function entry module when enabled", () => {

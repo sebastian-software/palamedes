@@ -134,6 +134,17 @@ navigation. Turbopack and webpack therefore omit inactive locale catalogs and
 unvisited route messages from network requests. Locale changes require a
 document navigation.
 
+Eager translation calls must execute inside a function, method, or callback
+after i18n activation. Palamedes rejects eager macros at module scope, and
+custom compiled-adapter calls must follow the same rule because the generated
+bootstrap is appended to preserve source maps. Declarations that defer
+translation until component render remain valid.
+
+Selected `.po` imports remain normal development dependencies. Catalog edits
+invalidate their affected subsets under Turbopack and webpack; Next may apply
+Fast Refresh or fall back to a full document reload at an async-module
+boundary. A document reload is the supported fallback.
+
 `messageSplitting` currently supports PO catalogs and defaults to `false` for
 compatibility. Keep using `createClientCatalogBoundary()` from
 `@palamedes/react/client` when an app needs a complete active-locale catalog or

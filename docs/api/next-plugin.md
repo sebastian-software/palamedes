@@ -160,6 +160,19 @@ No inline script, `eval`, JSON serialization, or application-owned i18n proxy
 is involved. This keeps the bootstrap compatible with strict CSP and the
 parser-free generated catalog representation.
 
+As with Palamedes' other eager translation APIs, translation calls must execute
+inside a function, method, or callback after i18n activation. The macro
+transform rejects eager `t`, `plural`, `select`, and `selectOrdinal` calls at
+module scope. The generated client bootstrap is appended to preserve source
+maps, so custom compiled-adapter calls must follow the same rule; declarations
+that defer translation until component render remain valid.
+
+In development, each selected `.po` import remains a real dependency of its
+consuming browser module. Catalog edits therefore invalidate the affected
+subset under both Turbopack and webpack. Next may apply Fast Refresh or fall
+back to a full document reload at an async-module boundary; reloading the
+document is the supported fallback and reuses its `<html lang>` locale.
+
 `messageSplitting` currently supports PO catalogs. Keep it disabled for other
 catalog formats or for a custom client-loading strategy. The compatibility
 fallback is `createClientCatalogBoundary()` from `@palamedes/react/client`,

@@ -85,7 +85,7 @@ function catalogResourcePath(config, catalog, locale) {
   return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
 }
 
-function clientMessageBootstrap(config, sourcePath, compiledIds) {
+function selectedMessageImports(config, sourcePath, compiledIds) {
   const catalogs = config.catalogs.filter((catalog) =>
     catalogMatchesSource(config, catalog, sourcePath)
   )
@@ -94,13 +94,29 @@ function clientMessageBootstrap(config, sourcePath, compiledIds) {
   }
 
   const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url")
-  const loaderGroups = catalogs.map((catalog) => {
-    const loaders = config.locales
-      .map((locale) => {
-        const resourcePath = catalogResourcePath(config, catalog, locale)
-        const specifier = `${relativeImport(sourcePath, resourcePath)}?${SELECTED_MESSAGES_QUERY}=${selection}`
-        return `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)})`
-      })
+  return catalogs.map((catalog) =>
+    config.locales.map((locale) => {
+      const resourcePath = catalogResourcePath(config, catalog, locale)
+      return {
+        locale,
+        specifier: `${relativeImport(sourcePath, resourcePath)}?${SELECTED_MESSAGES_QUERY}=${selection}`,
+      }
+    })
+  )
+}
+
+function clientMessageBootstrap(config, sourcePath, compiledIds) {
+  const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds)
+  if (!importsByCatalog) {
+    return null
+  }
+
+  const loaderGroups = importsByCatalog.map((imports) => {
+    const loaders = imports
+      .map(
+        ({ locale, specifier }) =>
+          `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)})`
+      )
       .join(", ")
     return `{ ${loaders} }`
   })
@@ -141,25 +157,21 @@ function relativeImport(fromFile, targetFile) {
 }
 
 function messageLoaderRegistration(config, sourcePath, compiledIds) {
-  const catalogs = config.catalogs.filter((catalog) =>
-    catalogMatchesSource(config, catalog, sourcePath)
-  )
-  if (catalogs.length === 0) {
+  const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds)
+  if (!importsByCatalog) {
     return null
   }
 
-  const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url")
   const modulePath = normalizePath(
     path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath))
   )
   const moduleKey = createHash("sha256").update(modulePath).digest("hex").slice(0, 12)
-  const registrations = catalogs.map((catalog, catalogIndex) => {
-    const loaders = config.locales
-      .map((locale) => {
-        const resourcePath = catalogResourcePath(config, catalog, locale)
-        const specifier = `${relativeImport(sourcePath, resourcePath)}?${SELECTED_MESSAGES_QUERY}=${selection}`
-        return `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)}).then(({ messages }) => messages)`
-      })
+  const registrations = importsByCatalog.map((imports, catalogIndex) => {
+    const loaders = imports
+      .map(
+        ({ locale, specifier }) =>
+          `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)}).then(({ messages }) => messages)`
+      )
       .join(", ")
     return `registerMessageLoaders(${JSON.stringify(`${moduleKey}:${catalogIndex}`)}, { ${loaders} });`
   })
