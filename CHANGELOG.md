@@ -90,6 +90,20 @@
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.14.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.13.0...palamedes-v1.14.0) (2026-08-06)
+
+
+### Features
+
+* **cli:** add non-mutating extraction checks ([dfd8c0c](https://github.com/sebastian-software/palamedes/commit/dfd8c0c78a4eca4eb2d37ac26e8130d3a27d22eb))
+
+
+### Bug Fixes
+
+* **deps:** update rust crate signal-hook to 0.4.0 ([2a3b32a](https://github.com/sebastian-software/palamedes/commit/2a3b32ac7088c4a8fd37db17b49fc5d2ab500340))
+* format minimum release age exclusions ([fb510a3](https://github.com/sebastian-software/palamedes/commit/fb510a3f6d80a867e72b46df2802845d95c6fc25))
+* **site:** build TypeDoc packages before conversion ([1bf4708](https://github.com/sebastian-software/palamedes/commit/1bf47085e5b2c0c6d686d7a28fb3615e0b38257e))
+
 ## [1.13.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.12.0...palamedes-v1.13.0) (2026-08-06)
 
 
