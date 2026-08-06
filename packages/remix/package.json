@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/remix",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "Remix v3 integration for Palamedes macro transformation",
   "keywords": [
     "remix",

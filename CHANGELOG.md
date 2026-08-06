@@ -90,6 +90,28 @@
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.13.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.12.0...palamedes-v1.13.0) (2026-08-06)
+
+
+### Features
+
+* **benchmark:** add a General Translation lane to the e2e workflow benchmark ([11f2861](https://github.com/sebastian-software/palamedes/commit/11f28614d7116cbd523a4a29cf37a680d683fb61))
+* **cli:** allow audit info threshold ([c85e7a2](https://github.com/sebastian-software/palamedes/commit/c85e7a299ca9560b54780318cbbb0e75eb41e485))
+* **core-node:** expose translation patch workflow ([f006684](https://github.com/sebastian-software/palamedes/commit/f00668465af2fddb8d56b9a1e02d5a6bd9a80962))
+* **core:** add translation candidate patch APIs ([c425124](https://github.com/sebastian-software/palamedes/commit/c425124545403b2b867bd9fad5a4a9799b3545dc))
+* **next:** initialize i18n in server functions ([#543](https://github.com/sebastian-software/palamedes/issues/543)) ([6e21b1f](https://github.com/sebastian-software/palamedes/commit/6e21b1f9fc511fe57a5e6d9691736b96b3190193))
+* **next:** split client messages by module graph ([3d6476a](https://github.com/sebastian-software/palamedes/commit/3d6476abbb036f8c5c73fb6e8a9abf0562fddfe0))
+* **next:** split client messages by module graph ([796d022](https://github.com/sebastian-software/palamedes/commit/796d022a1cc578512e28cd1dd0bd363760a009b8))
+* **next:** split Server Function catalogs by module ([#545](https://github.com/sebastian-software/palamedes/issues/545)) ([56ca14d](https://github.com/sebastian-software/palamedes/commit/56ca14d2410b99c65fd33a03956871cebe974ba0))
+
+
+### Bug Fixes
+
+* **audit:** detect repeated argument loss ([c400cd4](https://github.com/sebastian-software/palamedes/commit/c400cd410b1b9597e25935440849d8609ca9932b))
+* **cli:** add deletion-aware three-way catalog merge ([e51b0c5](https://github.com/sebastian-software/palamedes/commit/e51b0c5c59edff01a0318e514cea26a48dedca20))
+* **next:** preserve i18n scope across RSC suspension ([#539](https://github.com/sebastian-software/palamedes/issues/539)) ([1f6b749](https://github.com/sebastian-software/palamedes/commit/1f6b74931b3f19eaf1ca6e8555d146b3bc62df5d))
+* **site:** resolve compiled core entry in TypeDoc ([#536](https://github.com/sebastian-software/palamedes/issues/536)) ([92a651f](https://github.com/sebastian-software/palamedes/commit/92a651f0ab9c1ee451e0e2f86dff9f16bcdd713e))
+
 ## [1.12.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.11.0...palamedes-v1.12.0) (2026-08-04)
 
 
