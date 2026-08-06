@@ -6,6 +6,9 @@ use thiserror::Error;
 
 use crate::config::ConfigError;
 
+/// Exit status used when `extract --check` finds catalog drift.
+pub const CATALOG_DRIFT_EXIT_CODE: u8 = 3;
+
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error(transparent)]
@@ -48,6 +51,10 @@ pub enum CliError {
     CompletenessBelowThreshold { threshold: String, locales: String },
     #[error("Extraction failed for {failures} source file(s); catalogs were not updated.")]
     ExtractionFailed { failures: usize },
+    #[error("Catalog extraction check found drift in {catalogs} catalog file(s).")]
+    CatalogDrift { catalogs: usize },
+    #[error("{message}")]
+    ExtractionCheckFailed { message: String },
     #[error("Source lint failed with {errors} error diagnostic(s).")]
     LintFailedOnError { errors: usize },
     #[error("Source lint failed with {errors} error(s) and {warnings} warning(s).")]
@@ -62,4 +69,14 @@ pub enum CliError {
     },
     #[error("Could not watch source files: {0}")]
     Watch(#[from] notify::Error),
+}
+
+impl CliError {
+    /// Process status for this failure.
+    pub fn exit_code(&self) -> u8 {
+        match self {
+            Self::CatalogDrift { .. } => CATALOG_DRIFT_EXIT_CODE,
+            _ => 1,
+        }
+    }
 }

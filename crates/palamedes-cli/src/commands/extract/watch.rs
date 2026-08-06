@@ -227,7 +227,7 @@ fn run_watch_extraction(
     let result = run_extraction_with_cache(config, options, cache);
     persist_extract_cache(config, options, cache);
     match result {
-        Ok(()) => Ok(()),
+        Ok(_) => Ok(()),
         Err(error) => {
             eprintln!("Warning: {error} Continuing to watch for changes.");
             Ok(())

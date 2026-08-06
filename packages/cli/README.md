@@ -15,6 +15,7 @@ configuration, plugin dispatch, output, and exit codes.
 Use `@palamedes/cli` when you want:
 
 - a supported extraction command for Palamedes projects
+- a non-mutating catalog drift check for CI
 - structured catalog audits in CI
 - watch mode during development
 - a clean way to update `.po` catalogs in CI, with opt-in `.fcl` storage
@@ -73,6 +74,8 @@ pnpm exec pmds extract
 pnpm exec pmds extract --watch
 pnpm exec pmds extract --clean
 pnpm exec pmds extract --force-clean
+pnpm exec pmds extract --check
+pnpm exec pmds extract --check --json
 pnpm exec pmds extract --config ./palamedes.yaml
 pnpm exec pmds extract --threads 1
 pnpm exec pmds extract --no-cache
@@ -101,6 +104,17 @@ must fail CI; the default continues to fail only on errors.
 `pmds lint` is non-mutating and checks Palamedes authoring across the same
 configured sources as extraction. It supports stable human and JSON output,
 configured rule levels, code-specific line suppressions, and CI thresholds.
+
+`pmds extract --check` projects configured PO and FCL catalogs through the
+same extraction and serialization path without changing catalog files or
+creating missing catalog directories. Add `--json` for deterministic CI
+output. Exit code `0` means clean, `1` means extraction or configuration
+failed, `2` means invalid CLI usage, and `3` means catalog drift. The extraction
+cache may still be updated unless `--no-cache` is present.
+
+```bash
+pnpm exec pmds extract --check --json
+```
 
 `pmds catalog convert` preserves translator comments, obsolete state, and
 review markers such as `fuzzy` when converting PO catalogs to FCL.

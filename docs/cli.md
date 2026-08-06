@@ -32,6 +32,8 @@ pmds extract
 pmds extract --config ./palamedes.yaml
 pmds extract --clean
 pmds extract --force-clean
+pmds extract --check
+pmds extract --check --json
 pmds extract --watch
 pmds extract --verbose
 ```
@@ -44,9 +46,46 @@ Options:
 | `-w, --watch`         | Re-run extraction on file changes (debounced). Fatal authoring errors are printed and watching continues; the config file is watched and reloaded on change. |
 | `--clean`             | Remove obsolete entries with `obsolete-since` at least 30 days old; keep undated obsolete entries.                                                           |
 | `--force-clean`       | Remove all obsolete entries immediately, including undated entries.                                                                                          |
+| `--check`             | Exit unsuccessfully when extraction would create or modify a catalog, without writing catalog files. Cannot be combined with `--watch`.                      |
+| `--json`              | With `--check`, print one deterministic result document.                                                                                                     |
 | `--threads <COUNT>`   | Worker threads for the parallel extraction pass. Overrides `extract-threads` in the config; defaults to `4`; `1` runs serial.                                |
 | `--no-cache`          | Ignore and do not write the extraction cache in `.palamedes/`. Use for a cold run; the cache is on by default.                                               |
 | `-v, --verbose`       | Print verbose extraction details.                                                                                                                            |
+
+`--check` runs the normal source discovery, extraction, catalog projection,
+obsolete-entry policy, metadata generation, and PO/FCL serialization in memory.
+It compares the exact resulting bytes with each configured catalog. Catalog
+files, missing catalog directories, and catalog modification times remain
+unchanged. The source-analysis cache may still be populated; add `--no-cache`
+when the entire check must avoid cache writes.
+
+`--clean` and `--force-clean` keep their normal meaning in check mode. If both
+are present, `--force-clean` wins. Because regular extraction does not delete
+catalog files, the current catalog change kinds are `created` and `modified`;
+cleanup flags remove obsolete entries inside the projected file.
+
+JSON paths are relative to the configuration root when possible, use `/` as
+the separator, and are sorted deterministically:
+
+```json
+{
+  "status": "drift",
+  "catalogs": [
+    { "path": "catalogs/de/messages.fcl", "change": "modified" },
+    { "path": "locales/de/messages.po", "change": "created" }
+  ]
+}
+```
+
+A clean result uses `{ "status": "clean", "catalogs": [] }`. An extraction
+or configuration failure uses status `error`, an empty `catalogs` array, and
+`error.message`. Exit code `0` means clean, `1` means the check could not run,
+`2` is reserved by Clap for invalid command-line usage, and `3` means catalog
+drift. A minimal CI check is:
+
+```bash
+pnpm exec pmds extract --check --json
+```
 
 ## `pmds lint`
 

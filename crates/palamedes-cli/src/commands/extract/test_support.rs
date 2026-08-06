@@ -12,6 +12,8 @@ pub(super) fn extract_options() -> ExtractOptions {
     ExtractOptions {
         config: None,
         watch: false,
+        check: false,
+        json: false,
         clean: false,
         force_clean: false,
         threads: None,
