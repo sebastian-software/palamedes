@@ -8,7 +8,7 @@
     "url": "git+https://github.com/sebastian-software/palamedes.git"
   },
   "bugs": "https://github.com/sebastian-software/palamedes/issues",
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.20.0",
   "engines": {
     "node": ">=22.22.0"
   },
