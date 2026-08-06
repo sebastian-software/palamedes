@@ -25,4 +25,4 @@ thiserror = "2.0.18"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"
-signal-hook = "0.3.18"
+signal-hook = "0.4.0"
