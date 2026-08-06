@@ -46,7 +46,7 @@ The build is multi-stage:
    first build noticeably longer.
 2. **Runtime stage** (slimmer Debian slim): takes over the finished workspace and
    starts the supervisor. Dev dependencies stay installed because TanStack's
-   `vite preview` and SolidStart's `vinxi start` come from them.
+   `vite preview` comes from them; SolidStart v2 runs Nitro's generated output.
 
 ## Start the container
 
@@ -106,7 +106,7 @@ can reach the published ports. Some frameworks otherwise bind only to
 `127.0.0.1`; the supervisor overrides that in a container-specific way, without
 touching the example `package.json` files:
 
-- **SolidStart** (`vinxi`): `HOST=0.0.0.0` via environment variable
+- **SolidStart** (Nitro v3 output): `HOST=0.0.0.0` via environment variable
 - **TanStack** (`vite preview`): the hardcoded `--host 127.0.0.1` in the script
   cannot be reliably overridden by an appended flag (Vite's CLI parser collects
   repeated flags into an array), so the supervisor runs `vite preview` directly

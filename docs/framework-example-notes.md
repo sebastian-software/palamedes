@@ -36,6 +36,7 @@ The `solidstart-cookie`, `solidstart-route`, `solidstart-subdomain`, and
 `solidstart-tld` examples verify:
 
 - Vite-based Palamedes integration in SolidStart
+- SolidStart 2's Vite Environment API with Nitro v3 output
 - request-local SSR plus a hook-free, document-fixed client locale
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows

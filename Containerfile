@@ -50,8 +50,8 @@ RUN pnpm build:examples
 RUN rm -rf target && rm -rf examples/*/.next/cache
 
 # --- Runtime stage -----------------------------------------------------------
-# Dev dependencies stay installed on purpose: TanStack's `vite preview` and
-# SolidStart's `vinxi start` live in devDependencies, so we do not prune them.
+# Dev dependencies stay installed on purpose: TanStack's `vite preview` needs
+# them. SolidStart v2 starts Nitro's generated `.output` directly.
 FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
