@@ -13,6 +13,8 @@ import {
   extractMessagesNative,
   getNativeInfo,
   listTranslationCandidates,
+  mergeCatalogFilesThreeWay,
+  mergeCatalogsThreeWay,
   parsePo,
   renderCatalogModule,
   transformMacrosNative,
@@ -161,6 +163,58 @@ msgstr "Oeffnen"
       long,
       "Zebra",
     ])
+  })
+
+  it("performs deletion-aware three-way catalog merges across the NAPI boundary", async () => {
+    const catalog = (entries: string) => `msgid ""
+msgstr ""
+"Language: de\\n"
+
+${entries}`
+    const ancestor = catalog(`msgid "Removed"
+msgstr "Alt"
+`)
+    const ours = catalog(`msgid "New ours"
+msgstr "Unser"
+`)
+    const theirs = catalog(`msgid "New theirs"
+msgstr "Ihr"
+`)
+    const merged = mergeCatalogsThreeWay({
+      ancestor: { content: ancestor, label: "base" },
+      ours: { content: ours, label: "ours" },
+      theirs: { content: theirs, label: "theirs" },
+      format: "po",
+      sourceLocale: "en",
+      locale: "de",
+    })
+
+    expect(merged.content).not.toContain('msgid "Removed"')
+    expect(merged.content).toContain('msgid "New ours"')
+    expect(merged.content).toContain('msgid "New theirs"')
+
+    const rootDir = await createTempDir()
+    const ancestorPath = path.join(rootDir, "ancestor.po")
+    const oursPath = path.join(rootDir, "ours.po")
+    const theirsPath = path.join(rootDir, "theirs.po")
+    const outputPath = path.join(rootDir, "merged.po")
+    await Promise.all([
+      writeFile(ancestorPath, ancestor),
+      writeFile(oursPath, ours),
+      writeFile(theirsPath, theirs),
+    ])
+
+    const fileResult = mergeCatalogFilesThreeWay({
+      ancestorPath,
+      oursPath,
+      theirsPath,
+      outputPath,
+      sourceLocale: "en",
+      locale: "de",
+    })
+
+    expect(fileResult.format).toBe("po")
+    expect(await readFile(outputPath, "utf8")).toBe(merged.content)
   })
 
   it("enumerates and atomically applies typed translation patches", async () => {

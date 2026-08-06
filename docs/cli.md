@@ -176,11 +176,27 @@ Git merge-driver workflows.
 
 ```bash
 pmds catalog merge ours.po theirs.po --output merged.po
-pmds catalog merge %A %B --base %O --output %A --path %P --format po --conflict-strategy use-first
+pmds catalog merge ours.po theirs.po --base base.po --output merged.po
+pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first
 pmds catalog merge ours.fcl theirs.fcl --output merged.fcl --format fcl
 ```
 
-`pmds catalog merge` requires exactly two input catalogs in precedence order.
+`pmds catalog merge` requires exactly two current input catalogs. Without
+`--base`, they are combined in precedence order. With `--base`, the command
+performs a deletion-aware three-way merge with explicit ancestor, ours (first
+input), and theirs (second input) roles:
+
+- an entry absent from both current sides stays deleted;
+- a deletion wins when the other side is unchanged from the ancestor;
+- an entry modified on one side and deleted on the other follows
+  `--conflict-strategy` and emits `combine.modify_delete_resolved` when resolved;
+- entries newly added on either side are retained; and
+- an entry changed on only one side is accepted without a translation conflict.
+
+`use-first` selects ours and `use-last` selects theirs for translation and
+modify/delete conflicts. `error` rejects the merge. Parse errors and rejected
+conflicts leave the output file unchanged. PO and FCL use the same identity and
+deletion rules; identity is the source message plus optional gettext context.
 
 Merged PO catalogs are written in the same order and shape as an extraction
 produces, so a resolved conflict does not land as a fully re-sorted file that
@@ -196,11 +212,34 @@ Options:
 | `--output <path>`                | Required output path.                                            |
 | `-c, --config <path>`            | Use a specific config file when inferring `source-locale`.       |
 | `--format <format>`              | `po` or `fcl`. Inferred from paths when omitted.                 |
-| `--base <path>`                  | Optional ancestor catalog path supplied by Git merge drivers.    |
+| `--base <path>`                  | Optional common ancestor for a three-way merge.                  |
 | `--conflict-strategy <strategy>` | `use-first`, `use-last`, or `error`. Default: `use-first`.       |
 | `--source-locale <locale>`       | Source locale for catalog semantics. Defaults to config or `en`. |
 | `--locale <locale>`              | Locale of the merged catalog.                                    |
 | `--path <path>`                  | Real catalog pathname; pass `%P` in a Git merge driver.          |
+
+### Git merge driver
+
+Use `catalog merge-driver` for Git instead of reconstructing role handling in
+a wrapper script:
+
+```bash
+git config merge.palamedes-catalog.driver \
+  'pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first'
+git config merge.palamedes-catalog-fcl.driver \
+  'pmds catalog merge-driver %O %A %B %A --path %P --format fcl --conflict-strategy use-first'
+```
+
+During a normal merge, Git's `%A` is logical ours and `%B` is theirs. During a
+rebase, Git internally assigns the upstream side to `%A` and the commit being
+replayed to `%B`. `merge-driver` detects the active rebase and swaps those
+inputs before calling the Core API, so `use-first` consistently means “the
+branch being merged or rebased wins.” Use `--operation merge` or
+`--operation rebase` to override auto-detection in unusual Git orchestration.
+
+The positional arguments are ancestor (`%O`), Git current file (`%A`), Git
+other file (`%B`), and output (`%A`). `--path %P` selects the real configured
+catalog so its PO formatting options are applied to the output.
 
 ## `pmds catalog convert`
 

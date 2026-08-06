@@ -1,11 +1,13 @@
 //! `pmds catalog merge` — semantic catalog merge, usable as a Git merge driver.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command as ProcessCommand;
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    combine_catalog_files, CatalogConflictStrategy, CatalogFileCombineRequest,
-    CatalogFileCombineResult, CatalogFileFormat,
+    combine_catalog_files, merge_catalog_files_three_way, CatalogConflictStrategy,
+    CatalogFileCombineRequest, CatalogFileCombineResult, CatalogFileFormat,
+    CatalogFileThreeWayMergeRequest,
 };
 
 use crate::command::{Command, Context};
@@ -14,7 +16,7 @@ use crate::error::CliError;
 
 #[derive(Debug, Args)]
 pub struct MergeOptions {
-    /// Input catalog files in precedence order.
+    /// Two current catalog files, ordered as ours and theirs when `--base` is set.
     #[arg(required = true)]
     inputs: Vec<PathBuf>,
     /// Output catalog path.
@@ -26,7 +28,7 @@ pub struct MergeOptions {
     /// Catalog format.
     #[arg(long)]
     format: Option<MergeFormat>,
-    /// Ancestor catalog path supplied by Git merge drivers.
+    /// Common ancestor catalog path for a deletion-aware three-way merge.
     #[arg(long)]
     base: Option<PathBuf>,
     /// Catalog conflict strategy.
@@ -45,6 +47,40 @@ pub struct MergeOptions {
     path: Option<PathBuf>,
 }
 
+#[derive(Debug, Args)]
+pub struct MergeDriverOptions {
+    /// Common ancestor supplied by Git as `%O`.
+    ancestor: PathBuf,
+    /// Git's `%A` file (stage 2 during conflicts).
+    current: PathBuf,
+    /// Git's `%B` file (stage 3 during conflicts).
+    other: PathBuf,
+    /// Output catalog, normally `%A`.
+    output: PathBuf,
+    /// Real catalog pathname supplied by Git as `%P`.
+    #[arg(long)]
+    path: PathBuf,
+    /// Path to a Palamedes config file.
+    #[arg(short, long)]
+    config: Option<PathBuf>,
+    /// Catalog format.
+    #[arg(long)]
+    format: Option<MergeFormat>,
+    /// Catalog conflict strategy. `use-first` always means the logical branch
+    /// being merged or rebased, even though Git swaps `%A`/`%B` during rebase.
+    #[arg(long, default_value = "use-first")]
+    conflict_strategy: MergeConflictStrategy,
+    /// Source locale for catalog semantics.
+    #[arg(long)]
+    source_locale: Option<String>,
+    /// Locale of the merged catalog.
+    #[arg(long)]
+    locale: Option<String>,
+    /// Git operation role mapping. `auto` detects an active rebase.
+    #[arg(long, default_value = "auto")]
+    operation: GitMergeOperation,
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum MergeFormat {
     Po,
@@ -56,6 +92,13 @@ enum MergeConflictStrategy {
     UseFirst,
     UseLast,
     Error,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum GitMergeOperation {
+    Auto,
+    Merge,
+    Rebase,
 }
 
 impl Command for MergeOptions {
@@ -96,27 +139,32 @@ impl Command for MergeOptions {
                 .map(Into::into)
         });
 
-        let mut input_paths = self.inputs.clone();
-        if let Some(base) = &self.base {
-            input_paths.push(base.clone());
+        let format = self.format.map(MergeFormat::core);
+        let conflict_strategy = self.conflict_strategy.core();
+        match &self.base {
+            Some(base) => Ok(merge_catalog_files_three_way(
+                CatalogFileThreeWayMergeRequest {
+                    ancestor_path: base.clone(),
+                    ours_path: self.inputs[0].clone(),
+                    theirs_path: self.inputs[1].clone(),
+                    output_path: self.output.clone(),
+                    format,
+                    source_locale,
+                    locale: self.locale.clone(),
+                    conflict_strategy,
+                    po,
+                },
+            )?),
+            None => Ok(combine_catalog_files(CatalogFileCombineRequest {
+                input_paths: self.inputs.clone(),
+                output_path: self.output.clone(),
+                format,
+                source_locale,
+                locale: self.locale.clone(),
+                conflict_strategy,
+                po,
+            })?),
         }
-
-        Ok(combine_catalog_files(CatalogFileCombineRequest {
-            input_paths,
-            output_path: self.output.clone(),
-            format: self.format.map(|format| match format {
-                MergeFormat::Po => CatalogFileFormat::Po,
-                MergeFormat::Fcl => CatalogFileFormat::Fcl,
-            }),
-            source_locale,
-            locale: self.locale.clone(),
-            conflict_strategy: match self.conflict_strategy {
-                MergeConflictStrategy::UseFirst => CatalogConflictStrategy::UseFirst,
-                MergeConflictStrategy::UseLast => CatalogConflictStrategy::UseLast,
-                MergeConflictStrategy::Error => CatalogConflictStrategy::Error,
-            },
-            po,
-        })?)
     }
 
     /// The merged catalog file is the result. Git merge drivers run inside
@@ -124,5 +172,107 @@ impl Command for MergeOptions {
     /// so a successful merge stays silent and the exit code carries the answer.
     fn render(&self, _output: &Self::Output) -> Result<(), CliError> {
         Ok(())
+    }
+}
+
+impl Command for MergeDriverOptions {
+    type Output = CatalogFileCombineResult;
+
+    fn run(&self, context: &Context) -> Result<Self::Output, CliError> {
+        let (ours, theirs) = self.logical_sides();
+        MergeOptions {
+            inputs: vec![ours.to_path_buf(), theirs.to_path_buf()],
+            output: self.output.clone(),
+            config: self.config.clone(),
+            format: self.format,
+            base: Some(self.ancestor.clone()),
+            conflict_strategy: self.conflict_strategy,
+            source_locale: self.source_locale.clone(),
+            locale: self.locale.clone(),
+            path: Some(self.path.clone()),
+        }
+        .run(context)
+    }
+
+    fn render(&self, _output: &Self::Output) -> Result<(), CliError> {
+        Ok(())
+    }
+}
+
+impl MergeDriverOptions {
+    fn logical_sides(&self) -> (&Path, &Path) {
+        match self.resolved_operation() {
+            GitMergeOperation::Rebase => (&self.other, &self.current),
+            GitMergeOperation::Merge | GitMergeOperation::Auto => (&self.current, &self.other),
+        }
+    }
+
+    fn resolved_operation(&self) -> GitMergeOperation {
+        match self.operation {
+            GitMergeOperation::Auto if git_path_exists("rebase-merge") => GitMergeOperation::Rebase,
+            GitMergeOperation::Auto if git_path_exists("rebase-apply") => GitMergeOperation::Rebase,
+            GitMergeOperation::Auto => GitMergeOperation::Merge,
+            operation => operation,
+        }
+    }
+}
+
+impl MergeFormat {
+    fn core(self) -> CatalogFileFormat {
+        match self {
+            Self::Po => CatalogFileFormat::Po,
+            Self::Fcl => CatalogFileFormat::Fcl,
+        }
+    }
+}
+
+impl MergeConflictStrategy {
+    fn core(self) -> CatalogConflictStrategy {
+        match self {
+            Self::UseFirst => CatalogConflictStrategy::UseFirst,
+            Self::UseLast => CatalogConflictStrategy::UseLast,
+            Self::Error => CatalogConflictStrategy::Error,
+        }
+    }
+}
+
+fn git_path_exists(name: &str) -> bool {
+    let Ok(output) = ProcessCommand::new("git")
+        .args(["rev-parse", "--git-path", name])
+        .output()
+    else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let path = String::from_utf8_lossy(&output.stdout);
+    Path::new(path.trim()).exists()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GitMergeOperation, MergeConflictStrategy, MergeDriverOptions};
+    use std::path::PathBuf;
+
+    #[test]
+    fn explicit_rebase_mapping_keeps_the_rebased_branch_first() {
+        let options = MergeDriverOptions {
+            ancestor: PathBuf::from("base"),
+            current: PathBuf::from("upstream"),
+            other: PathBuf::from("rebased-branch"),
+            output: PathBuf::from("upstream"),
+            path: PathBuf::from("messages.po"),
+            config: None,
+            format: None,
+            conflict_strategy: MergeConflictStrategy::UseFirst,
+            source_locale: Some("en".to_owned()),
+            locale: Some("de".to_owned()),
+            operation: GitMergeOperation::Rebase,
+        };
+
+        let (ours, theirs) = options.logical_sides();
+        assert_eq!(ours, PathBuf::from("rebased-branch"));
+        assert_eq!(theirs, PathBuf::from("upstream"));
     }
 }

@@ -172,14 +172,16 @@ locale is below the threshold.
 
 ### Catalog Merge
 
-`pmds catalog merge` combines catalog files. When inputs
-contain the same semantic identity, `--conflict-strategy` controls how
-translator-facing conflicts are handled; messages that only exist in the second
-input are added.
+`pmds catalog merge` combines two current catalog files. Supplying `--base`
+activates a true ancestor/ours/theirs merge: deletions are preserved, a
+one-sided deletion beats an unchanged opposite side, and modify/delete cases
+follow `--conflict-strategy`. New entries from either side remain in the
+result. PO and FCL both identify entries by source message plus optional
+gettext context.
 
 ```bash
-pnpm exec pmds catalog merge --format=po --conflict-strategy=use-first --base %O --output %A %A %B
-pnpm exec pmds catalog merge --format=fcl --conflict-strategy=use-first --base %O --output %A %A %B
+pnpm exec pmds catalog merge ours.po theirs.po --base base.po --output merged.po
+pnpm exec pmds catalog merge ours.fcl theirs.fcl --base base.fcl --output merged.fcl
 ```
 
 `--format` can be omitted when all input and output extensions are supported
@@ -194,13 +196,21 @@ For Git merge-driver usage:
 
 ```bash
 git config merge.palamedes-catalog.driver \
-  'pmds catalog merge --format=po --conflict-strategy=use-first --base %O --output %A %A %B'
+  'pmds catalog merge-driver %O %A %B %A --path %P --format=po --conflict-strategy=use-first'
 git config merge.palamedes-catalog-fcl.driver \
-  'pmds catalog merge --format=fcl --conflict-strategy=use-first --base %O --output %A %A %B'
+  'pmds catalog merge-driver %O %A %B %A --path %P --format=fcl --conflict-strategy=use-first'
 ```
 
 `--source-locale` is optional. The command uses an explicit value first, then
 the configured Palamedes config when available, then `en`.
+
+`merge-driver` maps Git's roles explicitly. In a normal merge, `%A` is ours.
+During a rebase Git reverses the logical branch roles, so the command detects
+the rebase and makes `%B` logical ours. Therefore `use-first` always favors the
+branch being merged or rebased. `use-last` favors the incoming or upstream
+side, while `error` rejects translation and modify/delete conflicts without
+changing `%A`. A resolved modify/delete conflict emits the stable Ferrocat
+diagnostic code `combine.modify_delete_resolved` through the Core API.
 
 ## Configuration
 

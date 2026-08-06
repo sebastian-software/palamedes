@@ -292,6 +292,18 @@ pub struct CatalogCombineResult {
     pub diagnostics: Vec<CatalogDiagnostic>,
 }
 
+#[napi(object)]
+pub struct CatalogThreeWayMergeRequest {
+    pub ancestor: CatalogCombineInput,
+    pub ours: CatalogCombineInput,
+    pub theirs: CatalogCombineInput,
+    pub format: CatalogFileFormat,
+    pub source_locale: String,
+    pub locale: Option<String>,
+    pub conflict_strategy: Option<CatalogConflictStrategy>,
+    pub po: Option<PoOutputOptions>,
+}
+
 #[napi(string_enum)]
 pub enum CatalogFileFormat {
     Po,
@@ -315,6 +327,19 @@ pub struct CatalogFileCombineResult {
     pub format: CatalogFileFormat,
     pub stats: CatalogCombineStats,
     pub diagnostics: Vec<CatalogDiagnostic>,
+}
+
+#[napi(object)]
+pub struct CatalogFileThreeWayMergeRequest {
+    pub ancestor_path: String,
+    pub ours_path: String,
+    pub theirs_path: String,
+    pub output_path: String,
+    pub format: Option<CatalogFileFormat>,
+    pub source_locale: String,
+    pub locale: Option<String>,
+    pub conflict_strategy: Option<CatalogConflictStrategy>,
+    pub po: Option<PoOutputOptions>,
 }
 
 #[napi(string_enum)]
@@ -1063,6 +1088,23 @@ impl TryFrom<CatalogCombineRequest> for palamedes::CatalogCombineRequest {
     }
 }
 
+impl From<CatalogThreeWayMergeRequest> for palamedes::CatalogThreeWayMergeRequest {
+    fn from(value: CatalogThreeWayMergeRequest) -> Self {
+        Self {
+            ancestor: value.ancestor.into(),
+            ours: value.ours.into(),
+            theirs: value.theirs.into(),
+            format: value.format.into(),
+            source_locale: value.source_locale,
+            locale: value.locale,
+            conflict_strategy: value
+                .conflict_strategy
+                .map_or(palamedes::CatalogConflictStrategy::UseFirst, Into::into),
+            po: value.po.map(Into::into),
+        }
+    }
+}
+
 impl TryFrom<palamedes::CatalogCombineStats> for CatalogCombineStats {
     type Error = napi::Error;
 
@@ -1122,6 +1164,24 @@ impl From<CatalogFileCombineRequest> for palamedes::CatalogFileCombineRequest {
             input_paths: value.input_paths.into_iter().map(PathBuf::from).collect(),
             output_path: PathBuf::from(value.output_path),
             format: value.format.map(palamedes::CatalogFileFormat::from),
+            source_locale: value.source_locale,
+            locale: value.locale,
+            conflict_strategy: value
+                .conflict_strategy
+                .map_or(palamedes::CatalogConflictStrategy::UseFirst, Into::into),
+            po: value.po.map(Into::into),
+        }
+    }
+}
+
+impl From<CatalogFileThreeWayMergeRequest> for palamedes::CatalogFileThreeWayMergeRequest {
+    fn from(value: CatalogFileThreeWayMergeRequest) -> Self {
+        Self {
+            ancestor_path: PathBuf::from(value.ancestor_path),
+            ours_path: PathBuf::from(value.ours_path),
+            theirs_path: PathBuf::from(value.theirs_path),
+            output_path: PathBuf::from(value.output_path),
+            format: value.format.map(Into::into),
             source_locale: value.source_locale,
             locale: value.locale,
             conflict_strategy: value
@@ -1734,6 +1794,37 @@ pub fn combine_catalog_files(
     request: CatalogFileCombineRequest,
 ) -> Result<CatalogFileCombineResult> {
     palamedes::combine_catalog_files(request.into())
+        .map_err(to_napi_error)
+        .and_then(CatalogFileCombineResult::try_from)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Merges explicit ancestor, ours, and theirs catalog contents.
+///
+/// # Errors
+///
+/// Returns an error for invalid catalogs or rejected translation and
+/// modify/delete conflicts.
+pub fn merge_catalogs_three_way(
+    request: CatalogThreeWayMergeRequest,
+) -> Result<CatalogCombineResult> {
+    palamedes::merge_catalogs_three_way(request.into())
+        .map_err(to_napi_error)
+        .and_then(CatalogCombineResult::try_from)
+}
+
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+/// Merges explicit ancestor, ours, and theirs files and atomically replaces the output.
+///
+/// # Errors
+///
+/// Returns an error for I/O failures, invalid catalogs, or rejected conflicts.
+pub fn merge_catalog_files_three_way(
+    request: CatalogFileThreeWayMergeRequest,
+) -> Result<CatalogFileCombineResult> {
+    palamedes::merge_catalog_files_three_way(request.into())
         .map_err(to_napi_error)
         .and_then(CatalogFileCombineResult::try_from)
 }

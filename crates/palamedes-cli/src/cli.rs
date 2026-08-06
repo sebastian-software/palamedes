@@ -55,6 +55,7 @@ impl Cli {
             Command::Report(options) => execute(options, &context).map(|()| 0),
             Command::Catalog(catalog) => match &catalog.command {
                 CatalogSubcommand::Merge(options) => execute(options, &context).map(|()| 0),
+                CatalogSubcommand::MergeDriver(options) => execute(options, &context).map(|()| 0),
                 CatalogSubcommand::Convert(options) => execute(options, &context).map(|()| 0),
             },
             Command::Version => execute(&VersionCommand, &context).map(|()| 0),

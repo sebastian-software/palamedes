@@ -15,6 +15,8 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `validateMessageMetadata(input)`
 - `combineCatalogs(request)`
 - `combineCatalogFiles(request)`
+- `mergeCatalogsThreeWay(request)`
+- `mergeCatalogFilesThreeWay(request)`
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`

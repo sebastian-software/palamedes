@@ -13,6 +13,10 @@ license = "MIT"
 repository = "https://github.com/sebastian-software/palamedes"
 rust-version = "1.95"
 
+[profile.release]
+# Native npm packages ship the release artifacts, not their debug symbols.
+strip = "symbols"
+
 [workspace.lints.rust]
 future_incompatible = "warn"
 unused_must_use = "warn"

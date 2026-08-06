@@ -6,7 +6,7 @@ pub mod convert;
 pub mod merge;
 
 use convert::ConvertOptions;
-use merge::MergeOptions;
+use merge::{MergeDriverOptions, MergeOptions};
 
 #[derive(Debug, Args)]
 pub struct CatalogCommand {
@@ -16,8 +16,10 @@ pub struct CatalogCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum CatalogSubcommand {
-    /// Merge two catalog files with semantic use-first behavior.
+    /// Merge two current catalogs, optionally against an explicit ancestor.
     Merge(MergeOptions),
+    /// Run as a deletion-aware Git merge driver with merge/rebase role mapping.
+    MergeDriver(MergeDriverOptions),
     /// Convert configured PO catalogs to another Palamedes storage format.
     Convert(ConvertOptions),
 }

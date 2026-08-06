@@ -23,6 +23,7 @@ mod catalog_audit;
 mod catalog_combine;
 mod catalog_convert;
 mod catalog_coverage;
+mod catalog_three_way;
 mod catalog_update;
 mod choice;
 mod descriptor;
@@ -69,6 +70,10 @@ pub use catalog_convert::{
 pub use catalog_coverage::{
     measure_catalog_coverage, CatalogCoverageRequest, CatalogCoverageResult,
     CatalogLocaleCoverageResult,
+};
+pub use catalog_three_way::{
+    merge_catalog_files_three_way, merge_catalogs_three_way, CatalogFileThreeWayMergeRequest,
+    CatalogMergeSide, CatalogThreeWayMergeRequest, CATALOG_MODIFY_DELETE_RESOLVED,
 };
 pub use catalog_update::{
     parse_catalog, update_catalog_file, AiProvenance, CatalogOriginMetadata, CatalogParseRequest,
@@ -122,7 +127,7 @@ pub use translation_candidates::{
 };
 
 /// Published `ferrocat` version used by the Rust core.
-pub const FERROCAT_VERSION: &str = "3.3.0";
+pub const FERROCAT_VERSION: &str = "3.4.2";
 
 /// Version metadata for the loaded native core.
 #[derive(Debug, Serialize)]

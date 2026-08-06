@@ -11,6 +11,8 @@ import type {
   CatalogFileCombineResult as GeneratedCatalogFileCombineResult,
   CatalogCombineRequest as GeneratedCatalogCombineRequest,
   CatalogCombineResult as GeneratedCatalogCombineResult,
+  CatalogThreeWayMergeRequest as GeneratedCatalogThreeWayMergeRequest,
+  CatalogFileThreeWayMergeRequest as GeneratedCatalogFileThreeWayMergeRequest,
   CatalogArtifactCatalogConfig as GeneratedCatalogArtifactCatalogConfig,
   CatalogArtifactConfig as GeneratedCatalogArtifactConfig,
   CatalogArtifactDiagnostic as GeneratedCatalogArtifactDiagnostic,
@@ -196,6 +198,16 @@ export type CatalogCombineResult = Omit<GeneratedCatalogCombineResult, "diagnost
   diagnostics: CatalogDiagnostic[]
 }
 export type CatalogFileFormat = "po" | "fcl"
+export type CatalogThreeWayMergeRequest = {
+  ancestor: CatalogCombineInput
+  ours: CatalogCombineInput
+  theirs: CatalogCombineInput
+  format: CatalogFileFormat
+  sourceLocale: string
+  locale?: string
+  conflictStrategy?: CatalogConflictStrategy
+  po?: PoOutputOptions
+}
 export type CatalogConfigFormat = CatalogFileFormat
 export type PoLineBreaks = "auto" | "off"
 export type PoOutputOptions = {
@@ -223,6 +235,17 @@ export type CatalogFileCombineResult = Omit<
 > & {
   format: CatalogFileFormat
   diagnostics: CatalogDiagnostic[]
+}
+export type CatalogFileThreeWayMergeRequest = {
+  ancestorPath: string
+  oursPath: string
+  theirsPath: string
+  outputPath: string
+  format?: CatalogFileFormat
+  sourceLocale: string
+  locale?: string
+  conflictStrategy?: CatalogConflictStrategy
+  po?: PoOutputOptions
 }
 export type CatalogAuditOptions = {
   locales?: string[]
@@ -329,6 +352,8 @@ type NativeBindings = GeneratedNativeBindings
 type NativeCatalogAuditRequest = GeneratedCatalogAuditRequest
 type NativeCatalogCombineRequest = GeneratedCatalogCombineRequest
 type NativeCatalogFileCombineRequest = GeneratedCatalogFileCombineRequest
+type NativeCatalogThreeWayMergeRequest = GeneratedCatalogThreeWayMergeRequest
+type NativeCatalogFileThreeWayMergeRequest = GeneratedCatalogFileThreeWayMergeRequest
 type NativeCatalogArtifactRequest = GeneratedCatalogArtifactRequest
 type NativeCatalogArtifactSelectedRequest = GeneratedCatalogArtifactSelectedRequest
 type NativeCatalogModuleRequest = GeneratedCatalogModuleRequest
@@ -644,6 +669,25 @@ export function combineCatalogFiles(request: CatalogFileCombineRequest): Catalog
   }
 }
 
+export function mergeCatalogsThreeWay(request: CatalogThreeWayMergeRequest): CatalogCombineResult {
+  const result = native.mergeCatalogsThreeWay(toNativeThreeWayMergeRequest(request))
+  return {
+    ...result,
+    diagnostics: mapCatalogDiagnostics(result.diagnostics),
+  }
+}
+
+export function mergeCatalogFilesThreeWay(
+  request: CatalogFileThreeWayMergeRequest
+): CatalogFileCombineResult {
+  const result = native.mergeCatalogFilesThreeWay(toNativeFileThreeWayMergeRequest(request))
+  return {
+    ...result,
+    format: fromNativeFileFormat(result.format),
+    diagnostics: mapCatalogDiagnostics(result.diagnostics),
+  }
+}
+
 function toNativeCombineRequest(request: CatalogCombineRequest): NativeCatalogCombineRequest {
   return {
     inputs: request.inputs,
@@ -654,6 +698,23 @@ function toNativeCombineRequest(request: CatalogCombineRequest): NativeCatalogCo
       : undefined,
     selection: request.selection ? toNativeSelection(request.selection) : undefined,
     includeObsolete: request.includeObsolete,
+  }
+}
+
+function toNativeThreeWayMergeRequest(
+  request: CatalogThreeWayMergeRequest
+): NativeCatalogThreeWayMergeRequest {
+  return {
+    ancestor: request.ancestor,
+    ours: request.ours,
+    theirs: request.theirs,
+    format: toNativeFileFormat(request.format),
+    sourceLocale: request.sourceLocale,
+    locale: request.locale,
+    conflictStrategy: request.conflictStrategy
+      ? toNativeConflictStrategy(request.conflictStrategy)
+      : undefined,
+    po: toNativePoOptions(request.po),
   }
 }
 
@@ -678,6 +739,24 @@ function toNativeFileCombineRequest(
 ): NativeCatalogFileCombineRequest {
   return {
     inputPaths: request.inputPaths,
+    outputPath: request.outputPath,
+    format: request.format ? toNativeFileFormat(request.format) : undefined,
+    sourceLocale: request.sourceLocale,
+    locale: request.locale,
+    conflictStrategy: request.conflictStrategy
+      ? toNativeConflictStrategy(request.conflictStrategy)
+      : undefined,
+    po: toNativePoOptions(request.po),
+  }
+}
+
+function toNativeFileThreeWayMergeRequest(
+  request: CatalogFileThreeWayMergeRequest
+): NativeCatalogFileThreeWayMergeRequest {
+  return {
+    ancestorPath: request.ancestorPath,
+    oursPath: request.oursPath,
+    theirsPath: request.theirsPath,
     outputPath: request.outputPath,
     format: request.format ? toNativeFileFormat(request.format) : undefined,
     sourceLocale: request.sourceLocale,
