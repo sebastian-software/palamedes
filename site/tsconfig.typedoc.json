@@ -20,6 +20,12 @@
       "@palamedes/core-node": ["packages/core-node/src/index.ts"],
       "@palamedes/extractor": ["packages/extractor/src/index.ts"],
       "@palamedes/next-plugin": ["packages/next-plugin/src/index.ts"],
+      "@palamedes/next-plugin/server-function-entry": [
+        "packages/next-plugin/src/server-function-entry.ts"
+      ],
+      "@palamedes/next-plugin/server-function-initializer": [
+        "packages/next-plugin/src/server-function-initializer.ts"
+      ],
       "@palamedes/react": ["packages/react/src/index.tsx"],
       "@palamedes/react/client": ["packages/react/src/client.tsx"],
       "@palamedes/react/macro": ["packages/react/src/macro.ts"],
