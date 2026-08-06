@@ -1,9 +1,13 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
-    "types": ["vinxi/types/client"]
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["@solidjs/start/env"]
   },
-  "include": ["src", "app.config.ts"]
+  "include": ["src", "vite.config.ts"]
 }

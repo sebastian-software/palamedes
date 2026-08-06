@@ -28,8 +28,8 @@ const page: FrameworkLanding = {
     },
     {
       label: "Verified against",
-      value: "SolidStart 1.3",
-      note: "Vinxi and Vite 8 on the checked matrix path.",
+      value: "SolidStart 2.0",
+      note: "Vite Environment API, Nitro v3, and Vite 8.",
     },
     {
       label: "Rendering",
@@ -71,18 +71,20 @@ const page: FrameworkLanding = {
     ],
   },
   code: {
-    label: "app.config.ts + routes/[locale].tsx",
+    label: "vite.config.ts + routes/[locale].tsx",
     caption: "Configure the transform once, then author messages as Solid code.",
-    source: `// app.config.ts
-import { defineConfig } from "@solidjs/start/config"
+    source: `// vite.config.ts
+import { nitro } from "nitro/vite"
+import { defineConfig } from "vite"
+import { solidStart } from "@solidjs/start/config"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  vite: {
-    plugins: [
-      palamedes({ framework: "solid" }),
-    ],
-  },
+  plugins: [
+    palamedes({ framework: "solid" }),
+    solidStart(),
+    nitro(),
+  ],
 })
 
 // routes/[locale].tsx
@@ -124,8 +126,8 @@ export default function LocalePage() {
     ],
   },
   boundary: {
-    title: "Current proof targets SolidStart 1.x.",
-    body: "The checked examples use SolidStart 1.3 with app.config.ts and Vinxi. SolidStart 2 moves configuration into vite.config.ts; the Palamedes Vite model is compatible in shape, but the repository does not claim SolidStart 2 verification until that matrix is updated.",
+    title: "Current proof targets stable SolidStart 2.",
+    body: "All four checked examples use SolidStart 2's direct Vite Environment API path with Nitro v3 output. The matrix verifies the same Palamedes plugin across cookie, route, subdomain, and top-level-domain locale strategies.",
     link: {
       label: "Read the Solid API guide",
       href: docsHref("api/solid"),
@@ -138,15 +140,15 @@ export default function LocalePage() {
     },
     {
       q: "Does SolidStart i18n work during server-side rendering?",
-      a: "Yes on the verified SolidStart 1.x path. The example activates a server i18n instance before route rendering and initializes the matching client locale for hydration.",
+      a: "Yes on the verified SolidStart 2 path. The example activates a server i18n instance before route rendering and initializes the matching client locale for hydration.",
     },
     {
       q: "Can I use route-based locales such as /de/products?",
       a: "Yes. The route example derives the locale from a dynamic SolidStart segment. Cookie, subdomain, and top-level-domain examples use the same messages and Solid runtime with different resolution policies.",
     },
     {
-      q: "Is SolidStart 2 already verified?",
-      a: "Not yet. The current browser matrix pins SolidStart 1.3.2. The integration uses a standard Vite plugin, but Palamedes will not label the v2 path verified until a checked v2 example replaces or extends the matrix.",
+      q: "Is SolidStart 2 verified?",
+      a: "Yes. The browser matrix pins SolidStart 2.0 and exercises the direct Vite plus Nitro v3 path across all four locale strategies.",
     },
   ],
   related: [

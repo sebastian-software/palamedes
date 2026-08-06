@@ -1,6 +1,6 @@
 import { query } from "@solidjs/router"
+import { setCookie } from "@solidjs/start/http"
 import { getRequestEvent } from "solid-js/web"
-import { setCookie } from "vinxi/http"
 import { t } from "@palamedes/core/macro"
 import { activateServerI18n } from "./i18n.server"
 import { getLocaleLabel, LOCALE_COOKIE, type Locale, locales } from "./i18n"
