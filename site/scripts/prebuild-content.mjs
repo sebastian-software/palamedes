@@ -1,5 +1,6 @@
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { dirname, extname, join, posix, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -11,6 +12,8 @@ const routesRoot = join(siteRoot, "app/routes")
 const publicRoot = join(siteRoot, "public")
 const repoUrl = "https://github.com/sebastian-software/palamedes"
 const pendingAssetCopies = []
+
+buildTypedocPackages()
 
 const generatedDirs = [
   join(routesRoot, "api-reference"),
@@ -59,6 +62,29 @@ await writeContentStats(adrs)
 console.log(
   `prebuild-content: generated ${docs.length} docs, ${adrs.length} ADRs, ${posts.length} posts, and TypeDoc API routes`
 )
+
+function buildTypedocPackages() {
+  const filters = typedocPackages().flatMap(({ packageDir }) => [
+    "--filter",
+    `./packages/${packageDir}`,
+  ])
+  const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
+
+  console.log("prebuild-content: building TypeDoc workspace packages")
+  const result = spawnSync(pnpm, ["--recursive", ...filters, "build"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  })
+
+  if (result.error) {
+    throw new Error("Could not start the TypeDoc workspace package build", {
+      cause: result.error,
+    })
+  }
+  if (result.status !== 0) {
+    throw new Error(`TypeDoc workspace package build failed with status ${result.status}`)
+  }
+}
 
 /*
  * Derives the stat-tile numbers (ADR count, example matrix shape) from the
