@@ -17,7 +17,7 @@
     "@palamedes/next-plugin": "workspace:^",
     "@palamedes/react": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "next": "^16.2.12",
+    "next": "^16.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "server-only": "^0.0.1"
@@ -25,7 +25,7 @@
   "devDependencies": {
     "@palamedes/cli": "workspace:^",
     "@palamedes/config": "workspace:^",
-    "@swc/helpers": "0.5.15",
+    "@swc/helpers": "0.5.23",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

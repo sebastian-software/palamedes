@@ -52,7 +52,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@oxlint/plugins": "^1.76.0",
+    "@oxlint/plugins": "^1.77.0",
     "@palamedes/core-node": "workspace:^"
   },
   "peerDependencies": {
@@ -70,7 +70,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "eslint": "^10.8.0",
-    "oxlint": "^1.76.0",
+    "oxlint": "^1.77.0",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.10"
