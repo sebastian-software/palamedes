@@ -19,6 +19,6 @@
     "@lingui/format-po": "6.6.0",
     "gt-react": "11.1.4",
     "gtx-cli": "2.16.0",
-    "i18next-cli": "1.67.3"
+    "i18next-cli": "1.67.4"
   }
 }
