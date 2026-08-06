@@ -188,6 +188,16 @@ export interface CatalogCombineResult {
   stats: CatalogCombineStats;
   diagnostics: Array<CatalogDiagnostic>;
 }
+export interface CatalogThreeWayMergeRequest {
+  ancestor: CatalogCombineInput;
+  ours: CatalogCombineInput;
+  theirs: CatalogCombineInput;
+  format: CatalogFileFormat;
+  sourceLocale: string;
+  locale?: string;
+  conflictStrategy?: CatalogConflictStrategy;
+  po?: PoOutputOptions;
+}
 export type CatalogFileFormat = "Po" | "Fcl"
 export interface CatalogFileCombineRequest {
   inputPaths: Array<string>;
@@ -203,6 +213,17 @@ export interface CatalogFileCombineResult {
   format: CatalogFileFormat;
   stats: CatalogCombineStats;
   diagnostics: Array<CatalogDiagnostic>;
+}
+export interface CatalogFileThreeWayMergeRequest {
+  ancestorPath: string;
+  oursPath: string;
+  theirsPath: string;
+  outputPath: string;
+  format?: CatalogFileFormat;
+  sourceLocale: string;
+  locale?: string;
+  conflictStrategy?: CatalogConflictStrategy;
+  po?: PoOutputOptions;
 }
 export type CatalogDiagnosticSeverity = "Info" | "Warning" | "Error"
 export interface CatalogDiagnosticSourceKey {
@@ -531,6 +552,8 @@ export interface NativeBindings {
   validateMessageMetadata(input: MessageMetadataInput): MessageMetadataValidationReport;
   combineCatalogs(request: CatalogCombineRequest): CatalogCombineResult;
   combineCatalogFiles(request: CatalogFileCombineRequest): CatalogFileCombineResult;
+  mergeCatalogsThreeWay(request: CatalogThreeWayMergeRequest): CatalogCombineResult;
+  mergeCatalogFilesThreeWay(request: CatalogFileThreeWayMergeRequest): CatalogFileCombineResult;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
   compileCatalogModule(request: CatalogModuleRequest): CatalogModuleResult;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;

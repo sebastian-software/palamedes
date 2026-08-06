@@ -11,6 +11,7 @@ commands.
 - `pmds audit`
 - `pmds report`
 - `pmds catalog merge`
+- `pmds catalog merge-driver`
 - `pmds catalog convert`
 - `pmds version`
 

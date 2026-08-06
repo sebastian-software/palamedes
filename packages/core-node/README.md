@@ -53,6 +53,7 @@ the musl package while glibc distributions use the GNU package.
 import {
   combineCatalogFiles,
   getNativeInfo,
+  mergeCatalogFilesThreeWay,
   parsePo,
   updateCatalogFile,
 } from "@palamedes/core-node"
@@ -77,6 +78,15 @@ combineCatalogFiles({
   format: "po",
   sourceLocale: "en",
 })
+mergeCatalogFilesThreeWay({
+  ancestorPath: "git/base/de.po",
+  oursPath: "src/locales/de.po",
+  theirsPath: "incoming/de.po",
+  outputPath: "src/locales/de.po",
+  format: "po",
+  sourceLocale: "en",
+  conflictStrategy: "useFirst",
+})
 combineCatalogFiles({
   inputPaths: ["src/locales/de.fcl", "incoming/de.fcl"],
   outputPath: "src/locales/de.fcl",
@@ -100,6 +110,8 @@ console.log(po.headers.Language)
 - `validateMessageMetadata(input)`
 - `combineCatalogs(request)`
 - `combineCatalogFiles(request)`
+- `mergeCatalogsThreeWay(request)`
+- `mergeCatalogFilesThreeWay(request)`
 - `compileCatalogArtifact(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`
