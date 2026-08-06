@@ -6,7 +6,7 @@ commands.
 
 ## Commands
 
-- `pmds extract`
+- `pmds extract` (`--check` verifies catalog drift without rewriting files)
 - `pmds lint`
 - `pmds audit`
 - `pmds report`

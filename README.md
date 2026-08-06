@@ -244,6 +244,13 @@ declare module "*.po" {
 pnpm exec pmds extract
 ```
 
+Keep generated PO and FCL catalogs synchronized in CI without rewriting the
+workspace:
+
+```bash
+pnpm exec pmds extract --check --json
+```
+
 For semantic catalog conflict handling, Palamedes can also act as a Git merge
 driver:
 

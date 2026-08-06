@@ -13,12 +13,12 @@ use std::time::Instant;
 
 use clap::Args;
 use palamedes::{
-    extract_catalog_messages_cached, update_catalog_file, CatalogUpdateMessage,
-    CatalogUpdateRequest, ExtractCache, ExtractCatalogFileFailure,
+    extract_catalog_messages_cached, preview_catalog_file_update, update_catalog_file,
+    CatalogUpdateMessage, CatalogUpdateRequest, ExtractCache, ExtractCatalogFileFailure,
 };
 use serde::Serialize;
 
-use crate::command::{Command, Context};
+use crate::command::{render_json, Command, Context};
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
 use cache::{load_extract_cache, persist_extract_cache};
@@ -37,6 +37,12 @@ pub struct ExtractOptions {
     /// Watch for file changes.
     #[arg(short, long)]
     watch: bool,
+    /// Verify that extraction would leave every configured catalog unchanged.
+    #[arg(long, conflicts_with = "watch")]
+    check: bool,
+    /// Print the extraction check as one JSON document.
+    #[arg(long, requires = "check")]
+    json: bool,
     /// Remove obsolete messages whose obsolete-since marker is older than the
     /// 30-day grace period; undated entries are kept (use --force-clean to
     /// remove everything immediately).
@@ -58,26 +64,153 @@ pub struct ExtractOptions {
 }
 
 impl Command for ExtractOptions {
-    type Output = ();
+    type Output = ExtractOutput;
 
     fn run(&self, context: &Context) -> Result<Self::Output, CliError> {
+        let result = self.run_configured(context);
+        if self.check {
+            return match result {
+                Ok(output) => Ok(output),
+                Err(error) => Ok(ExtractOutput::Check(ExtractCheckReport::error(
+                    error.to_string(),
+                ))),
+            };
+        }
+        result
+    }
+
+    fn render(&self, output: &Self::Output) -> Result<(), CliError> {
+        let ExtractOutput::Check(report) = output else {
+            return Ok(());
+        };
+        if self.json {
+            return render_json(report);
+        }
+        report.render_human();
+        Ok(())
+    }
+
+    fn verdict(&self, output: &Self::Output) -> Result<(), CliError> {
+        let ExtractOutput::Check(report) = output else {
+            return Ok(());
+        };
+        match report.status {
+            ExtractCheckStatus::Clean => Ok(()),
+            ExtractCheckStatus::Drift => Err(CliError::CatalogDrift {
+                catalogs: report.catalogs.len(),
+            }),
+            ExtractCheckStatus::Error => Err(CliError::ExtractionCheckFailed {
+                message: report
+                    .error
+                    .as_ref()
+                    .map(|error| error.message.clone())
+                    .unwrap_or_else(|| "Catalog extraction check failed.".to_owned()),
+            }),
+        }
+    }
+}
+
+impl ExtractOptions {
+    fn run_configured(&self, context: &Context) -> Result<ExtractOutput, CliError> {
         let config = context.load_config(self.config.as_deref())?;
         if self.verbose {
             eprintln!("Config loaded from {}", config.config_path.display());
         }
 
         if self.watch {
-            run_watch_mode(&config, self)
+            run_watch_mode(&config, self)?;
+            Ok(ExtractOutput::Completed)
         } else {
             run_extraction(&config, self)
         }
     }
+}
 
-    /// Extraction reports as it goes — one summary line per pass, so watch mode
-    /// reports every rebuild rather than only the last one — and has nothing
-    /// left to render once the run is over.
-    fn render(&self, _output: &Self::Output) -> Result<(), CliError> {
-        Ok(())
+#[derive(Debug)]
+pub enum ExtractOutput {
+    Completed,
+    Check(ExtractCheckReport),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum ExtractCheckStatus {
+    Clean,
+    Drift,
+    Error,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtractCheckReport {
+    status: ExtractCheckStatus,
+    catalogs: Vec<CatalogDrift>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<ExtractCheckError>,
+}
+
+impl ExtractCheckReport {
+    fn from_catalogs(mut catalogs: Vec<CatalogDrift>) -> Self {
+        catalogs.sort();
+        Self {
+            status: if catalogs.is_empty() {
+                ExtractCheckStatus::Clean
+            } else {
+                ExtractCheckStatus::Drift
+            },
+            catalogs,
+            error: None,
+        }
+    }
+
+    fn error(message: String) -> Self {
+        Self {
+            status: ExtractCheckStatus::Error,
+            catalogs: Vec::new(),
+            error: Some(ExtractCheckError { message }),
+        }
+    }
+
+    fn render_human(&self) {
+        match self.status {
+            ExtractCheckStatus::Clean => println!("✓ Catalogs are up to date."),
+            ExtractCheckStatus::Drift => {
+                println!("Catalog drift detected:");
+                for catalog in &self.catalogs {
+                    println!("  {} {}", catalog.change.human_verb(), catalog.path);
+                }
+            }
+            ExtractCheckStatus::Error => {}
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExtractCheckError {
+    message: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogDrift {
+    path: String,
+    change: CatalogChangeKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum CatalogChangeKind {
+    Created,
+    Modified,
+}
+
+impl CatalogChangeKind {
+    fn human_verb(self) -> &'static str {
+        match self {
+            Self::Created => "create",
+            Self::Modified => "modify",
+        }
     }
 }
 
@@ -102,7 +235,10 @@ struct TimingReport {
     total_files: usize,
 }
 
-fn run_extraction(config: &LoadedConfig, options: &ExtractOptions) -> Result<(), CliError> {
+fn run_extraction(
+    config: &LoadedConfig,
+    options: &ExtractOptions,
+) -> Result<ExtractOutput, CliError> {
     let mut cache = load_extract_cache(config, options);
     let result = run_extraction_with_cache(config, options, &mut cache);
     persist_extract_cache(config, options, &mut cache);
@@ -113,7 +249,7 @@ fn run_extraction_with_cache(
     config: &LoadedConfig,
     options: &ExtractOptions,
     cache: &mut ExtractCache,
-) -> Result<(), CliError> {
+) -> Result<ExtractOutput, CliError> {
     let started_at = Instant::now();
     let mut total_glob_ms = 0;
     let mut total_extract_ms = 0;
@@ -187,8 +323,19 @@ fn run_extraction_with_cache(
             write_jobs.push((catalog, &result.messages, locale.as_str()));
         }
     }
-    write_catalogs(&write_jobs, config, options)?;
+    let operation = if options.check {
+        CatalogOperation::Preview
+    } else {
+        CatalogOperation::Write
+    };
+    let drift = process_catalogs(&write_jobs, config, options, operation)?;
     let total_write_ms = write_started_at.elapsed().as_millis();
+
+    if options.check {
+        return Ok(ExtractOutput::Check(ExtractCheckReport::from_catalogs(
+            drift,
+        )));
+    }
 
     let total_ms = started_at.elapsed().as_millis();
     println!("✓ Extracted {total_messages} messages from {total_files} files ({total_ms}ms)");
@@ -206,7 +353,7 @@ fn run_extraction_with_cache(
         println!("{TIMING_MARKER}{}", serde_json::to_string(&report)?);
     }
 
-    Ok(())
+    Ok(ExtractOutput::Completed)
 }
 
 fn extract_from_catalog(
@@ -226,7 +373,7 @@ fn extract_from_catalog(
 
     if files.is_empty() {
         eprintln!(
-            "Warning: catalog '{}' matched no source files (include: {}); writing an empty catalog.",
+            "Warning: catalog '{}' matched no source files (include: {}); projecting an empty catalog.",
             catalog.path,
             catalog.include.join(", ")
         );
@@ -264,12 +411,11 @@ fn extract_from_catalog(
 }
 
 /*
- * Each (catalog, locale) write is independent work against a distinct target
- * file, so the jobs run concurrently. That overlaps the CPU-bound
- * parse/merge/serialize work in ferrocat across locales and — just as
- * important on macOS, where `File::sync_all` issues an F_FULLFSYNC barrier
- * per written catalog and its directory — the per-file durability stalls that
- * dominate the write phase for small catalogs.
+ * Each (catalog, locale) projection is independent work against a distinct
+ * target file, so writes and previews run concurrently. That overlaps the
+ * CPU-bound parse/merge/serialize work in ferrocat across locales and — for
+ * writes on macOS — the per-file durability stalls that dominate the write
+ * phase for small catalogs.
  *
  * Outcomes are collected per job and reported in job order afterwards, so
  * verbose output and the first error stay deterministic regardless of how the
@@ -277,23 +423,37 @@ fn extract_from_catalog(
  * attempted when an earlier one fails; the first failure in job order is the
  * one returned.
  */
-fn write_catalogs(
+#[derive(Clone, Copy)]
+enum CatalogOperation {
+    Write,
+    Preview,
+}
+
+struct CatalogJobOutcome {
+    lines: Vec<String>,
+    drift: Option<CatalogDrift>,
+}
+
+fn process_catalogs(
     write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
     config: &LoadedConfig,
     options: &ExtractOptions,
-) -> Result<(), CliError> {
+    operation: CatalogOperation,
+) -> Result<Vec<CatalogDrift>, CliError> {
     let worker_count = write_jobs.len().min(
         std::thread::available_parallelism()
             .map(std::num::NonZeroUsize::get)
             .unwrap_or(1),
     );
 
-    let mut outcomes: Vec<Option<Result<Vec<String>, CliError>>> = Vec::new();
+    let mut outcomes: Vec<Option<Result<CatalogJobOutcome, CliError>>> = Vec::new();
     outcomes.resize_with(write_jobs.len(), || None);
 
     if worker_count <= 1 {
         for (outcome, (catalog, messages, locale)) in outcomes.iter_mut().zip(write_jobs) {
-            *outcome = Some(write_catalog(catalog, locale, messages, config, options));
+            *outcome = Some(process_catalog(
+                catalog, locale, messages, config, options, operation,
+            ));
         }
     } else {
         let collected = std::thread::scope(|scope| {
@@ -308,7 +468,9 @@ fn write_catalogs(
                             .map(|(index, (catalog, messages, locale))| {
                                 (
                                     index,
-                                    write_catalog(catalog, locale, messages, config, options),
+                                    process_catalog(
+                                        catalog, locale, messages, config, options, operation,
+                                    ),
                                 )
                             })
                             .collect::<Vec<_>>()
@@ -325,33 +487,31 @@ fn write_catalogs(
         }
     }
 
+    let mut drift = Vec::new();
     for outcome in outcomes {
-        let lines = outcome.expect("every write job produces an outcome")?;
-        for line in lines {
+        let outcome = outcome.expect("every catalog job produces an outcome")?;
+        for line in outcome.lines {
             eprintln!("{line}");
         }
+        if let Some(catalog) = outcome.drift {
+            drift.push(catalog);
+        }
     }
-    Ok(())
+    Ok(drift)
 }
 
-fn write_catalog(
+fn process_catalog(
     catalog: &ConfigCatalog,
     locale: &str,
     messages: &[CatalogUpdateMessage],
     config: &LoadedConfig,
     options: &ExtractOptions,
-) -> Result<Vec<String>, CliError> {
+    operation: CatalogOperation,
+) -> Result<CatalogJobOutcome, CliError> {
     let catalog_path = config
         .resolve_catalog_path(&catalog.path, locale)
         .with_extension(catalog.format.extension());
-    if let Some(parent) = catalog_path.parent() {
-        fs::create_dir_all(parent).map_err(|source| CliError::Io {
-            path: parent.to_path_buf(),
-            source,
-        })?;
-    }
-
-    let result = update_catalog_file(CatalogUpdateRequest {
+    let request = CatalogUpdateRequest {
         target_path: catalog_path.to_string_lossy().into_owned(),
         locale: locale.to_owned(),
         source_locale: config.source_locale.clone(),
@@ -360,20 +520,65 @@ fn write_catalog(
         format: catalog.format,
         po: catalog.po.clone().map(Into::into),
         messages: messages.to_vec(),
-    })?;
+    };
 
     let mut lines = Vec::new();
-    if options.verbose {
-        lines.push(format!("  -> {}", catalog_path.display()));
-        for diagnostic in result.diagnostics {
-            lines.push(format!(
-                "Warning: {}: {}",
-                diagnostic.code, diagnostic.message
-            ));
+    let drift = match operation {
+        CatalogOperation::Write => {
+            if let Some(parent) = catalog_path.parent() {
+                fs::create_dir_all(parent).map_err(|source| CliError::Io {
+                    path: parent.to_path_buf(),
+                    source,
+                })?;
+            }
+            let result = update_catalog_file(request)?;
+            if options.verbose {
+                lines.push(format!("  -> {}", catalog_path.display()));
+                for diagnostic in result.diagnostics {
+                    lines.push(format!(
+                        "Warning: {}: {}",
+                        diagnostic.code, diagnostic.message
+                    ));
+                }
+            }
+            None
         }
-    }
+        CatalogOperation::Preview => {
+            let result = preview_catalog_file_update(request)?;
+            if options.verbose {
+                lines.push(format!("  -> checked {}", catalog_path.display()));
+                for diagnostic in result.diagnostics {
+                    lines.push(format!(
+                        "Warning: {}: {}",
+                        diagnostic.code, diagnostic.message
+                    ));
+                }
+            }
+            let change = if result.created {
+                Some(CatalogChangeKind::Created)
+            } else if result.updated {
+                Some(CatalogChangeKind::Modified)
+            } else {
+                None
+            };
+            change.map(|change| CatalogDrift {
+                path: stable_catalog_path(&catalog_path, &config.root_dir),
+                change,
+            })
+        }
+    };
 
-    Ok(lines)
+    Ok(CatalogJobOutcome { lines, drift })
+}
+
+fn stable_catalog_path(path: &Path, root: &Path) -> String {
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    let value = relative.to_string_lossy();
+    if std::path::MAIN_SEPARATOR == '\\' {
+        value.replace('\\', "/")
+    } else {
+        value.into_owned()
+    }
 }
 
 #[cfg(test)]

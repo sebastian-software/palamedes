@@ -5,11 +5,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
 use ferrocat::{
-    parse_catalog as ferrocat_parse_catalog, update_catalog_file as ferrocat_update_catalog_file,
-    ApiError, CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult,
-    EffectiveTranslationRef, ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog,
-    PlaceholderCommentMode, RenderOptions, SerializeOptions, SourceExtractedMessage,
-    UpdateCatalogFileOptions, UpdateCatalogOptions,
+    parse_catalog as ferrocat_parse_catalog, update_catalog as ferrocat_update_catalog,
+    update_catalog_file as ferrocat_update_catalog_file, ApiError, CatalogOrigin, CatalogStats,
+    CatalogUpdateInput, CatalogUpdateResult, EffectiveTranslationRef, ObsoleteStrategy,
+    ParseCatalogOptions, ParsedCatalog, PlaceholderCommentMode, RenderOptions, SerializeOptions,
+    SourceExtractedMessage, UpdateCatalogFileOptions, UpdateCatalogOptions,
 };
 use ferrocat::{AiProvenance as FerrocatAiProvenance, MachineMetadata as FerrocatMachineMetadata};
 use serde::{Deserialize, Serialize};
@@ -132,6 +132,22 @@ pub struct CatalogUpdateResponse {
     pub diagnostics: Vec<CatalogDiagnostic>,
 }
 
+/// Non-mutating result of rendering the update a catalog file would receive.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogUpdatePreview {
+    /// Whether the target catalog does not exist and would be created.
+    pub created: bool,
+    /// Whether the rendered content differs from the current target content.
+    pub updated: bool,
+    /// Complete catalog content that a file update would write.
+    pub content: String,
+    /// Aggregate update statistics.
+    pub stats: CatalogUpdateStats,
+    /// Diagnostics emitted while rendering the update.
+    pub diagnostics: Vec<CatalogDiagnostic>,
+}
+
 /// Aggregate statistics from a catalog update.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -240,6 +256,27 @@ pub fn update_catalog_file(
     update_catalog_file_source_first(request)
 }
 
+/// Renders the update for a catalog file without creating or changing it.
+///
+/// This uses the same source-first projection, cleanup policy, compatibility
+/// handling, and Ferrocat rendering options as [`update_catalog_file`].
+///
+/// # Errors
+///
+/// Returns an error when the target file cannot be read, when Ferrocat rejects
+/// the projected messages, or when any extracted message is empty.
+pub fn preview_catalog_file_update(
+    request: CatalogUpdateRequest,
+) -> PalamedesResult<CatalogUpdatePreview> {
+    let target_path = validated_target_path(&request.target_path)?;
+    let existing = read_optional_catalog(&target_path)?;
+    let result = update_catalog_source_first(
+        request,
+        CatalogUpdateDestination::Preview(existing.as_deref()),
+    )?;
+    Ok(public_preview_result(result))
+}
+
 /// Parses a catalog file into the public semantic result shape.
 ///
 /// # Errors
@@ -263,16 +300,33 @@ pub fn parse_catalog(request: &CatalogParseRequest) -> PalamedesResult<CatalogPa
 }
 
 fn update_catalog_file_source_first(
-    mut request: CatalogUpdateRequest,
+    request: CatalogUpdateRequest,
 ) -> PalamedesResult<CatalogUpdateResponse> {
-    let target_path = PathBuf::from(&request.target_path);
-    if target_path.as_os_str().is_empty() {
-        return Err(PalamedesError::from(ApiError::InvalidArguments(
-            "target_path must not be empty".to_owned(),
-        )));
-    }
+    let target_path = validated_target_path(&request.target_path)?;
+    let result =
+        update_catalog_source_first(request, CatalogUpdateDestination::File(&target_path))?;
+    Ok(public_update_result(result))
+}
+
+#[derive(Clone, Copy)]
+enum CatalogUpdateDestination<'a> {
+    File(&'a Path),
+    Preview(Option<&'a str>),
+}
+
+fn update_catalog_source_first(
+    mut request: CatalogUpdateRequest,
+    destination: CatalogUpdateDestination<'_>,
+) -> PalamedesResult<CatalogUpdateResult> {
     validate_po_options(request.format, request.po.as_ref())?;
-    preserve_existing_po_apostrophe_identities(&mut request, &target_path)?;
+    match destination {
+        CatalogUpdateDestination::File(target_path) => {
+            preserve_existing_po_apostrophe_identities(&mut request, target_path)?;
+        }
+        CatalogUpdateDestination::Preview(existing) => {
+            preserve_existing_po_apostrophe_identities_from_content(&mut request, existing)?;
+        }
+    }
     let custom_header_attributes =
         BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
     let input = CatalogUpdateInput::SourceFirst(
@@ -301,30 +355,58 @@ fn update_catalog_file_source_first(
             .with_custom_header_attributes(&custom_header_attributes)
             .with_po_serialize_options(po_serialize_options(request.po.as_ref()));
     }
-    let update_options = UpdateCatalogOptions::new(&request.source_locale, input)
+    let mut update_options = UpdateCatalogOptions::new(&request.source_locale, input)
         .with_locale(&request.locale)
         .with_mode(request.format.ferrocat_mode())
         .with_obsolete_strategy(obsolete_strategy)
         .with_overwrite_source_translations(true)
         .with_render(render)
         .with_now(&now);
-    /*
-     * Catalog files are repository-owned, regenerable artifacts, so the write
-     * skips Ferrocat's per-file durability barriers (File::sync_all is
-     * F_FULLFSYNC on macOS and was the dominant fixed cost of the write phase
-     * there). The rename stays atomic; after a crash the worst case is an old
-     * or missing catalog that the next extract rewrites.
-     */
-    let file_options = UpdateCatalogFileOptions::new(
-        &target_path,
-        &request.source_locale,
-        CatalogUpdateInput::default(),
-    )
-    .with_options(update_options)
-    .with_durability(ferrocat::WriteDurability::Rename);
-    let result = ferrocat_update_catalog_file(file_options).map_err(PalamedesError::from)?;
+    match destination {
+        CatalogUpdateDestination::File(target_path) => {
+            /*
+             * Catalog files are repository-owned, regenerable artifacts, so
+             * the write skips Ferrocat's per-file durability barriers
+             * (File::sync_all is F_FULLFSYNC on macOS and was the dominant
+             * fixed cost of the write phase there). The rename stays atomic;
+             * after a crash the worst case is an old or missing catalog that
+             * the next extract rewrites.
+             */
+            let file_options = UpdateCatalogFileOptions::new(
+                target_path,
+                &request.source_locale,
+                CatalogUpdateInput::default(),
+            )
+            .with_options(update_options)
+            .with_durability(ferrocat::WriteDurability::Rename);
+            ferrocat_update_catalog_file(file_options).map_err(PalamedesError::from)
+        }
+        CatalogUpdateDestination::Preview(existing) => {
+            update_options.existing = existing;
+            ferrocat_update_catalog(update_options).map_err(PalamedesError::from)
+        }
+    }
+}
 
-    Ok(public_update_result(result))
+fn validated_target_path(value: &str) -> PalamedesResult<PathBuf> {
+    let target_path = PathBuf::from(value);
+    if target_path.as_os_str().is_empty() {
+        return Err(PalamedesError::from(ApiError::InvalidArguments(
+            "target_path must not be empty".to_owned(),
+        )));
+    }
+    Ok(target_path)
+}
+
+fn read_optional_catalog(target_path: &Path) -> PalamedesResult<Option<String>> {
+    match std::fs::read_to_string(target_path) {
+        Ok(content) => Ok(Some(content)),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(PalamedesError::ReadFile {
+            path: target_path.to_path_buf(),
+            source,
+        }),
+    }
 }
 
 /// Keeps a translated PO entry attached when an extractor upgrade only changes
@@ -351,22 +433,33 @@ fn preserve_existing_po_apostrophe_identities(
         return Ok(());
     }
 
-    let content = match std::fs::read_to_string(target_path) {
-        Ok(content) => content,
-        Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => {
-            return Err(PalamedesError::ReadFile {
-                path: target_path.to_path_buf(),
-                source,
-            });
-        }
+    let content = read_optional_catalog(target_path)?;
+    preserve_existing_po_apostrophe_identities_from_content(request, content.as_deref())
+}
+
+fn preserve_existing_po_apostrophe_identities_from_content(
+    request: &mut CatalogUpdateRequest,
+    content: Option<&str>,
+) -> PalamedesResult<()> {
+    if request.format != super::catalog_artifact::PalamedesCatalogFormat::Po {
+        return Ok(());
+    }
+    if !request
+        .messages
+        .iter()
+        .any(|message| message.message.contains('\''))
+    {
+        return Ok(());
+    }
+    let Some(content) = content.filter(|content| !content.is_empty()) else {
+        return Ok(());
     };
-    if content.is_empty() || request.messages.is_empty() {
+    if request.messages.is_empty() {
         return Ok(());
     }
 
     let parsed = ferrocat_parse_catalog(
-        ParseCatalogOptions::new(&content, &request.source_locale)
+        ParseCatalogOptions::new(content, &request.source_locale)
             .with_locale(&request.locale)
             .with_mode(request.format.ferrocat_mode()),
     )
@@ -497,6 +590,20 @@ fn public_update_result(result: CatalogUpdateResult) -> CatalogUpdateResponse {
     }
 }
 
+fn public_preview_result(result: CatalogUpdateResult) -> CatalogUpdatePreview {
+    CatalogUpdatePreview {
+        created: result.created,
+        updated: result.updated,
+        content: result.content,
+        stats: public_stats(&result.stats),
+        diagnostics: result
+            .diagnostics
+            .into_iter()
+            .map(CatalogDiagnostic::from)
+            .collect(),
+    }
+}
+
 fn public_parse_result(parsed: ParsedCatalog) -> CatalogParseResult {
     CatalogParseResult {
         locale: parsed.locale,
@@ -614,8 +721,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        parse_catalog, update_catalog_file, CatalogParseRequest, CatalogUpdateMessage,
-        CatalogUpdateOrigin, CatalogUpdateRequest, PoLineBreaks, PoOutputOptions,
+        parse_catalog, preview_catalog_file_update, update_catalog_file, CatalogParseRequest,
+        CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest, PoLineBreaks,
+        PoOutputOptions,
     };
     use crate::parse_po;
     use ferrocat::{machine_translation_hash, EffectiveTranslationRef};
@@ -1075,6 +1183,72 @@ msgstr "Zebra""#;
         let po = parse_po(&std::fs::read_to_string(&path).expect("read output")).expect("parse po");
         assert_eq!(po.items.len(), 1);
         assert_eq!(po.items[0].msgid, "Hello");
+    }
+
+    #[test]
+    fn previews_the_exact_file_update_without_changing_the_target() {
+        let path = temp_file("preview-existing");
+        std::fs::write(
+            &path,
+            concat!(
+                "msgid \"Hello\"\n",
+                "msgstr \"Hallo\"\n\n",
+                "msgid \"Old\"\n",
+                "msgstr \"Alt\"\n",
+            ),
+        )
+        .expect("write existing");
+        let before = std::fs::read(&path).expect("read existing bytes");
+        let request = || CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: vec![
+                message("Hello", None, "src/App.tsx"),
+                message("New", None, "src/New.tsx"),
+            ],
+        };
+
+        let preview = preview_catalog_file_update(request()).expect("preview");
+
+        assert!(!preview.created);
+        assert!(preview.updated);
+        assert!(preview.content.contains("msgstr \"Hallo\""));
+        assert!(preview.content.contains("msgid \"New\""));
+        assert_eq!(std::fs::read(&path).expect("read after preview"), before);
+
+        update_catalog_file(request()).expect("apply update");
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read applied update"),
+            preview.content
+        );
+    }
+
+    #[test]
+    fn previews_a_missing_catalog_without_creating_it() {
+        let path = temp_file_with_extension("preview-created", "fcl");
+        let _ = std::fs::remove_file(&path);
+
+        let preview = preview_catalog_file_update(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: false,
+            format: crate::PalamedesCatalogFormat::Fcl,
+            po: None,
+            messages: vec![message("Hello", None, "src/App.tsx")],
+        })
+        .expect("preview");
+
+        assert!(preview.created);
+        assert!(preview.updated);
+        assert!(preview.content.starts_with("%FCL1"));
+        assert!(!std::path::Path::new(&path).exists());
     }
 
     #[test]

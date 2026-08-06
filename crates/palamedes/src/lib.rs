@@ -76,10 +76,10 @@ pub use catalog_three_way::{
     CatalogMergeSide, CatalogThreeWayMergeRequest, CATALOG_MODIFY_DELETE_RESOLVED,
 };
 pub use catalog_update::{
-    parse_catalog, update_catalog_file, AiProvenance, CatalogOriginMetadata, CatalogParseRequest,
-    CatalogParseResult, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
-    CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks,
-    PoOutputOptions,
+    parse_catalog, preview_catalog_file_update, update_catalog_file, AiProvenance,
+    CatalogOriginMetadata, CatalogParseRequest, CatalogParseResult, CatalogUpdateMessage,
+    CatalogUpdateOrigin, CatalogUpdatePreview, CatalogUpdateRequest, CatalogUpdateResponse,
+    CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks, PoOutputOptions,
 };
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 pub use error::{PalamedesError, PalamedesResult};
