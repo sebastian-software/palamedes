@@ -145,6 +145,16 @@ invalidate their affected subsets under Turbopack and webpack; Next may apply
 Fast Refresh or fall back to a full document reload at an async-module
 boundary. A document reload is the supported fallback.
 
+Each production fragment import is attempted once. If one rejects, Palamedes
+logs the failure with the module path and locale, skips only that fragment, and
+continues hydrating the client graph (including any other fragments that did
+load). It deliberately does not immediately retry: browsers commonly retain a
+failed dynamic-import result, so a retry adds noise without making the graph
+more reliable. Development remains fail-fast so catalog wiring failures stay
+visible while editing. In a production build, set `keepSourceFallbacks: true`
+if readable source text is required when a skipped fragment has no loaded
+translation; the compact default does not retain source messages.
+
 `messageSplitting` currently supports PO catalogs and defaults to `false` for
 compatibility. Keep using `createClientCatalogBoundary()` from
 `@palamedes/react/client` when an app needs a complete active-locale catalog or

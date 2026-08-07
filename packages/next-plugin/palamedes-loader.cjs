@@ -106,7 +106,7 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
   )
 }
 
-function clientMessageBootstrap(config, sourcePath, compiledIds) {
+function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailureMode) {
   const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds)
   if (!importsByCatalog) {
     return null
@@ -127,26 +127,42 @@ function clientMessageBootstrap(config, sourcePath, compiledIds) {
   )
   const identifier = `__pmds_${createHash("sha256").update(modulePath).digest("hex").slice(0, 12)}`
 
-  return (
-    `const ${identifier}_locale = document.documentElement.lang;\n` +
-    `const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];\n` +
-    `const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => loaders[${identifier}_locale]);\n` +
-    `if (${identifier}_activeLoaders.some((loader) => loader === undefined)) {\n` +
-    `  throw new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`);\n` +
-    `}\n` +
+  const imports =
     `const ${identifier}_modules = await Promise.all([\n` +
     `  import("@palamedes/core/compiled"),\n` +
     `  import("@palamedes/runtime"),\n` +
-    `  ...${identifier}_activeLoaders.map((load) => load()),\n` +
     `]);\n` +
     `const ${identifier}_i18n = ${identifier}_modules[1].initializeClientI18n(\n` +
     `  ${identifier}_locale,\n` +
     `  ${identifier}_modules[0].createI18n,\n` +
-    `);\n` +
-    `for (const { messages } of ${identifier}_modules.slice(2)) {\n` +
-    `  ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
-    `}\n`
-  )
+    `);\n`
+  const fragmentImports =
+    fragmentFailureMode === "degrade"
+      ? `const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map(async (load) => {\n` +
+        `  try {\n` +
+        `    return await load();\n` +
+        `  } catch (error) {\n` +
+        `    console.error(\n` +
+        `      \`Palamedes client graph message splitting failed to load a catalog fragment for ${modulePath} (\${${identifier}_locale}). Continuing without that fragment.\`,\n` +
+        `      error,\n` +
+        `    );\n` +
+        `    return null;\n` +
+        `  }\n` +
+        `}));\n`
+      : `const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map((load) => load()));\n`
+
+  return `const ${identifier}_locale = document.documentElement.lang;
+const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];
+const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => loaders[${identifier}_locale]);
+if (${identifier}_activeLoaders.some((loader) => loader === undefined)) {
+  throw new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`);
+}
+${imports}${fragmentImports}for (const fragment of ${identifier}_fragments) {
+  if (fragment === null) continue;
+  const { messages } = fragment;
+  ${identifier}_i18n.load(${identifier}_locale, messages);
+}
+`
 }
 
 function skipTrivia(code, index) {
@@ -462,7 +478,12 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
     }
     const registration = serverMessageSplitting
       ? messageLoaderRegistration(config, this.resourcePath, result.compiledIds)
-      : clientMessageBootstrap(config, this.resourcePath, result.compiledIds)
+      : clientMessageBootstrap(
+          config,
+          this.resourcePath,
+          result.compiledIds,
+          options.clientFragmentFailureMode === "degrade" ? "degrade" : "throw"
+        )
     let code = result.code
     let sourceMap = result.map ?? inputSourceMap ?? null
     if (registration) {

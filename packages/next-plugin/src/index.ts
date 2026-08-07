@@ -322,6 +322,10 @@ export function withPalamedes(
     ...(configPath ? { configPath } : {}),
     ...(serverFunctions ? { serverFunctions } : {}),
   }
+  // A missing production chunk must not make the entire client entry module
+  // unevaluable. Development stays fail-fast so broken catalog wiring is
+  // surfaced immediately instead of being hidden behind source fallbacks.
+  const clientFragmentFailureMode = process.env.NODE_ENV === "production" ? "degrade" : "throw"
 
   const rules: TurbopackRules = { ...baseConfig.turbopack?.rules }
 
@@ -350,7 +354,9 @@ export function withPalamedes(
           loader: oxcLoaderPath,
           options: {
             ...transformLoaderOptions,
-            ...(messageSplitting ? { clientMessageSplitting: true } : {}),
+            ...(messageSplitting
+              ? { clientMessageSplitting: true, clientFragmentFailureMode }
+              : {}),
           },
         },
       ],
@@ -445,7 +451,9 @@ export function withPalamedes(
             options: {
               ...transformLoaderOptions,
               ...(serverFunctions && context.isServer ? { serverMessageSplitting: true } : {}),
-              ...(messageSplitting && !context.isServer ? { clientMessageSplitting: true } : {}),
+              ...(messageSplitting && !context.isServer
+                ? { clientMessageSplitting: true, clientFragmentFailureMode }
+                : {}),
             },
           },
         ],

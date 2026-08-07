@@ -115,6 +115,7 @@ describe("palamedes-loader.cjs", () => {
 
     expect(output).toContain("_locale = document.documentElement.lang")
     expect(output).toContain("_modules = await Promise.all")
+    expect(output).toContain("_fragments = await Promise.all")
     expect(output).toContain('"en": () => import("./locales/en.po?palamedes-selected=')
     expect(output).toContain('"de": () => import("./locales/de.po?palamedes-selected=')
     expect(output).toContain(".initializeClientI18n(")
@@ -183,9 +184,8 @@ describe("palamedes-loader.cjs", () => {
       })
       const importer = modulePromise.then(() => globalThis.__pmds_test_label)
 
-      await Promise.resolve()
+      await vi.waitFor(() => expect(requested).toHaveLength(3))
       expect(moduleBodyRan).toBe(false)
-      expect(requested).toHaveLength(3)
       expect(requested.some((specifier) => specifier.includes("./locales/en.po"))).toBe(false)
 
       resolveFragment({ messages: { id: "translated" } })
@@ -199,7 +199,85 @@ describe("palamedes-loader.cjs", () => {
     }
   })
 
-  it("propagates client bootstrap rejections to importers before evaluating the module body", async () => {
+  it("degrades a rejected production catalog fragment, logs it, and hydrates the module", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "globalThis.__pmds_test_body_ran = true;",
+      map: null,
+      compiledIds: ["id-a"],
+    })
+    loadPalamedesConfigSync.mockReturnValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [
+        { path: "src/locales/{locale}", include: ["src/**/*.tsx"] },
+        { path: "src/secondary-locales/{locale}", include: ["src/**/*.tsx"] },
+      ],
+    })
+
+    const originalDocument = globalThis.document
+    const originalBodyRan = globalThis.__pmds_test_body_ran
+    const originalConsoleError = console.error
+    const bootstrapError = new Error("fragment failed to load")
+    const errors: unknown[][] = []
+    const loaded: Array<{ locale: string; messages: Record<string, unknown> }> = []
+    let fragmentRequests = 0
+    let successfulFragmentRequests = 0
+    const i18n = {
+      locale: "de",
+      activate: vi.fn(),
+      load(locale: string, messages: Record<string, unknown>) {
+        loaded.push({ locale, messages })
+      },
+    }
+
+    try {
+      globalThis.document = { documentElement: { lang: "de" } } as Document
+      console.error = (...args: unknown[]) => errors.push(args)
+
+      const output = await runLoader({
+        clientMessageSplitting: true,
+        clientFragmentFailureMode: "degrade",
+      })
+      expect(output).toContain("Continuing without that fragment")
+      const modulePromise = executeGeneratedClientModule(output, async (specifier) => {
+        if (specifier === "@palamedes/core/compiled") {
+          return { createI18n: () => i18n }
+        }
+        if (specifier === "@palamedes/runtime") {
+          return { initializeClientI18n: () => i18n }
+        }
+        if (specifier.includes("./locales/de.po?palamedes-selected=")) {
+          fragmentRequests += 1
+          throw bootstrapError
+        }
+        if (specifier.includes("./secondary-locales/de.po?palamedes-selected=")) {
+          successfulFragmentRequests += 1
+          return { messages: { id: "translated" } }
+        }
+        throw new Error(`Unexpected import: ${specifier}`)
+      })
+
+      await expect(modulePromise).resolves.toBeUndefined()
+      expect(globalThis.__pmds_test_body_ran).toBe(true)
+      expect(loaded).toEqual([{ locale: "de", messages: { id: "translated" } }])
+      expect(fragmentRequests).toBe(1)
+      expect(successfulFragmentRequests).toBe(1)
+      expect(errors).toEqual([
+        [
+          "Palamedes client graph message splitting failed to load a catalog fragment for src/page.tsx (de). Continuing without that fragment.",
+          bootstrapError,
+        ],
+      ])
+    } finally {
+      restoreGlobal("document", originalDocument)
+      restoreGlobal("__pmds_test_body_ran", originalBodyRan)
+      console.error = originalConsoleError
+    }
+  })
+
+  it("fails fast in development mode when a catalog fragment rejects", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "globalThis.__pmds_test_body_ran = true;",
       map: null,
@@ -213,7 +291,10 @@ describe("palamedes-loader.cjs", () => {
     try {
       globalThis.document = { documentElement: { lang: "de" } } as Document
 
-      const output = await runLoader({ clientMessageSplitting: true })
+      const output = await runLoader({
+        clientMessageSplitting: true,
+        clientFragmentFailureMode: "throw",
+      })
       const modulePromise = executeGeneratedClientModule(output, async (specifier) => {
         if (specifier === "@palamedes/core/compiled") {
           return { createI18n: () => ({}) }
@@ -227,7 +308,43 @@ describe("palamedes-loader.cjs", () => {
         throw new Error(`Unexpected import: ${specifier}`)
       })
 
-      await expect(modulePromise.then(() => "importer resolved")).rejects.toBe(bootstrapError)
+      await expect(modulePromise).rejects.toBe(bootstrapError)
+      expect(globalThis.__pmds_test_body_ran).toBeUndefined()
+    } finally {
+      restoreGlobal("document", originalDocument)
+      restoreGlobal("__pmds_test_body_ran", originalBodyRan)
+    }
+  })
+
+  it("does not swallow production runtime bootstrap failures", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "globalThis.__pmds_test_body_ran = true;",
+      map: null,
+      compiledIds: ["id-a"],
+    })
+
+    const originalDocument = globalThis.document
+    const originalBodyRan = globalThis.__pmds_test_body_ran
+    const bootstrapError = new Error("runtime failed to load")
+
+    try {
+      globalThis.document = { documentElement: { lang: "de" } } as Document
+
+      const output = await runLoader({
+        clientMessageSplitting: true,
+        clientFragmentFailureMode: "degrade",
+      })
+      const modulePromise = executeGeneratedClientModule(output, async (specifier) => {
+        if (specifier === "@palamedes/core/compiled") {
+          return { createI18n: () => ({}) }
+        }
+        if (specifier === "@palamedes/runtime") {
+          throw bootstrapError
+        }
+        throw new Error(`Unexpected import: ${specifier}`)
+      })
+
+      await expect(modulePromise).rejects.toBe(bootstrapError)
       expect(globalThis.__pmds_test_body_ran).toBeUndefined()
     } finally {
       restoreGlobal("document", originalDocument)
