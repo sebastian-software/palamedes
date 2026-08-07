@@ -126,6 +126,10 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
     path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath))
   )
   const identifier = `__pmds_${createHash("sha256").update(modulePath).digest("hex").slice(0, 12)}`
+  const fragmentFailurePrefix = JSON.stringify(
+    `Palamedes client graph message splitting failed to load a catalog fragment for ${modulePath} (`
+  )
+  const fragmentFailureSuffix = JSON.stringify("). Continuing without that fragment.")
 
   const imports =
     `const ${identifier}_modules = await Promise.all([\n` +
@@ -142,10 +146,16 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
         `  try {\n` +
         `    return await load();\n` +
         `  } catch (error) {\n` +
-        `    console.error(\n` +
-        `      \`Palamedes client graph message splitting failed to load a catalog fragment for ${modulePath} (\${${identifier}_locale}). Continuing without that fragment.\`,\n` +
-        `      error,\n` +
-        `    );\n` +
+        `    try {\n` +
+        `      console.error(\n` +
+        `        ${fragmentFailurePrefix},\n` +
+        `        ${identifier}_locale,\n` +
+        `        ${fragmentFailureSuffix},\n` +
+        `        error,\n` +
+        `      );\n` +
+        `    } catch {\n` +
+        `      // Logging must not prevent the client graph from hydrating.\n` +
+        `    }\n` +
         `    return null;\n` +
         `  }\n` +
         `}));\n`

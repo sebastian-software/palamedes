@@ -148,10 +148,11 @@ boundary. A document reload is the supported fallback.
 Each production fragment import is attempted once. If one rejects, Palamedes
 logs the failure with the module path and locale, skips only that fragment, and
 continues hydrating the client graph (including any other fragments that did
-load). It deliberately does not immediately retry: browsers commonly retain a
-failed dynamic-import result, so a retry adds noise without making the graph
-more reliable. Development remains fail-fast so catalog wiring failures stay
-visible while editing. In a production build, set `keepSourceFallbacks: true`
+load). It deliberately avoids an immediate, unbacked-off retry: deterministic
+CDN, ad-blocker, and stale-deploy failures are unlikely to improve in the same
+turn, while a retry can add a request without restoring the graph. Development
+remains fail-fast so catalog wiring failures stay visible while editing. In a
+production build, set `keepSourceFallbacks: true`
 if readable source text is required when a skipped fragment has no loaded
 translation; the compact default does not retain source messages.
 
