@@ -119,6 +119,16 @@ test("matrix example browser contract", async () => {
   expect(example.id).not.toBe("")
 
   const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [])
+  const browserErrors = []
+  page.on("pageerror", (error) => browserErrors.push(error.message))
+
+  if (example.strategy === "cookie") {
+    // The browser context is en-US, while SSR negotiates es from this request
+    // header. A client bootstrap that falls back to navigator.language would
+    // therefore immediately diverge from the server-rendered document.
+    await page.setExtraHTTPHeaders({ "accept-language": "es-ES, en;q=0.8" })
+  }
+
   const initialUrl =
     example.strategy === "route"
       ? routeUrl(example.baseUrl)
@@ -158,7 +168,14 @@ test("matrix example browser contract", async () => {
     return
   }
 
-  await expect.poll(() => currentServerLocale(page)).toContain("English")
+  await expect
+    .poll(() => currentServerLocale(page))
+    .toContain(example.strategy === "cookie" ? "Español" : "English")
+  await expect
+    .poll(() => page.locator("html").getAttribute("lang"))
+    .toBe(example.strategy === "cookie" ? "es" : "en")
+  await waitForClientReady(page)
+  expect(browserErrors).toEqual([])
   await captureScreenshot(page, example, "initial")
 
   if (example.strategy === "cookie") {

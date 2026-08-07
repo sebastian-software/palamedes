@@ -38,6 +38,14 @@ export function loadMessages(locale: Locale): CompiledCatalogMessages {
   return CATALOGS[locale]
 }
 
+export function resolveCookieLocale(headers: Record<string, string | undefined>) {
+  return locales.resolve({
+    strategy: "cookie",
+    acceptLanguageHeader: headers["accept-language"],
+    cookieHeader: headers.cookie,
+  })
+}
+
 const clientI18n = createI18n()
 
 export async function createServerI18n(locale: Locale) {
@@ -61,10 +69,12 @@ export function initializeClientI18n(locale: Locale) {
 }
 
 if (typeof window !== "undefined") {
-  const cookieLocale = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${LOCALE_COOKIE}=`))
-    ?.slice(`${LOCALE_COOKIE}=`.length)
-  initializeClientI18n(locales.normalizeLocale(cookieLocale ?? navigator.language.split("-")[0]))
+  const locale = document.documentElement.lang
+  if (!locales.isLocale(locale)) {
+    throw new Error(
+      `Expected a supported server document locale, received ${JSON.stringify(locale)}`
+    )
+  }
+
+  initializeClientI18n(locale)
 }

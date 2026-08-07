@@ -1,7 +1,9 @@
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
 import appCss from "@palamedes/example-ui/styles.css?url"
+import { loadDocumentLocale } from "../lib/server-functions"
 
 export const Route = createRootRoute({
+  loader: () => loadDocumentLocale(),
   head: () => ({
     meta: [
       { charSet: "utf8" },
@@ -14,8 +16,10 @@ export const Route = createRootRoute({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const locale = Route.useLoaderData()
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <head>
         <HeadContent />
       </head>

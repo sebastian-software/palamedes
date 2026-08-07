@@ -1,20 +1,16 @@
 import { mount, StartClient } from "@solidjs/start/client"
 
-import { DEFAULT_LOCALE, LOCALE_COOKIE, normalizeLocale, initializeClientI18n } from "./lib/i18n"
+import { initializeClientI18n, locales } from "./lib/i18n"
 
 function resolveInitialLocale() {
-  const cookieValue = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${LOCALE_COOKIE}=`))
-    ?.slice(`${LOCALE_COOKIE}=`.length)
-
-  if (cookieValue) {
-    return normalizeLocale(cookieValue)
+  const locale = document.documentElement.lang
+  if (!locales.isLocale(locale)) {
+    throw new Error(
+      `Expected a supported server document locale, received ${JSON.stringify(locale)}`
+    )
   }
 
-  const preferredLanguage = navigator.language.split("-")[0] ?? DEFAULT_LOCALE
-  return normalizeLocale(preferredLanguage)
+  return locale
 }
 
 function ClientEntry() {

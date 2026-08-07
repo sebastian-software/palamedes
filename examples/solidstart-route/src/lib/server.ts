@@ -4,6 +4,12 @@ import { t } from "@palamedes/core/macro"
 import { activateServerI18n } from "./i18n.server"
 import { getLocaleLabel, locales, normalizeLocale } from "./i18n"
 
+export function resolveRouteLocale(request: Request | undefined) {
+  const pathname = request ? new URL(request.url).pathname : "/"
+  const routeLocale = pathname.split("/").filter(Boolean)[0]
+  return normalizeLocale(routeLocale)
+}
+
 export const loadRoutePageData = query(async (routeLocale: string) => {
   "use server"
 

@@ -5,15 +5,19 @@ import { t } from "@palamedes/core/macro"
 import { activateServerI18n } from "./i18n.server"
 import { getLocaleLabel, LOCALE_COOKIE, type Locale, locales } from "./i18n"
 
+export function resolveCookieLocale(request: Request | undefined) {
+  return locales.resolve({
+    strategy: "cookie",
+    acceptLanguageHeader: request?.headers.get("accept-language"),
+    cookieHeader: request?.headers.get("cookie"),
+  })
+}
+
 export const loadHomePageData = query(async () => {
   "use server"
 
   const event = getRequestEvent()
-  const resolved = locales.resolve({
-    strategy: "cookie",
-    acceptLanguageHeader: event?.request.headers.get("accept-language"),
-    cookieHeader: event?.request.headers.get("cookie"),
-  })
+  const resolved = resolveCookieLocale(event?.request)
 
   await activateServerI18n(resolved.locale)
 
@@ -39,11 +43,7 @@ export const getLocalizedServerStatus = query(async () => {
   "use server"
 
   const event = getRequestEvent()
-  const resolved = locales.resolve({
-    strategy: "cookie",
-    acceptLanguageHeader: event?.request.headers.get("accept-language"),
-    cookieHeader: event?.request.headers.get("cookie"),
-  })
+  const resolved = resolveCookieLocale(event?.request)
 
   await activateServerI18n(resolved.locale)
 

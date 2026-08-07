@@ -12,6 +12,10 @@ function getResolvedLocale() {
   })
 }
 
+export const loadDocumentLocale = createServerFn({ method: "GET" }).handler(
+  () => getResolvedLocale().locale
+)
+
 export const loadHomePageData = createServerFn({ method: "GET" }).handler(async () => {
   const resolved = getResolvedLocale()
   await activateServerI18n(resolved.locale)

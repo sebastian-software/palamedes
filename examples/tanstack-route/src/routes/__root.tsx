@@ -1,7 +1,12 @@
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
 import appCss from "@palamedes/example-ui/styles.css?url"
+import { normalizeLocale } from "../lib/i18n"
 
 export const Route = createRootRoute({
+  loader({ location }) {
+    const locale = location.pathname.split("/").filter(Boolean)[0]
+    return normalizeLocale(locale)
+  },
   head: () => ({
     meta: [
       { charSet: "utf8" },
@@ -14,8 +19,10 @@ export const Route = createRootRoute({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const locale = Route.useLoaderData()
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <head>
         <HeadContent />
       </head>

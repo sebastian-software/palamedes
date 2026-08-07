@@ -259,6 +259,15 @@ async function verifySmokeCheck(example, check) {
     }
   }
 
+  if (check.htmlLang) {
+    const htmlLang = response.body.match(/<html\b[^>]*\blang=["']([^"']+)["']/iu)?.[1]
+    if (htmlLang !== check.htmlLang) {
+      throw new Error(
+        `Expected html lang ${JSON.stringify(check.htmlLang)} in ${example.id} response for ${check.path}, received ${JSON.stringify(htmlLang)}`
+      )
+    }
+  }
+
   for (const substring of check.substrings) {
     if (!response.body.includes(substring)) {
       throw new Error(

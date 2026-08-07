@@ -6,7 +6,7 @@ import { ClientReady } from "../components/ClientReady"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
 import { ProofPanel } from "../components/ProofPanel"
 import { TicketPanel } from "../components/TicketPanel"
-import { activateServerI18n, getLocaleLabel, type Locale, locales } from "../lib/i18n"
+import { activateServerI18n, getLocaleLabel, resolveCookieLocale, type Locale } from "../lib/i18n"
 
 type ProbeResult = {
   handledAt: string
@@ -17,11 +17,7 @@ type ProbeResult = {
 
 export default async function CookiePage() {
   const headers = unstable_getHeaders()
-  const { locale } = locales.resolve({
-    strategy: "cookie",
-    acceptLanguageHeader: headers["accept-language"],
-    cookieHeader: headers.cookie,
-  })
+  const { locale } = resolveCookieLocale(headers)
   const localeLabel = getLocaleLabel(locale)
 
   await activateServerI18n(locale)
