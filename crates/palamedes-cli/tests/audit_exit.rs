@@ -4,8 +4,92 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-fn audit_info_threshold_fails_on_fuzzy_markers_without_changing_the_default() {
+fn audit_warning_threshold_prints_failed_status_and_exits_one() {
+    let fixture = fixture_dir("audit-warning-threshold");
+    write_config(&fixture);
+    write_catalogs(
+        &fixture,
+        "msgid \"Save\"\nmsgstr \"Save\"\n",
+        "msgid \"Save\"\nmsgstr \"Speichern\"\n\nmsgid \"Only target\"\nmsgstr \"Nur Ziel\"\n",
+    );
+
+    let default = audit(&fixture, &[]);
+    assert!(default.status.success(), "{default:?}");
+    assert!(String::from_utf8_lossy(&default.stdout)
+        .contains("Catalog audit passed: 0 error(s), 1 warning(s), 0 info"));
+
+    let fail_on_warning = audit(&fixture, &["--fail-on", "warning"]);
+    assert_eq!(
+        fail_on_warning.status.code(),
+        Some(1),
+        "{fail_on_warning:?}"
+    );
+    assert!(String::from_utf8_lossy(&fail_on_warning.stdout)
+        .contains("Catalog audit failed: 0 error(s), 1 warning(s), 0 info"));
+
+    fs::remove_dir_all(fixture).expect("cleanup");
+}
+
+#[test]
+fn audit_info_threshold_prints_failed_status_and_exits_one() {
     let fixture = fixture_dir("audit-info-threshold");
+    write_config(&fixture);
+    write_catalogs(
+        &fixture,
+        "msgid \"Save\"\nmsgstr \"Save\"\n",
+        "#, fuzzy\nmsgid \"Save\"\nmsgstr \"Speichern\"\n",
+    );
+
+    let default = audit(&fixture, &[]);
+    assert!(default.status.success(), "{default:?}");
+    assert!(String::from_utf8_lossy(&default.stdout)
+        .contains("Catalog audit passed: 0 error(s), 0 warning(s), 1 info"));
+
+    let fail_on_info = audit(&fixture, &["--fail-on", "info"]);
+    assert_eq!(fail_on_info.status.code(), Some(1), "{fail_on_info:?}");
+    assert!(
+        String::from_utf8_lossy(&fail_on_info.stdout)
+            .contains("Catalog audit failed: 0 error(s), 0 warning(s), 1 info"),
+        "{fail_on_info:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&fail_on_info.stderr)
+            .contains("Catalog audit failed with 0 error(s), 0 warning(s), and 1 info"),
+        "{fail_on_info:?}"
+    );
+
+    fs::remove_dir_all(fixture).expect("cleanup");
+}
+
+#[test]
+fn audit_json_output_remains_machine_readable_when_its_threshold_fails() {
+    let fixture = fixture_dir("audit-json-threshold");
+    write_config(&fixture);
+    write_catalogs(
+        &fixture,
+        "msgid \"Save\"\nmsgstr \"Save\"\n",
+        "msgid \"Save\"\nmsgstr \"Speichern\"\n\nmsgid \"Only target\"\nmsgstr \"Nur Ziel\"\n",
+    );
+
+    let output = audit(&fixture, &["--json", "--fail-on", "warning"]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("audit JSON");
+    assert_eq!(json["summary"]["warnings"], 1);
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("Catalog audit"));
+
+    fs::remove_dir_all(fixture).expect("cleanup");
+}
+
+fn audit(cwd: &Path, arguments: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .arg("audit")
+        .args(arguments)
+        .current_dir(cwd)
+        .output()
+        .expect("run pmds audit")
+}
+
+fn write_config(fixture: &Path) {
     fs::create_dir_all(fixture.join("locales/en")).expect("create source catalog dir");
     fs::create_dir_all(fixture.join("locales/de")).expect("create target catalog dir");
     fs::write(
@@ -18,42 +102,11 @@ catalogs:
 "#,
     )
     .expect("write config");
-    fs::write(
-        fixture.join("locales/en/messages.po"),
-        "msgid \"Save\"\nmsgstr \"Save\"\n",
-    )
-    .expect("write source catalog");
-    fs::write(
-        fixture.join("locales/de/messages.po"),
-        "#, fuzzy\nmsgid \"Save\"\nmsgstr \"Speichern\"\n",
-    )
-    .expect("write target catalog");
-
-    let default = audit(&fixture, &[]);
-    assert!(default.status.success(), "{default:?}");
-
-    let fail_on_info = audit(&fixture, &["--fail-on", "info"]);
-    assert_eq!(fail_on_info.status.code(), Some(1), "{fail_on_info:?}");
-    assert!(
-        String::from_utf8_lossy(&fail_on_info.stdout).contains("1 info"),
-        "{fail_on_info:?}"
-    );
-    assert!(
-        String::from_utf8_lossy(&fail_on_info.stderr)
-            .contains("Catalog audit failed with 0 error(s), 0 warning(s), and 1 info"),
-        "{fail_on_info:?}"
-    );
-
-    fs::remove_dir_all(fixture).expect("cleanup");
 }
 
-fn audit(cwd: &Path, arguments: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_pmds"))
-        .arg("audit")
-        .args(arguments)
-        .current_dir(cwd)
-        .output()
-        .expect("run pmds audit")
+fn write_catalogs(fixture: &Path, source: &str, target: &str) {
+    fs::write(fixture.join("locales/en/messages.po"), source).expect("write source catalog");
+    fs::write(fixture.join("locales/de/messages.po"), target).expect("write target catalog");
 }
 
 fn fixture_dir(name: &str) -> PathBuf {

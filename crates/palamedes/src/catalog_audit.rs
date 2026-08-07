@@ -353,20 +353,24 @@ impl CatalogAuditCheckOptions {
 }
 
 fn target_locales(config: &CatalogArtifactConfig, requested: &[String]) -> Vec<String> {
-    if requested.is_empty() {
-        return config
+    let mut locales = if requested.is_empty() {
+        config
             .locales
             .iter()
             .filter(|locale| locale.as_str() != config.source_locale)
             .cloned()
-            .collect();
-    }
+            .collect::<Vec<_>>()
+    } else {
+        requested
+            .iter()
+            .filter(|locale| locale.as_str() != config.source_locale)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
 
-    requested
-        .iter()
-        .filter(|locale| locale.as_str() != config.source_locale)
-        .cloned()
-        .collect()
+    locales.sort();
+    locales.dedup();
+    locales
 }
 
 fn load_audit_catalogs(
@@ -561,6 +565,88 @@ msgstr "{name}, Eigentümer: {name}"
                 && diagnostic.message.contains("1 occurrence(s) in the source")
                 && diagnostic.message.contains("2 in the translation")
         }));
+    }
+
+    #[test]
+    fn deduplicates_and_sorts_explicit_audit_locales() {
+        let fixture = create_fixture_dir("catalog-audit-duplicate-locales");
+        let locale_dir = fixture.join("src/locales");
+        fs::create_dir_all(&locale_dir).expect("locale dir");
+        fs::write(
+            locale_dir.join("en.po"),
+            r#"msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "{count} of {count} sites covered"
+msgstr ""
+"#,
+        )
+        .expect("write en");
+        fs::write(
+            locale_dir.join("de.po"),
+            r#"msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "{count} of {count} sites covered"
+msgstr "{count} Standorte abgedeckt"
+"#,
+        )
+        .expect("write de");
+
+        let duplicate = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec!["de".to_owned(), "de".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit duplicate locales");
+        assert_eq!(duplicate.summary.target_locales, 1);
+        assert_eq!(duplicate.summary.errors, 1);
+        assert_eq!(
+            duplicate
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.code == "icu.argument_occurrence_mismatch")
+                .count(),
+            1
+        );
+
+        let first_order = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec![
+                "fr".to_owned(),
+                "en".to_owned(),
+                "de".to_owned(),
+                "de".to_owned(),
+            ],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit first locale order");
+        let second_order = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec![
+                "de".to_owned(),
+                "fr".to_owned(),
+                "en".to_owned(),
+                "de".to_owned(),
+            ],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect("audit second locale order");
+
+        assert!(first_order.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "catalog.missing_locale"
+                && diagnostic.locale.as_deref() == Some("fr")
+        }));
+        assert_eq!(
+            audit_signature(&first_order),
+            audit_signature(&second_order),
+            "explicit locale order must not change the audit result"
+        );
     }
 
     #[test]
@@ -783,6 +869,39 @@ msgstr "Hallo {{name}}"
                 path: "src/locales/{locale}".to_owned(),
                 format: PalamedesCatalogFormat::Po,
             }],
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct AuditSignature {
+        target_locales: usize,
+        diagnostics: usize,
+        errors: usize,
+        warnings: usize,
+        infos: usize,
+        source_messages: usize,
+        diagnostic_details: Vec<(String, Option<String>, Option<String>)>,
+    }
+
+    fn audit_signature(result: &super::CatalogAuditResult) -> AuditSignature {
+        AuditSignature {
+            target_locales: result.summary.target_locales,
+            diagnostics: result.summary.diagnostics,
+            errors: result.summary.errors,
+            warnings: result.summary.warnings,
+            infos: result.summary.infos,
+            source_messages: result.summary.source_messages,
+            diagnostic_details: result
+                .diagnostics
+                .iter()
+                .map(|diagnostic| {
+                    (
+                        diagnostic.code.clone(),
+                        diagnostic.locale.clone(),
+                        diagnostic.name.clone(),
+                    )
+                })
+                .collect(),
         }
     }
 
