@@ -145,27 +145,37 @@ describe("withPalamedes turbopack config", () => {
     expect(browserRule?.loaders?.[0]?.options).not.toHaveProperty("serverMessageSplitting")
   })
 
-  it("enables graph-split client bootstrapping only in the Turbopack browser graph", () => {
-    const configuredRules = getRules(withPalamedes({}, { messageSplitting: true }))[
-      "*"
-    ] as RuleItem[]
-    const browserRule = configuredRules.find((candidate) =>
-      conditionList(candidate).includes("browser")
-    )
-    const serverRule = configuredRules.find((candidate) =>
-      conditionList(candidate).some(
-        (condition) =>
-          typeof condition === "object" &&
-          condition !== null &&
-          "not" in condition &&
-          condition.not === "browser"
+  it.each([
+    ["development", "throw"],
+    ["production", "degrade"],
+  ] as const)(
+    "enables graph-split client bootstrapping with %s fragment failures set to %s in the Turbopack browser graph",
+    (mode, clientFragmentFailureMode) => {
+      vi.stubEnv("NODE_ENV", mode)
+      const configuredRules = getRules(withPalamedes({}, { messageSplitting: true }))[
+        "*"
+      ] as RuleItem[]
+      const browserRule = configuredRules.find((candidate) =>
+        conditionList(candidate).includes("browser")
       )
-    )
+      const serverRule = configuredRules.find((candidate) =>
+        conditionList(candidate).some(
+          (condition) =>
+            typeof condition === "object" &&
+            condition !== null &&
+            "not" in condition &&
+            condition.not === "browser"
+        )
+      )
 
-    expect(browserRule?.loaders?.[0]?.options).toMatchObject({ clientMessageSplitting: true })
-    expect(serverRule?.loaders?.[0]?.options).not.toHaveProperty("clientMessageSplitting")
-    expect(serverRule?.loaders?.[0]?.options).not.toHaveProperty("serverMessageSplitting")
-  })
+      expect(browserRule?.loaders?.[0]?.options).toMatchObject({
+        clientMessageSplitting: true,
+        clientFragmentFailureMode,
+      })
+      expect(serverRule?.loaders?.[0]?.options).not.toHaveProperty("clientMessageSplitting")
+      expect(serverRule?.loaders?.[0]?.options).not.toHaveProperty("serverMessageSplitting")
+    }
+  )
 
   it("requires the conventional Server Function entry module when enabled", () => {
     vi.spyOn(process, "cwd").mockReturnValue(path.join(nextExampleRoot, "missing"))
@@ -295,18 +305,28 @@ describe("withPalamedes webpack config", () => {
     expect(transformRule?.use?.[0]?.options).not.toHaveProperty("serverMessageSplitting")
   })
 
-  it("enables graph-split client bootstrapping only in the webpack client compiler", () => {
-    const configured = withPalamedes({}, { messageSplitting: true })
-    const clientRule = collectWebpackRules(configured, { isServer: false }).find((rule) =>
-      rule.use?.[0]?.loader.includes("palamedes-loader")
-    )
-    const serverRule = collectWebpackRules(configured, { isServer: true }).find((rule) =>
-      rule.use?.[0]?.loader.includes("palamedes-loader")
-    )
+  it.each([
+    ["development", "throw"],
+    ["production", "degrade"],
+  ] as const)(
+    "enables graph-split client bootstrapping with %s fragment failures set to %s in the webpack client compiler",
+    (mode, clientFragmentFailureMode) => {
+      vi.stubEnv("NODE_ENV", mode)
+      const configured = withPalamedes({}, { messageSplitting: true })
+      const clientRule = collectWebpackRules(configured, { isServer: false }).find((rule) =>
+        rule.use?.[0]?.loader.includes("palamedes-loader")
+      )
+      const serverRule = collectWebpackRules(configured, { isServer: true }).find((rule) =>
+        rule.use?.[0]?.loader.includes("palamedes-loader")
+      )
 
-    expect(clientRule?.use?.[0]?.options).toMatchObject({ clientMessageSplitting: true })
-    expect(serverRule?.use?.[0]?.options).not.toHaveProperty("clientMessageSplitting")
-  })
+      expect(clientRule?.use?.[0]?.options).toMatchObject({
+        clientMessageSplitting: true,
+        clientFragmentFailureMode,
+      })
+      expect(serverRule?.use?.[0]?.options).not.toHaveProperty("clientMessageSplitting")
+    }
+  )
 
   it("enables webpack async modules only for graph-split client builds", () => {
     const configured = withPalamedes({}, { messageSplitting: true })
