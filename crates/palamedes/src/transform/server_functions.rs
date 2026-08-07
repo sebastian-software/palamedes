@@ -7,7 +7,10 @@ use oxc_ast::ast::{
 };
 use oxc_ast::ast_kind::AstKind;
 use oxc_ast_visit::{walk, Visit};
+use oxc_semantic::{Semantic, SemanticBuilder};
 use oxc_span::GetSpan;
+use oxc_syntax::reference::Reference;
+use oxc_syntax::symbol::SymbolId;
 
 use crate::error::PalamedesError;
 use crate::translation_scope::source_location;
@@ -97,7 +100,8 @@ fn module_server_function_spans(program: &Program<'_>) -> HashSet<(u32, u32)> {
         return HashSet::new();
     }
 
-    let local_async_function_spans = local_async_function_spans(program);
+    let semantic = SemanticBuilder::new().build(program).semantic;
+    let local_async_function_spans = local_async_function_spans(program, &semantic);
     let mut named_exports = HashSet::new();
     for statement in &program.body {
         if let Statement::ExportNamedDeclaration(export) = statement {
@@ -128,6 +132,7 @@ fn module_server_function_spans(program: &Program<'_>) -> HashSet<(u32, u32)> {
                     &export.declaration,
                     None,
                     &local_async_function_spans,
+                    &semantic,
                     &mut spans,
                 );
             }
@@ -140,6 +145,7 @@ fn module_server_function_spans(program: &Program<'_>) -> HashSet<(u32, u32)> {
                         record_exported_initializer_functions(
                             expression,
                             &local_async_function_spans,
+                            &semantic,
                             &mut spans,
                         );
                     }
@@ -156,6 +162,7 @@ fn module_server_function_spans(program: &Program<'_>) -> HashSet<(u32, u32)> {
                     declaration,
                     Some(&named_exports),
                     &local_async_function_spans,
+                    &semantic,
                     &mut spans,
                 );
             }
@@ -166,25 +173,28 @@ fn module_server_function_spans(program: &Program<'_>) -> HashSet<(u32, u32)> {
 }
 
 /// Records module-scope async functions that can be passed by reference to an
-/// exported Server Function wrapper. Only immutable bindings are eligible: a
-/// later assignment could change which callback the wrapper invokes.
-fn local_async_function_spans(program: &Program<'_>) -> HashMap<String, (u32, u32)> {
+/// exported Server Function wrapper. Bindings with writes are excluded because
+/// a later assignment could change which callback the wrapper invokes.
+fn local_async_function_spans(
+    program: &Program<'_>,
+    semantic: &Semantic<'_>,
+) -> HashMap<SymbolId, (u32, u32)> {
     let mut spans = HashMap::new();
 
     for statement in &program.body {
         match statement {
             Statement::FunctionDeclaration(function) => {
-                record_local_async_function(function, &mut spans);
+                record_local_async_function(function, semantic, &mut spans);
             }
             Statement::VariableDeclaration(declaration) => {
-                record_local_async_variable_functions(declaration, &mut spans);
+                record_local_async_variable_functions(declaration, semantic, &mut spans);
             }
             Statement::ExportDeclaration(export) => match &export.declaration {
                 Declaration::FunctionDeclaration(function) => {
-                    record_local_async_function(function, &mut spans);
+                    record_local_async_function(function, semantic, &mut spans);
                 }
                 Declaration::VariableDeclaration(declaration) => {
-                    record_local_async_variable_functions(declaration, &mut spans);
+                    record_local_async_variable_functions(declaration, semantic, &mut spans);
                 }
                 _ => {}
             },
@@ -192,7 +202,7 @@ fn local_async_function_spans(program: &Program<'_>) -> HashMap<String, (u32, u3
                 if let oxc_ast::ast::ExportDefaultDeclarationKind::FunctionDeclaration(function) =
                     &export.declaration
                 {
-                    record_local_async_function(function, &mut spans);
+                    record_local_async_function(function, semantic, &mut spans);
                 }
             }
             _ => {}
@@ -202,28 +212,39 @@ fn local_async_function_spans(program: &Program<'_>) -> HashMap<String, (u32, u3
     spans
 }
 
-fn record_local_async_function(function: &Function<'_>, spans: &mut HashMap<String, (u32, u32)>) {
+fn record_local_async_function(
+    function: &Function<'_>,
+    semantic: &Semantic<'_>,
+    spans: &mut HashMap<SymbolId, (u32, u32)>,
+) {
     if function.r#async && function.body.is_some() {
-        if let Some(name) = function
+        if let Some(symbol_id) = function
             .id
             .as_ref()
-            .map(|identifier| identifier.name.to_string())
+            .and_then(|identifier| identifier.symbol_id.get())
+            .filter(|&symbol_id| !symbol_has_writes(semantic, symbol_id))
         {
-            spans.insert(name, (function.span.start, function.span.end));
+            spans.insert(symbol_id, (function.span.start, function.span.end));
         }
     }
 }
 
 fn record_local_async_variable_functions(
     declaration: &VariableDeclaration<'_>,
-    spans: &mut HashMap<String, (u32, u32)>,
+    semantic: &Semantic<'_>,
+    spans: &mut HashMap<SymbolId, (u32, u32)>,
 ) {
     if declaration.kind != VariableDeclarationKind::Const {
         return;
     }
 
     for declarator in &declaration.declarations {
-        let Some(name) = declarator.id.get_identifier_name() else {
+        let Some(symbol_id) = declarator
+            .id
+            .get_binding_identifier()
+            .and_then(|identifier| identifier.symbol_id.get())
+            .filter(|&symbol_id| !symbol_has_writes(semantic, symbol_id))
+        else {
             continue;
         };
         let Some(initializer) = &declarator.init else {
@@ -242,15 +263,23 @@ fn record_local_async_variable_functions(
             _ => None,
         };
         if let Some(span) = span {
-            spans.insert(name.to_string(), span);
+            spans.insert(symbol_id, span);
         }
     }
+}
+
+fn symbol_has_writes(semantic: &Semantic<'_>, symbol_id: SymbolId) -> bool {
+    semantic
+        .scoping()
+        .get_resolved_references(symbol_id)
+        .any(Reference::is_write)
 }
 
 fn record_declaration_functions(
     declaration: &Declaration<'_>,
     named_exports: Option<&HashSet<String>>,
-    local_async_function_spans: &HashMap<String, (u32, u32)>,
+    local_async_function_spans: &HashMap<SymbolId, (u32, u32)>,
+    semantic: &Semantic<'_>,
     spans: &mut HashSet<(u32, u32)>,
 ) {
     match declaration {
@@ -270,6 +299,7 @@ fn record_declaration_functions(
                 declaration,
                 named_exports,
                 local_async_function_spans,
+                semantic,
                 spans,
             );
         }
@@ -280,7 +310,8 @@ fn record_declaration_functions(
 fn record_variable_functions(
     declaration: &VariableDeclaration<'_>,
     named_exports: Option<&HashSet<String>>,
-    local_async_function_spans: &HashMap<String, (u32, u32)>,
+    local_async_function_spans: &HashMap<SymbolId, (u32, u32)>,
+    semantic: &Semantic<'_>,
     spans: &mut HashSet<(u32, u32)>,
 ) {
     for declarator in &declaration.declarations {
@@ -295,6 +326,7 @@ fn record_variable_functions(
                 record_exported_initializer_functions(
                     initializer,
                     local_async_function_spans,
+                    semantic,
                     spans,
                 );
             }
@@ -310,12 +342,14 @@ fn record_function(function: &Function<'_>, spans: &mut HashSet<(u32, u32)>) {
 
 fn record_exported_initializer_functions(
     expression: &Expression<'_>,
-    local_async_function_spans: &HashMap<String, (u32, u32)>,
+    local_async_function_spans: &HashMap<SymbolId, (u32, u32)>,
+    semantic: &Semantic<'_>,
     spans: &mut HashSet<(u32, u32)>,
 ) {
     let mut collector = ExportedInitializerFunctionCollector {
         spans,
         local_async_function_spans,
+        semantic,
         function_depth: 0,
     };
     collector.visit_expression(expression.get_inner_expression());
@@ -323,7 +357,8 @@ fn record_exported_initializer_functions(
 
 struct ExportedInitializerFunctionCollector<'a> {
     spans: &'a mut HashSet<(u32, u32)>,
-    local_async_function_spans: &'a HashMap<String, (u32, u32)>,
+    local_async_function_spans: &'a HashMap<SymbolId, (u32, u32)>,
+    semantic: &'a Semantic<'a>,
     function_depth: usize,
 }
 
@@ -357,9 +392,16 @@ impl<'a> Visit<'a> for ExportedInitializerFunctionCollector<'_> {
                 else {
                     continue;
                 };
-                if let Some(span) = self
-                    .local_async_function_spans
-                    .get(identifier.name.as_str())
+                if let Some(span) = identifier
+                    .reference_id
+                    .get()
+                    .and_then(|reference_id| {
+                        self.semantic
+                            .scoping()
+                            .get_reference(reference_id)
+                            .symbol_id()
+                    })
+                    .and_then(|symbol_id| self.local_async_function_spans.get(&symbol_id))
                 {
                     self.spans.insert(*span);
                 }
