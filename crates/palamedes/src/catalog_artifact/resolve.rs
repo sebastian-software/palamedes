@@ -4,7 +4,9 @@ use regex::Regex;
 
 use crate::error::{PalamedesError, PalamedesResult};
 
-use super::load::{load_catalogs, parse_catalog_sources, read_catalog_sources, CatalogSources};
+use super::load::{
+    load_catalogs, parse_catalog_sources_with_observer, read_catalog_sources, CatalogSources,
+};
 use super::types::{CatalogArtifactConfig, FallbackLocales};
 use super::{resolve_catalog_path, PreparedCompilation};
 
@@ -44,8 +46,15 @@ pub(super) struct CompilationSnapshot {
 }
 
 impl CompilationSnapshot {
-    pub(super) fn into_prepared(self) -> PalamedesResult<PreparedCompilation> {
-        let loaded = parse_catalog_sources(&self.sources, &self.source_locale)?;
+    pub(super) fn into_prepared_with_observer<F>(
+        self,
+        on_parse: F,
+    ) -> PalamedesResult<PreparedCompilation>
+    where
+        F: FnMut(),
+    {
+        let loaded =
+            parse_catalog_sources_with_observer(&self.sources, &self.source_locale, on_parse)?;
         Ok(PreparedCompilation {
             locale: self.locale,
             fallback_chain: self.fallback_chain,

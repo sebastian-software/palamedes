@@ -74,11 +74,23 @@ pub(super) fn parse_catalog_sources(
     sources: &[CatalogSource],
     source_locale: &str,
 ) -> PalamedesResult<LocaleCatalogs> {
+    parse_catalog_sources_with_observer(sources, source_locale, || {})
+}
+
+pub(super) fn parse_catalog_sources_with_observer<F>(
+    sources: &[CatalogSource],
+    source_locale: &str,
+    mut on_parse: F,
+) -> PalamedesResult<LocaleCatalogs>
+where
+    F: FnMut(),
+{
     let mut loaded = LocaleCatalogs::new();
     for source in sources {
         let options = ParseCatalogOptions::new(&source.content, source_locale)
             .with_locale(source.locale.as_str())
             .with_mode(source.format.ferrocat_mode());
+        on_parse();
         let parsed =
             parse_catalog(options).map_err(|source_error| PalamedesError::ParseCatalog {
                 path: source.path.clone(),

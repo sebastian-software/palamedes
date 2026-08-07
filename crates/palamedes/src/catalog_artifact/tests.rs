@@ -8,7 +8,11 @@ use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
 use std::collections::BTreeSet;
 use std::fs;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -596,28 +600,26 @@ fn selected_catalog_cache_reuses_parses_and_index_across_sidecars() {
     let fixture = create_fixture_dir("selected-catalog-cache-reuse");
     let locale_dir = fixture.join("src/locales");
     fs::create_dir_all(&locale_dir).expect("locale dir");
-    write_test_catalog(&locale_dir, "en", &[("Hello", ""), ("Goodbye", "")]);
-    write_test_catalog(
-        &locale_dir,
-        "de",
-        &[("Hello", "Hallo"), ("Goodbye", "Auf Wiedersehen")],
-    );
-    let request = selected_request(&fixture, &locale_dir, "Hello");
+    write_numbered_catalog(&locale_dir, "en", "", 64);
+    write_numbered_catalog(&locale_dir, "de", "DE ", 64);
     let cache = CatalogCompilationCache::new(8);
 
-    // This models many module sidecars selecting different subsets from one
-    // locale. Parsing/index construction scales with catalog snapshots, not
-    // with the number of selected module compiles.
-    for _ in 0..64 {
+    // Each distinct requested ID represents a separate module sidecar. The
+    // counters are incremented at the actual parser and ID-index construction
+    // sites, so this fails if either heavy operation is keyed by selection.
+    for index in 0..64 {
+        let message = format!("Message {index}");
+        let request = selected_request(&fixture, &locale_dir, &message);
         let result = compile_catalog_artifact_selected_cached(&cache, &request)
             .expect("selected catalog artifact");
         assert_eq!(result.messages.len(), 1);
+        let expected = format!("DE {message}");
         assert_eq!(
             result
                 .messages
-                .get(&compiled_key("Hello", None))
+                .get(&compiled_key(&message, None))
                 .map(String::as_str),
-            Some("Hallo")
+            Some(expected.as_str())
         );
     }
 
@@ -677,10 +679,134 @@ fn selected_catalog_cache_invalidates_equal_mtime_content_replacement() {
     assert_eq!(
         cache.statistics(),
         super::cache::CacheStatistics {
+            parses: 5,
+            index_builds: 2,
+        }
+    );
+}
+
+#[test]
+fn selected_catalog_cache_failures_do_not_consume_ready_capacity() {
+    let fixture = create_fixture_dir("selected-catalog-cache-failure-capacity");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Hallo")]);
+    write_test_catalog(&locale_dir, "fr", &[("Hello", "Bonjour")]);
+    let cache = CatalogCompilationCache::new(1);
+    let fr = selected_request_for_locale(&fixture, &locale_dir, "fr", "Hello");
+    compile_catalog_artifact_selected_cached(&cache, &fr).expect("warm ready entry");
+
+    fs::write(locale_dir.join("de.po"), "not a catalog").expect("write malformed catalog");
+    let de = selected_request_for_locale(&fixture, &locale_dir, "de", "Hello");
+    for _ in 0..3 {
+        assert!(compile_catalog_artifact_selected_cached(&cache, &de).is_err());
+    }
+    assert_eq!(
+        cache.ready_len(),
+        1,
+        "failed snapshots must not occupy the LRU"
+    );
+    compile_catalog_artifact_selected_cached(&cache, &fr).expect("hot ready entry survives");
+    assert_eq!(
+        cache.statistics(),
+        super::cache::CacheStatistics {
+            parses: 5,
+            index_builds: 1,
+        }
+    );
+}
+
+#[test]
+fn selected_catalog_cache_keeps_identical_builds_coalesced_under_capacity_pressure() {
+    let fixture = create_fixture_dir("selected-catalog-cache-in-flight-capacity");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Hallo")]);
+    write_test_catalog(&locale_dir, "fr", &[("Hello", "Bonjour")]);
+    let cache = Arc::new(CatalogCompilationCache::new(1));
+    let (started_tx, started_rx) = mpsc::sync_channel(2);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    cache.set_before_build_hook(Arc::new(move |locale| {
+        if locale == "de" {
+            started_tx.send(()).expect("report build start");
+            release_rx
+                .lock()
+                .expect("release lock")
+                .recv()
+                .expect("release build");
+        }
+    }));
+
+    let first_cache = Arc::clone(&cache);
+    let first_fixture = fixture.clone();
+    let first_dir = locale_dir.clone();
+    let first = thread::spawn(move || {
+        compile_catalog_artifact_selected_cached(
+            &first_cache,
+            &selected_request_for_locale(&first_fixture, &first_dir, "de", "Hello"),
+        )
+    });
+    started_rx.recv().expect("first build started");
+    compile_catalog_artifact_selected_cached(
+        &cache,
+        &selected_request_for_locale(&fixture, &locale_dir, "fr", "Hello"),
+    )
+    .expect("capacity pressure build");
+
+    let second_cache = Arc::clone(&cache);
+    let second_fixture = fixture.clone();
+    let second_dir = locale_dir.clone();
+    let second = thread::spawn(move || {
+        compile_catalog_artifact_selected_cached(
+            &second_cache,
+            &selected_request_for_locale(&second_fixture, &second_dir, "de", "Hello"),
+        )
+    });
+    assert!(
+        matches!(
+            started_rx.recv_timeout(Duration::from_millis(200)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ),
+        "an identical request must wait for the original in-flight build"
+    );
+    release_tx.send(()).expect("release first build");
+    first.join().expect("first join").expect("first result");
+    second.join().expect("second join").expect("second result");
+    assert_eq!(
+        cache.statistics(),
+        super::cache::CacheStatistics {
             parses: 4,
             index_builds: 2,
         }
     );
+}
+
+#[test]
+fn selected_catalog_cache_cleans_up_an_unwinding_in_flight_build() {
+    let fixture = create_fixture_dir("selected-catalog-cache-panic-cleanup");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Hallo")]);
+    let cache = CatalogCompilationCache::new(1);
+    cache.set_before_build_hook(Arc::new(|locale| {
+        if locale == "de" {
+            panic!("test-only build interruption");
+        }
+    }));
+    let request = selected_request(&fixture, &locale_dir, "Hello");
+    assert!(catch_unwind(AssertUnwindSafe(|| {
+        compile_catalog_artifact_selected_cached(&cache, &request)
+    }))
+    .is_err());
+
+    cache.clear_before_build_hook();
+    compile_catalog_artifact_selected_cached(&cache, &request)
+        .expect("retry after unwinding build");
+    assert_eq!(cache.ready_len(), 1);
 }
 
 #[test]
@@ -1206,6 +1332,35 @@ fn selected_request(
         resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
         compiled_ids: vec![compiled_key(message, None)],
     }
+}
+
+fn selected_request_for_locale(
+    fixture: &Path,
+    locale_dir: &Path,
+    locale: &str,
+    message: &str,
+) -> CatalogArtifactSelectedRequest {
+    let mut request = selected_request(fixture, locale_dir, message);
+    request.config.locales.push("fr".to_owned());
+    request.resource_path = locale_dir
+        .join(format!("{locale}.po"))
+        .to_string_lossy()
+        .into_owned();
+    request
+}
+
+fn write_numbered_catalog(locale_dir: &Path, locale: &str, translation_prefix: &str, count: usize) {
+    let mut catalog = format!("msgid \"\"\nmsgstr \"\"\n\"Language: {locale}\\n\"\n");
+    for index in 0..count {
+        let message = format!("Message {index}");
+        let translation = format!("{translation_prefix}{message}");
+        catalog.push_str(&format!(
+            "\nmsgid {}\nmsgstr {}\n",
+            po_string(&message),
+            po_string(&translation)
+        ));
+    }
+    fs::write(locale_dir.join(format!("{locale}.po")), catalog).expect("write numbered catalog");
 }
 
 fn restore_mtime(path: &Path, mtime: SystemTime) {
