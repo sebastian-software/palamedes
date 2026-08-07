@@ -27,9 +27,14 @@ Every candidate includes:
 - native Ferrocat machine provenance when present; and
 - a per-entry fingerprint for optimistic concurrency control.
 
-The fingerprint covers the candidate's source, current target, relevant
-metadata, and review state. An unrelated entry can therefore be written in an
-earlier incremental batch without invalidating the remaining candidates.
+The fingerprint covers the candidate's source, current target, complete origin
+state, relevant metadata, and review state. The `maxOrigins` response limit
+only affects the displayed origin list, never the fingerprint. An unrelated
+entry can therefore be written in an earlier incremental batch without
+invalidating the remaining candidates.
+
+Fingerprint payload changes are versioned. When upgrading across a fingerprint
+version, discard in-flight candidates and list them again before patching.
 
 ## Applying completed translations
 

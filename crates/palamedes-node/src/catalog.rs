@@ -796,7 +796,10 @@ impl TryFrom<TranslationCandidateRequest> for palamedes::TranslationCandidateReq
                 .into_iter()
                 .map(palamedes::TranslationCandidateId::from)
                 .collect(),
-            max_origins: value.max_origins.map_or(8, |limit| limit as usize),
+            max_origins: value.max_origins.map_or(
+                palamedes::DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS,
+                |limit| limit as usize,
+            ),
         })
     }
 }

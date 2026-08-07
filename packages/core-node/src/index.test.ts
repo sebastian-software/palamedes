@@ -292,6 +292,64 @@ msgstr ""
     expect(output).toContain("{count, plural, one {# Datei} other {# Dateien}}")
   })
 
+  it("patches candidates listed with truncated origins using a stable fingerprint", async () => {
+    const rootDir = await createTempDir()
+    const catalogDir = path.join(rootDir, "locales", "de")
+    const targetPath = path.join(catalogDir, "messages.po")
+    const origins = Array.from(
+      { length: 10 },
+      (_, index) => `#: src/origin-${index + 1}.tsx#Origin${index + 1}`
+    ).join("\n")
+    await mkdir(catalogDir, { recursive: true })
+    await writeFile(
+      targetPath,
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+${origins}
+msgid "Hello"
+msgstr ""
+`
+    )
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+
+    const twoOrigins = listTranslationCandidates({ config, maxOrigins: 2 })
+    const sixOrigins = listTranslationCandidates({ config, maxOrigins: 6 })
+    const limited = twoOrigins.candidates.find((candidate) => candidate.id.message === "Hello")
+    const expanded = sixOrigins.candidates.find((candidate) => candidate.id.message === "Hello")
+
+    expect(limited?.origins).toHaveLength(2)
+    expect(expanded?.origins).toHaveLength(6)
+    expect(limited?.fingerprint).toBe(expanded?.fingerprint)
+    if (!limited) {
+      throw new Error("Expected candidate listed with truncated origins")
+    }
+
+    const applied = applyTranslationPatches({
+      config,
+      patches: [
+        {
+          id: limited.id,
+          fingerprint: limited.fingerprint,
+          translation: { kind: "singular", value: "Hallo" },
+        },
+      ],
+    })
+
+    expect(applied).toMatchObject({
+      updated: true,
+      stats: { requested: 1, applied: 1, catalogsUpdated: 1 },
+      outcomes: [{ status: "applied" }],
+      diagnostics: [],
+    })
+  })
+
   it("maps native transform results into JavaScript strings and source maps", () => {
     const source = `import { t } from "@palamedes/core/macro";
 function message(name) {

@@ -20,8 +20,12 @@ use crate::{
     PoOutputOptions,
 };
 
-const DEFAULT_MAX_ORIGINS: usize = 8;
-const CANDIDATE_FINGERPRINT_NAMESPACE: &[u8] = b"palamedes:translation-candidate:v1";
+/// Default maximum number of origins returned for each translation candidate.
+pub const DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS: usize = 8;
+
+// v2 fingerprints include every origin, rather than the response's bounded origin list.
+// Candidates listed by v1 builds must be listed again before they can be patched.
+const CANDIDATE_FINGERPRINT_NAMESPACE: &[u8] = b"palamedes:translation-candidate:v2";
 
 /// Stable catalog and message identity used by translation workflow APIs.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -589,7 +593,7 @@ pub fn apply_translation_patches(
 }
 
 fn default_max_origins() -> usize {
-    DEFAULT_MAX_ORIGINS
+    DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS
 }
 
 fn selected_locales(config: &CatalogArtifactConfig, requested: &[String]) -> Vec<String> {
@@ -690,15 +694,14 @@ fn build_candidate(
         || message.comments.clone(),
         |item| item.extracted_comments.iter().cloned().collect(),
     );
-    let origins = message
+    let all_origins = message
         .origin
         .iter()
-        .take(max_origins)
         .map(|origin| TranslationWorkflowOrigin {
             file: origin.file.clone(),
             scope: origin.scope.clone(),
         })
-        .collect();
+        .collect::<Vec<_>>();
     let id = TranslationCandidateId {
         catalog: loaded.scope.clone(),
         locale: loaded.locale.clone(),
@@ -712,12 +715,12 @@ fn build_candidate(
         source,
         translation,
         comments,
-        origins,
+        origins: all_origins.iter().take(max_origins).cloned().collect(),
         review,
         machine: message.machine.clone().map(MachineMetadata::from),
         fingerprint: String::new(),
     };
-    candidate.fingerprint = candidate_fingerprint(&candidate);
+    candidate.fingerprint = candidate_fingerprint(&candidate, &all_origins);
     candidate
 }
 
@@ -829,14 +832,17 @@ fn value_is_translated(value: &TranslationValue) -> bool {
     }
 }
 
-fn candidate_fingerprint(candidate: &TranslationCandidate) -> String {
+fn candidate_fingerprint(
+    candidate: &TranslationCandidate,
+    all_origins: &[TranslationWorkflowOrigin],
+) -> String {
     let mut hasher = Sha256::new();
     hasher.update(CANDIDATE_FINGERPRINT_NAMESPACE);
     hash_json(&mut hasher, &candidate.id);
     hash_json(&mut hasher, &candidate.source);
     hash_json(&mut hasher, &candidate.translation);
     hash_json(&mut hasher, &candidate.comments);
-    hash_json(&mut hasher, &candidate.origins);
+    hash_json(&mut hasher, all_origins);
     hash_json(&mut hasher, &candidate.review);
     hash_json(&mut hasher, &candidate.machine);
     let digest = hasher.finalize();
@@ -846,7 +852,7 @@ fn candidate_fingerprint(candidate: &TranslationCandidate) -> String {
         .collect()
 }
 
-fn hash_json<T: Serialize>(hasher: &mut Sha256, value: &T) {
+fn hash_json<T: Serialize + ?Sized>(hasher: &mut Sha256, value: &T) {
     let bytes = serde_json::to_vec(value).expect("translation fingerprint payload is serializable");
     hasher.update((bytes.len() as u64).to_be_bytes());
     hasher.update(bytes);
@@ -1335,6 +1341,72 @@ mod tests {
                 .map(|ai| ai.model.as_str()),
             Some("example/new")
         );
+    }
+
+    #[test]
+    fn fingerprints_complete_origins_while_returning_the_requested_origin_limit() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let origins = (1..=10)
+            .map(|index| format!("#: src/origin-{index}.tsx#Origin{index}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let content = fs::read_to_string(&path).expect("read fixture");
+        let expanded_content = content.replace(
+            "#: src/home.tsx#HomePage\n#: src/shared.ts#formatGreeting",
+            &origins,
+        );
+        fs::write(&path, &expanded_content).expect("write expanded origins");
+
+        let target = id("messages/{locale}", "de", "Hello", None);
+        let two_origins = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![target.clone()],
+            max_origins: 2,
+        })
+        .expect("list candidate with two origins");
+        let six_origins = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![target.clone()],
+            max_origins: 6,
+        })
+        .expect("list candidate with six origins");
+        let limited = candidate(&two_origins.candidates, "Hello");
+        let expanded = candidate(&six_origins.candidates, "Hello");
+
+        assert_eq!(limited.origins.len(), 2);
+        assert_eq!(expanded.origins.len(), 6);
+        assert_eq!(limited.fingerprint, expanded.fingerprint);
+
+        fs::write(
+            &path,
+            expanded_content.replace("Origin10", "UpdatedOrigin10"),
+        )
+        .expect("change an origin outside the response limit");
+        let changed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![target],
+            max_origins: 2,
+        })
+        .expect("list candidate after an origin change");
+        assert_ne!(
+            limited.fingerprint,
+            candidate(&changed.candidates, "Hello").fingerprint
+        );
+        fs::write(&path, expanded_content).expect("restore unchanged catalog");
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![singular_patch(limited, "Hallo")],
+        })
+        .expect("apply candidate listed with truncated origins");
+        assert!(result.updated);
+        assert!(result.diagnostics.is_empty());
     }
 
     #[test]
