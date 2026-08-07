@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use napi::bindgen_prelude::{Either, Result};
 use napi_derive::napi;
@@ -8,6 +9,18 @@ use crate::catalog_config::{
     CatalogArtifactConfig, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
     CatalogConfigFormat,
 };
+const SELECTED_CATALOG_CACHE_CAPACITY: usize = 64;
+
+/*
+ * N-API entrypoints can be invoked from Node worker threads. The core cache
+ * coalesces construction per catalog-content key and has no mutable data after
+ * construction; this process-local holder only bounds its lifetime and size.
+ */
+fn selected_catalog_cache() -> &'static palamedes::CatalogCompilationCache {
+    static CACHE: OnceLock<palamedes::CatalogCompilationCache> = OnceLock::new();
+    CACHE.get_or_init(|| palamedes::CatalogCompilationCache::new(SELECTED_CATALOG_CACHE_CAPACITY))
+}
+
 use crate::shared::{checked_u32, to_napi_error};
 
 #[napi(object)]
@@ -1899,7 +1912,7 @@ pub fn compile_catalog_artifact_selected(
     request: CatalogArtifactSelectedRequest,
 ) -> Result<CatalogArtifactResult> {
     let request = request.into();
-    palamedes::compile_catalog_artifact_selected(&request)
+    palamedes::compile_catalog_artifact_selected_cached(selected_catalog_cache(), &request)
         .map(CatalogArtifactResult::from)
         .map_err(to_napi_error)
 }

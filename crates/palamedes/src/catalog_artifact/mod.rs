@@ -1,3 +1,4 @@
+mod cache;
 mod compile;
 mod load;
 mod resolve;
@@ -17,6 +18,7 @@ use ferrocat::{
 
 use crate::error::{PalamedesError, PalamedesResult};
 
+pub use self::cache::CatalogCompilationCache;
 use self::compile::{build_artifact_result, runtime_icu_options};
 use self::load::LocaleCatalogs;
 use self::resolve::{ferrocat_fallback_chain, prepare_compilation};
@@ -37,7 +39,7 @@ pub(crate) fn resolve_catalog_path(
         .with_extension(catalog.format.extension())
 }
 
-struct PreparedCompilation {
+pub(super) struct PreparedCompilation {
     locale: String,
     fallback_chain: Vec<String>,
     watch_files: Vec<PathBuf>,
@@ -104,6 +106,27 @@ pub fn compile_catalog_artifact_selected(
         ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
     )
     .map_err(PalamedesError::BuildCompiledIdIndex)?;
+    compile_selected_prepared(&prepared, &compiled_id_index, request)
+}
+
+/// Compiles selected runtime IDs while reusing an explicit catalog cache.
+///
+/// The cache is caller-owned and validates catalog content on every call.
+/// This is intended for hosts that compile many independently selected module
+/// sidecars from the same catalog set.
+pub fn compile_catalog_artifact_selected_cached(
+    cache: &CatalogCompilationCache,
+    request: &CatalogArtifactSelectedRequest,
+) -> PalamedesResult<CatalogArtifactResult> {
+    cache.compile_selected(request)
+}
+
+pub(super) fn compile_selected_prepared(
+    prepared: &PreparedCompilation,
+    compiled_id_index: &CompiledCatalogIdIndex,
+    request: &CatalogArtifactSelectedRequest,
+) -> PalamedesResult<CatalogArtifactResult> {
+    let catalogs = prepared.loaded.values().collect::<Vec<_>>();
     let ferrocat_fallback_chain = ferrocat_fallback_chain(
         &prepared.fallback_chain,
         &prepared.locale,
@@ -134,13 +157,13 @@ pub fn compile_catalog_artifact_selected(
     .with_options(artifact_options);
 
     let artifact =
-        ferrocat_compile_catalog_artifact_selected(&catalogs, &compiled_id_index, &options)
+        ferrocat_compile_catalog_artifact_selected(&catalogs, compiled_id_index, &options)
             .map_err(PalamedesError::CompileSelectedCatalogArtifact)?;
 
     build_artifact_result(
         artifact,
-        prepared.watch_files,
-        prepared.fallback_chain,
+        prepared.watch_files.clone(),
+        prepared.fallback_chain.clone(),
         request.config.pseudo_locale.as_deref(),
         &prepared.locale,
     )
