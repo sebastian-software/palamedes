@@ -29,7 +29,49 @@ for files with no macro import looks equivalent, but is not: `i18n._(...)`
 runtime calls are extracted without any import, so the filter silently dropped
 messages until the tests caught it. Corrected, it saved only 119 ms to 98 ms
 serial and nothing measurable on the four-worker path, while making broken
-non-i18n files stop being reported. It is not in the codebase.
+non-i18n files stop being reported. On 27 July 2026, that macro-import-only
+variant was not in the codebase.
+
+### Later marker-based fast paths (31 July 2026)
+
+A later implementation adopted a broader, deliberately textual candidate gate.
+For non-MDX files, the gate treats a source as a parse candidate when its text
+contains either `@palamedes` or `i18n`; otherwise it returns no messages or
+source diagnostics without parsing. The `i18n` substring is the necessary
+correction to an `@palamedes`-only check: supported runtime calls such as
+`i18n._(...)` and `i18n.t(...)` have no macro import. This is a substring
+check, not a match for an `@palamedes/i18n` import or a claim that the source
+is syntactically valid.
+
+The policy appears in three source-analysis paths, whose symbols are the
+authoritative definition:
+
+- `extract_one_file` applies it before parsing in batch extraction, which is
+  used by `pmds extract` and the native binding.
+- `analyze_source_file_cached` applies it while reading an uncached file for
+  shared source analysis, including `pmds lint`.
+- `analyze_source_in` applies a narrower, post-parse gate: after macro-import
+  collection, a file with no imported macro and no `i18n` substring skips the
+  remaining AST walks and line-index construction. Parse diagnostics therefore
+  remain unchanged on this path.
+
+Batch extraction accepts the diagnostic trade-off that the 27 July alternative
+identified: a syntax-broken, marker-free non-MDX file is deliberately skipped
+and does not fail extraction. A marker-bearing candidate is parsed and keeps
+its normal parse diagnostics. MDX always takes the full path. The behavior is
+covered by `batch_skips_broken_files_without_i18n_markers` and
+`batch_reports_non_fatal_file_failures` in
+`crates/palamedes/src/extract.rs`; the CLI failure behavior for a marker-bearing
+file is covered by `extraction_failures_leave_existing_catalogs_unchanged` in
+`crates/palamedes-cli/src/commands/extract/mod.rs`.
+
+The scan is intentionally an over-approximation, not a parser. An incidental
+`@palamedes` or `i18n` in a comment, string, or unrelated identifier can cause
+an otherwise irrelevant file to be parsed; that is a performance false
+positive, not extraction evidence. Conversely, supported macro imports and
+runtime-call spellings carry one of these substrings, but a future supported
+surface that does not would be skipped until this gate is updated. Neither
+outcome lets textual scanning establish that a file is valid syntax.
 
 ## Decision
 
