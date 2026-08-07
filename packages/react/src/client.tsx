@@ -58,7 +58,7 @@ export function createClientCatalogBoundary<TLocale extends string>({
   const clientLocale = typeof window === "undefined" ? undefined : resolveClientLocale()
   let clientI18nResource: Promise<CompiledPalamedesI18n> | undefined
   let clientI18nResourceRejected = false
-  let clientI18nResourceEvictionScheduled = false
+  let clientI18nResourceError: unknown
 
   function createClientI18nResource(locale: TLocale): Promise<CompiledPalamedesI18n> {
     const resource = loadCatalog(locale).then((catalog) =>
@@ -66,33 +66,64 @@ export function createClientCatalogBoundary<TLocale extends string>({
     )
     clientI18nResource = resource
     clientI18nResourceRejected = false
-    clientI18nResourceEvictionScheduled = false
-    void resource.catch(() => {
+    clientI18nResourceError = undefined
+    void resource.catch((error: unknown) => {
       if (clientI18nResource === resource) {
         clientI18nResourceRejected = true
+        clientI18nResourceError = error
       }
     })
     return resource
   }
 
-  function scheduleClientI18nResourceEviction(resource: Promise<CompiledPalamedesI18n>) {
+  function evictClientI18nResource(error: unknown) {
     if (
-      clientI18nResource !== resource ||
-      !clientI18nResourceRejected ||
-      clientI18nResourceEvictionScheduled
+      clientI18nResource !== undefined &&
+      clientI18nResourceRejected &&
+      error === clientI18nResourceError
     ) {
-      return
+      clientI18nResource = undefined
+      clientI18nResourceRejected = false
+      clientI18nResourceError = undefined
+    }
+  }
+
+  type ClientCatalogResourceErrorBoundaryState = {
+    error: unknown
+    hasError: boolean
+    rethrow: boolean
+  }
+
+  class ClientCatalogResourceErrorBoundary extends React.Component<
+    { children: ReactNode },
+    ClientCatalogResourceErrorBoundaryState
+  > {
+    public state: ClientCatalogResourceErrorBoundaryState = {
+      error: undefined,
+      hasError: false,
+      rethrow: false,
     }
 
-    clientI18nResourceEvictionScheduled = true
-    // Let React commit the nearest error boundary with the original error before retrying.
-    setTimeout(() => {
-      if (clientI18nResource === resource && clientI18nResourceRejected) {
-        clientI18nResource = undefined
-        clientI18nResourceRejected = false
+    public static getDerivedStateFromError(
+      error: unknown
+    ): ClientCatalogResourceErrorBoundaryState {
+      return { error, hasError: true, rethrow: false }
+    }
+
+    public componentDidCatch(error: unknown) {
+      evictClientI18nResource(error)
+      this.setState({ rethrow: true })
+    }
+
+    public render() {
+      if (this.state.rethrow) {
+        throw this.state.error
       }
-      clientI18nResourceEvictionScheduled = false
-    })
+      if (this.state.hasError) {
+        return null
+      }
+      return this.props.children
+    }
   }
 
   if (clientLocale !== undefined) {
@@ -120,7 +151,7 @@ export function createClientCatalogBoundary<TLocale extends string>({
     return resource
   }
 
-  function ClientCatalogBoundary({ children, locale }: ClientCatalogBoundaryProps<TLocale>) {
+  function ClientCatalogContents({ children, locale }: ClientCatalogBoundaryProps<TLocale>) {
     const isClient = typeof window !== "undefined"
     if (isClient && locale !== clientLocale) {
       throw new Error(
@@ -131,9 +162,6 @@ export function createClientCatalogBoundary<TLocale extends string>({
     const resource = (
       isClient ? getClientI18nResource() : getServerCatalogResource(locale)
     ) as Promise<ClientCatalogModule | CompiledPalamedesI18n>
-    if (isClient && clientI18nResource === resource && clientI18nResourceRejected) {
-      scheduleClientI18nResourceEviction(resource as Promise<CompiledPalamedesI18n>)
-    }
     const catalogOrI18n = use(resource)
     const i18n = useMemo<CompiledPalamedesI18n>(() => {
       if (isClient) {
@@ -147,6 +175,17 @@ export function createClientCatalogBoundary<TLocale extends string>({
     }
 
     return children
+  }
+
+  function ClientCatalogBoundary(props: ClientCatalogBoundaryProps<TLocale>) {
+    if (typeof window === "undefined") {
+      return <ClientCatalogContents {...props} />
+    }
+    return (
+      <ClientCatalogResourceErrorBoundary>
+        <ClientCatalogContents {...props} />
+      </ClientCatalogResourceErrorBoundary>
+    )
   }
 
   ClientCatalogBoundary.displayName = "PalamedesClientCatalogBoundary"
