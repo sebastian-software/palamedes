@@ -3,6 +3,20 @@ import { fileURLToPath } from "node:url"
 
 export const ROOT = path.resolve(import.meta.dirname, "..")
 
+// These public identities are deliberately independent of EXAMPLE_MATRIX.
+// The guard compares matrix-derived values to them so a whole-family or
+// whole-strategy rename cannot preserve cardinality while breaking selectors.
+export const SERVER_FRAMEWORKS = [
+  "nextjs",
+  "tanstack",
+  "waku",
+  "react-router",
+  "solidstart",
+  "remix",
+]
+export const LOCALE_STRATEGIES = ["cookie", "route", "subdomain", "tld"]
+export const VITE_EXAMPLE = { framework: "vite", strategy: "client", id: "vite-mdx" }
+
 export const EXAMPLE_MATRIX = [
   {
     id: "nextjs-cookie",
@@ -560,9 +574,9 @@ export function selectExamples(filters) {
 // The server matrix is six framework families by four locale strategies. Vite
 // is an additional client-only MDX proof, rather than a seventh server family
 // or a fifth locale strategy.
-export const SERVER_EXAMPLES = EXAMPLE_MATRIX.filter((example) => example.framework !== "vite")
-export const SERVER_FRAMEWORKS = [...new Set(SERVER_EXAMPLES.map((example) => example.framework))]
-export const LOCALE_STRATEGIES = [...new Set(SERVER_EXAMPLES.map((example) => example.strategy))]
+export const SERVER_EXAMPLES = EXAMPLE_MATRIX.filter((example) =>
+  SERVER_FRAMEWORKS.includes(example.framework)
+)
 
 // Remix v3 is deliberately server-first while its component/UI adapter settles.
 // Its four entries have smoke contracts, but not the shared browser-interaction

@@ -1,4 +1,9 @@
+import { readFile } from "node:fs/promises"
+import { resolve } from "node:path"
+
 import { describe, expect, it } from "vitest"
+import { EXAMPLE_MATRIX } from "../example-matrix.mjs"
+import { buildPublishArgs } from "./port-plan.mjs"
 import { CONTAINER_HOST, buildStartArgs, buildStartEnv } from "./start-plan.mjs"
 
 describe("buildStartArgs", () => {
@@ -11,6 +16,18 @@ describe("buildStartArgs", () => {
       CONTAINER_HOST,
       "--port",
       "4020",
+    ])
+  })
+
+  it("runs Vite MDX directly with a container-reachable host and fixed port", () => {
+    expect(buildStartArgs({ framework: "vite", start: ["preview"], port: 4070 })).toEqual([
+      "exec",
+      "vite",
+      "preview",
+      "--host",
+      CONTAINER_HOST,
+      "--port",
+      "4070",
     ])
   })
 
@@ -43,5 +60,28 @@ describe("buildStartEnv", () => {
       startEnv: { HOST: "127.0.0.1" },
     })
     expect(env.HOST).toBe(CONTAINER_HOST)
+  })
+})
+
+describe("container publish contract", () => {
+  it("publishes Vite MDX on its container-reachable start-plan port", async () => {
+    const vite = EXAMPLE_MATRIX.find((example) => example.id === "vite-mdx")
+    expect(vite).toBeDefined()
+    expect(buildStartArgs(vite)).toEqual([
+      "exec",
+      "vite",
+      "preview",
+      "--host",
+      CONTAINER_HOST,
+      "--port",
+      "4070",
+    ])
+    expect(buildPublishArgs(EXAMPLE_MATRIX)).toContain("4070:4070")
+
+    const containerfile = await readFile(
+      resolve(import.meta.dirname, "../../Containerfile"),
+      "utf8"
+    )
+    expect(containerfile).toMatch(/^EXPOSE .*\b4070\b/m)
   })
 })

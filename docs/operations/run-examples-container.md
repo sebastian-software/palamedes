@@ -57,7 +57,7 @@ from the ports the servers actually bind:
 podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
 ```
 
-Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4063:4063`.
+Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4063:4063 -p 4070:4070`.
 
 - **Init/reaping:** the image ships `tini` as its entrypoint, so reparented child
   processes are reaped cleanly with no extra flag (also works later via
@@ -92,6 +92,7 @@ container with an error code as soon as a server dies unexpectedly (fail-fast).
 | 4061 | `remix-route`          | route     |
 | 4062 | `remix-subdomain`      | subdomain |
 | 4063 | `remix-tld`            | tld       |
+| 4070 | `vite-mdx`             | client    |
 
 `scripts/example-matrix.mjs` is the single source of truth for the ports. The
 supervisor binds according to it automatically, and the `print-podman-ports.mjs`
@@ -111,6 +112,8 @@ touching the example `package.json` files:
   cannot be reliably overridden by an appended flag (Vite's CLI parser collects
   repeated flags into an array), so the supervisor runs `vite preview` directly
   with a single `--host 0.0.0.0`
+- **Vite MDX** (`vite preview`): uses the same container-only direct start plan
+  with a single `--host 0.0.0.0` and fixed port `4070`
 
 Next.js and React Router already bind `0.0.0.0` / honor `HOST`. Waku is driven via
 `HOST=0.0.0.0`; on the first container run, confirm external reachability of

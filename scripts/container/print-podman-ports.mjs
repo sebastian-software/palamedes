@@ -7,6 +7,7 @@
 
 import process from "node:process"
 import { EXAMPLE_MATRIX } from "../example-matrix.mjs"
+import { buildPublishArgs } from "./port-plan.mjs"
 
-const flags = EXAMPLE_MATRIX.flatMap((example) => ["-p", `${example.port}:${example.port}`])
+const flags = buildPublishArgs(EXAMPLE_MATRIX)
 process.stdout.write(`${flags.join(" ")}\n`)
