@@ -45,6 +45,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 pnpm verify:examples:smoke
 pnpm check:release-set
 pnpm check:binary-size
+pnpm check:llms
 ```
 
 `pnpm check:binary-size` builds the release CLI and holds it under a fixed
@@ -82,6 +83,13 @@ When adding a feature, include:
 - the failure mode or diagnostics users will see
 - the migration note if behavior changes
 - a short validation command
+
+`llms.txt` and `llms-full.txt` are curated context files for coding assistants,
+not generated API dumps. When a public CLI command, flag, package, or Node API
+changes, refresh the relevant level of detail in both files and run `pnpm
+check:llms`. The check ties the maintained context contract to the CLI docs,
+published package manifests, and exported Node API names; the site build copies
+the checked files to `palamedes.dev`.
 
 ## Pull Requests
 

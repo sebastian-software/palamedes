@@ -48,14 +48,15 @@ Recommended app-facing packages:
 - `@palamedes/vite-plugin`: Vite integration and `.po` loading
 - `@palamedes/next-plugin`: Next.js integration
 - `@palamedes/remix`: server-first Remix v3 integration (requires Node.js `>=24.3`)
-- `@palamedes/cli`: native CLI (`pmds extract`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog convert`); also hosts explicitly configured CLI plugins via `@palamedes/cli/plugin`
+- `@palamedes/cli`: native CLI (`pmds extract`, `pmds lint`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog merge-driver`, `pmds catalog convert`); also hosts explicitly configured CLI plugins via `@palamedes/cli/plugin`
 - `@palamedes/config`: config loading for the JS plugin loaders; also reads legacy `palamedes.config.ts`/`.js` as a compatibility path (the native CLI reads only YAML/JSON/TOML)
 
 Advanced/custom-tooling packages:
 
 - `@palamedes/transform`
 - `@palamedes/extractor`
-- `@palamedes/core-node`: native Node wrapper for transform, extract, catalog audit, metadata validation, and catalog combine workflows
+- `@palamedes/core-node`: native Node wrapper for transform, extract, catalog audit, metadata validation, catalog combine workflows, and typed translation candidate/patch APIs
+- `@palamedes/eslint-plugin`: Preview ESLint/Oxlint facade over native source diagnostics. Oxlint's JavaScript plugin API is still alpha; `pmds lint` remains the stable CI and MDX path.
 
 Reserved placeholder packages, not the normal starting point today:
 
@@ -255,12 +256,34 @@ Important consequences:
 - catalog health checks should use `pmds audit` or the `auditCatalogs(...)` API
 - completeness gates should use `pmds report --fail-if-below <percent>`
 
+### Translation candidate and patch APIs
+
+Custom translation tooling can use the synchronous typed APIs from
+`@palamedes/core-node`:
+
+```ts
+import {
+  applyTranslationPatches,
+  listTranslationCandidates,
+} from "@palamedes/core-node"
+```
+
+`listTranslationCandidates(...)` reads configured PO/FCL catalogs and returns
+candidates plus diagnostics. A candidate has a stable identity and a
+`fingerprint`; carry that fingerprint into `applyTranslationPatches(...)` so a
+patch is rejected when the current catalog no longer matches the candidate.
+The patch result reports `applied`, `unchanged`, `rejected`, or `notApplied`
+outcomes and diagnostics. A failed catalog replacement throws an error with a
+partial report; do not treat a thrown write error as proof that no earlier
+catalog patch completed.
+
 ## CLI model
 
 Core commands:
 
 ```bash
 pnpm exec pmds extract
+pnpm exec pmds lint
 pnpm exec pmds audit
 pnpm exec pmds report
 ```
@@ -269,27 +292,50 @@ Useful options include:
 
 ```bash
 pnpm exec pmds extract --clean
+pnpm exec pmds extract --check --json
 pnpm exec pmds extract --watch
 pnpm exec pmds extract --verbose
+pnpm exec pmds lint --json
+pnpm exec pmds lint --fail-on warning
 pnpm exec pmds audit --json
 pnpm exec pmds audit --fail-on warning
 pnpm exec pmds report --json
 pnpm exec pmds report --fail-if-below 90
 ```
 
+`pmds lint` is non-mutating source-authoring validation for the configured
+source files (including MDX). It has human or deterministic JSON output;
+`--fail-on warning` also makes warnings fail. Its cache is shared with
+extraction; use `--no-cache` when the run must not write the cache.
+
+`pmds extract --check --json` projects the configured PO/FCL catalogs through
+the normal extraction and serialization path, compares the result with disk,
+and reports deterministic clean, drift, or error data. It exits nonzero for
+drift without writing catalog files or creating missing catalog directories.
+The extraction cache may still be updated unless `--no-cache` is passed.
+
 Catalog utilities:
 
 ```bash
 pnpm exec pmds catalog merge --format=po --conflict-strategy=use-first --output out.po a.po b.po
+pnpm exec pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first
 pnpm exec pmds catalog convert --to fcl input.po
 ```
 
-`catalog merge` takes exactly two input files and also works as a Git merge driver:
+`catalog merge` takes exactly two input files. Add `--base base.po` for a
+deletion-aware three-way merge. For Git, use `catalog merge-driver` rather than
+reconstructing Git role mapping in a wrapper:
 
 ```bash
 git config merge.palamedes-catalog.driver \
-  'pmds catalog merge --format=po --conflict-strategy=use-first --output %A %A %B'
+  'pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first'
 ```
+
+The merge driver receives ancestor, current, other, and output positional paths
+from Git and needs `--path %P` to apply configured catalog formatting. It
+detects rebases and swaps Git's temporary roles so `use-first` consistently
+means the branch being merged or rebased. Use `--operation merge` or
+`--operation rebase` only for unusual Git orchestration.
 
 Extraction performance is already handled by the CLI and needs no user tuning by default. `pmds extract` runs a bounded parallel read/parse pass (`--threads <COUNT>`, or `extract-threads` in the config) and reuses an on-disk extraction cache (`--no-cache` disables it for one run; `extract-cache: false` disables it permanently).
 
