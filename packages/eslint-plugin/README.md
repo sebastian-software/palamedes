@@ -80,6 +80,17 @@ repeat native parsing. UTF-8 byte ranges from Rust are converted to the UTF-16
 indices expected by JavaScript linters before `SourceCode#getLocFromIndex` maps
 them to editor locations.
 
+Fatal native analysis failures are also emitted once per host parse, even when
+several Palamedes rules are enabled. The coordinator owns that one-shot state
+with the host `SourceCode` identity, so a later editor re-parse reports the
+failure again while an unchanged parse never duplicates it. ESLint-compatible
+hosts require diagnostics to be reported by an enabled rule, so the host
+`ruleId` is the first enabled Palamedes facade; the message explicitly identifies
+the diagnostic as a shared native-analysis failure, not a finding from that rule.
+When a native error contains Palamedes' structured `at file:line:column` or
+`Location: file:line:column` form, the adapter uses that source location;
+otherwise it safely falls back to the start of the file.
+
 There are no fixes in this version. `pmds lint` suppressions are intentionally
 separate from ESLint/Oxlint directives and are only consumed by the CLI.
 

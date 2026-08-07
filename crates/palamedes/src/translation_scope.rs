@@ -152,7 +152,7 @@ fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<(&'a str, (u32,
     }
 }
 
-/// Formats a byte offset as a one-based filename, line, and column location.
+/// Formats a byte offset as a one-based filename, line, and Unicode-scalar column location.
 pub(crate) fn source_location(source: &str, filename: &str, offset: usize) -> String {
     let mut line = 1usize;
     let mut line_start = 0usize;
@@ -167,7 +167,20 @@ pub(crate) fn source_location(source: &str, filename: &str, offset: usize) -> St
         }
     }
 
-    let column = offset.saturating_sub(line_start) + 1;
+    let column = source[line_start..offset].chars().count() + 1;
 
     format!("{filename}:{line}:{column}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::source_location;
+
+    #[test]
+    fn source_locations_use_unicode_scalar_columns() {
+        let source = "const label = \"😀\"; t`Hello`";
+        let offset = source.find("t`Hello`").expect("translation macro offset");
+
+        assert_eq!(source_location(source, "view.tsx", offset), "view.tsx:1:20");
+    }
 }
