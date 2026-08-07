@@ -239,49 +239,144 @@ function directivePrologueEnd(code) {
   return end
 }
 
-function offsetSourceMapForInsertion(sourceMap, insertionOffset, insertion) {
-  if (!sourceMap || typeof sourceMap !== "object" || typeof sourceMap.mappings !== "string") {
-    return sourceMap
+function generatedPositionForText(text) {
+  const line = text.split("\n").length - 1
+  return { line, column: text.length - text.lastIndexOf("\n") - 1 }
+}
+
+function compareGeneratedPositions(left, right) {
+  if (left.line !== right.line) {
+    return left.line - right.line
   }
-  if (sourceMap.mappings === "" || insertion.length === 0) {
+  return left.column - right.column
+}
+
+function insertionMetrics(insertion) {
+  const position = generatedPositionForText(insertion)
+  return { addedLines: position.line, finalLineLength: position.column }
+}
+
+function shiftedGeneratedPosition(position, insertionPosition, insertion, metrics) {
+  if (compareGeneratedPositions(position, insertionPosition) < 0) {
+    return position
+  }
+  if (metrics.addedLines === 0) {
+    return { line: position.line, column: position.column + insertion.length }
+  }
+  return {
+    line: position.line + metrics.addedLines,
+    column:
+      position.line === insertionPosition.line
+        ? metrics.finalLineLength + position.column - insertionPosition.column
+        : position.column,
+  }
+}
+
+function isGeneratedPosition(position) {
+  return (
+    position &&
+    typeof position === "object" &&
+    Number.isInteger(position.line) &&
+    position.line >= 0 &&
+    Number.isInteger(position.column) &&
+    position.column >= 0
+  )
+}
+
+function offsetFlatSourceMap(sourceMap, insertionPosition, insertion, metrics) {
+  if (sourceMap.mappings === "") {
     return sourceMap
   }
 
-  const prefix = insertionOffset.source
-  const insertionLine = prefix.split("\n").length - 1
-  const insertionColumn = prefix.length - prefix.lastIndexOf("\n") - 1
-  const addedLines = insertion.split("\n").length - 1
-  const finalLineLength = insertion.length - insertion.lastIndexOf("\n") - 1
   const mappings = decode(sourceMap.mappings)
-  const shifted = Array.from({ length: mappings.length + addedLines }, () => [])
+  const shifted = Array.from({ length: mappings.length + metrics.addedLines }, () => [])
 
   for (const [lineIndex, segments] of mappings.entries()) {
     for (const segment of segments) {
-      if (lineIndex < insertionLine) {
-        shifted[lineIndex].push(segment)
-        continue
-      }
-      if (lineIndex > insertionLine) {
-        shifted[lineIndex + addedLines].push(segment)
-        continue
-      }
-      if (segment[0] < insertionColumn) {
-        shifted[lineIndex].push(segment)
-        continue
-      }
-
+      const position = shiftedGeneratedPosition(
+        { line: lineIndex, column: segment[0] },
+        insertionPosition,
+        insertion,
+        metrics
+      )
       const shiftedSegment = [...segment]
-      if (addedLines === 0) {
-        shiftedSegment[0] += insertion.length
-        shifted[lineIndex].push(shiftedSegment)
-      } else {
-        shiftedSegment[0] = finalLineLength + segment[0] - insertionColumn
-        shifted[lineIndex + addedLines].push(shiftedSegment)
-      }
+      shiftedSegment[0] = position.column
+      shifted[position.line].push(shiftedSegment)
     }
   }
 
   return { ...sourceMap, mappings: encode(shifted) }
+}
+
+function offsetIndexedSourceMap(sourceMap, insertionPosition, insertion, metrics) {
+  const sections = sourceMap.sections
+  if (!sections.every((section) => section && isGeneratedPosition(section.offset))) {
+    return sourceMap
+  }
+
+  let activeSectionIndex = -1
+  for (const [sectionIndex, section] of sections.entries()) {
+    // A section starting exactly at the insertion belongs to the original body
+    // and moves with it; only the preceding section can span the insertion.
+    if (compareGeneratedPositions(section.offset, insertionPosition) < 0) {
+      activeSectionIndex = sectionIndex
+    }
+  }
+
+  let changed = false
+  const shiftedSections = sections.map((section, sectionIndex) => {
+    if (sectionIndex === activeSectionIndex) {
+      const localInsertionPosition = {
+        line: insertionPosition.line - section.offset.line,
+        column:
+          insertionPosition.line === section.offset.line
+            ? insertionPosition.column - section.offset.column
+            : insertionPosition.column,
+      }
+      const map = offsetSourceMapAtPosition(section.map, localInsertionPosition, insertion, metrics)
+      if (map !== section.map) {
+        changed = true
+        return { ...section, map }
+      }
+      return section
+    }
+
+    if (compareGeneratedPositions(section.offset, insertionPosition) >= 0) {
+      changed = true
+      return {
+        ...section,
+        offset: shiftedGeneratedPosition(section.offset, insertionPosition, insertion, metrics),
+      }
+    }
+    return section
+  })
+
+  return changed ? { ...sourceMap, sections: shiftedSections } : sourceMap
+}
+
+function offsetSourceMapAtPosition(sourceMap, insertionPosition, insertion, metrics) {
+  if (!sourceMap || typeof sourceMap !== "object") {
+    return sourceMap
+  }
+  if (typeof sourceMap.mappings === "string") {
+    return offsetFlatSourceMap(sourceMap, insertionPosition, insertion, metrics)
+  }
+  if (Array.isArray(sourceMap.sections)) {
+    return offsetIndexedSourceMap(sourceMap, insertionPosition, insertion, metrics)
+  }
+  return sourceMap
+}
+
+function offsetSourceMapForInsertion(sourceMap, insertionOffset, insertion) {
+  if (insertion.length === 0) {
+    return sourceMap
+  }
+  return offsetSourceMapAtPosition(
+    sourceMap,
+    generatedPositionForText(insertionOffset.source),
+    insertion,
+    insertionMetrics(insertion)
+  )
 }
 
 function prependClientMessageBootstrap(code, bootstrap) {

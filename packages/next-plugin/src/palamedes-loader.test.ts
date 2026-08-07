@@ -13,6 +13,10 @@ declare global {
 }
 
 const require = createRequire(import.meta.url)
+const { decode, encode } = require("@jridgewell/sourcemap-codec") as {
+  decode(mappings: string): number[][][]
+  encode(mappings: number[][][]): string
+}
 const loaderPath = "../palamedes-loader.cjs"
 const moduleLoader = Module as unknown as {
   _load: (request: string, parent: unknown, isMain: boolean) => unknown
@@ -232,14 +236,16 @@ describe("palamedes-loader.cjs", () => {
   })
 
   it("keeps transformed source-map lines aligned after the client bootstrap", async () => {
+    const sourceMap = {
+      version: 3,
+      sources: ["page.tsx"],
+      names: [],
+      mappings: "AAAA;AACA",
+    }
+    const originalSourceMap = structuredClone(sourceMap)
     transformPalamedesMacros.mockReturnValue({
       code: ['"use client";', 'const label = getI18n()._("Hello");'].join("\n"),
-      map: {
-        version: 3,
-        sources: ["page.tsx"],
-        names: [],
-        mappings: "AAAA;AACA",
-      },
+      map: sourceMap,
       compiledIds: ["id-a"],
     })
 
@@ -251,6 +257,160 @@ describe("palamedes-loader.cjs", () => {
     expect(mappings[0]).toBe("AAAA")
     expect(mappings.slice(1, bodyLine)).toEqual(Array.from({ length: bodyLine - 1 }, () => ""))
     expect(mappings[bodyLine]).toBe("AACA")
+    expect(sourceMap).toEqual(originalSourceMap)
+    expect(output.map).not.toBe(sourceMap)
+  })
+
+  it("rebases indexed source maps through the client bootstrap without mutating the input", async () => {
+    const sourceMap = {
+      version: 3,
+      file: "page.js",
+      sections: [
+        {
+          offset: { line: 0, column: 0 },
+          map: {
+            version: 3,
+            sources: ["page.tsx"],
+            names: [],
+            mappings: "AAAA;AACA;AACA",
+          },
+        },
+        {
+          offset: { line: 3, column: 0 },
+          map: {
+            version: 3,
+            sources: ["page.tsx"],
+            names: [],
+            mappings: "AACA",
+          },
+        },
+      ],
+    }
+    const originalSourceMap = structuredClone(sourceMap)
+    transformPalamedesMacros.mockReturnValue({
+      code: [
+        '"use client";',
+        'const label = getI18n()._("Hello");',
+        'const second = getI18n()._("Again");',
+        'const tail = getI18n()._("Later");',
+      ].join("\n"),
+      map: sourceMap,
+      compiledIds: ["id-a"],
+    })
+
+    const output = await runLoaderResult({ clientMessageSplitting: true })
+    const bodyLine = output.code.split("\n").findIndex((line) => line.startsWith("const label ="))
+    const indexedMap = output.map as {
+      sections: Array<{ offset: { line: number; column: number }; map: { mappings: string } }>
+    }
+    const firstSectionMappings = decode(indexedMap.sections[0]!.map.mappings)
+
+    expect(bodyLine).toBeGreaterThan(1)
+    expect(firstSectionMappings[0]).toEqual([[0, 0, 0, 0]])
+    expect(firstSectionMappings.slice(1, bodyLine)).toEqual(
+      Array.from({ length: bodyLine - 1 }, () => [])
+    )
+    expect(firstSectionMappings[bodyLine]).toEqual([[0, 0, 1, 0]])
+    expect(firstSectionMappings[bodyLine + 1]).toEqual([[0, 0, 2, 0]])
+    expect(indexedMap.sections[1]!.offset).toEqual({ line: bodyLine + 2, column: 0 })
+    expect(sourceMap).toEqual(originalSourceMap)
+    expect(indexedMap).not.toBe(sourceMap)
+  })
+
+  it("rebases indexed source-map columns for a same-line directive prologue", async () => {
+    const directive = '"use client"; '
+    const sourceMap = {
+      version: 3,
+      sections: [
+        {
+          offset: { line: 0, column: 0 },
+          map: {
+            version: 3,
+            sources: ["page.tsx"],
+            names: [],
+            mappings: encode([
+              [
+                [0, 0, 0, 0],
+                [directive.length, 0, 0, directive.length],
+              ],
+            ]),
+          },
+        },
+      ],
+    }
+    const originalSourceMap = structuredClone(sourceMap)
+    transformPalamedesMacros.mockReturnValue({
+      code: `${directive}const label = getI18n()._("Hello");`,
+      map: sourceMap,
+      compiledIds: ["id-a"],
+    })
+
+    const output = await runLoaderResult({ clientMessageSplitting: true })
+    const bodyLine = output.code.split("\n").findIndex((line) => line.startsWith("const label ="))
+    const indexedMap = output.map as { sections: Array<{ map: { mappings: string } }> }
+    const mappings = decode(indexedMap.sections[0]!.map.mappings)
+
+    expect(output.code.startsWith(`${directive}\n`)).toBe(true)
+    expect(mappings[0]).toEqual([[0, 0, 0, 0]])
+    expect(mappings.slice(1, bodyLine)).toEqual(Array.from({ length: bodyLine - 1 }, () => []))
+    expect(mappings[bodyLine]).toEqual([[0, 0, 0, directive.length]])
+    expect(sourceMap).toEqual(originalSourceMap)
+  })
+
+  it("rebases indexed sections at the bootstrap insertion, including empty maps", async () => {
+    const sourceMap = {
+      version: 3,
+      sections: [
+        {
+          offset: { line: 0, column: 0 },
+          map: {
+            version: 3,
+            sources: ["page.tsx"],
+            names: [],
+            mappings: "AAAA",
+          },
+        },
+        {
+          offset: { line: 1, column: 0 },
+          map: {
+            version: 3,
+            sources: ["page.tsx"],
+            names: [],
+            mappings: "",
+          },
+        },
+        {
+          offset: { line: 2, column: 0 },
+          map: {
+            version: 3,
+            sources: ["page.tsx"],
+            names: [],
+            mappings: "AACA",
+          },
+        },
+      ],
+    }
+    const originalSourceMap = structuredClone(sourceMap)
+    transformPalamedesMacros.mockReturnValue({
+      code: [
+        '"use client";',
+        'const label = getI18n()._("Hello");',
+        "export const tail = true;",
+      ].join("\n"),
+      map: sourceMap,
+      compiledIds: ["id-a"],
+    })
+
+    const output = await runLoaderResult({ clientMessageSplitting: true })
+    const bodyLine = output.code.split("\n").findIndex((line) => line.startsWith("const label ="))
+    const indexedMap = output.map as {
+      sections: Array<{ offset: { line: number; column: number }; map: { mappings: string } }>
+    }
+
+    expect(indexedMap.sections[1]!.offset).toEqual({ line: bodyLine, column: 0 })
+    expect(indexedMap.sections[1]!.map.mappings).toBe("")
+    expect(indexedMap.sections[2]!.offset).toEqual({ line: bodyLine + 1, column: 0 })
+    expect(sourceMap).toEqual(originalSourceMap)
   })
 
   it("does not add server message imports to a client transform", async () => {
