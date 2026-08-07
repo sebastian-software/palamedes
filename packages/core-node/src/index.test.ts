@@ -4,7 +4,9 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { runInNewContext } from "node:vm"
 
+import ts from "typescript"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
@@ -745,6 +747,49 @@ function message(name) {
       sourcesContent: [source],
     })
     expect(map.mappings).not.toBe("")
+  })
+
+  it("executes transformed Trans through the compiled import when an authored local shadows it", () => {
+    const source = `import { Trans as MacroTrans } from "@palamedes/react/macro";
+import { Trans } from "@palamedes/react/compiled";
+function Example() {
+  const Trans = () => "authored-shadow"
+  return <MacroTrans>Hello</MacroTrans>
+}`
+    const result = transformMacrosNative(source, "sample.tsx")
+
+    expect(result.code).toContain(
+      'import { Trans as __palamedesTrans } from "@palamedes/react/compiled";'
+    )
+    expect(result.code).toContain("return <__palamedesTrans id=")
+
+    const executable = result.code
+      .replace(
+        'import { Trans as __palamedesTrans } from "@palamedes/react/compiled";',
+        'const __palamedesTrans = () => "compiled-component";'
+      )
+      .replace(
+        'import { Trans } from "@palamedes/react/compiled";',
+        'const Trans = () => "top-level-import";'
+      )
+    const output = ts.transpileModule(executable, {
+      compilerOptions: {
+        jsx: ts.JsxEmit.React,
+        jsxFactory: "jsx",
+        module: ts.ModuleKind.None,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText
+    const context: {
+      Example?: () => { type: () => string }
+      jsx: (type: () => string) => { type: () => string }
+    } = {
+      jsx: (type) => ({ type }),
+    }
+
+    runInNewContext(output, context)
+
+    expect(context.Example?.().type()).toBe("compiled-component")
   })
 
   it.each(["react", "solid"] as const)(

@@ -303,7 +303,7 @@ pub fn transform_macros(
     let mut trans_imports = visitor.trans_imports.iter().cloned().collect::<Vec<_>>();
     trans_imports.sort();
     for (module, local_name) in trans_imports {
-        if local_name != "Trans" || !collector.has_reusable_trans_import(&module) {
+        if local_name != "Trans" || !visitor.reused_trans_imports.contains(&module) {
             if local_name == "Trans" {
                 let _ = writeln!(prefix, "import {{ Trans }} from \"{module}\";");
             } else {
