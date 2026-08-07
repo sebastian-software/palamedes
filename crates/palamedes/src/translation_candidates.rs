@@ -97,7 +97,7 @@ pub struct TranslationCandidate {
 }
 
 /// Source origin exposed to translation workflow consumers.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslationWorkflowOrigin {
     /// Source filename.
@@ -694,7 +694,7 @@ fn build_candidate(
         || message.comments.clone(),
         |item| item.extracted_comments.iter().cloned().collect(),
     );
-    let all_origins = message
+    let mut all_origins = message
         .origin
         .iter()
         .map(|origin| TranslationWorkflowOrigin {
@@ -702,6 +702,8 @@ fn build_candidate(
             scope: origin.scope.clone(),
         })
         .collect::<Vec<_>>();
+    all_origins.sort();
+    all_origins.dedup();
     let id = TranslationCandidateId {
         catalog: loaded.scope.clone(),
         locale: loaded.locale.clone(),
@@ -1344,14 +1346,22 @@ mod tests {
     }
 
     #[test]
-    fn fingerprints_complete_origins_while_returning_the_requested_origin_limit() {
+    fn canonicalizes_complete_origins_for_fingerprints_and_response_limits() {
         let fixture = tempfile::tempdir().expect("fixture directory");
         let path = fixture.path().join("messages/de.po");
         write_po_fixture(&path, "de");
-        let origins = (1..=10)
+        let canonical_origins = (1..=10)
             .map(|index| format!("#: src/origin-{index}.tsx#Origin{index}"))
             .collect::<Vec<_>>()
             .join("\n");
+        let origins = format!(
+            "{}\n#: src/origin-1.tsx#Origin1",
+            (1..=10)
+                .rev()
+                .map(|index| format!("#: src/origin-{index}.tsx#Origin{index}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
         let content = fs::read_to_string(&path).expect("read fixture");
         let expanded_content = content.replace(
             "#: src/home.tsx#HomePage\n#: src/shared.ts#formatGreeting",
@@ -1381,6 +1391,26 @@ mod tests {
         assert_eq!(expanded.origins.len(), 6);
         assert_eq!(limited.fingerprint, expanded.fingerprint);
 
+        fs::write(
+            &path,
+            content.replace(
+                "#: src/home.tsx#HomePage\n#: src/shared.ts#formatGreeting",
+                &canonical_origins,
+            ),
+        )
+        .expect("rewrite origins in canonical order without duplicates");
+        let rewritten = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![target.clone()],
+            max_origins: 2,
+        })
+        .expect("list candidate after equivalent origin rewrite");
+        let rewritten = candidate(&rewritten.candidates, "Hello");
+        assert_eq!(limited.origins, rewritten.origins);
+        assert_eq!(limited.fingerprint, rewritten.fingerprint);
+
+        fs::write(&path, &expanded_content).expect("restore expanded origins");
         fs::write(
             &path,
             expanded_content.replace("Origin10", "UpdatedOrigin10"),
