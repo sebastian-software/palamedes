@@ -1,16 +1,23 @@
 import { createMiddleware } from "@solidjs/start/middleware"
-import { waitForServerI18nTestBarrier } from "@palamedes/runtime/server/test"
+import {
+  markServerI18nTestBarrierReached,
+  waitForServerI18nTestBarrier,
+} from "@palamedes/runtime/server/test"
 import { createServerI18n, serverI18nScope } from "./lib/i18n.server"
 import { locales } from "./lib/i18n"
 
-export default createMiddleware({
-  async onRequest(event) {
+export default createMiddleware([
+  async (event, next) => {
+    const request = event.req
     const { locale } = locales.resolve({
       strategy: "cookie",
-      acceptLanguageHeader: event.request.headers.get("accept-language"),
-      cookieHeader: event.request.headers.get("cookie"),
+      acceptLanguageHeader: request.headers.get("accept-language"),
+      cookieHeader: request.headers.get("cookie"),
     })
-    serverI18nScope.activate(createServerI18n(locale))
-    await waitForServerI18nTestBarrier(event.request)
+    return serverI18nScope.run(createServerI18n(locale), async () => {
+      await waitForServerI18nTestBarrier(request)
+      markServerI18nTestBarrierReached(request, event.res.headers)
+      return next()
+    })
   },
-})
+])
