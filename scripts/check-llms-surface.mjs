@@ -250,21 +250,52 @@ function verifyFeatureNarrative(read) {
 }
 
 function codeExamples(text) {
-  const fenced = [...text.matchAll(/^```[^\r\n]*\r?\n([\s\S]*?)^```/gmu)].map(
-    ([, example]) => example
-  )
-  const inline = [...text.matchAll(/`([^`]*)`/gu)].map(([, example]) => example)
+  const fenced = [...text.matchAll(/^```[^\r\n]*\r?\n([\s\S]*?)^```/gmu)].map(([, example]) => ({
+    example,
+    fenced: true,
+  }))
+  const withoutFencedExamples = text.replaceAll(/^```[^\r\n]*\r?\n[\s\S]*?^```/gmu, "")
+  const inline = [...withoutFencedExamples.matchAll(/`([^`]*)`/gu)].map(([, example]) => ({
+    example,
+    fenced: false,
+  }))
   return [...fenced, ...inline]
+}
+
+function hasShellContinuation(line) {
+  const trimmed = line.trimEnd()
+  let trailingBackslashes = 0
+  for (let index = trimmed.length - 1; index >= 0 && trimmed[index] === "\\"; index -= 1) {
+    trailingBackslashes += 1
+  }
+  return trailingBackslashes % 2 === 1
+}
+
+function logicalShellCommands(example) {
+  const commands = []
+  let command = ""
+  for (const line of example.split(/\r?\n/u)) {
+    const continued = hasShellContinuation(line)
+    const part = continued ? line.trimEnd().slice(0, -1) : line
+    command = command.length === 0 ? part : `${command} ${part.trimStart()}`
+    if (!continued) {
+      if (command.trim()) commands.push(command.trim())
+      command = ""
+    }
+  }
+  if (command.trim()) commands.push(command.trim())
+  return commands
 }
 
 function mergeDriverCommands(text) {
   const commands = []
-  for (const example of codeExamples(text)) {
-    const normalized = example.replaceAll(/\\\s*\r?\n/gu, " ").replaceAll(/\s+/gu, " ")
-    const matches = [...normalized.matchAll(/\bpmds\s+catalog\s+merge-driver\b/gu)]
-    for (const [index, match] of matches.entries()) {
-      const command = normalized.slice(match.index, matches[index + 1]?.index).trim()
-      if (/(?:^|\s)(?:%[OABP]|--(?:format|path)\b)/u.test(command)) commands.push(command)
+  for (const { example, fenced } of codeExamples(text)) {
+    const candidates = fenced ? logicalShellCommands(example) : [example]
+    for (const command of candidates) {
+      if (!/\bpmds\s+catalog\s+merge-driver\b/u.test(command)) continue
+      if (fenced || /(?:^|\s)(?:%[OABP]|--(?:format|path)\b)/u.test(command)) {
+        commands.push(command)
+      }
     }
   }
   return commands

@@ -75,7 +75,7 @@ test("accepts reordered options, alternate conflict-strategy spelling, and wrapp
       read: withMutation("llms.txt", (text) =>
         text.replace(
           "pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first",
-          "pmds catalog merge-driver --path=%P \\\n+            %O %A %B %A \\\n+            --conflict-strategy use-first"
+          "pmds catalog merge-driver --path=%P \\   \n            %O %A %B %A \\ \n            --conflict-strategy use-first"
         )
       ),
     })
@@ -116,6 +116,35 @@ test("rejects a stale command even when a canonical command remains elsewhere", 
     "llms-full.txt",
     (text) => `${text}\n\`pmds catalog merge-driver %O %A %B %A --format po --path %P\``,
     /llms-full\.txt must not hard-code a merge-driver format/
+  )
+})
+
+test("does not borrow placeholders from a later command in the same fenced example", () => {
+  expectRejected(
+    "llms.txt",
+    (text) =>
+      `${text}\n\`\`\`sh\npmds catalog merge-driver --path %P\nprintf '%O %A %B %A'\n\`\`\``,
+    /llms\.txt merge-driver guidance must pass Git placeholders %O %A %B %A/
+  )
+})
+
+test("does not treat an unrelated later catalog command as a merge-driver option", () => {
+  assert.doesNotThrow(() =>
+    checkLlmsSurface({
+      read: withMutation(
+        "llms.txt",
+        (text) =>
+          `${text}\n\`\`\`sh\npmds catalog merge-driver %O %A %B %A --path %P\npmds catalog merge --format po\n\`\`\``
+      ),
+    })
+  )
+})
+
+test("does not join an escaped trailing backslash with the next shell line", () => {
+  expectRejected(
+    "llms.txt",
+    (text) => `${text}\n\`\`\`sh\npmds catalog merge-driver --path %P \\\\\n%O %A %B %A\n\`\`\``,
+    /llms\.txt merge-driver guidance must pass Git placeholders %O %A %B %A/
   )
 })
 
