@@ -11,6 +11,12 @@ export const DEFAULT_LOCALE = "en"
 export const LOCALE_COOKIE = "locale"
 export type Locale = (typeof LOCALES)[number]
 
+declare global {
+  interface Window {
+    __PALAMEDES_LOCALE__?: string
+  }
+}
+
 /** Headless locale controls for this demo (cookie strategy). */
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
@@ -69,10 +75,10 @@ export function initializeClientI18n(locale: Locale) {
 }
 
 if (typeof window !== "undefined") {
-  const locale = document.documentElement.lang
+  const locale = window.__PALAMEDES_LOCALE__
   if (!locales.isLocale(locale)) {
     throw new Error(
-      `Expected a supported server document locale, received ${JSON.stringify(locale)}`
+      `Expected an injected supported server locale, received ${JSON.stringify(locale)}`
     )
   }
 

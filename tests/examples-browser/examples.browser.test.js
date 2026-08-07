@@ -52,7 +52,27 @@ function routeUrl(baseUrl) {
   return `${baseUrl}/en`
 }
 
-async function launchPage(launchArgs = []) {
+function hasClientLocaleProbe(example) {
+  return ["solidstart-cookie", "tanstack-cookie", "waku-cookie"].includes(example.id)
+}
+
+function hasServerDocumentLocale(example) {
+  return example.id !== "waku-cookie"
+}
+
+function documentLocale(example, locale) {
+  return hasServerDocumentLocale(example) ? locale : "en"
+}
+
+function isHydrationMismatch(message) {
+  return (
+    /\b(?:hydration|hydrate|hydrated)\b.*\b(?:mismatch|failed|error)/iu.test(message) ||
+    /\b(?:server rendered|server-rendered)\b.*\b(?:html|text|markup)/iu.test(message) ||
+    /\b(?:text content|html)\b.*\b(?:does not match|did not match|mismatch)/iu.test(message)
+  )
+}
+
+async function launchPage(launchArgs = [], { browserLocale = "en-US", navigatorLocale } = {}) {
   browser = await chromium.launch({
     args: launchArgs,
     executablePath: resolveChromiumExecutable(),
@@ -60,13 +80,30 @@ async function launchPage(launchArgs = []) {
   })
   const context = await browser.newContext({
     colorScheme: "light",
-    locale: "en-US",
+    locale: browserLocale,
     viewport: {
       width: 1440,
       height: 1200,
     },
   })
-  return context.newPage()
+  const page = await context.newPage()
+
+  if (navigatorLocale) {
+    await page.addInitScript((locale) => {
+      Object.defineProperties(navigator, {
+        language: {
+          configurable: true,
+          get: () => locale,
+        },
+        languages: {
+          configurable: true,
+          get: () => [locale],
+        },
+      })
+    }, navigatorLocale)
+  }
+
+  return page
 }
 
 afterEach(async () => {
@@ -79,10 +116,7 @@ async function currentServerLocale(page) {
 }
 
 async function waitForClientReady(page) {
-  await page
-    .getByTestId("client-ready")
-    .waitFor({ state: "attached", timeout: 10_000 })
-    .catch(() => {})
+  await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 })
 }
 
 async function stabilizePage(page) {
@@ -118,16 +152,21 @@ test("matrix example browser contract", async () => {
   const example = activeExample()
   expect(example.id).not.toBe("")
 
-  const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [])
-  const browserErrors = []
-  page.on("pageerror", (error) => browserErrors.push(error.message))
-
-  if (example.strategy === "cookie") {
-    // The browser context is en-US, while SSR negotiates es from this request
-    // header. A client bootstrap that falls back to navigator.language would
-    // therefore immediately diverge from the server-rendered document.
-    await page.setExtraHTTPHeaders({ "accept-language": "es-ES, en;q=0.8" })
-  }
+  const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [], {
+    // The browser sends es-ES to SSR, while client code sees en-US. A client
+    // bootstrap which chooses navigator.language would therefore diverge from
+    // the Spanish server document during hydration.
+    browserLocale: example.strategy === "cookie" ? "es-ES" : "en-US",
+    navigatorLocale: example.strategy === "cookie" ? "en-US" : undefined,
+  })
+  const pageErrors = []
+  const hydrationErrors = []
+  page.on("pageerror", (error) => pageErrors.push(error.message))
+  page.on("console", (message) => {
+    if (message.type() === "error" && isHydrationMismatch(message.text())) {
+      hydrationErrors.push(message.text())
+    }
+  })
 
   const initialUrl =
     example.strategy === "route"
@@ -170,12 +209,18 @@ test("matrix example browser contract", async () => {
 
   await expect
     .poll(() => currentServerLocale(page))
-    .toContain(example.strategy === "cookie" ? "Español" : "English")
+    .toMatch(example.strategy === "cookie" ? /español/iu : /english/iu)
   await expect
     .poll(() => page.locator("html").getAttribute("lang"))
-    .toBe(example.strategy === "cookie" ? "es" : "en")
+    .toBe(documentLocale(example, example.strategy === "cookie" ? "es" : "en"))
   await waitForClientReady(page)
-  expect(browserErrors).toEqual([])
+  expect(pageErrors).toEqual([])
+  if (hasClientLocaleProbe(example)) {
+    await expect
+      .poll(() => page.getByTestId("client-locale-value").textContent())
+      .toBe("Añadir al carrito")
+    expect(hydrationErrors).toEqual([])
+  }
   await captureScreenshot(page, example, "initial")
 
   if (example.strategy === "cookie") {
@@ -185,7 +230,9 @@ test("matrix example browser contract", async () => {
       .click({ force: true, noWaitAfter: true, timeout: 15_000 })
     await navigation
 
-    await expect.poll(() => page.locator("html").getAttribute("lang")).toBe("de")
+    await expect
+      .poll(() => page.locator("html").getAttribute("lang"))
+      .toBe(documentLocale(example, "de"))
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
 
     await waitForClientReady(page)
