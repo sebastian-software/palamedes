@@ -5,7 +5,7 @@
 //! described over the versioned stdio protocol, and then run as child
 //! processes. No JavaScript module or executable config is loaded here.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::io::{self, BufRead, BufReader, IsTerminal, Write};
@@ -19,15 +19,30 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Once;
 use std::thread;
 
+use clap::CommandFactory;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::command::Context;
 use crate::config::{ConfigPluginDeclaration, LoadedConfig};
 
-const BUILT_IN_NAMESPACES: &[&str] = &["extract", "lint", "audit", "report", "catalog", "version"];
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
+
+fn reserved_plugin_namespaces() -> BTreeSet<String> {
+    command_namespace_tokens(&mut crate::cli::Cli::command())
+}
+
+fn command_namespace_tokens(command: &mut clap::Command) -> BTreeSet<String> {
+    command.build();
+    command
+        .get_subcommands()
+        .flat_map(|subcommand| {
+            std::iter::once(subcommand.get_name()).chain(subcommand.get_all_aliases())
+        })
+        .map(str::to_owned)
+        .collect()
+}
 
 /// Dispatches one external Clap subcommand through the binary plugin host.
 pub fn run(args: &[String], context: &Context) -> u8 {
@@ -271,6 +286,14 @@ fn validate_manifest(
     resolved: &ResolvedPlugin,
     manifest: &PluginManifest,
 ) -> Result<(), PluginFailure> {
+    validate_manifest_with_reserved_namespaces(resolved, manifest, &reserved_plugin_namespaces())
+}
+
+fn validate_manifest_with_reserved_namespaces(
+    resolved: &ResolvedPlugin,
+    manifest: &PluginManifest,
+    reserved_namespaces: &BTreeSet<String>,
+) -> Result<(), PluginFailure> {
     if manifest.protocol_version != PROTOCOL_VERSION {
         return Err(PluginFailure::new(
             "PLUGIN_PROTOCOL_INCOMPATIBLE",
@@ -289,7 +312,7 @@ fn validate_manifest(
             ),
         ));
     }
-    if BUILT_IN_NAMESPACES.contains(&manifest.name.as_str()) {
+    if reserved_namespaces.contains(&manifest.name) {
         return Err(PluginFailure::new(
             "PLUGIN_NAMESPACE_COLLISION",
             format!(
@@ -1230,27 +1253,81 @@ mod tests {
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use clap::CommandFactory;
+    use clap::Command;
     use serde_json::json;
 
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use super::{
-        finish_run, is_kebab_name, matches_constraint, parse_event, resolve_binary_plugin,
-        validate_manifest, BinaryInvocation, ManifestCommand, PluginEvent, PluginInvocation,
-        PluginManifest, ResolvedPlugin, BUILT_IN_NAMESPACES, PROTOCOL_VERSION,
+        command_namespace_tokens, finish_run, is_kebab_name, matches_constraint, parse_event,
+        reserved_plugin_namespaces, resolve_binary_plugin, validate_manifest,
+        validate_manifest_with_reserved_namespaces, BinaryInvocation, ManifestCommand, PluginEvent,
+        PluginInvocation, PluginManifest, ResolvedPlugin, PROTOCOL_VERSION,
     };
-    use crate::cli::Cli;
 
     #[test]
-    fn built_in_namespaces_match_the_clap_command_tree() {
-        let cli = Cli::command();
-        let commands = cli
-            .get_subcommands()
-            .map(|command| command.get_name())
-            .collect::<Vec<_>>();
+    fn reserved_plugin_namespaces_match_the_built_clap_command_tree() {
+        assert_eq!(
+            reserved_plugin_namespaces(),
+            BTreeSet::from_iter(
+                ["extract", "lint", "audit", "report", "catalog", "version", "help"]
+                    .map(str::to_owned)
+            )
+        );
+    }
 
-        assert_eq!(BUILT_IN_NAMESPACES, commands);
+    #[test]
+    fn reserved_plugin_namespaces_include_aliases_without_an_order_contract() {
+        let expected = BTreeSet::from_iter(
+            [
+                "audit",
+                "check",
+                "help",
+                "internal-check",
+                "report",
+                "summary",
+            ]
+            .map(str::to_owned),
+        );
+        let mut audit_first = Command::new("pmds")
+            .subcommand(
+                Command::new("audit")
+                    .visible_alias("check")
+                    .alias("internal-check"),
+            )
+            .subcommand(Command::new("report").visible_alias("summary"));
+        let mut report_first = Command::new("pmds")
+            .subcommand(Command::new("report").visible_alias("summary"))
+            .subcommand(
+                Command::new("audit")
+                    .visible_alias("check")
+                    .alias("internal-check"),
+            );
+
+        assert_eq!(command_namespace_tokens(&mut audit_first), expected);
+        assert_eq!(command_namespace_tokens(&mut report_first), expected);
+
+        let resolved = ResolvedPlugin {
+            specifier: "@acme/plugin".to_owned(),
+            binary_path: "/fixture/plugin".into(),
+        };
+        for namespace in ["check", "internal-check", "summary"] {
+            let manifest = PluginManifest {
+                name: namespace.to_owned(),
+                protocol_version: PROTOCOL_VERSION,
+                commands: BTreeMap::from([(
+                    "inspect".to_owned(),
+                    ManifestCommand { description: None },
+                )]),
+            };
+            assert_eq!(
+                validate_manifest_with_reserved_namespaces(&resolved, &manifest, &expected)
+                    .expect_err("alias collision rejected")
+                    .code,
+                "PLUGIN_NAMESPACE_COLLISION",
+                "for alias {namespace}"
+            );
+        }
     }
 
     #[test]
@@ -1413,9 +1490,9 @@ mod tests {
                 .code,
             "PLUGIN_INVALID"
         );
-        for namespace in BUILT_IN_NAMESPACES {
+        for namespace in reserved_plugin_namespaces() {
             assert_eq!(
-                validate_manifest(&resolved, &manifest(namespace, PROTOCOL_VERSION))
+                validate_manifest(&resolved, &manifest(&namespace, PROTOCOL_VERSION))
                     .expect_err("built-in collision rejected")
                     .code,
                 "PLUGIN_NAMESPACE_COLLISION",
