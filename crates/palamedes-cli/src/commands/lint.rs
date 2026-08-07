@@ -294,17 +294,11 @@ impl CommentSyntax {
 #[derive(Default)]
 struct CommentScanState {
     javascript: Vec<JavascriptScanMode>,
+    javascript_regex_allowed: bool,
     quote: Option<char>,
     mdx_comment: Option<MdxComment>,
-}
-
-impl CommentScanState {
-    fn javascript_mode(&mut self) -> &mut Vec<JavascriptScanMode> {
-        if self.javascript.is_empty() {
-            self.javascript.push(JavascriptScanMode::Code);
-        }
-        &mut self.javascript
-    }
+    mdx_expression_depth: usize,
+    mdx_template: Vec<MdxTemplateMode>,
 }
 
 enum JavascriptScanMode {
@@ -314,6 +308,7 @@ enum JavascriptScanMode {
     SingleQuote,
     DoubleQuote,
     BlockComment { only_whitespace: bool },
+    Regex { character_class: bool },
 }
 
 #[derive(Clone, Copy)]
@@ -325,6 +320,14 @@ enum MdxCommentSyntax {
 struct MdxComment {
     syntax: MdxCommentSyntax,
     only_whitespace: bool,
+}
+
+enum MdxTemplateMode {
+    Raw,
+    Expression { braces: usize },
+    SingleQuote,
+    DoubleQuote,
+    BlockComment { only_whitespace: bool },
 }
 
 #[derive(Default)]
@@ -353,7 +356,7 @@ fn opening_fence(line: &str) -> Option<(char, usize)> {
     let content = commonmark_fence_content(line)?;
     for marker in ['`', '~'] {
         let width = fence_width(content, marker);
-        if width >= 3 {
+        if width >= 3 && (marker != '`' || !content[width..].contains('`')) {
             return Some((marker, width));
         }
     }
@@ -365,7 +368,11 @@ fn is_closing_fence(line: &str, marker: char, opening_width: usize) -> bool {
         return false;
     };
     let width = fence_width(content, marker);
-    width >= opening_width && content[width..].trim().is_empty()
+    width >= opening_width && content[width..].bytes().all(is_commonmark_line_whitespace)
+}
+
+const fn is_commonmark_line_whitespace(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\r' | b'\n')
 }
 
 /// CommonMark permits up to three leading spaces before a fenced-code marker.
@@ -509,7 +516,12 @@ fn javascript_comment_openers(
     state: &mut CommentScanState,
 ) -> Vec<(usize, CommentSyntax)> {
     let mut openers = Vec::new();
-    let modes = state.javascript_mode();
+    if state.javascript.is_empty() {
+        state.javascript.push(JavascriptScanMode::Code);
+        state.javascript_regex_allowed = true;
+    }
+    let modes = &mut state.javascript;
+    let regex_allowed = &mut state.javascript_regex_allowed;
     let bytes = line.as_bytes();
     let mut index = 0usize;
     while index < bytes.len() {
@@ -538,6 +550,7 @@ fn javascript_comment_openers(
                     index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
                 } else if bytes[index] == b'\'' {
                     modes.pop();
+                    *regex_allowed = false;
                     index += 1;
                 } else {
                     index += char_width(bytes[index]);
@@ -548,6 +561,7 @@ fn javascript_comment_openers(
                     index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
                 } else if bytes[index] == b'"' {
                     modes.pop();
+                    *regex_allowed = false;
                     index += 1;
                 } else {
                     index += char_width(bytes[index]);
@@ -558,10 +572,29 @@ fn javascript_comment_openers(
                     index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
                 } else if bytes[index] == b'`' {
                     modes.pop();
+                    *regex_allowed = false;
                     index += 1;
                 } else if line[index..].starts_with("${") {
                     modes.push(JavascriptScanMode::TemplateExpression { braces: 0 });
+                    *regex_allowed = true;
                     index += 2;
+                } else {
+                    index += char_width(bytes[index]);
+                }
+            }
+            JavascriptScanMode::Regex { character_class } => {
+                if bytes[index] == b'\\' {
+                    index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
+                } else if *character_class && bytes[index] == b']' {
+                    *character_class = false;
+                    index += 1;
+                } else if !*character_class && bytes[index] == b'[' {
+                    *character_class = true;
+                    index += 1;
+                } else if !*character_class && bytes[index] == b'/' {
+                    modes.pop();
+                    *regex_allowed = false;
+                    index += 1;
                 } else {
                     index += char_width(bytes[index]);
                 }
@@ -590,20 +623,31 @@ fn javascript_comment_openers(
                 } else if bytes[index] == b'`' {
                     modes.push(JavascriptScanMode::TemplateRaw);
                     index += 1;
+                } else if bytes[index] == b'/' && *regex_allowed {
+                    modes.push(JavascriptScanMode::Regex {
+                        character_class: false,
+                    });
+                    index += 1;
                 } else if let JavascriptScanMode::TemplateExpression { braces } = modes
                     .last_mut()
                     .expect("JavaScript scanner has a base mode")
                 {
                     if bytes[index] == b'{' {
                         *braces += 1;
+                        *regex_allowed = true;
                     } else if bytes[index] == b'}' && *braces == 0 {
                         modes.pop();
+                        *regex_allowed = false;
                     } else if bytes[index] == b'}' {
                         *braces -= 1;
+                        *regex_allowed = false;
+                    } else {
+                        index += update_javascript_regex_context(line, index, regex_allowed);
+                        continue;
                     }
                     index += 1;
                 } else {
-                    index += char_width(bytes[index]);
+                    index += update_javascript_regex_context(line, index, regex_allowed);
                 }
             }
         }
@@ -611,11 +655,152 @@ fn javascript_comment_openers(
     openers
 }
 
+fn update_javascript_regex_context(line: &str, index: usize, regex_allowed: &mut bool) -> usize {
+    let bytes = line.as_bytes();
+    let byte = bytes[index];
+    if byte.is_ascii_whitespace() {
+        return 1;
+    }
+    if byte.is_ascii_alphabetic() || matches!(byte, b'_' | b'$') {
+        let end = line[index..]
+            .char_indices()
+            .find_map(|(offset, character)| {
+                (offset > 0
+                    && !(character.is_ascii_alphanumeric() || matches!(character, '_' | '$')))
+                .then_some(index + offset)
+            })
+            .unwrap_or(line.len());
+        *regex_allowed = matches!(
+            &line[index..end],
+            "case"
+                | "delete"
+                | "do"
+                | "else"
+                | "in"
+                | "instanceof"
+                | "new"
+                | "of"
+                | "return"
+                | "throw"
+                | "typeof"
+                | "void"
+                | "yield"
+                | "await"
+        );
+        return end - index;
+    }
+    if byte.is_ascii_digit() {
+        let end = line[index..]
+            .char_indices()
+            .find_map(|(offset, character)| {
+                (offset > 0 && !character.is_ascii_alphanumeric()).then_some(index + offset)
+            })
+            .unwrap_or(line.len());
+        *regex_allowed = false;
+        return end - index;
+    }
+    *regex_allowed = !matches!(byte, b')' | b']' | b'}');
+    char_width(byte)
+}
+
 fn mdx_comment_openers(line: &str, state: &mut CommentScanState) -> Vec<(usize, CommentSyntax)> {
     let mut openers = Vec::new();
     let bytes = line.as_bytes();
     let mut index = 0usize;
     while index < bytes.len() {
+        if let Some(mode) = state.mdx_template.last_mut() {
+            match mode {
+                MdxTemplateMode::Raw => {
+                    if bytes[index] == b'\\' {
+                        index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
+                    } else if bytes[index] == b'`' {
+                        state.mdx_template.pop();
+                        index += 1;
+                    } else if line[index..].starts_with("${") {
+                        state
+                            .mdx_template
+                            .push(MdxTemplateMode::Expression { braces: 0 });
+                        index += 2;
+                    } else {
+                        index += char_width(bytes[index]);
+                    }
+                }
+                MdxTemplateMode::Expression { braces } => {
+                    if line[index..].starts_with("//") {
+                        let after_opener = &line[index + 2..];
+                        let whitespace = after_opener.len() - after_opener.trim_start().len();
+                        let directive = index + 2 + whitespace;
+                        if directive_start(line, directive) {
+                            openers.push((directive, CommentSyntax::Line));
+                        }
+                        break;
+                    }
+                    if line[index..].starts_with("/*") {
+                        state.mdx_template.push(MdxTemplateMode::BlockComment {
+                            only_whitespace: true,
+                        });
+                        index += 2;
+                    } else if bytes[index] == b'\'' {
+                        state.mdx_template.push(MdxTemplateMode::SingleQuote);
+                        index += 1;
+                    } else if bytes[index] == b'"' {
+                        state.mdx_template.push(MdxTemplateMode::DoubleQuote);
+                        index += 1;
+                    } else if bytes[index] == b'`' {
+                        state.mdx_template.push(MdxTemplateMode::Raw);
+                        index += 1;
+                    } else if bytes[index] == b'{' {
+                        *braces += 1;
+                        index += 1;
+                    } else if bytes[index] == b'}' && *braces == 0 {
+                        state.mdx_template.pop();
+                        index += 1;
+                    } else if bytes[index] == b'}' {
+                        *braces -= 1;
+                        index += 1;
+                    } else {
+                        index += char_width(bytes[index]);
+                    }
+                }
+                MdxTemplateMode::SingleQuote => {
+                    if bytes[index] == b'\\' {
+                        index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
+                    } else if bytes[index] == b'\'' {
+                        state.mdx_template.pop();
+                        index += 1;
+                    } else {
+                        index += char_width(bytes[index]);
+                    }
+                }
+                MdxTemplateMode::DoubleQuote => {
+                    if bytes[index] == b'\\' {
+                        index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
+                    } else if bytes[index] == b'"' {
+                        state.mdx_template.pop();
+                        index += 1;
+                    } else {
+                        index += char_width(bytes[index]);
+                    }
+                }
+                MdxTemplateMode::BlockComment { only_whitespace } => {
+                    if line[index..].starts_with("*/") {
+                        state.mdx_template.pop();
+                        index += 2;
+                    } else {
+                        if *only_whitespace {
+                            if directive_start(line, index) {
+                                openers.push((index, CommentSyntax::Block));
+                                *only_whitespace = false;
+                            } else if !line[index..].starts_with(char::is_whitespace) {
+                                *only_whitespace = false;
+                            }
+                        }
+                        index += char_width(bytes[index]);
+                    }
+                }
+            }
+            continue;
+        }
         if let Some(comment) = state.mdx_comment.as_mut() {
             let closes = match comment.syntax {
                 MdxCommentSyntax::Block => "*/",
@@ -654,7 +839,16 @@ fn mdx_comment_openers(line: &str, state: &mut CommentScanState) -> Vec<(usize, 
             }
             continue;
         }
-        if let Some(quote) = ['\'', '"']
+        if bytes[index] == b'{' {
+            state.mdx_expression_depth += 1;
+            index += 1;
+        } else if bytes[index] == b'}' && state.mdx_expression_depth > 0 {
+            state.mdx_expression_depth -= 1;
+            index += 1;
+        } else if bytes[index] == b'`' && state.mdx_expression_depth > 0 {
+            state.mdx_template.push(MdxTemplateMode::Raw);
+            index += 1;
+        } else if let Some(quote) = ['\'', '"']
             .into_iter()
             .find(|quote| line[index..].starts_with(*quote))
         {
@@ -889,6 +1083,22 @@ const trailing = 1; /* explanation palamedes-lint-disable-line pmds/no-placehold
     }
 
     #[test]
+    fn suppression_parser_enforces_commonmark_fence_whitespace_and_backtick_info() {
+        let nbsp_close = "```mdx\n```\u{a0}\n<!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message -->\n";
+        let (suppressions, diagnostics) = super::parse_suppressions(nbsp_close, "guide.mdx");
+        assert!(suppressions.is_empty());
+        assert!(diagnostics.is_empty());
+
+        let invalid_backtick_info = "```tsx`not-a-fence\n<!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message -->\n";
+        let (suppressions, diagnostics) =
+            super::parse_suppressions(invalid_backtick_info, "guide.mdx");
+        assert!(diagnostics.is_empty());
+        assert_eq!(suppressions.len(), 1);
+        assert_eq!(suppressions[0].primary.line, 2);
+        assert_eq!(suppressions[0].line, 3);
+    }
+
+    #[test]
     fn suppression_parser_allows_whitespace_only_multiline_comments() {
         let script = "/*\n \tpalamedes-lint-disable-line pmds/no-placeholder-only-message\n*/\n";
         let (suppressions, diagnostics) = super::parse_suppressions(script, "view.ts");
@@ -927,6 +1137,58 @@ const message = `outer ${tag`inner ${(
         assert_eq!(suppressions.len(), 1);
         assert_eq!(suppressions[0].primary.line, 3);
         assert_eq!(suppressions[0].line, 4);
+    }
+
+    #[test]
+    fn suppression_parser_ignores_regexp_braces_in_template_expressions() {
+        let source = r#"const escaped = `outer ${/\}/.test(status) ? (
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  t`${status}`
+) : ""}`;
+const character_class = `outer ${/[}]/.test(status) ? (
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  t`${status}`
+) : ""}`;
+const division = `outer ${status / 2 ? (
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  t`${status}`
+) : ""}`;
+"#;
+        let (suppressions, diagnostics) = super::parse_suppressions(source, "view.ts");
+
+        assert!(diagnostics.is_empty());
+        assert_eq!(suppressions.len(), 3);
+        assert_eq!(
+            suppressions
+                .iter()
+                .map(|suppression| (suppression.primary.line, suppression.line))
+                .collect::<Vec<_>>(),
+            vec![(2, 3), (6, 7), (10, 11)]
+        );
+    }
+
+    #[test]
+    fn suppression_parser_keeps_mdx_template_text_inert() {
+        let source = r#"{`raw <!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message --> ${(
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  t`${status}`
+)}`}
+{`nested ${`escaped \` <!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message --> ${(
+  /* palamedes-lint-disable-next-line pmds/prefer-trans-in-jsx */
+  t`${status}`
+)}`}`}
+"#;
+        let (suppressions, diagnostics) = super::parse_suppressions(source, "guide.mdx");
+
+        assert!(diagnostics.is_empty());
+        assert_eq!(suppressions.len(), 2);
+        assert_eq!(
+            suppressions
+                .iter()
+                .map(|suppression| (suppression.primary.line, suppression.line))
+                .collect::<Vec<_>>(),
+            vec![(2, 3), (6, 7)]
+        );
     }
 
     #[test]

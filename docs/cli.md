@@ -153,8 +153,9 @@ start immediately after a supported comment opener, allowing whitespace but no
 other text; in block and HTML comments, that whitespace may continue onto the
 directive's physical line. JS and TS accept `//` and `/* ... */`; JSX and TSX
 accept those forms including JSX `{/* ... */}`; MDX accepts HTML `<!-- ... -->`
-and JSX `{/* ... */}`. MDX fenced code blocks are always ignored so
-documentation examples cannot become unused suppressions.
+and JSX `{/* ... */}`; JavaScript expressions in MDX also accept their native
+`//` and `/* ... */` forms. Raw MDX template text and fenced code blocks are
+always ignored so documentation examples cannot become unused suppressions.
 
 ```tsx
 // palamedes-lint-disable-next-line pmds/no-placeholder-only-message

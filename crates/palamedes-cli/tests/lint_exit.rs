@@ -118,6 +118,110 @@ export function Label({ status }) {
 }
 
 #[test]
+fn lint_keeps_commonmark_fence_edge_cases_on_the_public_path() {
+    let fixture = fixture_dir("commonmark-fence");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+    )
+    .expect("write config");
+    fs::write(
+        fixture.join("src/nbsp-close.mdx"),
+        "```mdx\n```\u{a0}\n<!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message -->\n",
+    )
+    .expect("write NBSP fence source");
+    fs::write(
+        fixture.join("src/invalid-opener.mdx"),
+        "```tsx`not-a-fence\n<!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message -->\n",
+    )
+    .expect("write invalid opener source");
+
+    let output = pmds(&fixture, &["lint", "--json", "--fail-on", "warning"]);
+    assert_eq!(output.status.code(), Some(4), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        stdout.matches("pmds/unused-suppression").count(),
+        1,
+        "{stdout}"
+    );
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn lint_suppresses_a_template_expression_comment_after_a_regexp_literal() {
+    let fixture = fixture_dir("regexp-template-expression-suppression");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+    )
+    .expect("write config");
+    fs::write(
+        fixture.join("src/view.tsx"),
+        r#"import { t } from "@palamedes/core/macro";
+export function Label({ status }) {
+  const label = `outer ${/}/.test(status) ? (
+    // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+    t`${status}`
+  ) : ""}`;
+  return <p>{label}</p>;
+}
+"#,
+    )
+    .expect("write source");
+
+    let output = pmds(
+        &fixture,
+        &["lint", "--json", "--fail-on", "warning", "--threads", "1"],
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("\"suppressed\": 1"),
+        "{output:?}"
+    );
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn lint_treats_only_mdx_template_expression_comments_as_suppressions() {
+    let fixture = fixture_dir("mdx-template-expression-suppression");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+    )
+    .expect("write config");
+    fs::write(
+        fixture.join("src/guide.mdx"),
+        r#"import { t } from "@palamedes/core/macro";
+
+{`raw <!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message --> ${(
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  t`${status}`
+)}`}
+"#,
+    )
+    .expect("write source");
+
+    let output = pmds(
+        &fixture,
+        &["lint", "--json", "--fail-on", "warning", "--threads", "1"],
+    );
+    assert_eq!(output.status.code(), Some(4), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        stdout.matches("pmds/unused-suppression").count(),
+        1,
+        "{stdout}"
+    );
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
 fn lint_configuration_failures_keep_the_generic_exit_code() {
     let fixture = fixture_dir("configuration-failure");
     fs::create_dir_all(&fixture).expect("create fixture");
