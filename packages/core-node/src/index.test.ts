@@ -587,7 +587,7 @@ msgstr ""
     await mkdir(path.dirname(secondPath), { recursive: true })
     await Promise.all([writeFile(firstPath, catalog), writeFile(secondPath, catalog)])
 
-    const addon = await loadTestSupportAddon(rootDir)
+    const addon = await loadTestSupportAddon()
     const listed = addon.listTranslationCandidates({ config, locales: ["de"], maxOrigins: 8 })
     const first = listed.candidates.find((candidate) => candidate.id.catalog === "first/{locale}")
     const second = listed.candidates.find((candidate) => candidate.id.catalog === "second/{locale}")
@@ -1000,7 +1000,7 @@ type TestSupportBindings = Pick<GeneratedNativeBindings, "listTranslationCandida
   ): GeneratedTranslationPatchResult
 }
 
-async function loadTestSupportAddon(tempDir: string): Promise<TestSupportBindings> {
+async function loadTestSupportAddon(): Promise<TestSupportBindings> {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
   execFileSync("cargo", ["build", "--package", "palamedes-node", "--features", "test-support"], {
     cwd: repoRoot,
@@ -1009,7 +1009,15 @@ async function loadTestSupportAddon(tempDir: string): Promise<TestSupportBinding
   const extension =
     process.platform === "win32" ? "dll" : process.platform === "darwin" ? "dylib" : "so"
   const libraryName = `${process.platform === "win32" ? "" : "lib"}palamedes_node.${extension}`
-  const addonPath = path.join(tempDir, "palamedes-node.node")
+  // Windows keeps loaded native addons open until Node exits, so a copy inside
+  // the per-test fixture would make its afterEach cleanup fail with EPERM.
+  // target/ is ignored and is already the build-artifact home for this addon.
+  const addonPath = path.join(
+    repoRoot,
+    "target",
+    "debug",
+    `palamedes-node-test-support-${process.pid}.node`
+  )
   await copyFile(path.join(repoRoot, "target", "debug", libraryName), addonPath)
   if (process.platform === "darwin") {
     execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", addonPath], {
