@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url"
 
 import { ESLint } from "eslint"
 
-import plugin from "./index"
+import plugin, { configs } from "./index"
 import {
   createAnalysisCoordinator,
   nativeFailureLocationToUtf16Index,
@@ -59,7 +59,7 @@ describe("native Palamedes lint adapter", () => {
     expect(analyze).toHaveBeenCalledTimes(2)
   })
 
-  it("claims a cached native failure once per SourceCode identity", () => {
+  it("uses weak source claims while reusing a cached native failure across fresh parses", () => {
     const analyze = vi.fn(() => {
       throw new Error("Translation macro `t` must be used inside a function at view.tsx:2:1.")
     })
@@ -158,6 +158,34 @@ const message = t\`Hello\``,
       })
     }
   )
+
+  it("reports recommended ESLint failures once per file and once again after a fresh parse", async () => {
+    const eslint = eslintFor(configs.recommended.rules)
+    const failures = ["first", "second"].map((name) => ({
+      filePath: `${name}.jsx`,
+      source: `import { t } from "@palamedes/core/macro"
+function ${name}View() { return t({ message: ${name}Message }) }`,
+    }))
+
+    const firstPass = await Promise.all(
+      failures.map(({ filePath, source }) => eslint.lintText(source, { filePath }))
+    )
+    for (const [index, [result]] of firstPass.entries()) {
+      expect(result.messages).toHaveLength(1)
+      expect(result.messages[0]).toMatchObject({
+        ruleId: "palamedes/no-placeholder-only-message",
+        message: expect.stringContaining(`Palamedes native analysis failed`),
+        line: 2,
+        column: failures[index].source.split("\n")[1].indexOf("t({") + 1,
+      })
+    }
+
+    const [freshResult] = await eslint.lintText(failures[0].source, {
+      filePath: failures[0].filePath,
+    })
+    expect(freshResult.messages).toHaveLength(1)
+    expect(freshResult.messages[0]?.message).toContain("Palamedes native analysis failed")
+  })
 
   it.each(["react", "solid"])(
     "reports aliased %s macros through separate ESLint rule names at the exact Unicode range",
@@ -300,6 +328,107 @@ function View() { return t({ message }) }`
         message: expect.stringContaining("Palamedes native analysis failed"),
       })
       expect(output.diagnostics[0].labels[0].span).toMatchObject({ line: 2, column: 26 })
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it("reports each native failure once across multiple Oxlint files in one worker", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "palamedes-oxlint-multi-failure-"))
+    try {
+      const pluginPath = fileURLToPath(new URL("../dist/index.mjs", import.meta.url))
+      const failures = Array.from({ length: 6 }, (_, index) => ({
+        filename: `f${index}.jsx`,
+        source: `import { t } from "@palamedes/core/macro"
+function View${index}() { const prefix${index} = ${index}; return t({ message: message${index} }) }`,
+      }))
+      const semanticFilename = "semantic.jsx"
+      const semanticSource = `import { t } from "@palamedes/core/macro"
+function SemanticView({ status }) {
+  return <p>{t\`${"${status}"}\`}</p>
+}`
+      const configPath = path.join(directory, ".oxlintrc.json")
+      const sourcePaths = failures.map(({ filename, source }, index) => {
+        const sourcePath = path.join(directory, filename)
+        writeFileSync(sourcePath, source)
+        return index === 1 ? [sourcePath, path.join(directory, semanticFilename)] : [sourcePath]
+      })
+      writeFileSync(path.join(directory, semanticFilename), semanticSource)
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          categories: { correctness: "off" },
+          jsPlugins: [{ name: "palamedes", specifier: pluginPath }],
+          rules: {
+            "palamedes/no-placeholder-only-message": "warn",
+            "palamedes/no-empty-component-only-message": "warn",
+            "palamedes/prefer-trans-in-jsx": "warn",
+          },
+        })
+      )
+
+      const require = createRequire(import.meta.url)
+      const oxlintEntry = require.resolve("oxlint")
+      const oxlintBin = path.resolve(path.dirname(oxlintEntry), "../bin/oxlint")
+      const run = spawnSync(
+        process.execPath,
+        [
+          oxlintBin,
+          "--config",
+          configPath,
+          "--format",
+          "json",
+          "--threads",
+          "1",
+          ...sourcePaths.flat(),
+        ],
+        { cwd: directory, encoding: "utf8" }
+      )
+
+      expect(run).toMatchObject({ status: 0 })
+      const output = JSON.parse(run.stdout) as {
+        diagnostics: Array<{
+          code: string
+          labels: Array<{ span: { line: number; column: number } }>
+          message: string
+        }>
+      }
+      const nativeDiagnostics = output.diagnostics.filter((diagnostic) =>
+        diagnostic.message.startsWith("Palamedes native analysis failed:")
+      )
+      expect(nativeDiagnostics).toHaveLength(failures.length)
+      for (const failure of failures) {
+        const diagnostic = nativeDiagnostics.filter((candidate) =>
+          candidate.message.includes(failure.filename)
+        )
+        expect(diagnostic).toHaveLength(1)
+        expect(diagnostic[0]).toMatchObject({
+          code: "palamedes(no-placeholder-only-message)",
+          message: expect.stringContaining("descriptor `message` must be a string literal"),
+          labels: [
+            {
+              span: {
+                line: 2,
+                column: failure.source.split("\n")[1].indexOf("t({") + 1,
+              },
+            },
+          ],
+        })
+      }
+
+      const semanticDiagnostics = output.diagnostics.filter(
+        (diagnostic) => !diagnostic.message.startsWith("Palamedes native analysis failed:")
+      )
+      expect(semanticDiagnostics.map(({ code }) => code).sort()).toStrictEqual([
+        "palamedes(no-placeholder-only-message)",
+        "palamedes(prefer-trans-in-jsx)",
+      ])
+      for (const diagnostic of semanticDiagnostics) {
+        expect(diagnostic.labels[0]?.span).toMatchObject({
+          line: 3,
+          column: semanticSource.split("\n")[2].indexOf("t`") + 1,
+        })
+      }
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
