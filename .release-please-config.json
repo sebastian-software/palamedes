@@ -217,6 +217,11 @@
         },
         {
           "type": "json",
+          "path": "packages/tanstack/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "packages/runtime/package.json",
           "jsonpath": "$.version"
         },

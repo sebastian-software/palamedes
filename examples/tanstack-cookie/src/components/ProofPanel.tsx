@@ -13,13 +13,13 @@ type ProofPanelProps = {
 export function ProofPanel({ locale }: ProofPanelProps) {
   const when = new Date(EVENT.startsAt)
   const seats = EVENT.seatsLeft
-  const [message, setMessage] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Record<string, string> | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function refresh() {
     startTransition(async () => {
       const result = await getLocalizedServerStatus()
-      setMessage(result.message)
+      setMessages(result.messages)
     })
   }
 
@@ -94,9 +94,18 @@ export function ProofPanel({ locale }: ProofPanelProps) {
           <span className="feat-name">
             <Trans>Server</Trans>
           </span>
-          <span className="feat-out is-text" data-testid="server-proof-message">
-            {message ?? "…"}
-          </span>
+          <div className="feat-out is-text">
+            <span data-testid="server-proof-message">{messages?.direct ?? "…"}</span>
+            <span data-testid="server-proof-sync" hidden>
+              {messages?.synchronous ?? ""}
+            </span>
+            <span data-testid="server-proof-async" hidden>
+              {messages?.asynchronous ?? ""}
+            </span>
+            <span data-testid="server-proof-cross-module" hidden>
+              {messages?.crossModule ?? ""}
+            </span>
+          </div>
         </div>
         <button
           className="cta"

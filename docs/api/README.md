@@ -10,6 +10,7 @@ expected to use directly.
 - [`@palamedes/remix`](./remix.md)
 - [`@palamedes/react-router-rsc`](./react-router-rsc.md)
 - [`@palamedes/waku`](./waku.md)
+- [`@palamedes/tanstack`](./tanstack.md)
 - [`@palamedes/config`](./config.md)
 - [`@palamedes/cli`](./cli.md)
 - [`pmds` binary plugin protocol](./cli-binary-plugin.md)

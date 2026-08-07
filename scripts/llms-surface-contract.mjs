@@ -35,6 +35,7 @@ export const publishedPackageInventory = [
   "@palamedes/remix",
   "@palamedes/runtime",
   "@palamedes/solid",
+  "@palamedes/tanstack",
   "@palamedes/transform",
   "@palamedes/vite-plugin",
   "@palamedes/waku",

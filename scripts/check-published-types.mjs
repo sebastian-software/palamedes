@@ -43,6 +43,7 @@ try {
   linkPackage("eslint-plugin")
   linkPackage("next-plugin")
   linkPackage("waku")
+  linkPackage("tanstack")
   linkPackage("vite-plugin")
 
   const esmFixture = path.join(fixtureRoot, "consumer.mts")
@@ -52,6 +53,7 @@ try {
 import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
+import { createTanStackI18nRequestMiddleware } from "@palamedes/tanstack"
 import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
 
 export const lengths = [
@@ -66,6 +68,7 @@ export const vitePlugins = [vitePalamedes(), palamedes()]
 export const lintPlugin = palamedesLint
 export const lintConfig = palamedesLintConfigs.recommended
 export const wakuInterceptor = createWakuI18nInterceptor((request) => ({
+export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) => ({
   locale: request.headers.get("accept-language") ?? "en",
   _: () => "",
 }))

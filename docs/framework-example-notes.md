@@ -26,7 +26,7 @@ The `tanstack-cookie`, `tanstack-route`, `tanstack-subdomain`, and
 `tanstack-tld` examples verify:
 
 - Vite-based Palamedes integration in TanStack Start
-- SSR plus localized server functions
+- SSR plus localized server functions through `@palamedes/tanstack` request middleware
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 

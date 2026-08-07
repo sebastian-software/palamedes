@@ -119,6 +119,33 @@ async function waitForClientReady(page) {
   await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 })
 }
 
+async function expectTanStackServerFunctionMessages(page, locale) {
+  if (activeExample().id !== "tanstack-cookie") {
+    return
+  }
+
+  const messages =
+    locale === "de"
+      ? [
+          ["server-proof-message", "Serverfunktion bestätigte Sprache de."],
+          ["server-proof-sync", "Synchroner Server-Helfer bestätigte Sprache."],
+          ["server-proof-async", "Asynchroner Server-Helfer bestätigte Sprache."],
+          ["server-proof-cross-module", "Modulübergreifender Server-Helfer bestätigte Sprache."],
+        ]
+      : [
+          ["server-proof-message", `Server function confirmed locale ${locale}.`],
+          ["server-proof-sync", "Synchronous server helper confirmed locale."],
+          ["server-proof-async", "Asynchronous server helper confirmed locale."],
+          ["server-proof-cross-module", "Cross-module server helper confirmed locale."],
+        ]
+
+  for (const [testId, expected] of messages) {
+    await expect
+      .poll(async () => (await page.getByTestId(testId).textContent())?.trim() ?? "")
+      .toBe(expected)
+  }
+}
+
 async function stabilizePage(page) {
   await page
     .addStyleTag({
@@ -289,6 +316,7 @@ test("matrix example browser contract", async () => {
         .toContain("en")
       await englishContext.close()
     }
+    await expectTanStackServerFunctionMessages(page, "de")
     await captureScreenshot(page, example, "interactive")
     return
   }
