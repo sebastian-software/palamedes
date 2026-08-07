@@ -9,23 +9,23 @@ import { getLocaleLabel, locales } from "./i18n"
  * (`de.lvh.me` -> `de`). Server functions run on the same host the browser
  * requested, so the `Host` header is available here too.
  */
-function resolveHostLocale() {
-  const event = getRequestEvent()
-  const requestHost = event?.request.headers.get("host") ?? null
-  const acceptLanguageHeader = event?.request.headers.get("accept-language") ?? null
+export function resolveHostLocale(request: Request | undefined) {
+  const requestHost = request?.headers.get("host") ?? null
+  const acceptLanguageHeader = request?.headers.get("accept-language") ?? null
   const { locale } = locales.resolve({
     strategy: "subdomain",
     acceptLanguageHeader,
     requestHost,
   })
 
-  return { acceptLanguageHeader, event, locale, requestHost }
+  return { acceptLanguageHeader, locale, requestHost }
 }
 
 export const loadHomePageData = query(async () => {
   "use server"
 
-  const { acceptLanguageHeader, event, locale, requestHost } = resolveHostLocale()
+  const event = getRequestEvent()
+  const { acceptLanguageHeader, locale, requestHost } = resolveHostLocale(event?.request)
   activateServerI18n(locale)
 
   return {
@@ -46,7 +46,7 @@ export const loadHomePageData = query(async () => {
 export const getLocalizedServerStatus = query(async () => {
   "use server"
 
-  const { locale } = resolveHostLocale()
+  const { locale } = resolveHostLocale(getRequestEvent()?.request)
   activateServerI18n(locale)
 
   return {

@@ -4,6 +4,15 @@ import { t } from "@palamedes/core/macro"
 import { activateServerI18n } from "./i18n.server"
 import { getLocaleLabel, locales, normalizeLocale } from "./i18n"
 
+export const loadDocumentLocale = createServerFn({ method: "GET" }).handler(() => {
+  const { locale } = locales.resolve({
+    strategy: "subdomain",
+    acceptLanguageHeader: getRequestHeader("accept-language"),
+    requestHost: getRequestHeader("host"),
+  })
+  return locale
+})
+
 export const loadHomePageData = createServerFn({ method: "GET" }).handler(async () => {
   // Subdomain strategy: the leftmost DNS label of the request host is
   // authoritative for the locale, so we resolve it from the `Host` header
