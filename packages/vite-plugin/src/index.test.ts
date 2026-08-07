@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type * as PalamedesTransformModule from "@palamedes/transform"
@@ -37,6 +39,11 @@ vi.mock("@palamedes/transform", async (importOriginal) => {
 })
 
 import { palamedes } from "./index"
+
+// catalogResourcePath() resolves configured catalog paths. Keep the mocked
+// native boundary aligned with the host path convention so this suite covers
+// the Windows path it receives in production as well as POSIX paths.
+const deCatalogPath = path.resolve("/repo/src/locales/de.po")
 
 beforeEach(() => {
   mocks.loadPalamedesConfig.mockResolvedValue({
@@ -203,7 +210,7 @@ describe("palamedes vite plugin", () => {
       expect.objectContaining({
         catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
       }),
-      "/repo/src/locales/de.po",
+      deCatalogPath,
       ["message-id"]
     )
   })
@@ -527,8 +534,7 @@ describe("experimental graph splitting", () => {
   it("renders per-locale modules through the native catalog renderer", async () => {
     mocks.compileCatalogArtifactSelected.mockImplementation(
       (_config: unknown, resourcePath: string) => ({
-        messages:
-          resourcePath === "/repo/src/locales/de.po" ? { "id-a": "Hallo" } : { "id-a": "Hello" },
+        messages: resourcePath === deCatalogPath ? { "id-a": "Hallo" } : { "id-a": "Hello" },
         missing: [],
         diagnostics: [],
         watchFiles: [resourcePath],
@@ -542,14 +548,14 @@ describe("experimental graph splitting", () => {
     expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledTimes(1)
     expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo" }),
-      "/repo/src/locales/de.po",
+      deCatalogPath,
       ["id-a"]
     )
     expect(mocks.renderCatalogModule).toHaveBeenCalledWith({ "id-a": "Hallo" })
     expect(result?.code).toBe(
       `/*rendered*/export const messages={"id-a":"Hallo"};export default { messages };`
     )
-    expect(addWatchFile).toHaveBeenCalledWith("/repo/src/locales/de.po")
+    expect(addWatchFile).toHaveBeenCalledWith(deCatalogPath)
   })
 
   it("warns on missing translations and keeps the sidecar buildable", async () => {
@@ -643,8 +649,7 @@ describe("experimental graph splitting", () => {
     )
     mocks.compileCatalogArtifactSelected.mockImplementation(
       (_config: unknown, resourcePath: string) => ({
-        messages:
-          resourcePath === "/repo/src/locales/de.po" ? { "id-a": "Hallo" } : { "id-a": "Hello" },
+        messages: resourcePath === deCatalogPath ? { "id-a": "Hallo" } : { "id-a": "Hello" },
         missing: [],
         diagnostics: [],
         watchFiles: [],
