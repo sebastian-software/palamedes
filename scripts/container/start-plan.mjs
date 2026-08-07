@@ -10,23 +10,23 @@ export const CONTAINER_HOST = "0.0.0.0"
 //   0.0.0.0 already / honor the HOST env — no CLI override, just the HOST env.
 // - SolidStart v2's generated Nitro server honors HOST and PORT; the matrix
 //   defaults HOST to 127.0.0.1 and buildStartEnv overrides it to 0.0.0.0.
-// - TanStack binds 127.0.0.1 via a hardcoded `vite preview --host 127.0.0.1` in
-//   its package script; handled specially in buildStartArgs.
+// - TanStack and Vite MDX bind 127.0.0.1 via hardcoded `vite preview` scripts;
+//   handled specially in buildStartArgs.
 // We never edit the example package.json files; the container-only overrides
 // live here on top of the shared EXAMPLE_MATRIX.
 
 // Build the `pnpm` arguments for an example's start script.
 //
-// TanStack is special-cased: its `preview` script hardcodes `--host 127.0.0.1`,
-// and appending a second `--host` would NOT reliably override it — Vite's CLI
-// parser (cac) collects repeated flags into an array, which breaks
-// `server.listen`. We run `vite preview` directly with a single host/port
-// instead, leaving the example package.json untouched. Every other framework
-// runs its matrix start script unchanged and binds 0.0.0.0 via the HOST env
-// (see buildStartEnv); appending a CLI host flag is unsafe (e.g. `next start`
-// treats a trailing `-H` as a positional project directory).
+// TanStack and Vite MDX are special-cased: their `preview` scripts hardcode
+// `--host 127.0.0.1`, and appending a second `--host` would NOT reliably
+// override it — Vite's CLI parser (cac) collects repeated flags into an array,
+// which breaks `server.listen`. We run `vite preview` directly with a single
+// host/port instead, leaving the example package.json files untouched. Every
+// other framework runs its matrix start script unchanged and binds 0.0.0.0 via
+// the HOST env (see buildStartEnv); appending a CLI host flag is unsafe (e.g.
+// `next start` treats a trailing `-H` as a positional project directory).
 export function buildStartArgs(example) {
-  if (example.framework === "tanstack") {
+  if (example.framework === "tanstack" || example.framework === "vite") {
     return ["exec", "vite", "preview", "--host", CONTAINER_HOST, "--port", String(example.port)]
   }
   return [...example.start]

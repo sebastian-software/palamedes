@@ -11,7 +11,8 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "package.json"
-      - "scripts/example-matrix.mjs"
+      - "scripts/example-matrix*.mjs"
+      - "scripts/container/**"
       - "scripts/verify-examples*.mjs"
       - "scripts/check-example-matrix.mjs"
       - "tests/examples-browser/**"
@@ -30,7 +31,8 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "package.json"
-      - "scripts/example-matrix.mjs"
+      - "scripts/example-matrix*.mjs"
+      - "scripts/container/**"
       - "scripts/verify-examples*.mjs"
       - "scripts/check-example-matrix.mjs"
       - "tests/examples-browser/**"
@@ -88,7 +90,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check example matrix selection
-        run: pnpm check:example-matrix
+        run: pnpm check:example-matrix && pnpm check:example-contracts
 
       - name: Build workspace packages
         run: pnpm build
@@ -100,7 +102,7 @@ jobs:
         if: github.event_name == 'schedule' || inputs.run_browser
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Browser-test 21 UI examples
+      - name: Browser-test 21 browser-capable examples
         if: github.event_name == 'schedule' || inputs.run_browser
         env:
           PALAMEDES_SCREENSHOT_DIR: artifacts/example-screenshots

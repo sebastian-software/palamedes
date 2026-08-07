@@ -9,6 +9,7 @@
 #     -p 4040:4040 -p 4041:4041 -p 4042:4042 -p 4043:4043 \
 #     -p 4050:4050 -p 4051:4051 -p 4052:4052 -p 4053:4053 \
 #     -p 4060:4060 -p 4061:4061 -p 4062:4062 -p 4063:4063 \
+#     -p 4070:4070 \
 #     palamedes-examples
 #
 # (or let the matrix generate the flags: `podman run --init \
@@ -67,13 +68,13 @@ COPY --from=build --chown=node:node /app /app
 # Global pnpm at the version pinned in package.json (packageManager) so the
 # unprivileged `node` user can run the example start scripts.
 RUN npm install -g "pnpm@$(node -p 'require("./package.json").packageManager.split("@")[1].split("+")[0]')"
-# Run the 24 public servers as a non-root user (least privilege).
+# Run all 25 example servers as a non-root user (least privilege).
 USER node
 
 # Fixed ports — informational only; the authoritative list is
 # scripts/example-matrix.mjs. Publish them without drift via:
 #   podman run $(node ./scripts/container/print-podman-ports.mjs) palamedes-examples
-EXPOSE 4010 4011 4012 4013 4020 4021 4022 4023 4030 4031 4032 4033 4040 4041 4042 4043 4050 4051 4052 4053 4060 4061 4062 4063
+EXPOSE 4010 4011 4012 4013 4020 4021 4022 4023 4030 4031 4032 4033 4040 4041 4042 4043 4050 4051 4052 4053 4060 4061 4062 4063 4070
 
 # tini is the init/reaper (no external `--init` needed). `-s` registers it as a
 # subreaper so reaping still works if it ends up not as PID 1 (e.g. when the
