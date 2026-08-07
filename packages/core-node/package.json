@@ -38,7 +38,7 @@
     "generate-native-types": "node ./scripts/generate-native-types.mjs",
     "check-native-types": "node ./scripts/generate-native-types.mjs --check",
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.ts",
+    "test": "vitest run --globals src/index.test.ts && node --test ./scripts/package.test.mjs",
     "stub": "unbuild --stub"
   },
   "engines": {
@@ -48,11 +48,11 @@
     "access": "public"
   },
   "optionalDependencies": {
-    "@palamedes/core-node-darwin-arm64": "workspace:^",
-    "@palamedes/core-node-linux-arm64-gnu": "workspace:^",
-    "@palamedes/core-node-linux-x64-gnu": "workspace:^",
-    "@palamedes/core-node-linux-x64-musl": "workspace:^",
-    "@palamedes/core-node-win32-x64-msvc": "workspace:^"
+    "@palamedes/core-node-darwin-arm64": "workspace:*",
+    "@palamedes/core-node-linux-arm64-gnu": "workspace:*",
+    "@palamedes/core-node-linux-x64-gnu": "workspace:*",
+    "@palamedes/core-node-linux-x64-musl": "workspace:*",
+    "@palamedes/core-node-win32-x64-msvc": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

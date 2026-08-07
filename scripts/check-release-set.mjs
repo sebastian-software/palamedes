@@ -3,6 +3,7 @@ import path from "node:path"
 
 const root = process.cwd()
 const nativePackagePattern = /^@palamedes\/(?:core-node|cli)-.+/
+const nativeWrapperPackageNames = new Set(["@palamedes/core-node", "@palamedes/cli"])
 
 function readJson(file) {
   return JSON.parse(readFileSync(path.join(root, file), "utf8"))
@@ -190,6 +191,20 @@ for (const packageInfo of publicPackages) {
     }
   } else if (!workflowFilters.has(packageInfo.name)) {
     fail(`${packageInfo.name} is missing from the JavaScript publish filters`)
+  }
+
+  if (nativeWrapperPackageNames.has(packageInfo.name)) {
+    const platformDependencies = Object.entries(
+      readJson(path.join(packageInfo.path, "package.json")).optionalDependencies ?? {}
+    ).filter(([name]) => name.startsWith(`${packageInfo.name}-`))
+    if (platformDependencies.length !== 5) {
+      fail(`${packageInfo.name} must declare all five native platform dependencies`)
+    }
+    for (const [name, version] of platformDependencies) {
+      if (version !== "workspace:*") {
+        fail(`${packageInfo.name} must use workspace:* for ${name}, found ${version}`)
+      }
+    }
   }
 }
 

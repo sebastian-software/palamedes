@@ -83,6 +83,19 @@ try {
   if (Object.hasOwn(installedManifest.scripts ?? {}, "postinstall")) {
     throw new Error("The packed @palamedes/cli package still declares a postinstall script.")
   }
+  const platformDependencyVersions = Object.entries(
+    installedManifest.optionalDependencies ?? {}
+  ).filter(([name]) => name.startsWith("@palamedes/cli-"))
+  if (platformDependencyVersions.length !== 5) {
+    throw new Error("The packed @palamedes/cli manifest is missing a platform dependency.")
+  }
+  for (const [name, version] of platformDependencyVersions) {
+    if (version !== installedManifest.version) {
+      throw new Error(
+        `The packed @palamedes/cli manifest must pin ${name} to ${installedManifest.version}, found ${version}.`
+      )
+    }
+  }
 
   const copiedSidecar = path.join(
     cliInstallDir,

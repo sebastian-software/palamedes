@@ -50,6 +50,19 @@ The preferred native workflow operations are:
 
 Standalone utilities may still exist when they are clearly useful outside a larger workflow. `parsePo()` is an example of an acceptable utility.
 
+Native Node operations are synchronous today. They perform filesystem and CPU
+work on the calling Node thread, so host adapters must invoke them only from
+their normal bounded build or module-hook work rather than request-time hot
+paths. In particular, the Vite plugin deliberately compiles catalog modules in
+Vite's host-side hooks; it does not claim those hooks are nonblocking.
+
+Adding `Async` variants would duplicate a broad workflow surface and introduce
+parallelism, cancellation, and result-ordering contracts that the current
+workloads have not demonstrated a need for. Revisit that decision when a
+representative host workload shows event-loop delay that cannot be bounded by
+existing build orchestration, or when a supported integration needs concurrent
+request-time native work with a defined cancellation contract.
+
 This does not mean Palamedes must collapse every operation into one giant "do everything" call. The rule is not "fewer functions at any cost." The rule is that each exported native function should represent a meaningful product operation, not a transport workaround.
 
 ## Alternatives Considered
@@ -77,3 +90,6 @@ Rejected because it would overfit the current host integrations and make the API
 - The Rust core remains `napi`-free; the binding crate is responsible for N-API bridge types and conversion.
 - Future performance work should first ask whether orchestration can remain inside an existing native workflow before adding new boundary crossings.
 - New utilities should be added sparingly and only when they are useful outside a larger workflow.
+- Node callers must treat the current native operations as synchronous and keep
+  them off latency-sensitive request paths; future async APIs require measured
+  event-loop pressure and an explicit lifecycle contract.
