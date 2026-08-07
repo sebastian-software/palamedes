@@ -1,6 +1,7 @@
 import { fsRouter } from "waku"
 import adapter from "waku/adapters/default"
 import { createServerI18nScope } from "@palamedes/runtime/server"
+import { waitForServerI18nTestBarrier } from "@palamedes/runtime/server/test"
 import { createServerI18n, locales } from "./lib/i18n"
 
 // Glob keys must keep the `pages/` prefix so fsRouter's default `pagesDir: "pages"`
@@ -26,7 +27,10 @@ export default adapter(fsRouter(modules), {
         acceptLanguageHeader: request.headers.get("accept-language"),
         requestHost: request.headers.get("host"),
       })
-      return serverI18nScope.run(createServerI18n(locale), () => next())
+      return serverI18nScope.run(createServerI18n(locale), async () => {
+        await waitForServerI18nTestBarrier(request)
+        return next()
+      })
     },
   ],
 })
