@@ -23,8 +23,8 @@ longer needs a JavaScript host.
 Use one native command boundary:
 
 1. The Rust `pmds` executable owns built-in and plugin command dispatch.
-2. Built-in namespaces (`extract`, `audit`, `report`, `catalog`, and `version`)
-   execute before configuration or plugin resolution.
+2. Built-in namespaces (`extract`, `lint`, `audit`, `report`, `catalog`, and
+   `version`) execute before configuration or plugin resolution.
 3. Any other namespace is resolved only from the explicit `plugins` list in a
    Palamedes data config (`yaml`, `yml`, `json`, or `toml`). JavaScript and
    TypeScript files are not CLI configuration.

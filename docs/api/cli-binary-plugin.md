@@ -72,8 +72,8 @@ The plugin answers with exactly one manifest event:
 ```
 
 Namespaces and commands must be lowercase kebab-case. Plugin namespaces cannot
-collide with built-ins (`extract`, `audit`, `report`, `catalog`, `version`) or
-another configured plugin.
+collide with built-ins (`extract`, `lint`, `audit`, `report`, `catalog`,
+`version`) or another configured plugin.
 
 A `run` request carries the invocation and resolved project context:
 
