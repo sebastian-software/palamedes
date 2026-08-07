@@ -1,0 +1,116 @@
+name: Example Verification
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - "examples/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "scripts/example-matrix.mjs"
+      - "scripts/verify-examples*.mjs"
+      - "scripts/check-example-matrix.mjs"
+      - "tests/examples-browser/**"
+      - "tsconfig*.json"
+      - "vitest.examples.config.mjs"
+      - ".github/workflows/example-verification.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - "examples/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "scripts/example-matrix.mjs"
+      - "scripts/verify-examples*.mjs"
+      - "scripts/check-example-matrix.mjs"
+      - "tests/examples-browser/**"
+      - "tsconfig*.json"
+      - "vitest.examples.config.mjs"
+      - ".github/workflows/example-verification.yml"
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      run_browser:
+        description: Run the scheduled Playwright browser layer as well as smoke verification
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: example-verification-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  verify:
+    name: example matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Restore pnpm cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check example matrix selection
+        run: pnpm check:example-matrix
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Smoke-test all 25 examples
+        run: pnpm verify:examples:smoke
+
+      - name: Install Playwright Chromium
+        if: github.event_name == 'schedule' || inputs.run_browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser-test 21 UI examples
+        if: github.event_name == 'schedule' || inputs.run_browser
+        env:
+          PALAMEDES_SCREENSHOT_DIR: artifacts/example-screenshots
+        run: pnpm verify:examples:browser -- --capture-screenshots
+
+      - name: Upload browser diagnostics
+        if: ${{ always() && (github.event_name == 'schedule' || inputs.run_browser) }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: example-browser-diagnostics-${{ github.run_id }}
+          path: artifacts/example-screenshots
+          if-no-files-found: warn
+          retention-days: 7

@@ -20,6 +20,7 @@
     "container:ports": "node ./scripts/container/print-podman-ports.mjs",
     "capture:example-screenshots": "node ./scripts/capture-example-screenshots.mjs",
     "verify:examples": "pnpm build && node ./scripts/verify-examples-all.mjs",
+    "check:example-matrix": "node ./scripts/check-example-matrix.mjs",
     "verify:examples:smoke": "node ./scripts/verify-examples.mjs",
     "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",

@@ -556,3 +556,10 @@ export function selectExamples(filters) {
     return true
   })
 }
+
+// Remix v3 is deliberately server-first while its component/UI adapter settles.
+// Its four entries have smoke contracts, but not the shared browser-interaction
+// contract that the other framework families and Vite exercise.
+export function selectBrowserExamples(filters) {
+  return selectExamples(filters).filter((example) => example.framework !== "remix")
+}

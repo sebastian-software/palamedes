@@ -26,8 +26,9 @@ We are not asking you to trust a slogan. The repo shows the work.
 The current proof:
 
 - Six framework families, each with cookie, route, subdomain, and tld locale
-  strategies: five are browser-verified through the same Playwright-based flow
-  used in CI, and server-first Remix v3 is smoke-verified.
+  strategies: all 25 are smoke-verified on relevant PRs and `main`; five
+  browser-capable families use the same scheduled Playwright flow, while
+  server-first Remix v3 remains smoke-verified.
 - The image above is one demo in three locales: switch language and the copy,
   plural seat counts, currency, and dates all change together. Each verified
   framework and strategy renders the same design, so per-framework captures live in

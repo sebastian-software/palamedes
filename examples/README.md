@@ -13,8 +13,12 @@ uses all six frameworks. Each example is independently useful as a reference
 for its own host and locale strategy.
 
 The matrix is intended to be run locally and validated in CI — that remains the
-canonical verification path. Public demo URLs are documented as the live
-reference surface, but reachability depends on the hosting and DNS rows in
+canonical verification path. The `Example Verification` workflow smoke-tests
+all 25 examples on relevant pull requests and `main` pushes. Its weekly run
+(and an opt-in manual dispatch) also exercises the 21 browser-capable examples
+with Playwright; the four server-first Remix v3 examples remain smoke-only.
+Public demo URLs are documented as the live reference surface, but reachability
+depends on the hosting and DNS rows in
 [docs/demo-deployments.md](../docs/demo-deployments.md).
 
 The server-framework matrix intentionally uses the package-root compatibility
@@ -304,6 +308,15 @@ Together they cover:
 - canonical redirect/switch targets
 - locale switching
 - localized server action or server function output after interaction
+
+`Example Verification` runs the smoke layer across the complete 25-example
+matrix on relevant pull requests and `main` pushes, including the deterministic
+request-scope concurrency checks for React Router, SolidStart, TanStack Start,
+and Waku. It runs the Playwright layer for its 21 browser-capable examples on a
+weekly schedule or when a maintainer selects `run_browser` in manual dispatch.
+The four Remix v3 examples are intentionally excluded from that browser layer:
+their server-first beta adapter has no shared client-interaction contract yet,
+but all four locale strategies are covered by smoke verification.
 
 For the decision model behind cookie, route, subdomain, tld, and domain handling, see:
 
