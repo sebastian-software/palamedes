@@ -59,11 +59,14 @@ impl Context {
 
     /// Loads the Palamedes configuration, honoring an explicit `--config` path.
     pub fn load_config(&self, explicit_path: Option<&Path>) -> Result<LoadedConfig, CliError> {
-        let config = match &self.cwd {
-            Some(cwd) => load_config(cwd, explicit_path),
-            None => load_config(&current_dir()?, explicit_path),
-        };
+        let config = load_config(&self.cwd()?, explicit_path);
         Ok(config?)
+    }
+
+    /// Resolves the invocation directory when a command needs to interpret a
+    /// path supplied by an external tool such as Git.
+    pub fn cwd(&self) -> Result<PathBuf, CliError> {
+        self.cwd.clone().map_or_else(current_dir, Ok)
     }
 }
 

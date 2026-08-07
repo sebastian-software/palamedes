@@ -216,8 +216,8 @@ Git merge-driver workflows.
 ```bash
 pmds catalog merge ours.po theirs.po --output merged.po
 pmds catalog merge ours.po theirs.po --base base.po --output merged.po
-pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first
-pmds catalog merge ours.fcl theirs.fcl --output merged.fcl --format fcl
+pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy use-first
+pmds catalog merge ours.fcl theirs.fcl --output merged.fcl
 ```
 
 `pmds catalog merge` requires exactly two current input catalogs. Without
@@ -250,7 +250,7 @@ Options:
 | -------------------------------- | ---------------------------------------------------------------- |
 | `--output <path>`                | Required output path.                                            |
 | `-c, --config <path>`            | Use a specific config file when inferring `source-locale`.       |
-| `--format <format>`              | `po` or `fcl`. Inferred from paths when omitted.                 |
+| `--format <format>`              | `po` or `fcl`. Overrides path inference when supplied.           |
 | `--base <path>`                  | Optional common ancestor for a three-way merge.                  |
 | `--conflict-strategy <strategy>` | `use-first`, `use-last`, or `error`. Default: `use-first`.       |
 | `--source-locale <locale>`       | Source locale for catalog semantics. Defaults to config or `en`. |
@@ -264,9 +264,7 @@ a wrapper script:
 
 ```bash
 git config merge.palamedes-catalog.driver \
-  'pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first'
-git config merge.palamedes-catalog-fcl.driver \
-  'pmds catalog merge-driver %O %A %B %A --path %P --format fcl --conflict-strategy use-first'
+  'pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy use-first'
 ```
 
 During a normal merge, Git's `%A` is logical ours and `%B` is theirs. During a
@@ -278,7 +276,11 @@ branch being merged or rebased wins.” Use `--operation merge` or
 
 The positional arguments are ancestor (`%O`), Git current file (`%A`), Git
 other file (`%B`), and output (`%A`). `--path %P` selects the real configured
-catalog so its PO formatting options are applied to the output.
+catalog so its PO formatting options are applied to the output and, when
+`--format` is omitted, determines whether the extensionless Git temp files are
+PO or FCL. This one driver supports mixed PO/FCL repositories. Outside a merge
+driver, omit `--path` and format inference continues to use the input/output
+catalog paths.
 
 ## `pmds catalog convert`
 

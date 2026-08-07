@@ -132,30 +132,33 @@ impl Command for MergeOptions {
          * differently than the project writes it, and the next extraction
          * turns that into a diff.
          */
-        let po = config.as_ref().and_then(|config| {
-            config
-                .catalog_for_path(self.path.as_deref().unwrap_or(&self.output))
+        let po = match config.as_ref() {
+            Some(config) => config
+                .catalog_for_path(
+                    self.path.as_deref().unwrap_or(&self.output),
+                    &context.cwd()?,
+                )?
                 .and_then(|catalog| catalog.po.clone())
-                .map(Into::into)
-        });
+                .map(Into::into),
+            None => None,
+        };
 
-        let format = self.format.map(MergeFormat::core);
+        let logical_format = self.path.as_deref().and_then(MergeFormat::from_path);
+        let format = self.format.map(MergeFormat::core).or(logical_format);
         let conflict_strategy = self.conflict_strategy.core();
-        match &self.base {
-            Some(base) => Ok(merge_catalog_files_three_way(
-                CatalogFileThreeWayMergeRequest {
-                    ancestor_path: base.clone(),
-                    ours_path: self.inputs[0].clone(),
-                    theirs_path: self.inputs[1].clone(),
-                    output_path: self.output.clone(),
-                    format,
-                    source_locale,
-                    locale: self.locale.clone(),
-                    conflict_strategy,
-                    po,
-                },
-            )?),
-            None => Ok(combine_catalog_files(CatalogFileCombineRequest {
+        let result = match &self.base {
+            Some(base) => merge_catalog_files_three_way(CatalogFileThreeWayMergeRequest {
+                ancestor_path: base.clone(),
+                ours_path: self.inputs[0].clone(),
+                theirs_path: self.inputs[1].clone(),
+                output_path: self.output.clone(),
+                format,
+                source_locale,
+                locale: self.locale.clone(),
+                conflict_strategy,
+                po,
+            }),
+            None => combine_catalog_files(CatalogFileCombineRequest {
                 input_paths: self.inputs.clone(),
                 output_path: self.output.clone(),
                 format,
@@ -163,8 +166,9 @@ impl Command for MergeOptions {
                 locale: self.locale.clone(),
                 conflict_strategy,
                 po,
-            })?),
-        }
+            }),
+        };
+        result.map_err(|error| self.inference_error(CliError::from(error), logical_format))
     }
 
     /// The merged catalog file is the result. Git merge drivers run inside
@@ -223,6 +227,53 @@ impl MergeFormat {
             Self::Po => CatalogFileFormat::Po,
             Self::Fcl => CatalogFileFormat::Fcl,
         }
+    }
+
+    fn from_path(path: &Path) -> Option<CatalogFileFormat> {
+        match path.extension().and_then(|extension| extension.to_str()) {
+            Some(extension) if extension.eq_ignore_ascii_case("po") => Some(CatalogFileFormat::Po),
+            Some(extension) if extension.eq_ignore_ascii_case("fcl") => {
+                Some(CatalogFileFormat::Fcl)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl MergeOptions {
+    fn inference_error(
+        &self,
+        error: CliError,
+        logical_format: Option<CatalogFileFormat>,
+    ) -> CliError {
+        let merge_paths = self
+            .base
+            .iter()
+            .chain(self.inputs.iter())
+            .chain(std::iter::once(&self.output));
+        if self.format.is_none()
+            && logical_format.is_none()
+            && self.path.is_some()
+            && merge_paths
+                .clone()
+                .all(|path| MergeFormat::from_path(path).is_none())
+        {
+            let paths = self
+                .base
+                .iter()
+                .chain(self.inputs.iter())
+                .chain(std::iter::once(&self.output))
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            if let Some(path) = &self.path {
+                return CliError::MergeFormatInference {
+                    path: path.clone(),
+                    paths,
+                };
+            }
+        }
+        error
     }
 }
 
