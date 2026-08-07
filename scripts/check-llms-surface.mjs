@@ -171,7 +171,7 @@ export function discoverPublishedPackages(read, listDirectories = () => readdirS
 }
 
 function platformParent(packageName) {
-  if (!platformPackageInventory.includes(packageName)) return undefined
+  if (!platformPackageInventory.includes(packageName)) return
   return platformPackageParents.find((parent) => packageName.startsWith(`${parent}-`))
 }
 
