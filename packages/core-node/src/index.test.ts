@@ -12,6 +12,7 @@ import {
   analyzeSourceNative,
   applyTranslationPatches,
   compileCatalogArtifact,
+  compileCatalogArtifactSelected,
   compileCatalogModule,
   extractMessagesNative,
   getNativeInfo,
@@ -192,6 +193,84 @@ describe("@palamedes/core-node", () => {
       expect(error).toHaveProperty(
         "message",
         expect.stringMatching(/could not read compileCatalogModule\.argument\[0\]\.locale/u)
+      )
+    }
+  })
+
+  it("preserves native-visible class and enumerable record semantics", () => {
+    class ClassBackedMessages implements Record<string, string> {
+      [key: string]: string
+
+      public message = "from class"
+    }
+    expect(renderCatalogModule(new ClassBackedMessages())).toContain("from class")
+
+    const nonEnumerableMessages: Record<string, string> = {}
+    Object.defineProperty(nonEnumerableMessages, "hidden", {
+      configurable: true,
+      value: "not native-visible",
+      writable: true,
+    })
+    expect(renderCatalogModule(nonEnumerableMessages)).not.toContain("not native-visible")
+  })
+
+  it("classifies Proxy metadata once and translates prototype and length errors", () => {
+    let prototypeReads = 0
+    const stablePrototypeProxy = new Proxy(
+      { message: "one prototype read" },
+      {
+        getPrototypeOf(target) {
+          prototypeReads += 1
+          return Reflect.getPrototypeOf(target)
+        },
+      }
+    )
+    expect(renderCatalogModule(stablePrototypeProxy)).toContain("one prototype read")
+    expect(prototypeReads).toBe(1)
+
+    const prototypeFailure = new Error("fixture prototype failure")
+    const throwingPrototypeProxy = new Proxy(
+      { message: "unreachable" },
+      {
+        getPrototypeOf() {
+          throw prototypeFailure
+        },
+      }
+    )
+    try {
+      renderCatalogModule(throwingPrototypeProxy)
+      throw new Error(
+        "Expected a throwing getPrototypeOf trap to fail the native boundary snapshot."
+      )
+    } catch (error) {
+      expect(error).toMatchObject({ cause: prototypeFailure })
+      expect(error).toHaveProperty(
+        "message",
+        expect.stringMatching(/could not read renderCatalogModule\.argument\[0\]/u)
+      )
+    }
+
+    const lengthFailure = new Error("fixture length failure")
+    const throwingLengthProxy = new Proxy(["message"], {
+      get(target, property, receiver) {
+        if (property === "length") throw lengthFailure
+        return Reflect.get(target, property, receiver)
+      },
+    })
+    try {
+      compileCatalogArtifactSelected(
+        { rootDir: ".", locales: ["en"], sourceLocale: "en", catalogs: [] },
+        "fixture.po",
+        throwingLengthProxy
+      )
+      throw new Error("Expected a throwing length trap to fail the native boundary snapshot.")
+    } catch (error) {
+      expect(error).toMatchObject({ cause: lengthFailure })
+      expect(error).toHaveProperty(
+        "message",
+        expect.stringMatching(
+          /could not read compileCatalogArtifactSelected\.argument\[0\]\.compiledIds/u
+        )
       )
     }
   })
