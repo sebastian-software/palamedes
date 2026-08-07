@@ -6,6 +6,9 @@ use crate::error::PalamedesResult;
 use crate::icu_text::compiled_message_key;
 use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
+use oxc_allocator::Allocator;
+use oxc_parser::Parser;
+use oxc_span::SourceType;
 
 fn transform_macros(
     source: &str,
@@ -130,6 +133,104 @@ export const save = withAuth(async () => persist());
     assert!(result
         .code
         .contains("const hidden = withAuth(async () => hide())"));
+}
+
+#[test]
+fn instruments_module_local_async_handlers_referenced_by_exported_wrappers() {
+    let source = r#""use server";
+async function saveHandler() { await persist(); }
+export const save = withAuth(saveHandler);
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("local async handler reference should be instrumented");
+
+    assert_eq!(
+        result
+            .code
+            .matches("await __palamedesServerFunctionInitializer();")
+            .count(),
+        1
+    );
+    assert!(result
+        .map
+        .as_ref()
+        .is_some_and(|map| !map.mappings.is_empty()));
+
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &result.code, SourceType::ts()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "instrumented action should remain valid TypeScript: {:?}",
+        parsed.diagnostics
+    );
+}
+
+#[test]
+fn instruments_async_const_handlers_through_nested_exported_wrappers() {
+    let source = r#""use server";
+const archiveHandler = async () => archive();
+const deleteHandler = async function () { await destroy(); };
+export const archive = withAuth(withAudit(archiveHandler));
+export const remove = withAuth(deleteHandler);
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("local async const handler references should be instrumented");
+
+    assert_eq!(
+        result
+            .code
+            .matches("await __palamedesServerFunctionInitializer();")
+            .count(),
+        2
+    );
+    assert!(result.code.contains(
+        "const archiveHandler = async () => {\n  await __palamedesServerFunctionInitializer();\n  return archive();\n};"
+    ));
+    assert!(result
+        .code
+        .contains("const deleteHandler = async function ()"));
+}
+
+#[test]
+fn deduplicates_local_handler_spans_across_export_aliases_and_wrappers() {
+    let source = r#""use server";
+async function handler() { await persist(); }
+export { handler as directSave };
+export const save = withAuth(handler);
+export const retry = withRateLimit(withAuth(handler));
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("reused local handler should be instrumented once");
+
+    assert_eq!(
+        result
+            .code
+            .matches("await __palamedesServerFunctionInitializer();")
+            .count(),
+        1
+    );
+    assert_eq!(
+        result.code.matches("from \"@/i18n/server-action\"").count(),
+        1
+    );
+}
+
+#[test]
+fn ignores_imported_non_async_unreferenced_and_shadowed_wrapper_callbacks() {
+    let source = r#""use server";
+import { importedHandler } from "./handlers";
+async function handler() { await persist(); }
+const syncHandler = () => remove();
+const unusedHandler = async () => archive();
+export const imported = withAuth(importedHandler);
+export const sync = withAuth(syncHandler);
+export const shadowed = withAuth((handler) => withAudit(handler));
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("unsupported callback references should be left alone");
+
+    assert!(!result.has_changed);
+    assert_eq!(result.code, source);
 }
 
 #[test]
