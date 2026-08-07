@@ -321,7 +321,7 @@ impl CommandContext<'_> {
     }
 
     /// A prepared subprocess invocation of a documented built-in command
-    /// (`extract`, `audit`, `report`, `catalog`, `version`), or `None` when
+    /// (`extract`, `lint`, `audit`, `report`, `catalog`, `version`), or `None` when
     /// the host did not provide the sidecar path. The plugin decides how to
     /// run it; with `--json` it should capture the output instead of letting
     /// it reach the plugin's own stdout.

@@ -25,7 +25,7 @@ use serde_json::{json, Value};
 use crate::command::Context;
 use crate::config::{ConfigPluginDeclaration, LoadedConfig};
 
-const BUILT_IN_NAMESPACES: &[&str] = &["extract", "audit", "report", "catalog", "version"];
+const BUILT_IN_NAMESPACES: &[&str] = &["extract", "lint", "audit", "report", "catalog", "version"];
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
 
@@ -1230,6 +1230,7 @@ mod tests {
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use clap::CommandFactory;
     use serde_json::json;
 
     use std::collections::BTreeMap;
@@ -1237,8 +1238,20 @@ mod tests {
     use super::{
         finish_run, is_kebab_name, matches_constraint, parse_event, resolve_binary_plugin,
         validate_manifest, BinaryInvocation, ManifestCommand, PluginEvent, PluginInvocation,
-        PluginManifest, ResolvedPlugin, PROTOCOL_VERSION,
+        PluginManifest, ResolvedPlugin, BUILT_IN_NAMESPACES, PROTOCOL_VERSION,
     };
+    use crate::cli::Cli;
+
+    #[test]
+    fn built_in_namespaces_match_the_clap_command_tree() {
+        let cli = Cli::command();
+        let commands = cli
+            .get_subcommands()
+            .map(|command| command.get_name())
+            .collect::<Vec<_>>();
+
+        assert_eq!(BUILT_IN_NAMESPACES, commands);
+    }
 
     #[test]
     fn parses_reserved_plugin_options_and_passthrough() {
@@ -1400,12 +1413,15 @@ mod tests {
                 .code,
             "PLUGIN_INVALID"
         );
-        assert_eq!(
-            validate_manifest(&resolved, &manifest("extract", PROTOCOL_VERSION))
-                .expect_err("built-in collision rejected")
-                .code,
-            "PLUGIN_NAMESPACE_COLLISION"
-        );
+        for namespace in BUILT_IN_NAMESPACES {
+            assert_eq!(
+                validate_manifest(&resolved, &manifest(namespace, PROTOCOL_VERSION))
+                    .expect_err("built-in collision rejected")
+                    .code,
+                "PLUGIN_NAMESPACE_COLLISION",
+                "for built-in namespace {namespace}",
+            );
+        }
 
         let mut invalid_command = manifest("acme", PROTOCOL_VERSION);
         invalid_command
