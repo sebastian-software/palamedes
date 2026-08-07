@@ -163,9 +163,10 @@ parser-free generated catalog representation.
 As with Palamedes' other eager translation APIs, translation calls must execute
 inside a function, method, or callback after i18n activation. The macro
 transform rejects eager `t`, `plural`, `select`, and `selectOrdinal` calls at
-module scope. The generated client bootstrap is appended to preserve source
-maps, so custom compiled-adapter calls must follow the same rule; declarations
-that defer translation until component render remain valid.
+module scope, and declarations that defer translation until component render
+remain valid. The generated client bootstrap initializes the module's own
+fragment before its body evaluates, so custom compiled-adapter calls observe
+that fragment if they must run eagerly.
 
 In development, each selected `.po` import remains a real dependency of its
 consuming browser module. Catalog edits therefore invalidate the affected

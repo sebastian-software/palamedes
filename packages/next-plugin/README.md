@@ -129,16 +129,16 @@ module.exports = withPalamedes(
 Each message-bearing browser module gets statically enumerable imports for its
 selected PO subset. It awaits only the import matching
 `document.documentElement.lang`, loads the fragment into a shared parser-free
-instance, and only then exposes the component to hydration or client
-navigation. Turbopack and webpack therefore omit inactive locale catalogs and
+instance, and only then evaluates that module body or resolves it to an
+importer. Turbopack and webpack therefore omit inactive locale catalogs and
 unvisited route messages from network requests. Locale changes require a
 document navigation.
 
 Eager translation calls must execute inside a function, method, or callback
 after i18n activation. Palamedes rejects eager macros at module scope, and
-custom compiled-adapter calls must follow the same rule because the generated
-bootstrap is appended to preserve source maps. Declarations that defer
-translation until component render remain valid.
+declarations that defer translation until component render remain valid. The
+client bootstrap also initializes the module's own fragment before its body, so
+custom compiled-adapter calls observe that fragment if they must run eagerly.
 
 Selected `.po` imports remain normal development dependencies. Catalog edits
 invalidate their affected subsets under Turbopack and webpack; Next may apply

@@ -1491,6 +1491,9 @@ importers:
 
   packages/next-plugin:
     dependencies:
+      '@jridgewell/sourcemap-codec':
+        specifier: 1.5.5
+        version: 1.5.5
       '@palamedes/config':
         specifier: workspace:^
         version: link:../config

@@ -3,6 +3,7 @@
 const { createHash } = require("node:crypto")
 const { realpathSync, statSync } = require("node:fs")
 const path = require("node:path")
+const { decode, encode } = require("@jridgewell/sourcemap-codec")
 const { loadPalamedesConfigSync } = require("@palamedes/config")
 const { transformPalamedesMacros } = require("@palamedes/transform")
 const picomatch = require("picomatch")
@@ -127,7 +128,7 @@ function clientMessageBootstrap(config, sourcePath, compiledIds) {
   const identifier = `__pmds_${createHash("sha256").update(modulePath).digest("hex").slice(0, 12)}`
 
   return (
-    `\nconst ${identifier}_locale = document.documentElement.lang;\n` +
+    `const ${identifier}_locale = document.documentElement.lang;\n` +
     `const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];\n` +
     `const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => loaders[${identifier}_locale]);\n` +
     `if (${identifier}_activeLoaders.some((loader) => loader === undefined)) {\n` +
@@ -146,6 +147,152 @@ function clientMessageBootstrap(config, sourcePath, compiledIds) {
     `  ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
     `}\n`
   )
+}
+
+function skipTrivia(code, index) {
+  let current = index
+  let sawLineTerminator = false
+
+  while (current < code.length) {
+    const character = code[current]
+    if (character === "\r" || character === "\n") {
+      sawLineTerminator = true
+      current += 1
+      continue
+    }
+    if (/\s/u.test(character)) {
+      current += 1
+      continue
+    }
+    if (code.startsWith("//", current)) {
+      const lineEnd = code.indexOf("\n", current + 2)
+      if (lineEnd === -1) {
+        return { index: code.length, sawLineTerminator }
+      }
+      sawLineTerminator = true
+      current = lineEnd + 1
+      continue
+    }
+    if (code.startsWith("/*", current)) {
+      const commentEnd = code.indexOf("*/", current + 2)
+      if (commentEnd === -1) {
+        return { index: code.length, sawLineTerminator }
+      }
+      const comment = code.slice(current, commentEnd + 2)
+      if (/\r|\n/u.test(comment)) {
+        sawLineTerminator = true
+      }
+      current = commentEnd + 2
+      continue
+    }
+    break
+  }
+
+  return { index: current, sawLineTerminator }
+}
+
+function directivePrologueEnd(code) {
+  let current = code.charCodeAt(0) === 0xfe_ff ? 1 : 0
+  if (code.startsWith("#!", current)) {
+    const lineEnd = code.indexOf("\n", current + 2)
+    current = lineEnd === -1 ? code.length : lineEnd + 1
+  }
+
+  let end = current
+  while (current < code.length) {
+    const beforeDirective = skipTrivia(code, current)
+    const quote = code[beforeDirective.index]
+    if (quote !== '"' && quote !== "'") {
+      break
+    }
+
+    let stringEnd = beforeDirective.index + 1
+    while (stringEnd < code.length) {
+      if (code[stringEnd] === "\\") {
+        stringEnd += 2
+        continue
+      }
+      if (code[stringEnd] === quote) {
+        break
+      }
+      stringEnd += 1
+    }
+    if (stringEnd >= code.length) {
+      break
+    }
+
+    const afterString = skipTrivia(code, stringEnd + 1)
+    if (code[afterString.index] === ";") {
+      const afterSemicolon = skipTrivia(code, afterString.index + 1)
+      end = afterSemicolon.index
+      current = afterSemicolon.index
+      continue
+    }
+    if (afterString.index === code.length || afterString.sawLineTerminator) {
+      end = afterString.index
+      current = afterString.index
+      continue
+    }
+    break
+  }
+
+  return end
+}
+
+function offsetSourceMapForInsertion(sourceMap, insertionOffset, insertion) {
+  if (!sourceMap || typeof sourceMap !== "object" || typeof sourceMap.mappings !== "string") {
+    return sourceMap
+  }
+  if (sourceMap.mappings === "" || insertion.length === 0) {
+    return sourceMap
+  }
+
+  const prefix = insertionOffset.source
+  const insertionLine = prefix.split("\n").length - 1
+  const insertionColumn = prefix.length - prefix.lastIndexOf("\n") - 1
+  const addedLines = insertion.split("\n").length - 1
+  const finalLineLength = insertion.length - insertion.lastIndexOf("\n") - 1
+  const mappings = decode(sourceMap.mappings)
+  const shifted = Array.from({ length: mappings.length + addedLines }, () => [])
+
+  for (const [lineIndex, segments] of mappings.entries()) {
+    for (const segment of segments) {
+      if (lineIndex < insertionLine) {
+        shifted[lineIndex].push(segment)
+        continue
+      }
+      if (lineIndex > insertionLine) {
+        shifted[lineIndex + addedLines].push(segment)
+        continue
+      }
+      if (segment[0] < insertionColumn) {
+        shifted[lineIndex].push(segment)
+        continue
+      }
+
+      const shiftedSegment = [...segment]
+      if (addedLines === 0) {
+        shiftedSegment[0] += insertion.length
+        shifted[lineIndex].push(shiftedSegment)
+      } else {
+        shiftedSegment[0] = finalLineLength + segment[0] - insertionColumn
+        shifted[lineIndex + addedLines].push(shiftedSegment)
+      }
+    }
+  }
+
+  return { ...sourceMap, mappings: encode(shifted) }
+}
+
+function prependClientMessageBootstrap(code, bootstrap) {
+  const insertionIndex = directivePrologueEnd(code)
+  const prefix = code.slice(0, insertionIndex)
+  const insertion = `${prefix.length > 0 && !prefix.endsWith("\n") ? "\n" : ""}${bootstrap}`
+
+  return {
+    code: `${prefix}${insertion}${code.slice(insertionIndex)}`,
+    insertion: { source: prefix, value: insertion },
+  }
 }
 
 function relativeImport(fromFile, targetFile) {
@@ -222,8 +369,15 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
       ? messageLoaderRegistration(config, this.resourcePath, result.compiledIds)
       : clientMessageBootstrap(config, this.resourcePath, result.compiledIds)
     let code = result.code
+    let sourceMap = result.map ?? inputSourceMap ?? null
     if (registration) {
-      code += registration
+      if (clientMessageSplitting) {
+        const output = prependClientMessageBootstrap(code, registration)
+        code = output.code
+        sourceMap = offsetSourceMapForInsertion(sourceMap, output.insertion, output.insertion.value)
+      } else {
+        code += registration
+      }
     } else if (typeof this.emitWarning === "function") {
       this.emitWarning(
         new Error(
@@ -232,7 +386,7 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
       )
     }
     if (callback) {
-      callback(null, code, result.map ?? inputSourceMap ?? null)
+      callback(null, code, sourceMap)
       return
     }
     return code
