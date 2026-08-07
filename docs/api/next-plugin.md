@@ -145,9 +145,11 @@ message-bearing Client Component or transitive browser helper, the loader emits
 one selected PO import per configured locale. Module evaluation awaits only the
 import selected by `document.documentElement.lang`, initializes one shared
 parser-free client instance, and loads that source module's fragment before its
-exports can render. Initial hydration and later client navigation therefore
-follow `active locale × evaluated client module graph`; other locales and
-unvisited route messages remain in separate chunks.
+exports can render. In production, a rejected fragment is logged and skipped
+so the module can still evaluate; that module's translations are unavailable
+unless a fallback is retained. Initial hydration and later client navigation
+therefore follow `active locale × evaluated client module graph`; other locales
+and unvisited route messages remain in separate chunks.
 
 The bootstrap is generated for browser modules only. Server Components keep
 using the request-local scope above, and no executable message function crosses
@@ -192,6 +194,12 @@ code renders. It also omits translator comments and context metadata from
 runtime descriptors. Set `keepSourceFallbacks: true` when production must
 retain readable source-message fallbacks. The option is forwarded identically
 to the Turbopack and webpack transform loaders.
+
+Production does not immediately retry a rejected fragment import. This is a
+deliberate trade-off: likely deterministic CDN, ad-blocker, or stale-deploy
+failures need backoff or a later navigation rather than another request in the
+same bootstrap turn. Development remains fail-fast to surface catalog wiring
+errors while editing.
 
 The plugin configures both Turbopack and webpack paths, and requires Next.js
 16 (`peerDependencies: next ^16` — the emitted top-level `turbopack.rules`
