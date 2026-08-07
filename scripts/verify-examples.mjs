@@ -2,6 +2,8 @@ import { execFileSync, spawn } from "node:child_process"
 import http from "node:http"
 import { parseExampleArgs, selectExamples } from "./example-matrix.mjs"
 
+let barrierSequence = 0
+
 function runCommand({ args, cwd, env }) {
   return new Promise((resolve, reject) => {
     const child = spawn("pnpm", args, {
@@ -174,17 +176,73 @@ async function verifyExample(example) {
   const child = startCommand({
     args: example.start,
     cwd: example.cwd,
-    env: example.startEnv,
+    env: {
+      ...example.startEnv,
+      // The test barrier is inert without the per-request header below. Keeping
+      // it enabled for this short-lived verifier makes the overlap deterministic.
+      PALAMEDES_I18N_TEST_BARRIER: "1",
+    },
   })
 
   try {
     await waitForServer(example.port, example.strategy === "route" ? "/en" : "/")
 
     await Promise.all(example.smokeChecks.map((check) => verifySmokeCheck(example, check)))
+    if (["react-router", "solidstart", "tanstack", "waku"].includes(example.framework)) {
+      await verifyConcurrentServerI18n(example)
+    }
   } finally {
     await stopCommand(child)
     await ensurePortFree(example.port)
   }
+}
+
+function serverI18nConcurrencyChecks(example) {
+  const english = {
+    path: example.strategy === "route" ? "/en" : "/",
+    substrings: ["English", "seats left"],
+  }
+  const german = {
+    path: example.strategy === "route" ? "/de" : "/",
+    substrings: ["Deutsch", "Plätze frei"],
+  }
+
+  if (example.strategy === "cookie") {
+    return [
+      { ...english, headers: { "accept-language": "en" } },
+      { ...german, headers: { "accept-language": "de" } },
+    ]
+  }
+
+  if (example.strategy === "subdomain") {
+    return [
+      { ...english, headers: { host: `en.lvh.me:${example.port}` } },
+      { ...german, headers: { host: `de.lvh.me:${example.port}` } },
+    ]
+  }
+
+  if (example.strategy === "tld") {
+    return [
+      { ...english, headers: { host: `palamedes-i18n.com:${example.port}` } },
+      { ...german, headers: { host: `palamedes-i18n.de:${example.port}` } },
+    ]
+  }
+
+  return [english, german]
+}
+
+async function verifyConcurrentServerI18n(example) {
+  barrierSequence += 1
+  const barrierId = `${example.id}-${barrierSequence}`
+  const checks = serverI18nConcurrencyChecks(example).map((check) => ({
+    ...check,
+    headers: {
+      ...check.headers,
+      "x-palamedes-i18n-test-barrier": barrierId,
+    },
+  }))
+
+  await Promise.all(checks.map((check) => verifySmokeCheck(example, check)))
 }
 
 async function verifySmokeCheck(example, check) {

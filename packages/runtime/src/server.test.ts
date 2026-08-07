@@ -2,13 +2,27 @@ import { AsyncLocalStorage } from "node:async_hooks"
 
 import { describe, expect, it, afterEach, vi } from "vitest"
 
-import { type I18nInstance, getI18n, resetI18nRuntime } from "./index"
+import { type I18nInstance, getI18n, resetI18nRuntime, setServerI18nGetter } from "./index"
 import { createServerI18nScope } from "./server"
 
 function createTestI18n(locale = "en"): I18nInstance {
   return {
     locale,
     _: (message: string) => message,
+  }
+}
+
+function rendezvousAfterActivation() {
+  let arrivals = 0
+  let release!: () => void
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve
+  })
+
+  return async () => {
+    arrivals += 1
+    if (arrivals === 2) release()
+    await barrier
   }
 }
 
@@ -169,6 +183,38 @@ describe("@palamedes/runtime/server", () => {
         expect(getI18n()).toBe(enI18n)
       }),
     ])
+  })
+
+  it("shows the legacy global getter leaking after two requests rendezvous", async () => {
+    const deI18n = createTestI18n("de")
+    const enI18n = createTestI18n("en")
+    const rendezvous = rendezvousAfterActivation()
+
+    async function render(i18n: I18nInstance) {
+      setServerI18nGetter(() => i18n)
+      await rendezvous()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      return getI18n().locale
+    }
+
+    await expect(Promise.all([render(deI18n), render(enI18n)])).resolves.toEqual(["en", "en"])
+  })
+
+  it("keeps scoped i18n instances isolated after the same rendezvous", async () => {
+    const scope = createServerI18nScope<I18nInstance>()
+    const deI18n = createTestI18n("de")
+    const enI18n = createTestI18n("en")
+    const rendezvous = rendezvousAfterActivation()
+
+    async function render(i18n: I18nInstance) {
+      return scope.run(i18n, async () => {
+        await rendezvous()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        return getI18n().locale
+      })
+    }
+
+    await expect(Promise.all([render(deI18n), render(enI18n)])).resolves.toEqual(["de", "en"])
   })
 
   it("keeps concurrent activated server contexts isolated", async () => {

@@ -91,11 +91,9 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-cookie"),
     build: ["build"],
     start: ["start"],
-    // Waku (Vite RSC) ships a client-bootstrap shell over plain HTTP and streams
-    // the rendered markup via the RSC payload, so localized text never appears in
-    // the initial document. Node fetch+substring cannot see it; the browser tests
-    // (which deserialize the stream) cover this example instead. We still start the
-    // server here to confirm it boots and serves.
+    // The normal smoke pass only confirms that Waku boots. The verifier's
+    // deterministic i18n-concurrency pass below fetches the localized SSR/RSC
+    // response after both request scopes have rendezvoused.
     smokeChecks: [],
   },
   {
@@ -106,8 +104,8 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-route"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie: the RSC shell hides localized text from a plain fetch, so
-    // the Node smoke only confirms boot; browser tests cover the rendered output.
+    // See waku-cookie: the normal smoke only confirms boot; the deterministic
+    // i18n-concurrency pass asserts localized SSR/RSC output.
     smokeChecks: [],
   },
   {
@@ -342,8 +340,8 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-subdomain"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie/route: the RSC shell hides localized text from a plain
-    // fetch, so the Node smoke only confirms boot; browser tests cover output.
+    // See waku-cookie: the normal smoke only confirms boot; the deterministic
+    // i18n-concurrency pass asserts localized SSR/RSC output.
     smokeChecks: [],
   },
   {
@@ -456,8 +454,8 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-tld"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie/route/subdomain: the RSC shell hides localized text from a
-    // plain fetch, so the Node smoke only confirms boot; browser tests cover output.
+    // See waku-cookie: the normal smoke only confirms boot; the deterministic
+    // i18n-concurrency pass asserts localized SSR/RSC output.
     smokeChecks: [],
   },
   {

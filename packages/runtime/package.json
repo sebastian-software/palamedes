@@ -31,6 +31,21 @@
         "import": "./dist/server-unavailable.mjs",
         "require": "./dist/server-unavailable.cjs"
       }
+    },
+    "./server/test": {
+      "types": "./dist/server-test.d.ts",
+      "node": {
+        "import": "./dist/server-test.mjs",
+        "require": "./dist/server-test.cjs"
+      },
+      "browser": {
+        "import": "./dist/server-unavailable.mjs",
+        "require": "./dist/server-unavailable.cjs"
+      },
+      "default": {
+        "import": "./dist/server-unavailable.mjs",
+        "require": "./dist/server-unavailable.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",
