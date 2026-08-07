@@ -48,7 +48,7 @@ Recommended app-facing packages:
 - `@palamedes/vite-plugin`: Vite integration and `.po` loading
 - `@palamedes/next-plugin`: Next.js integration
 - `@palamedes/remix`: server-first Remix v3 integration (requires Node.js `>=24.3`)
-- `@palamedes/cli`: native CLI (`pmds extract`, `pmds lint`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog merge-driver`, `pmds catalog convert`); also hosts explicitly configured CLI plugins via `@palamedes/cli/plugin`
+- `@palamedes/cli`: native CLI (`pmds extract`, `pmds lint`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog merge-driver`, `pmds catalog convert`, `pmds version`); also dispatches explicitly configured binary CLI plugins
 - `@palamedes/config`: config loading for the JS plugin loaders; also reads legacy `palamedes.config.ts`/`.js` as a compatibility path (the native CLI reads only YAML/JSON/TOML)
 
 Advanced/custom-tooling packages:
@@ -272,10 +272,14 @@ import {
 candidates plus diagnostics. A candidate has a stable identity and a
 `fingerprint`; carry that fingerprint into `applyTranslationPatches(...)` so a
 patch is rejected when the current catalog no longer matches the candidate.
-The patch result reports `applied`, `unchanged`, `rejected`, or `notApplied`
-outcomes and diagnostics. A failed catalog replacement throws an error with a
-partial report; do not treat a thrown write error as proof that no earlier
-catalog patch completed.
+The candidate/patch type surface is `TranslationCandidateId`,
+`TranslationCandidate`, `TranslationCandidateRequest`,
+`TranslationCandidateResult`, `TranslationPatch`, `TranslationPatchRequest`,
+`TranslationPatchOutcomeStatus`, `TranslationPatchOutcome`,
+`TranslationPatchResult`, and `TranslationPatchWriteError`. The patch result
+reports `applied`, `unchanged`, `rejected`, or `notApplied` outcomes and
+diagnostics. A failed catalog replacement throws an error with a partial report;
+do not treat a thrown write error as proof that no earlier catalog patch completed.
 
 ## CLI model
 
@@ -302,6 +306,13 @@ pnpm exec pmds audit --fail-on warning
 pnpm exec pmds report --json
 pnpm exec pmds report --fail-if-below 90
 ```
+
+`extract`, `lint`, `audit`, `report`, `catalog merge`, `catalog merge-driver`,
+and `catalog convert` accept `--config <path>` where configuration is relevant.
+Use `pmds extract --force-clean` to remove every obsolete entry. `audit` and
+`report` accept `--locale <locale...>`. `catalog merge`, `catalog merge-driver`,
+and `catalog convert` accept `--source-locale <locale>` and `--locale <locale>`
+for catalog semantics.
 
 `pmds lint` is non-mutating source-authoring validation for the configured
 source files (including MDX). It has human or deterministic JSON output;
@@ -348,10 +359,9 @@ pnpm exec pmds <plugin> <command> [...args]
 ```
 
 Third-party CLI plugins must be explicitly listed under `plugins` in the
-Palamedes configuration — installed packages are never auto-discovered. Node
-plugins implement `definePlugin` from `@palamedes/cli/plugin` (API version 1);
-standalone executables can implement the versioned binary plugin protocol
-instead. See `/docs/api/cli-plugin.md`, `/docs/api/cli-binary-plugin.md`,
+Palamedes configuration — installed packages are never auto-discovered.
+Plugins are binary-only native executables that implement the versioned binary
+plugin protocol. See `/docs/cli.md`, `/docs/api/cli-binary-plugin.md`,
 `/adr/017-cli-plugin-execution-boundary.md`, and
 `/adr/018-binary-plugin-protocol.md`.
 
