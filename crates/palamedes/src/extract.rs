@@ -85,6 +85,19 @@ pub struct ExtractCatalogMessagesRequest {
     pub max_threads: Option<usize>,
 }
 
+/// One file to analyze as part of a source-analysis batch.
+///
+/// `path` identifies the file on disk and in [`ExtractCache`], while `filename`
+/// is the display path written into diagnostics. Keeping them separate lets a
+/// caller cache absolute paths while reporting stable project-relative paths.
+#[derive(Clone, Debug)]
+pub struct SourceFileAnalysisRequest {
+    /// Path to read and use as the cache key.
+    pub path: String,
+    /// Display filename for diagnostics produced from `path`.
+    pub filename: String,
+}
+
 /// Optional behavior for aggregated catalog extraction.
 #[derive(Clone, Debug)]
 pub struct ExtractCatalogMessagesOptions {
@@ -1735,58 +1748,172 @@ pub fn analyze_source_file_cached(
     options: &ExtractCatalogMessagesOptions,
     cache: &mut ExtractCache,
 ) -> PalamedesResult<SourceFileAnalysisResult> {
+    let mut results = analyze_source_files_cached(
+        &[SourceFileAnalysisRequest {
+            path: path.to_owned(),
+            filename: filename.to_owned(),
+        }],
+        root_dir,
+        options,
+        Some(1),
+        cache,
+    )?;
+    // The batch always returns exactly one outcome for every input file.
+    results
+        .pop()
+        .expect("one source-analysis request produces one outcome")
+}
+
+/// Analyze source files while reusing the cache shared with batch extraction.
+///
+/// Reading, cache validation, and parsing run in a bounded Rayon pool. The
+/// supplied cache is observed immutably by workers, then fresh results are
+/// inserted serially in request order. This keeps cache writes, diagnostics,
+/// and caller-side suppression processing deterministic while still avoiding
+/// serial parse work on cold trees.
+///
+/// The returned vector has one result per input, in input order. A bad file
+/// does not prevent independent files from being analyzed; its entry contains
+/// the original [`PalamedesError`]. A pool-construction failure applies to the
+/// whole batch and is returned from this function.
+pub fn analyze_source_files_cached(
+    files: &[SourceFileAnalysisRequest],
+    root_dir: &str,
+    options: &ExtractCatalogMessagesOptions,
+    max_threads: Option<usize>,
+    cache: &mut ExtractCache,
+) -> PalamedesResult<Vec<PalamedesResult<SourceFileAnalysisResult>>> {
     cache.reset_if_request_differs(root_dir, options);
-    let fingerprint = cache.fingerprint_before_read(path);
-    let source = std::fs::read_to_string(path).map_err(|source| PalamedesError::ReadFile {
-        path: PathBuf::from(path),
-        source,
-    })?;
-    if let Some((_relative_file, messages, diagnostics)) = cache.get_after_read(path, fingerprint) {
-        return Ok(SourceFileAnalysisResult {
-            source,
-            analysis: analysis_with_display_filename(
-                SourceAnalysisResult {
-                    messages,
-                    diagnostics,
-                },
+    let threads = resolve_extract_threads(max_threads, files.len());
+    let outcomes: Vec<SourceFileAnalysisOutcome> = if threads <= 1 {
+        files
+            .iter()
+            .map(|file| analyze_one_source_file_cached(file, options, cache))
+            .collect()
+    } else {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .map_err(|source| PalamedesError::ExtractionPool {
+                message: source.to_string(),
+            })?
+            .install(|| {
+                files
+                    .par_iter()
+                    .map(|file| analyze_one_source_file_cached(file, options, cache))
+                    .collect()
+            })
+    };
+
+    Ok(outcomes
+        .into_iter()
+        .map(|outcome| match outcome {
+            SourceFileAnalysisOutcome::Analyzed {
+                path,
                 filename,
-            ),
-        });
+                source,
+                analysis,
+                fresh,
+                fingerprint,
+            } => {
+                if fresh {
+                    cache.insert(
+                        path.clone(),
+                        relative_origin_file(Path::new(root_dir), &path),
+                        &analysis.messages,
+                        &analysis.diagnostics,
+                        fingerprint,
+                    );
+                }
+                Ok(SourceFileAnalysisResult {
+                    source,
+                    analysis: analysis_with_display_filename(analysis, &filename),
+                })
+            }
+            SourceFileAnalysisOutcome::Failed(error) => Err(error),
+        })
+        .collect())
+}
+
+/// Result of the parallel source-analysis phase before ordered cache insertion.
+enum SourceFileAnalysisOutcome {
+    Analyzed {
+        path: String,
+        filename: String,
+        source: String,
+        analysis: SourceAnalysisResult,
+        fresh: bool,
+        fingerprint: Option<ReadStartFingerprint>,
+    },
+    Failed(PalamedesError),
+}
+
+fn analyze_one_source_file_cached(
+    file: &SourceFileAnalysisRequest,
+    options: &ExtractCatalogMessagesOptions,
+    cache: &ExtractCache,
+) -> SourceFileAnalysisOutcome {
+    let fingerprint = cache.fingerprint_before_read(&file.path);
+    let source = match std::fs::read_to_string(&file.path) {
+        Ok(source) => source,
+        Err(source) => {
+            return SourceFileAnalysisOutcome::Failed(PalamedesError::ReadFile {
+                path: PathBuf::from(&file.path),
+                source,
+            });
+        }
+    };
+    if let Some((_relative_file, messages, diagnostics)) =
+        cache.get_after_read(&file.path, fingerprint)
+    {
+        return SourceFileAnalysisOutcome::Analyzed {
+            path: file.path.clone(),
+            filename: file.filename.clone(),
+            source,
+            analysis: SourceAnalysisResult {
+                messages,
+                diagnostics,
+            },
+            fresh: false,
+            fingerprint: None,
+        };
     }
 
-    let is_mdx = is_mdx_filename(path);
-    let analysis = if !is_mdx && !source.contains("@palamedes") && !source.contains("i18n") {
-        SourceAnalysisResult {
+    let analysis = if !is_mdx_filename(&file.path)
+        && !source.contains("@palamedes")
+        && !source.contains("i18n")
+    {
+        Ok(SourceAnalysisResult {
             messages: Vec::new(),
             diagnostics: Vec::new(),
-        }
+        })
     } else {
         EXTRACT_ARENA.with(|arena| {
             let mut arena = arena.borrow_mut();
             let analysis = analyze_source_in(
                 &arena,
                 &source,
-                path,
+                &file.path,
                 options.reference_scopes,
                 &options.mdx,
                 &options.rules,
             );
             arena.reset();
             analysis
-        })?
+        })
     };
 
-    cache.insert(
-        path.to_owned(),
-        relative_origin_file(Path::new(root_dir), path),
-        &analysis.messages,
-        &analysis.diagnostics,
-        fingerprint,
-    );
-    Ok(SourceFileAnalysisResult {
-        source,
-        analysis: analysis_with_display_filename(analysis, filename),
-    })
+    match analysis {
+        Ok(analysis) => SourceFileAnalysisOutcome::Analyzed {
+            path: file.path.clone(),
+            filename: file.filename.clone(),
+            source,
+            analysis,
+            fresh: true,
+            fingerprint,
+        },
+        Err(error) => SourceFileAnalysisOutcome::Failed(error),
+    }
 }
 
 fn analysis_with_display_filename(
@@ -2469,12 +2596,12 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::{
-        analyze_source, analyze_source_file_cached, analyze_source_with_mdx_options,
-        analyze_source_with_options, extract_catalog_messages_cached,
-        extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
-        extract_messages as extract_messages_raw, resolve_extract_threads,
-        ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest, ExtractedMessageRecord,
-        DEFAULT_EXTRACT_THREADS,
+        analyze_source, analyze_source_file_cached, analyze_source_files_cached,
+        analyze_source_with_mdx_options, analyze_source_with_options,
+        extract_catalog_messages_cached, extract_catalog_messages_from_files,
+        extract_catalog_messages_from_files_with_options, extract_messages as extract_messages_raw,
+        resolve_extract_threads, ExtractCatalogMessagesOptions, ExtractCatalogMessagesRequest,
+        ExtractedMessageRecord, SourceFileAnalysisRequest, DEFAULT_EXTRACT_THREADS,
     };
     use crate::error::PalamedesResult;
     use crate::extract_cache::ExtractCache;
@@ -2789,6 +2916,105 @@ function Greeting() { return <p>{t`Hello`}</p>; }
             );
         }
 
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_source_analysis_keeps_order_and_cache_results_independent_of_threads() {
+        let root = temp_root("source-analysis-thread-count");
+        fs::create_dir_all(&root).expect("create root");
+        let mut files = Vec::new();
+        for index in 0..12 {
+            let path = root.join(format!("fixture-{index:02}.tsx"));
+            fs::write(
+                &path,
+                format!(
+                    "import {{ t }} from \"@palamedes/core/macro\";\nexport function Label{index}({{ status }}) {{ return t`${{status}}`; }}\n"
+                ),
+            )
+            .expect("write fixture");
+            fs::File::options()
+                .write(true)
+                .open(&path)
+                .expect("open fixture")
+                .set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(10))
+                .expect("age fixture");
+            files.push(SourceFileAnalysisRequest {
+                path: path.to_string_lossy().into_owned(),
+                filename: format!("src/fixture-{index:02}.tsx"),
+            });
+        }
+        // Duplicate inputs are reachable through library callers and must keep
+        // their caller-provided order even though cache insertion is serial.
+        files.push(files[3].clone());
+
+        let options = ExtractCatalogMessagesOptions {
+            rules: SourceRuleOptions::default(),
+            ..ExtractCatalogMessagesOptions::default()
+        };
+        let run = |threads, cache: &mut ExtractCache| {
+            analyze_source_files_cached(
+                &files,
+                &root.to_string_lossy(),
+                &options,
+                Some(threads),
+                cache,
+            )
+            .expect("batch source analysis")
+            .into_iter()
+            .map(|result| {
+                let result = result.expect("fixture analysis");
+                serde_json::to_vec(&(result.source, result.analysis))
+                    .expect("serialize deterministic analysis")
+            })
+            .collect::<Vec<_>>()
+        };
+
+        let mut uncached = ExtractCache::disabled();
+        let serial = run(1, &mut uncached);
+        for threads in [2, 4, 8] {
+            let mut cache = ExtractCache::disabled();
+            assert_eq!(serial, run(threads, &mut cache), "thread count {threads}");
+        }
+
+        let cache_path = root.join("cache.json");
+        let mut warm_cache =
+            ExtractCache::load_with_options(&cache_path, &root.to_string_lossy(), &options);
+        assert_eq!(serial, run(4, &mut warm_cache));
+        assert_eq!(warm_cache.len(), 12);
+        assert_eq!(serial, run(2, &mut warm_cache));
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn batch_source_analysis_preserves_partial_failures_in_input_order() {
+        let root = temp_root("source-analysis-partial-failure");
+        fs::create_dir_all(&root).expect("create root");
+        let valid = root.join("valid.ts");
+        fs::write(&valid, "export const value = 1;\n").expect("write source");
+        let files = vec![
+            SourceFileAnalysisRequest {
+                path: valid.to_string_lossy().into_owned(),
+                filename: "src/valid.ts".to_owned(),
+            },
+            SourceFileAnalysisRequest {
+                path: root.join("missing.ts").to_string_lossy().into_owned(),
+                filename: "src/missing.ts".to_owned(),
+            },
+        ];
+        let mut cache = ExtractCache::disabled();
+        let outcomes = analyze_source_files_cached(
+            &files,
+            &root.to_string_lossy(),
+            &ExtractCatalogMessagesOptions::default(),
+            Some(4),
+            &mut cache,
+        )
+        .expect("batch executes");
+
+        assert!(outcomes[0].is_ok());
+        assert!(outcomes[1].is_err());
         fs::remove_dir_all(root).expect("cleanup");
     }
 

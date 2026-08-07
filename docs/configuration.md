@@ -31,20 +31,20 @@ catalogs:
 
 ## Fields
 
-| Field                   | Required | Type                                   | Notes                                                                               |
-| ----------------------- | -------- | -------------------------------------- | ----------------------------------------------------------------------------------- |
-| `locales`               | Yes      | `string[]`                             | All locale codes known to the project. Must include `source-locale`.                |
-| `source-locale`         | Yes      | `string`                               | Locale used by source messages.                                                     |
-| `catalogs`              | Yes      | catalog array                          | Catalog locations and source scan patterns.                                         |
-| `fallback-locales`      | No       | `string[] \| Record<string, string[]>` | Shared or per-locale fallback chain.                                                |
-| `pseudo-locale`         | No       | `string`                               | Locale code used for pseudo-localized UI testing.                                   |
-| `source-reference-root` | No       | `git \| config \| lingui \| path`      | Root used for catalog source references. Defaults to nearest Git root, then config. |
-| `reference-scopes`      | No       | `boolean`                              | Adds stable source scopes to catalog references. Defaults to `true`.                |
-| `mdx`                   | No       | MDX options                            | Shared native MDX extraction and Vite compilation behavior.                         |
-| `lint`                  | No       | source lint options                    | Source-authoring rule levels used by `pmds lint`.                                   |
-| `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                |
-| `extract-threads`       | No       | `number`                               | Worker threads for the parallel extraction pass. Defaults to `4`; `1` runs serial.  |
-| `extract-cache`         | No       | `boolean`                              | Reuse the shared extraction/source-analysis cache. Defaults to `true`.              |
+| Field                   | Required | Type                                   | Notes                                                                                       |
+| ----------------------- | -------- | -------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `locales`               | Yes      | `string[]`                             | All locale codes known to the project. Must include `source-locale`.                        |
+| `source-locale`         | Yes      | `string`                               | Locale used by source messages.                                                             |
+| `catalogs`              | Yes      | catalog array                          | Catalog locations and source scan patterns.                                                 |
+| `fallback-locales`      | No       | `string[] \| Record<string, string[]>` | Shared or per-locale fallback chain.                                                        |
+| `pseudo-locale`         | No       | `string`                               | Locale code used for pseudo-localized UI testing.                                           |
+| `source-reference-root` | No       | `git \| config \| lingui \| path`      | Root used for catalog source references. Defaults to nearest Git root, then config.         |
+| `reference-scopes`      | No       | `boolean`                              | Adds stable source scopes to catalog references. Defaults to `true`.                        |
+| `mdx`                   | No       | MDX options                            | Shared native MDX extraction and Vite compilation behavior.                                 |
+| `lint`                  | No       | source lint options                    | Source-authoring rule levels used by `pmds lint`.                                           |
+| `plugins`               | No       | `(string \| [string, options])[]`      | Explicit CLI plugin packages. Never auto-discovered.                                        |
+| `extract-threads`       | No       | `number`                               | Worker threads for parallel extraction and lint analysis. Defaults to `4`; `1` runs serial. |
+| `extract-cache`         | No       | `boolean`                              | Reuse the shared extraction/source-analysis cache. Defaults to `true`.                      |
 
 The native CLI and JS config loader both accept snake_case aliases for these
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
@@ -52,8 +52,8 @@ hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
 
 `extract-threads` and `extract-cache` (and their `extract_threads` /
 `extract_cache` aliases) are read by the native `pmds` CLI only. They tune
-extraction, which the CLI owns; the JS config loader in `@palamedes/config`
-ignores them, and no bundler plugin reads them.
+extraction and lint source analysis, which the CLI owns; the JS config loader
+in `@palamedes/config` ignores them, and no bundler plugin reads them.
 
 `extract-threads` bounds the parallel read/parse pass. The default of `4` is a
 measured floor rather than a core count: extraction gets slower again above it,
@@ -61,7 +61,8 @@ because a one-shot `pmds extract` pays worker setup on every invocation and
 never amortizes it. Raise it only with a measurement on your own corpus and
 hardware; see
 [ADR-013](https://github.com/sebastian-software/palamedes/blob/main/adr/013-bounded-parallel-extraction.md)
-for the numbers. `--threads` on the command line overrides this value.
+for the numbers. `--threads` on `pmds extract` or `pmds lint` overrides this
+value.
 
 `extract-cache` controls whether extraction and source lint reuse their shared
 analysis for files that have not changed. The cache lives at

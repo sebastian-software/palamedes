@@ -8,6 +8,8 @@ use crate::config::ConfigError;
 
 /// Exit status used when `extract --check` finds catalog drift.
 pub const CATALOG_DRIFT_EXIT_CODE: u8 = 3;
+/// Exit status used when `lint` completes analysis but its requested threshold fails.
+pub const LINT_VERDICT_EXIT_CODE: u8 = 4;
 
 #[derive(Debug, Error)]
 pub enum CliError {
@@ -78,6 +80,9 @@ impl CliError {
     pub fn exit_code(&self) -> u8 {
         match self {
             Self::CatalogDrift { .. } => CATALOG_DRIFT_EXIT_CODE,
+            Self::LintFailedOnError { .. }
+            | Self::LintFailedOnWarning { .. }
+            | Self::LintAnalysisFailed { .. } => LINT_VERDICT_EXIT_CODE,
             _ => 1,
         }
     }

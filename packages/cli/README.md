@@ -83,6 +83,7 @@ pnpm exec pmds extract --verbose
 pnpm exec pmds lint
 pnpm exec pmds lint --json
 pnpm exec pmds lint --fail-on warning
+pnpm exec pmds lint --threads 1
 pnpm exec pmds lint --no-cache
 pnpm exec pmds audit
 pnpm exec pmds audit --json
@@ -104,6 +105,11 @@ must fail CI; the default continues to fail only on errors.
 `pmds lint` is non-mutating and checks Palamedes authoring across the same
 configured sources as extraction. It supports stable human and JSON output,
 configured rule levels, code-specific line suppressions, and CI thresholds.
+Its verdict uses exit code `4` when diagnostics meet `--fail-on` or a source
+file cannot be analyzed; exit code `1` remains for configuration, I/O, and
+output failures, and `2` for invalid CLI usage. Lint source analysis uses the
+same bounded parallel worker policy as extraction; `--threads` overrides
+`extract-threads` and `1` runs it serially.
 
 `pmds extract --check` projects configured PO and FCL catalogs through the
 same extraction and serialization path without changing catalog files or

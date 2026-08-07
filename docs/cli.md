@@ -101,12 +101,13 @@ pmds lint --fail-on warning
 
 Options:
 
-| Option                | Description                                               |
-| --------------------- | --------------------------------------------------------- |
-| `-c, --config <path>` | Use a specific config file.                               |
-| `--json`              | Print one deterministic result document.                  |
-| `--fail-on <level>`   | Fail on `error` or `warning`. Default: `error`.           |
-| `--no-cache`          | Ignore and do not write the shared source-analysis cache. |
+| Option                | Description                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `-c, --config <path>` | Use a specific config file.                                                                                         |
+| `--json`              | Print one deterministic result document.                                                                            |
+| `--fail-on <level>`   | Fail on `error` or `warning`. Default: `error`.                                                                     |
+| `--threads <COUNT>`   | Worker threads for bounded parallel source analysis. Overrides `extract-threads`; defaults to `4`; `1` runs serial. |
+| `--no-cache`          | Ignore and do not write the shared source-analysis cache.                                                           |
 
 Human diagnostics contain file, line, column, severity, stable code, message,
 and actionable help. JSON contains `diagnostics`, `failedFiles`, and a
@@ -138,11 +139,21 @@ by file. The document shape is stable:
 }
 ```
 
-Exit code `0` means the configured threshold passed, `1` means diagnostics met
-the threshold or a file could not be analyzed, and `2` is reserved by Clap for
-invalid command-line usage.
+Exit code `0` means the configured threshold passed. Exit code `4` means lint
+completed and either diagnostics met the configured `--fail-on` threshold
+(whether errors alone or errors and warnings) or one or more source files could
+not be analyzed. Exit code `1` means configuration, I/O, or output execution
+failed before lint could produce its result. Exit code `2` remains reserved by
+Clap for invalid command-line usage. This mirrors `extract --check`: a completed
+verdict has a dedicated code that CI can distinguish from a command that could
+not run.
 
-Suppressions are deliberately code-specific and line-scoped:
+Suppressions are deliberately code-specific and line-scoped. A directive must
+start immediately after a supported comment opener, allowing whitespace but no
+other text. JS and TS accept `//` and `/* ... */`; JSX and TSX accept those
+forms including JSX `{/* ... */}`; MDX accepts HTML `<!-- ... -->` and JSX
+`{/* ... */}`. MDX fenced code blocks are always ignored so documentation
+examples cannot become unused suppressions.
 
 ```tsx
 // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
@@ -155,6 +166,10 @@ Unknown codes, directives without a code, and valid suppressions that no longer
 match a finding are reported by `pmds lint`.
 The default `.palamedes/extract-cache.json` stores compatible messages and
 diagnostics together, so `extract` and `lint` can reuse the same native parse.
+Lint follows extraction's bounded parallel read/parse model. Workers only
+observe the immutable cache; results are suppressed, merged, and inserted into
+the cache serially in source-file order, so cold, warm, and repeated runs keep
+the same diagnostic output.
 
 ## `pmds audit`
 
