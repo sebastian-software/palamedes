@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 
 use ferrocat::{CompiledCatalogIdIndex, CompiledKeyStrategy};
 
@@ -26,12 +26,20 @@ pub struct CatalogCompilationCache {
     state: Mutex<CacheState>,
     #[cfg(test)]
     statistics: Mutex<CacheStatistics>,
+    #[cfg(test)]
+    before_build: Mutex<Option<Arc<dyn Fn(&str) + Send + Sync>>>,
 }
 
 struct CacheState {
-    entries: HashMap<CompilationCacheKey, Arc<Mutex<Option<Arc<CachedCompilation>>>>>,
+    ready: HashMap<CompilationCacheKey, Arc<CachedCompilation>>,
+    in_flight: HashMap<CompilationCacheKey, Arc<InFlightBuild>>,
     clock: u64,
     last_used: HashMap<CompilationCacheKey, u64>,
+}
+
+struct InFlightBuild {
+    finished: Mutex<bool>,
+    wake: Condvar,
 }
 
 struct CachedCompilation {
@@ -73,12 +81,15 @@ impl CatalogCompilationCache {
         Self {
             capacity,
             state: Mutex::new(CacheState {
-                entries: HashMap::new(),
+                ready: HashMap::new(),
+                in_flight: HashMap::new(),
                 clock: 0,
                 last_used: HashMap::new(),
             }),
             #[cfg(test)]
             statistics: Mutex::new(CacheStatistics::default()),
+            #[cfg(test)]
+            before_build: Mutex::new(None),
         }
     }
 
@@ -86,77 +97,107 @@ impl CatalogCompilationCache {
         &self,
         request: &CatalogArtifactSelectedRequest,
     ) -> PalamedesResult<super::types::CatalogArtifactResult> {
-        let snapshot = prepare_compilation_snapshot(&request.config, &request.resource_path)?;
-        let key = CompilationCacheKey::new(&request.config, &snapshot);
+        let mut snapshot = Some(prepare_compilation_snapshot(
+            &request.config,
+            &request.resource_path,
+        )?);
+        let key = CompilationCacheKey::new(&request.config, snapshot.as_ref().expect("snapshot"));
 
         if self.capacity == 0 {
-            let cached = self.build(snapshot)?;
+            let cached = self.build(snapshot.take().expect("snapshot"))?;
             return compile_selected_prepared(&cached.prepared, &cached.compiled_id_index, request);
         }
 
-        let entry = self.entry(key);
-        let compiled = {
-            let mut entry = entry.lock().expect("catalog cache entry lock poisoned");
-            if entry.is_none() {
-                *entry = Some(Arc::new(self.build(snapshot)?));
+        loop {
+            if let Some(compiled) = self.ready(&key) {
+                return compile_selected_prepared(
+                    &compiled.prepared,
+                    &compiled.compiled_id_index,
+                    request,
+                );
             }
-            Arc::clone(entry.as_ref().expect("catalog cache entry initialized"))
-        };
-        // `CachedCompilation` is immutable after construction, so it remains
-        // safe to use after releasing the per-key construction lock.
-        compile_selected_prepared(&compiled.prepared, &compiled.compiled_id_index, request)
+
+            let (in_flight, builds) = self.in_flight(&key);
+            if builds {
+                let completion = InFlightCompletion::new(self, key.clone(), Arc::clone(&in_flight));
+                self.before_build(&key.locale);
+                let result = self.build(snapshot.take().expect("snapshot")).map(Arc::new);
+                if let Ok(compiled) = &result {
+                    self.insert_ready(key.clone(), Arc::clone(compiled));
+                }
+                drop(completion);
+                let compiled = result?;
+                return compile_selected_prepared(
+                    &compiled.prepared,
+                    &compiled.compiled_id_index,
+                    request,
+                );
+            }
+            in_flight.wait();
+        }
     }
 
-    fn entry(&self, key: CompilationCacheKey) -> Arc<Mutex<Option<Arc<CachedCompilation>>>> {
-        let mut state = self
-            .state
-            .lock()
-            .expect("catalog cache state lock poisoned");
+    fn ready(&self, key: &CompilationCacheKey) -> Option<Arc<CachedCompilation>> {
+        let mut state = lock_unpoison(&self.state);
+        let compiled = state.ready.get(key).map(Arc::clone)?;
         state.clock = state.clock.wrapping_add(1);
         let now = state.clock;
-        if let Some(entry) = state.entries.get(&key) {
-            let entry = Arc::clone(entry);
-            state.last_used.insert(key, now);
-            return entry;
-        }
+        state.last_used.insert(key.clone(), now);
+        Some(compiled)
+    }
 
-        if state.entries.len() >= self.capacity {
+    fn in_flight(&self, key: &CompilationCacheKey) -> (Arc<InFlightBuild>, bool) {
+        let mut state = lock_unpoison(&self.state);
+        if let Some(in_flight) = state.in_flight.get(key) {
+            return (Arc::clone(in_flight), false);
+        }
+        let in_flight = Arc::new(InFlightBuild::new());
+        state.in_flight.insert(key.clone(), Arc::clone(&in_flight));
+        (in_flight, true)
+    }
+
+    fn insert_ready(&self, key: CompilationCacheKey, compiled: Arc<CachedCompilation>) {
+        let mut state = lock_unpoison(&self.state);
+        if state.ready.len() >= self.capacity {
             if let Some(oldest) = state
                 .last_used
                 .iter()
                 .min_by_key(|(_, used)| *used)
                 .map(|(key, _)| key.clone())
             {
-                state.entries.remove(&oldest);
+                state.ready.remove(&oldest);
                 state.last_used.remove(&oldest);
             }
         }
-        let entry = Arc::new(Mutex::new(None));
-        state.entries.insert(key.clone(), Arc::clone(&entry));
+        state.clock = state.clock.wrapping_add(1);
+        let now = state.clock;
+        state.ready.insert(key.clone(), compiled);
         state.last_used.insert(key, now);
-        entry
+    }
+
+    fn finish_in_flight(&self, key: &CompilationCacheKey, in_flight: &Arc<InFlightBuild>) {
+        let mut state = lock_unpoison(&self.state);
+        if state
+            .in_flight
+            .get(key)
+            .is_some_and(|current| Arc::ptr_eq(current, in_flight))
+        {
+            state.in_flight.remove(key);
+        }
+        drop(state);
+        in_flight.finish();
     }
 
     fn build(&self, snapshot: CompilationSnapshot) -> PalamedesResult<CachedCompilation> {
-        #[cfg(test)]
-        let parses = snapshot.sources.len();
-        let prepared = snapshot.into_prepared()?;
+        let prepared = snapshot.into_prepared_with_observer(|| self.record_parse())?;
         let catalogs = prepared.loaded.values().collect::<Vec<_>>();
+        self.record_index_build();
         let compiled_id_index = CompiledCatalogIdIndex::new_with_policy(
             &catalogs,
             CompiledKeyStrategy::FerrocatV1,
             ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
         )
         .map_err(PalamedesError::BuildCompiledIdIndex)?;
-        #[cfg(test)]
-        {
-            let mut statistics = self
-                .statistics
-                .lock()
-                .expect("catalog cache statistics lock poisoned");
-            statistics.parses += parses;
-            statistics.index_builds += 1;
-        }
         Ok(CachedCompilation {
             prepared,
             compiled_id_index,
@@ -165,11 +206,102 @@ impl CatalogCompilationCache {
 
     #[cfg(test)]
     pub(super) fn statistics(&self) -> CacheStatistics {
-        *self
-            .statistics
-            .lock()
-            .expect("catalog cache statistics lock poisoned")
+        *lock_unpoison(&self.statistics)
     }
+
+    fn record_parse(&self) {
+        #[cfg(test)]
+        {
+            lock_unpoison(&self.statistics).parses += 1;
+        }
+    }
+
+    fn record_index_build(&self) {
+        #[cfg(test)]
+        {
+            lock_unpoison(&self.statistics).index_builds += 1;
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn ready_len(&self) -> usize {
+        lock_unpoison(&self.state).ready.len()
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_before_build_hook(&self, hook: Arc<dyn Fn(&str) + Send + Sync>) {
+        *lock_unpoison(&self.before_build) = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn clear_before_build_hook(&self) {
+        *lock_unpoison(&self.before_build) = None;
+    }
+
+    fn before_build(&self, locale: &str) {
+        #[cfg(not(test))]
+        let _ = locale;
+        #[cfg(test)]
+        let hook = lock_unpoison(&self.before_build).as_ref().map(Arc::clone);
+        #[cfg(test)]
+        if let Some(hook) = hook {
+            hook(locale);
+        }
+    }
+}
+
+impl InFlightBuild {
+    fn new() -> Self {
+        Self {
+            finished: Mutex::new(false),
+            wake: Condvar::new(),
+        }
+    }
+
+    fn wait(&self) {
+        let mut finished = lock_unpoison(&self.finished);
+        while !*finished {
+            finished = self
+                .wake
+                .wait(finished)
+                .unwrap_or_else(PoisonError::into_inner);
+        }
+    }
+
+    fn finish(&self) {
+        *lock_unpoison(&self.finished) = true;
+        self.wake.notify_all();
+    }
+}
+
+struct InFlightCompletion<'a> {
+    cache: &'a CatalogCompilationCache,
+    key: CompilationCacheKey,
+    in_flight: Arc<InFlightBuild>,
+}
+
+impl<'a> InFlightCompletion<'a> {
+    fn new(
+        cache: &'a CatalogCompilationCache,
+        key: CompilationCacheKey,
+        in_flight: Arc<InFlightBuild>,
+    ) -> Self {
+        Self {
+            cache,
+            key,
+            in_flight,
+        }
+    }
+}
+
+impl Drop for InFlightCompletion<'_> {
+    fn drop(&mut self) {
+        self.cache.finish_in_flight(&self.key, &self.in_flight);
+    }
+}
+
+fn lock_unpoison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl CompilationCacheKey {
