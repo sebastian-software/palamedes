@@ -66,7 +66,7 @@ pub struct CatalogConfig {
 }
 
 /// Palamedes catalog storage format.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PalamedesCatalogFormat {
     /// gettext PO catalogs.

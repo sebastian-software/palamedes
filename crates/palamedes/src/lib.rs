@@ -50,10 +50,11 @@ use ferrocat::{parse_po as ferrocat_parse_po, MsgStr, PoFile, PoItem};
 use serde::Serialize;
 
 pub use catalog_artifact::{
-    compile_catalog_artifact, compile_catalog_artifact_selected, CatalogArtifactConfig,
-    CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity, CatalogArtifactMissingMessage,
-    CatalogArtifactRequest, CatalogArtifactResult, CatalogArtifactSelectedRequest,
-    CatalogArtifactSourceKey, CatalogConfig, FallbackLocales, PalamedesCatalogFormat,
+    compile_catalog_artifact, compile_catalog_artifact_selected,
+    compile_catalog_artifact_selected_cached, CatalogArtifactConfig, CatalogArtifactDiagnostic,
+    CatalogArtifactDiagnosticSeverity, CatalogArtifactMissingMessage, CatalogArtifactRequest,
+    CatalogArtifactResult, CatalogArtifactSelectedRequest, CatalogArtifactSourceKey,
+    CatalogCompilationCache, CatalogConfig, FallbackLocales, PalamedesCatalogFormat,
 };
 pub use catalog_audit::{
     audit_catalogs, CatalogAuditCheckOptions, CatalogAuditDiagnostic, CatalogAuditRequest,

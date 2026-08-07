@@ -4,7 +4,7 @@ use regex::Regex;
 
 use crate::error::{PalamedesError, PalamedesResult};
 
-use super::load::load_catalogs;
+use super::load::{load_catalogs, parse_catalog_sources, read_catalog_sources, CatalogSources};
 use super::types::{CatalogArtifactConfig, FallbackLocales};
 use super::{resolve_catalog_path, PreparedCompilation};
 
@@ -32,6 +32,46 @@ pub(super) fn prepare_compilation(
         fallback_chain,
         watch_files,
         loaded,
+    })
+}
+
+pub(super) struct CompilationSnapshot {
+    pub(super) locale: String,
+    pub(super) fallback_chain: Vec<String>,
+    pub(super) watch_files: Vec<PathBuf>,
+    pub(super) sources: CatalogSources,
+    source_locale: String,
+}
+
+impl CompilationSnapshot {
+    pub(super) fn into_prepared(self) -> PalamedesResult<PreparedCompilation> {
+        let loaded = parse_catalog_sources(&self.sources, &self.source_locale)?;
+        Ok(PreparedCompilation {
+            locale: self.locale,
+            fallback_chain: self.fallback_chain,
+            watch_files: self.watch_files,
+            loaded,
+        })
+    }
+}
+
+pub(super) fn prepare_compilation_snapshot(
+    config: &CatalogArtifactConfig,
+    resource_path: &str,
+) -> PalamedesResult<CompilationSnapshot> {
+    let resource_path = PathBuf::from(resource_path);
+    let root_dir = PathBuf::from(&config.root_dir);
+    let resolved = resolve_catalog_request(config, &resource_path)?;
+    let fallback_chain = resolve_locale_chain(config, &resolved.locale);
+    let watch_files =
+        collect_watch_files(&root_dir, &resolved.primary_file, config, &fallback_chain);
+    let sources = read_catalog_sources(&watch_files, config)?;
+    Ok(CompilationSnapshot {
+        locale: resolved.locale,
+        fallback_chain,
+        watch_files,
+        sources,
+        source_locale: config.source_locale.clone(),
     })
 }
 

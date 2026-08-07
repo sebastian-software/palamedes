@@ -1,7 +1,8 @@
 use super::{
-    compile_catalog_artifact, compile_catalog_artifact_selected, CatalogArtifactConfig,
+    compile_catalog_artifact, compile_catalog_artifact_selected,
+    compile_catalog_artifact_selected_cached, CatalogArtifactConfig,
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
-    CatalogConfig, PalamedesCatalogFormat,
+    CatalogCompilationCache, CatalogConfig, PalamedesCatalogFormat,
 };
 use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
@@ -591,6 +592,98 @@ msgstr "Hallo"
 }
 
 #[test]
+fn selected_catalog_cache_reuses_parses_and_index_across_sidecars() {
+    let fixture = create_fixture_dir("selected-catalog-cache-reuse");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", ""), ("Goodbye", "")]);
+    write_test_catalog(
+        &locale_dir,
+        "de",
+        &[("Hello", "Hallo"), ("Goodbye", "Auf Wiedersehen")],
+    );
+    let request = selected_request(&fixture, &locale_dir, "Hello");
+    let cache = CatalogCompilationCache::new(8);
+
+    // This models many module sidecars selecting different subsets from one
+    // locale. Parsing/index construction scales with catalog snapshots, not
+    // with the number of selected module compiles.
+    for _ in 0..64 {
+        let result = compile_catalog_artifact_selected_cached(&cache, &request)
+            .expect("selected catalog artifact");
+        assert_eq!(result.messages.len(), 1);
+        assert_eq!(
+            result
+                .messages
+                .get(&compiled_key("Hello", None))
+                .map(String::as_str),
+            Some("Hallo")
+        );
+    }
+
+    assert_eq!(
+        cache.statistics(),
+        super::cache::CacheStatistics {
+            parses: 2,
+            index_builds: 1,
+        }
+    );
+}
+
+#[test]
+fn selected_catalog_cache_invalidates_equal_mtime_content_replacement() {
+    let fixture = create_fixture_dir("selected-catalog-cache-content-replacement");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Hallo")]);
+    let request = selected_request(&fixture, &locale_dir, "Hello");
+    let cache = CatalogCompilationCache::new(8);
+
+    let first = compile_catalog_artifact_selected_cached(&cache, &request)
+        .expect("first selected catalog artifact");
+    assert_eq!(
+        first
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Hallo")
+    );
+
+    let de_catalog = locale_dir.join("de.po");
+    let original_mtime = fs::metadata(&de_catalog)
+        .expect("catalog metadata")
+        .modified()
+        .expect("catalog modified time");
+    fs::write(&de_catalog, "this is not a catalog").expect("write malformed catalog");
+    restore_mtime(&de_catalog, original_mtime);
+    assert!(
+        compile_catalog_artifact_selected_cached(&cache, &request).is_err(),
+        "a changed malformed catalog must not be hidden behind the prior cached snapshot"
+    );
+
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Guten Tag")]);
+    restore_mtime(&de_catalog, original_mtime);
+
+    let second = compile_catalog_artifact_selected_cached(&cache, &request)
+        .expect("updated selected catalog artifact");
+    assert_eq!(
+        second
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Guten Tag")
+    );
+    assert_eq!(
+        cache.statistics(),
+        super::cache::CacheStatistics {
+            parses: 4,
+            index_builds: 2,
+        }
+    );
+}
+
+#[test]
 fn compile_catalog_artifact_selected_reports_icu_compatibility_diagnostics() {
     let fixture = create_fixture_dir("catalog-artifact-selected-icu-compatibility");
     let locale_dir = fixture.join("src/locales");
@@ -1091,6 +1184,37 @@ fn write_test_catalog(locale_dir: &Path, locale: &str, entries: &[(&str, &str)])
     }
 
     fs::write(locale_dir.join(format!("{locale}.po")), catalog).expect("write catalog");
+}
+
+fn selected_request(
+    fixture: &Path,
+    locale_dir: &Path,
+    message: &str,
+) -> CatalogArtifactSelectedRequest {
+    CatalogArtifactSelectedRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: locale_dir.join("de.po").to_string_lossy().into_owned(),
+        compiled_ids: vec![compiled_key(message, None)],
+    }
+}
+
+fn restore_mtime(path: &Path, mtime: SystemTime) {
+    fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .expect("catalog file")
+        .set_times(std::fs::FileTimes::new().set_modified(mtime))
+        .expect("restore catalog mtime");
 }
 
 fn po_string(value: &str) -> String {
