@@ -30,13 +30,18 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up pnpm cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
           # This caches pnpm's download store only. remix@next is still resolved
           # afresh below, so the cache cannot pin or mask the canary version.
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-
-      - name: Enable Corepack
-        run: corepack enable
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
