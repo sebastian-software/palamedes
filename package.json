@@ -38,6 +38,7 @@
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check:published-types": "node ./scripts/check-published-types.mjs",
     "check:release-set": "node ./scripts/check-release-set.mjs",
+    "check:remix-next-canary": "node ./scripts/check-remix-next-canary.mjs",
     "check-types": "pnpm check:native-types && pnpm -r --filter \"./packages/**\" exec tsc --noEmit -p tsconfig.json",
     "lint": "pnpm lint:oxlint && pnpm lint:eslint",
     "lint:fix": "pnpm lint:oxlint:fix && pnpm lint:eslint:fix",
