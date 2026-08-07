@@ -328,25 +328,30 @@ The extraction cache may still be updated unless `--no-cache` is passed.
 Catalog utilities:
 
 ```bash
-pnpm exec pmds catalog merge --format=po --conflict-strategy=use-first --output out.po a.po b.po
-pnpm exec pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first
+pnpm exec pmds catalog merge --conflict-strategy=use-first --output out.po a.po b.po
+pnpm exec pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first
 pnpm exec pmds catalog convert --to fcl input.po
 ```
 
 `catalog merge` takes exactly two input files. Add `--base base.po` for a
-deletion-aware three-way merge. For Git, use `catalog merge-driver` rather than
-reconstructing Git role mapping in a wrapper:
+deletion-aware three-way merge. Supported PO/FCL extensions infer the format;
+set `--format po` or `--format fcl` only to explicitly override that
+inference. For Git, use `catalog merge-driver` rather than reconstructing Git
+role mapping in a wrapper:
 
 ```bash
 git config merge.palamedes-catalog.driver \
-  'pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first'
+  'pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first'
 ```
 
 The merge driver receives ancestor, current, other, and output positional paths
-from Git and needs `--path %P` to apply configured catalog formatting. It
-detects rebases and swaps Git's temporary roles so `use-first` consistently
-means the branch being merged or rebased. Use `--operation merge` or
-`--operation rebase` only for unusual Git orchestration.
+from Git and needs `--path %P` to apply configured catalog formatting and infer
+PO or FCL from the logical path when Git temporary paths are extensionless.
+This one driver supports mixed-format repositories; set `--format po` or
+`--format fcl` only as an explicit override. It detects rebases and swaps
+Git's temporary roles so `use-first` consistently means the branch being
+merged or rebased. Use `--operation merge` or `--operation rebase` only for
+unusual Git orchestration.
 
 Extraction performance is already handled by the CLI and needs no user tuning by default. `pmds extract` runs a bounded parallel read/parse pass (`--threads <COUNT>`, or `extract-threads` in the config) and reuses an on-disk extraction cache (`--no-cache` disables it for one run; `extract-cache: false` disables it permanently).
 

@@ -199,21 +199,24 @@ pnpm exec pmds catalog merge ours.fcl theirs.fcl --base base.fcl --output merged
 ```
 
 `--format` can be omitted when all input and output extensions are supported
-and match. `.po` maps to `po`; `.fcl` maps to `fcl`.
+and match. `.po` maps to `po`; `.fcl` maps to `fcl`. Supply `--format` only
+to explicitly override that inference.
 
 For Git merge-driver usage:
 
 ```gitattributes
 *.po merge=palamedes-catalog
-*.fcl merge=palamedes-catalog-fcl
+*.fcl merge=palamedes-catalog
 ```
 
 ```bash
 git config merge.palamedes-catalog.driver \
-  'pmds catalog merge-driver %O %A %B %A --path %P --format=po --conflict-strategy=use-first'
-git config merge.palamedes-catalog-fcl.driver \
-  'pmds catalog merge-driver %O %A %B %A --path %P --format=fcl --conflict-strategy=use-first'
+  'pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first'
 ```
+
+Git's temporary paths may be extensionless, so `--path %P` supplies the
+logical catalog path and lets this one driver infer PO or FCL. Add
+`--format=po` or `--format=fcl` only to explicitly override that inference.
 
 `--source-locale` is optional. The command uses an explicit value first, then
 the configured Palamedes config when available, then `en`.
