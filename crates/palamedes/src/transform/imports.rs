@@ -9,7 +9,7 @@ use oxc_ast::ast::{
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::Semantic;
 use oxc_span::GetSpan;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::{scope::ScopeId, symbol::SymbolId};
 
 pub(super) struct ImportCollector {
     runtime_module: String,
@@ -17,14 +17,14 @@ pub(super) struct ImportCollector {
     pub macro_imports: HashMap<String, ImportedMacro>,
     macro_specifiers: Vec<MacroImportSpecifier>,
     reference_symbols: HashMap<(u32, u32), SymbolId>,
+    reference_scopes: HashMap<(u32, u32), ScopeId>,
     pub removed_macro_import: Option<(String, usize)>,
     pub has_reusable_runtime_import: bool,
     /// Number of bindings that could shadow calls through the configured local name.
     pub runtime_import_binding_count: usize,
     /// All authored identifiers that a generated import alias must not capture.
     pub used_identifier_names: HashSet<String>,
-    binding_symbols: HashMap<String, HashSet<SymbolId>>,
-    reusable_trans_import_sources: HashSet<String>,
+    reusable_trans_import_symbols: HashMap<String, SymbolId>,
 }
 
 impl ImportCollector {
@@ -35,12 +35,12 @@ impl ImportCollector {
             macro_imports: HashMap::new(),
             macro_specifiers: Vec::new(),
             reference_symbols: HashMap::new(),
+            reference_scopes: HashMap::new(),
             removed_macro_import: None,
             has_reusable_runtime_import: false,
             runtime_import_binding_count: 0,
             used_identifier_names: HashSet::new(),
-            binding_symbols: HashMap::new(),
-            reusable_trans_import_sources: HashSet::new(),
+            reusable_trans_import_symbols: HashMap::new(),
         }
     }
 
@@ -56,6 +56,8 @@ impl ImportCollector {
                 let span = semantic.nodes().get_node(reference.node_id()).span();
                 self.reference_symbols
                     .insert((span.start, span.end), symbol_id);
+                self.reference_scopes
+                    .insert((span.start, span.end), reference.scope_id());
             }
         }
     }
@@ -170,14 +172,36 @@ impl ImportCollector {
             })
     }
 
-    pub(super) fn has_other_binding_named(&self, name: &str, symbol_id: SymbolId) -> bool {
-        self.binding_symbols
-            .get(name)
-            .is_some_and(|symbols| symbols.iter().any(|other| *other != symbol_id))
+    pub(super) fn can_reuse_trans_import_at(
+        &self,
+        semantic: &Semantic<'_>,
+        module: &str,
+        reference_span: (u32, u32),
+    ) -> bool {
+        let Some(&import_symbol) = self.reusable_trans_import_symbols.get(module) else {
+            return false;
+        };
+        let Some(&scope_id) = self.reference_scopes.get(&reference_span) else {
+            return false;
+        };
+
+        semantic.scoping().find_binding(scope_id, "Trans".into()) == Some(import_symbol)
     }
 
-    pub(super) fn has_reusable_trans_import(&self, module: &str) -> bool {
-        self.reusable_trans_import_sources.contains(module)
+    pub(super) fn can_use_generated_trans_import_at(
+        &self,
+        semantic: &Semantic<'_>,
+        macro_symbol: SymbolId,
+        reference_span: (u32, u32),
+    ) -> bool {
+        let Some(&scope_id) = self.reference_scopes.get(&reference_span) else {
+            return false;
+        };
+
+        semantic
+            .scoping()
+            .find_binding(scope_id, "Trans".into())
+            .is_none_or(|symbol_id| symbol_id == macro_symbol)
     }
 }
 
@@ -246,12 +270,6 @@ impl<'a> Visit<'a> for ImportCollector {
         let name = it.name.to_string();
         if name == self.runtime_import_name {
             self.runtime_import_binding_count += 1;
-        }
-        if let Some(symbol_id) = it.symbol_id.get() {
-            self.binding_symbols
-                .entry(name.clone())
-                .or_default()
-                .insert(symbol_id);
         }
         self.used_identifier_names.insert(name);
         walk::walk_binding_identifier(self, it);
@@ -323,8 +341,10 @@ impl<'a> Visit<'a> for ImportCollector {
                             && specifier.imported.name() == "Trans"
                             && specifier.local.name == "Trans"
                         {
-                            self.reusable_trans_import_sources
-                                .insert(source.to_string());
+                            if let Some(symbol_id) = specifier.local.symbol_id.get() {
+                                self.reusable_trans_import_symbols
+                                    .insert(source.to_string(), symbol_id);
+                            }
                         }
                     }
                 }

@@ -27,7 +27,8 @@ pub(super) struct TransformVisitor<'a> {
     pub compiled_ids: Vec<String>,
     pub needs_runtime_import: bool,
     pub trans_imports: HashSet<(String, String)>,
-    trans_replacements: Vec<(SymbolId, String, usize)>,
+    pub reused_trans_imports: HashSet<String>,
+    trans_replacements: Vec<(SymbolId, String, usize, (u32, u32))>,
     pub consumed_binding_ranges: Vec<(SymbolId, usize, usize)>,
     pub error: Option<PalamedesError>,
     jsx_child_element_spans: Vec<(usize, usize)>,
@@ -49,6 +50,7 @@ impl<'a> TransformVisitor<'a> {
             compiled_ids: Vec::new(),
             needs_runtime_import: false,
             trans_imports: HashSet::new(),
+            reused_trans_imports: HashSet::new(),
             trans_replacements: Vec::new(),
             consumed_binding_ranges: Vec::new(),
             error: None,
@@ -87,13 +89,22 @@ impl<'a> TransformVisitor<'a> {
     pub(super) fn rebind_surviving_trans(&mut self, semantic: &Semantic<'_>) {
         let mut aliases = HashMap::<SymbolId, String>::new();
         let mut reserved = self.imports.used_identifier_names.clone();
-        for (symbol_id, module, replacement_index) in self.trans_replacements.clone() {
+        for (symbol_id, module, replacement_index, reference_span) in
+            self.trans_replacements.clone()
+        {
+            let reuses_trans_import =
+                self.imports
+                    .can_reuse_trans_import_at(semantic, &module, reference_span);
             let needs_alias = self.imports.has_surviving_reference(
                 semantic,
                 symbol_id,
                 &self.consumed_binding_ranges,
-            ) || (!self.imports.has_reusable_trans_import(&module)
-                && self.imports.has_other_binding_named("Trans", symbol_id));
+            ) || (!reuses_trans_import
+                && !self.imports.can_use_generated_trans_import_at(
+                    semantic,
+                    symbol_id,
+                    reference_span,
+                ));
             let local_name = if needs_alias {
                 aliases
                     .entry(symbol_id)
@@ -106,6 +117,8 @@ impl<'a> TransformVisitor<'a> {
                 self.replacements[replacement_index].text = self.replacements[replacement_index]
                     .text
                     .replacen("<Trans ", &format!("<{local_name} "), 1);
+            } else if reuses_trans_import {
+                self.reused_trans_imports.insert(module.clone());
             }
             self.trans_imports.insert((module, local_name));
         }
@@ -234,6 +247,10 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             macro_symbol_id,
                             format!("{module}/compiled"),
                             self.replacements.len() - 1,
+                            (
+                                it.opening_element.name.span().start,
+                                it.opening_element.name.span().end,
+                            ),
                         ));
                     }
                 } else {

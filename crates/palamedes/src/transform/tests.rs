@@ -682,6 +682,27 @@ const view = <MacroTrans>Upload failed</MacroTrans>;
 }
 
 #[test]
+fn aliases_reused_trans_when_it_is_shadowed_at_the_macro_site() {
+    let source = r#"import { Trans as MacroTrans } from "@palamedes/react/macro";
+import { Trans } from "@palamedes/react/compiled";
+function Example() {
+  const Trans = () => "authored-shadow";
+  return <MacroTrans>Upload failed</MacroTrans>;
+}
+"#;
+
+    let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#));
+    assert!(result
+        .code
+        .contains("const Trans = () => \"authored-shadow\""));
+    assert!(result.code.contains("return <__palamedesTrans id="));
+}
+
+#[test]
 fn aliases_injected_runtime_import_when_local_name_is_taken_by_another_module() {
     let source = r#"import { t } from "@palamedes/core/macro";
 import { getI18n } from "@palamedes/runtime";
