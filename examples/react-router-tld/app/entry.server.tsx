@@ -5,7 +5,10 @@ import type { EntryContext, RouterContextProvider } from "react-router"
 import { ServerRouter } from "react-router"
 import type { RenderToPipeableStreamOptions } from "react-dom/server"
 import { renderToPipeableStream } from "react-dom/server"
-import { waitForServerI18nTestBarrier } from "@palamedes/runtime/server/test"
+import {
+  markServerI18nTestBarrierReached,
+  waitForServerI18nTestBarrier,
+} from "@palamedes/runtime/server/test"
 import { createServerI18n, resolveLocaleFromRequest } from "~/lib/i18n"
 import { serverI18nScope } from "~/lib/i18n.server"
 
@@ -19,12 +22,16 @@ export default function handleRequest(
   _loadContext: RouterContextProvider
 ) {
   if (request.method.toUpperCase() === "HEAD") {
-    return new Response(null, { status: responseStatusCode, headers: responseHeaders })
+    return new Response(null, {
+      status: responseStatusCode,
+      headers: responseHeaders,
+    })
   }
 
   const i18n = createServerI18n(resolveLocaleFromRequest(request))
   return serverI18nScope.run(i18n, async () => {
     await waitForServerI18nTestBarrier(request)
+    markServerI18nTestBarrierReached(request, responseHeaders)
     return new Promise((resolve, reject) => {
       let shellRendered = false
       const userAgent = request.headers.get("user-agent")

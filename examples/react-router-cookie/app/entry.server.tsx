@@ -6,7 +6,10 @@ import { ServerRouter } from "react-router"
 import { isbot } from "isbot"
 import type { RenderToPipeableStreamOptions } from "react-dom/server"
 import { renderToPipeableStream } from "react-dom/server"
-import { waitForServerI18nTestBarrier } from "@palamedes/runtime/server/test"
+import {
+  markServerI18nTestBarrierReached,
+  waitForServerI18nTestBarrier,
+} from "@palamedes/runtime/server/test"
 import { resolveLocaleFromRequest } from "~/lib/i18n"
 import {
   createServerI18n,
@@ -99,6 +102,7 @@ export default function handleRequest(
   const locale = resolveLocaleFromRequest(request).locale
   return serverI18nScope.run(createServerI18n(locale), async () => {
     await waitForServerI18nTestBarrier(request)
+    markServerI18nTestBarrierReached(request, responseHeaders)
     return new Promise((resolve, reject) => {
       let shellRendered = false
       const userAgent = request.headers.get("user-agent")

@@ -4,6 +4,7 @@
  */
 const TEST_BARRIER_ENV = "PALAMEDES_I18N_TEST_BARRIER"
 const TEST_BARRIER_HEADER = "x-palamedes-i18n-test-barrier"
+export const SERVER_I18N_TEST_BARRIER_REACHED_HEADER = "x-palamedes-i18n-test-barrier-reached"
 const TEST_BARRIER_TIMEOUT_MS = 5e3
 const TEST_BARRIERS_KEY = Symbol.for("palamedes.runtime.serverI18nTestBarriers")
 
@@ -28,6 +29,21 @@ function testBarriers(): Map<string, Barrier> {
   return barriers
 }
 
+function serverI18nTestBarrierId(request: Request): string | undefined {
+  if (process.env[TEST_BARRIER_ENV] !== "1") return
+  return request.headers.get(TEST_BARRIER_HEADER) ?? undefined
+}
+
+/**
+ * Adds a test-only response marker after a request has passed the rendezvous.
+ * The verifier requires this marker, so an adapter that does not register its
+ * barrier cannot produce a false-positive concurrency result.
+ */
+export function markServerI18nTestBarrierReached(request: Request, headers: Headers): void {
+  const barrierId = serverI18nTestBarrierId(request)
+  if (barrierId) headers.set(SERVER_I18N_TEST_BARRIER_REACHED_HEADER, barrierId)
+}
+
 /**
  * Wait for a matching request after its i18n scope has been activated and
  * before the framework begins rendering translations. This is deliberately
@@ -35,9 +51,7 @@ function testBarriers(): Map<string, Barrier> {
  * per-request header are required.
  */
 export function waitForServerI18nTestBarrier(request: Request): Promise<void> | undefined {
-  if (process.env[TEST_BARRIER_ENV] !== "1") return
-
-  const barrierId = request.headers.get(TEST_BARRIER_HEADER)
+  const barrierId = serverI18nTestBarrierId(request)
   if (!barrierId) return
 
   const barriers = testBarriers()

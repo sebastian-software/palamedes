@@ -3,6 +3,7 @@ import http from "node:http"
 import { parseExampleArgs, selectExamples } from "./example-matrix.mjs"
 
 let barrierSequence = 0
+const SERVER_I18N_TEST_BARRIER_REACHED_HEADER = "x-palamedes-i18n-test-barrier-reached"
 
 function runCommand({ args, cwd, env }) {
   return new Promise((resolve, reject) => {
@@ -236,6 +237,7 @@ async function verifyConcurrentServerI18n(example) {
   const barrierId = `${example.id}-${barrierSequence}`
   const checks = serverI18nConcurrencyChecks(example).map((check) => ({
     ...check,
+    expectedBarrierId: barrierId,
     headers: {
       ...check.headers,
       "x-palamedes-i18n-test-barrier": barrierId,
@@ -247,6 +249,16 @@ async function verifyConcurrentServerI18n(example) {
 
 async function verifySmokeCheck(example, check) {
   const response = await requestText(example.port, check.path, check.headers)
+  if (check.expectedBarrierId) {
+    const reachedBarrier = response.headers[SERVER_I18N_TEST_BARRIER_REACHED_HEADER]
+    const reachedBarrierIds = Array.isArray(reachedBarrier) ? reachedBarrier : [reachedBarrier]
+    if (!reachedBarrierIds.includes(check.expectedBarrierId)) {
+      throw new Error(
+        `${example.id} did not reach server i18n test barrier ${JSON.stringify(check.expectedBarrierId)}`
+      )
+    }
+  }
+
   for (const substring of check.substrings) {
     if (!response.body.includes(substring)) {
       throw new Error(
