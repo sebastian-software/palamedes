@@ -117,10 +117,11 @@ if (muslNodeAddon) {
   // needed. (The static-musl CLI *binary* keeps `+crt-static` and links fully
   // statically, which is why it builds fine on the glibc host.)
   //
-  // `panic=abort` is intentionally not forced here. napi-rs (`#[napi]`) wraps
-  // every `extern "C"` entry point in a panic guard, so panics are converted to
-  // JS errors and never unwind across the FFI boundary — matching the gnu,
-  // darwin, and win32 addons, which all build with the default unwind strategy.
+  // `panic=abort` is intentionally not forced here. Every synchronous export in
+  // `palamedes-node` opts into napi-rs's `#[napi(catch_unwind)]` guard, so Rust
+  // panics become catchable JavaScript errors instead of unwinding across the
+  // FFI boundary — matching the gnu, darwin, and win32 addons, which all build
+  // with the default unwind strategy.
   //
   // Prepend any inherited target rustflags so an externally provided value
   // (e.g. CI optimisation overrides) is preserved rather than dropped.

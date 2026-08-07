@@ -1655,7 +1655,7 @@ impl From<palamedes::CatalogArtifactResult> for CatalogArtifactResult {
     }
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Updates a PO catalog file from source-first extracted messages.
 ///
@@ -1669,7 +1669,7 @@ pub fn update_catalog_file(request: CatalogUpdateRequest) -> Result<CatalogUpdat
         .and_then(CatalogUpdateResult::try_from)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Parses a PO catalog file into the public semantic catalog shape.
 ///
@@ -1684,7 +1684,7 @@ pub fn parse_catalog(request: CatalogParseRequest) -> Result<CatalogParseResult>
         .map_err(to_napi_error)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Enumerates provider-neutral translation candidates across configured catalogs.
 ///
@@ -1700,7 +1700,7 @@ pub fn list_translation_candidates(
         .map_err(to_napi_error)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Validates and atomically applies provider-neutral translation patches.
 ///
@@ -1716,7 +1716,7 @@ pub fn apply_translation_patches(
         .and_then(TranslationPatchResult::try_from)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Audits configured catalogs with Ferrocat catalog QA checks.
 ///
@@ -1731,7 +1731,7 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> Result<CatalogAuditResult
         .and_then(CatalogAuditResult::try_from)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Derives normalized semantic metadata from an ICU MessageFormat v1 message.
 ///
@@ -1747,7 +1747,7 @@ pub fn derive_message_metadata(
         .map_err(to_napi_error)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Normalizes progressive semantic metadata into canonical object form.
 ///
@@ -1760,14 +1760,14 @@ pub fn normalize_message_metadata(input: MessageMetadataInput) -> Result<Message
         .map_err(to_napi_error)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Validates progressive semantic metadata against its `msgid`.
 pub fn validate_message_metadata(input: MessageMetadataInput) -> MessageMetadataValidationReport {
     palamedes::validate_message_metadata(input.into()).into()
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Combines multiple catalog contents into one deterministic catalog.
 ///
@@ -1782,7 +1782,7 @@ pub fn combine_catalogs(request: CatalogCombineRequest) -> Result<CatalogCombine
         .and_then(CatalogCombineResult::try_from)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Combines exactly two catalog files and replaces the output after a successful combine.
 ///
@@ -1798,7 +1798,7 @@ pub fn combine_catalog_files(
         .and_then(CatalogFileCombineResult::try_from)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Merges explicit ancestor, ours, and theirs catalog contents.
 ///
@@ -1814,7 +1814,7 @@ pub fn merge_catalogs_three_way(
         .and_then(CatalogCombineResult::try_from)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Merges explicit ancestor, ours, and theirs files and atomically replaces the output.
 ///
@@ -1829,7 +1829,7 @@ pub fn merge_catalog_files_three_way(
         .and_then(CatalogFileCombineResult::try_from)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Compiles a full host-neutral catalog artifact for a requested locale.
 ///
@@ -1844,7 +1844,7 @@ pub fn compile_catalog_artifact(request: CatalogArtifactRequest) -> Result<Catal
         .map_err(to_napi_error)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Compiles a catalog and renders the JavaScript module consumed by bundlers.
 ///
@@ -1884,7 +1884,7 @@ pub fn compile_catalog_module(request: CatalogModuleRequest) -> Result<CatalogMo
     create_catalog_module_result(artifact, &render_options)
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Compiles a selected subset of runtime IDs for a requested locale.
 ///
@@ -1968,7 +1968,7 @@ fn create_catalog_module_result(
     })
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Renders catalog messages as the executable JavaScript module consumed by bundlers.
 ///

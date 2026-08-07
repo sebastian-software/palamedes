@@ -150,7 +150,7 @@ impl TryFrom<NativeSourceAnalysisOptions> for palamedes::SourceAnalysisOptions {
     }
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Analyze source-first messages and authoring diagnostics in one native pass.
 ///
