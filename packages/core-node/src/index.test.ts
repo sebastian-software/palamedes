@@ -32,6 +32,7 @@ import {
   assertNativeBindingVersion,
   assertWellFormedNativeArguments,
   loadNativeBindings,
+  snapshotNativeArguments,
 } from "./native-loader"
 
 type SourceMapLike = {
@@ -110,6 +111,89 @@ describe("@palamedes/core-node", () => {
         new Map([["message", ["valid", "\ud800"]]]),
       ])
     ).toThrow(/renderCatalogModule\.argument\[0\]\.get\(message\)\[1\]/u)
+  })
+
+  it("passes the single validated accessor and Proxy snapshot to native bindings", () => {
+    let accessorReads = 0
+    const accessorMessages: Record<string, string> = {}
+    Object.defineProperty(accessorMessages, "message", {
+      enumerable: true,
+      get() {
+        accessorReads += 1
+        return accessorReads === 1 ? "from accessor" : "\ud800"
+      },
+    })
+
+    const accessorRendered = renderCatalogModule(accessorMessages)
+    expect(accessorReads).toBe(1)
+    expect(accessorRendered).toContain("from accessor")
+    expect(accessorRendered).not.toContain("�")
+
+    let proxyReads = 0
+    const proxyMessages = new Proxy(
+      { message: "unused" },
+      {
+        get(target, property, receiver) {
+          if (property === "message") {
+            proxyReads += 1
+            return proxyReads === 1 ? "from proxy" : "\udc00"
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }
+    )
+    const proxyRendered = renderCatalogModule(proxyMessages)
+    expect(proxyReads).toBe(1)
+    expect(proxyRendered).toContain("from proxy")
+    expect(proxyRendered).not.toContain("�")
+  })
+
+  it("snapshots nested accessors, arrays, Maps, and getter failures deterministically", () => {
+    let nestedReads = 0
+    const nested: { config: { locales: string[] } } = { config: {} as { locales: string[] } }
+    Object.defineProperty(nested.config, "locales", {
+      enumerable: true,
+      get() {
+        nestedReads += 1
+        return nestedReads === 1 ? ["en", "cafe\u0301", "😀"] : ["\ud800"]
+      },
+    })
+    const map = new Map([["request", nested]])
+    const snapshot = snapshotNativeArguments("compileCatalogModule", [map])
+    const snapshotMap = snapshot[0] as Map<string, { config: { locales: string[] } }>
+
+    expect(nestedReads).toBe(1)
+    expect(snapshotMap).not.toBe(map)
+    expect(snapshotMap.get("request")).toStrictEqual({
+      config: { locales: ["en", "cafe\u0301", "😀"] },
+    })
+    expect(nested.config.locales).toStrictEqual(["\ud800"])
+
+    const cyclic: { message: string; self?: unknown } = { message: "cycle" }
+    cyclic.self = cyclic
+    const cyclicSnapshot = snapshotNativeArguments("renderCatalogModule", [cyclic])[0] as {
+      self: unknown
+    }
+    expect(cyclicSnapshot.self).toBe(cyclicSnapshot)
+
+    const failure = new Error("fixture getter failure")
+    const throwingRequest = {}
+    Object.defineProperty(throwingRequest, "locale", {
+      enumerable: true,
+      get() {
+        throw failure
+      },
+    })
+    try {
+      snapshotNativeArguments("compileCatalogModule", [throwingRequest])
+      throw new Error("Expected a throwing getter to fail the native boundary snapshot.")
+    } catch (error) {
+      expect(error).toMatchObject({ cause: failure })
+      expect(error).toHaveProperty(
+        "message",
+        expect.stringMatching(/could not read compileCatalogModule\.argument\[0\]\.locale/u)
+      )
+    }
   })
 
   it("loads native bindings and exposes version information", () => {

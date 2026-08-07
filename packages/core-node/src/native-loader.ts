@@ -125,17 +125,48 @@ function isWellFormed(value: string): boolean {
 }
 
 export function assertWellFormedNativeArguments(operation: string, arguments_: unknown[]): void {
-  const seen = new WeakSet<object>()
-  const pending = arguments_
+  snapshotNativeArguments(operation, arguments_)
+}
+
+/**
+ * Read, validate, and normalize arguments before the N-API boundary. The
+ * binding receives only this snapshot, so an accessor or Proxy cannot return a
+ * different string after it has passed Unicode validation.
+ */
+export function snapshotNativeArguments(operation: string, arguments_: unknown[]): unknown[] {
+  const snapshots = new Map<object, unknown>()
+  const result: unknown[] = Array.from({ length: arguments_.length })
+  const pending: SnapshotTask[] = arguments_
     .map((value, index) => ({
+      kind: "value" as const,
       value,
       path: { segment: `${operation}.argument[${index}]` },
+      assign(snapshot: unknown) {
+        result[index] = snapshot
+      },
     }))
     .reverse()
 
   while (pending.length > 0) {
     const current = pending.pop()
     if (!current) continue
+
+    if (current.kind === "property") {
+      let propertyValue: unknown
+      try {
+        propertyValue = Reflect.get(current.source, current.key)
+      } catch (error) {
+        throw nativeBoundaryReadError(current.path, error)
+      }
+      pending.push({
+        kind: "value",
+        value: propertyValue,
+        path: current.path,
+        assign: current.assign,
+      })
+      continue
+    }
+
     const { path: currentPath, value } = current
 
     if (typeof value === "string") {
@@ -145,42 +176,120 @@ export function assertWellFormedNativeArguments(operation: string, arguments_: u
           `Palamedes native boundary rejected malformed Unicode in ${field}; replace the unpaired UTF-16 surrogate before calling ${operation}.`
         )
       }
+      current.assign(value)
       continue
     }
-    if (value === null || typeof value !== "object" || seen.has(value)) {
+    if (value === null || typeof value !== "object") {
+      current.assign(value)
       continue
     }
 
-    seen.add(value)
+    const existingSnapshot = snapshots.get(value)
+    if (existingSnapshot !== undefined) {
+      current.assign(existingSnapshot)
+      continue
+    }
+
     if (value instanceof Map) {
-      const mapEntries = [...value.entries()]
+      const mapSnapshot = new Map<unknown, unknown>()
+      snapshots.set(value, mapSnapshot)
+      current.assign(mapSnapshot)
+      let mapEntries: Array<[unknown, unknown]>
+      try {
+        mapEntries = [...Map.prototype.entries.call(value)]
+      } catch (error) {
+        throw nativeBoundaryReadError(currentPath, error)
+      }
       for (let index = mapEntries.length - 1; index >= 0; index -= 1) {
         const [key, entry] = mapEntries[index] ?? []
+        const pair: { key?: unknown; value?: unknown } = {}
+        const setEntry = () => {
+          if ("key" in pair && "value" in pair) mapSnapshot.set(pair.key, pair.value)
+        }
         pending.push({
+          kind: "value",
           value: entry,
           path: appendNativeArgumentPath(currentPath, mapValuePath(key)),
+          assign(snapshotValue: unknown) {
+            pair.value = snapshotValue
+            setEntry()
+          },
         })
-        pending.push({ value: key, path: appendNativeArgumentPath(currentPath, ".<key>") })
+        pending.push({
+          kind: "value",
+          value: key,
+          path: appendNativeArgumentPath(currentPath, ".<key>"),
+          assign(snapshotKey: unknown) {
+            pair.key = snapshotKey
+            setEntry()
+          },
+        })
       }
       continue
     }
     if (Array.isArray(value)) {
-      for (let index = value.length - 1; index >= 0; index -= 1) {
+      const arraySnapshot: unknown[] = []
+      arraySnapshot.length = value.length
+      snapshots.set(value, arraySnapshot)
+      current.assign(arraySnapshot)
+      for (const key of ownPropertyNames(value, currentPath).reverse()) {
+        if (key === "length") continue
+        const propertyPath = appendNativeArgumentPath(currentPath, arrayPropertyPath(key))
+        assertWellFormedPropertyName(key, propertyPath)
         pending.push({
-          value: value[index],
-          path: appendNativeArgumentPath(currentPath, `[${index}]`),
+          kind: "property",
+          source: value,
+          key,
+          path: propertyPath,
+          assign(snapshotValue: unknown) {
+            defineSnapshotProperty(arraySnapshot, key, snapshotValue)
+          },
         })
       }
       continue
     }
-    const objectEntries = Object.entries(value)
-    for (let index = objectEntries.length - 1; index >= 0; index -= 1) {
-      const [key, entry] = objectEntries[index] ?? []
-      pending.push({ value: entry, path: appendNativeArgumentPath(currentPath, `.${key}`) })
-      pending.push({ value: key, path: appendNativeArgumentPath(currentPath, ".<key>") })
+
+    const prototype = objectPrototype(value, currentPath)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError(
+        `Palamedes native boundary requires a plain object at ${formatNativeArgumentPath(currentPath)}; copy class instances into request data before calling ${operation}.`
+      )
+    }
+    const snapshot = Object.create(prototype) as Record<string, unknown>
+    snapshots.set(value, snapshot)
+    current.assign(snapshot)
+    for (const key of ownPropertyNames(value, currentPath).reverse()) {
+      const propertyPath = appendNativeArgumentPath(currentPath, `.${key}`)
+      assertWellFormedPropertyName(key, propertyPath)
+      pending.push({
+        kind: "property",
+        source: value,
+        key,
+        path: propertyPath,
+        assign(snapshotValue: unknown) {
+          defineSnapshotProperty(snapshot, key, snapshotValue)
+        },
+      })
     }
   }
+
+  return result
 }
+
+type SnapshotTask =
+  | {
+      kind: "value"
+      value: unknown
+      path: NativeArgumentPath
+      assign: (snapshot: unknown) => void
+    }
+  | {
+      kind: "property"
+      source: object
+      key: string
+      path: NativeArgumentPath
+      assign: (snapshot: unknown) => void
+    }
 
 type NativeArgumentPath = {
   parent?: NativeArgumentPath
@@ -210,6 +319,50 @@ function mapValuePath(key: unknown): string {
   return ".<map value>"
 }
 
+function arrayPropertyPath(key: string): string {
+  return /^(?:0|[1-9]\d*)$/u.test(key) ? `[${key}]` : `.${key}`
+}
+
+function ownPropertyNames(value: object, argumentPath: NativeArgumentPath): string[] {
+  try {
+    return Object.getOwnPropertyNames(value)
+  } catch (error) {
+    throw nativeBoundaryReadError(argumentPath, error)
+  }
+}
+
+function objectPrototype(value: object, argumentPath: NativeArgumentPath): object | null {
+  try {
+    return Object.getPrototypeOf(value)
+  } catch (error) {
+    throw nativeBoundaryReadError(argumentPath, error)
+  }
+}
+
+function defineSnapshotProperty(target: object, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  })
+}
+
+function assertWellFormedPropertyName(key: string, argumentPath: NativeArgumentPath): void {
+  if (!isWellFormed(key)) {
+    throw new TypeError(
+      `Palamedes native boundary rejected malformed Unicode in ${formatNativeArgumentPath(argumentPath)}.<key>; replace the unpaired UTF-16 surrogate in the property name.`
+    )
+  }
+}
+
+function nativeBoundaryReadError(argumentPath: NativeArgumentPath, cause: unknown): TypeError {
+  return new TypeError(
+    `Palamedes native boundary could not read ${formatNativeArgumentPath(argumentPath)}; accessors and Proxies must return a stable value.`,
+    { cause }
+  )
+}
+
 function guardNativeBindings(bindings: NativeBindings): NativeBindings {
   return new Proxy(bindings, {
     get(target, property, receiver) {
@@ -217,10 +370,8 @@ function guardNativeBindings(bindings: NativeBindings): NativeBindings {
       if (typeof property !== "string" || typeof value !== "function") {
         return value
       }
-      return (...arguments_: unknown[]) => {
-        assertWellFormedNativeArguments(property, arguments_)
-        return Reflect.apply(value, target, arguments_)
-      }
+      return (...arguments_: unknown[]) =>
+        Reflect.apply(value, target, snapshotNativeArguments(property, arguments_))
     },
   })
 }
