@@ -4,7 +4,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use clap::{Args, ValueEnum};
-use palamedes::{audit_catalogs, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult};
+use palamedes::{
+    audit_catalogs, CatalogAuditDiagnostic, CatalogAuditRequest, CatalogAuditResult,
+    CatalogAuditSummary,
+};
 
 use crate::command::{render_json, Command, Context};
 use crate::commands::normalize_locale_list;
@@ -50,39 +53,44 @@ impl Command for AuditOptions {
         if self.json {
             return render_json(output);
         }
-        print_audit_result(output);
+        print_audit_result(output, self.fail_on);
         Ok(())
     }
 
     fn verdict(&self, output: &Self::Output) -> Result<(), CliError> {
+        if !self.fail_on.should_fail(&output.summary) {
+            return Ok(());
+        }
+
         match self.fail_on {
-            FailOn::Info
-                if output.summary.errors > 0
-                    || output.summary.warnings > 0
-                    || output.summary.infos > 0 =>
-            {
-                Err(CliError::AuditFailedOnInfo {
-                    errors: output.summary.errors,
-                    warnings: output.summary.warnings,
-                    infos: output.summary.infos,
-                })
-            }
-            FailOn::Warning if output.summary.errors > 0 || output.summary.warnings > 0 => {
-                Err(CliError::AuditFailedOnWarning {
-                    errors: output.summary.errors,
-                    warnings: output.summary.warnings,
-                })
-            }
-            FailOn::Error if output.summary.errors > 0 => Err(CliError::AuditFailedOnError {
+            FailOn::Info => Err(CliError::AuditFailedOnInfo {
+                errors: output.summary.errors,
+                warnings: output.summary.warnings,
+                infos: output.summary.infos,
+            }),
+            FailOn::Warning => Err(CliError::AuditFailedOnWarning {
+                errors: output.summary.errors,
+                warnings: output.summary.warnings,
+            }),
+            FailOn::Error => Err(CliError::AuditFailedOnError {
                 errors: output.summary.errors,
             }),
-            _ => Ok(()),
         }
     }
 }
 
-fn print_audit_result(result: &CatalogAuditResult) {
-    let status = if result.summary.errors > 0 {
+impl FailOn {
+    fn should_fail(self, summary: &CatalogAuditSummary) -> bool {
+        match self {
+            Self::Info => summary.errors > 0 || summary.warnings > 0 || summary.infos > 0,
+            Self::Warning => summary.errors > 0 || summary.warnings > 0,
+            Self::Error => summary.errors > 0,
+        }
+    }
+}
+
+fn print_audit_result(result: &CatalogAuditResult, fail_on: FailOn) {
+    let status = if fail_on.should_fail(&result.summary) {
         "failed"
     } else {
         "passed"
@@ -121,5 +129,34 @@ fn print_audit_result(result: &CatalogAuditResult) {
                 println!("    Source: {}{}", source_key.message, context);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FailOn;
+    use palamedes::CatalogAuditSummary;
+
+    #[test]
+    fn fail_on_thresholds_share_exact_severity_boundaries() {
+        let errors = CatalogAuditSummary {
+            errors: 1,
+            ..CatalogAuditSummary::default()
+        };
+        let warnings = CatalogAuditSummary {
+            warnings: 1,
+            ..CatalogAuditSummary::default()
+        };
+        let infos = CatalogAuditSummary {
+            infos: 1,
+            ..CatalogAuditSummary::default()
+        };
+
+        assert!(FailOn::Error.should_fail(&errors));
+        assert!(!FailOn::Error.should_fail(&warnings));
+        assert!(FailOn::Warning.should_fail(&warnings));
+        assert!(!FailOn::Warning.should_fail(&infos));
+        assert!(FailOn::Info.should_fail(&infos));
+        assert!(!FailOn::Info.should_fail(&CatalogAuditSummary::default()));
     }
 }
