@@ -69,15 +69,66 @@ test("rejects a missing translation patch outcome from full context", () => {
   )
 })
 
-test("rejects a hard-coded merge-driver format in a primary documentation surface", () => {
+test("accepts reordered options, alternate conflict-strategy spelling, and wrapped merge drivers", () => {
+  assert.doesNotThrow(() =>
+    checkLlmsSurface({
+      read: withMutation("llms.txt", (text) =>
+        text.replace(
+          "pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first",
+          "pmds catalog merge-driver --path=%P \\\n+            %O %A %B %A \\\n+            --conflict-strategy use-first"
+        )
+      ),
+    })
+  )
+})
+
+test("ignores merge-driver prose outside command examples", () => {
+  assert.doesNotThrow(() =>
+    checkLlmsSurface({
+      read: withMutation(
+        "llms.txt",
+        (text) =>
+          `${text}\nProse may mention pmds catalog merge-driver --format po without configuring Git.`
+      ),
+    })
+  )
+})
+
+test("rejects hard-coded merge-driver formats in either spelling and any option order", () => {
+  for (const command of [
+    "pmds catalog merge-driver --format=po %O %A %B %A --path %P",
+    "pmds catalog merge-driver --path %P %O %A %B %A --format fcl",
+  ]) {
+    expectRejected(
+      "llms.txt",
+      (text) =>
+        text.replace(
+          "pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first",
+          command
+        ),
+      /llms\.txt must not hard-code a merge-driver format/
+    )
+  }
+})
+
+test("rejects a stale command even when a canonical command remains elsewhere", () => {
+  expectRejected(
+    "llms-full.txt",
+    (text) => `${text}\n\`pmds catalog merge-driver %O %A %B %A --format po --path %P\``,
+    /llms-full\.txt must not hard-code a merge-driver format/
+  )
+})
+
+test("requires the logical path and Git placeholder contract for every merge driver", () => {
   expectRejected(
     "llms.txt",
-    (text) =>
-      text.replace(
-        "pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first",
-        "pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy=use-first"
-      ),
-    /llms\.txt must not hard-code a merge-driver format/
+    (text) => text.replace("--path %P ", ""),
+    /llms\.txt merge-driver guidance must pass --path %P/
+  )
+  expectRejected(
+    "llms.txt",
+    (text) => text.replace("%O %A %B %A", "%O %B %A %A"),
+    /llms\.txt merge-driver guidance must pass Git placeholders %O %A %B %A/
   )
 })
 

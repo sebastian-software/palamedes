@@ -249,15 +249,59 @@ function verifyFeatureNarrative(read) {
   }
 }
 
+function codeExamples(text) {
+  const fenced = [...text.matchAll(/^```[^\r\n]*\r?\n([\s\S]*?)^```/gmu)].map(
+    ([, example]) => example
+  )
+  const inline = [...text.matchAll(/`([^`]*)`/gu)].map(([, example]) => example)
+  return [...fenced, ...inline]
+}
+
+function mergeDriverCommands(text) {
+  const commands = []
+  for (const example of codeExamples(text)) {
+    const normalized = example.replaceAll(/\\\s*\r?\n/gu, " ").replaceAll(/\s+/gu, " ")
+    const matches = [...normalized.matchAll(/\bpmds\s+catalog\s+merge-driver\b/gu)]
+    for (const [index, match] of matches.entries()) {
+      const command = normalized.slice(match.index, matches[index + 1]?.index).trim()
+      if (/(?:^|\s)(?:%[OABP]|--(?:format|path)\b)/u.test(command)) commands.push(command)
+    }
+  }
+  return commands
+}
+
+function commandTokens(command) {
+  return command.split(/\s+/u).map((token) => token.replace(/^["']+|["']+$/gu, ""))
+}
+
+function optionValues(tokens, name) {
+  const option = `--${name}`
+  const values = []
+  for (const [index, token] of tokens.entries()) {
+    if (token === option && tokens[index + 1]) values.push(tokens[index + 1])
+    if (token.startsWith(`${option}=`)) values.push(token.slice(option.length + 1))
+  }
+  return values
+}
+
 function verifyMergeDriverGuidance(read) {
-  const command = "pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first"
   const surfaces = ["packages/cli/README.md", "llms.txt", "llms-full.txt"]
   for (const file of surfaces) {
-    const text = read(file)
-    if (/pmds catalog merge-driver %O %A %B %A --path %P --format(?:=|\s)/u.test(text)) {
-      throw new Error(`${file} must not hard-code a merge-driver format`)
+    const commands = mergeDriverCommands(read(file))
+    if (commands.length === 0) throw new Error(`${file} is missing merge-driver guidance`)
+    for (const command of commands) {
+      const tokens = commandTokens(command)
+      if (optionValues(tokens, "format").some((value) => /^(po|fcl)$/iu.test(value))) {
+        throw new Error(`${file} must not hard-code a merge-driver format`)
+      }
+      if (optionValues(tokens, "path").every((value) => value !== "%P")) {
+        throw new Error(`${file} merge-driver guidance must pass --path %P`)
+      }
+      const placeholders = tokens.filter((token) => ["%O", "%A", "%B"].includes(token))
+      if (placeholders.join(" ") !== "%O %A %B %A") {
+        throw new Error(`${file} merge-driver guidance must pass Git placeholders %O %A %B %A`)
+      }
     }
-    assertContains(text, command, `${file} merge-driver guidance`)
   }
 }
 
