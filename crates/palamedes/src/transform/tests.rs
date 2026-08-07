@@ -520,6 +520,24 @@ function Example() {
 }
 
 #[test]
+fn preserves_macro_binding_for_same_binding_type_queries() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+type MacroValue = typeof t;
+function Example() {
+  return t`Upload failed`;
+}
+"#;
+
+    let result = transform_macros(source, "test.ts", None).expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains(r#"import { t } from "@palamedes/core/macro";"#));
+    assert!(result.code.contains("type MacroValue = typeof t"));
+    assert!(!result.code.contains("t`Upload failed`"));
+}
+
+#[test]
 fn removes_only_fully_consumed_macro_specifiers() {
     let source = r#"import { t as translate, plural as count } from "@palamedes/core/macro";
 function Example() {
@@ -597,6 +615,70 @@ function Example() {
         "Trans rebinding should emit valid TSX: {:?}",
         parsed.diagnostics
     );
+}
+
+#[test]
+fn aliases_compiled_trans_when_an_authored_trans_binding_is_reserved() {
+    let source = r#"import { Trans as MacroTrans } from "@palamedes/react/macro";
+const Trans = () => null;
+const view = <MacroTrans>Upload failed</MacroTrans>;
+"#;
+
+    let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#));
+    assert!(result.code.contains("const Trans = () => null"));
+    assert!(result.code.contains("<__palamedesTrans id="));
+    assert!(!result
+        .code
+        .contains(r#"import { Trans } from "@palamedes/react/compiled";"#));
+}
+
+#[test]
+fn reuses_only_exact_value_trans_imports() {
+    let cases = [
+        (
+            r#"import type { Trans } from "@palamedes/react/compiled";"#,
+            "type-only import",
+        ),
+        (
+            r#"import { Fragment as Trans } from "@palamedes/react/compiled";"#,
+            "renamed import",
+        ),
+    ];
+
+    for (compiled_import, case_name) in cases {
+        let source = format!(
+            "import {{ Trans as MacroTrans }} from \"@palamedes/react/macro\";\n{compiled_import}\nconst view = <MacroTrans>Upload failed</MacroTrans>;\n"
+        );
+        let result = transform_macros(&source, "test.tsx", None)
+            .unwrap_or_else(|_| panic!("{case_name} should transform"));
+
+        assert!(
+            result.code.contains(
+                r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#
+            ),
+            "{case_name} must not suppress the generated value import"
+        );
+        assert!(result.code.contains("<__palamedesTrans id="));
+    }
+
+    let source = r#"import { Trans as MacroTrans } from "@palamedes/react/macro";
+import { Trans } from "@palamedes/react/compiled";
+const view = <MacroTrans>Upload failed</MacroTrans>;
+"#;
+    let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
+
+    assert_eq!(
+        result
+            .code
+            .matches(r#"from "@palamedes/react/compiled""#)
+            .count(),
+        1
+    );
+    assert!(result.code.contains("<Trans id="));
 }
 
 #[test]

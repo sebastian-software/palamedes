@@ -88,11 +88,13 @@ impl<'a> TransformVisitor<'a> {
         let mut aliases = HashMap::<SymbolId, String>::new();
         let mut reserved = self.imports.used_identifier_names.clone();
         for (symbol_id, module, replacement_index) in self.trans_replacements.clone() {
-            let local_name = if self.imports.has_surviving_value_reference(
+            let needs_alias = self.imports.has_surviving_reference(
                 semantic,
                 symbol_id,
                 &self.consumed_binding_ranges,
-            ) {
+            ) || (!self.imports.has_reusable_trans_import(&module)
+                && self.imports.has_other_binding_named("Trans", symbol_id));
+            let local_name = if needs_alias {
                 aliases
                     .entry(symbol_id)
                     .or_insert_with(|| unique_identifier("__palamedesTrans", &mut reserved))
