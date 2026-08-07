@@ -69,6 +69,18 @@ test("rejects a missing translation patch outcome from full context", () => {
   )
 })
 
+test("rejects a hard-coded merge-driver format in a primary documentation surface", () => {
+  expectRejected(
+    "llms.txt",
+    (text) =>
+      text.replace(
+        "pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first",
+        "pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy=use-first"
+      ),
+    /llms\.txt must not hard-code a merge-driver format/
+  )
+})
+
 test("accepts harmless Markdown heading-layout changes", () => {
   assert.doesNotThrow(() =>
     checkLlmsSurface({

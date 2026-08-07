@@ -249,12 +249,25 @@ function verifyFeatureNarrative(read) {
   }
 }
 
+function verifyMergeDriverGuidance(read) {
+  const command = "pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first"
+  const surfaces = ["packages/cli/README.md", "llms.txt", "llms-full.txt"]
+  for (const file of surfaces) {
+    const text = read(file)
+    if (/pmds catalog merge-driver %O %A %B %A --path %P --format(?:=|\s)/u.test(text)) {
+      throw new Error(`${file} must not hard-code a merge-driver format`)
+    }
+    assertContains(text, command, `${file} merge-driver guidance`)
+  }
+}
+
 export function checkLlmsSurface({ read, listDirectories } = {}) {
   const readFile = read ?? ((file) => readFileSync(path.join(process.cwd(), file), "utf8"))
   verifyPackages(readFile, listDirectories)
   verifyCli(readFile)
   verifyTranslationApi(readFile)
   verifyFeatureNarrative(readFile)
+  verifyMergeDriverGuidance(readFile)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
