@@ -16,6 +16,13 @@ default and returns active entries whose target value is missing. Pass
 `targets` to select exact translated, fuzzy, or obsolete entries for a re-run or
 review instead.
 
+The source locale is never a translation target, including when it is named in
+an explicit locale request. Default enumeration skips a configured target whose
+catalog has not been created yet and emits a `translation.missing_catalog`
+diagnostic with `locale` and `catalogPath`; run `pmds extract` to create it.
+An explicitly requested missing target remains a hard read error so a caller
+cannot mistake an incomplete requested scope for an empty result.
+
 Every candidate includes:
 
 - a stable identity consisting of catalog scope, locale, source message, and
@@ -43,6 +50,8 @@ catalog. Unknown or ambiguous catalogs, unknown messages, duplicate identities,
 stale fingerprints, shape mismatches, invalid ICU plural branches, and invalid
 provenance are returned as structured diagnostics with the rejected patch
 identity. A rejected validation batch leaves every original catalog unchanged.
+Source-locale patch identities are likewise rejected as
+`translation.source_locale`, before any catalog write.
 
 On success, Palamedes preserves unrelated translations, comments, origins,
 flags, obsolete entries, and PO headers. Each changed PO or FCL file is replaced

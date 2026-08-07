@@ -251,6 +251,12 @@ pub struct TranslationWorkflowDiagnostic {
     /// Associated candidate identity, when available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<TranslationCandidateId>,
+    /// Resolved catalog path associated with this diagnostic, when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub catalog_path: Option<String>,
+    /// Target locale associated with this diagnostic, when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
 }
 
 #[derive(Debug)]
@@ -290,10 +296,15 @@ pub fn list_translation_candidates(
     request: &TranslationCandidateRequest,
 ) -> PalamedesResult<TranslationCandidateResult> {
     let locales = selected_locales(&request.config, &request.locales);
+    let default_locale_selection = request.locales.is_empty();
     let explicit = !request.targets.is_empty();
     let mut requested = BTreeMap::<TranslationCandidateId, usize>::new();
     let mut diagnostics = Vec::new();
     for target in &request.targets {
+        if is_source_locale(&request.config, &target.locale) {
+            diagnostics.push(source_locale_diagnostic(target.clone()));
+            continue;
+        }
         let count = requested.entry(target.clone()).or_default();
         *count += 1;
         if *count == 2 {
@@ -309,7 +320,17 @@ pub fn list_translation_candidates(
     let mut seen = BTreeSet::new();
     for catalog in &request.config.catalogs {
         for locale in &locales {
-            let loaded = load_catalog(&request.config, catalog, locale)?;
+            let loaded = match load_catalog(&request.config, catalog, locale) {
+                Ok(loaded) => loaded,
+                Err(PalamedesError::ReadFile { path, source })
+                    if default_locale_selection
+                        && source.kind() == std::io::ErrorKind::NotFound =>
+                {
+                    diagnostics.push(missing_catalog_diagnostic(locale, path));
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             for (key, message) in &loaded.messages {
                 let id = TranslationCandidateId {
                     catalog: loaded.scope.clone(),
@@ -400,6 +421,12 @@ where
     let mut groups = BTreeMap::<CatalogBatchKey, Vec<usize>>::new();
 
     for (index, patch) in request.patches.iter().enumerate() {
+        if is_source_locale(&request.config, &patch.id.locale) {
+            rejected.insert(index);
+            diagnostics.push(source_locale_diagnostic(patch.id.clone()));
+            continue;
+        }
+
         for message in validate_plural_translation_branches(&patch.translation) {
             rejected.insert(index);
             diagnostics.push(workflow_diagnostic(
@@ -640,19 +667,26 @@ fn selected_locales(config: &CatalogArtifactConfig, requested: &[String]) -> Vec
         config
             .locales
             .iter()
-            .filter(|locale| locale.as_str() != config.source_locale)
+            .filter(|locale| !is_source_locale(config, locale))
             .cloned()
             .collect::<Vec<_>>()
     } else {
         requested
             .iter()
-            .filter(|locale| config.locales.contains(locale))
+            .filter(|locale| config.locales.contains(locale) && !is_source_locale(config, locale))
             .cloned()
             .collect::<Vec<_>>()
     };
     locales.sort();
     locales.dedup();
     locales
+}
+
+fn is_source_locale(config: &CatalogArtifactConfig, locale: &str) -> bool {
+    // Catalog paths and candidate identities use the configured locale spelling verbatim.
+    // Keep the comparison on that canonical configuration value rather than accepting a
+    // differently spelled locale that would resolve to a different on-disk path.
+    locale == config.source_locale
 }
 
 fn load_catalog(
@@ -1200,13 +1234,51 @@ fn workflow_diagnostic(
         code: code.to_owned(),
         message: message.into(),
         id,
+        catalog_path: None,
+        locale: None,
+    }
+}
+
+fn source_locale_diagnostic(id: TranslationCandidateId) -> TranslationWorkflowDiagnostic {
+    let locale = id.locale.clone();
+    TranslationWorkflowDiagnostic {
+        code: "translation.source_locale".to_owned(),
+        message: format!(
+            "Locale `{locale}` is the configured source locale and cannot be selected or patched. Select a configured target locale instead."
+        ),
+        id: Some(id),
+        catalog_path: None,
+        locale: Some(locale),
+    }
+}
+
+fn missing_catalog_diagnostic(locale: &str, path: PathBuf) -> TranslationWorkflowDiagnostic {
+    let catalog_path = path.to_string_lossy().into_owned();
+    TranslationWorkflowDiagnostic {
+        code: "translation.missing_catalog".to_owned(),
+        message: format!(
+            "Translation catalog for locale `{locale}` is missing at `{catalog_path}`. Run `pmds extract` to create it before requesting this locale explicitly."
+        ),
+        id: None,
+        catalog_path: Some(catalog_path),
+        locale: Some(locale.to_owned()),
     }
 }
 
 fn diagnostic_sort_key(
     diagnostic: &TranslationWorkflowDiagnostic,
-) -> (&str, Option<&TranslationCandidateId>) {
-    (&diagnostic.code, diagnostic.id.as_ref())
+) -> (
+    &str,
+    Option<&str>,
+    Option<&str>,
+    Option<&TranslationCandidateId>,
+) {
+    (
+        &diagnostic.code,
+        diagnostic.catalog_path.as_deref(),
+        diagnostic.locale.as_deref(),
+        diagnostic.id.as_ref(),
+    )
 }
 
 #[cfg(test)]
@@ -1308,6 +1380,136 @@ mod tests {
             machine.ai.as_ref().map(|ai| ai.model.as_str()),
             Some("example/model")
         );
+    }
+
+    #[test]
+    fn excludes_the_source_locale_from_explicit_candidate_requests() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("messages/de.po"), "de");
+
+        let explicitly_selected_source =
+            list_translation_candidates(&TranslationCandidateRequest {
+                config: po_config(fixture.path()),
+                locales: vec!["en".to_owned()],
+                targets: Vec::new(),
+                max_origins: 8,
+            })
+            .expect("source locale is excluded from explicit selection");
+        assert!(explicitly_selected_source.candidates.is_empty());
+        assert!(explicitly_selected_source.diagnostics.is_empty());
+
+        let stale_source_target = id("messages/{locale}", "en", "Hello", None);
+        let source_target = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["en".to_owned()],
+            targets: vec![stale_source_target.clone()],
+            max_origins: 8,
+        })
+        .expect("source target is rejected as a diagnostic");
+        assert!(source_target.candidates.is_empty());
+        assert_eq!(source_target.diagnostics.len(), 1);
+        assert_eq!(
+            source_target.diagnostics[0].code,
+            "translation.source_locale"
+        );
+        assert_eq!(
+            source_target.diagnostics[0].id.as_ref(),
+            Some(&stale_source_target)
+        );
+    }
+
+    #[test]
+    fn skips_missing_default_catalogs_with_deterministic_context_but_errors_for_explicit_locales() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("messages/de.po"), "de");
+        let mut default_config = po_config(fixture.path());
+        default_config.locales = vec![
+            "en".to_owned(),
+            "de".to_owned(),
+            "ja".to_owned(),
+            "fr".to_owned(),
+        ];
+
+        let default_result = list_translation_candidates(&TranslationCandidateRequest {
+            config: default_config,
+            locales: Vec::new(),
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("default enumeration skips fresh locale catalogs");
+        assert!(default_result
+            .candidates
+            .iter()
+            .all(|candidate| candidate.id.locale == "de"));
+        let missing = default_result
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "translation.missing_catalog")
+            .collect::<Vec<_>>();
+        assert_eq!(missing.len(), 2);
+        assert_eq!(
+            missing
+                .iter()
+                .map(|diagnostic| diagnostic.locale.as_deref())
+                .collect::<Vec<_>>(),
+            vec![Some("fr"), Some("ja")]
+        );
+        assert_eq!(
+            missing
+                .iter()
+                .map(|diagnostic| diagnostic.catalog_path.as_deref())
+                .collect::<Vec<_>>(),
+            vec![
+                fixture.path().join("messages/fr.po").to_str(),
+                fixture.path().join("messages/ja.po").to_str(),
+            ]
+        );
+        assert!(missing
+            .iter()
+            .all(|diagnostic| diagnostic.message.contains("pmds extract")));
+
+        let mut explicit_config = po_config(fixture.path());
+        explicit_config.locales = vec![
+            "en".to_owned(),
+            "de".to_owned(),
+            "ja".to_owned(),
+            "fr".to_owned(),
+        ];
+        let error = list_translation_candidates(&TranslationCandidateRequest {
+            config: explicit_config,
+            locales: vec!["fr".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect_err("explicitly requested missing locale remains an error");
+        let PalamedesError::ReadFile { path, source } = error else {
+            panic!("expected missing catalog read error");
+        };
+        assert_eq!(path, fixture.path().join("messages/fr.po"));
+        assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn does_not_swallow_non_missing_catalog_read_failures() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("messages/de.po"), "de");
+        fs::create_dir_all(fixture.path().join("messages/fr.po"))
+            .expect("create directory where catalog file belongs");
+        let mut config = po_config(fixture.path());
+        config.locales.push("fr".to_owned());
+
+        let error = list_translation_candidates(&TranslationCandidateRequest {
+            config,
+            locales: Vec::new(),
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect_err("directory read error is not treated as a missing catalog");
+        let PalamedesError::ReadFile { path, source } = error else {
+            panic!("expected catalog read error");
+        };
+        assert_eq!(path, fixture.path().join("messages/fr.po"));
+        assert_ne!(source.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[test]
@@ -1447,6 +1649,71 @@ mod tests {
                 .map(|ai| ai.model.as_str()),
             Some("example/new")
         );
+    }
+
+    #[test]
+    fn rejects_source_locale_patch_ids_before_any_catalog_write() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let target_path = fixture.path().join("messages/de.po");
+        let source_path = fixture.path().join("messages/fr.po");
+        write_po_fixture(&target_path, "de");
+        write_po_fixture(&source_path, "fr");
+        let mut listing_config = po_config(fixture.path());
+        listing_config.locales = vec!["fr".to_owned(), "de".to_owned()];
+        listing_config.source_locale = "fr".to_owned();
+
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: listing_config,
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list target candidate");
+        let target = candidate(&listed.candidates, "Hello");
+        let source_id = id("tampered/{locale}", "fr", "Hello", None);
+        let target_before = fs::read_to_string(&target_path).expect("read target before patch");
+        let source_before = fs::read_to_string(&source_path).expect("read source before patch");
+        let mut patch_config = po_config(fixture.path());
+        patch_config.locales = vec!["fr".to_owned(), "de".to_owned()];
+        patch_config.source_locale = "fr".to_owned();
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: patch_config,
+            po: None,
+            patches: vec![
+                singular_patch(target, "Hallo"),
+                TranslationPatch {
+                    id: source_id.clone(),
+                    fingerprint: "stale-or-tampered-source-id".to_owned(),
+                    translation: TranslationValue::Singular {
+                        value: "Bonjour".to_owned(),
+                    },
+                    machine: None,
+                },
+            ],
+        })
+        .expect("source patch is rejected as a structured result");
+
+        assert!(!result.updated);
+        assert_eq!(result.stats.requested, 2);
+        assert_eq!(
+            result
+                .outcomes
+                .iter()
+                .map(|outcome| outcome.status)
+                .collect::<Vec<_>>(),
+            vec![
+                TranslationPatchOutcomeStatus::NotApplied,
+                TranslationPatchOutcomeStatus::Rejected,
+            ]
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "translation.source_locale"
+                && diagnostic.id.as_ref() == Some(&source_id)
+                && diagnostic.locale.as_deref() == Some("fr")
+        }));
+        assert_eq!(fs::read_to_string(&target_path).unwrap(), target_before);
+        assert_eq!(fs::read_to_string(&source_path).unwrap(), source_before);
     }
 
     #[test]

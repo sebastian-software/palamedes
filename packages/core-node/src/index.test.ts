@@ -300,6 +300,41 @@ msgstr ""
     expect(output).toContain("{count, plural, one {# Datei} other {# Dateien}}")
   })
 
+  it("serializes skipped fresh target catalogs while excluding an explicit source locale", async () => {
+    const rootDir = await createTempDir()
+    const targetPath = path.join(rootDir, "locales", "de", "messages.po")
+    await mkdir(path.dirname(targetPath), { recursive: true })
+    await writeFile(
+      targetPath,
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "Hello"
+msgstr ""
+`
+    )
+    const config = {
+      rootDir,
+      locales: ["en", "de", "fr"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+
+    const defaultResult = listTranslationCandidates({ config })
+    expect(defaultResult.candidates).toHaveLength(1)
+    expect(defaultResult.diagnostics).toStrictEqual([
+      expect.objectContaining({
+        code: "translation.missing_catalog",
+        locale: "fr",
+        catalogPath: path.join(rootDir, "locales", "fr", "messages.po"),
+      }),
+    ])
+
+    const sourceResult = listTranslationCandidates({ config, locales: ["en"] })
+    expect(sourceResult).toStrictEqual({ candidates: [], diagnostics: [] })
+  })
+
   it("exposes a partial report on a later native catalog write failure", async () => {
     const rootDir = await createTempDir()
     const firstPath = path.join(rootDir, "first", "de.po")

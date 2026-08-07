@@ -196,6 +196,8 @@ pub struct TranslationWorkflowDiagnostic {
     pub code: String,
     pub message: String,
     pub id: Option<TranslationCandidateId>,
+    pub catalog_path: Option<String>,
+    pub locale: Option<String>,
 }
 
 #[napi(object)]
@@ -948,6 +950,8 @@ impl From<palamedes::TranslationWorkflowDiagnostic> for TranslationWorkflowDiagn
             code: value.code,
             message: value.message,
             id: value.id.map(TranslationCandidateId::from),
+            catalog_path: value.catalog_path,
+            locale: value.locale,
         }
     }
 }

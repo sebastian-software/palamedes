@@ -121,6 +121,8 @@ export interface TranslationWorkflowDiagnostic {
   code: string;
   message: string;
   id?: TranslationCandidateId;
+  catalogPath?: string;
+  locale?: string;
 }
 export interface TranslationCandidateResult {
   candidates: Array<TranslationCandidate>;
