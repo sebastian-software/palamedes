@@ -535,6 +535,7 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
     }
     if (
       serverMessageSplitting &&
+      result.compiledIds.length > 0 &&
       !registration?.matchesCatalog &&
       typeof this.emitWarning === "function"
     ) {
