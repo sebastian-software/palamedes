@@ -1,12 +1,15 @@
 import { execFileSync, spawn } from "node:child_process"
 import http from "node:http"
 import path from "node:path"
-import { parseExampleArgs, ROOT, selectExamples } from "./example-matrix.mjs"
+import { parseExampleArgs, ROOT, selectBrowserExamples } from "./example-matrix.mjs"
 
 function parseBrowserArgs(argv) {
   return {
     captureScreenshots: argv.includes("--capture-screenshots"),
-    screenshotDir: path.join(ROOT, "docs/example-screenshots"),
+    screenshotDir: path.resolve(
+      ROOT,
+      process.env.PALAMEDES_SCREENSHOT_DIR ?? "docs/example-screenshots"
+    ),
   }
 }
 
@@ -218,10 +221,10 @@ async function verifyExample(example, options) {
 
 async function main() {
   const browserOptions = parseBrowserArgs(process.argv)
-  const selected = selectExamples(parseExampleArgs(process.argv))
+  const selected = selectBrowserExamples(parseExampleArgs(process.argv))
 
   if (selected.length === 0) {
-    throw new Error("No examples matched the provided filters")
+    throw new Error("No browser-verifiable examples matched the provided filters")
   }
 
   for (const example of selected) {
