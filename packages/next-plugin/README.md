@@ -217,9 +217,11 @@ the initialized request scope.
 
 A re-export such as `export { save } from "./save"` has no function body to
 instrument at the re-export site. Put `"use server"` in the implementation
-module or on the implementation function itself. Likewise, a wrapper call that
-only receives an imported callback has no local async body for Palamedes to
-instrument; keep the callback inline or mark its implementation explicitly.
+module or on the implementation function itself. Exported wrappers can pass a
+module-local `async function` or `const` async arrow/function callback by
+reference (including through nested wrappers). A wrapper that only receives an
+imported callback still has no local async body for Palamedes to instrument, so
+mark that callback's implementation explicitly.
 
 The initializer belongs to the application. It should resolve the request
 locale, create and activate a fresh request-local i18n instance, and be
