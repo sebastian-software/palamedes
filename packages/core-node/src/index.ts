@@ -133,6 +133,8 @@ export type TranslationWorkflowDiagnostic = {
   code: string
   message: string
   id?: TranslationCandidateId
+  catalogPath?: string
+  locale?: string
 }
 export type TranslationCandidateRequest = {
   config: CatalogArtifactConfig
