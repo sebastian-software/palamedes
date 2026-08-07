@@ -1,7 +1,7 @@
 // @vitest-environment node
 import * as React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   createI18n,
@@ -22,6 +22,16 @@ function fulfilled<T>(value: T): Promise<T> {
   }
   promise.status = "fulfilled"
   promise.value = value
+  return promise
+}
+
+function rejected<T>(reason: unknown): Promise<T> {
+  const promise = Promise.reject(reason) as Promise<T> & {
+    status: "rejected"
+    reason: unknown
+  }
+  promise.status = "rejected"
+  promise.reason = reason
   return promise
 }
 
@@ -61,5 +71,61 @@ describe("createClientCatalogBoundary on the server", () => {
 
     expect(deHtml).toBe("Hallo")
     expect(enHtml).toBe("Hello")
+  })
+
+  it("rethrows failed server loads, then caches the retry that succeeds", async () => {
+    const loadError = new Error("catalog unavailable")
+    const loadCatalog = vi
+      .fn<() => Promise<{ messages: CompiledCatalogMessages }>>()
+      .mockReturnValueOnce(rejected(loadError))
+      .mockReturnValueOnce(fulfilled({ messages: defineCompiledCatalog({ greeting: "Hallo" }) }))
+    const Boundary = createClientCatalogBoundary<Locale>({
+      loadCatalog,
+      resolveClientLocale() {
+        throw new Error("resolveClientLocale must not run on the server")
+      },
+    })
+
+    function Greeting() {
+      return String(getI18n()._("greeting"))
+    }
+
+    const renderGreeting = () =>
+      renderToStaticMarkup(
+        <Boundary locale="de">
+          <Greeting />
+        </Boundary>
+      )
+
+    expect(renderGreeting).toThrow(loadError)
+    await Promise.resolve()
+    expect(renderGreeting()).toBe("Hallo")
+    expect(renderGreeting()).toBe("Hallo")
+    expect(loadCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it("evicts each rejected server load before the next render", async () => {
+    const firstError = new Error("first failure")
+    const secondError = new Error("second failure")
+    const loadCatalog = vi
+      .fn<() => Promise<{ messages: CompiledCatalogMessages }>>()
+      .mockReturnValueOnce(rejected(firstError))
+      .mockReturnValueOnce(rejected(secondError))
+      .mockReturnValueOnce(fulfilled({ messages: defineCompiledCatalog({ greeting: "Hallo" }) }))
+    const Boundary = createClientCatalogBoundary<Locale>({
+      loadCatalog,
+      resolveClientLocale() {
+        throw new Error("resolveClientLocale must not run on the server")
+      },
+    })
+
+    const renderBoundary = () => renderToStaticMarkup(<Boundary locale="de">Ready</Boundary>)
+
+    expect(renderBoundary).toThrow(firstError)
+    await Promise.resolve()
+    expect(renderBoundary).toThrow(secondError)
+    await Promise.resolve()
+    expect(renderBoundary()).toBe("Ready")
+    expect(loadCatalog).toHaveBeenCalledTimes(3)
   })
 })

@@ -56,18 +56,42 @@ export function createClientCatalogBoundary<TLocale extends string>({
 }: CreateClientCatalogBoundaryOptions<TLocale>) {
   const serverResources = new Map<TLocale, Promise<ClientCatalogModule>>()
   const clientLocale = typeof window === "undefined" ? undefined : resolveClientLocale()
-  const clientI18nResource =
-    clientLocale === undefined
-      ? undefined
-      : loadCatalog(clientLocale).then((catalog) =>
-          setClientI18n(createCatalogI18n(clientLocale, catalog))
-        )
+  let clientI18nResource: Promise<CompiledPalamedesI18n> | undefined
+
+  function createClientI18nResource(locale: TLocale): Promise<CompiledPalamedesI18n> {
+    const resource = loadCatalog(locale).then((catalog) =>
+      setClientI18n(createCatalogI18n(locale, catalog))
+    )
+    clientI18nResource = resource
+    void resource.catch(() => {
+      if (clientI18nResource === resource) {
+        clientI18nResource = undefined
+      }
+    })
+    return resource
+  }
+
+  if (clientLocale !== undefined) {
+    createClientI18nResource(clientLocale)
+  }
+
+  function getClientI18nResource(): Promise<CompiledPalamedesI18n> {
+    if (clientLocale === undefined) {
+      throw new Error("Palamedes client catalog boundary was rendered on the server")
+    }
+    return clientI18nResource ?? createClientI18nResource(clientLocale)
+  }
 
   function getServerCatalogResource(locale: TLocale): Promise<ClientCatalogModule> {
     let resource = serverResources.get(locale)
     if (!resource) {
       resource = loadCatalog(locale)
       serverResources.set(locale, resource)
+      void resource.catch(() => {
+        if (serverResources.get(locale) === resource) {
+          serverResources.delete(locale)
+        }
+      })
     }
     return resource
   }
@@ -80,9 +104,9 @@ export function createClientCatalogBoundary<TLocale extends string>({
       )
     }
 
-    const resource = (isClient ? clientI18nResource! : getServerCatalogResource(locale)) as Promise<
-      ClientCatalogModule | CompiledPalamedesI18n
-    >
+    const resource = (
+      isClient ? getClientI18nResource() : getServerCatalogResource(locale)
+    ) as Promise<ClientCatalogModule | CompiledPalamedesI18n>
     const catalogOrI18n = use(resource)
     const i18n = useMemo<CompiledPalamedesI18n>(() => {
       if (isClient) {
