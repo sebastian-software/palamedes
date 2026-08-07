@@ -556,6 +556,7 @@ msgstr ""
       sourceLocale: "en",
       catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
     }
+    const missingCatalogPath = `${rootDir}${path.sep}locales/fr/messages.po`
 
     const defaultResult = listTranslationCandidates({ config })
     expect(defaultResult.candidates).toHaveLength(1)
@@ -563,7 +564,7 @@ msgstr ""
       expect.objectContaining({
         code: "translation.missing_catalog",
         locale: "fr",
-        catalogPath: path.join(rootDir, "locales", "fr", "messages.po"),
+        catalogPath: missingCatalogPath,
       }),
     ])
 
