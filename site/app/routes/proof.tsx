@@ -16,7 +16,7 @@ export const handle = { layout: "bare" }
 export function meta() {
   return pageMeta({
     title: "Palamedes — benchmarks, verification, and the decision trail",
-    description: `Claims you can re-run: checked-in extraction benchmarks, an executable ICU semantics proof, ${contentStats.exampleCount} browser-verified example apps, and ${contentStats.adrCount} decision records.`,
+    description: `Claims you can re-run: checked-in extraction benchmarks, an executable ICU semantics proof, ${contentStats.smokeExampleCount} smoke-verified examples and ${contentStats.browserExampleCount} scheduled browser checks, and ${contentStats.adrCount} decision records.`,
     path: "/proof",
   })
 }
@@ -24,11 +24,11 @@ export function meta() {
 const VERIFICATION_STEPS = [
   {
     title: "Build",
-    body: `All ${contentStats.exampleCount} example apps build against the workspace packages — no mocked integrations.`,
+    body: `All ${contentStats.smokeExampleCount} example apps build and smoke-test against the workspace packages on relevant PRs and main pushes — no mocked integrations.`,
   },
   {
     title: "Drive",
-    body: "A Playwright flow loads each app, checks SSR output, switches locales, and exercises localized server actions.",
+    body: `${contentStats.browserExampleCount} browser-capable examples run the Playwright flow weekly or on manual dispatch: load, SSR output, locale switch, and localized server actions.`,
   },
   {
     title: "Capture",
@@ -88,7 +88,7 @@ export default function Proof() {
 
       <Section
         num="02 — Verification"
-        title={`${contentStats.exampleCount} apps, verified in a real browser, on every change.`}
+        title={`${contentStats.smokeExampleCount} apps smoke-checked on relevant changes; ${contentStats.browserExampleCount} browser-checked weekly.`}
       >
         <div className="hairline-grid mb-10 grid-cols-3 max-tight:grid-cols-1">
           {VERIFICATION_STEPS.map((step, index) => (

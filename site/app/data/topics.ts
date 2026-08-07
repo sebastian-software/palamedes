@@ -98,13 +98,13 @@ export const TOPICS: Topic[] = [
       ],
     },
     evidence: {
-      title: "Verified in a browser, on every change",
+      title: "Smoke-checked on relevant changes; browser-checked weekly",
       lede: "Server-component rendering is exactly the kind of claim that is easy to assert and tedious to prove, so it is proven mechanically instead.",
       items: [
         {
           label: "Example apps",
-          value: `${contentStats.exampleCount}`,
-          note: "Every one is built against the workspace packages and driven by Playwright in CI — no mocked integrations.",
+          value: `${contentStats.smokeExampleCount}`,
+          note: `${contentStats.browserExampleCount} browser-capable examples run Playwright weekly or on manual dispatch; all are built and smoke-checked on relevant PRs and main pushes — no mocked integrations.`,
         },
         {
           label: "Meta-frameworks",
@@ -381,13 +381,13 @@ select(gender, {
         },
         {
           title: "Every strategy is exercised, not just documented",
-          body: `Each of the ${contentStats.frameworkCount} supported meta-frameworks has an example app for all ${contentStats.strategyCount} strategies, driven in a real browser in CI. The tradeoffs below are written from apps that run, not from a table someone maintained by hand.`,
+          body: `Each of the six server frameworks has an example app for all four strategies. All ${contentStats.smokeExampleCount} examples are smoke-checked on relevant PRs and main pushes; ${contentStats.browserExampleCount} browser-capable examples run the real-browser contract weekly or on manual dispatch. The tradeoffs below are written from apps that run, not from a table someone maintained by hand.`,
         },
       ],
     },
     evidence: {
       title: "The four strategies, and what each one costs",
-      lede: "All four are implemented and browser-verified for every supported framework. The differences are real and worth reading before you commit.",
+      lede: `All four are implemented for every server framework and smoke-checked across ${contentStats.smokeExampleCount} examples. The ${contentStats.browserExampleCount} browser-capable examples run Playwright weekly or on manual dispatch. The differences are real and worth reading before you commit.`,
       items: [
         {
           label: "Cookie",
@@ -432,7 +432,7 @@ select(gender, {
       },
       {
         q: "How do I know these actually work?",
-        a: `Every strategy has a running example app per framework — ${contentStats.exampleCount} in total — built against the workspace packages and driven by Playwright in CI, with versioned screenshots checked into the repository.`,
+        a: `Every strategy has a running example app per framework — ${contentStats.smokeExampleCount} in total — built and smoke-checked against the workspace packages on relevant PRs and main pushes. ${contentStats.browserExampleCount} browser-capable examples run Playwright weekly or on manual dispatch, with versioned screenshots checked into the repository.`,
       },
     ],
     related: [

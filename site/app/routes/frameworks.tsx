@@ -50,14 +50,15 @@ export default function Frameworks() {
       >
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
-          All {contentStats.exampleCount} apps are verified in CI. The{" "}
-          {contentStats.exampleCount - contentStats.strategyCount} established UI-adapter apps cover
-          SSR output, locale switching, and localized server actions or functions in the browser;
-          the {contentStats.strategyCount} Remix v3 apps cover server responses and locale handling
-          through smoke checks. Screenshots cover the UI-adapter matrix and are versioned in the
-          repo. Cookie, route, and subdomain demos are publicly hosted for the five browser-verified
-          frameworks; the TLD domains are still being provisioned, and Remix v3 has no public
-          hosting yet. Hosting status is documented in the repo&apos;s demo-deployments guide.
+          All {contentStats.smokeExampleCount} apps are smoke-checked on relevant pull requests and
+          main pushes. The {contentStats.browserExampleCount} browser-capable examples — the 20
+          established UI-adapter matrix apps plus the Vite MDX proof — cover SSR output, locale
+          switching, and localized server actions or functions in weekly or manual Playwright runs;
+          the four Remix v3 apps cover server responses and locale handling through smoke checks.
+          Screenshots cover the browser-capable set and are versioned in the repo. Cookie, route,
+          and subdomain demos are publicly hosted for the five browser-verified frameworks; the TLD
+          domains are still being provisioned, and Remix v3 has no public hosting yet. Hosting
+          status is documented in the repo&apos;s demo-deployments guide.
         </p>
       </Section>
 

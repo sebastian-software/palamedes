@@ -1,8 +1,9 @@
 # Example Screenshots
 
 These screenshots are generated from the same Playwright-based browser verifier
-used by the example matrix. They are versioned verification artifacts, not
-manually curated mockups.
+that checks 21 browser-capable examples weekly and on manual dispatch. All 25
+examples receive smoke verification on relevant pull requests and `main`
+pushes. They are versioned verification artifacts, not manually curated mockups.
 
 Refresh them with:
 

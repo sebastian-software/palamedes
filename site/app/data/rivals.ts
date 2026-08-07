@@ -179,7 +179,7 @@ export const RIVALS: Rival[] = [
       {
         criterion: "Verified host coverage",
         rival: "Broad UI-framework packages",
-        palamedes: `${contentStats.exampleCount} browser-verified host applications`,
+        palamedes: `${contentStats.smokeExampleCount} smoke-verified examples; ${contentStats.browserExampleCount} browser-checked weekly`,
       },
     ],
     code: {
@@ -373,7 +373,7 @@ plural(seats, {
       },
       {
         title: "The model outlives the framework choice",
-        body: `Palamedes runs the same runtime and identity model across Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3, with ${contentStats.exampleCount} browser-verified example apps in CI covering ${contentStats.strategyCount} locale strategies each. That is not a compatibility table — it is a test suite. Changing meta-framework changes your routing layer and nothing about your messages.`,
+        body: `Palamedes runs the same runtime and identity model across Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3, with ${contentStats.smokeExampleCount} examples smoke-checked on relevant PRs and main pushes across four locale strategies. ${contentStats.browserExampleCount} browser-capable examples run the Playwright contract weekly or on manual dispatch. That is not a compatibility table — it is a test suite. Changing meta-framework changes your routing layer and nothing about your messages.`,
       },
       {
         title: "Source strings as the stable path, not the experiment",
@@ -859,7 +859,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework coverage",
         rival: "The widest here — ~19 first-party adapters",
-        palamedes: `React and Solid across ${contentStats.frameworkCount} meta-frameworks, ${contentStats.exampleCount} apps verified in CI`,
+        palamedes: `React and Solid across ${contentStats.frameworkCount} meta-frameworks, ${contentStats.smokeExampleCount} apps smoke-checked in CI`,
       },
       {
         criterion: "Extract + update speed",
