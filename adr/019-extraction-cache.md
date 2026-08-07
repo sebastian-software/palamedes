@@ -38,8 +38,9 @@ A later implementation adopted a broader, deliberately textual candidate gate.
 For non-MDX files, the gate treats a source as a parse candidate when its text
 contains either `@palamedes` or `i18n`; otherwise it returns no messages or
 source diagnostics without parsing. The `i18n` substring is the necessary
-correction to an `@palamedes`-only check: supported runtime calls such as
-`i18n._(...)` and `i18n.t(...)` have no macro import. This is a substring
+correction to an `@palamedes`-only check: supported runtime forms include the
+call `i18n._(...)` and the tagged template ``i18n.t`...` ``; neither has a
+macro import. This is a substring
 check, not a match for an `@palamedes/i18n` import or a claim that the source
 is syntactically valid.
 
