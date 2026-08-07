@@ -44,6 +44,7 @@ type SourceMapLike = {
 }
 
 const tempDirs: string[] = []
+const testSupportAddonFilename = "palamedes-node-test-support.node"
 
 afterEach(async () => {
   await Promise.all(
@@ -273,6 +274,13 @@ describe("@palamedes/core-node", () => {
         )
       )
     }
+  })
+
+  it("reuses one test-support addon path across repeated setup", () => {
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
+
+    expect(testSupportAddonPath(repoRoot)).toBe(testSupportAddonPath(repoRoot))
+    expect(path.basename(testSupportAddonPath(repoRoot))).toBe(testSupportAddonFilename)
   })
 
   it("loads native bindings and exposes version information", () => {
@@ -1012,12 +1020,9 @@ async function loadTestSupportAddon(): Promise<TestSupportBindings> {
   // Windows keeps loaded native addons open until Node exits, so a copy inside
   // the per-test fixture would make its afterEach cleanup fail with EPERM.
   // target/ is ignored and is already the build-artifact home for this addon.
-  const addonPath = path.join(
-    repoRoot,
-    "target",
-    "debug",
-    `palamedes-node-test-support-${process.pid}.node`
-  )
+  // Reuse one stable filename after the preceding Node process exits so normal
+  // test runs cannot leave a PID-suffixed addon behind each time.
+  const addonPath = testSupportAddonPath(repoRoot)
   await copyFile(path.join(repoRoot, "target", "debug", libraryName), addonPath)
   if (process.platform === "darwin") {
     execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", addonPath], {
@@ -1025,4 +1030,8 @@ async function loadTestSupportAddon(): Promise<TestSupportBindings> {
     })
   }
   return createRequire(import.meta.url)(addonPath) as TestSupportBindings
+}
+
+function testSupportAddonPath(repoRoot: string): string {
+  return path.join(repoRoot, "target", "debug", testSupportAddonFilename)
 }
