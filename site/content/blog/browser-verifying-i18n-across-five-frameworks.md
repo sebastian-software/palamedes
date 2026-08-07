@@ -2,7 +2,7 @@
 date: "2026-07-05"
 ---
 
-# How We Browser-Verify i18n Across Six Frameworks
+# How We Browser-Verify i18n Across Five Frameworks
 
 Status: draft
 
@@ -14,21 +14,27 @@ interaction, and server actions all have to agree.
 
 Palamedes treats that as a verification problem.
 
-The repo contains an example matrix across six framework families:
+The repo contains 25 examples: six server framework families with four locale
+strategies each, plus a focused Vite MDX app. All 25 are smoke-checked on
+relevant pull requests and `main` pushes.
+
+This article is about the 20 established UI-adapter examples that share the
+browser interaction contract and versioned screenshots:
 
 - Next.js
 - TanStack Start
 - SolidStart
 - Waku
 - React Router
-- Remix v3
 
 Each family has four locale strategies:
 
 - cookie-based locale persistence
 - route-segment locale persistence
+- subdomain-based locale persistence
+- top-level-domain locale persistence
 
-That gives 24 example apps. Each one has visible checks for the parts that
+That gives 20 UI-adapter example apps. Each one has visible checks for the parts that
 usually hide i18n bugs:
 
 - server-rendered localized text before hydration
@@ -36,14 +42,16 @@ usually hide i18n bugs:
 - server-side localized action or query output
 - the same runtime model behind the framework-specific wiring
 
-The screenshots are versioned in the repo:
+Those 20 UI-adapter examples have two versioned screenshots each:
 
 - [example screenshots](../../../docs/example-screenshots/README.md)
 - [matrix visual](../../../docs/assets/palamedes-localized-matrix.png)
 
 The useful detail is that the screenshots are not hand-picked marketing
 images. They come from the same Playwright-based verification flow that checks
-the examples.
+those UI-adapter examples weekly and on manual dispatch. The browser lane also
+checks the Vite MDX app; the four server-first Remix v3 examples remain
+smoke-only and have no browser capture.
 
 That changes the value of the asset. The matrix is evidence that the product
 thesis is being exercised.
@@ -56,7 +64,8 @@ For Palamedes, the thesis is:
 The matrix is where that thesis has to survive contact with frameworks.
 
 Next.js and React Router do not fail in the same places. TanStack Start,
-SolidStart, Waku, and Remix v3 each have their own server/client boundaries.
+SolidStart, and Waku each have their own server/client boundaries. Remix v3 is
+covered separately by the smoke lane while its UI adapter settles.
 Route-based locale state and cookie-based locale state put pressure on different
 parts of the adapter layer.
 
@@ -67,7 +76,8 @@ If each adapter grows its own message semantics, the matrix becomes ten
 different products. Palamedes keeps catalog semantics in `ferrocat`, runtime
 access behind `getI18n()`, and message identity at `message + context`.
 
-The verifier then checks that every host can express the same model.
+The browser verifier checks that each UI-adapter host can express the same
+model, while the smoke lane covers the full 25-example matrix.
 
 This is not the final proof that Palamedes covers every edge case. It is a
 repeatable baseline. A team evaluating the project can inspect the examples,

@@ -174,7 +174,7 @@ export const RIVALS: Rival[] = [
       {
         criterion: "Framework coverage",
         rival: "React, React Native, Vue, Solid, vanilla",
-        palamedes: `React and Solid across ${contentStats.frameworkCount} meta-frameworks; no Vue, no React Native`,
+        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} server frameworks; no Vue, no React Native`,
       },
       {
         criterion: "Verified host coverage",
@@ -343,7 +343,7 @@ plural(seats, {
     metaDescription:
       "next-intl is the most Next.js-idiomatic i18n library there is, routing included. Palamedes trades that depth for one runtime and message model across supported hosts — and ships source-string extraction as the stable path, not an experiment.",
     eyebrow: "Compare · next-intl",
-    headline: `One framework deep, or ${contentStats.frameworkCount} frameworks wide.`,
+    headline: `One framework deep, or ${contentStats.serverFrameworkCount} server frameworks wide.`,
     lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes draws the boundary differently: your framework keeps routing, while Palamedes carries the same authoring, catalog, validation, and runtime model across supported hosts.",
     card: "Next-native depth including routing, against one shared model across supported hosts.",
     facts: [
@@ -631,7 +631,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework coverage",
         rival: "Broad, via one Vite plugin",
-        palamedes: `React and Solid across ${contentStats.frameworkCount} verified meta-frameworks`,
+        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} verified server frameworks`,
       },
       {
         criterion: "Extract + update speed",
@@ -741,7 +741,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework bindings",
         rival: "React, Vue, Angular and Svelte",
-        palamedes: `React and Solid across ${contentStats.frameworkCount} verified meta-frameworks`,
+        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} verified server frameworks`,
       },
       {
         criterion: "Extract + update speed",
@@ -859,7 +859,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework coverage",
         rival: "The widest here — ~19 first-party adapters",
-        palamedes: `React and Solid across ${contentStats.frameworkCount} meta-frameworks, ${contentStats.smokeExampleCount} apps smoke-checked in CI`,
+        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} server frameworks, ${contentStats.smokeExampleCount} apps smoke-checked in CI`,
       },
       {
         criterion: "Extract + update speed",

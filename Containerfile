@@ -41,7 +41,7 @@ COPY . .
 
 RUN pnpm install --frozen-lockfile
 # `pnpm build` builds the workspace packages and compiles the native addon via
-# cargo; `pnpm build:examples` builds all 24 example apps.
+# cargo; `pnpm build:examples` builds all 25 example apps.
 RUN pnpm build
 RUN pnpm build:examples
 # Drop build-only artifacts before they reach the runtime image: the compiled

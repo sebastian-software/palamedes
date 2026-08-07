@@ -5,7 +5,13 @@ import { dirname, extname, join, posix, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { generateApiDocs } from "ardo/typedoc"
-import { EXAMPLE_MATRIX, selectBrowserExamples } from "../../scripts/example-matrix.mjs"
+import {
+  EXAMPLE_MATRIX,
+  LOCALE_STRATEGIES,
+  SERVER_FRAMEWORKS,
+  selectBrowserExamples,
+  selectScreenshotExamples,
+} from "../../scripts/example-matrix.mjs"
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const repoRoot = resolve(siteRoot, "..")
@@ -102,15 +108,14 @@ async function writeContentStats(adrEntries) {
     throw new Error("The example matrix and examples directory must contain the same entries")
   }
 
-  const frameworks = new Set(exampleDirs.map((name) => name.slice(0, name.lastIndexOf("-"))))
-  const strategies = new Set(exampleDirs.map((name) => name.slice(name.lastIndexOf("-") + 1)))
   const stats = {
     adrCount: adrEntries.length,
     exampleCount: exampleDirs.length,
     smokeExampleCount: EXAMPLE_MATRIX.length,
     browserExampleCount: selectBrowserExamples({}).length,
-    frameworkCount: frameworks.size,
-    strategyCount: strategies.size,
+    screenshotExampleCount: selectScreenshotExamples({}).length,
+    serverFrameworkCount: SERVER_FRAMEWORKS.length,
+    localeStrategyCount: LOCALE_STRATEGIES.length,
   }
   const generatedDir = join(siteRoot, "app/data/generated")
   await mkdir(generatedDir, { recursive: true })

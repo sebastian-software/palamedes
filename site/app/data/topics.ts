@@ -93,7 +93,7 @@ export const TOPICS: Topic[] = [
         },
         {
           title: "Not a Next.js feature",
-          body: `The same model runs across ${contentStats.frameworkCount} meta-frameworks, including the RSC-capable ones beyond Next.js — Waku and TanStack Start among them. Server-component support here is a property of the architecture, not an integration written for one framework.`,
+          body: `The same model runs across ${contentStats.serverFrameworkCount} server frameworks, including the RSC-capable ones beyond Next.js — Waku and TanStack Start among them. Server-component support here is a property of the architecture, not an integration written for one framework.`,
         },
       ],
     },
@@ -108,12 +108,12 @@ export const TOPICS: Topic[] = [
         },
         {
           label: "Meta-frameworks",
-          value: `${contentStats.frameworkCount}`,
+          value: `${contentStats.serverFrameworkCount}`,
           note: "Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3, each with the same runtime model.",
         },
         {
           label: "Locale strategies each",
-          value: `${contentStats.strategyCount}`,
+          value: `${contentStats.localeStrategyCount}`,
           note: "Cookie, route, subdomain and top-level domain, so the server path is exercised under every resolution mode.",
         },
         {
@@ -151,7 +151,7 @@ export default async function CheckoutHeading({ seats }) {
       },
       {
         q: "Does this work outside Next.js?",
-        a: `Yes. The same model is verified across ${contentStats.frameworkCount} meta-frameworks in CI, including the RSC-capable ones beyond Next.js. Palamedes ships React and Solid packages; there is no Vue or React Native support.`,
+        a: `Yes. The same model is verified across ${contentStats.serverFrameworkCount} server frameworks in CI, including the RSC-capable ones beyond Next.js. Palamedes ships React and Solid packages; there is no Vue or React Native support.`,
       },
       {
         q: "Why can't React Intl support server components?",
@@ -432,7 +432,7 @@ select(gender, {
       },
       {
         q: "How do I know these actually work?",
-        a: `Every strategy has a running example app per framework — ${contentStats.smokeExampleCount} in total — built and smoke-checked against the workspace packages on relevant PRs and main pushes. ${contentStats.browserExampleCount} browser-capable examples run Playwright weekly or on manual dispatch, with versioned screenshots checked into the repository.`,
+        a: `Every strategy has a running example app per framework — ${contentStats.smokeExampleCount} in total — built and smoke-checked against the workspace packages on relevant PRs and main pushes. ${contentStats.browserExampleCount} browser-capable examples run Playwright weekly or on manual dispatch; ${contentStats.screenshotExampleCount} UI-adapter examples have versioned screenshots.`,
       },
     ],
     related: [

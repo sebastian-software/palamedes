@@ -557,9 +557,24 @@ export function selectExamples(filters) {
   })
 }
 
+// The server matrix is six framework families by four locale strategies. Vite
+// is an additional client-only MDX proof, rather than a seventh server family
+// or a fifth locale strategy.
+export const SERVER_EXAMPLES = EXAMPLE_MATRIX.filter((example) => example.framework !== "vite")
+export const SERVER_FRAMEWORKS = [...new Set(SERVER_EXAMPLES.map((example) => example.framework))]
+export const LOCALE_STRATEGIES = [...new Set(SERVER_EXAMPLES.map((example) => example.strategy))]
+
 // Remix v3 is deliberately server-first while its component/UI adapter settles.
 // Its four entries have smoke contracts, but not the shared browser-interaction
 // contract that the other framework families and Vite exercise.
 export function selectBrowserExamples(filters) {
   return selectExamples(filters).filter((example) => example.framework !== "remix")
+}
+
+// The checked-in screenshot set records the established UI-adapter matrix.
+// Vite has the browser contract but no capture artifact, and Remix is smoke-only.
+export function selectScreenshotExamples(filters) {
+  return selectExamples(filters).filter(
+    (example) => example.framework !== "remix" && example.framework !== "vite"
+  )
 }

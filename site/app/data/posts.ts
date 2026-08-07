@@ -30,9 +30,9 @@ export const POSTS: Post[] = [
     readMinutes: 7,
   },
   {
-    title: "Browser-verifying i18n across six frameworks",
+    title: "Browser-verifying i18n across five frameworks",
     excerpt:
-      "How 24 example apps get driven by the same verification flow in CI — and why versioned screenshots beat compatibility tables.",
+      "How 20 UI-adapter apps share a browser verification flow and versioned screenshots, within a 25-app smoke matrix.",
     href: blogHref("browser-verifying-i18n-across-five-frameworks"),
     readMinutes: 6,
   },

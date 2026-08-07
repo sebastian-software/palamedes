@@ -1,6 +1,6 @@
 # Running all examples together in one container
 
-This document describes how to run all 24 Palamedes example apps together in
+This document describes how to run all 25 Palamedes example apps together in
 **one** Podman container – each on its own fixed port. It builds on the
 `Containerfile` in the repo root and the supervisor
 `scripts/container/start-all.mjs`.
@@ -42,7 +42,7 @@ The build is multi-stage:
 
 1. **Build stage** (glibc/Debian): `pnpm install`, `pnpm build` (builds the
    packages including the native addon via `cargo` in release profile) and
-   `pnpm build:examples` (builds all 24 apps). The `cargo` compilation makes the
+   `pnpm build:examples` (builds all 25 apps). The `cargo` compilation makes the
    first build noticeably longer.
 2. **Runtime stage** (slimmer Debian slim): takes over the finished workspace and
    starts the supervisor. Dev dependencies stay installed because TanStack's
@@ -70,7 +70,7 @@ Spelled out, this is `-p 4010:4010 -p 4011:4011 … -p 4063:4063`.
 The supervisor starts all apps from `scripts/example-matrix.mjs`, prefixes their
 output with the example id (`[nextjs-cookie] …`), and intentionally exits the
 container with an error code as soon as a server dies unexpectedly (fail-fast).
-`podman stop` terminates all 24 servers via forwarded `SIGTERM`.
+`podman stop` terminates all 25 servers via forwarded `SIGTERM`.
 
 ## Port overview
 

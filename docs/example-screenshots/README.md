@@ -1,9 +1,11 @@
 # Example Screenshots
 
-These screenshots are generated from the same Playwright-based browser verifier
-that checks 21 browser-capable examples weekly and on manual dispatch. All 25
-examples receive smoke verification on relevant pull requests and `main`
-pushes. They are versioned verification artifacts, not manually curated mockups.
+These screenshots are generated from the Playwright-based browser verifier that
+checks 21 browser-capable examples weekly and on manual dispatch. The 20
+UI-adapter examples represented here have versioned captures; Vite MDX has no
+capture artifact. All 25 examples receive smoke verification on relevant pull
+requests and `main` pushes. They are versioned verification artifacts, not
+manually curated mockups.
 
 Refresh them with:
 
@@ -11,7 +13,7 @@ Refresh them with:
 pnpm capture:example-screenshots
 ```
 
-Each example has two screenshots. They are intentionally captured in two
+Each UI-adapter example has two screenshots. They are intentionally captured in two
 different locales — that language change is the expected outcome of the
 verification flow, **not** a hydration glitch or a discarded server render:
 
