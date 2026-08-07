@@ -13,9 +13,11 @@ piece of evidence.
 
 Cross-framework i18n should not be a README claim.
 
-Palamedes keeps 24 examples in the repo: six framework families, each with
-cookie, route, subdomain, and tld locale strategies. The screenshots are
-versioned and come from the same verification flow used in CI.
+Palamedes keeps 25 examples in the repo: six server framework families, each
+with cookie, route, subdomain, and tld locale strategies, plus a Vite MDX app.
+All 25 are smoke-checked on relevant PRs and `main`; 21 browser-capable apps
+run Playwright weekly or manually, and 20 UI-adapter apps have versioned
+screenshots.
 
 Evidence: `docs/example-screenshots`
 

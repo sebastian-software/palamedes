@@ -46,8 +46,9 @@ The proof is visible in the repo:
 - the [example matrix](../../../examples/README.md) covers Next.js, TanStack
   Start, SolidStart, Waku, and React Router
 - each framework family has cookie, route, subdomain, and tld locale strategies
-- [browser screenshots](../../../docs/example-screenshots/README.md) are generated
-  from the same Playwright verification flow used in CI
+- [browser screenshots](../../../docs/example-screenshots/README.md) cover the
+  20 UI-adapter examples and are generated from their Playwright verification
+  flow in CI
 - [ADRs](../../../adr/001-project-scope-and-positioning.md) explain the runtime
   model, message identity, adapter architecture, and native boundary
 - [benchmark commands](../../../docs/proof-and-benchmarks.md) are checked in so local

@@ -25,8 +25,8 @@ const STATS: Stat[] = [
     href: "/frameworks",
   },
   {
-    value: `${contentStats.frameworkCount} × ${contentStats.strategyCount}`,
-    label: "frameworks × locale strategies",
+    value: `${contentStats.serverFrameworkCount} × ${contentStats.localeStrategyCount}`,
+    label: "server frameworks × locale strategies",
     href: "/frameworks",
   },
   {

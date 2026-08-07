@@ -24,5 +24,5 @@ locale without public DNS.
 - `app/po.d.ts` declares `.po` imports for TypeScript.
 - `app/lib/i18n.ts` wires the runtime and tld locale controls.
 
-The canonical overview for all 24 examples is
+The canonical overview for all 25 examples is
 [`examples/README.md`](../README.md).

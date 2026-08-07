@@ -46,19 +46,20 @@ export default function Frameworks() {
 
       <Section
         num="01 — Matrix"
-        title={`The ${contentStats.frameworkCount} × ${contentStats.strategyCount} verified matrix.`}
+        title={`The ${contentStats.serverFrameworkCount} × ${contentStats.localeStrategyCount} server matrix, plus Vite.`}
       >
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
           All {contentStats.smokeExampleCount} apps are smoke-checked on relevant pull requests and
-          main pushes. The {contentStats.browserExampleCount} browser-capable examples — the 20
-          established UI-adapter matrix apps plus the Vite MDX proof — cover SSR output, locale
-          switching, and localized server actions or functions in weekly or manual Playwright runs;
-          the four Remix v3 apps cover server responses and locale handling through smoke checks.
-          Screenshots cover the browser-capable set and are versioned in the repo. Cookie, route,
-          and subdomain demos are publicly hosted for the five browser-verified frameworks; the TLD
-          domains are still being provisioned, and Remix v3 has no public hosting yet. Hosting
-          status is documented in the repo&apos;s demo-deployments guide.
+          main pushes. The {contentStats.browserExampleCount} browser-capable examples — the
+          {contentStats.screenshotExampleCount} established UI-adapter matrix apps plus the Vite MDX
+          proof — cover SSR output, locale switching, and localized server actions or functions in
+          weekly or manual Playwright runs; the four Remix v3 apps cover server responses and locale
+          handling through smoke checks. Versioned screenshots cover the{" "}
+          {contentStats.screenshotExampleCount} UI-adapter examples; Vite has no capture artifact.
+          Cookie, route, and subdomain demos are publicly hosted for the five browser-verified
+          frameworks; the TLD domains are still being provisioned, and Remix v3 has no public
+          hosting yet. Hosting status is documented in the repo&apos;s demo-deployments guide.
         </p>
       </Section>
 

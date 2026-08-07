@@ -26,14 +26,15 @@ We are not asking you to trust a slogan. The repo shows the work.
 The current proof:
 
 - Six framework families, each with cookie, route, subdomain, and tld locale
-  strategies: all 25 are smoke-verified on relevant PRs and `main`; five
-  browser-capable families use the same scheduled Playwright flow, while
-  server-first Remix v3 remains smoke-verified.
+  strategies, plus Vite MDX: all 25 are smoke-verified on relevant PRs and
+  `main`; five UI-adapter families and Vite make 21 browser-capable examples
+  for the scheduled Playwright flow, while server-first Remix v3 remains
+  smoke-verified.
 - The image above is one demo in three locales: switch language and the copy,
-  plural seat counts, currency, and dates all change together. Each verified
-  framework and strategy renders the same design, so per-framework captures live in
+  plural seat counts, currency, and dates all change together. The 20
+  UI-adapter examples have versioned captures in
   [docs/example-screenshots](docs/example-screenshots) instead of repeating the
-  same picture here. All of it is versioned browser output, not a mockup.
+  same picture here. Those captures are browser output, not mockups.
 - A numbered [ADR series](https://palamedes.dev/decisions) explains the
   runtime model, message identity, native boundary, adapter architecture, and
   the work deliberately kept out of scope.
@@ -96,9 +97,10 @@ easier to review, and easier to carry from one framework to the next.
 ## Current Status
 
 - Recommended for new projects and teams that want cleaner i18n foundations
-- Verified today across Next.js, TanStack Start, SolidStart, Waku, and React
-  Router on Node.js `>=22.22`; server-first Remix v3 is smoke-verified and
-  requires Node.js `>=24.3`
+- All 25 examples are smoke-verified on relevant PRs and `main`; 21
+  browser-capable examples across Next.js, TanStack Start, SolidStart, Waku,
+  React Router, and Vite run Playwright weekly or manually. Server-first Remix
+  v3 is smoke-only and requires Node.js `>=24.3`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
 - 1.0 stability tiers and public API expectations are documented in [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
@@ -107,7 +109,8 @@ easier to review, and easier to carry from one framework to the next.
 
 - An example matrix across six framework families — five browser-verified,
   Remix v3 smoke-verified
-- Versioned screenshots generated from the same Playwright-based verifier used in CI
+- Versioned screenshots for the 20 UI-adapter examples, generated from the same
+  Playwright-based verifier used in CI
 - Reproducible benchmark commands for transform, extract, catalog update, compile steps, and end-to-end extract/update workflows
 - Structured catalog audit and metadata validation APIs backed by `ferrocat`
 - Decision records and architecture docs that explain the choices behind the product
