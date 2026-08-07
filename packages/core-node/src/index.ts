@@ -1,6 +1,3 @@
-import path from "node:path"
-import { createRequire } from "node:module"
-import { fileURLToPath } from "node:url"
 import type {
   CatalogAuditCheckOptions as GeneratedCatalogAuditCheckOptions,
   CatalogAuditDiagnostic as GeneratedCatalogAuditDiagnostic,
@@ -76,6 +73,7 @@ import type {
   TranslationPatchResult as GeneratedTranslationPatchResult,
   TranslationValue as GeneratedTranslationValue,
 } from "./generated/palamedes-node-types"
+import { loadNativeBindings } from "./native-loader"
 
 export type NativeInfo = GeneratedNativeInfo
 export type ParsedPoItem = GeneratedParsedPoItem
@@ -369,97 +367,6 @@ type NativeCatalogUpdateRequest = GeneratedCatalogUpdateRequest
 type NativeCatalogParseRequest = GeneratedCatalogParseRequest
 type NativeTranslationCandidateRequest = GeneratedTranslationCandidateRequest
 type NativeTranslationPatchRequest = GeneratedTranslationPatchRequest
-
-function detectLinuxLibc(): "gnu" | "musl" | null {
-  if (process.platform !== "linux") {
-    return null
-  }
-
-  const report = process.report?.getReport?.() as
-    | { header?: { glibcVersionRuntime?: string }; sharedObjects?: string[] }
-    | undefined
-  const header = report?.header
-  const glibcVersion = header?.glibcVersionRuntime
-
-  if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
-    return "gnu"
-  }
-
-  const sharedObjects = Array.isArray(report?.sharedObjects) ? report.sharedObjects : []
-
-  if (sharedObjects.some((sharedObject) => sharedObject.includes("musl"))) {
-    return "musl"
-  }
-
-  if (
-    sharedObjects.some(
-      (sharedObject) => sharedObject.includes("libc.so.6") || sharedObject.includes("ld-linux")
-    )
-  ) {
-    return "gnu"
-  }
-
-  return null
-}
-
-const SUPPORTED_NATIVE_PACKAGES = [
-  "@palamedes/core-node-darwin-arm64",
-  "@palamedes/core-node-linux-arm64-gnu",
-  "@palamedes/core-node-linux-x64-gnu",
-  "@palamedes/core-node-linux-x64-musl",
-  "@palamedes/core-node-win32-x64-msvc",
-] as const
-
-function getPlatformTriple(): string {
-  const libc = detectLinuxLibc()
-  return libc
-    ? `${process.platform}-${process.arch}-${libc}`
-    : `${process.platform}-${process.arch}`
-}
-
-function getNativePackageName(): string {
-  const linuxLibc = detectLinuxLibc()
-
-  if (process.platform === "darwin" && process.arch === "arm64") {
-    return "@palamedes/core-node-darwin-arm64"
-  }
-
-  if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "gnu") {
-    return "@palamedes/core-node-linux-x64-gnu"
-  }
-
-  if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "musl") {
-    return "@palamedes/core-node-linux-x64-musl"
-  }
-
-  if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "gnu") {
-    return "@palamedes/core-node-linux-arm64-gnu"
-  }
-
-  if (process.platform === "win32" && process.arch === "x64") {
-    return "@palamedes/core-node-win32-x64-msvc"
-  }
-
-  throw new Error(
-    `No Palamedes native bindings package is available for ${getPlatformTriple()}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}. If you need to build from source, run \`cargo build --workspace\` in the Palamedes repository.`
-  )
-}
-
-function loadNativeBindings(): NativeBindings {
-  const require = createRequire(import.meta.url)
-  const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-  const nativePackageName = getNativePackageName()
-
-  try {
-    return require(nativePackageName) as NativeBindings
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(
-      `Failed to load Palamedes native bindings from ${nativePackageName} for ${getPlatformTriple()} in package ${packageDir}: ${message}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}.`,
-      { cause: error }
-    )
-  }
-}
 
 const native = loadNativeBindings()
 

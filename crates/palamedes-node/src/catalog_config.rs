@@ -10,7 +10,13 @@ use napi_derive::napi;
 pub struct CatalogArtifactCatalogConfig {
     pub path: String,
     pub format: Option<CatalogConfigFormat>,
-    pub include: Vec<String>,
+    /// Host-side source selection only. Native catalog workflows do not apply
+    /// these patterns; adapters such as the Vite plugin filter source modules
+    /// before invoking the native operation.
+    pub include: Option<Vec<String>>,
+    /// Host-side source selection only. Native catalog workflows do not apply
+    /// these patterns; adapters such as the Vite plugin filter source modules
+    /// before invoking the native operation.
     pub exclude: Option<Vec<String>>,
 }
 

@@ -1331,19 +1331,19 @@ importers:
         version: 6.0.3
     optionalDependencies:
       '@palamedes/cli-darwin-arm64':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../cli-darwin-arm64
       '@palamedes/cli-linux-arm64-gnu':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../cli-linux-arm64-gnu
       '@palamedes/cli-linux-x64-gnu':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../cli-linux-x64-gnu
       '@palamedes/cli-linux-x64-musl':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../cli-linux-x64-musl
       '@palamedes/cli-win32-x64-msvc':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../cli-win32-x64-msvc
 
   packages/cli-darwin-arm64: {}
@@ -1409,19 +1409,19 @@ importers:
         version: 4.1.10(@edge-runtime/vm@3.2.0)(@types/node@24.13.3)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
     optionalDependencies:
       '@palamedes/core-node-darwin-arm64':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core-node-darwin-arm64
       '@palamedes/core-node-linux-arm64-gnu':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core-node-linux-arm64-gnu
       '@palamedes/core-node-linux-x64-gnu':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core-node-linux-x64-gnu
       '@palamedes/core-node-linux-x64-musl':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core-node-linux-x64-musl
       '@palamedes/core-node-win32-x64-msvc':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core-node-win32-x64-msvc
 
   packages/core-node-darwin-arm64: {}

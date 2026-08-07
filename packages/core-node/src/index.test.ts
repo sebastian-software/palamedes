@@ -28,6 +28,11 @@ import type {
   TranslationPatchRequest as GeneratedTranslationPatchRequest,
   TranslationPatchResult as GeneratedTranslationPatchResult,
 } from "./generated/palamedes-node-types"
+import {
+  assertNativeBindingVersion,
+  assertWellFormedNativeArguments,
+  loadNativeBindings,
+} from "./native-loader"
 
 type SourceMapLike = {
   mappings?: string
@@ -47,6 +52,66 @@ afterEach(async () => {
 })
 
 describe("@palamedes/core-node", () => {
+  it("rejects a mismatched platform binding before exposing the native surface", () => {
+    expect(() =>
+      assertNativeBindingVersion("1.14.0", "@palamedes/core-node-linux-x64-gnu", {
+        palamedesVersion: "1.15.0",
+        ferrocatVersion: "0.1.0",
+      })
+    ).toThrow(
+      "@palamedes/core-node@1.14.0 loaded @palamedes/core-node-linux-x64-gnu with native version 1.15.0"
+    )
+    expect(() =>
+      assertNativeBindingVersion("1.14.0", "@palamedes/core-node-linux-x64-gnu", {
+        palamedesVersion: "1.14.0",
+        ferrocatVersion: "0.1.0",
+      })
+    ).not.toThrow()
+
+    const fixtureBindings = {
+      getNativeInfo: () => ({ palamedesVersion: "1.15.0", ferrocatVersion: "0.1.0" }),
+    }
+    expect(() =>
+      loadNativeBindings({
+        packageDir: "/fixture/core-node",
+        nativePackageName: "@palamedes/core-node-win32-x64-msvc",
+        require(specifier) {
+          return specifier.endsWith("package.json") ? { version: "1.14.0" } : fixtureBindings
+        },
+      })
+    ).toThrow("@palamedes/core-node-win32-x64-msvc with native version 1.15.0")
+  })
+
+  it("rejects lone surrogates without changing well-formed nested request data", () => {
+    const validRequest = {
+      config: {
+        rootDir: "café",
+        locales: ["en", "de", "emoji-😀"],
+        sourceLocale: "en",
+        fallbackLocales: { de: ["en"] },
+        catalogs: [{ path: "locales/{locale}", include: ["src/e\u0301.ts"] }],
+      },
+      compiledIds: ["hello"],
+    }
+    const before = structuredClone(validRequest)
+
+    expect(() =>
+      assertWellFormedNativeArguments("compileCatalogArtifactSelected", [validRequest])
+    ).not.toThrow()
+    expect(validRequest).toStrictEqual(before)
+    expect(() => parsePo("\ud800")).toThrow(/parsePo\.argument\[0\]/u)
+    expect(() =>
+      assertWellFormedNativeArguments("compileCatalogModule", [
+        { config: { locales: ["en", "\udc00"] } },
+      ])
+    ).toThrow(/compileCatalogModule\.argument\[0\]\.config\.locales\[1\]/u)
+    expect(() =>
+      assertWellFormedNativeArguments("renderCatalogModule", [
+        new Map([["message", ["valid", "\ud800"]]]),
+      ])
+    ).toThrow(/renderCatalogModule\.argument\[0\]\.get\(message\)\[1\]/u)
+  })
+
   it("loads native bindings and exposes version information", () => {
     const info = getNativeInfo()
 
