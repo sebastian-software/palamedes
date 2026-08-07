@@ -169,7 +169,7 @@ export type WithPalamedesOptions = {
   /**
    * Split client messages with the Next.js module graph. Each transformed
    * browser module loads only its own compiled fragment for the document
-   * locale before it evaluates.
+   * locale before evaluating its body or resolving to importers.
    *
    * @default false
    */

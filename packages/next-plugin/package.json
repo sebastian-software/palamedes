@@ -87,6 +87,7 @@
     "./palamedes-po-loader": "./palamedes-po-loader.cjs"
   },
   "dependencies": {
+    "@jridgewell/sourcemap-codec": "1.5.5",
     "@palamedes/config": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
