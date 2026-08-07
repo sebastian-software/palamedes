@@ -51,7 +51,10 @@ files has per-file atomicity; it is not a filesystem transaction across files.
 If a later replacement fails, the call still returns a hard error. Rust callers
 can recover the completed per-file outcomes from
 `PalamedesError::translation_patch_result()`; remaining patches are reported as
-`notApplied`.
+`notApplied`. Node callers receive an `Error` with code
+`ERR_PALAMEDES_TRANSLATION_PATCH_WRITE`; its `report` property is the completed
+`TranslationPatchResult`, and its `cause` describes the failed catalog write.
+This remains an error rather than a successful partial result.
 
 Applying a patch does not clear `fuzzy` or other review flags automatically.
 That is workflow policy and remains the caller's responsibility.
@@ -61,6 +64,7 @@ That is workflow policy and remains the caller's responsibility.
 ```ts
 import {
   applyTranslationPatches,
+  isTranslationPatchWriteError,
   listTranslationCandidates,
   type CatalogArtifactConfig,
   type TranslationPatch,
@@ -110,7 +114,15 @@ const patches: TranslationPatch[] = candidates.map((candidate) => ({
         },
 }))
 
-const result = applyTranslationPatches({ config, patches })
+let result
+try {
+  result = applyTranslationPatches({ config, patches })
+} catch (error) {
+  if (isTranslationPatchWriteError(error)) {
+    console.error(error.code, error.message, error.cause, error.report)
+  }
+  throw error
+}
 
 if (result.diagnostics.length > 0) {
   // Re-enumerate stale candidates before retrying them.

@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
-use napi::bindgen_prelude::{Either, Result};
+use napi::bindgen_prelude::{Either, JsObjectValue, Result};
+use napi::{Env, Error, Status};
 use napi_derive::napi;
 
 use crate::catalog_config::{
@@ -239,6 +240,11 @@ pub struct TranslationPatchResult {
     pub outcomes: Vec<TranslationPatchOutcome>,
     pub diagnostics: Vec<TranslationWorkflowDiagnostic>,
 }
+
+const TRANSLATION_PATCH_WRITE_ERROR_CODE: &str = "ERR_PALAMEDES_TRANSLATION_PATCH_WRITE";
+const TRANSLATION_PATCH_WRITE_CAUSE_CODE: &str = "ERR_PALAMEDES_CATALOG_WRITE";
+const TRANSLATION_PATCH_WRITE_ERROR_MESSAGE: &str =
+    "Failed to replace a translation catalog; completed per-file outcomes are available in error.report.";
 
 #[napi(object)]
 pub struct CatalogCombineInput {
@@ -1712,14 +1718,69 @@ pub fn list_translation_candidates(
 ///
 /// # Errors
 ///
-/// Returns an error when a configured catalog cannot be read, rendered, or replaced.
+/// Returns an error when a configured catalog cannot be read, rendered, or replaced. A replacement
+/// failure throws an error with code `ERR_PALAMEDES_TRANSLATION_PATCH_WRITE`; its `report`
+/// property contains completed per-file outcomes, while `cause` contains the catalog write error.
 pub fn apply_translation_patches(
+    env: Env,
     request: TranslationPatchRequest,
 ) -> Result<TranslationPatchResult> {
     let request = request.try_into()?;
-    palamedes::apply_translation_patches(request)
-        .map_err(to_napi_error)
-        .and_then(TranslationPatchResult::try_from)
+    translation_patch_result_or_throw(env, palamedes::apply_translation_patches(request))
+}
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+#[napi(catch_unwind)]
+#[allow(clippy::needless_pass_by_value)]
+pub fn apply_translation_patches_with_injected_write_failure(
+    env: Env,
+    request: TranslationPatchRequest,
+    failing_path: String,
+) -> Result<TranslationPatchResult> {
+    let request = request.try_into()?;
+    translation_patch_result_or_throw(
+        env,
+        palamedes::apply_translation_patches_with_injected_write_failure(
+            request,
+            std::path::Path::new(&failing_path),
+        ),
+    )
+}
+
+fn translation_patch_result_or_throw(
+    env: Env,
+    result: palamedes::PalamedesResult<palamedes::TranslationPatchResult>,
+) -> Result<TranslationPatchResult> {
+    match result {
+        Ok(result) => TranslationPatchResult::try_from(result),
+        Err(palamedes::PalamedesError::TranslationPatchWrite { result, source }) => {
+            throw_translation_patch_write_error(env, result, source)
+        }
+        Err(error) => Err(to_napi_error(error)),
+    }
+}
+
+fn throw_translation_patch_write_error(
+    env: Env,
+    result: palamedes::TranslationPatchResult,
+    source: Box<palamedes::PalamedesError>,
+) -> Result<TranslationPatchResult> {
+    let report = TranslationPatchResult::try_from(result)?;
+    let mut cause = env.create_error(Error::new(Status::GenericFailure, source.to_string()))?;
+    cause.set_named_property("code", TRANSLATION_PATCH_WRITE_CAUSE_CODE)?;
+    let mut error = env.create_error(Error::new(
+        Status::GenericFailure,
+        TRANSLATION_PATCH_WRITE_ERROR_MESSAGE,
+    ))?;
+    error.set_named_property("code", TRANSLATION_PATCH_WRITE_ERROR_CODE)?;
+    error.set_named_property("cause", cause)?;
+    error.set_named_property("report", report)?;
+    env.throw(error)?;
+    Err(Error::new(
+        Status::PendingException,
+        "translation patch catalog replacement failed",
+    ))
 }
 
 #[napi(catch_unwind)]

@@ -1,6 +1,9 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { execFileSync } from "node:child_process"
+import { createRequire } from "node:module"
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { afterEach, describe, expect, it } from "vitest"
 
@@ -20,6 +23,11 @@ import {
   transformMacrosNative,
   updateCatalogFile,
 } from "./index"
+import type {
+  NativeBindings as GeneratedNativeBindings,
+  TranslationPatchRequest as GeneratedTranslationPatchRequest,
+  TranslationPatchResult as GeneratedTranslationPatchResult,
+} from "./generated/palamedes-node-types"
 
 type SourceMapLike = {
   mappings?: string
@@ -290,6 +298,87 @@ msgstr ""
     const output = await readFile(targetPath, "utf8")
     expect(output).toContain('msgstr "Hallo"')
     expect(output).toContain("{count, plural, one {# Datei} other {# Dateien}}")
+  })
+
+  it("exposes a partial report on a later native catalog write failure", async () => {
+    const rootDir = await createTempDir()
+    const firstPath = path.join(rootDir, "first", "de.po")
+    const secondPath = path.join(rootDir, "second", "de.po")
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [
+        { path: "first/{locale}", include: ["src"] },
+        { path: "second/{locale}", include: ["src"] },
+      ],
+    }
+    const catalog = `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "Hello"
+msgstr ""
+`
+    await mkdir(path.dirname(firstPath), { recursive: true })
+    await mkdir(path.dirname(secondPath), { recursive: true })
+    await Promise.all([writeFile(firstPath, catalog), writeFile(secondPath, catalog)])
+
+    const addon = await loadTestSupportAddon(rootDir)
+    const listed = addon.listTranslationCandidates({ config, locales: ["de"], maxOrigins: 8 })
+    const first = listed.candidates.find((candidate) => candidate.id.catalog === "first/{locale}")
+    const second = listed.candidates.find((candidate) => candidate.id.catalog === "second/{locale}")
+    if (!first || !second) {
+      throw new Error("Expected candidates from both catalogs")
+    }
+    const request: GeneratedTranslationPatchRequest = {
+      config,
+      patches: [
+        {
+          id: first.id,
+          fingerprint: first.fingerprint,
+          translation: { kind: "Singular", value: "Hallo" },
+        },
+        {
+          id: second.id,
+          fingerprint: second.fingerprint,
+          translation: { kind: "Singular", value: "Servus" },
+        },
+      ],
+    }
+
+    let thrown: unknown
+    try {
+      addon.applyTranslationPatchesWithInjectedWriteFailure(request, secondPath)
+      throw new Error("Expected the injected replacement failure")
+    } catch (error) {
+      thrown = error
+    }
+    const error = thrown as Error & {
+      code?: unknown
+      cause?: Error & { code?: unknown }
+      report?: GeneratedTranslationPatchResult
+    }
+
+    expect(error).toBeInstanceOf(Error)
+    expect(error.message).toBe(
+      "Failed to replace a translation catalog; completed per-file outcomes are available in error.report."
+    )
+    expect(error.code).toBe("ERR_PALAMEDES_TRANSLATION_PATCH_WRITE")
+    expect(error.cause).toBeInstanceOf(Error)
+    expect(error.cause?.code).toBe("ERR_PALAMEDES_CATALOG_WRITE")
+    expect(error.cause?.message).toContain("injected catalog replacement failure")
+    expect(error.report).toMatchObject({
+      updated: true,
+      stats: { requested: 2, applied: 1, catalogsUpdated: 1 },
+      outcomes: [
+        { id: first.id, status: "Applied" },
+        { id: second.id, status: "NotApplied" },
+      ],
+      diagnostics: [],
+    })
+    await expect(readFile(firstPath, "utf8")).resolves.toContain('msgstr "Hallo"')
+    await expect(readFile(secondPath, "utf8")).resolves.toBe(catalog)
   })
 
   it("patches candidates listed with truncated origins using a stable fingerprint", async () => {
@@ -639,4 +728,30 @@ async function createTempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "palamedes-core-node-"))
   tempDirs.push(dir)
   return dir
+}
+
+type TestSupportBindings = Pick<GeneratedNativeBindings, "listTranslationCandidates"> & {
+  applyTranslationPatchesWithInjectedWriteFailure(
+    request: GeneratedTranslationPatchRequest,
+    failingPath: string
+  ): GeneratedTranslationPatchResult
+}
+
+async function loadTestSupportAddon(tempDir: string): Promise<TestSupportBindings> {
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
+  execFileSync("cargo", ["build", "--package", "palamedes-node", "--features", "test-support"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  })
+  const extension =
+    process.platform === "win32" ? "dll" : process.platform === "darwin" ? "dylib" : "so"
+  const libraryName = `${process.platform === "win32" ? "" : "lib"}palamedes_node.${extension}`
+  const addonPath = path.join(tempDir, "palamedes-node.node")
+  await copyFile(path.join(repoRoot, "target", "debug", libraryName), addonPath)
+  if (process.platform === "darwin") {
+    execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", addonPath], {
+      stdio: "inherit",
+    })
+  }
+  return createRequire(import.meta.url)(addonPath) as TestSupportBindings
 }

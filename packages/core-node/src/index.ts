@@ -174,6 +174,14 @@ export type TranslationPatchResult = Omit<
   outcomes: TranslationPatchOutcome[]
   diagnostics: TranslationWorkflowDiagnostic[]
 }
+export const TRANSLATION_PATCH_WRITE_ERROR_CODE = "ERR_PALAMEDES_TRANSLATION_PATCH_WRITE"
+export const TRANSLATION_PATCH_WRITE_ERROR_MESSAGE =
+  "Failed to replace a translation catalog; completed per-file outcomes are available in error.report."
+export type TranslationPatchWriteError = Error & {
+  code: typeof TRANSLATION_PATCH_WRITE_ERROR_CODE
+  cause: Error
+  report: TranslationPatchResult
+}
 export type CatalogAuditDiagnostic = Omit<GeneratedCatalogAuditDiagnostic, "severity"> & {
   severity: CatalogDiagnosticSeverity
 }
@@ -520,7 +528,46 @@ export function applyTranslationPatches(request: TranslationPatchRequest): Trans
     patches: request.patches.map(toNativeTranslationPatch),
     po: toNativePoOptions(request.po),
   }
-  const result: GeneratedTranslationPatchResult = native.applyTranslationPatches(nativeRequest)
+  try {
+    const result: GeneratedTranslationPatchResult = native.applyTranslationPatches(nativeRequest)
+    return fromNativeTranslationPatchResult(result)
+  } catch (error) {
+    if (isNativeTranslationPatchWriteError(error)) {
+      const writeError = error as unknown as TranslationPatchWriteError
+      writeError.report = fromNativeTranslationPatchResult(error.report)
+    }
+    throw error
+  }
+}
+
+export function isTranslationPatchWriteError(error: unknown): error is TranslationPatchWriteError {
+  const candidate = error as { code?: unknown }
+  return (
+    error instanceof Error &&
+    candidate.code === TRANSLATION_PATCH_WRITE_ERROR_CODE &&
+    "report" in error
+  )
+}
+
+type NativeTranslationPatchWriteError = Error & {
+  code: typeof TRANSLATION_PATCH_WRITE_ERROR_CODE
+  report: GeneratedTranslationPatchResult
+}
+
+function isNativeTranslationPatchWriteError(
+  error: unknown
+): error is NativeTranslationPatchWriteError {
+  const candidate = error as { code?: unknown }
+  return (
+    error instanceof Error &&
+    candidate.code === TRANSLATION_PATCH_WRITE_ERROR_CODE &&
+    "report" in error
+  )
+}
+
+function fromNativeTranslationPatchResult(
+  result: GeneratedTranslationPatchResult
+): TranslationPatchResult {
   return {
     ...result,
     outcomes: result.outcomes.map((outcome) => ({
