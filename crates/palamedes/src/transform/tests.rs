@@ -163,6 +163,14 @@ export const save = withAuth(saveHandler);
         "instrumented action should remain valid TypeScript: {:?}",
         parsed.diagnostics
     );
+
+    let repeated = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("repeated local async handler transform should succeed");
+    assert_eq!(repeated.code, result.code);
+    assert_eq!(
+        repeated.map.as_ref().map(|map| &map.mappings),
+        result.map.as_ref().map(|map| &map.mappings)
+    );
 }
 
 #[test]
@@ -228,6 +236,38 @@ export const shadowed = withAuth((handler) => withAudit(handler));
 "#;
     let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
         .expect("unsupported callback references should be left alone");
+
+    assert!(!result.has_changed);
+    assert_eq!(result.code, source);
+}
+
+#[test]
+fn ignores_class_local_handler_bindings_inside_exported_wrappers() {
+    let source = r#""use server";
+async function handler() { await persist(); }
+export const save = wrap(class Config {
+  static {
+    const handler = () => {};
+    register(handler);
+  }
+});
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("class-local callback reference should be left alone");
+
+    assert!(!result.has_changed);
+    assert_eq!(result.code, source);
+}
+
+#[test]
+fn ignores_reassigned_function_declaration_handler_references() {
+    let source = r#""use server";
+async function handler() { await persist(); }
+handler = async () => replace();
+export const save = wrap(handler);
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("reassigned handler reference should be left alone");
 
     assert!(!result.has_changed);
     assert_eq!(result.code, source);
