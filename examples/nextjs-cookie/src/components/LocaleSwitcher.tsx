@@ -22,6 +22,9 @@ export function LocaleSwitcher({ locale }: LocaleSwitcherProps) {
   function handleLocaleChange(nextLocale: Locale) {
     startTransition(async () => {
       await setLocaleAction(nextLocale)
+      // Locale is document bootstrap state. Start a new document only after the
+      // server action has persisted the cookie so server and client agree.
+      window.location.assign("/")
     })
   }
 

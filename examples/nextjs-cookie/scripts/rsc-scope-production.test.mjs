@@ -227,6 +227,111 @@ async function assertClientGraphSplitting() {
   }
 }
 
+async function assertLocaleSwitchThenClientNavigation() {
+  const executablePath = [
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+    "/opt/pw-browsers/chromium",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  ].find((candidate) => candidate && existsSync(candidate))
+  const browser = await chromium.launch(executablePath ? { executablePath } : undefined)
+
+  try {
+    const context = await browser.newContext({
+      extraHTTPHeaders: { "accept-language": "en" },
+      locale: "en",
+    })
+    const page = await context.newPage()
+    const errors = []
+    const chunkResponses = []
+
+    page.on("console", (message) => {
+      if (message.type() !== "error") return
+
+      const text = message.text()
+      if (text.startsWith("Failed to load resource: the server responded with a status of 404")) {
+        return
+      }
+      errors.push(`console: ${text}`)
+    })
+    page.on("pageerror", (error) => errors.push(`page: ${error.message}`))
+    page.on("requestfailed", (request) => {
+      const failure = request.failure()?.errorText ?? "unknown"
+      if (failure !== "net::ERR_ABORTED" || request.url().includes("/_next/static/")) {
+        errors.push(`request: ${request.url()} (${failure})`)
+      }
+    })
+    page.on("response", (response) => {
+      const url = response.url()
+      if (response.status() >= 400 && url.includes("/_next/static/")) {
+        errors.push(`response: ${url} (${response.status()})`)
+      }
+      if (!url.includes("/_next/static/") || !url.endsWith(".js")) return
+      chunkResponses.push(
+        response
+          .body()
+          .then((body) => ({ source: body.toString("utf8"), url }))
+          .catch(() => ({ source: "", url }))
+      )
+    })
+
+    await page.goto(baseUrl)
+    await page.getByTestId("client-ready").waitFor({ state: "attached" })
+
+    const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 })
+    await page.getByTestId("locale-switch-de").click({ noWaitAfter: true })
+    await navigation
+    await page.getByTestId("client-ready").waitFor({ state: "attached" })
+    await page.waitForLoadState("networkidle")
+
+    assert.equal(await page.locator("html").getAttribute("lang"), "de")
+    assert.equal((await page.getByTestId("server-locale-value").textContent())?.trim(), "Deutsch")
+    assert.equal((await page.locator(".ticket .cta").textContent())?.trim(), "In den Warenkorb")
+    assert.equal((await page.locator("body").innerText()).includes("Add to cart"), false)
+
+    const responseCountBeforeClientNavigation = chunkResponses.length
+    await page.getByTestId("open-lazy-client-probe").evaluate((button) => button.click())
+    await page.getByTestId("lazy-client-message").waitFor()
+    await page.waitForLoadState("networkidle")
+
+    assert.equal(
+      await page.getByTestId("lazy-client-message").textContent(),
+      "Erst nach Client-Navigation geladen",
+      "locale switch followed by client navigation rendered the wrong message fragment"
+    )
+    const navigationChunks = await Promise.all(
+      chunkResponses.slice(responseCountBeforeClientNavigation)
+    )
+    const navigationSource = navigationChunks.map(({ source }) => source).join("\n")
+    assert(
+      navigationSource.includes("Erst nach Client-Navigation geladen"),
+      "locale switch followed by client navigation did not request the German message fragment"
+    )
+    for (const inactiveFragment of [
+      "Loaded only after client navigation",
+      "Cargado solo después de la navegación del cliente",
+    ]) {
+      assert.equal(
+        navigationSource.includes(inactiveFragment),
+        false,
+        `locale switch followed by client navigation requested inactive fragment ${JSON.stringify(inactiveFragment)}`
+      )
+    }
+    assert.deepEqual(
+      errors,
+      [],
+      "locale switch followed by client navigation caused browser errors"
+    )
+    await context.close()
+  } finally {
+    await browser.close()
+  }
+}
+
 const server = spawn(process.execPath, [nextCli, "start", "--port", String(port)], {
   cwd: new URL("..", import.meta.url),
   env: { ...process.env, NODE_ENV: "production" },
@@ -255,8 +360,9 @@ try {
     )
   )
   await assertClientGraphSplitting()
+  await assertLocaleSwitchThenClientNavigation()
   console.log(
-    "Next.js production scopes stayed request-local and client requests followed locale × route graphs"
+    "Next.js production scopes stayed request-local and client requests followed locale × route graphs after a document locale switch"
   )
 } catch (error) {
   console.error(serverOutput)
