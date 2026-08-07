@@ -1,134 +1,91 @@
 /*
- * The llms files are curated context, not generated API reference. This is the
- * deliberately small public surface that must be discoverable in both files.
- * Each authority entry is read from the implementation or published manifest;
- * each document entry describes the minimum useful context for that audience.
+ * `llms.txt` and `llms-full.txt` are edited context, not generated reference.
+ * This contract says which discovered public surfaces each audience covers:
+ * the concise file covers the workflow features called out below, while the
+ * full file covers every built-in command and non-platform published package.
+ * Keep an intentional inventory here when a public API is added or removed.
  */
 
-export const llmsFiles = ["llms.txt", "llms-full.txt"]
-
-export const llmsSurfaceContract = [
-  {
-    id: "source-lint",
-    authority: {
-      package: {
-        manifest: "packages/cli/package.json",
-        name: "@palamedes/cli",
-      },
-      cli: {
-        command: "pmds lint",
-        documentation: "docs/cli.md",
-        heading: "## `pmds lint`",
-        flags: ["--json", "--fail-on", "--no-cache"],
-        implementation: "crates/palamedes-cli/src/cli.rs",
-        implementationMarkers: ["Lint(LintOptions)"],
-      },
-    },
-    documents: {
-      "llms.txt": ["@palamedes/cli", "pmds lint", "non-mutating", "MDX"],
-      "llms-full.txt": ["@palamedes/cli", "pmds lint", "non-mutating", "MDX", "--fail-on warning"],
-    },
-  },
-  {
-    id: "eslint-oxlint-adapter",
-    authority: {
-      package: {
-        manifest: "packages/eslint-plugin/package.json",
-        name: "@palamedes/eslint-plugin",
-      },
-      documentation: {
-        file: "packages/eslint-plugin/README.md",
-        markers: ["Preview", "Oxlint", "MDX is not supported"],
-      },
-    },
-    documents: {
-      "llms.txt": ["@palamedes/eslint-plugin", "Preview", "ESLint/Oxlint", "pmds lint"],
-      "llms-full.txt": [
-        "@palamedes/eslint-plugin",
-        "Preview",
-        "ESLint/Oxlint",
-        "Oxlint's JavaScript plugin API is still alpha",
-        "MDX",
-        "pmds lint",
-      ],
-    },
-  },
-  {
-    id: "translation-candidate-patches",
-    authority: {
-      package: {
-        manifest: "packages/core-node/package.json",
-        name: "@palamedes/core-node",
-      },
-      api: {
-        file: "packages/core-node/src/index.ts",
-        exports: ["listTranslationCandidates", "applyTranslationPatches"],
-      },
-    },
-    documents: {
-      "llms.txt": [
-        "@palamedes/core-node",
-        "listTranslationCandidates",
-        "applyTranslationPatches",
-        "fingerprint",
-      ],
-      "llms-full.txt": [
-        "@palamedes/core-node",
-        "listTranslationCandidates",
-        "applyTranslationPatches",
-        "fingerprint",
-        "applied",
-        "unchanged",
-        "rejected",
-      ],
-    },
-  },
-  {
-    id: "extraction-drift-check",
-    authority: {
-      cli: {
-        command: "pmds extract",
-        documentation: "docs/cli.md",
-        heading: "## `pmds extract`",
-        flags: ["--check", "--json", "--no-cache"],
-        implementation: "crates/palamedes-cli/src/commands/extract/mod.rs",
-        implementationMarkers: ["check: bool", "json: bool", "no_cache: bool"],
-      },
-    },
-    documents: {
-      "llms.txt": ["pmds extract --check --json", "catalog", "--no-cache"],
-      "llms-full.txt": [
-        "pmds extract --check --json",
-        "without writing catalog files",
-        "--no-cache",
-        "cache",
-      ],
-    },
-  },
-  {
-    id: "deletion-aware-merge-driver",
-    authority: {
-      cli: {
-        command: "pmds catalog merge-driver",
-        documentation: "docs/cli.md",
-        heading: "## `pmds catalog merge`",
-        flags: ["--base", "--path", "--operation"],
-        implementation: "crates/palamedes-cli/src/commands/catalog/merge.rs",
-        implementationMarkers: ["pub struct MergeDriverOptions", "GitMergeOperation"],
-      },
-    },
-    documents: {
-      "llms.txt": [
-        "pmds catalog merge-driver %O %A %B %A --path %P",
-        "deletion-aware",
-        "three-way merge",
-      ],
-      "llms-full.txt": [
-        "pmds catalog merge-driver %O %A %B %A --path %P",
-        "deletion-aware three-way merge",
-        "rebase",
-        "use-first",
-      ],
-    },
-  },
+export const compactCommandInventory = [
+  "pmds extract",
+  "pmds lint",
+  "pmds catalog merge",
+  "pmds catalog merge-driver",
 ]
+
+export const compactPackageInventory = [
+  "@palamedes/cli",
+  "@palamedes/core-node",
+  "@palamedes/eslint-plugin",
+]
+
+// Every public package is intentionally enumerated. Platform binaries remain
+// discoverable through their parent package in the full context, while an
+// unexpected package name still fails the inventory check.
+export const publishedPackageInventory = [
+  "@palamedes/cli",
+  "@palamedes/config",
+  "@palamedes/core",
+  "@palamedes/core-node",
+  "@palamedes/eslint-plugin",
+  "@palamedes/extractor",
+  "@palamedes/next-plugin",
+  "@palamedes/react",
+  "@palamedes/remix",
+  "@palamedes/runtime",
+  "@palamedes/solid",
+  "@palamedes/transform",
+  "@palamedes/vite-plugin",
+  "create-palamedes",
+  "palamedes",
+]
+
+export const platformPackageParents = ["@palamedes/cli", "@palamedes/core-node"]
+
+export const platformPackageInventory = [
+  "@palamedes/cli-darwin-arm64",
+  "@palamedes/cli-linux-arm64-gnu",
+  "@palamedes/cli-linux-x64-gnu",
+  "@palamedes/cli-linux-x64-musl",
+  "@palamedes/cli-win32-x64-msvc",
+  "@palamedes/core-node-darwin-arm64",
+  "@palamedes/core-node-linux-arm64-gnu",
+  "@palamedes/core-node-linux-x64-gnu",
+  "@palamedes/core-node-linux-x64-musl",
+  "@palamedes/core-node-win32-x64-msvc",
+]
+
+// The candidate/patch API is a deliberately bounded public workflow. The
+// checker also discovers all matching exports, so additions need both an
+// inventory decision and full-context coverage.
+export const translationApiInventory = [
+  "applyTranslationPatches",
+  "listTranslationCandidates",
+  "TranslationCandidate",
+  "TranslationCandidateId",
+  "TranslationCandidateRequest",
+  "TranslationCandidateResult",
+  "TranslationPatch",
+  "TranslationPatchOutcome",
+  "TranslationPatchOutcomeStatus",
+  "TranslationPatchRequest",
+  "TranslationPatchResult",
+  "TranslationPatchWriteError",
+]
+
+export const translationPatchOutcomeInventory = ["applied", "unchanged", "rejected", "notApplied"]
+
+export const compactTranslationApiInventory = [
+  "listTranslationCandidates",
+  "applyTranslationPatches",
+  "TranslationPatch",
+  "fingerprint",
+]
+
+export const featureNarrative = {
+  lint: ["non-mutating", "MDX"],
+  eslintAdapter: ["Preview", "ESLint/Oxlint", "pmds lint"],
+  extractCheck: ["pmds extract --check --json", "--no-cache"],
+  mergeDriver: ["deletion-aware", "three-way merge"],
+  binaryPlugins: ["binary-only", "binary plugin protocol"],
+}

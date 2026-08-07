@@ -13,7 +13,8 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "check:llms": "node ./scripts/check-llms-surface.mjs",
+    "test:llms": "node --test ./scripts/check-llms-surface.test.mjs",
+    "check:llms": "node ./scripts/check-llms-surface.mjs && pnpm test:llms",
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "build:site": "pnpm --filter @palamedes/site build",
@@ -34,7 +35,7 @@
     "benchmark:runtime-browser": "pnpm build && pnpm --filter @palamedes/example-vite-mdx build && node ./scripts/check-runtime-browser-bundle.mjs",
     "proof:icu": "pnpm build && node ./scripts/proof-icu-semantics.mjs",
     "proof:icu:check": "node ./scripts/proof-icu-semantics.mjs",
-    "test": "pnpm -r --filter \"./packages/**\" --if-present test",
+    "test": "pnpm test:llms && pnpm -r --filter \"./packages/**\" --if-present test",
     "check:binary-size": "node ./scripts/check-binary-size.mjs",
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check:published-types": "node ./scripts/check-published-types.mjs",
