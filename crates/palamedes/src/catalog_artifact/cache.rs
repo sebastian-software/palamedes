@@ -9,6 +9,9 @@ use super::resolve::{prepare_compilation_snapshot, CompilationSnapshot};
 use super::types::{CatalogArtifactConfig, CatalogArtifactSelectedRequest};
 use super::{compile_selected_prepared, PreparedCompilation};
 
+#[cfg(test)]
+type BeforeBuildHook = Arc<dyn Fn(&str) + Send + Sync>;
+
 /// A bounded cache for selected catalog compilation inputs.
 ///
 /// Callers own the cache. In particular, the Node binding keeps one bounded
@@ -27,7 +30,7 @@ pub struct CatalogCompilationCache {
     #[cfg(test)]
     statistics: Mutex<CacheStatistics>,
     #[cfg(test)]
-    before_build: Mutex<Option<Arc<dyn Fn(&str) + Send + Sync>>>,
+    before_build: Mutex<Option<BeforeBuildHook>>,
 }
 
 struct CacheState {
@@ -229,7 +232,7 @@ impl CatalogCompilationCache {
     }
 
     #[cfg(test)]
-    pub(super) fn set_before_build_hook(&self, hook: Arc<dyn Fn(&str) + Send + Sync>) {
+    pub(super) fn set_before_build_hook(&self, hook: BeforeBuildHook) {
         *lock_unpoison(&self.before_build) = Some(hook);
     }
 
