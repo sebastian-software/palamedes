@@ -233,7 +233,7 @@ function assertPackedCliRuntimeFiles(archivePath) {
 
   const packedFiles = execFileSync("tar", ["-tzf", archivePath], { encoding: "utf8" })
     .trim()
-    .split("\n")
+    .split(/\r?\n/u)
     .filter(Boolean)
     .sort()
   const expectedRuntimeFiles = [
