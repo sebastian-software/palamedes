@@ -48,6 +48,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check remix@next canary workflow contract
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm check:remix-next-canary
+
       - name: Check release package set
         if: ${{ matrix.full }}
         run: pnpm check:release-set
@@ -154,43 +158,3 @@ jobs:
       - name: Check shipped binary size
         if: matrix.toolchain == '1.95'
         run: node ./scripts/check-binary-size.mjs
-
-  remix-next-canary:
-    name: remix next canary
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Override Remix examples to remix@next
-        run: pnpm --filter "@palamedes/example-remix-*" add remix@next --save-exact
-
-      - name: Smoke-test Remix examples against remix@next
-        id: remix-next-smoke
-        continue-on-error: true
-        run: pnpm verify:examples:smoke -- --framework remix
-
-      - name: Summarize remix@next canary failure
-        if: steps.remix-next-smoke.outcome == 'failure'
-        run: |
-          {
-            echo "### remix@next canary"
-            echo ""
-            echo "The pinned Remix beta remains the release gate. The remix@next canary failed and should be treated as an early warning for upstream beta churn."
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "::warning::remix@next canary failed; see the step summary for details."

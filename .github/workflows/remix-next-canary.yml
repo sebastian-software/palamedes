@@ -1,0 +1,111 @@
+name: Remix next canary
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # Main catches Palamedes regressions; this catches upstream Remix churn.
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remix-next-canary-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  remix-next-canary:
+    name: remix next canary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          # This caches pnpm's download store only. remix@next is still resolved
+          # afresh below, so the cache cannot pin or mask the canary version.
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Create isolated canary workspace
+        id: canary-worktree
+        run: |
+          canary_dir="$RUNNER_TEMP/remix-next-canary"
+          git worktree add --detach "$canary_dir" "$GITHUB_SHA"
+          echo "path=$canary_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Install locked dependencies
+        id: install-dependencies
+        working-directory: ${{ steps.canary-worktree.outputs.path }}
+        run: pnpm install --frozen-lockfile
+
+      # Recursive pnpm runs dependency packages before their dependents: the
+      # native platform package precedes its JS wrapper, then the complete
+      # @palamedes/remix workspace closure. The selector keeps unrelated
+      # packages (notably the CLI) out of this compatibility canary.
+      - name: Build workspace packages required by Remix
+        id: build-workspace
+        working-directory: ${{ steps.canary-worktree.outputs.path }}
+        run: pnpm --filter "@palamedes/remix..." -r build
+
+      - name: Override Remix only inside canary workspace
+        id: install-remix-next
+        working-directory: ${{ steps.canary-worktree.outputs.path }}
+        run: pnpm --filter "@palamedes/example-remix-*" add remix@next --save-exact
+
+      - name: Record resolved remix@next version
+        id: remix-next-version
+        working-directory: ${{ steps.canary-worktree.outputs.path }}/examples/remix-cookie
+        run: echo "version=$(node -p \"require('remix/package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test every Remix strategy against remix@next
+        id: remix-next-smoke
+        working-directory: ${{ steps.canary-worktree.outputs.path }}
+        run: pnpm verify:examples:smoke -- --framework remix
+
+      - name: Summarize remix@next canary
+        if: ${{ always() }}
+        env:
+          BUILD_OUTCOME: ${{ steps.build-workspace.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install-remix-next.outcome }}
+          VERSION_OUTCOME: ${{ steps.remix-next-version.outcome }}
+          REMIX_VERSION: ${{ steps.remix-next-version.outputs.version }}
+          SMOKE_OUTCOME: ${{ steps.remix-next-smoke.outcome }}
+        run: |
+          {
+            echo "## remix@next canary"
+            echo ""
+            echo "- Trigger: \`${{ github.event_name }}\`"
+            echo "- Revision: \`${{ github.sha }}\`"
+            if [[ "$BUILD_OUTCOME" != "success" || "$INSTALL_OUTCOME" != "success" || "$VERSION_OUTCOME" != "success" ]]; then
+              echo ""
+              echo "### Infrastructure/setup failure"
+              echo "The workspace dependency build or remix@next installation failed before compatibility assertions could run. This is not an upstream Remix compatibility result."
+            elif [[ "$SMOKE_OUTCOME" == "success" ]]; then
+              echo ""
+              echo "### Compatibility passed"
+              echo "All four Remix strategies built, started, and passed their runtime assertions against \`remix@$REMIX_VERSION\`."
+            else
+              echo ""
+              echo "### Upstream compatibility failure"
+              echo "Workspace setup completed with \`remix@$REMIX_VERSION\`; the Remix build/type/runtime smoke assertions then failed. Investigate this as a potential upstream-canary incompatibility."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove isolated canary workspace
+        if: ${{ always() }}
+        run: git worktree remove --force "$RUNNER_TEMP/remix-next-canary" || true
