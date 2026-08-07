@@ -13,6 +13,7 @@
     "node": ">=22.22.0"
   },
   "scripts": {
+    "check:llms": "node ./scripts/check-llms-surface.mjs",
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "build:site": "pnpm --filter @palamedes/site build",
@@ -50,7 +51,7 @@
     "build:native": "cargo build --workspace",
     "check:rust": "cargo check --workspace",
     "test:rust": "cargo test --workspace",
-    "agent:check": "pnpm build && concurrently --kill-others-on-fail --group --names release,published-types,format,lint,test,types,rustfmt,rust \"pnpm check:release-set\" \"pnpm check:published-types\" \"pnpm format:check\" \"pnpm lint\" \"pnpm test\" \"pnpm check-types\" \"cargo fmt --all --check\" \"cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked\""
+    "agent:check": "pnpm build && concurrently --kill-others-on-fail --group --names release,published-types,llms,format,lint,test,types,rustfmt,rust \"pnpm check:release-set\" \"pnpm check:published-types\" \"pnpm check:llms\" \"pnpm format:check\" \"pnpm lint\" \"pnpm test\" \"pnpm check-types\" \"cargo fmt --all --check\" \"cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked\""
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

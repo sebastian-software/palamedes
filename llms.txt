@@ -106,8 +106,19 @@ pnpm exec pmds report
 ## Catalog workflow commands
 
 - `pmds report --fail-if-below 90`: per-locale completeness gate for CI
-- `pmds catalog merge --format=po --conflict-strategy=use-first --output out.po a.po b.po`: semantic merge of exactly two catalogs (also usable as a Git merge driver)
+- `pmds lint --json --fail-on warning`: non-mutating source-authoring diagnostics for configured JS, TS, JSX, TSX, and MDX files. Use `pmds lint` rather than a browser adapter for stable CI and MDX.
+- `pmds extract --check --json`: CI drift check; it compares projected catalog output without changing catalog files or creating catalog directories. It can still update the extraction cache unless `--no-cache` is passed.
+- `pmds catalog merge --format=po --conflict-strategy=use-first --output out.po a.po b.po`: semantic merge of exactly two catalogs; add `--base base.po` for a deletion-aware three-way merge.
+- `pmds catalog merge-driver %O %A %B %A --path %P --format po --conflict-strategy use-first`: deletion-aware three-way merge driver for Git. It maps merge and rebase roles so `use-first` stays the branch being merged or rebased.
 - `pmds catalog convert --to fcl input.po`: convert PO catalogs to the opt-in FCL format
+
+## Lint adapters and translation automation APIs
+
+`@palamedes/eslint-plugin` is a Preview ESLint/Oxlint facade over native source
+diagnostics; `pmds lint` remains the stable CI and MDX interface. For custom
+translation tooling, `@palamedes/core-node` exposes
+`listTranslationCandidates(...)` and `applyTranslationPatches(...)`; create a
+patch from the candidate `fingerprint` so stale catalog state is rejected.
 
 ## CLI plugins
 
