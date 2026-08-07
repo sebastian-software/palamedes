@@ -108,6 +108,12 @@ jobs:
         if: ${{ !matrix.full }}
         run: pnpm --filter @palamedes/core-node exec node -e "const core = require('./dist/index.cjs'); if (typeof core.transformMacrosNative !== 'function') process.exit(1)"
 
+      # These suites exercise portable path handling. Browser/end-to-end and
+      # Linux-only native packaging coverage remain in their dedicated gates.
+      - name: Test path-sensitive packages
+        if: ${{ !matrix.full }}
+        run: pnpm test:platform
+
       - name: Run tests
         if: ${{ matrix.full }}
         run: pnpm test
