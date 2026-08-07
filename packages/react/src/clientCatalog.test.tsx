@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Suspense } from "react"
+import { Component, Suspense, type ReactNode } from "react"
 import { act, render, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -42,6 +42,22 @@ function deferred<T>(): {
     reject = fail
   })
   return { promise, resolve, reject }
+}
+
+class CatalogErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  public state: { error: Error | null } = { error: null }
+
+  public static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  public render() {
+    return this.state.error ? (
+      <span role="alert">{this.state.error.message}</span>
+    ) : (
+      this.props.children
+    )
+  }
 }
 
 describe("createClientCatalogBoundary", () => {
@@ -121,9 +137,10 @@ describe("createClientCatalogBoundary", () => {
 
   it("retries a rejected preload and keeps the successful catalog cached", async () => {
     document.documentElement.lang = "de"
+    const loadError = new Error("catalog unavailable")
     const loadCatalog = vi
       .fn<() => Promise<CatalogModule>>()
-      .mockRejectedValueOnce(new Error("catalog unavailable"))
+      .mockRejectedValueOnce(loadError)
       .mockResolvedValueOnce(catalog("Hallo"))
     const Boundary = createClientCatalogBoundary<Locale>({
       loadCatalog,
@@ -135,37 +152,43 @@ describe("createClientCatalogBoundary", () => {
       return <span>{String(getI18n()._("greeting"))}</span>
     }
 
-    function boundary() {
+    function boundary(retryKey: string) {
       return (
         <Suspense fallback={<span>Loading</span>}>
-          <Boundary locale="de">
-            <Greeting />
-          </Boundary>
+          <CatalogErrorBoundary key={retryKey}>
+            <Boundary locale="de">
+              <Greeting />
+            </Boundary>
+          </CatalogErrorBoundary>
         </Suspense>
       )
     }
 
     let view!: ReturnType<typeof render>
     await act(async () => {
-      view = render(boundary())
+      view = render(boundary("first"))
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("catalog unavailable"))
+    expect(loadCatalog).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      view.rerender(boundary("retry"))
       await Promise.resolve()
     })
     await waitFor(() => expect(view.container.textContent).toBe("Hallo"))
     expect(loadCatalog).toHaveBeenCalledTimes(2)
-
-    await act(async () => {
-      view.rerender(boundary())
-    })
-    expect(view.container.textContent).toBe("Hallo")
-    expect(loadCatalog).toHaveBeenCalledTimes(2)
   })
 
-  it("observes a rejected preload before the boundary renders", async () => {
+  it("surfaces repeated rejected preloads before retrying successfully", async () => {
     document.documentElement.lang = "de"
+    const firstError = new Error("first failure")
+    const secondError = new Error("second failure")
     const preload = deferred<CatalogModule>()
     const loadCatalog = vi
       .fn<() => Promise<CatalogModule>>()
       .mockReturnValueOnce(preload.promise)
+      .mockRejectedValueOnce(secondError)
       .mockResolvedValueOnce(catalog("Hallo"))
     const Boundary = createClientCatalogBoundary<Locale>({
       loadCatalog,
@@ -174,21 +197,41 @@ describe("createClientCatalogBoundary", () => {
     expect(loadCatalog).toHaveBeenCalledOnce()
 
     await act(async () => {
-      preload.reject(new Error("catalog unavailable"))
+      preload.reject(firstError)
       await Promise.resolve()
       await Promise.resolve()
     })
 
-    let view!: ReturnType<typeof render>
-    await act(async () => {
-      view = render(
+    function boundary(retryKey: string) {
+      return (
         <Suspense fallback={<span>Loading</span>}>
-          <Boundary locale="de">Ready</Boundary>
+          <CatalogErrorBoundary key={retryKey}>
+            <Boundary locale="de">Ready</Boundary>
+          </CatalogErrorBoundary>
         </Suspense>
       )
+    }
+
+    let view!: ReturnType<typeof render>
+    await act(async () => {
+      view = render(boundary("first"))
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("first failure"))
+    expect(loadCatalog).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      view.rerender(boundary("second"))
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("second failure"))
+    expect(loadCatalog).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      view.rerender(boundary("success"))
       await Promise.resolve()
     })
     await waitFor(() => expect(view.container.textContent).toBe("Ready"))
-    expect(loadCatalog).toHaveBeenCalledTimes(2)
+    expect(loadCatalog).toHaveBeenCalledTimes(3)
   })
 })

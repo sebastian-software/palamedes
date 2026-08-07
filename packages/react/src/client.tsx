@@ -57,18 +57,42 @@ export function createClientCatalogBoundary<TLocale extends string>({
   const serverResources = new Map<TLocale, Promise<ClientCatalogModule>>()
   const clientLocale = typeof window === "undefined" ? undefined : resolveClientLocale()
   let clientI18nResource: Promise<CompiledPalamedesI18n> | undefined
+  let clientI18nResourceRejected = false
+  let clientI18nResourceEvictionScheduled = false
 
   function createClientI18nResource(locale: TLocale): Promise<CompiledPalamedesI18n> {
     const resource = loadCatalog(locale).then((catalog) =>
       setClientI18n(createCatalogI18n(locale, catalog))
     )
     clientI18nResource = resource
+    clientI18nResourceRejected = false
+    clientI18nResourceEvictionScheduled = false
     void resource.catch(() => {
       if (clientI18nResource === resource) {
-        clientI18nResource = undefined
+        clientI18nResourceRejected = true
       }
     })
     return resource
+  }
+
+  function scheduleClientI18nResourceEviction(resource: Promise<CompiledPalamedesI18n>) {
+    if (
+      clientI18nResource !== resource ||
+      !clientI18nResourceRejected ||
+      clientI18nResourceEvictionScheduled
+    ) {
+      return
+    }
+
+    clientI18nResourceEvictionScheduled = true
+    // Let React commit the nearest error boundary with the original error before retrying.
+    setTimeout(() => {
+      if (clientI18nResource === resource && clientI18nResourceRejected) {
+        clientI18nResource = undefined
+        clientI18nResourceRejected = false
+      }
+      clientI18nResourceEvictionScheduled = false
+    })
   }
 
   if (clientLocale !== undefined) {
@@ -107,6 +131,9 @@ export function createClientCatalogBoundary<TLocale extends string>({
     const resource = (
       isClient ? getClientI18nResource() : getServerCatalogResource(locale)
     ) as Promise<ClientCatalogModule | CompiledPalamedesI18n>
+    if (isClient && clientI18nResource === resource && clientI18nResourceRejected) {
+      scheduleClientI18nResourceEviction(resource as Promise<CompiledPalamedesI18n>)
+    }
     const catalogOrI18n = use(resource)
     const i18n = useMemo<CompiledPalamedesI18n>(() => {
       if (isClient) {
