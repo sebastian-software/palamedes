@@ -7,6 +7,9 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Rust core for Palamedes."
 
+[features]
+test-support = []
+
 [dependencies]
 ferrocat = "=3.4.2"
 ferrocat-icu = "=3.4.2"

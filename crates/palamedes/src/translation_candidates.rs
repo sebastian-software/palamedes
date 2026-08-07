@@ -373,6 +373,16 @@ pub fn list_translation_candidates(
 pub fn apply_translation_patches(
     request: TranslationPatchRequest,
 ) -> PalamedesResult<TranslationPatchResult> {
+    apply_translation_patches_with_replacement(request, atomic_replace_catalog)
+}
+
+fn apply_translation_patches_with_replacement<F>(
+    request: TranslationPatchRequest,
+    mut replace_catalog: F,
+) -> PalamedesResult<TranslationPatchResult>
+where
+    F: FnMut(&PreparedCatalog, &str, Option<&PoOutputOptions>) -> PalamedesResult<()>,
+{
     let requested_count = request.patches.len();
     if request.patches.is_empty() {
         return Ok(TranslationPatchResult {
@@ -579,7 +589,7 @@ pub fn apply_translation_patches(
     for catalog in &prepared {
         if catalog.changed {
             if let Err(source) =
-                atomic_replace_catalog(catalog, &request.config.source_locale, request.po.as_ref())
+                replace_catalog(catalog, &request.config.source_locale, request.po.as_ref())
             {
                 return Err(PalamedesError::TranslationPatchWrite {
                     result: completed_translation_patch_result(
@@ -602,6 +612,23 @@ pub fn apply_translation_patches(
         &completed_patches,
         catalogs_updated,
     ))
+}
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub fn apply_translation_patches_with_injected_write_failure(
+    request: TranslationPatchRequest,
+    failing_path: &std::path::Path,
+) -> PalamedesResult<TranslationPatchResult> {
+    apply_translation_patches_with_replacement(request, |catalog, source_locale, po| {
+        if catalog.path == failing_path {
+            return Err(PalamedesError::WriteFile {
+                path: catalog.path.clone(),
+                source: std::io::Error::other("injected catalog replacement failure"),
+            });
+        }
+        atomic_replace_catalog(catalog, source_locale, po)
+    })
 }
 
 fn default_max_origins() -> usize {
@@ -1193,12 +1220,13 @@ mod tests {
     };
 
     use super::{
-        apply_translation_patches, list_translation_candidates, TranslationCandidate,
+        apply_translation_patches, apply_translation_patches_with_replacement,
+        atomic_replace_catalog, list_translation_candidates, TranslationCandidate,
         TranslationCandidateId, TranslationCandidateRequest, TranslationMachineProvenance,
         TranslationPatch, TranslationPatchOutcomeStatus, TranslationPatchRequest,
         TranslationPluralKind, TranslationValue,
     };
-    use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat};
+    use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError};
 
     const FIXTURE: &str = include_str!("../fixtures/translation-workflow.de.po");
 
@@ -1702,11 +1730,8 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
     }
 
-    #[cfg(unix)]
     #[test]
     fn retains_completed_per_file_outcomes_when_a_later_replacement_fails() {
-        use std::os::unix::fs::PermissionsExt;
-
         let fixture = tempfile::tempdir().expect("fixture directory");
         let first_path = fixture.path().join("first/de.po");
         let second_path = fixture.path().join("second/de.po");
@@ -1732,24 +1757,35 @@ mod tests {
             .iter()
             .find(|candidate| candidate.id.catalog == "second/{locale}")
             .expect("second catalog candidate");
-        let second_directory = second_path.parent().expect("second catalog directory");
-        let original_permissions = fs::metadata(second_directory)
-            .expect("read second directory permissions")
-            .permissions();
-        fs::set_permissions(second_directory, std::fs::Permissions::from_mode(0o555))
-            .expect("make second catalog directory read-only");
-        let result = apply_translation_patches(TranslationPatchRequest {
-            config: two_catalog_config(fixture.path()),
-            po: None,
-            patches: vec![
-                singular_patch(first, "Hallo"),
-                singular_patch(second, "Servus"),
-            ],
-        });
-        fs::set_permissions(second_directory, original_permissions)
-            .expect("restore second catalog directory permissions");
+        let result = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config: two_catalog_config(fixture.path()),
+                po: None,
+                patches: vec![
+                    singular_patch(first, "Hallo"),
+                    singular_patch(second, "Servus"),
+                ],
+            },
+            |catalog, source_locale, po| {
+                if catalog.path == second_path {
+                    return Err(PalamedesError::WriteFile {
+                        path: catalog.path.clone(),
+                        source: std::io::Error::other("injected catalog replacement failure"),
+                    });
+                }
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        );
 
         let error = result.expect_err("second replacement should fail");
+        let PalamedesError::TranslationPatchWrite { source, .. } = &error else {
+            panic!("expected a translation patch write error");
+        };
+        let PalamedesError::WriteFile { source, .. } = source.as_ref() else {
+            panic!("expected the injected write-file source error");
+        };
+        assert_eq!(source.kind(), std::io::ErrorKind::Other);
+        assert_eq!(source.to_string(), "injected catalog replacement failure");
         let report = error
             .translation_patch_result()
             .expect("write error retains completed patch report");

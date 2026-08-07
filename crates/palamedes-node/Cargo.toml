@@ -12,6 +12,9 @@ publish = false
 path = "src/lib.rs"
 crate-type = ["cdylib"]
 
+[features]
+test-support = ["palamedes/test-support"]
+
 [dependencies]
 napi = { version = "3.9.4", default-features = false, features = ["napi9"] }
 napi-derive = "3.5.7"

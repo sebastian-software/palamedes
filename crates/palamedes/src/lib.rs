@@ -117,6 +117,9 @@ pub use transform::{
     transform_macros, NativeTransformEdit, NativeTransformOptions, NativeTransformResult,
     NativeTransformSourceMap, ServerFunctionTransformOptions,
 };
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use translation_candidates::apply_translation_patches_with_injected_write_failure;
 pub use translation_candidates::{
     apply_translation_patches, list_translation_candidates, TranslationCandidate,
     TranslationCandidateId, TranslationCandidateRequest, TranslationCandidateResult,
