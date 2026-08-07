@@ -138,6 +138,30 @@ describe("palamedes-loader.cjs", () => {
     expect(output).toContain('registerMessageLoaderGroup("514d17c76993", []);')
   })
 
+  it("cleans up a message-free server module outside catalogs without warning", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: '"use server"; export async function save() {}',
+      map: null,
+      compiledIds: [],
+    })
+    loadPalamedesConfigSync.mockReturnValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [{ path: "src/locales/{locale}", include: ["other/**/*.tsx"] }],
+    })
+    const emitWarning = vi.fn()
+
+    const output = await runLoader(
+      { serverMessageSplitting: true },
+      { addDependency() {}, emitWarning }
+    )
+
+    expect(output).toContain('registerMessageLoaderGroup("514d17c76993", []);')
+    expect(emitWarning).not.toHaveBeenCalled()
+  })
+
   it("does not add no-op server cleanup registrations to production modules", async () => {
     vi.stubEnv("NODE_ENV", "production")
     transformPalamedesMacros.mockReturnValue({
@@ -175,6 +199,7 @@ describe("palamedes-loader.cjs", () => {
         message: expect.stringContaining("not included in any configured catalog"),
       })
     )
+    expect(emitWarning).toHaveBeenCalledOnce()
   })
 
   it("blocks a client module on only the document locale's compiled fragments", async () => {
