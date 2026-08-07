@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+use crate::TranslationPatchResult;
+
 /// Shared result type for the Rust core.
 pub type PalamedesResult<T> = Result<T, PalamedesError>;
 
@@ -34,6 +36,17 @@ pub enum PalamedesError {
         #[source]
         /// Underlying filesystem error.
         source: std::io::Error,
+    },
+    /// Replacing a translation catalog failed after one or more catalog outcomes completed.
+    #[error(
+        "Failed to replace a translation catalog; inspect translation_patch_result() for completed outcomes: {source}"
+    )]
+    TranslationPatchWrite {
+        /// Completed per-file outcomes before the failing catalog replacement.
+        result: TranslationPatchResult,
+        #[source]
+        /// Underlying catalog replacement failure.
+        source: Box<PalamedesError>,
     },
     /// The worker pool for parallel extraction could not be created.
     #[error("Could not create the extraction worker pool: {message}")]
@@ -224,4 +237,15 @@ pub enum PalamedesError {
         /// Source location of the nested macro.
         location: String,
     },
+}
+
+impl PalamedesError {
+    /// Returns completed translation-patch outcomes retained with a write failure.
+    #[must_use]
+    pub fn translation_patch_result(&self) -> Option<&TranslationPatchResult> {
+        match self {
+            Self::TranslationPatchWrite { result, .. } => Some(result),
+            _ => None,
+        }
+    }
 }

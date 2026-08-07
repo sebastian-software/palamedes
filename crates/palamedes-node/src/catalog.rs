@@ -1705,7 +1705,10 @@ pub fn list_translation_candidates(
 
 #[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
-/// Validates and atomically applies provider-neutral translation patches.
+/// Validates provider-neutral translation patches and atomically replaces each changed catalog.
+///
+/// Validation failures leave every catalog unchanged. A batch spanning multiple catalogs has
+/// per-file atomicity rather than filesystem-transaction semantics.
 ///
 /// # Errors
 ///

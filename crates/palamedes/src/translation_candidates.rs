@@ -198,7 +198,7 @@ pub struct TranslationPatchResult {
     pub stats: TranslationPatchStats,
     /// One outcome per requested patch in request order.
     pub outcomes: Vec<TranslationPatchOutcome>,
-    /// Structured validation diagnostics. Any error leaves all catalogs unchanged.
+    /// Structured validation diagnostics. Validation failures leave all catalogs unchanged.
     pub diagnostics: Vec<TranslationWorkflowDiagnostic>,
 }
 
@@ -226,7 +226,7 @@ pub enum TranslationPatchOutcomeStatus {
     Unchanged,
     /// Patch was rejected by validation.
     Rejected,
-    /// Patch was valid but not written because another patch invalidated the atomic batch.
+    /// Patch was valid but its catalog was not replaced before the batch stopped.
     NotApplied,
 }
 
@@ -270,6 +270,7 @@ struct PreparedCatalog {
     path: PathBuf,
     format: PalamedesCatalogFormat,
     locale: String,
+    patch_indexes: Vec<usize>,
     content: String,
     changed: bool,
 }
@@ -366,7 +367,9 @@ pub fn list_translation_candidates(
 ///
 /// # Errors
 ///
-/// Returns an error when catalogs cannot be read, parsed, rendered, or replaced.
+/// Returns an error when catalogs cannot be read, parsed, rendered, or replaced. When replacing
+/// a later catalog fails, the error retains the completed per-file report through
+/// [`PalamedesError::translation_patch_result`].
 pub fn apply_translation_patches(
     request: TranslationPatchRequest,
 ) -> PalamedesResult<TranslationPatchResult> {
@@ -387,6 +390,15 @@ pub fn apply_translation_patches(
     let mut groups = BTreeMap::<CatalogBatchKey, Vec<usize>>::new();
 
     for (index, patch) in request.patches.iter().enumerate() {
+        for message in validate_plural_translation_branches(&patch.translation) {
+            rejected.insert(index);
+            diagnostics.push(workflow_diagnostic(
+                "translation.invalid_icu",
+                message,
+                Some(patch.id.clone()),
+            ));
+        }
+
         if let Some(previous) = identities.insert(patch.id.clone(), index) {
             rejected.insert(previous);
             rejected.insert(index);
@@ -528,6 +540,7 @@ pub fn apply_translation_patches(
                 path: loaded.path,
                 format: loaded.format,
                 locale: batch.locale,
+                patch_indexes,
                 changed: content != loaded.original,
                 content,
             });
@@ -561,35 +574,34 @@ pub fn apply_translation_patches(
         });
     }
 
-    let catalogs_updated = prepared.iter().filter(|catalog| catalog.changed).count();
-    for catalog in prepared.iter().filter(|catalog| catalog.changed) {
-        atomic_replace_catalog(catalog, &request.config.source_locale, request.po.as_ref())?;
+    let mut completed_patches = BTreeSet::new();
+    let mut catalogs_updated = 0;
+    for catalog in &prepared {
+        if catalog.changed {
+            if let Err(source) =
+                atomic_replace_catalog(catalog, &request.config.source_locale, request.po.as_ref())
+            {
+                return Err(PalamedesError::TranslationPatchWrite {
+                    result: completed_translation_patch_result(
+                        &request.patches,
+                        &changed_patches,
+                        &completed_patches,
+                        catalogs_updated,
+                    ),
+                    source: Box::new(source),
+                });
+            }
+            catalogs_updated += 1;
+        }
+        completed_patches.extend(&catalog.patch_indexes);
     }
-    let outcomes = request
-        .patches
-        .into_iter()
-        .enumerate()
-        .map(|(index, patch)| TranslationPatchOutcome {
-            id: patch.id,
-            status: if changed_patches.contains(&index) {
-                TranslationPatchOutcomeStatus::Applied
-            } else {
-                TranslationPatchOutcomeStatus::Unchanged
-            },
-        })
-        .collect();
 
-    Ok(TranslationPatchResult {
-        updated: catalogs_updated > 0,
-        stats: TranslationPatchStats {
-            requested: requested_count,
-            applied: changed_patches.len(),
-            unchanged: requested_count - changed_patches.len(),
-            catalogs_updated,
-        },
-        outcomes,
-        diagnostics,
-    })
+    Ok(completed_translation_patch_result(
+        &request.patches,
+        &changed_patches,
+        &completed_patches,
+        catalogs_updated,
+    ))
 }
 
 fn default_max_origins() -> usize {
@@ -904,6 +916,31 @@ fn validate_patch_translation(
     }
 }
 
+fn validate_plural_translation_branches(value: &TranslationValue) -> Vec<String> {
+    let TranslationValue::Plural {
+        variable,
+        plural_kind,
+        values,
+        ..
+    } = value
+    else {
+        return Vec::new();
+    };
+
+    values
+        .iter()
+        .filter_map(|(selector, branch)| {
+            parse_plural_branch(variable, *plural_kind, branch)
+                .err()
+                .map(|source| {
+                    format!(
+                        "Plural translation branch `translation.values.{selector}` is not valid ICU: {source}"
+                    )
+                })
+        })
+        .collect()
+}
+
 fn validate_machine_provenance(machine: &TranslationMachineProvenance) -> Result<(), &'static str> {
     if let Some(ai) = &machine.ai {
         if ai.model.trim().is_empty() {
@@ -1086,6 +1123,45 @@ fn find_po_item<'a>(po: &'a PoFile, key: &CatalogMessageKey) -> Option<&'a PoIte
     po.items
         .iter()
         .find(|item| item.msgid == key.msgid && item.msgctxt == key.msgctxt)
+}
+
+fn completed_translation_patch_result(
+    patches: &[TranslationPatch],
+    changed_patches: &BTreeSet<usize>,
+    completed_patches: &BTreeSet<usize>,
+    catalogs_updated: usize,
+) -> TranslationPatchResult {
+    let applied = changed_patches
+        .iter()
+        .filter(|index| completed_patches.contains(index))
+        .count();
+    let unchanged = completed_patches.len() - applied;
+    let outcomes = patches
+        .iter()
+        .enumerate()
+        .map(|(index, patch)| TranslationPatchOutcome {
+            id: patch.id.clone(),
+            status: if !completed_patches.contains(&index) {
+                TranslationPatchOutcomeStatus::NotApplied
+            } else if changed_patches.contains(&index) {
+                TranslationPatchOutcomeStatus::Applied
+            } else {
+                TranslationPatchOutcomeStatus::Unchanged
+            },
+        })
+        .collect();
+
+    TranslationPatchResult {
+        updated: catalogs_updated > 0,
+        stats: TranslationPatchStats {
+            requested: patches.len(),
+            applied,
+            unchanged,
+            catalogs_updated,
+        },
+        outcomes,
+        diagnostics: Vec::new(),
+    }
 }
 
 fn workflow_diagnostic(
@@ -1489,6 +1565,217 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_plural_icu_as_a_per_patch_diagnostic_without_writing() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![
+                id("messages/{locale}", "de", "Hello", None),
+                id(
+                    "messages/{locale}",
+                    "de",
+                    "{count, plural, one {# file} other {# files}}",
+                    None,
+                ),
+            ],
+            max_origins: 8,
+        })
+        .expect("list plural patch candidates");
+        let hello = candidate(&listed.candidates, "Hello");
+        let plural = candidate(
+            &listed.candidates,
+            "{count, plural, one {# file} other {# files}}",
+        );
+        let mut translation = plural.source.clone();
+        let TranslationValue::Plural { values, .. } = &mut translation else {
+            panic!("expected a plural candidate");
+        };
+        values.insert("one".to_owned(), "# Datei }".to_owned());
+        values.insert("other".to_owned(), "# Dateien }".to_owned());
+        let before = fs::read_to_string(&path).expect("read catalog before invalid patch");
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![
+                singular_patch(hello, "Hallo"),
+                TranslationPatch {
+                    id: plural.id.clone(),
+                    fingerprint: plural.fingerprint.clone(),
+                    translation,
+                    machine: None,
+                },
+            ],
+        })
+        .expect("reject invalid ICU as a diagnostic");
+
+        assert!(!result.updated);
+        assert_eq!(result.stats.requested, 2);
+        assert_eq!(
+            result
+                .outcomes
+                .iter()
+                .map(|outcome| outcome.status)
+                .collect::<Vec<_>>(),
+            vec![
+                TranslationPatchOutcomeStatus::NotApplied,
+                TranslationPatchOutcomeStatus::Rejected,
+            ]
+        );
+        let diagnostics = result
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "translation.invalid_icu")
+            .collect::<Vec<_>>();
+        assert_eq!(diagnostics.len(), 2);
+        assert!(diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.id.as_ref() == Some(&plural.id)));
+        assert!(diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("translation.values.one")));
+        assert!(diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("translation.values.other")));
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn rejects_invalid_selectordinal_branch_as_a_structured_diagnostic() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let content = fs::read_to_string(&path).expect("read fixture");
+        fs::write(
+            &path,
+            format!(
+                "{content}\nmsgid \"{{position, selectordinal, one {{#st}} two {{#nd}} few {{#rd}} other {{#th}}}}\"\nmsgstr \"\"\n"
+            ),
+        )
+        .expect("add ordinal candidate");
+        let source = "{position, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", source, None)],
+            max_origins: 8,
+        })
+        .expect("list ordinal candidate");
+        let ordinal = candidate(&listed.candidates, source);
+        let mut translation = ordinal.source.clone();
+        let TranslationValue::Plural {
+            plural_kind,
+            values,
+            ..
+        } = &mut translation
+        else {
+            panic!("expected an ordinal plural candidate");
+        };
+        assert_eq!(*plural_kind, TranslationPluralKind::Ordinal);
+        values.insert("other".to_owned(), "#te }".to_owned());
+        let before = fs::read_to_string(&path).expect("read catalog before invalid ordinal patch");
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![TranslationPatch {
+                id: ordinal.id.clone(),
+                fingerprint: ordinal.fingerprint.clone(),
+                translation,
+                machine: None,
+            }],
+        })
+        .expect("reject invalid ordinal ICU as a diagnostic");
+
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Rejected
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "translation.invalid_icu"
+                && diagnostic.id.as_ref() == Some(&ordinal.id)
+                && diagnostic.message.contains("translation.values.other")
+        }));
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn retains_completed_per_file_outcomes_when_a_later_replacement_fails() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let first_path = fixture.path().join("first/de.po");
+        let second_path = fixture.path().join("second/de.po");
+        write_po_fixture(&first_path, "de");
+        write_po_fixture(&second_path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: two_catalog_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![
+                id("first/{locale}", "de", "Hello", None),
+                id("second/{locale}", "de", "Hello", None),
+            ],
+            max_origins: 8,
+        })
+        .expect("list candidates for both files");
+        let first = listed
+            .candidates
+            .iter()
+            .find(|candidate| candidate.id.catalog == "first/{locale}")
+            .expect("first catalog candidate");
+        let second = listed
+            .candidates
+            .iter()
+            .find(|candidate| candidate.id.catalog == "second/{locale}")
+            .expect("second catalog candidate");
+        let second_directory = second_path.parent().expect("second catalog directory");
+        let original_permissions = fs::metadata(second_directory)
+            .expect("read second directory permissions")
+            .permissions();
+        fs::set_permissions(second_directory, std::fs::Permissions::from_mode(0o555))
+            .expect("make second catalog directory read-only");
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: two_catalog_config(fixture.path()),
+            po: None,
+            patches: vec![
+                singular_patch(first, "Hallo"),
+                singular_patch(second, "Servus"),
+            ],
+        });
+        fs::set_permissions(second_directory, original_permissions)
+            .expect("restore second catalog directory permissions");
+
+        let error = result.expect_err("second replacement should fail");
+        let report = error
+            .translation_patch_result()
+            .expect("write error retains completed patch report");
+        assert!(report.updated);
+        assert_eq!(report.stats.catalogs_updated, 1);
+        assert_eq!(report.stats.applied, 1);
+        assert_eq!(
+            report
+                .outcomes
+                .iter()
+                .map(|outcome| outcome.status)
+                .collect::<Vec<_>>(),
+            vec![
+                TranslationPatchOutcomeStatus::Applied,
+                TranslationPatchOutcomeStatus::NotApplied,
+            ]
+        );
+        assert!(fs::read_to_string(&first_path)
+            .expect("read first catalog")
+            .contains("msgstr \"Hallo\""));
+        assert!(fs::read_to_string(&second_path)
+            .expect("read second catalog")
+            .contains("msgstr \"\""));
+    }
+
+    #[test]
     fn rejects_duplicate_unknown_and_stale_patches_without_writing() {
         let fixture = tempfile::tempdir().expect("fixture directory");
         let path = fixture.path().join("messages/de.po");
@@ -1643,6 +1930,26 @@ mod tests {
         config.locales = vec!["en".to_owned(), "de".to_owned()];
         config.catalogs.remove(0);
         config
+    }
+
+    fn two_catalog_config(root: &Path) -> CatalogArtifactConfig {
+        CatalogArtifactConfig {
+            root_dir: root.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "first/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "second/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        }
     }
 
     fn write_catalog_matrix(root: &Path) {

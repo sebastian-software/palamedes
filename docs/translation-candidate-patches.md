@@ -40,14 +40,18 @@ version, discard in-flight candidates and list them again before patching.
 
 `applyTranslationPatches()` validates the complete request before writing any
 catalog. Unknown or ambiguous catalogs, unknown messages, duplicate identities,
-stale fingerprints, shape mismatches, and invalid provenance are returned as
-structured diagnostics. A rejected validation batch leaves every original
-catalog unchanged.
+stale fingerprints, shape mismatches, invalid ICU plural branches, and invalid
+provenance are returned as structured diagnostics with the rejected patch
+identity. A rejected validation batch leaves every original catalog unchanged.
 
 On success, Palamedes preserves unrelated translations, comments, origins,
 flags, obsolete entries, and PO headers. Each changed PO or FCL file is replaced
 atomically through Ferrocat's format-aware writer. A batch spanning several
 files has per-file atomicity; it is not a filesystem transaction across files.
+If a later replacement fails, the call still returns a hard error. Rust callers
+can recover the completed per-file outcomes from
+`PalamedesError::translation_patch_result()`; remaining patches are reported as
+`notApplied`.
 
 Applying a patch does not clear `fuzzy` or other review flags automatically.
 That is workflow policy and remains the caller's responsibility.
