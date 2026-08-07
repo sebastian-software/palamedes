@@ -162,21 +162,22 @@ test("matrix example browser contract", async () => {
   await captureScreenshot(page, example, "initial")
 
   if (example.strategy === "cookie") {
+    const navigation = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 })
     await page
       .getByTestId("locale-switch-de")
       .click({ force: true, noWaitAfter: true, timeout: 15_000 })
+    await navigation
 
-    try {
-      await expect.poll(() => currentServerLocale(page), { timeout: 2500 }).toContain("Deutsch")
-    } catch {
-      await page.reload({ waitUntil: "domcontentloaded" })
-      await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
-    }
-
-    await page.reload({ waitUntil: "domcontentloaded" })
+    await expect.poll(() => page.locator("html").getAttribute("lang")).toBe("de")
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
 
     await waitForClientReady(page)
+    if (example.id === "nextjs-cookie") {
+      await expect.poll(() => page.locator(".ticket .cta").textContent()).toBe("In den Warenkorb")
+      await expect
+        .poll(async () => (await page.locator("body").innerText()).includes("Add to cart"))
+        .toBe(false)
+    }
     await page.evaluate(() => {
       document.querySelector('[data-testid="server-proof-trigger"]')?.click()
     })
