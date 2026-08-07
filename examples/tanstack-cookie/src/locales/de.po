@@ -6,86 +6,133 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-msgid "Add to cart"
-msgstr "In den Warenkorb"
-
-msgid "Attendees"
-msgstr "Teilnehmer"
-
-msgid "Availability"
-msgstr "Verfügbarkeit"
-
-msgid "Behind the scenes"
-msgstr "Hinter den Kulissen"
-
-msgid "Berlin, Germany"
-msgstr "Berlin, Deutschland"
-
-msgid "Book your seat at Frontend Stage 2026"
-msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
-
-msgid "Conference pass"
-msgstr "Konferenzpass"
-
-msgid "Currency"
-msgstr "Währung"
-
-msgid "Date"
-msgstr "Datum"
-
-msgid "Fewer tickets"
-msgstr "Weniger Tickets"
-
-msgid "Locale"
-msgstr "Sprache"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Für dieses Dokument mit Palamedes lokalisiert"
-
-msgid "More tickets"
-msgstr "Mehr Tickets"
-
-msgid "Number"
-msgstr "Zahl"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Serverergebnis aktualisieren"
-
-msgid "Rendered with TanStack Start"
-msgstr "Gerendert mit TanStack Start"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server function confirmed locale {locale}."
-msgstr "Serverfunktion bestätigte Sprache {locale}."
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten deine Tickets."
-
-msgid "Total"
-msgstr "Gesamt"
-
-msgid "Venue"
-msgstr "Ort"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Willkommen zurück, {attendeeName}."
-
-msgid "each"
-msgstr "pro Stück"
-
-msgid "one switch, every format"
-msgstr "ein Klick, alle Formate"
-
-msgid "server locale"
-msgstr "Server-Sprache"
-
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
 
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
+
+#: examples/tanstack-cookie/src/components/ClientReady.tsx#ClientReady
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "In den Warenkorb"
+
+#: examples/tanstack-cookie/src/lib/server-function-helpers.server.ts#asynchronousServerFunctionMessage
+msgid "Asynchronous server helper confirmed locale."
+msgstr "Asynchroner Server-Helfer bestätigte Sprache."
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Teilnehmer"
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Verfügbarkeit"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Hinter den Kulissen"
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Deutschland"
+
+#: examples/tanstack-cookie/src/routes/index.tsx#Home
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Konferenzpass"
+
+#: examples/tanstack-cookie/src/lib/server-function-cross-module.server.ts#crossModuleServerFunctionMessage
+msgid "Cross-module server helper confirmed locale."
+msgstr "Modulübergreifender Server-Helfer bestätigte Sprache."
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Währung"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Datum"
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "pro Stück"
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Weniger Tickets"
+
+#: examples/tanstack-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Sprache"
+
+#: examples/tanstack-cookie/src/routes/index.tsx#Home
+msgid "Localized for this document with Palamedes"
+msgstr "Für dieses Dokument mit Palamedes lokalisiert"
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Mehr Tickets"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Zahl"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "ein Klick, alle Formate"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Serverergebnis aktualisieren"
+
+#: examples/tanstack-cookie/src/routes/index.tsx#Home
+msgid "Rendered with TanStack Start"
+msgstr "Gerendert mit TanStack Start"
+
+#: examples/tanstack-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/tanstack-cookie/src/lib/server-functions.ts#getLocalizedServerStatus
+msgid "Server function confirmed locale {locale}."
+msgstr "Serverfunktion bestätigte Sprache {locale}."
+
+#: examples/tanstack-cookie/src/routes/index.tsx#Home
+msgid "server locale"
+msgstr "Server-Sprache"
+
+#: examples/tanstack-cookie/src/lib/server-function-helpers.server.ts#synchronousServerFunctionMessage
+msgid "Synchronous server helper confirmed locale."
+msgstr "Synchroner Server-Helfer bestätigte Sprache."
+
+#: examples/tanstack-cookie/src/routes/index.tsx#Home
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten "
+"deine Tickets."
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Gesamt"
+
+#: examples/tanstack-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Ort"
+
+#: examples/tanstack-cookie/src/routes/index.tsx#Home
+msgid "Welcome back, {attendeeName}."
+msgstr "Willkommen zurück, {attendeeName}."

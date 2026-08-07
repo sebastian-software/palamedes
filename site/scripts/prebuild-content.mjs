@@ -504,6 +504,13 @@ function typedocPackages() {
       entryPoints: ["packages/waku/src/index.ts"],
     },
     {
+      slug: "tanstack",
+      label: "TanStack Start",
+      packageDir: "tanstack",
+      position: 76,
+      entryPoints: ["packages/tanstack/src/index.ts"],
+    },
+    {
       slug: "transform",
       label: "Transform",
       packageDir: "transform",

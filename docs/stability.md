@@ -40,6 +40,7 @@ may change faster than Stable surfaces.
 | `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs.                                                                |
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                        |
 | `@palamedes/waku`                                     | Preview  | ESM-only Waku handler interceptor and request resolver contract; Waku currently exposes the required APIs as unstable.        |
+| `@palamedes/tanstack`                                 | Stable   | TanStack Start server-function middleware and its request resolver contract are public integration APIs.                      |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                          |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                  |
 | `@palamedes/eslint-plugin`                            | Preview  | Thin ESLint/Oxlint facades over native diagnostics; Oxlint's JavaScript plugin API is still alpha.                            |
@@ -63,6 +64,7 @@ Palamedes treats these as stable adoption surfaces:
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs
 - Waku server-action interceptor documented in `@palamedes/waku` (Preview while Waku's interceptor API is unstable)
+- TanStack Start server-function middleware documented in `@palamedes/tanstack`
 - runtime access through `getI18n()`
 - `createI18n(options?)` and descriptor-based lookup behavior
 - React and Solid runtime components and macro package names

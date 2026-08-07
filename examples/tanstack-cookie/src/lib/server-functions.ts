@@ -1,8 +1,12 @@
 import { createServerFn } from "@tanstack/react-start"
 import { getRequestHeader, setCookie } from "@tanstack/react-start/server"
 import { t } from "@palamedes/core/macro"
-import { activateServerI18n } from "./i18n.server"
 import { getLocaleLabel, LOCALE_COOKIE, locales, normalizeLocale } from "./i18n"
+import {
+  asynchronousServerFunctionMessage,
+  synchronousServerFunctionMessage,
+} from "./server-function-helpers.server"
+import { crossModuleServerFunctionMessage } from "./server-function-cross-module.server"
 
 function getResolvedLocale() {
   return locales.resolve({
@@ -18,7 +22,6 @@ export const loadDocumentLocale = createServerFn({ method: "GET" }).handler(
 
 export const loadHomePageData = createServerFn({ method: "GET" }).handler(async () => {
   const resolved = getResolvedLocale()
-  await activateServerI18n(resolved.locale)
 
   return {
     locale: resolved.locale,
@@ -45,12 +48,16 @@ export const setLocaleCookie = createServerFn({ method: "POST" })
 
 export const getLocalizedServerStatus = createServerFn({ method: "GET" }).handler(async () => {
   const resolved = getResolvedLocale()
-  await activateServerI18n(resolved.locale)
 
   return {
     locale: resolved.locale,
     localeLabel: getLocaleLabel(resolved.locale),
     handledAt: new Date().toISOString(),
-    message: t`Server function confirmed locale ${resolved.locale}.`,
+    messages: {
+      asynchronous: await asynchronousServerFunctionMessage(),
+      crossModule: crossModuleServerFunctionMessage(),
+      direct: t`Server function confirmed locale ${resolved.locale}.`,
+      synchronous: synchronousServerFunctionMessage(),
+    },
   }
 })

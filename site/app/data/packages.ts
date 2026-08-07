@@ -19,4 +19,5 @@ export const PACKAGES: PackageCard[] = [
   { name: "@palamedes/vite-plugin", role: "Recommended Vite entry point" },
   { name: "@palamedes/next-plugin", role: "Recommended Next.js entry point" },
   { name: "@palamedes/waku", role: "ESM-only Waku server-action request interceptor" },
+  { name: "@palamedes/tanstack", role: "TanStack Start server-function i18n" },
 ]
