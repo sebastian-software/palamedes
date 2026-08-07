@@ -180,19 +180,21 @@ async function verifyExample(example) {
   try {
     await waitForServer(example.port, example.strategy === "route" ? "/en" : "/")
 
-    for (const check of example.smokeChecks) {
-      const response = await requestText(example.port, check.path, check.headers)
-      for (const substring of check.substrings) {
-        if (!response.body.includes(substring)) {
-          throw new Error(
-            `Missing substring "${substring}" in ${example.id} response for ${check.path}`
-          )
-        }
-      }
-    }
+    await Promise.all(example.smokeChecks.map((check) => verifySmokeCheck(example, check)))
   } finally {
     await stopCommand(child)
     await ensurePortFree(example.port)
+  }
+}
+
+async function verifySmokeCheck(example, check) {
+  const response = await requestText(example.port, check.path, check.headers)
+  for (const substring of check.substrings) {
+    if (!response.body.includes(substring)) {
+      throw new Error(
+        `Missing substring "${substring}" in ${example.id} response for ${check.path}`
+      )
+    }
   }
 }
 

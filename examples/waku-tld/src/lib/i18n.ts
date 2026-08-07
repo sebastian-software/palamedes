@@ -1,5 +1,5 @@
 import { createI18n } from "@palamedes/core"
-import { setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
+import { activateServerI18n as activateScopedServerI18n, setClientI18n } from "@palamedes/runtime"
 import { defineLocaleControls } from "@palamedes/core/locale"
 import { messages as deMessages } from "../locales/de.po"
 import { messages as enMessages } from "../locales/en.po"
@@ -40,21 +40,22 @@ export function getLocaleLabel(locale: Locale) {
   return locales.label(locale)
 }
 
-export function activateServerI18n(locale: Locale) {
+export function createServerI18n(locale: Locale) {
   const i18n = createI18n()
   i18n.load(locale, localeMessages[locale])
   i18n.activate(locale)
-  setServerI18nGetter(() => i18n)
   return i18n
+}
+
+export function activateServerI18n(locale: Locale) {
+  return activateScopedServerI18n(createServerI18n(locale))
 }
 
 export function initializeClientI18n(locale: Locale) {
   clientI18n.load(locale, localeMessages[locale])
   clientI18n.activate(locale)
 
-  if (typeof window === "undefined") {
-    setServerI18nGetter(() => clientI18n)
-  } else {
+  if (typeof window !== "undefined") {
     setClientI18n(clientI18n)
   }
 

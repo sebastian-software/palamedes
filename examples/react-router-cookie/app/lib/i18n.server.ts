@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
-import { setServerI18nGetter } from "@palamedes/runtime"
+import { createServerI18nScope } from "@palamedes/runtime/server"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
 import { messages as esMessages } from "../locales/es.po"
@@ -16,12 +16,17 @@ const CATALOGS: Record<Locale, CompiledCatalogMessages> = {
   es: esMessages,
 }
 
-export function activateServerI18n(locale: Locale) {
+export const serverI18nScope = createServerI18nScope<ReturnType<typeof createExampleI18n>>()
+
+export function createServerI18n(locale: Locale) {
   const i18n = createExampleI18n()
   i18n.load(locale, CATALOGS[locale])
   i18n.activate(locale)
-  setServerI18nGetter(() => i18n)
   return i18n
+}
+
+export function activateServerI18n(locale: Locale) {
+  return serverI18nScope.activate(createServerI18n(locale))
 }
 
 // Import-map locale binding: the production client resolves its per-route
