@@ -92,7 +92,7 @@ export default function Home() {
       <Section
         num="03 — Proof"
         title="We don't ask you to trust a slogan. The repo shows the work."
-        lede="Every combination in the verified framework matrix is a real app, re-checked in CI through the same Playwright flow — with public demos where the hosting is ready. Every benchmark number links to a checked-in, re-runnable report. Palamedes carries two bars: the cold run every tool performs, and the cached re-run you actually trigger all day."
+        lede={`Every combination in the verified framework matrix is a real app: all ${contentStats.smokeExampleCount} are smoke-checked on relevant PRs and main pushes, while ${contentStats.browserExampleCount} browser-capable examples run the Playwright flow weekly or on manual dispatch. Public demos are available where hosting is ready. Every benchmark number links to a checked-in, re-runnable report. Palamedes carries two bars: the cold run every tool performs, and the cached re-run you actually trigger all day.`}
       >
         <div className="space-y-10">
           <FrameworkMatrix />

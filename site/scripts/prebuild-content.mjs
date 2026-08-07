@@ -5,6 +5,7 @@ import { dirname, extname, join, posix, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { generateApiDocs } from "ardo/typedoc"
+import { EXAMPLE_MATRIX, selectBrowserExamples } from "../../scripts/example-matrix.mjs"
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const repoRoot = resolve(siteRoot, "..")
@@ -95,11 +96,19 @@ async function writeContentStats(adrEntries) {
   const exampleDirs = (await readdir(join(repoRoot, "examples"), { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
+  const matrixIds = new Set(EXAMPLE_MATRIX.map((example) => example.id))
+
+  if (matrixIds.size !== exampleDirs.length || exampleDirs.some((id) => !matrixIds.has(id))) {
+    throw new Error("The example matrix and examples directory must contain the same entries")
+  }
+
   const frameworks = new Set(exampleDirs.map((name) => name.slice(0, name.lastIndexOf("-"))))
   const strategies = new Set(exampleDirs.map((name) => name.slice(name.lastIndexOf("-") + 1)))
   const stats = {
     adrCount: adrEntries.length,
     exampleCount: exampleDirs.length,
+    smokeExampleCount: EXAMPLE_MATRIX.length,
+    browserExampleCount: selectBrowserExamples({}).length,
     frameworkCount: frameworks.size,
     strategyCount: strategies.size,
   }

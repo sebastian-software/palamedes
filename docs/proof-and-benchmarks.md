@@ -11,7 +11,7 @@ uses all of them. The goal is confidence, not hype.
 
 This repo can credibly prove five things:
 
-- Palamedes is browser-verified across Next.js, TanStack Start, SolidStart, Waku, and React Router, with server-first Remix v3 smoke-verified
+- all 25 examples receive smoke verification on relevant pull requests and `main` pushes; 21 browser-capable examples (Next.js, TanStack Start, SolidStart, Waku, React Router, and Vite) receive Playwright verification weekly and on manual dispatch, while Remix v3 remains smoke-only
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, source analysis, catalog update, and catalog compile steps are measured locally and reproducibly
@@ -22,16 +22,16 @@ evidence easy to inspect.
 
 ## Current Maturity
 
-| Topic                 | Current state                                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring                                  |
-| Supported frameworks  | Browser-verified examples for Next.js, TanStack Start, SolidStart, Waku, and React Router; Remix v3 smoke-verified |
-| Runtime model         | `@palamedes/runtime` with `getI18n()`                                                                              |
-| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in                                          |
-| Native core           | Rust + `napi-rs`                                                                                                   |
-| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                                                       |
-| Node requirement      | `>=22.22`                                                                                                          |
-| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                                                         |
+| Topic                 | Current state                                                                     |
+| --------------------- | --------------------------------------------------------------------------------- |
+| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring |
+| Supported frameworks  | See verification cadence above; Remix v3 smoke-only                               |
+| Runtime model         | `@palamedes/runtime` with `getI18n()`                                             |
+| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in         |
+| Native core           | Rust + `napi-rs`                                                                  |
+| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                      |
+| Node requirement      | `>=22.22`                                                                         |
+| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                        |
 
 ## What Counts As Proof In This Repo
 

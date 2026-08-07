@@ -19,7 +19,11 @@ interface Stat {
  * benchmark report), so none of these numbers can silently drift.
  */
 const STATS: Stat[] = [
-  { value: `${contentStats.exampleCount}`, label: "verified example apps", href: "/frameworks" },
+  {
+    value: `${contentStats.smokeExampleCount}`,
+    label: "smoke-verified example apps",
+    href: "/frameworks",
+  },
   {
     value: `${contentStats.frameworkCount} × ${contentStats.strategyCount}`,
     label: "frameworks × locale strategies",
