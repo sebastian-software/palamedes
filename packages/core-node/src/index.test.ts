@@ -296,14 +296,16 @@ msgstr ""
     const rootDir = await createTempDir()
     const catalogDir = path.join(rootDir, "locales", "de")
     const targetPath = path.join(catalogDir, "messages.po")
-    const origins = Array.from(
+    const canonicalOrigins = Array.from(
       { length: 10 },
       (_, index) => `#: src/origin-${index + 1}.tsx#Origin${index + 1}`
     ).join("\n")
+    const origins = `${Array.from(
+      { length: 10 },
+      (_, index) => `#: src/origin-${10 - index}.tsx#Origin${10 - index}`
+    ).join("\n")}\n#: src/origin-1.tsx#Origin1`
     await mkdir(catalogDir, { recursive: true })
-    await writeFile(
-      targetPath,
-      `msgid ""
+    const catalog = `msgid ""
 msgstr ""
 "Language: de\\n"
 
@@ -311,7 +313,7 @@ ${origins}
 msgid "Hello"
 msgstr ""
 `
-    )
+    await writeFile(targetPath, catalog)
     const config = {
       rootDir,
       locales: ["en", "de"],
@@ -327,6 +329,12 @@ msgstr ""
     expect(limited?.origins).toHaveLength(2)
     expect(expanded?.origins).toHaveLength(6)
     expect(limited?.fingerprint).toBe(expanded?.fingerprint)
+    await writeFile(targetPath, catalog.replace(origins, canonicalOrigins))
+    const rewritten = listTranslationCandidates({ config, maxOrigins: 2 }).candidates.find(
+      (candidate) => candidate.id.message === "Hello"
+    )
+    expect(rewritten?.origins).toStrictEqual(limited?.origins)
+    expect(rewritten?.fingerprint).toBe(limited?.fingerprint)
     if (!limited) {
       throw new Error("Expected candidate listed with truncated origins")
     }
