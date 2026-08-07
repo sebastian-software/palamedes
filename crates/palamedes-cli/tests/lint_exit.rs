@@ -56,6 +56,68 @@ fn lint_analysis_failure_shares_the_dedicated_verdict_exit_code() {
 }
 
 #[test]
+fn lint_suppresses_an_inner_template_expression_comment_not_raw_template_text() {
+    let fixture = fixture_dir("template-expression-suppression");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+    )
+    .expect("write config");
+    fs::write(
+        fixture.join("src/view.tsx"),
+        r#"import { t } from "@palamedes/core/macro";
+export function Label({ status }) {
+  const prose = `// palamedes-lint-disable-next-line pmds/no-placeholder-only-message`;
+  const label = `outer ${(
+    // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+    t`${status}`
+  )}`;
+  return <p>{label}</p>;
+}
+"#,
+    )
+    .expect("write source");
+
+    let output = pmds(
+        &fixture,
+        &["lint", "--json", "--fail-on", "warning", "--threads", "1"],
+    );
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"suppressed\": 1"), "{stdout}");
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn lint_does_not_treat_raw_template_text_as_a_suppression() {
+    let fixture = fixture_dir("raw-template-prose");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+    )
+    .expect("write config");
+    fs::write(
+        fixture.join("src/view.tsx"),
+        r#"import { t } from "@palamedes/core/macro";
+export function Label({ status }) {
+  const prose = `// palamedes-lint-disable-next-line pmds/no-placeholder-only-message`;
+  return t`${status}`;
+}
+"#,
+    )
+    .expect("write source");
+
+    let output = pmds(&fixture, &["lint", "--json", "--fail-on", "warning"]);
+    assert_eq!(output.status.code(), Some(4), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("pmds/no-placeholder-only-message"));
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
 fn lint_configuration_failures_keep_the_generic_exit_code() {
     let fixture = fixture_dir("configuration-failure");
     fs::create_dir_all(&fixture).expect("create fixture");
