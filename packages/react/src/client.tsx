@@ -155,7 +155,7 @@ export function createClientCatalogBoundary<TLocale extends string>({
     const isClient = typeof window !== "undefined"
     if (isClient && locale !== clientLocale) {
       throw new Error(
-        `Palamedes reload catalog boundary received locale "${locale}", but this document was initialized for "${clientLocale}". Perform a document navigation to change locale.`
+        `Palamedes client catalog boundary received locale "${locale}", but this document was initialized for "${clientLocale}". Perform a document navigation to change locale.`
       )
     }
 
