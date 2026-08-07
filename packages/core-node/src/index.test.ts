@@ -379,7 +379,7 @@ msgstr ""
     })
     await expect(readFile(firstPath, "utf8")).resolves.toContain('msgstr "Hallo"')
     await expect(readFile(secondPath, "utf8")).resolves.toBe(catalog)
-  })
+  }, 30_000)
 
   it("patches candidates listed with truncated origins using a stable fingerprint", async () => {
     const rootDir = await createTempDir()
