@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/*.test.ts",
+    "test": "vitest run --globals",
     "stub": "unbuild --stub"
   },
   "homepage": "https://github.com/sebastian-software/palamedes",

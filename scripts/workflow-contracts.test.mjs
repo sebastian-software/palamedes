@@ -37,9 +37,11 @@ describe("workflow contracts", () => {
   })
 
   it("runs path-sensitive package tests on each non-Linux validation leg", async () => {
-    const [ci, packageJson] = await Promise.all([
+    const [ci, packageJson, nextPlugin, vitePlugin] = await Promise.all([
       readRepositoryFile(".github/workflows/ci.yml"),
       readRepositoryFile("package.json").then(JSON.parse),
+      readRepositoryFile("packages/next-plugin/package.json").then(JSON.parse),
+      readRepositoryFile("packages/vite-plugin/package.json").then(JSON.parse),
     ])
 
     expect(ci).toContain("- os: macos-14")
@@ -51,6 +53,8 @@ describe("workflow contracts", () => {
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/core-node")
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/next-plugin")
     expect(packageJson.scripts["test:platform"]).toContain("--filter @palamedes/vite-plugin")
+    expect(nextPlugin.scripts.test).toBe("vitest run --globals")
+    expect(vitePlugin.scripts.test).toBe("vitest run --globals")
   })
 
   it("requires locked Rust workspace tests before any release publishing", async () => {
