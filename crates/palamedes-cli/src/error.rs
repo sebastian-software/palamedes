@@ -27,6 +27,8 @@ pub enum CliError {
     CurrentDir(#[source] std::io::Error),
     #[error("Catalog merge requires exactly two input files, received {0}.")]
     InvalidMergeInputCount(usize),
+    #[error("Could not infer catalog merge format from logical --path `{path}` or merge paths ({paths}). Git supplies extensionless temporary files for %O, %A, and %B; pass --format po or --format fcl.")]
+    MergeFormatInference { path: PathBuf, paths: String },
     #[error("Catalog convert requires either an input file or --config.")]
     MissingConvertInput,
     #[error("Catalog convert --output can only be used with a single input file.")]

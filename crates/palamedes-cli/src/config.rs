@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use ::config as config_rs;
 use palamedes::{
@@ -43,6 +43,8 @@ pub enum ConfigError {
     },
     #[error("Invalid Palamedes config in {path}: {message}")]
     Invalid { path: PathBuf, message: String },
+    #[error("Catalog path {path} matches multiple configured catalogs ({catalogs}); refusing to choose one.")]
+    AmbiguousCatalogPath { path: PathBuf, catalogs: String },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -329,21 +331,46 @@ impl LoadedConfig {
     ///
     /// Commands that receive a catalog by path rather than by config entry —
     /// a Git merge driver, for one — need this to apply that catalog's output
-    /// options. Relative paths resolve against the config root, which is where
-    /// catalog paths are anchored.
-    pub fn catalog_for_path(&self, path: &Path) -> Option<&ConfigCatalog> {
-        let target = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            self.root_dir.join(path)
-        };
-        self.catalogs.iter().find(|catalog| {
-            self.locales.iter().any(|locale| {
-                self.resolve_catalog_path(&catalog.path, locale)
-                    .with_extension(catalog.format.extension())
-                    == target
+    /// options. A relative path may be config-root-relative (ordinary CLI
+    /// usage), CWD-relative, or worktree-root-relative (`git`'s `%P`), so all
+    /// three normalized absolute interpretations are considered. Only exact
+    /// configured catalog paths match; ambiguity is an error rather than a
+    /// best-effort guess.
+    pub fn catalog_for_path(
+        &self,
+        path: &Path,
+        cwd: &Path,
+    ) -> Result<Option<&ConfigCatalog>, ConfigError> {
+        let candidates = catalog_path_candidates(path, &self.root_dir, cwd);
+        let matches = self
+            .catalogs
+            .iter()
+            .enumerate()
+            .filter(|(_, catalog)| {
+                self.locales.iter().any(|locale| {
+                    let configured = normalize_path(
+                        &self
+                            .resolve_catalog_path(&catalog.path, locale)
+                            .with_extension(catalog.format.extension()),
+                    );
+                    candidates.contains(&configured)
+                })
             })
-        })
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+
+        match matches.as_slice() {
+            [] => Ok(None),
+            [index] => Ok(self.catalogs.get(*index)),
+            indices => Err(ConfigError::AmbiguousCatalogPath {
+                path: path.to_path_buf(),
+                catalogs: indices
+                    .iter()
+                    .map(|index| self.catalogs[*index].path.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            }),
+        }
     }
 
     pub fn resolve_pattern(&self, pattern: &str) -> PathBuf {
@@ -593,6 +620,48 @@ fn find_git_root(start_dir: &Path) -> Option<PathBuf> {
     }
 }
 
+fn catalog_path_candidates(path: &Path, config_root: &Path, cwd: &Path) -> Vec<PathBuf> {
+    if path.is_absolute() {
+        return vec![normalize_path(path)];
+    }
+
+    let mut candidates = vec![
+        normalize_path(&config_root.join(path)),
+        normalize_path(&cwd.join(path)),
+    ];
+    if let Some(git_root) = find_git_root(config_root) {
+        candidates.push(normalize_path(&git_root.join(path)));
+    }
+    candidates.sort();
+    candidates.dedup();
+    candidates
+}
+
+/// Normalizes separators and dot components without resolving symlinks or
+/// requiring the supplied path to exist. Merge drivers must accept `%P` while
+/// Git is operating on temporary files, and canonicalizing would make that
+/// path-dependent operation both lossy and unreliable.
+fn normalize_path(path: &Path) -> PathBuf {
+    let portable = path.to_string_lossy().replace('\\', "/");
+    let path = Path::new(&portable);
+    let is_absolute = path.is_absolute();
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(Path::new(std::path::MAIN_SEPARATOR_STR)),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() && !is_absolute {
+                    normalized.push("..");
+                }
+            }
+            Component::Normal(part) => normalized.push(part),
+        }
+    }
+    normalized
+}
+
 fn absolutize(path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -752,7 +821,8 @@ catalogs:
         let config = load_config(&app, None).expect("load config");
 
         let po_catalog = config
-            .catalog_for_path(&app.join("src/locales/de/messages.po"))
+            .catalog_for_path(&app.join("src/locales/de/messages.po"), &app)
+            .expect("resolve catalog")
             .expect("catalog for a target locale");
         assert_eq!(po_catalog.path, "src/locales/{locale}/messages");
         assert_eq!(
@@ -763,20 +833,124 @@ catalogs:
         // Relative paths anchor at the config root, which is what a merge
         // driver's `%P` hands over.
         assert!(config
-            .catalog_for_path(std::path::Path::new("src/locales/en/messages.po"))
+            .catalog_for_path(std::path::Path::new("src/locales/en/messages.po"), &app)
+            .expect("resolve catalog")
             .is_some());
 
         assert_eq!(
             config
-                .catalog_for_path(&app.join("docs/locales/en.fcl"))
+                .catalog_for_path(&app.join("docs/locales/en.fcl"), &app)
+                .expect("resolve catalog")
                 .map(|catalog| catalog.path.as_str()),
             Some("docs/locales/{locale}")
         );
 
         assert!(config
-            .catalog_for_path(&app.join("src/locales/fr/messages.po"))
+            .catalog_for_path(&app.join("src/locales/fr/messages.po"), &app)
+            .expect("resolve catalog")
             .is_none());
-        assert!(config.catalog_for_path(&app.join("README.md")).is_none());
+        assert!(config
+            .catalog_for_path(&app.join("README.md"), &app)
+            .expect("resolve catalog")
+            .is_none());
+    }
+
+    #[test]
+    fn resolves_config_and_git_relative_catalog_paths_without_guessing() {
+        let repo = temp_dir("catalog-for-monorepo-path");
+        fs::create_dir_all(repo.join(".git")).expect("git root");
+        let app = repo.join("apps/web");
+        fs::create_dir_all(&app).expect("app root");
+        let config_path = app.join(CONFIG_FILENAME);
+        fs::write(
+            &config_path,
+            r#"
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: locales/{locale}
+    include: [src]
+    po:
+      line-breaks: "off"
+  - path: ../api/locales/{locale}
+    include: [../api/src]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&repo, Some(&config_path)).expect("load config");
+        let web = "locales/de.po";
+        assert_eq!(
+            config
+                .catalog_for_path(std::path::Path::new(web), &app)
+                .expect("config-relative catalog")
+                .map(|catalog| catalog.path.as_str()),
+            Some("locales/{locale}")
+        );
+        assert_eq!(
+            config
+                .catalog_for_path(std::path::Path::new("apps/web/locales/de.po"), &repo)
+                .expect("git-relative catalog")
+                .map(|catalog| catalog.path.as_str()),
+            Some("locales/{locale}")
+        );
+        assert_eq!(
+            config
+                .catalog_for_path(
+                    &repo.join("apps/web/locales/../locales/de.po"),
+                    &repo.join("apps/web/src"),
+                )
+                .expect("normalized absolute catalog")
+                .map(|catalog| catalog.path.as_str()),
+            Some("locales/{locale}")
+        );
+        assert_eq!(
+            config
+                .catalog_for_path(std::path::Path::new("apps\\web\\locales\\de.po"), &repo)
+                .expect("portable separator catalog")
+                .map(|catalog| catalog.path.as_str()),
+            Some("locales/{locale}")
+        );
+
+        assert!(config
+            .catalog_for_path(
+                std::path::Path::new("apps/web/apps/web/locales/de.po"),
+                &repo,
+            )
+            .expect("duplicated prefix must not match")
+            .is_none());
+        assert!(config
+            .catalog_for_path(std::path::Path::new("outside/locales/de.po"), &repo)
+            .expect("outside path must not match")
+            .is_none());
+    }
+
+    #[test]
+    fn rejects_ambiguous_catalog_paths_from_different_relative_roots() {
+        let repo = temp_dir("ambiguous-catalog-path");
+        fs::create_dir_all(repo.join(".git/apps/web")).expect("git root");
+        let app = repo.join("apps/web");
+        fs::create_dir_all(&app).expect("app root");
+        let config_path = app.join(CONFIG_FILENAME);
+        fs::write(
+            &config_path,
+            r#"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}
+    include: [src]
+  - path: apps/web/locales/{locale}
+    include: [generated]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&repo, Some(&config_path)).expect("load config");
+        let error = config
+            .catalog_for_path(std::path::Path::new("apps/web/locales/en.po"), &repo)
+            .expect_err("different resolution roots must not select a catalog");
+        assert!(error.to_string().contains("multiple configured catalogs"));
     }
 
     /*

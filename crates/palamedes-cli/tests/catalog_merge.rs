@@ -25,8 +25,6 @@ fn base_only_entry_deleted_from_both_sides_stays_deleted() {
             base.to_str().expect("base path"),
             "--output",
             output.to_str().expect("output path"),
-            "--format",
-            "po",
             "--source-locale",
             "en",
             "--locale",
@@ -56,6 +54,7 @@ fn merge_driver_use_first_keeps_the_current_branch_during_merge() {
 
     git(&fixture, &["merge", "feature"]);
     assert_translation(&fixture, "Main");
+    assert_unwrapped_catalog_message(&fixture);
 
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }
@@ -79,8 +78,156 @@ fn merge_driver_use_first_keeps_the_rebased_branch_during_rebase() {
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }
 
+#[test]
+fn merge_driver_infers_fcl_from_the_logical_git_path() {
+    let fixture = fixture_dir("catalog-driver-fcl");
+    initialize_fcl_git_fixture(&fixture);
+
+    git(&fixture, &["checkout", "-b", "feature"]);
+    write_fcl_translation(&fixture, "Feature");
+    commit_all(&fixture, "feature translation");
+    git(&fixture, &["checkout", "main"]);
+    write_fcl_translation(&fixture, "Main");
+    commit_all(&fixture, "main translation");
+
+    git(&fixture, &["merge", "feature"]);
+    let content = fs::read_to_string(fixture.join(FCL_CATALOG)).expect("read FCL catalog");
+    assert!(content.starts_with("%FCL1"), "{content}");
+    assert!(content.contains("Hello\t\tMain"), "{content}");
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn explicit_format_overrides_the_logical_path() {
+    let fixture = fixture_dir("catalog-merge-explicit-format");
+    fs::create_dir_all(&fixture).expect("create fixture");
+    let base = fixture.join("base");
+    let ours = fixture.join("ours");
+    let theirs = fixture.join("theirs");
+    let output = fixture.join("output");
+    fs::write(&base, "msgid \"Hello\"\nmsgstr \"Alt\"\n").expect("write base");
+    fs::write(&ours, "msgid \"Hello\"\nmsgstr \"Unser\"\n").expect("write ours");
+    fs::write(&theirs, "msgid \"Hello\"\nmsgstr \"Ihr\"\n").expect("write theirs");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .args([
+            "catalog",
+            "merge-driver",
+            base.to_str().expect("base path"),
+            ours.to_str().expect("ours path"),
+            theirs.to_str().expect("theirs path"),
+            output.to_str().expect("output path"),
+            "--path",
+            "catalog.fcl",
+            "--format",
+            "po",
+            "--source-locale",
+            "en",
+            "--locale",
+            "de",
+        ])
+        .output()
+        .expect("run catalog merge driver");
+
+    assert!(result.status.success(), "{result:?}");
+    assert!(fs::read_to_string(&output)
+        .expect("read output")
+        .contains("msgstr \"Unser\""));
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn merge_uses_the_logical_path_without_a_three_way_base() {
+    let fixture = fixture_dir("catalog-merge-logical-format-hint");
+    fs::create_dir_all(&fixture).expect("create fixture");
+    let ours = fixture.join("ours");
+    let theirs = fixture.join("theirs");
+    let output = fixture.join("output");
+    fs::write(&ours, "msgid \"Hello\"\nmsgstr \"Unser\"\n").expect("write ours");
+    fs::write(&theirs, "msgid \"New\"\nmsgstr \"Neu\"\n").expect("write theirs");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .args([
+            "catalog",
+            "merge",
+            ours.to_str().expect("ours path"),
+            theirs.to_str().expect("theirs path"),
+            "--output",
+            output.to_str().expect("output path"),
+            "--path",
+            "apps/web/locales/de.po",
+            "--source-locale",
+            "en",
+            "--locale",
+            "de",
+        ])
+        .output()
+        .expect("run catalog merge");
+
+    assert!(result.status.success(), "{result:?}");
+    let merged = fs::read_to_string(&output).expect("read output");
+    assert!(merged.contains("msgstr \"Unser\""), "{merged}");
+    assert!(merged.contains("msgid \"New\""), "{merged}");
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn extensionless_driver_files_report_the_logical_path_when_format_is_unknown() {
+    let fixture = fixture_dir("catalog-merge-unknown-logical-format");
+    fs::create_dir_all(&fixture).expect("create fixture");
+    let base = fixture.join("base");
+    let ours = fixture.join("ours");
+    let theirs = fixture.join("theirs");
+    let output = fixture.join("output");
+    for path in [&base, &ours, &theirs] {
+        fs::write(path, "msgid \"Hello\"\nmsgstr \"Hallo\"\n").expect("write catalog");
+    }
+
+    let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .args([
+            "catalog",
+            "merge-driver",
+            base.to_str().expect("base path"),
+            ours.to_str().expect("ours path"),
+            theirs.to_str().expect("theirs path"),
+            output.to_str().expect("output path"),
+            "--path",
+            "catalog.unknown",
+            "--source-locale",
+            "en",
+            "--locale",
+            "de",
+        ])
+        .output()
+        .expect("run catalog merge driver");
+
+    assert!(!result.status.success());
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("catalog.unknown"), "{stderr}");
+    assert!(stderr.contains("merge paths"), "{stderr}");
+    assert!(stderr.contains("--format po or --format fcl"), "{stderr}");
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+const PO_CATALOG: &str = "apps/web/locales/de.po";
+const FCL_CATALOG: &str = "apps/web/fcl/de.fcl";
+
 fn initialize_git_fixture(fixture: &std::path::Path) {
-    fs::create_dir_all(fixture).expect("create git fixture");
+    initialize_git(fixture);
+    write_translation(fixture, "Base");
+    commit_all(fixture, "base catalog");
+}
+
+fn initialize_fcl_git_fixture(fixture: &std::path::Path) {
+    initialize_git(fixture);
+    write_fcl_translation(fixture, "Base");
+    commit_all(fixture, "base catalog");
+}
+
+fn initialize_git(fixture: &std::path::Path) {
+    fs::create_dir_all(fixture.join("apps/web/locales")).expect("create git fixture");
+    fs::create_dir_all(fixture.join("apps/web/fcl")).expect("create FCL directory");
     git(fixture, &["init", "-b", "main"]);
     git(fixture, &["config", "user.name", "Palamedes Test"]);
     git(
@@ -89,7 +236,7 @@ fn initialize_git_fixture(fixture: &std::path::Path) {
     );
     git(fixture, &["config", "commit.gpgsign", "false"]);
     let driver = format!(
-        "'{}' catalog merge-driver %O %A %B %A --path %P --format po --source-locale en --locale de --conflict-strategy use-first",
+        "'{}' catalog merge-driver %O %A %B %A --path %P --config apps/web/palamedes.yaml --source-locale en --locale de --conflict-strategy use-first",
         env!("CARGO_BIN_EXE_pmds").replace('\'', "'\\''")
     );
     git(
@@ -98,29 +245,64 @@ fn initialize_git_fixture(fixture: &std::path::Path) {
     );
     fs::write(
         fixture.join(".gitattributes"),
-        "messages.po merge=palamedes-catalog\n",
+        "*.po merge=palamedes-catalog\n*.fcl merge=palamedes-catalog\n",
     )
     .expect("write attributes");
-    write_translation(fixture, "Base");
-    commit_all(fixture, "base catalog");
+    fs::write(
+        fixture.join("apps/web/palamedes.yaml"),
+        r#"
+locales: [en, de]
+source-locale: en
+catalogs:
+  - path: locales/{locale}
+    include: [src]
+    po:
+      line-breaks: "off"
+  - path: fcl/{locale}
+    format: fcl
+    include: [src]
+"#,
+    )
+    .expect("write nested config");
 }
 
 fn write_translation(fixture: &std::path::Path, translation: &str) {
+    let long = long_message();
     fs::write(
-        fixture.join("messages.po"),
+        fixture.join(PO_CATALOG),
         format!(
-            "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Hello\"\nmsgstr \"{translation}\"\n"
+            "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"{long}\"\nmsgstr \"{long}\"\n\nmsgid \"Hello\"\nmsgstr \"{translation}\"\n"
         ),
     )
     .expect("write catalog");
 }
 
+fn assert_unwrapped_catalog_message(fixture: &std::path::Path) {
+    let content = fs::read_to_string(fixture.join(PO_CATALOG)).expect("read catalog");
+    assert!(
+        content.contains(&format!("msgid \"{}\"", long_message())),
+        "configured line-breaks: off must survive the merge: {content}"
+    );
+}
+
+fn long_message() -> &'static str {
+    "A deliberately long catalog message that must stay on one line after a merge driver writes it."
+}
+
 fn assert_translation(fixture: &std::path::Path, translation: &str) {
-    let content = fs::read_to_string(fixture.join("messages.po")).expect("read catalog");
+    let content = fs::read_to_string(fixture.join(PO_CATALOG)).expect("read catalog");
     assert!(
         content.contains(&format!("msgstr \"{translation}\"")),
         "{content}"
     );
+}
+
+fn write_fcl_translation(fixture: &std::path::Path, translation: &str) {
+    fs::write(
+        fixture.join(FCL_CATALOG),
+        format!("%FCL1\tsource=en\tlocale=de\nHello\t\t{translation}\n"),
+    )
+    .expect("write FCL catalog");
 }
 
 fn commit_all(fixture: &std::path::Path, message: &str) {
