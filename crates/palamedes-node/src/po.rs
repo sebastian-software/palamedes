@@ -82,14 +82,14 @@ impl TryFrom<palamedes::JsPoFile> for ParsedPoFile {
     }
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[must_use]
 /// Returns the version metadata for the loaded native binding.
 pub fn get_native_info() -> NativeInfo {
     palamedes::get_native_info().into()
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Parses raw PO source text into the public host-facing PO shape.
 ///

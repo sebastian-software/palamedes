@@ -110,7 +110,7 @@ impl TryFrom<palamedes::NativeTransformResult> for NativeTransformResult {
     }
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Transforms Lingui-style macros into Palamedes runtime calls.
 ///

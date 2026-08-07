@@ -132,7 +132,7 @@ impl TryFrom<palamedes::MdxAnalysisResult> for NativeMdxAnalysisResult {
     }
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Analyze and compile an MDX module through the native semantic pipeline.
 ///

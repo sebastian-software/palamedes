@@ -102,7 +102,7 @@ impl TryFrom<palamedes::ExtractCatalogMessagesResult> for ExtractCatalogMessages
     }
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Extracts source-first messages from a JavaScript, TypeScript, or MDX module.
 ///
@@ -126,7 +126,7 @@ pub fn extract_messages(
         })
 }
 
-#[napi]
+#[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Extracts and aggregates source-first catalog update messages from files.
 ///
