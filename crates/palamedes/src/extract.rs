@@ -1933,7 +1933,7 @@ fn analyze_source_in(
         });
     }
 
-    validate_translation_macro_scopes(&parsed.program, filename, source, |local_name| {
+    validate_translation_macro_scopes(&parsed.program, filename, source, |local_name, _| {
         collector
             .imported_macros
             .get(local_name)

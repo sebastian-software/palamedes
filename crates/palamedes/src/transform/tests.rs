@@ -497,6 +497,109 @@ fn transforms_tagged_templates() {
 }
 
 #[test]
+fn preserves_macro_binding_for_mixed_runtime_uses() {
+    let source = r#"import { t as translate, plural as count } from "@palamedes/core/macro";
+function Example() {
+  const label = translate`Upload failed`;
+  useEffect(() => {}, [translate]);
+  consume({ translate, count });
+  console.log(count);
+  return label;
+}
+"#;
+
+    let result = transform_macros(source, "test.ts", None).expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains(r#"import { t as translate, plural as count } from "@palamedes/core/macro";"#));
+    assert!(result.code.contains("[translate]"));
+    assert!(result.code.contains("{ translate, count }"));
+    assert!(result.code.contains("console.log(count)"));
+    assert!(!result.code.contains("translate`Upload failed`"));
+}
+
+#[test]
+fn removes_only_fully_consumed_macro_specifiers() {
+    let source = r#"import { t as translate, plural as count } from "@palamedes/core/macro";
+function Example() {
+  const label = translate`Upload failed`;
+  return count;
+}
+"#;
+
+    let result = transform_macros(source, "test.ts", None).expect("transform should succeed");
+
+    assert!(!result.code.contains("t as translate"));
+    assert!(result.code.contains("plural as count"));
+    assert!(result.code.contains("return count"));
+}
+
+#[test]
+fn does_not_transform_shadowed_macro_locals() {
+    let source = r#"import { t } from "@palamedes/core/macro";
+function Example() {
+  const label = t`Upload failed`;
+  return ((t) => t`runtime tag`)(runtimeTag) && label;
+}
+"#;
+
+    let result = transform_macros(source, "test.ts", None).expect("transform should succeed");
+
+    assert!(!result.code.contains("@palamedes/core/macro"));
+    assert!(result.code.contains("t`runtime tag`"));
+    assert!(result.code.contains("getI18n()._("));
+}
+
+#[test]
+fn removes_value_macro_without_retaining_type_only_specifiers() {
+    let source = r#"import { t, type Trans } from "@palamedes/react/macro";
+function Example(): Trans {
+  return t`Upload failed`;
+}
+"#;
+
+    let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains(r#"import {  type Trans } from "@palamedes/react/macro";"#));
+    assert!(!result.code.contains("import { t,"));
+}
+
+#[test]
+fn rebinds_trans_when_its_macro_binding_survives() {
+    let source = r#"import { Trans } from "@palamedes/react/macro";
+function Example() {
+  const compiled = <Trans>Upload failed</Trans>;
+  return { compiled, component: Trans };
+}
+"#;
+
+    let result = transform_macros(source, "test.tsx", None).expect("transform should succeed");
+
+    assert!(result
+        .code
+        .contains(r#"import { Trans } from "@palamedes/react/macro";"#));
+    assert!(result
+        .code
+        .contains(r#"import { Trans as __palamedesTrans } from "@palamedes/react/compiled";"#));
+    assert!(result.code.contains("<__palamedesTrans id="));
+    assert!(result.code.contains("component: Trans"));
+    assert!(!result
+        .code
+        .contains(r#"import { Trans } from "@palamedes/react/compiled";"#));
+
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &result.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "Trans rebinding should emit valid TSX: {:?}",
+        parsed.diagnostics
+    );
+}
+
+#[test]
 fn aliases_injected_runtime_import_when_local_name_is_taken_by_another_module() {
     let source = r#"import { t } from "@palamedes/core/macro";
 import { getI18n } from "@palamedes/runtime";

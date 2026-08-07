@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use oxc_ast::ast::{ImportDeclaration, ImportDeclarationSpecifier};
+use oxc_ast::ast::{ImportDeclaration, ImportDeclarationSpecifier, ImportOrExportKind};
 
 pub(crate) const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
     "@palamedes/core/macro",
@@ -35,6 +35,11 @@ pub(crate) fn record_macro_import_declaration(
     if let Some(specifiers) = &declaration.specifiers {
         for specifier in specifiers {
             if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
+                if declaration.import_kind != ImportOrExportKind::Value
+                    || specifier.import_kind != ImportOrExportKind::Value
+                {
+                    continue;
+                }
                 let imported_name = specifier.imported.name().to_string();
                 if matches!(imported_name.as_str(), "msg" | "defineMessage")
                     && removed_macro_import.is_none()
