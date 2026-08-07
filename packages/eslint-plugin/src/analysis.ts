@@ -55,7 +55,7 @@ export function createAnalysisCoordinator(analyze: AnalyzeSource = analyzeSource
   const byFilename = new Map<string, CachedAnalysis>()
   // Deliberately separate from the analysis cache: a new SourceCode instance is
   // a new host parse, even when it can reuse a cached native result.
-  const reportedFailures = new WeakSet<SourceCodeLike>()
+  const reportedFailures = new WeakMap<SourceCodeLike, true>()
   let nativeCalls = 0
 
   function analyzeContext(context: AnalysisContext): CachedAnalysis {
@@ -93,16 +93,16 @@ export function createAnalysisCoordinator(analyze: AnalyzeSource = analyzeSource
 
   /**
    * Return a fatal native failure only to the first facade for this SourceCode.
-   * WeakSet ownership makes this atomic with respect to interleaved rule visits
+   * WeakMap ownership makes this atomic with respect to interleaved rule visits
    * without retaining host parse objects between editor runs.
    */
   function takeUnreportedFailure(context: AnalysisContext): NativeFailure | undefined {
     const result = analyzeContext(context)
-    if (!result.failure || reportedFailures.has(context.sourceCode)) {
+    if (!result.failure || reportedFailures.get(context.sourceCode)) {
       return undefined
     }
 
-    reportedFailures.add(context.sourceCode)
+    reportedFailures.set(context.sourceCode, true)
     return result.failure
   }
 
