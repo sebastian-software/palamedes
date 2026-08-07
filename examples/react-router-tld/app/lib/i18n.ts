@@ -1,6 +1,6 @@
 import { createI18n } from "@palamedes/core"
 import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
-import { setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
+import { activateServerI18n as activateScopedServerI18n, setClientI18n } from "@palamedes/runtime"
 import { defineLocaleControls } from "@palamedes/core/locale"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
@@ -51,12 +51,15 @@ export function createExampleI18n() {
   return createI18n()
 }
 
-export function activateServerI18n(locale: Locale) {
+export function createServerI18n(locale: Locale) {
   const i18n = createExampleI18n()
   i18n.load(locale, loadMessages(locale))
   i18n.activate(locale)
-  setServerI18nGetter(() => i18n)
   return i18n
+}
+
+export function activateServerI18n(locale: Locale) {
+  return activateScopedServerI18n(createServerI18n(locale))
 }
 
 const clientI18n = createExampleI18n()

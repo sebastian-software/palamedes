@@ -1,5 +1,7 @@
 import { fsRouter } from "waku"
 import adapter from "waku/adapters/default"
+import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createServerI18n, locales } from "./lib/i18n"
 
 // Glob keys must keep the `pages/` prefix so fsRouter's default `pagesDir: "pages"`
 // matches them. Globbing from `/src` and stripping the leading `/src/` yields
@@ -13,4 +15,18 @@ const modules = Object.fromEntries(
   ])
 )
 
-export default adapter(fsRouter(modules))
+const serverI18nScope = createServerI18nScope<ReturnType<typeof createServerI18n>>()
+
+export default adapter(fsRouter(modules), {
+  middlewareFns: [
+    () => async (context, next) => {
+      const request = context.req.raw
+      const { locale } = locales.resolve({
+        strategy: "tld",
+        acceptLanguageHeader: request.headers.get("accept-language"),
+        requestHost: request.headers.get("host"),
+      })
+      return serverI18nScope.run(createServerI18n(locale), () => next())
+    },
+  ],
+})

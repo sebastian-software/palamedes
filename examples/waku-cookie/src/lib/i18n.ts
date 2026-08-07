@@ -1,6 +1,6 @@
 import { createI18n } from "@palamedes/core"
 import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
-import { setClientI18n, setServerI18nGetter } from "@palamedes/runtime"
+import { activateServerI18n as activateScopedServerI18n, setClientI18n } from "@palamedes/runtime"
 import { defineLocaleControls } from "@palamedes/core/locale"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
@@ -40,28 +40,24 @@ export function loadMessages(locale: Locale): CompiledCatalogMessages {
 
 const clientI18n = createI18n()
 
-export async function activateServerI18n(locale: Locale) {
+export async function createServerI18n(locale: Locale) {
   const i18n = createI18n()
   i18n.load(locale, loadMessages(locale))
   i18n.activate(locale)
-  setServerI18nGetter(() => i18n)
   return i18n
+}
+
+export async function activateServerI18n(locale: Locale) {
+  return activateScopedServerI18n(await createServerI18n(locale))
 }
 
 export function initializeClientI18n(locale: Locale) {
   clientI18n.load(locale, loadMessages(locale))
   clientI18n.activate(locale)
 
-  if (typeof window === "undefined") {
-    // "use client" components are still server-rendered for the initial HTML.
-    // That SSR pass runs in its own module instance where activateServerI18n was
-    // never called, so register this catalog as the server getter too — otherwise
-    // their <Trans> calls throw "No active server i18n instance" during SSR.
-    setServerI18nGetter(() => clientI18n)
-    return
+  if (typeof window !== "undefined") {
+    setClientI18n(clientI18n)
   }
-
-  setClientI18n(clientI18n)
 }
 
 if (typeof window !== "undefined") {
