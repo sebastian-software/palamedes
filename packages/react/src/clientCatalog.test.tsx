@@ -33,12 +33,15 @@ function fulfilled<T>(value: T): Promise<T> {
 function deferred<T>(): {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason?: unknown) => void
 } {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((done, fail) => {
     resolve = done
+    reject = fail
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 describe("createClientCatalogBoundary", () => {
@@ -114,5 +117,78 @@ describe("createClientCatalogBoundary", () => {
         )
       })
     ).rejects.toThrow(/Perform a document navigation to change locale/)
+  })
+
+  it("retries a rejected preload and keeps the successful catalog cached", async () => {
+    document.documentElement.lang = "de"
+    const loadCatalog = vi
+      .fn<() => Promise<CatalogModule>>()
+      .mockRejectedValueOnce(new Error("catalog unavailable"))
+      .mockResolvedValueOnce(catalog("Hallo"))
+    const Boundary = createClientCatalogBoundary<Locale>({
+      loadCatalog,
+      resolveClientLocale: () => document.documentElement.lang as Locale,
+    })
+    expect(loadCatalog).toHaveBeenCalledOnce()
+
+    function Greeting() {
+      return <span>{String(getI18n()._("greeting"))}</span>
+    }
+
+    function boundary() {
+      return (
+        <Suspense fallback={<span>Loading</span>}>
+          <Boundary locale="de">
+            <Greeting />
+          </Boundary>
+        </Suspense>
+      )
+    }
+
+    let view!: ReturnType<typeof render>
+    await act(async () => {
+      view = render(boundary())
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(view.container.textContent).toBe("Hallo"))
+    expect(loadCatalog).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      view.rerender(boundary())
+    })
+    expect(view.container.textContent).toBe("Hallo")
+    expect(loadCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it("observes a rejected preload before the boundary renders", async () => {
+    document.documentElement.lang = "de"
+    const preload = deferred<CatalogModule>()
+    const loadCatalog = vi
+      .fn<() => Promise<CatalogModule>>()
+      .mockReturnValueOnce(preload.promise)
+      .mockResolvedValueOnce(catalog("Hallo"))
+    const Boundary = createClientCatalogBoundary<Locale>({
+      loadCatalog,
+      resolveClientLocale: () => document.documentElement.lang as Locale,
+    })
+    expect(loadCatalog).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      preload.reject(new Error("catalog unavailable"))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    let view!: ReturnType<typeof render>
+    await act(async () => {
+      view = render(
+        <Suspense fallback={<span>Loading</span>}>
+          <Boundary locale="de">Ready</Boundary>
+        </Suspense>
+      )
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(view.container.textContent).toBe("Ready"))
+    expect(loadCatalog).toHaveBeenCalledTimes(2)
   })
 })
