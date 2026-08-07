@@ -5,6 +5,7 @@ const path = require("node:path")
 const { loadPalamedesConfig } = require("@palamedes/config")
 const { compileCatalogArtifactSelected, compileCatalogModule } = require("@palamedes/core-node")
 const { createCatalogLoaderResult, createMissingErrorMessage } = require("@palamedes/transform")
+const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected"
 
@@ -96,6 +97,10 @@ module.exports = function palamedesPoLoader() {
       result.watchFiles.forEach((file) => {
         this.addDependency(file)
       })
+    } else if (selection) {
+      // Selected artifacts fold fallback catalogs into a split sidecar. Without
+      // addDependency a host cannot invalidate those indirect inputs.
+      warnMissingAddDependency(this)
     }
 
     result.warnings.forEach((warning) => {

@@ -140,10 +140,16 @@ declarations that defer translation until component render remain valid. The
 client bootstrap also initializes the module's own fragment before its body, so
 custom compiled-adapter calls observe that fragment if they must run eagerly.
 
-Selected `.po` imports remain normal development dependencies. Catalog edits
-invalidate their affected subsets under Turbopack and webpack; Next may apply
-Fast Refresh or fall back to a full document reload at an async-module
-boundary. A document reload is the supported fallback.
+Selected `.po` imports remain normal development dependencies. Their
+source-locale fallbacks and the Palamedes config are also registered as loader
+dependencies, so catalog and fallback-policy edits invalidate the affected
+subset under supported hosts. If a custom loader host does not implement
+`addDependency()`, Palamedes emits one development warning; restart after
+changing a fallback catalog or config in that host. Next may apply Fast Refresh
+or fall back to a full document reload at an async-module boundary. A document
+reload is the supported fallback. The development invalidation regression runs
+under Turbopack. Webpack's top-level-await client build is covered in
+production, but does not claim an equivalent HMR contract.
 
 Each production fragment import is attempted once. If one rejects, Palamedes
 logs the failure with the module path and locale, skips only that fragment, and
@@ -262,7 +268,12 @@ long-lived server runtime can therefore retain registrations from more than one
 action graph, so a later action may load a superset of its own dependency
 closure. This affects the upper performance bound, not lookup correctness:
 Palamedes still imports only the active locale and only the selected ids from
-each registered source module.
+each registered source module. During webpack development, each generated
+server module releases its exact registration on HMR disposal, and a
+re-evaluated module atomically replaces all of its sidecars. Turbopack does not
+currently expose an equivalent server-module disposal hook to loader output;
+edits and catalog/config changes replace active registrations, but a module
+removed from the graph can remain registered until the dev server restarts.
 
 Parameter defaults execute before the function body. Palamedes therefore
 rejects eager macros in Server Function parameter initializers, including

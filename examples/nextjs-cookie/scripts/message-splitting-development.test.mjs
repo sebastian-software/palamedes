@@ -12,16 +12,32 @@ const baseUrl = `http://127.0.0.1:${port}`
 const require = createRequire(import.meta.url)
 const nextCli = require.resolve("next/dist/bin/next")
 const catalogUrl = new URL("../src/locales/de.po", import.meta.url)
+const sourceCatalogUrl = new URL("../src/locales/en.po", import.meta.url)
+const configUrl = new URL("../palamedes.yaml", import.meta.url)
 const nextEnvUrl = new URL("../next-env.d.ts", import.meta.url)
-const [originalCatalog, originalNextEnv] = await Promise.all([
-  readFile(catalogUrl, "utf8"),
-  readFile(nextEnvUrl, "utf8"),
-])
+const [originalCatalog, originalSourceCatalog, originalConfig, originalNextEnv] = await Promise.all(
+  [
+    readFile(catalogUrl, "utf8"),
+    readFile(sourceCatalogUrl, "utf8"),
+    readFile(configUrl, "utf8"),
+    readFile(nextEnvUrl, "utf8"),
+  ]
+)
 const changedCatalog = originalCatalog.replace(
   'msgstr "In den Warenkorb"',
   'msgstr "In den Warenkorb (Dev-Update)"'
 )
 assert.notEqual(changedCatalog, originalCatalog)
+const changedSourceCatalog = originalSourceCatalog.replace(
+  'msgstr "Source fallback development probe"',
+  'msgstr "Source fallback development probe (Dev-Update)"'
+)
+assert.notEqual(changedSourceCatalog, originalSourceCatalog)
+const changedConfig = originalConfig.replace(
+  "source-locale: en\n",
+  "source-locale: en\nfallback-locales:\n  de: [es]\n"
+)
+assert.notEqual(changedConfig, originalConfig)
 
 const executablePath = [
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
@@ -65,6 +81,19 @@ async function stopServer() {
   await Promise.race([once(server, "exit"), new Promise((resolve) => setTimeout(resolve, 5000))])
 }
 
+async function reloadUntil(page, locator, expectedText) {
+  const deadline = Date.now() + 15_000
+  let actualText = ""
+  while (Date.now() < deadline) {
+    await page.reload()
+    await locator.waitFor()
+    actualText = (await locator.textContent()) ?? ""
+    if (actualText === expectedText) return
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  assert.equal(actualText, expectedText)
+}
+
 let browser
 try {
   await waitForServer()
@@ -75,24 +104,25 @@ try {
   })
   const page = await context.newPage()
   const callToAction = page.locator(".ticket .cta")
+  const fallbackProbe = page.locator(".ticket .fallback-probe")
   await page.goto(baseUrl)
   await callToAction.waitFor()
   assert.equal(await callToAction.textContent(), "In den Warenkorb")
+  assert.equal(await fallbackProbe.textContent(), "Source fallback development probe")
 
   await writeFile(catalogUrl, changedCatalog)
+  await reloadUntil(page, callToAction, "In den Warenkorb (Dev-Update)")
 
-  const deadline = Date.now() + 15_000
-  let updatedText = ""
-  while (Date.now() < deadline) {
-    await page.reload()
-    await callToAction.waitFor()
-    updatedText = (await callToAction.textContent()) ?? ""
-    if (updatedText === "In den Warenkorb (Dev-Update)") break
-    await new Promise((resolve) => setTimeout(resolve, 200))
-  }
+  await writeFile(sourceCatalogUrl, changedSourceCatalog)
+  await reloadUntil(page, fallbackProbe, "Source fallback development probe (Dev-Update)")
 
-  assert.equal(updatedText, "In den Warenkorb (Dev-Update)")
-  console.log("Next development catalog invalidation passed through document reload")
+  await writeFile(configUrl, changedConfig)
+  await reloadUntil(page, fallbackProbe, "Sondeo de reserva de desarrollo")
+
+  // This is a Turbopack dev test and verifies the supported document-reload
+  // fallback. Webpack's top-level-await client modules are build-covered, but
+  // do not have an equivalent HMR contract asserted here.
+  console.log("Next development catalog and config invalidation passed through document reload")
   await context.close()
 } catch (error) {
   console.error(serverOutput)
@@ -102,6 +132,8 @@ try {
   await stopServer()
   await Promise.all([
     writeFile(catalogUrl, originalCatalog),
+    writeFile(sourceCatalogUrl, originalSourceCatalog),
+    writeFile(configUrl, originalConfig),
     writeFile(nextEnvUrl, originalNextEnv),
   ])
 }

@@ -7,6 +7,7 @@ import {
   getI18n,
   initializeClientI18n,
   loadRegisteredMessages,
+  registerMessageLoaderGroup,
   registerMessageLoaders,
   registerMessages,
   resetI18nRuntime,
@@ -257,6 +258,54 @@ describe("registerMessages", () => {
     expect(first).toHaveBeenCalledOnce()
     expect(second).toHaveBeenCalledOnce()
     expect(i18n.loaded["reg-server-hmr"]).toEqual([{ keyK: "old" }, { keyK: "new" }])
+  })
+
+  it("replaces a source module's entire registration group", async () => {
+    const oldLoader = vi.fn(async () => ({ keyM: "old" }))
+    const newLoader = vi.fn(async () => ({ keyM: "new" }))
+    registerMessageLoaderGroup("reg-server-group", [{ "reg-server-group": oldLoader }])
+    const first = createLoadableI18n("reg-server-group")
+    await loadRegisteredMessages(first, "reg-server-group")
+
+    registerMessageLoaderGroup("reg-server-group", [{ "reg-server-group": newLoader }])
+    const second = createLoadableI18n("reg-server-group")
+    await loadRegisteredMessages(second, "reg-server-group")
+
+    expect(oldLoader).toHaveBeenCalledOnce()
+    expect(newLoader).toHaveBeenCalledOnce()
+    expect(second.loaded["reg-server-group"]).toEqual([{ keyM: "new" }])
+  })
+
+  it("removes a source module's registrations when it no longer has messages", async () => {
+    const loader = vi.fn(async () => ({ keyN: "stale" }))
+    registerMessageLoaderGroup("reg-server-removed", [{ "reg-server-removed": loader }])
+    registerMessageLoaderGroup("reg-server-removed", [])
+
+    await loadRegisteredMessages(createLoadableI18n("reg-server-removed"), "reg-server-removed")
+
+    expect(loader).not.toHaveBeenCalled()
+  })
+
+  it("does not let an old module disposal remove its HMR replacement", async () => {
+    const oldLoader = vi.fn(async () => ({ keyO: "old" }))
+    const newLoader = vi.fn(async () => ({ keyO: "new" }))
+    const releaseOld = registerMessageLoaderGroup("reg-server-dispose", [
+      { "reg-server-dispose": oldLoader },
+    ])
+    const releaseNew = registerMessageLoaderGroup("reg-server-dispose", [
+      { "reg-server-dispose": newLoader },
+    ])
+    releaseOld()
+
+    const i18n = createLoadableI18n("reg-server-dispose")
+    await loadRegisteredMessages(i18n, "reg-server-dispose")
+
+    expect(oldLoader).not.toHaveBeenCalled()
+    expect(newLoader).toHaveBeenCalledOnce()
+    releaseNew()
+    await expect(
+      loadRegisteredMessages(createLoadableI18n("reg-server-dispose"), "reg-server-dispose")
+    ).resolves.toBeDefined()
   })
 
   it("rejects a non-loadable instance only when graph messages exist", async () => {

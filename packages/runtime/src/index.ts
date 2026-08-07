@@ -10,6 +10,9 @@ const SERVER_I18N_GETTER_KEY = Symbol.for("palamedes.runtime.serverI18nGetter")
 const SERVER_SCOPE_STATE_KEY = Symbol.for("palamedes.runtime.serverI18nScopeState")
 const REGISTERED_MESSAGES_KEY = Symbol.for("palamedes.runtime.registeredMessages")
 const REGISTERED_MESSAGE_LOADERS_KEY = Symbol.for("palamedes.runtime.registeredMessageLoaders")
+const REGISTERED_MESSAGE_LOADER_GROUPS_KEY = Symbol.for(
+  "palamedes.runtime.registeredMessageLoaderGroups"
+)
 
 export type RegisteredMessages = Record<string, Record<string, unknown>>
 
@@ -27,6 +30,10 @@ export type RegisteredMessageLoader = () => Promise<Record<string, unknown>>
 type RegisteredMessageLoaderState = {
   loaders: Record<string, RegisteredMessageLoader>
   resources: Map<string, Promise<Record<string, unknown>>>
+}
+
+type RegisteredMessageLoaderGroup = {
+  registrations: Map<string, RegisteredMessageLoaderState>
 }
 
 export type ServerI18nScope<T extends I18nInstance = I18nInstance> = {
@@ -59,6 +66,7 @@ type GlobalRuntimeState = typeof globalThis & {
   }
   [REGISTERED_MESSAGES_KEY]?: Map<string, Record<string, unknown>[]>
   [REGISTERED_MESSAGE_LOADERS_KEY]?: Map<string, RegisteredMessageLoaderState>
+  [REGISTERED_MESSAGE_LOADER_GROUPS_KEY]?: Map<string, RegisteredMessageLoaderGroup>
 }
 
 function globalRuntimeState(): GlobalRuntimeState {
@@ -93,6 +101,25 @@ function getRegisteredMessageLoaders(
   const registered = new Map<string, RegisteredMessageLoaderState>()
   state[REGISTERED_MESSAGE_LOADERS_KEY] = registered
   return registered
+}
+
+function getRegisteredMessageLoaderGroups(
+  state = globalRuntimeState()
+): Map<string, RegisteredMessageLoaderGroup> {
+  const existing = state[REGISTERED_MESSAGE_LOADER_GROUPS_KEY]
+  if (existing) {
+    return existing
+  }
+
+  const registered = new Map<string, RegisteredMessageLoaderGroup>()
+  state[REGISTERED_MESSAGE_LOADER_GROUPS_KEY] = registered
+  return registered
+}
+
+function createRegisteredMessageLoaderState(
+  loaders: Record<string, RegisteredMessageLoader>
+): RegisteredMessageLoaderState {
+  return { loaders, resources: new Map() }
 }
 
 /**
@@ -144,11 +171,62 @@ export function registerMessages(catalogs: RegisteredMessages): void {
 export function registerMessageLoaders(
   key: string,
   loaders: Record<string, RegisteredMessageLoader>
-): void {
-  getRegisteredMessageLoaders().set(key, {
-    loaders,
-    resources: new Map(),
-  })
+): () => void {
+  const registered = getRegisteredMessageLoaders()
+  const registration = createRegisteredMessageLoaderState(loaders)
+  registered.set(key, registration)
+  return () => {
+    if (registered.get(key) === registration) {
+      registered.delete(key)
+    }
+  }
+}
+
+/**
+ * Replace every lazy sidecar registration owned by a generated source module.
+ * The returned release function only removes this exact registration, so an
+ * old HMR module cannot unregister the replacement that evaluated after it.
+ */
+export function registerMessageLoaderGroup(
+  key: string,
+  loaderGroups: ReadonlyArray<Record<string, RegisteredMessageLoader>>
+): () => void {
+  const registered = getRegisteredMessageLoaders()
+  const groups = getRegisteredMessageLoaderGroups()
+  const previous = groups.get(key)
+  if (previous) {
+    for (const [registrationKey, registration] of previous.registrations) {
+      if (registered.get(registrationKey) === registration) {
+        registered.delete(registrationKey)
+      }
+    }
+  }
+
+  if (loaderGroups.length === 0) {
+    groups.delete(key)
+    return () => {}
+  }
+
+  const group: RegisteredMessageLoaderGroup = { registrations: new Map() }
+  groups.set(key, group)
+  for (const [index, loaders] of loaderGroups.entries()) {
+    const registrationKey = `${key}:${index}`
+    const registration = createRegisteredMessageLoaderState(loaders)
+    group.registrations.set(registrationKey, registration)
+    registered.set(registrationKey, registration)
+  }
+
+  return () => {
+    if (groups.get(key) !== group) {
+      return
+    }
+    groups.delete(key)
+    for (const [registrationKey, registration] of group.registrations) {
+      if (registered.get(registrationKey) === registration) {
+        registered.delete(registrationKey)
+      }
+    }
+  }
 }
 
 /**
