@@ -107,9 +107,9 @@ function getRegisteredMessageLoaders(
  * runtime rejects unbranded copies. Merging across registrations is the
  * instance's `load()` responsibility.
  *
- * Registrations are module-evaluation facts, not instance state: like the
- * framework bindings' listener stores, they survive `resetI18nRuntime()`,
- * because the registering modules will not evaluate a second time.
+ * Registrations are module-evaluation facts, not instance state. They survive
+ * `resetI18nRuntime()` because the registering modules will not evaluate a
+ * second time.
  */
 export function registerMessages(catalogs: RegisteredMessages): void {
   const state = globalRuntimeState()
