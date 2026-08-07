@@ -48,6 +48,20 @@ per unchanged file. A source edit changes the fingerprint and invalidates the
 entry. Tests exercise the coordinator with distinct source objects to cover
 hosts that create a separate context for each enabled rule.
 
+Fatal native analysis errors take a separate path. The coordinator records the
+first reporting facade in a `WeakSet` keyed by the host `SourceCode` object, so
+an error is emitted once per parse even if cached analysis is visited by several
+rules. A new `SourceCode` identity is a new editor parse and may report again;
+the weak key does not retain editor source objects. ESLint-compatible APIs bind
+the displayed rule ID to the rule calling `report`, so no neutral coordinator
+ID can be emitted without adding a separately enabled public rule. The adapter
+therefore uses the first visiting enabled facade and prefixes the diagnostic as
+`Palamedes native analysis failed`, rather than presenting it as that semantic
+rule's result. Native authoring errors' explicit `at file:line:column` and
+`Location: file:line:column` locations are converted from one-based Unicode
+scalar coordinates to host UTF-16 positions; malformed or absent locations use
+the deterministic file-start fallback.
+
 ## Rule Mapping
 
 | Native code                            | ESLint/Oxlint rule                          | Recommended                                          |
