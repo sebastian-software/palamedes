@@ -1,30 +1,34 @@
 use std::collections::{HashMap, HashSet};
 
 use oxc_ast::ast::{
-    CallExpression, JSXChild, JSXElement, JSXOpeningElement, TaggedTemplateExpression,
+    CallExpression, Expression, JSXChild, JSXElement, JSXOpeningElement, TaggedTemplateExpression,
 };
 use oxc_ast_visit::{walk, Visit};
+use oxc_semantic::Semantic;
+use oxc_span::GetSpan;
 
 use crate::error::PalamedesError;
 use crate::translation_scope::source_location;
 
-use super::imports::ImportedMacro;
-use super::messages::identifier_name;
+use super::imports::ImportCollector;
 use super::runtime::{
     transform_choice_call, transform_choice_jsx_element, transform_descriptor_call,
     transform_tagged_template, transform_trans_element,
 };
 use super::{NativeTransformOptions, Replacement};
+use oxc_syntax::symbol::SymbolId;
 
 pub(super) struct TransformVisitor<'a> {
     filename: &'a str,
     source: &'a str,
-    macro_imports: &'a HashMap<String, ImportedMacro>,
+    imports: &'a ImportCollector,
     options: &'a NativeTransformOptions,
     pub replacements: Vec<Replacement>,
     pub compiled_ids: Vec<String>,
     pub needs_runtime_import: bool,
-    pub trans_import_modules: HashSet<String>,
+    pub trans_imports: HashSet<(String, String)>,
+    trans_replacements: Vec<(SymbolId, String, usize)>,
+    pub consumed_binding_ranges: Vec<(SymbolId, usize, usize)>,
     pub error: Option<PalamedesError>,
     jsx_child_element_spans: Vec<(usize, usize)>,
 }
@@ -33,18 +37,20 @@ impl<'a> TransformVisitor<'a> {
     pub(super) fn new(
         filename: &'a str,
         source: &'a str,
-        macro_imports: &'a HashMap<String, ImportedMacro>,
+        imports: &'a ImportCollector,
         options: &'a NativeTransformOptions,
     ) -> Self {
         Self {
             filename,
             source,
-            macro_imports,
+            imports,
             options,
             replacements: Vec::new(),
             compiled_ids: Vec::new(),
             needs_runtime_import: false,
-            trans_import_modules: HashSet::new(),
+            trans_imports: HashSet::new(),
+            trans_replacements: Vec::new(),
+            consumed_binding_ranges: Vec::new(),
             error: None,
             jsx_child_element_spans: Vec::new(),
         }
@@ -72,6 +78,35 @@ impl<'a> TransformVisitor<'a> {
             location: source_location(self.source, self.filename, start),
             detail: "the macro could not be statically transformed; use a supported literal, template, descriptor, or choice shape".to_string(),
         });
+    }
+
+    fn record_consumed_binding(&mut self, symbol_id: SymbolId, start: usize, end: usize) {
+        self.consumed_binding_ranges.push((symbol_id, start, end));
+    }
+
+    pub(super) fn rebind_surviving_trans(&mut self, semantic: &Semantic<'_>) {
+        let mut aliases = HashMap::<SymbolId, String>::new();
+        let mut reserved = self.imports.used_identifier_names.clone();
+        for (symbol_id, module, replacement_index) in self.trans_replacements.clone() {
+            let local_name = if self.imports.has_surviving_value_reference(
+                semantic,
+                symbol_id,
+                &self.consumed_binding_ranges,
+            ) {
+                aliases
+                    .entry(symbol_id)
+                    .or_insert_with(|| unique_identifier("__palamedesTrans", &mut reserved))
+                    .clone()
+            } else {
+                "Trans".to_string()
+            };
+            if local_name != "Trans" {
+                self.replacements[replacement_index].text = self.replacements[replacement_index]
+                    .text
+                    .replacen("<Trans ", &format!("<{local_name} "), 1);
+            }
+            self.trans_imports.insert((module, local_name));
+        }
     }
 
     fn is_current_jsx_child_element(&self, element: &JSXElement<'_>) -> bool {
@@ -116,7 +151,13 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         };
 
-        let Some(macro_info) = self.macro_imports.get(tag_name.as_str()).cloned() else {
+        let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(
+            tag_name.as_str(),
+            (
+                it.opening_element.name.span().start,
+                it.opening_element.name.span().end,
+            ),
+        ) else {
             walk::walk_jsx_element(self, it);
             return;
         };
@@ -125,8 +166,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             macro_info.imported_name.as_str(),
             "Trans" | "Plural" | "Select" | "SelectOrdinal"
         ) {
-            if let Some(nested_start) =
-                nested_message_macro_in_children(&it.children, self.macro_imports)
+            if let Some(nested_start) = nested_message_macro_in_children(&it.children, self.imports)
             {
                 self.fail(PalamedesError::NestedMessageMacro {
                     location: source_location(self.source, self.filename, nested_start),
@@ -180,11 +220,19 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     text,
                 });
                 self.push_compiled_id(&compiled_id);
+                self.record_consumed_binding(
+                    macro_symbol_id,
+                    it.span.start as usize,
+                    it.span.end as usize,
+                );
 
                 if macro_info.imported_name == "Trans" {
                     if let Some(module) = macro_info.source.strip_suffix("/macro") {
-                        self.trans_import_modules
-                            .insert(format!("{module}/compiled"));
+                        self.trans_replacements.push((
+                            macro_symbol_id,
+                            format!("{module}/compiled"),
+                            self.replacements.len() - 1,
+                        ));
                     }
                 } else {
                     self.needs_runtime_import = true;
@@ -215,12 +263,13 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         }
 
-        let Some(local_name) = identifier_name(&it.tag) else {
+        let Some((local_name, tag_span)) = identifier_name_and_span(&it.tag) else {
             walk::walk_tagged_template_expression(self, it);
             return;
         };
 
-        let Some(macro_info) = self.macro_imports.get(local_name).cloned() else {
+        let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(local_name, tag_span)
+        else {
             walk::walk_tagged_template_expression(self, it);
             return;
         };
@@ -238,6 +287,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     text,
                 });
                 self.push_compiled_id(&compiled_id);
+                self.record_consumed_binding(
+                    macro_symbol_id,
+                    it.span.start as usize,
+                    it.span.end as usize,
+                );
                 self.needs_runtime_import = true;
             }
             Ok(None) => {
@@ -258,12 +312,13 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         }
 
-        let Some(local_name) = identifier_name(&it.callee) else {
+        let Some((local_name, callee_span)) = identifier_name_and_span(&it.callee) else {
             walk::walk_call_expression(self, it);
             return;
         };
 
-        let Some(macro_info) = self.macro_imports.get(local_name).cloned() else {
+        let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(local_name, callee_span)
+        else {
             walk::walk_call_expression(self, it);
             return;
         };
@@ -285,6 +340,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
+                        self.record_consumed_binding(
+                            macro_symbol_id,
+                            it.span.start as usize,
+                            it.span.end as usize,
+                        );
                         self.needs_runtime_import = true;
                     }
                     Ok(None) => {
@@ -315,6 +375,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
+                        self.record_consumed_binding(
+                            macro_symbol_id,
+                            it.span.start as usize,
+                            it.span.end as usize,
+                        );
                         self.needs_runtime_import = true;
                     }
                     Ok(None) => {
@@ -342,23 +407,20 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
 fn nested_message_macro_in_children<'a>(
     children: &'a [JSXChild<'a>],
-    macro_imports: &HashMap<String, ImportedMacro>,
+    imports: &ImportCollector,
 ) -> Option<usize> {
-    NestedMessageMacroFinder::find_in_children(children, macro_imports)
+    NestedMessageMacroFinder::find_in_children(children, imports)
 }
 
 struct NestedMessageMacroFinder<'a> {
-    macro_imports: &'a HashMap<String, ImportedMacro>,
+    imports: &'a ImportCollector,
     nested_start: Option<usize>,
 }
 
 impl<'a> NestedMessageMacroFinder<'a> {
-    fn find_in_children(
-        children: &[JSXChild<'a>],
-        macro_imports: &'a HashMap<String, ImportedMacro>,
-    ) -> Option<usize> {
+    fn find_in_children(children: &[JSXChild<'a>], imports: &'a ImportCollector) -> Option<usize> {
         let mut finder = Self {
-            macro_imports,
+            imports,
             nested_start: None,
         };
 
@@ -379,7 +441,7 @@ impl<'a> Visit<'a> for NestedMessageMacroFinder<'a> {
             return;
         }
 
-        if is_jsx_message_macro(it, self.macro_imports) {
+        if is_jsx_message_macro(it, self.imports) {
             self.nested_start = Some(it.span.start as usize);
             return;
         }
@@ -393,20 +455,47 @@ impl<'a> Visit<'a> for NestedMessageMacroFinder<'a> {
     }
 }
 
-fn is_jsx_message_macro(
-    element: &JSXElement<'_>,
-    macro_imports: &HashMap<String, ImportedMacro>,
-) -> bool {
+fn is_jsx_message_macro(element: &JSXElement<'_>, imports: &ImportCollector) -> bool {
     let Some(tag_name) = element.opening_element.name.get_identifier_name() else {
         return false;
     };
 
-    macro_imports
-        .get(tag_name.as_str())
-        .is_some_and(|macro_info| {
+    imports
+        .macro_at(
+            tag_name.as_str(),
+            (
+                element.opening_element.name.span().start,
+                element.opening_element.name.span().end,
+            ),
+        )
+        .is_some_and(|(macro_info, _)| {
             matches!(
                 macro_info.imported_name.as_str(),
                 "Trans" | "Plural" | "Select" | "SelectOrdinal"
             )
         })
+}
+
+fn identifier_name_and_span<'a>(expression: &'a Expression<'a>) -> Option<(&'a str, (u32, u32))> {
+    match expression.without_parentheses() {
+        Expression::Identifier(identifier) => Some((
+            identifier.name.as_str(),
+            (identifier.span.start, identifier.span.end),
+        )),
+        _ => None,
+    }
+}
+
+fn unique_identifier(base: &str, reserved: &mut HashSet<String>) -> String {
+    if reserved.insert(base.to_string()) {
+        return base.to_string();
+    }
+    let mut counter = 2;
+    loop {
+        let candidate = format!("{base}{counter}");
+        if reserved.insert(candidate.clone()) {
+            return candidate;
+        }
+        counter += 1;
+    }
 }

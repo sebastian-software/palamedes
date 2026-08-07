@@ -12,6 +12,7 @@ use std::fmt::Write as _;
 use oxc_allocator::Allocator;
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
+use oxc_semantic::SemanticBuilder;
 use oxc_span::SourceType;
 use serde::{Deserialize, Serialize};
 use string_wizard::{Hires, MagicString, SourceMapOptions};
@@ -181,8 +182,14 @@ pub fn transform_macros(
         });
     }
 
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
+
     let mut collector = ImportCollector::new(&runtime_module, &runtime_import_name);
     collector.visit_program(&parsed.program);
+    collector.resolve_macro_references(&semantic);
 
     let runtime_import_name_is_unsafe = if collector.has_reusable_runtime_import {
         collector.runtime_import_binding_count > 1
@@ -212,20 +219,25 @@ pub fn transform_macros(
     }
 
     if !collector.macro_imports.is_empty() {
-        validate_translation_macro_scopes(&parsed.program, filename, source, |local_name| {
-            collector
-                .macro_imports
-                .get(local_name)
-                .map(|macro_info| macro_info.imported_name.clone())
-        })?;
+        validate_translation_macro_scopes(
+            &parsed.program,
+            filename,
+            source,
+            |local_name, span| {
+                collector
+                    .macro_at(local_name, span)
+                    .map(|(macro_info, _)| macro_info.imported_name)
+            },
+        )?;
     }
 
-    let mut visitor = TransformVisitor::new(filename, source, &collector.macro_imports, &options);
+    let mut visitor = TransformVisitor::new(filename, source, &collector, &options);
     visitor.visit_program(&parsed.program);
 
     if let Some(error) = visitor.error {
         return Err(error);
     }
+    visitor.rebind_surviving_trans(&semantic);
 
     let mut server_function_transform = options.server_functions.as_ref().map(|_| {
         ServerFunctionTransform::run(
@@ -245,13 +257,11 @@ pub fn transform_macros(
 
     let mut replacements = visitor.replacements;
     if !replacements.is_empty() {
-        for (start, end) in collector.macro_import_ranges {
-            replacements.push(Replacement {
-                start,
-                end,
-                text: String::new(),
-            });
-        }
+        replacements.extend(collector.macro_import_cleanup_replacements(
+            source,
+            &semantic,
+            &visitor.consumed_binding_ranges,
+        ));
     }
     if let Some(transform) = &server_function_transform {
         replacements.extend(transform.replacements.iter().cloned());
@@ -290,15 +300,18 @@ pub fn transform_macros(
         }
     }
 
-    let mut trans_modules = visitor
-        .trans_import_modules
-        .iter()
-        .cloned()
-        .collect::<Vec<_>>();
-    trans_modules.sort();
-    for module in trans_modules {
-        if !collector.trans_import_sources.contains(&module) {
-            let _ = writeln!(prefix, "import {{ Trans }} from \"{module}\";");
+    let mut trans_imports = visitor.trans_imports.iter().cloned().collect::<Vec<_>>();
+    trans_imports.sort();
+    for (module, local_name) in trans_imports {
+        if local_name != "Trans" || !collector.trans_import_sources.contains(&module) {
+            if local_name == "Trans" {
+                let _ = writeln!(prefix, "import {{ Trans }} from \"{module}\";");
+            } else {
+                let _ = writeln!(
+                    prefix,
+                    "import {{ Trans as {local_name} }} from \"{module}\";"
+                );
+            }
         }
     }
 

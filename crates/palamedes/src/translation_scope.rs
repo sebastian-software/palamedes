@@ -1,6 +1,7 @@
 use oxc_ast::ast::{CallExpression, Expression, JSXElement, Program, TaggedTemplateExpression};
 use oxc_ast::ast_kind::AstKind;
 use oxc_ast_visit::{walk, Visit};
+use oxc_span::GetSpan;
 
 use crate::error::{PalamedesError, PalamedesResult};
 
@@ -14,7 +15,7 @@ pub(crate) fn validate_translation_macro_scopes<'a, F>(
     imported_macro_name: F,
 ) -> PalamedesResult<()>
 where
-    F: Fn(&str) -> Option<String>,
+    F: Fn(&str, (u32, u32)) -> Option<String>,
 {
     let mut validator = TranslationScopeValidator {
         filename,
@@ -41,14 +42,20 @@ struct TranslationScopeValidator<'a, F> {
 
 impl<F> TranslationScopeValidator<'_, F>
 where
-    F: Fn(&str) -> Option<String>,
+    F: Fn(&str, (u32, u32)) -> Option<String>,
 {
-    fn validate_macro(&mut self, local_name: &str, expected: &[&str], offset: usize) {
+    fn validate_macro(
+        &mut self,
+        local_name: &str,
+        span: (u32, u32),
+        expected: &[&str],
+        offset: usize,
+    ) {
         if self.error.is_some() || self.function_depth > 0 {
             return;
         }
 
-        let Some(macro_name) = (self.imported_macro_name)(local_name) else {
+        let Some(macro_name) = (self.imported_macro_name)(local_name, span) else {
             return;
         };
         if !expected.contains(&macro_name.as_str()) {
@@ -64,7 +71,7 @@ where
 
 impl<'a, F> Visit<'a> for TranslationScopeValidator<'_, F>
 where
-    F: Fn(&str) -> Option<String>,
+    F: Fn(&str, (u32, u32)) -> Option<String>,
 {
     fn enter_node(&mut self, kind: AstKind<'a>) {
         if matches!(
@@ -92,6 +99,10 @@ where
         if let Some(local_name) = it.opening_element.name.get_identifier_name() {
             self.validate_macro(
                 local_name.as_str(),
+                (
+                    it.opening_element.name.span().start,
+                    it.opening_element.name.span().end,
+                ),
                 &EAGER_JSX_MACROS,
                 it.span.start as usize,
             );
@@ -107,8 +118,8 @@ where
             return;
         }
 
-        if let Some(local_name) = identifier_name(&it.tag) {
-            self.validate_macro(local_name, &["t"], it.span.start as usize);
+        if let Some((local_name, span)) = identifier_name(&it.tag) {
+            self.validate_macro(local_name, span, &["t"], it.span.start as usize);
         }
 
         if self.error.is_none() {
@@ -121,8 +132,8 @@ where
             return;
         }
 
-        if let Some(local_name) = identifier_name(&it.callee) {
-            self.validate_macro(local_name, &EAGER_JS_MACROS, it.span.start as usize);
+        if let Some((local_name, span)) = identifier_name(&it.callee) {
+            self.validate_macro(local_name, span, &EAGER_JS_MACROS, it.span.start as usize);
         }
 
         if self.error.is_none() {
@@ -131,9 +142,12 @@ where
     }
 }
 
-fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
+fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<(&'a str, (u32, u32))> {
     match expression.without_parentheses() {
-        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
+        Expression::Identifier(identifier) => Some((
+            identifier.name.as_str(),
+            (identifier.span.start, identifier.span.end),
+        )),
         _ => None,
     }
 }
