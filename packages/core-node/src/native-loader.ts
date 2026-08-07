@@ -190,7 +190,8 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
       continue
     }
 
-    if (value instanceof Map) {
+    const classification = classifySnapshotObject(value, currentPath)
+    if (classification.kind === "map") {
       const mapSnapshot = new Map<unknown, unknown>()
       snapshots.set(value, mapSnapshot)
       current.assign(mapSnapshot)
@@ -227,13 +228,12 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
       }
       continue
     }
-    if (Array.isArray(value)) {
+    if (classification.kind === "array") {
       const arraySnapshot: unknown[] = []
-      arraySnapshot.length = value.length
+      arraySnapshot.length = classification.length
       snapshots.set(value, arraySnapshot)
       current.assign(arraySnapshot)
-      for (const key of ownPropertyNames(value, currentPath).reverse()) {
-        if (key === "length") continue
+      for (const key of enumerablePropertyNames(value, currentPath).reverse()) {
         const propertyPath = appendNativeArgumentPath(currentPath, arrayPropertyPath(key))
         assertWellFormedPropertyName(key, propertyPath)
         pending.push({
@@ -249,16 +249,10 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
       continue
     }
 
-    const prototype = objectPrototype(value, currentPath)
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new TypeError(
-        `Palamedes native boundary requires a plain object at ${formatNativeArgumentPath(currentPath)}; copy class instances into request data before calling ${operation}.`
-      )
-    }
-    const snapshot = Object.create(prototype) as Record<string, unknown>
-    snapshots.set(value, snapshot)
-    current.assign(snapshot)
-    for (const key of ownPropertyNames(value, currentPath).reverse()) {
+    const recordSnapshot: Record<string, unknown> = {}
+    snapshots.set(value, recordSnapshot)
+    current.assign(recordSnapshot)
+    for (const key of enumerablePropertyNames(value, currentPath).reverse()) {
       const propertyPath = appendNativeArgumentPath(currentPath, `.${key}`)
       assertWellFormedPropertyName(key, propertyPath)
       pending.push({
@@ -267,7 +261,7 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
         key,
         path: propertyPath,
         assign(snapshotValue: unknown) {
-          defineSnapshotProperty(snapshot, key, snapshotValue)
+          defineSnapshotProperty(recordSnapshot, key, snapshotValue)
         },
       })
     }
@@ -323,17 +317,44 @@ function arrayPropertyPath(key: string): string {
   return /^(?:0|[1-9]\d*)$/u.test(key) ? `[${key}]` : `.${key}`
 }
 
-function ownPropertyNames(value: object, argumentPath: NativeArgumentPath): string[] {
+type SnapshotObjectClassification =
+  | { kind: "array"; length: number }
+  | { kind: "map" }
+  | { kind: "record" }
+
+function classifySnapshotObject(
+  value: object,
+  argumentPath: NativeArgumentPath
+): SnapshotObjectClassification {
   try {
-    return Object.getOwnPropertyNames(value)
+    if (Array.isArray(value)) {
+      return { kind: "array", length: readArrayLength(value) }
+    }
+
+    return isMapPrototype(Object.getPrototypeOf(value)) ? { kind: "map" } : { kind: "record" }
   } catch (error) {
     throw nativeBoundaryReadError(argumentPath, error)
   }
 }
 
-function objectPrototype(value: object, argumentPath: NativeArgumentPath): object | null {
+function readArrayLength(value: object): number {
+  const length = Reflect.get(value, "length")
+  if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) {
+    throw new TypeError("Array length must be a non-negative safe integer.")
+  }
+  return length
+}
+
+function isMapPrototype(prototype: object | null): boolean {
+  for (let current = prototype; current !== null; current = Object.getPrototypeOf(current)) {
+    if (current === Map.prototype) return true
+  }
+  return false
+}
+
+function enumerablePropertyNames(value: object, argumentPath: NativeArgumentPath): string[] {
   try {
-    return Object.getPrototypeOf(value)
+    return Object.keys(value)
   } catch (error) {
     throw nativeBoundaryReadError(argumentPath, error)
   }
