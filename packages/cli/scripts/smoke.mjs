@@ -17,6 +17,23 @@ import { resolvePlatformPackage } from "./platform.mjs"
 
 const packageDir = path.resolve(import.meta.dirname, "..")
 const repoRoot = path.resolve(packageDir, "../..")
+const expectedCliManifestFiles = [
+  "LICENSE",
+  "README.md",
+  "bin/pmds",
+  "scripts/run.mjs",
+  "scripts/platform.mjs",
+  "scripts/native.mjs",
+]
+const expectedPackedCliFiles = [
+  "package/LICENSE",
+  "package/README.md",
+  "package/bin/pmds",
+  "package/package.json",
+  "package/scripts/native.mjs",
+  "package/scripts/platform.mjs",
+  "package/scripts/run.mjs",
+]
 let platformPackage
 try {
   platformPackage = resolvePlatformPackage()
@@ -52,8 +69,8 @@ try {
   // node_modules tree. No lifecycle hook runs while constructing this fixture.
   const archiveDir = path.join(fixtureRoot, "archives")
   mkdirSync(archiveDir)
-  const cliArchive = packPackage(packageDir, archiveDir)
-  const nativeArchive = packPackage(platformPackageDir, archiveDir)
+  const cliArchive = packPackage(packageDir, archiveDir, "pnpm")
+  const nativeArchive = packPackage(platformPackageDir, archiveDir, "npm")
   assertPackedCliRuntimeFiles(cliArchive)
   const cliInstallDir = path.join(fixtureRoot, "node_modules", "@palamedes", "cli")
   const nativeInstallDir = path.join(fixtureRoot, "node_modules", ...platformPackage.split("/"))
@@ -188,9 +205,10 @@ if (output !== nativeOutput) {
   throw new Error("The npm wrapper changed built-in version output.")
 }
 
-function packPackage(packagePath, archiveDir) {
+function packPackage(packagePath, archiveDir, packageManagerName) {
   const before = new Set(readdirSync(archiveDir))
-  const packageManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
+  const packageManager =
+    process.platform === "win32" ? `${packageManagerName}.cmd` : packageManagerName
   execFileSync(packageManager, ["pack", "--pack-destination", archiveDir], {
     cwd: packagePath,
     env: { ...process.env, npm_config_cache: path.join(archiveDir, "npm-cache") },
@@ -215,41 +233,61 @@ function extractPackage(archivePath, destination) {
 
 function assertPackedCliRuntimeFiles(archivePath) {
   const manifest = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"))
-  const expectedManifestFiles = [
-    "LICENSE",
-    "README.md",
-    "bin/pmds",
-    "scripts/run.mjs",
-    "scripts/platform.mjs",
-    "scripts/native.mjs",
-  ]
-  if (JSON.stringify(manifest.files) !== JSON.stringify(expectedManifestFiles)) {
+  if (JSON.stringify(manifest.files) !== JSON.stringify(expectedCliManifestFiles)) {
     throw new Error(
-      `@palamedes/cli files must list only the launcher runtime surface: ${expectedManifestFiles.join(
+      `@palamedes/cli files must list only the launcher runtime surface: ${expectedCliManifestFiles.join(
         ", "
       )}`
     )
   }
 
-  const packedFiles = execFileSync("tar", ["-tzf", archivePath], { encoding: "utf8" })
-    .trim()
-    .split(/\r?\n/u)
-    .filter(Boolean)
-    .sort()
-  const expectedRuntimeFiles = [
-    "package/bin/pmds",
-    "package/scripts/native.mjs",
-    "package/scripts/platform.mjs",
-    "package/scripts/run.mjs",
-  ]
-  const packedRuntimeFiles = packedFiles.filter(
-    (file) => file.startsWith("package/scripts/") || file === "package/bin/pmds"
-  )
-  if (JSON.stringify(packedRuntimeFiles) !== JSON.stringify(expectedRuntimeFiles)) {
+  assertPackedCliFiles(readTarEntries(archivePath))
+  assertPackedCliFilesRejectMutations()
+}
+
+function readTarEntries(archivePath) {
+  const entries = execFileSync("tar", ["-tzf", archivePath], { encoding: "utf8" }).split(/\r?\n/u)
+  if (entries.pop() !== "") {
+    throw new Error("Packed @palamedes/cli tar listing must end with one newline.")
+  }
+  return entries.sort()
+}
+
+function assertPackedCliFiles(packedFiles) {
+  if (JSON.stringify(packedFiles) !== JSON.stringify(expectedPackedCliFiles)) {
     throw new Error(
-      `Packed @palamedes/cli runtime files drifted: expected ${expectedRuntimeFiles.join(
+      `Packed @palamedes/cli files drifted: expected ${expectedPackedCliFiles.join(
         ", "
-      )}; found ${packedRuntimeFiles.join(", ")}`
+      )}; found ${packedFiles.join(", ")}`
     )
   }
+}
+
+function assertPackedCliFilesRejectMutations() {
+  for (const requiredFile of expectedPackedCliFiles) {
+    assertPackedCliFilesRejects(`missing ${requiredFile}`, (files) =>
+      files.filter((file) => file !== requiredFile)
+    )
+  }
+  assertPackedCliFilesRejects("unexpected top-level file", (files) => [
+    ...files,
+    "package/unexpected.txt",
+  ])
+  assertPackedCliFilesRejects("leading whitespace corruption", (files) => [
+    ` ${files[0]}`,
+    ...files.slice(1),
+  ])
+  assertPackedCliFilesRejects("trailing whitespace corruption", (files) => [
+    ...files.slice(0, -1),
+    `${files.at(-1)} `,
+  ])
+}
+
+function assertPackedCliFilesRejects(description, mutate) {
+  try {
+    assertPackedCliFiles(mutate([...expectedPackedCliFiles]).sort())
+  } catch {
+    return
+  }
+  throw new Error(`Packed @palamedes/cli assertion accepted ${description}.`)
 }
