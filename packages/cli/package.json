@@ -24,7 +24,9 @@
     "LICENSE",
     "README.md",
     "bin/pmds",
-    "scripts/"
+    "scripts/run.mjs",
+    "scripts/platform.mjs",
+    "scripts/native.mjs"
   ],
   "scripts": {
     "build": "node ./scripts/build.mjs",

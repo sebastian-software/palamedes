@@ -54,6 +54,7 @@ try {
   mkdirSync(archiveDir)
   const cliArchive = packPackage(packageDir, archiveDir)
   const nativeArchive = packPackage(platformPackageDir, archiveDir)
+  assertPackedCliRuntimeFiles(cliArchive)
   const cliInstallDir = path.join(fixtureRoot, "node_modules", "@palamedes", "cli")
   const nativeInstallDir = path.join(fixtureRoot, "node_modules", ...platformPackage.split("/"))
   extractPackage(cliArchive, cliInstallDir)
@@ -189,7 +190,7 @@ if (output !== nativeOutput) {
 
 function packPackage(packagePath, archiveDir) {
   const before = new Set(readdirSync(archiveDir))
-  const packageManager = process.platform === "win32" ? "npm.cmd" : "npm"
+  const packageManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
   execFileSync(packageManager, ["pack", "--pack-destination", archiveDir], {
     cwd: packagePath,
     env: { ...process.env, npm_config_cache: path.join(archiveDir, "npm-cache") },
@@ -210,4 +211,45 @@ function extractPackage(archivePath, destination) {
   execFileSync("tar", ["-xzf", archivePath, "-C", destination, "--strip-components", "1"], {
     stdio: "pipe",
   })
+}
+
+function assertPackedCliRuntimeFiles(archivePath) {
+  const manifest = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"))
+  const expectedManifestFiles = [
+    "LICENSE",
+    "README.md",
+    "bin/pmds",
+    "scripts/run.mjs",
+    "scripts/platform.mjs",
+    "scripts/native.mjs",
+  ]
+  if (JSON.stringify(manifest.files) !== JSON.stringify(expectedManifestFiles)) {
+    throw new Error(
+      `@palamedes/cli files must list only the launcher runtime surface: ${expectedManifestFiles.join(
+        ", "
+      )}`
+    )
+  }
+
+  const packedFiles = execFileSync("tar", ["-tzf", archivePath], { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .sort()
+  const expectedRuntimeFiles = [
+    "package/bin/pmds",
+    "package/scripts/native.mjs",
+    "package/scripts/platform.mjs",
+    "package/scripts/run.mjs",
+  ]
+  const packedRuntimeFiles = packedFiles.filter(
+    (file) => file.startsWith("package/scripts/") || file === "package/bin/pmds"
+  )
+  if (JSON.stringify(packedRuntimeFiles) !== JSON.stringify(expectedRuntimeFiles)) {
+    throw new Error(
+      `Packed @palamedes/cli runtime files drifted: expected ${expectedRuntimeFiles.join(
+        ", "
+      )}; found ${packedRuntimeFiles.join(", ")}`
+    )
+  }
 }
