@@ -566,11 +566,14 @@ msgstr ""
         catalogPath: diagnostic.catalogPath?.replaceAll("\\", "/"),
       }))
     ).toStrictEqual([
-      expect.objectContaining({
+      {
         code: "translation.missing_catalog",
+        message:
+          `Translation catalog for locale \`fr\` is missing at \`${rootDir}${path.sep}locales/fr/messages.po\`. ` +
+          "Run `pmds extract` to create it before requesting this locale explicitly.",
         locale: "fr",
         catalogPath: path.join(rootDir, "locales", "fr", "messages.po").replaceAll("\\", "/"),
-      }),
+      },
     ])
 
     const sourceResult = listTranslationCandidates({ config, locales: ["en"] })

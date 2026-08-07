@@ -23,7 +23,8 @@ pub(super) struct ImportCollector {
     pub runtime_import_binding_count: usize,
     /// All authored identifiers that a generated import alias must not capture.
     pub used_identifier_names: HashSet<String>,
-    pub trans_import_sources: HashSet<String>,
+    binding_symbols: HashMap<String, HashSet<SymbolId>>,
+    reusable_trans_import_sources: HashSet<String>,
 }
 
 impl ImportCollector {
@@ -38,7 +39,8 @@ impl ImportCollector {
             has_reusable_runtime_import: false,
             runtime_import_binding_count: 0,
             used_identifier_names: HashSet::new(),
-            trans_import_sources: HashSet::new(),
+            binding_symbols: HashMap::new(),
+            reusable_trans_import_sources: HashSet::new(),
         }
     }
 
@@ -85,10 +87,9 @@ impl ImportCollector {
             let Some(symbol_id) = specifier.symbol_id else {
                 continue;
             };
-            let all_value_references_consumed = semantic
+            let all_references_consumed = semantic
                 .scoping()
                 .get_resolved_references(symbol_id)
-                .filter(|reference| reference.is_value())
                 .all(|reference| {
                     let span = semantic.nodes().get_node(reference.node_id()).span();
                     consumed_binding_ranges
@@ -99,7 +100,7 @@ impl ImportCollector {
                                 && span.end as usize <= *end
                         })
                 });
-            if all_value_references_consumed {
+            if all_references_consumed {
                 removable.insert(index);
             }
         }
@@ -148,7 +149,7 @@ impl ImportCollector {
         replacements
     }
 
-    pub(super) fn has_surviving_value_reference(
+    pub(super) fn has_surviving_reference(
         &self,
         semantic: &Semantic<'_>,
         symbol_id: SymbolId,
@@ -157,7 +158,6 @@ impl ImportCollector {
         semantic
             .scoping()
             .get_resolved_references(symbol_id)
-            .filter(|reference| reference.is_value())
             .any(|reference| {
                 let span = semantic.nodes().get_node(reference.node_id()).span();
                 !consumed_binding_ranges
@@ -168,6 +168,16 @@ impl ImportCollector {
                             && span.end as usize <= *end
                     })
             })
+    }
+
+    pub(super) fn has_other_binding_named(&self, name: &str, symbol_id: SymbolId) -> bool {
+        self.binding_symbols
+            .get(name)
+            .is_some_and(|symbols| symbols.iter().any(|other| *other != symbol_id))
+    }
+
+    pub(super) fn has_reusable_trans_import(&self, module: &str) -> bool {
+        self.reusable_trans_import_sources.contains(module)
     }
 }
 
@@ -237,6 +247,12 @@ impl<'a> Visit<'a> for ImportCollector {
         if name == self.runtime_import_name {
             self.runtime_import_binding_count += 1;
         }
+        if let Some(symbol_id) = it.symbol_id.get() {
+            self.binding_symbols
+                .entry(name.clone())
+                .or_default()
+                .insert(symbol_id);
+        }
         self.used_identifier_names.insert(name);
         walk::walk_binding_identifier(self, it);
     }
@@ -297,16 +313,18 @@ impl<'a> Visit<'a> for ImportCollector {
 
         if matches!(
             source,
-            "@palamedes/react"
-                | "@palamedes/react/compiled"
-                | "@palamedes/solid"
-                | "@palamedes/solid/compiled"
-        ) {
+            "@palamedes/react/compiled" | "@palamedes/solid/compiled"
+        ) && it.import_kind == ImportOrExportKind::Value
+        {
             if let Some(specifiers) = &it.specifiers {
                 for specifier in specifiers {
                     if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier {
-                        if specifier.local.name == "Trans" {
-                            self.trans_import_sources.insert(source.to_string());
+                        if specifier.import_kind == ImportOrExportKind::Value
+                            && specifier.imported.name() == "Trans"
+                            && specifier.local.name == "Trans"
+                        {
+                            self.reusable_trans_import_sources
+                                .insert(source.to_string());
                         }
                     }
                 }
