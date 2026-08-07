@@ -109,6 +109,9 @@ export function TicketPanel({ locale: _locale }: TicketPanelProps) {
         <button className="cta" type="button">
           <Trans>Add to cart</Trans>
         </button>
+        <p className="fallback-probe">
+          <Trans>Source fallback development probe</Trans>
+        </p>
       </div>
     </article>
   )

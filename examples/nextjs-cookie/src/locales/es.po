@@ -66,6 +66,9 @@ msgstr "Servidor"
 msgid "Server action confirmed locale {locale}."
 msgstr "La acción de servidor confirmó el idioma {locale}."
 
+msgid "Source fallback development probe"
+msgstr "Sondeo de reserva de desarrollo"
+
 msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
 msgstr "Tres días de charlas sobre el oficio de construir para la web. Elige tus entradas abajo."
 

@@ -52,6 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   moduleLoader._load = originalLoad
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
   delete require.cache[require.resolve(loaderPath)]
 })
@@ -97,11 +98,83 @@ describe("palamedes-loader.cjs", () => {
       { addDependency: (file: string) => dependencies.push(file) }
     )
 
-    expect(output).toContain('import { registerMessageLoaders } from "@palamedes/runtime";')
+    expect(output).toContain('import { registerMessageLoaderGroup } from "@palamedes/runtime";')
     expect(output).toContain('"en": () => import("./locales/en.po?palamedes-selected=')
     expect(output).toContain('"de": () => import("./locales/de.po?palamedes-selected=')
     expect(output).toContain(".then(({ messages }) => messages)")
     expect(dependencies).toEqual(["/repo/palamedes.yaml"])
+  })
+
+  it("warns once per development compilation when splitting cannot add config dependencies", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "export const translated = true",
+      map: null,
+      compiledIds: ["id-a"],
+    })
+    const emitWarning = vi.fn()
+    const compilation = {}
+    const context = { _compilation: compilation, emitWarning }
+
+    await runLoader({ serverMessageSplitting: true }, context)
+    await runLoader({ serverMessageSplitting: true }, context)
+
+    expect(emitWarning).toHaveBeenCalledOnce()
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("does not implement addDependency"),
+      })
+    )
+  })
+
+  it("clears a server module's previous registrations when it no longer uses messages", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: '"use server"; export async function save() {}',
+      map: null,
+      compiledIds: [],
+    })
+
+    const output = await runLoader({ serverMessageSplitting: true }, { addDependency() {} })
+
+    expect(output).toContain('registerMessageLoaderGroup("514d17c76993", []);')
+  })
+
+  it("does not add no-op server cleanup registrations to production modules", async () => {
+    vi.stubEnv("NODE_ENV", "production")
+    transformPalamedesMacros.mockReturnValue({
+      code: '"use server"; export async function save() {}',
+      map: null,
+      compiledIds: [],
+    })
+
+    await expect(runLoader({ serverMessageSplitting: true })).resolves.toBe(
+      '"use server"; export async function save() {}'
+    )
+  })
+
+  it("preserves the production warning path for source modules outside a catalog", async () => {
+    vi.stubEnv("NODE_ENV", "production")
+    transformPalamedesMacros.mockReturnValue({
+      code: "export const translated = true",
+      map: null,
+      compiledIds: ["id-a"],
+    })
+    loadPalamedesConfigSync.mockReturnValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [{ path: "src/locales/{locale}", include: ["other/**/*.tsx"] }],
+    })
+    const emitWarning = vi.fn()
+
+    const output = await runLoader({ serverMessageSplitting: true }, { emitWarning })
+
+    expect(output).not.toContain("registerMessageLoaderGroup")
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("not included in any configured catalog"),
+      })
+    )
   })
 
   it("blocks a client module on only the document locale's compiled fragments", async () => {
@@ -120,7 +193,7 @@ describe("palamedes-loader.cjs", () => {
     expect(output).toContain('"de": () => import("./locales/de.po?palamedes-selected=')
     expect(output).toContain(".initializeClientI18n(")
     expect(output).toContain("_i18n.load(")
-    expect(output).not.toContain("registerMessageLoaders")
+    expect(output).not.toContain("registerMessageLoaderGroup")
   })
 
   it("boots a client module before its compiled module-scope call and its importers", async () => {
@@ -593,7 +666,7 @@ describe("palamedes-loader.cjs", () => {
 
     const output = await runLoader({ serverMessageSplitting: false })
 
-    expect(output).not.toContain("registerMessageLoaders")
+    expect(output).not.toContain("registerMessageLoaderGroup")
     expect(loadPalamedesConfigSync).not.toHaveBeenCalled()
   })
 
@@ -641,7 +714,7 @@ describe("palamedes-loader.cjs", () => {
         }
       )
 
-      expect(output).toContain('import { registerMessageLoaders } from "@palamedes/runtime";')
+      expect(output).toContain('import { registerMessageLoaderGroup } from "@palamedes/runtime";')
       expect(warnings).toEqual([])
     } finally {
       await rm(fixtureDirectory, { force: true, recursive: true })

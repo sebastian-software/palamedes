@@ -7,6 +7,7 @@ const { decode, encode } = require("@jridgewell/sourcemap-codec")
 const { loadPalamedesConfigSync } = require("@palamedes/config")
 const { transformPalamedesMacros } = require("@palamedes/transform")
 const picomatch = require("picomatch")
+const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected"
 const configCache = new Map()
@@ -424,30 +425,44 @@ function relativeImport(fromFile, targetFile) {
   return relative
 }
 
-function messageLoaderRegistration(config, sourcePath, compiledIds) {
+function messageLoaderRegistration(config, sourcePath, compiledIds, clearUnmatchedRegistration) {
   const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds)
-  if (!importsByCatalog) {
-    return null
-  }
-
   const modulePath = normalizePath(
     path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath))
   )
   const moduleKey = createHash("sha256").update(modulePath).digest("hex").slice(0, 12)
-  const registrations = importsByCatalog.map((imports, catalogIndex) => {
-    const loaders = imports
-      .map(
-        ({ locale, specifier }) =>
-          `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)}).then(({ messages }) => messages)`
-      )
-      .join(", ")
-    return `registerMessageLoaders(${JSON.stringify(`${moduleKey}:${catalogIndex}`)}, { ${loaders} });`
-  })
+  if (!importsByCatalog) {
+    if (!clearUnmatchedRegistration) {
+      return null
+    }
+    return {
+      code:
+        `\nimport { registerMessageLoaderGroup } from "@palamedes/runtime";\n` +
+        `registerMessageLoaderGroup(${JSON.stringify(moduleKey)}, []);\n`,
+      matchesCatalog: false,
+    }
+  }
 
-  return (
-    `\nimport { registerMessageLoaders } from "@palamedes/runtime";\n` +
-    `${registrations.join("\n")}\n`
-  )
+  const registrations =
+    compiledIds.length === 0
+      ? []
+      : importsByCatalog.map((imports) => {
+          const loaders = imports
+            .map(
+              ({ locale, specifier }) =>
+                `${JSON.stringify(locale)}: () => import(${JSON.stringify(specifier)}).then(({ messages }) => messages)`
+            )
+            .join(", ")
+          return `{ ${loaders} }`
+        })
+
+  return {
+    code:
+      `\nimport { registerMessageLoaderGroup } from "@palamedes/runtime";\n` +
+      `const __pmds_releaseMessageLoaders = registerMessageLoaderGroup(${JSON.stringify(moduleKey)}, [${registrations.join(", ")}]);\n` +
+      `if (import.meta.webpackHot) import.meta.webpackHot.dispose(__pmds_releaseMessageLoaders);\n`,
+    matchesCatalog: true,
+  }
 }
 
 module.exports = function palamedesLoader(source, inputSourceMap) {
@@ -473,7 +488,12 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
 
   const serverMessageSplitting = options.serverMessageSplitting === true
   const clientMessageSplitting = options.clientMessageSplitting === true
-  if ((!serverMessageSplitting && !clientMessageSplitting) || !result.compiledIds?.length) {
+  const clearsServerRegistration = serverMessageSplitting && process.env.NODE_ENV !== "production"
+  if (
+    (!serverMessageSplitting && !clientMessageSplitting) ||
+    !Array.isArray(result.compiledIds) ||
+    (!result.compiledIds?.length && !clearsServerRegistration)
+  ) {
     if (callback) {
       callback(null, result.code, result.map ?? inputSourceMap ?? null)
       return
@@ -485,9 +505,16 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
     const config = loadConfigCached(options.configPath)
     if (typeof this.addDependency === "function" && config.configPath) {
       this.addDependency(config.configPath)
+    } else {
+      warnMissingAddDependency(this)
     }
     const registration = serverMessageSplitting
-      ? messageLoaderRegistration(config, this.resourcePath, result.compiledIds)
+      ? messageLoaderRegistration(
+          config,
+          this.resourcePath,
+          result.compiledIds,
+          clearsServerRegistration
+        )
       : clientMessageBootstrap(
           config,
           this.resourcePath,
@@ -497,17 +524,29 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
     let code = result.code
     let sourceMap = result.map ?? inputSourceMap ?? null
     if (registration) {
+      const registrationCode = serverMessageSplitting ? registration.code : registration
       if (clientMessageSplitting) {
-        const output = prependClientMessageBootstrap(code, registration)
+        const output = prependClientMessageBootstrap(code, registrationCode)
         code = output.code
         sourceMap = offsetSourceMapForInsertion(sourceMap, output.insertion, output.insertion.value)
       } else {
-        code += registration
+        code += registrationCode
       }
-    } else if (typeof this.emitWarning === "function") {
+    }
+    if (
+      serverMessageSplitting &&
+      !registration?.matchesCatalog &&
+      typeof this.emitWarning === "function"
+    ) {
       this.emitWarning(
         new Error(
-          `Palamedes ${serverMessageSplitting ? "Server Function" : "client graph"} message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`
+          `Palamedes Server Function message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`
+        )
+      )
+    } else if (!registration && typeof this.emitWarning === "function") {
+      this.emitWarning(
+        new Error(
+          `Palamedes client graph message splitting: ${this.resourcePath} uses messages but is not included in any configured catalog.`
         )
       )
     }

@@ -143,6 +143,28 @@ describe("palamedes-po-loader.cjs", () => {
     expect(result.code).toContain('"greeting":"Hallo"')
   })
 
+  it("warns once per development compilation when a selected sidecar host cannot add dependencies", async () => {
+    const selection = Buffer.from(JSON.stringify(["id-a"])).toString("base64url")
+    const emitWarning = vi.fn()
+    const compilation = {}
+    const context = {
+      _compilation: compilation,
+      addDependency: undefined,
+      emitWarning,
+      resourceQuery: `?palamedes-selected=${selection}`,
+    }
+
+    await runLoader({}, context)
+    await runLoader({}, context)
+
+    expect(emitWarning).toHaveBeenCalledOnce()
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("does not implement addDependency"),
+      })
+    )
+  })
+
   it("warns about selected messages missing from a non-pseudo locale", async () => {
     compileCatalogArtifactSelected.mockReturnValue({
       messages: {},
@@ -172,7 +194,6 @@ async function runLoader(
 
   const code = await new Promise<string>((resolve, reject) => {
     const context = {
-      ...extraContext,
       resourcePath: "/repo/src/locales/de.po",
       async() {
         return (error: Error | null, output?: string) => {
@@ -189,6 +210,7 @@ async function runLoader(
       addDependency(file: string) {
         dependencies.push(file)
       },
+      ...extraContext,
     }
 
     loader.call(context)
