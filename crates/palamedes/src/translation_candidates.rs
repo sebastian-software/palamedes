@@ -296,7 +296,7 @@ pub fn list_translation_candidates(
     request: &TranslationCandidateRequest,
 ) -> PalamedesResult<TranslationCandidateResult> {
     let locales = selected_locales(&request.config, &request.locales);
-    let default_locale_selection = request.locales.is_empty();
+    let default_locale_selection = request.locales.is_empty() && request.targets.is_empty();
     let explicit = !request.targets.is_empty();
     let mut requested = BTreeMap::<TranslationCandidateId, usize>::new();
     let mut diagnostics = Vec::new();
@@ -497,6 +497,15 @@ where
         }
     }
 
+    if !rejected.is_empty() {
+        return Ok(rejected_translation_patch_result(
+            request.patches,
+            requested_count,
+            &rejected,
+            diagnostics,
+        ));
+    }
+
     let mut prepared = Vec::new();
     for (batch, patch_indexes) in groups {
         let catalog = &request.config.catalogs[batch.catalog_index];
@@ -585,30 +594,12 @@ where
     }
 
     if !rejected.is_empty() {
-        diagnostics
-            .sort_by(|left, right| diagnostic_sort_key(left).cmp(&diagnostic_sort_key(right)));
-        let outcomes = request
-            .patches
-            .into_iter()
-            .enumerate()
-            .map(|(index, patch)| TranslationPatchOutcome {
-                id: patch.id,
-                status: if rejected.contains(&index) {
-                    TranslationPatchOutcomeStatus::Rejected
-                } else {
-                    TranslationPatchOutcomeStatus::NotApplied
-                },
-            })
-            .collect();
-        return Ok(TranslationPatchResult {
-            updated: false,
-            stats: TranslationPatchStats {
-                requested: requested_count,
-                ..TranslationPatchStats::default()
-            },
-            outcomes,
+        return Ok(rejected_translation_patch_result(
+            request.patches,
+            requested_count,
+            &rejected,
             diagnostics,
-        });
+        ));
     }
 
     let mut completed_patches = BTreeSet::new();
@@ -1225,6 +1216,36 @@ fn completed_translation_patch_result(
     }
 }
 
+fn rejected_translation_patch_result(
+    patches: Vec<TranslationPatch>,
+    requested_count: usize,
+    rejected: &BTreeSet<usize>,
+    mut diagnostics: Vec<TranslationWorkflowDiagnostic>,
+) -> TranslationPatchResult {
+    diagnostics.sort_by(|left, right| diagnostic_sort_key(left).cmp(&diagnostic_sort_key(right)));
+    let outcomes = patches
+        .into_iter()
+        .enumerate()
+        .map(|(index, patch)| TranslationPatchOutcome {
+            id: patch.id,
+            status: if rejected.contains(&index) {
+                TranslationPatchOutcomeStatus::Rejected
+            } else {
+                TranslationPatchOutcomeStatus::NotApplied
+            },
+        })
+        .collect();
+    TranslationPatchResult {
+        updated: false,
+        stats: TranslationPatchStats {
+            requested: requested_count,
+            ..TranslationPatchStats::default()
+        },
+        outcomes,
+        diagnostics,
+    }
+}
+
 fn workflow_diagnostic(
     code: &str,
     message: impl Into<String>,
@@ -1487,6 +1508,26 @@ mod tests {
         };
         assert_eq!(path, fixture.path().join("messages/fr.po"));
         assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
+
+        let mut target_config = po_config(fixture.path());
+        target_config.locales = vec![
+            "en".to_owned(),
+            "de".to_owned(),
+            "ja".to_owned(),
+            "fr".to_owned(),
+        ];
+        let error = list_translation_candidates(&TranslationCandidateRequest {
+            config: target_config,
+            locales: Vec::new(),
+            targets: vec![id("messages/{locale}", "fr", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect_err("an exact target in a missing catalog remains a read error");
+        let PalamedesError::ReadFile { path, source } = error else {
+            panic!("expected missing catalog read error for explicit target");
+        };
+        assert_eq!(path, fixture.path().join("messages/fr.po"));
+        assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[test]
@@ -1714,6 +1755,56 @@ mod tests {
         }));
         assert_eq!(fs::read_to_string(&target_path).unwrap(), target_before);
         assert_eq!(fs::read_to_string(&source_path).unwrap(), source_before);
+    }
+
+    #[test]
+    fn returns_source_patch_rejection_before_loading_an_unreadable_target_catalog() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        fs::create_dir_all(fixture.path().join("messages/de.po"))
+            .expect("create directory where target catalog belongs");
+        let source_id = id("tampered/{locale}", "en", "Hello", None);
+        let target_id = id("messages/{locale}", "de", "Hello", None);
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![
+                TranslationPatch {
+                    id: source_id.clone(),
+                    fingerprint: "tampered-source-id".to_owned(),
+                    translation: TranslationValue::Singular {
+                        value: "Hello".to_owned(),
+                    },
+                    machine: None,
+                },
+                TranslationPatch {
+                    id: target_id.clone(),
+                    fingerprint: "unreadable-target".to_owned(),
+                    translation: TranslationValue::Singular {
+                        value: "Hallo".to_owned(),
+                    },
+                    machine: None,
+                },
+            ],
+        })
+        .expect("preliminary source rejection returns without reading the target catalog");
+
+        assert!(!result.updated);
+        assert_eq!(result.stats.requested, 2);
+        assert_eq!(
+            result
+                .outcomes
+                .iter()
+                .map(|outcome| (&outcome.id, outcome.status))
+                .collect::<Vec<_>>(),
+            vec![
+                (&source_id, TranslationPatchOutcomeStatus::Rejected),
+                (&target_id, TranslationPatchOutcomeStatus::NotApplied),
+            ]
+        );
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "translation.source_locale");
+        assert_eq!(result.diagnostics[0].id.as_ref(), Some(&source_id));
     }
 
     #[test]
