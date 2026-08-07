@@ -124,6 +124,7 @@ pub use translation_candidates::{
     TranslationPatchOutcomeStatus, TranslationPatchRequest, TranslationPatchResult,
     TranslationPatchStats, TranslationPluralKind, TranslationReviewState, TranslationValue,
     TranslationWorkflowDiagnostic, TranslationWorkflowOrigin,
+    DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS,
 };
 
 /// Published `ferrocat` version used by the Rust core.
