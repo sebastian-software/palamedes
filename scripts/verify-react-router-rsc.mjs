@@ -4,6 +4,8 @@ import { chromium } from "@playwright/test"
 
 const port = 4071
 const baseUrl = `http://127.0.0.1:${port}`
+const TEST_BARRIER_HEADER = "x-palamedes-i18n-test-barrier"
+const TEST_BARRIER_REACHED_HEADER = "x-palamedes-i18n-test-barrier-reached"
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -43,15 +45,44 @@ async function expectText(page, testId, expected) {
   throw new Error(`Expected ${testId} to be ${JSON.stringify(expected)}`)
 }
 
+async function expectMultiCookieLocale() {
+  const response = await fetch(baseUrl, {
+    headers: { cookie: "session=production-proof; locale=de" },
+  })
+  const html = await response.text()
+  if (!response.ok || !html.includes("Server-Rendern bestätigte Sprache.")) {
+    throw new Error("A production request with session and locale cookies did not render German.")
+  }
+}
+
+async function addServerFunctionBarrier(page, barrierId) {
+  await page.route("**/*", async (route) => {
+    const request = route.request()
+    if (request.method() !== "POST") return route.continue()
+    await route.continue({
+      headers: { ...request.headers(), [TEST_BARRIER_HEADER]: barrierId },
+    })
+  })
+}
+
+function waitForServerFunctionBarrier(page, barrierId) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.headers()[TEST_BARRIER_REACHED_HEADER] === barrierId
+  )
+}
+
 await run("pnpm", ["--filter", "@palamedes/example-react-router-rsc-cookie", "build"])
 
 const server = spawn("pnpm", ["--filter", "@palamedes/example-react-router-rsc-cookie", "start"], {
-  env: { ...process.env, PORT: String(port) },
+  env: { ...process.env, PALAMEDES_I18N_TEST_BARRIER: "1", PORT: String(port) },
   stdio: "inherit",
 })
 
 try {
   await waitForServer()
+  await expectMultiCookieLocale()
   const browser = await chromium.launch({ headless: true })
   try {
     const [deContext, enContext] = await Promise.all([browser.newContext(), browser.newContext()])
@@ -64,10 +95,20 @@ try {
 
     await expectText(dePage, "server-rendered-message", "Server-Rendern bestätigte Sprache.")
     await expectText(enPage, "server-rendered-message", "Server render confirmed locale.")
+    const barrierId = `react-router-rsc-server-function-${Date.now()}`
     await Promise.all([
+      addServerFunctionBarrier(dePage, barrierId),
+      addServerFunctionBarrier(enPage, barrierId),
+    ])
+    const [deResponse, enResponse] = await Promise.all([
+      waitForServerFunctionBarrier(dePage, barrierId),
+      waitForServerFunctionBarrier(enPage, barrierId),
       dePage.getByTestId("server-function-trigger").click(),
       enPage.getByTestId("server-function-trigger").click(),
     ])
+    if (!deResponse.ok() || !enResponse.ok()) {
+      throw new Error("A rendezvoused React Router RSC Server Function request failed.")
+    }
     await Promise.all([
       expectText(
         dePage,

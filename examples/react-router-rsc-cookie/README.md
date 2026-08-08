@@ -7,3 +7,6 @@ original cookie/Accept-Language request headers and loads one active-locale
 server catalog.
 
 Run `pnpm verify:react-router-rsc` from the repository root.
+The production verifier sends a realistic multi-cookie request and forces two
+different-locale Server Function POSTs through the inert-by-default test
+rendezvous before accepting their response markers.

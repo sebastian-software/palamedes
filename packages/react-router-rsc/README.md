@@ -91,8 +91,11 @@ initialization failed`.
 - The adapter relies on Node's `AsyncLocalStorage` through
   `@palamedes/runtime/server`. Do not use it in Edge or Worker runtimes unless
   that runtime's Node-compatible async context propagation has been verified.
-- Detached work started after a Server Function resolves is outside the request
-  scope. Pass the locale or other required data into that work explicitly.
+- `scope.run()` restores its caller's store when the default entry settles, but
+  timers, promise continuations, stream callbacks, and other async resources
+  created inside that scope inherit its request locale even if they run later.
+  Work initiated separately without an inherited request context has no active
+  locale; pass explicit data or create an appropriate new scope for it.
 - React Router RSC runs separate RSC and SSR module graphs. The shared
   Palamedes runtime state and `AsyncLocalStorage` scope preserve locale
   isolation across both graphs, including concurrent requests.

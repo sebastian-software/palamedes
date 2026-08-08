@@ -386,7 +386,7 @@ Use `@palamedes/remix`. The integration is server-first (register hook plus requ
 
 ### React Router RSC
 
-Use `@palamedes/react-router-rsc` only for the exact tested experimental React Router RSC Framework Mode contract. Configure a custom `app/entry.rsc.tsx` that wraps the default RSC entry with `createReactRouterRscI18nRequestScope(createRequestI18n)`. It receives the original request and activates a fresh i18n instance before Server Function argument evaluation, dispatch, revalidation, SSR, and streams. RSC Data Mode, Edge/Worker runtimes, detached work, and graph-split server message fragments are not supported. See `/docs/api/react-router-rsc.md`.
+Use `@palamedes/react-router-rsc` only for the exact tested experimental React Router RSC Framework Mode contract. Configure a custom `app/entry.rsc.tsx` that wraps the default RSC entry with `createReactRouterRscI18nRequestScope(createRequestI18n)`. It receives the original request and activates a fresh i18n instance before Server Function argument evaluation, dispatch, revalidation, SSR, and streams. `scope.run()` restores its caller after dispatch settles, but async resources created inside it retain the request locale when they run later; separately initiated work without an inherited context has no active locale and needs explicit data or a new scope. RSC Data Mode, Edge/Worker runtimes, and graph-split server message fragments are not supported. See `/docs/api/react-router-rsc.md`.
 
 ### TanStack Start, SolidStart, Waku, React Router
 
