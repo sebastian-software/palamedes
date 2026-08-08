@@ -37,7 +37,7 @@
     "proof:icu": "pnpm build && node ./scripts/proof-icu-semantics.mjs",
     "proof:icu:check": "node ./scripts/proof-icu-semantics.mjs",
     "test": "pnpm test:llms && pnpm -r --filter \"./packages/**\" --if-present test && pnpm check:example-contracts && pnpm check:workflow-contracts",
-    "test:platform": "pnpm -r --filter @palamedes/config --filter @palamedes/core-node --filter @palamedes/next-plugin --filter @palamedes/vite-plugin test",
+    "test:platform": "pnpm -r --filter @palamedes/config --filter @palamedes/core-node --filter @palamedes/next-plugin --filter @palamedes/tanstack --filter @palamedes/vite-plugin test",
     "check:binary-size": "node ./scripts/check-binary-size.mjs",
     "check:native-types": "pnpm --filter @palamedes/core-node check-native-types",
     "check:published-types": "node ./scripts/check-published-types.mjs",
