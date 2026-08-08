@@ -42,6 +42,10 @@ try {
       2
     )}\n`
   )
+  writeFileSync(
+    path.join(consumerRoot, "pnpm-workspace.yaml"),
+    `overrides:\n  "@palamedes/runtime": "file:${runtimeArchive}"\n`
+  )
   runPackageManager(consumerRoot, ["install", "--ignore-scripts"])
 
   const installedWaku = path.join(consumerRoot, "node_modules", "@palamedes", "waku")
