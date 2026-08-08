@@ -560,11 +560,16 @@ msgstr ""
 
     const defaultResult = listTranslationCandidates({ config })
     expect(defaultResult.candidates).toHaveLength(1)
-    expect(defaultResult.diagnostics).toStrictEqual([
+    expect(
+      defaultResult.diagnostics.map((diagnostic) => ({
+        ...diagnostic,
+        catalogPath: diagnostic.catalogPath?.replaceAll("\\\\", "/"),
+      }))
+    ).toStrictEqual([
       expect.objectContaining({
         code: "translation.missing_catalog",
         locale: "fr",
-        catalogPath: missingCatalogPath,
+        catalogPath: path.join(rootDir, "locales", "fr", "messages.po").replaceAll("\\\\", "/"),
       }),
     ])
 
