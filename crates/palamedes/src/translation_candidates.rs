@@ -295,7 +295,7 @@ struct CatalogBatchKey {
 pub fn list_translation_candidates(
     request: &TranslationCandidateRequest,
 ) -> PalamedesResult<TranslationCandidateResult> {
-    let locales = selected_locales(&request.config, &request.locales);
+    let locales = selected_locales(&request.config, &request.locales, &request.targets);
     let default_locale_selection = request.locales.is_empty() && request.targets.is_empty();
     let explicit = !request.targets.is_empty();
     let mut requested = BTreeMap::<TranslationCandidateId, usize>::new();
@@ -653,14 +653,29 @@ fn default_max_origins() -> usize {
     DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS
 }
 
-fn selected_locales(config: &CatalogArtifactConfig, requested: &[String]) -> Vec<String> {
+fn selected_locales(
+    config: &CatalogArtifactConfig,
+    requested: &[String],
+    targets: &[TranslationCandidateId],
+) -> Vec<String> {
     let mut locales = if requested.is_empty() {
-        config
-            .locales
-            .iter()
-            .filter(|locale| !is_source_locale(config, locale))
-            .cloned()
-            .collect::<Vec<_>>()
+        if targets.is_empty() {
+            config
+                .locales
+                .iter()
+                .filter(|locale| !is_source_locale(config, locale))
+                .cloned()
+                .collect::<Vec<_>>()
+        } else {
+            targets
+                .iter()
+                .map(|target| &target.locale)
+                .filter(|locale| {
+                    config.locales.contains(*locale) && !is_source_locale(config, locale)
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        }
     } else {
         requested
             .iter()
@@ -1528,6 +1543,27 @@ mod tests {
         };
         assert_eq!(path, fixture.path().join("messages/fr.po"));
         assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn explicit_targets_skip_unrelated_missing_locale_catalogs() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("messages/de.po"), "de");
+        let mut target_config = po_config(fixture.path());
+        target_config.locales.push("fr".to_owned());
+        let target = id("messages/{locale}", "de", "Hello", None);
+
+        let result = list_translation_candidates(&TranslationCandidateRequest {
+            config: target_config,
+            locales: Vec::new(),
+            targets: vec![target.clone()],
+            max_origins: 8,
+        })
+        .expect("an unrelated missing locale does not block an explicit target");
+
+        assert_eq!(result.candidates.len(), 1);
+        assert_eq!(result.candidates[0].id, target);
+        assert!(result.diagnostics.is_empty());
     }
 
     #[test]
