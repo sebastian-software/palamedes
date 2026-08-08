@@ -8,6 +8,9 @@ Request-scoped i18n middleware for TanStack Start server functions.
 pnpm add @palamedes/core @palamedes/runtime @palamedes/tanstack @tanstack/react-start
 ```
 
+`@palamedes/tanstack` is ESM-only. Use ESM imports; CommonJS
+`require("@palamedes/tanstack")` is not supported.
+
 ## Global server-function middleware
 
 Create the middleware once and register it in `src/start.ts`. The resolver gets

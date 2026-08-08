@@ -82,7 +82,8 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
   const commonJsFixture = path.join(fixtureRoot, "consumer.cts")
   writeFileSync(
     commonJsFixture,
-    `import nextPlugin = require("@palamedes/next-plugin")
+    `// @palamedes/tanstack is intentionally ESM-only and belongs in consumer.mts.
+import nextPlugin = require("@palamedes/next-plugin")
 import vitePlugin = require("@palamedes/vite-plugin")
 
 export const config = nextPlugin.withPalamedes({})
@@ -113,4 +114,4 @@ export const vitePlugins = vitePlugin.palamedes()
   rmSync(fixtureRoot, { force: true, recursive: true })
 }
 
-console.log("Published TypeScript declarations support ESM and CommonJS consumers.")
+console.log("Published TypeScript declarations support each package's advertised module consumers.")
