@@ -54,3 +54,10 @@ The adapter relies on `@palamedes/runtime/server` and Node's
 Node-compatible `AsyncLocalStorage` behavior is independently verified. Waku's
 interceptor and request APIs are unstable-prefixed; revalidate this adapter when
 upgrading Waku.
+
+## Middleware ordering
+
+Waku default-adapter middleware runs before router dispatch and the Palamedes
+handler interceptor. Middleware that prepares locale inputs must `await next()`;
+an early response never enters the i18n scope. Do not install a competing
+Palamedes server scope around this interceptor.

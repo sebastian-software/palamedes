@@ -55,6 +55,14 @@ Do not use detached work as request ownership. Work started during an action
 may inherit Node's async context after the response, while work started later
 will not; pass explicit locale data to background work instead.
 
+### Middleware ordering
+
+With Waku's default adapter, adapter middleware runs before router dispatch and
+the Palamedes handler interceptor. Middleware that prepares the request for
+locale negotiation must `await next()`; middleware that returns a response
+early does not enter the i18n scope. Do not install a competing Palamedes
+server scope around this interceptor.
+
 ## License
 
 MIT © 2026 Sebastian Software
