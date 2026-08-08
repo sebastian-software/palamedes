@@ -8,6 +8,9 @@ Request-scoped i18n interceptor for Waku server actions.
 pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 ```
 
+`@palamedes/waku` is ESM-only, matching Waku's React Server Component runtime.
+Use `import`; CommonJS `require()` is deliberately unsupported.
+
 ## Waku handler interceptor
 
 Create one interceptor under `src/pages/_interceptors/`. `fsRouter()` discovers this
@@ -38,10 +41,12 @@ server logs available to retain the error cause.
 
 ## Streaming and runtime limits
 
-The interceptor awaits Waku's handler promise. Waku creates the response
-`ReadableStream` inside that scope, so Node's `AsyncLocalStorage` retains the
-active locale in stream callbacks created by the handler. The scope itself is
-restored after the response completes for the caller that initiated it.
+The interceptor restores the caller's scope when Waku's awaited handler promise
+settles and returns its `Response`, before that response body is consumed.
+Waku creates the response `ReadableStream` inside the i18n scope, so Node's
+`AsyncLocalStorage` can retain the active locale in stream callbacks created by
+the handler while they are consumed later. Those callbacks do not extend the
+caller's request ownership.
 
 `@palamedes/waku` uses `@palamedes/runtime/server`, which requires Node's
 `AsyncLocalStorage`. It supports the pinned Waku line `^1.0.0-beta.8` on

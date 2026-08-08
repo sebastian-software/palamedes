@@ -20,12 +20,9 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.mjs"
     }
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "sideEffects": false,
   "files": [
@@ -34,7 +31,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/*.test.ts",
+    "test": "pnpm build && pnpm --filter @palamedes/runtime build && vitest run --globals src/index.test.ts && node ./scripts/packed-consumer.test.mjs",
     "stub": "unbuild --stub"
   },
   "engines": {
