@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { createRequire } from "node:module"
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -44,7 +44,7 @@ type SourceMapLike = {
 }
 
 const tempDirs: string[] = []
-const testSupportAddonFilename = "palamedes-node-test-support.node"
+let testSupportAddon: TestSupportBindings | undefined
 
 afterEach(async () => {
   await Promise.all(
@@ -276,11 +276,13 @@ describe("@palamedes/core-node", () => {
     }
   })
 
-  it("reuses one test-support addon path across repeated setup", () => {
+  it("uses the content-addressed test-support addon prepared before tests", async () => {
     const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
+    const addonPath = await testSupportAddonPath(repoRoot)
 
-    expect(testSupportAddonPath(repoRoot)).toBe(testSupportAddonPath(repoRoot))
-    expect(path.basename(testSupportAddonPath(repoRoot))).toBe(testSupportAddonFilename)
+    expect(await testSupportAddonPath(repoRoot)).toBe(addonPath)
+    expect(path.basename(addonPath)).toMatch(/^palamedes-node-test-support-[a-f0-9]{16}\.node$/u)
+    await expect(access(addonPath)).resolves.toBeUndefined()
   })
 
   it("loads native bindings and exposes version information", () => {
@@ -597,6 +599,7 @@ msgstr ""
     await Promise.all([writeFile(firstPath, catalog), writeFile(secondPath, catalog)])
 
     const addon = await loadTestSupportAddon()
+    expect(await loadTestSupportAddon()).toBe(addon)
     const listed = addon.listTranslationCandidates({ config, locales: ["de"], maxOrigins: 8 })
     const first = listed.candidates.find((candidate) => candidate.id.catalog === "first/{locale}")
     const second = listed.candidates.find((candidate) => candidate.id.catalog === "second/{locale}")
@@ -651,7 +654,7 @@ msgstr ""
     })
     await expect(readFile(firstPath, "utf8")).resolves.toContain('msgstr "Hallo"')
     await expect(readFile(secondPath, "utf8")).resolves.toBe(catalog)
-  }, 30_000)
+  })
 
   it("patches candidates listed with truncated origins using a stable fingerprint", async () => {
     const rootDir = await createTempDir()
@@ -1010,29 +1013,22 @@ type TestSupportBindings = Pick<GeneratedNativeBindings, "listTranslationCandida
 }
 
 async function loadTestSupportAddon(): Promise<TestSupportBindings> {
+  if (testSupportAddon) {
+    return testSupportAddon
+  }
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
-  execFileSync("cargo", ["build", "--package", "palamedes-node", "--features", "test-support"], {
-    cwd: repoRoot,
-    stdio: "inherit",
-  })
+  const addonPath = await testSupportAddonPath(repoRoot)
+  const require = createRequire(import.meta.url)
+  const cached = require.cache[addonPath]
+  testSupportAddon = (cached?.exports ?? require(addonPath)) as TestSupportBindings
+  return testSupportAddon
+}
+
+async function testSupportAddonPath(repoRoot: string): Promise<string> {
   const extension =
     process.platform === "win32" ? "dll" : process.platform === "darwin" ? "dylib" : "so"
   const libraryName = `${process.platform === "win32" ? "" : "lib"}palamedes_node.${extension}`
-  // Windows keeps loaded native addons open until Node exits, so a copy inside
-  // the per-test fixture would make its afterEach cleanup fail with EPERM.
-  // target/ is ignored and is already the build-artifact home for this addon.
-  // Reuse one stable filename after the preceding Node process exits so normal
-  // test runs cannot leave a PID-suffixed addon behind each time.
-  const addonPath = testSupportAddonPath(repoRoot)
-  await copyFile(path.join(repoRoot, "target", "debug", libraryName), addonPath)
-  if (process.platform === "darwin") {
-    execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", addonPath], {
-      stdio: "inherit",
-    })
-  }
-  return createRequire(import.meta.url)(addonPath) as TestSupportBindings
-}
-
-function testSupportAddonPath(repoRoot: string): string {
-  return path.join(repoRoot, "target", "debug", testSupportAddonFilename)
+  const library = await readFile(path.join(repoRoot, "target", "debug", libraryName))
+  const digest = createHash("sha256").update(library).digest("hex").slice(0, 16)
+  return path.join(repoRoot, "target", "debug", `palamedes-node-test-support-${digest}.node`)
 }
