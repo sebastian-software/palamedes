@@ -12,6 +12,8 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 
 The adapter supports `waku@^1.0.0-beta.8` and Node.js 22.22 or newer. Macros
 still need the standard Vite transformation and catalog-loading setup.
+`@palamedes/waku` is ESM-only: use `import`; CommonJS `require()` is deliberately
+unsupported.
 
 ## Interceptor registration
 
@@ -42,9 +44,12 @@ macros and synchronous, asynchronous, or cross-module helper calls.
 
 ## Streaming and runtime limits
 
-Waku creates the response `ReadableStream` inside the interceptor scope. Node's
-`AsyncLocalStorage` therefore retains the active locale in stream callbacks
-created by the handler, and restores it for the caller after the response.
+The caller's scope is restored when the awaited handler promise settles and
+returns the `Response`, before the body is consumed. Waku creates the response
+`ReadableStream` inside the interceptor scope, so Node's `AsyncLocalStorage`
+can retain the active locale in stream callbacks created by the handler while
+they are consumed later. Those callbacks do not extend the caller's request
+ownership.
 Do not use detached work as request ownership: work created during an action
 may inherit its async context after the response, while later work will not.
 Pass locale data explicitly to background work.

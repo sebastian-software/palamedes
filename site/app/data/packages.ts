@@ -18,5 +18,5 @@ export const PACKAGES: PackageCard[] = [
   { name: "@palamedes/solid", role: "Solid translation components" },
   { name: "@palamedes/vite-plugin", role: "Recommended Vite entry point" },
   { name: "@palamedes/next-plugin", role: "Recommended Next.js entry point" },
-  { name: "@palamedes/waku", role: "Waku server-action request interceptor" },
+  { name: "@palamedes/waku", role: "ESM-only Waku server-action request interceptor" },
 ]
