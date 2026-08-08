@@ -17,6 +17,11 @@ export const SERVER_FRAMEWORKS = [
 export const LOCALE_STRATEGIES = ["cookie", "route", "subdomain", "tld"]
 export const VITE_EXAMPLE = { framework: "vite", strategy: "client", id: "vite-mdx" }
 
+// Focused production fixtures are intentionally outside the cross-framework
+// locale-strategy matrix. They have dedicated verifiers and must remain
+// discoverable by tooling that inventories the examples directory.
+export const FOCUSED_EXAMPLES = ["react-router-rsc-cookie"]
+
 export const EXAMPLE_MATRIX = [
   {
     id: "nextjs-cookie",

@@ -55,6 +55,18 @@ pnpm verify:examples -- --id vite-mdx
 That is the real point of the matrix. It is not a pile of demos. It is the
 evidence behind the claim that Palamedes stays coherent across frameworks.
 
+## Focused React Router RSC Proof
+
+[examples/react-router-rsc-cookie](./react-router-rsc-cookie) is intentionally
+outside the 25-app locale-strategy matrix. It is the production-built fixture
+for the experimental React Router RSC adapter: a Client Component invokes a
+real `"use server"` Server Function, then proves request-scoped localization,
+concurrent English/German isolation, and post-action revalidation.
+
+```bash
+pnpm verify:react-router-rsc
+```
+
 ## Live Reference URLs
 
 The URLs below are the intended public reference shape for the same design
