@@ -222,6 +222,39 @@ fn lint_treats_only_mdx_template_expression_comments_as_suppressions() {
 }
 
 #[test]
+fn lint_suppression_survives_a_jsx_closing_tag() {
+    let fixture = fixture_dir("scanner-sync");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+    )
+    .expect("write config");
+    fs::write(
+        fixture.join("src/view.tsx"),
+        r#"import { t } from "@palamedes/core/macro";
+export function Label({ status }) {
+  const first = <p>Ready</p>;
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  return <>{first}{t`${status}`}</>;
+}
+"#,
+    )
+    .expect("write JSX source");
+    let output = pmds(
+        &fixture,
+        &["lint", "--json", "--fail-on", "warning", "--threads", "1"],
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("\"suppressed\": 1"),
+        "{output:?}"
+    );
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
 fn lint_configuration_failures_keep_the_generic_exit_code() {
     let fixture = fixture_dir("configuration-failure");
     fs::create_dir_all(&fixture).expect("create fixture");

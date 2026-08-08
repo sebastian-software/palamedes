@@ -289,6 +289,14 @@ impl CommentSyntax {
             Self::Html => source.split_once("-->").map_or(source, |(body, _)| body),
         }
     }
+
+    fn closing_delimiter(self) -> Option<&'static str> {
+        match self {
+            Self::Line => None,
+            Self::Block => Some("*/"),
+            Self::Html => Some("-->"),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -474,7 +482,13 @@ fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<So
             for code in codes {
                 if SOURCE_DIAGNOSTIC_CODES.contains(&code) {
                     suppressions.push(Suppression {
-                        line: line_index + 1 + line_delta,
+                        line: suppression_line(
+                            source,
+                            line_start + directive_start,
+                            syntax,
+                            line_index + 1,
+                            *line_delta,
+                        ),
                         code: code.to_owned(),
                         primary: range.clone(),
                     });
@@ -492,6 +506,33 @@ fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<So
         line_start += line.len();
     }
     (suppressions, diagnostics)
+}
+
+fn suppression_line(
+    source: &str,
+    directive_start: usize,
+    syntax: CommentSyntax,
+    directive_line: usize,
+    line_delta: usize,
+) -> usize {
+    if line_delta == 0 {
+        return directive_line;
+    }
+
+    let Some(delimiter) = syntax.closing_delimiter() else {
+        return directive_line + line_delta;
+    };
+    let directive_to_close = &source[directive_start..];
+    let Some(close) = directive_to_close.find(delimiter) else {
+        return directive_line + line_delta;
+    };
+
+    directive_line
+        + directive_to_close[..close]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count()
+        + 1
 }
 
 /// Finds supported comment openers outside strings and existing block comments.
@@ -520,6 +561,7 @@ fn javascript_comment_openers(
         state.javascript.push(JavascriptScanMode::Code);
         state.javascript_regex_allowed = true;
     }
+    reset_javascript_line_state(&mut state.javascript);
     let modes = &mut state.javascript;
     let regex_allowed = &mut state.javascript_regex_allowed;
     let bytes = line.as_bytes();
@@ -623,7 +665,10 @@ fn javascript_comment_openers(
                 } else if bytes[index] == b'`' {
                     modes.push(JavascriptScanMode::TemplateRaw);
                     index += 1;
-                } else if bytes[index] == b'/' && *regex_allowed {
+                } else if bytes[index] == b'/'
+                    && *regex_allowed
+                    && !is_jsx_closing_tag_start(line, index)
+                {
                     modes.push(JavascriptScanMode::Regex {
                         character_class: false,
                     });
@@ -653,6 +698,23 @@ fn javascript_comment_openers(
         }
     }
     openers
+}
+
+fn reset_javascript_line_state(modes: &mut Vec<JavascriptScanMode>) {
+    while matches!(
+        modes.last(),
+        Some(
+            JavascriptScanMode::SingleQuote
+                | JavascriptScanMode::DoubleQuote
+                | JavascriptScanMode::Regex { .. }
+        )
+    ) {
+        modes.pop();
+    }
+}
+
+fn is_jsx_closing_tag_start(line: &str, slash: usize) -> bool {
+    line[..slash].ends_with('<')
 }
 
 fn update_javascript_regex_context(line: &str, index: usize, regex_allowed: &mut bool) -> usize {
@@ -705,6 +767,8 @@ fn update_javascript_regex_context(line: &str, index: usize, regex_allowed: &mut
 
 fn mdx_comment_openers(line: &str, state: &mut CommentScanState) -> Vec<(usize, CommentSyntax)> {
     let mut openers = Vec::new();
+    state.quote = None;
+    reset_mdx_template_line_state(&mut state.mdx_template);
     let bytes = line.as_bytes();
     let mut index = 0usize;
     while index < bytes.len() {
@@ -848,11 +912,8 @@ fn mdx_comment_openers(line: &str, state: &mut CommentScanState) -> Vec<(usize, 
         } else if bytes[index] == b'`' && state.mdx_expression_depth > 0 {
             state.mdx_template.push(MdxTemplateMode::Raw);
             index += 1;
-        } else if let Some(quote) = ['\'', '"']
-            .into_iter()
-            .find(|quote| line[index..].starts_with(*quote))
-        {
-            state.quote = Some(quote);
+        } else if state.mdx_expression_depth > 0 && matches!(bytes[index], b'\'' | b'"') {
+            state.quote = Some(bytes[index] as char);
             index += 1;
         } else if line[index..].starts_with("<!--") {
             state.mdx_comment = Some(MdxComment {
@@ -871,6 +932,15 @@ fn mdx_comment_openers(line: &str, state: &mut CommentScanState) -> Vec<(usize, 
         }
     }
     openers
+}
+
+fn reset_mdx_template_line_state(modes: &mut Vec<MdxTemplateMode>) {
+    while matches!(
+        modes.last(),
+        Some(MdxTemplateMode::SingleQuote | MdxTemplateMode::DoubleQuote)
+    ) {
+        modes.pop();
+    }
 }
 
 fn directive_start(line: &str, index: usize) -> bool {
@@ -1120,7 +1190,91 @@ const trailing = 1; /* explanation palamedes-lint-disable-line pmds/no-placehold
         assert_eq!(suppressions[0].primary.line, 2);
         assert_eq!(suppressions[0].line, 2);
         assert_eq!(suppressions[1].primary.line, 5);
-        assert_eq!(suppressions[1].line, 6);
+        assert_eq!(suppressions[1].line, 7);
+    }
+
+    #[test]
+    fn suppression_parser_recovers_after_jsx_and_mdx_text() {
+        let jsx = r#"const first = <p>Ready</p>;
+// palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+t`${status}`;
+"#;
+        let (suppressions, diagnostics) = super::parse_suppressions(jsx, "view.tsx");
+        assert!(diagnostics.is_empty());
+        assert_eq!(
+            suppressions
+                .iter()
+                .map(|suppression| (suppression.primary.line, suppression.line))
+                .collect::<Vec<_>>(),
+            vec![(2, 3)]
+        );
+
+        let jsx_text = r#"const first = <p>Don't panic</p>;
+// palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+t`${status}`;
+"#;
+        let (suppressions, diagnostics) = super::parse_suppressions(jsx_text, "view.tsx");
+        assert!(diagnostics.is_empty());
+        assert_eq!(
+            suppressions
+                .iter()
+                .map(|suppression| (suppression.primary.line, suppression.line))
+                .collect::<Vec<_>>(),
+            vec![(2, 3)]
+        );
+
+        let trailing = "const label = <p>Ready</p>; // palamedes-lint-disable-line pmds/no-placeholder-only-message\n";
+        let (suppressions, diagnostics) = super::parse_suppressions(trailing, "view.tsx");
+        assert!(diagnostics.is_empty());
+        assert_eq!(suppressions.len(), 1);
+        assert_eq!(suppressions[0].line, 1);
+
+        let mdx = r#"Here's an example:
+<!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message -->
+{t`${status}`}
+<p>Don't panic</p>
+{/* palamedes-lint-disable-next-line pmds/no-placeholder-only-message */}
+{t`${status}`}
+"#;
+        let (suppressions, diagnostics) = super::parse_suppressions(mdx, "guide.mdx");
+        assert!(diagnostics.is_empty());
+        assert_eq!(
+            suppressions
+                .iter()
+                .map(|suppression| (suppression.primary.line, suppression.line))
+                .collect::<Vec<_>>(),
+            vec![(2, 3), (5, 6)]
+        );
+    }
+
+    #[test]
+    fn suppression_parser_resets_unclosed_quotes_and_regexps_at_line_end() {
+        for source in [
+            "const message = 'unterminated\n// palamedes-lint-disable-next-line pmds/no-placeholder-only-message\nt`${status}`;\n",
+            "const pattern = /unterminated\n// palamedes-lint-disable-next-line pmds/no-placeholder-only-message\nt`${status}`;\n",
+        ] {
+            let (suppressions, diagnostics) = super::parse_suppressions(source, "view.tsx");
+            assert!(diagnostics.is_empty());
+            assert_eq!(suppressions.len(), 1);
+            assert_eq!(suppressions[0].line, 3);
+        }
+    }
+
+    #[test]
+    fn suppression_parser_targets_after_multiline_comment_closes() {
+        let source = "{/*\n palamedes-lint-disable-next-line pmds/no-placeholder-only-message\n*/}\nt`${status}`\n";
+        let (suppressions, diagnostics) = super::parse_suppressions(source, "view.tsx");
+        assert!(diagnostics.is_empty());
+        assert_eq!(suppressions.len(), 1);
+        assert_eq!(suppressions[0].primary.line, 2);
+        assert_eq!(suppressions[0].line, 4);
+
+        let source = "<!--\n palamedes-lint-disable-next-line pmds/no-placeholder-only-message\n-->\n{t`${status}`}\n";
+        let (suppressions, diagnostics) = super::parse_suppressions(source, "guide.mdx");
+        assert!(diagnostics.is_empty());
+        assert_eq!(suppressions.len(), 1);
+        assert_eq!(suppressions[0].primary.line, 2);
+        assert_eq!(suppressions[0].line, 4);
     }
 
     #[test]

@@ -151,7 +151,9 @@ not run.
 Suppressions are deliberately code-specific and line-scoped. A directive must
 start immediately after a supported comment opener, allowing whitespace but no
 other text; in block and HTML comments, that whitespace may continue onto the
-directive's physical line. JS and TS accept `//` and `/* ... */`; JSX and TSX
+directive's physical line. A `disable-next-line` directive in a multi-line
+block or HTML comment applies to the first line after that comment closes. JS
+and TS accept `//` and `/* ... */`; JSX and TSX
 accept those forms including JSX `{/* ... */}`; MDX accepts HTML `<!-- ... -->`
 and JSX `{/* ... */}`; JavaScript expressions in MDX also accept their native
 `//` and `/* ... */` forms. Raw MDX template text and fenced code blocks are
