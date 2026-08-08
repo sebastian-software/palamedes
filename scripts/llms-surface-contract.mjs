@@ -37,6 +37,7 @@ export const publishedPackageInventory = [
   "@palamedes/solid",
   "@palamedes/transform",
   "@palamedes/vite-plugin",
+  "@palamedes/waku",
   "create-palamedes",
   "palamedes",
 ]

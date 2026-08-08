@@ -39,6 +39,7 @@ may change faster than Stable surfaces.
 | `@palamedes/runtime`                                  | Stable   | `getI18n`, `setClientI18n`, and the server runtime contract are the public transform target.                                  |
 | `@palamedes/react` and `@palamedes/solid`             | Stable   | Runtime components and macro entry points are public app APIs.                                                                |
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                        |
+| `@palamedes/waku`                                     | Preview  | Waku handler interceptor and request resolver contract; Waku currently exposes the required APIs as unstable.                 |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                          |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                  |
 | `@palamedes/eslint-plugin`                            | Preview  | Thin ESLint/Oxlint facades over native diagnostics; Oxlint's JavaScript plugin API is still alpha.                            |
@@ -61,6 +62,7 @@ Palamedes treats these as stable adoption surfaces:
 - documented FCL storage configuration and conversion workflows
 - documented `pmds` commands and flags
 - Vite and Next plugin options documented in package READMEs
+- Waku server-action interceptor documented in `@palamedes/waku` (Preview while Waku's interceptor API is unstable)
 - runtime access through `getI18n()`
 - `createI18n(options?)` and descriptor-based lookup behavior
 - React and Solid runtime components and macro package names

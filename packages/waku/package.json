@@ -1,0 +1,59 @@
+{
+  "name": "@palamedes/waku",
+  "version": "1.14.0",
+  "description": "Waku request-scoped i18n interceptor for Palamedes",
+  "keywords": [
+    "waku",
+    "i18n",
+    "internationalization",
+    "localization"
+  ],
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/waku"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "README.md",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "test": "vitest run --globals src/*.test.ts",
+    "stub": "unbuild --stub"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@palamedes/runtime": "workspace:^"
+  },
+  "peerDependencies": {
+    "waku": "^1.0.0-beta.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.3",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.1.10",
+    "waku": "1.0.0-beta.8"
+  }
+}

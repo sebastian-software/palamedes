@@ -19,6 +19,7 @@
     { "path": "packages/transform" },
     { "path": "packages/remix" },
     { "path": "packages/react-router-rsc" },
+    { "path": "packages/waku" },
     { "path": "packages/vite-plugin" },
     { "path": "packages/next-plugin" },
     { "path": "packages/cli" },
