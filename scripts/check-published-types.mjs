@@ -68,6 +68,9 @@ export const vitePlugins = [vitePalamedes(), palamedes()]
 export const lintPlugin = palamedesLint
 export const lintConfig = palamedesLintConfigs.recommended
 export const wakuInterceptor = createWakuI18nInterceptor((request) => ({
+  locale: request.headers.get("accept-language") ?? "en",
+  _: () => "",
+}))
 export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) => ({
   locale: request.headers.get("accept-language") ?? "en",
   _: () => "",
