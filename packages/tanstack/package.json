@@ -31,7 +31,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/*.test.ts && node --test scripts/package.test.mjs",
+    "test": "vitest run --globals src/index.test.ts && node --test scripts/package.test.mjs",
     "stub": "unbuild --stub"
   },
   "engines": {
