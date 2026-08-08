@@ -6,13 +6,21 @@ import { ClientReady } from "../components/ClientReady"
 import { LocaleSwitcher } from "../components/LocaleSwitcher"
 import { ProofPanel } from "../components/ProofPanel"
 import { TicketPanel } from "../components/TicketPanel"
-import { activateServerI18n, getLocaleLabel, resolveCookieLocale, type Locale } from "../lib/i18n"
+import { getLocaleLabel, resolveCookieLocale, type Locale } from "../lib/i18n"
+import {
+  asynchronousServerActionMessage,
+  synchronousServerActionMessage,
+} from "../lib/server-action-helpers.server"
+import { crossModuleServerActionMessage } from "../lib/server-action-cross-module.server"
 
 type ProbeResult = {
   handledAt: string
   locale: Locale
   localeLabel: string
-  message: string
+  messages: Record<
+    "asynchronous" | "crossModule" | "defaultParameter" | "direct" | "synchronous",
+    string
+  >
 }
 
 export default async function CookiePage() {
@@ -20,18 +28,22 @@ export default async function CookiePage() {
   const { locale } = resolveCookieLocale(headers)
   const localeLabel = getLocaleLabel(locale)
 
-  await activateServerI18n(locale)
-
-  async function runProbe(): Promise<ProbeResult> {
+  async function runProbe(
+    defaultParameter = t`Parameter default confirmed locale.`
+  ): Promise<ProbeResult> {
     "use server"
-
-    await activateServerI18n(locale)
 
     return {
       handledAt: new Date().toISOString(),
       locale,
       localeLabel,
-      message: t`Server action confirmed locale ${locale}.`,
+      messages: {
+        asynchronous: await asynchronousServerActionMessage(),
+        crossModule: crossModuleServerActionMessage(),
+        defaultParameter,
+        direct: t`Server action confirmed locale ${locale}.`,
+        synchronous: synchronousServerActionMessage(),
+      },
     }
   }
 

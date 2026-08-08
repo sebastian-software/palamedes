@@ -6,86 +6,137 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-msgid "Add to cart"
-msgstr "In den Warenkorb"
-
-msgid "Attendees"
-msgstr "Teilnehmer"
-
-msgid "Availability"
-msgstr "Verfügbarkeit"
-
-msgid "Behind the scenes"
-msgstr "Hinter den Kulissen"
-
-msgid "Berlin, Germany"
-msgstr "Berlin, Deutschland"
-
-msgid "Book your seat at Frontend Stage 2026"
-msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
-
-msgid "Conference pass"
-msgstr "Konferenzpass"
-
-msgid "Currency"
-msgstr "Währung"
-
-msgid "Date"
-msgstr "Datum"
-
-msgid "Fewer tickets"
-msgstr "Weniger Tickets"
-
-msgid "Locale"
-msgstr "Sprache"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Für dieses Dokument mit Palamedes lokalisiert"
-
-msgid "More tickets"
-msgstr "Mehr Tickets"
-
-msgid "Number"
-msgstr "Zahl"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Serverergebnis aktualisieren"
-
-msgid "Rendered with Waku"
-msgstr "Gerendert mit Waku"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server action confirmed locale {locale}."
-msgstr "Server-Action bestätigte Sprache {locale}."
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten deine Tickets."
-
-msgid "Total"
-msgstr "Gesamt"
-
-msgid "Venue"
-msgstr "Ort"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Willkommen zurück, {attendeeName}."
-
-msgid "each"
-msgstr "pro Stück"
-
-msgid "one switch, every format"
-msgstr "ein Klick, alle Formate"
-
-msgid "server locale"
-msgstr "Server-Sprache"
-
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# Ticket} other {# Tickets}}"
 
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"
+
+#: examples/waku-cookie/src/components/ClientReady.tsx#ClientReady
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "In den Warenkorb"
+
+#: examples/waku-cookie/src/lib/server-action-helpers.server.ts#asynchronousServerActionMessage
+msgid "Asynchronous server-action helper confirmed locale."
+msgstr "Asynchroner Serveraktionshelfer bestätigte Sprache."
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Teilnehmer"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Verfügbarkeit"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Hinter den Kulissen"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Deutschland"
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Sichere dir deinen Platz bei Frontend Stage 2026"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Konferenzpass"
+
+#: examples/waku-cookie/src/lib/server-action-cross-module.server.ts#crossModuleServerActionMessage
+msgid "Cross-module server-action helper confirmed locale."
+msgstr "Modulübergreifender Serveraktionshelfer bestätigte Sprache."
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Währung"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Datum"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "pro Stück"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Weniger Tickets"
+
+#: examples/waku-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Sprache"
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "Localized for this document with Palamedes"
+msgstr "Für dieses Dokument mit Palamedes lokalisiert"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "Mehr Tickets"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Zahl"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "ein Klick, alle Formate"
+
+#: examples/waku-cookie/src/pages/index.tsx#runProbe
+msgid "Parameter default confirmed locale."
+msgstr "Parameterstandard bestätigte Sprache."
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Serverergebnis aktualisieren"
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "Rendered with Waku"
+msgstr "Gerendert mit Waku"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/waku-cookie/src/pages/index.tsx#runProbe
+msgid "Server action confirmed locale {locale}."
+msgstr "Server-Action bestätigte Sprache {locale}."
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "server locale"
+msgstr "Server-Sprache"
+
+#: examples/waku-cookie/src/lib/server-action-helpers.server.ts#synchronousServerActionMessage
+msgid "Synchronous server-action helper confirmed locale."
+msgstr "Synchroner Serveraktionshelfer bestätigte Sprache."
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Drei Tage Talks über das Handwerk moderner Web-Entwicklung. Wähle unten "
+"deine Tickets."
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Gesamt"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Ort"
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "Welcome back, {attendeeName}."
+msgstr "Willkommen zurück, {attendeeName}."

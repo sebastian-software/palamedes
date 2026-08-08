@@ -1182,6 +1182,9 @@ importers:
       '@palamedes/runtime':
         specifier: workspace:^
         version: link:../../packages/runtime
+      '@palamedes/waku':
+        specifier: workspace:^
+        version: link:../../packages/waku
       hono:
         specifier: ^4.13.0
         version: 4.13.0
@@ -1819,6 +1822,28 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@edge-runtime/vm@3.2.0)(@types/node@24.13.3)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+
+  packages/waku:
+    dependencies:
+      '@palamedes/runtime':
+        specifier: workspace:^
+        version: link:../runtime
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      unbuild:
+        specifier: ^3.6.1
+        version: 3.6.1(typescript@6.0.3)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@edge-runtime/vm@3.2.0)(@types/node@24.13.3)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+      waku:
+        specifier: 1.0.0-beta.8
+        version: 1.0.0-beta.8(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.25))(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.25)))(react@19.2.8)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
 
   site:
     dependencies:

@@ -250,6 +250,45 @@ test("matrix example browser contract", async () => {
         async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
       )
       .toContain("de")
+    if (example.id === "waku-cookie") {
+      await expect
+        .poll(() => page.getByTestId("server-proof-sync").textContent())
+        .toBe("Synchroner Serveraktionshelfer bestätigte Sprache.")
+      await expect
+        .poll(() => page.getByTestId("server-proof-async").textContent())
+        .toBe("Asynchroner Serveraktionshelfer bestätigte Sprache.")
+      await expect
+        .poll(() => page.getByTestId("server-proof-cross-module").textContent())
+        .toBe("Modulübergreifender Serveraktionshelfer bestätigte Sprache.")
+      await expect
+        .poll(() => page.getByTestId("server-proof-default-parameter").textContent())
+        .toBe("Parameterstandard bestätigte Sprache.")
+
+      const englishContext = await browser.newContext({ locale: "en-US" })
+      const englishPage = await englishContext.newPage()
+      await englishPage.goto(`${example.baseUrl}/`, { waitUntil: "domcontentloaded" })
+      await waitForClientReady(englishPage)
+      await Promise.all([
+        page.evaluate(() =>
+          document.querySelector('[data-testid="server-proof-trigger"]')?.click()
+        ),
+        englishPage.evaluate(() =>
+          document.querySelector('[data-testid="server-proof-trigger"]')?.click()
+        ),
+      ])
+      await expect
+        .poll(
+          async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+        )
+        .toContain("de")
+      await expect
+        .poll(
+          async () =>
+            (await englishPage.getByTestId("server-proof-message").textContent())?.trim() ?? ""
+        )
+        .toContain("en")
+      await englishContext.close()
+    }
     await captureScreenshot(page, example, "interactive")
     return
   }

@@ -48,6 +48,7 @@ Recommended app-facing packages:
 - `@palamedes/vite-plugin`: Vite integration and `.po` loading
 - `@palamedes/next-plugin`: Next.js integration
 - `@palamedes/remix`: server-first Remix v3 integration (requires Node.js `>=24.3`)
+- `@palamedes/waku`: request-scoped i18n interceptor for Waku server actions
 - `@palamedes/cli`: native CLI (`pmds extract`, `pmds lint`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog merge-driver`, `pmds catalog convert`, `pmds version`); also dispatches explicitly configured binary CLI plugins
 - `@palamedes/config`: config loading for the JS plugin loaders; also reads legacy `palamedes.config.ts`/`.js` as a compatibility path (the native CLI reads only YAML/JSON/TOML)
 

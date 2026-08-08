@@ -1,11 +1,9 @@
 import { fsRouter } from "waku"
 import adapter from "waku/adapters/default"
-import { createServerI18nScope } from "@palamedes/runtime/server"
 import {
   markServerI18nTestBarrierReached,
   waitForServerI18nTestBarrier,
 } from "@palamedes/runtime/server/test"
-import { createServerI18n, locales } from "./lib/i18n"
 
 // Glob keys must keep the `pages/` prefix so fsRouter's default `pagesDir: "pages"`
 // matches them. Globbing from `/src` and stripping the leading `/src/` yields
@@ -19,22 +17,13 @@ const modules = Object.fromEntries(
   ])
 )
 
-const serverI18nScope = createServerI18nScope<Awaited<ReturnType<typeof createServerI18n>>>()
-
 export default adapter(fsRouter(modules), {
   middlewareFns: [
     () => async (context, next) => {
       const request = context.req.raw
-      const { locale } = locales.resolve({
-        strategy: "cookie",
-        acceptLanguageHeader: request.headers.get("accept-language"),
-        cookieHeader: request.headers.get("cookie"),
-      })
-      return serverI18nScope.run(await createServerI18n(locale), async () => {
-        await waitForServerI18nTestBarrier(request)
-        markServerI18nTestBarrierReached(request, context.res.headers)
-        return next()
-      })
+      await waitForServerI18nTestBarrier(request)
+      markServerI18nTestBarrierReached(request, context.res.headers)
+      return await next()
     },
   ],
 })
