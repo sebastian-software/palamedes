@@ -11,7 +11,10 @@ type ProbeResult = {
   handledAt: string
   locale: Locale
   localeLabel: string
-  message: string
+  messages: Record<
+    "asynchronous" | "crossModule" | "defaultParameter" | "direct" | "synchronous",
+    string
+  >
 }
 
 type ProofPanelProps = {
@@ -21,20 +24,20 @@ type ProofPanelProps = {
 export function ProofPanel({ runProbe }: ProofPanelProps) {
   const when = new Date(EVENT.startsAt)
   const seats = EVENT.seatsLeft
-  const [message, setMessage] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ProbeResult["messages"] | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function refresh() {
     startTransition(async () => {
       const result = await runProbe()
-      setMessage(result.message)
+      setMessages(result.messages)
     })
   }
 
   useEffect(() => {
     startTransition(async () => {
       const result = await runProbe()
-      setMessage(result.message)
+      setMessages(result.messages)
     })
   }, [runProbe])
 
@@ -105,9 +108,21 @@ export function ProofPanel({ runProbe }: ProofPanelProps) {
           <span className="feat-name">
             <Trans>Server</Trans>
           </span>
-          <span className="feat-out is-text" data-testid="server-proof-message">
-            {message ?? "…"}
-          </span>
+          <div className="feat-out is-text">
+            <span data-testid="server-proof-message">{messages?.direct ?? "…"}</span>
+            <span data-testid="server-proof-sync" hidden>
+              {messages?.synchronous ?? ""}
+            </span>
+            <span data-testid="server-proof-async" hidden>
+              {messages?.asynchronous ?? ""}
+            </span>
+            <span data-testid="server-proof-cross-module" hidden>
+              {messages?.crossModule ?? ""}
+            </span>
+            <span data-testid="server-proof-default-parameter" hidden>
+              {messages?.defaultParameter ?? ""}
+            </span>
+          </div>
         </div>
         <button
           className="cta"

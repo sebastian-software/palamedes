@@ -483,6 +483,13 @@ function typedocPackages() {
       entryPoints: ["packages/next-plugin/src/index.ts"],
     },
     {
+      slug: "waku",
+      label: "Waku",
+      packageDir: "waku",
+      position: 75,
+      entryPoints: ["packages/waku/src/index.ts"],
+    },
+    {
       slug: "transform",
       label: "Transform",
       packageDir: "transform",

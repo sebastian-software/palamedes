@@ -217,6 +217,11 @@
         },
         {
           "type": "json",
+          "path": "packages/waku/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "packages/solid/package.json",
           "jsonpath": "$.version"
         },

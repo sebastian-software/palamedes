@@ -8,6 +8,7 @@ expected to use directly.
 - [`@palamedes/react`](./react.md)
 - [`@palamedes/solid`](./solid.md)
 - [`@palamedes/remix`](./remix.md)
+- [`@palamedes/waku`](./waku.md)
 - [`@palamedes/config`](./config.md)
 - [`@palamedes/cli`](./cli.md)
 - [`pmds` binary plugin protocol](./cli-binary-plugin.md)

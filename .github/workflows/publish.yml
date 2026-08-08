@@ -299,6 +299,7 @@ jobs:
           --filter @palamedes/eslint-plugin
           --filter @palamedes/react
           --filter @palamedes/remix
+          --filter @palamedes/waku
           --filter @palamedes/solid
           --filter @palamedes/cli
           --filter @palamedes/vite-plugin
@@ -318,6 +319,7 @@ jobs:
           node ./scripts/publish-package-if-needed.mjs @palamedes/eslint-plugin
           node ./scripts/publish-package-if-needed.mjs @palamedes/react
           node ./scripts/publish-package-if-needed.mjs @palamedes/remix
+          node ./scripts/publish-package-if-needed.mjs @palamedes/waku
           node ./scripts/publish-package-if-needed.mjs @palamedes/solid
           node ./scripts/publish-package-if-needed.mjs @palamedes/cli
           node ./scripts/publish-package-if-needed.mjs @palamedes/vite-plugin

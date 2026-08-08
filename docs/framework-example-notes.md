@@ -52,7 +52,7 @@ The `waku-cookie`, `waku-route`, `waku-subdomain`, and `waku-tld` examples verif
 
 - Waku file-based `src/pages` routing with the default adapter path
 - Waku-native SSR with provider-free Palamedes rendering
-- localized server actions
+- localized server actions through `@palamedes/waku` request-scoped interceptor coverage
 - `.po` loading through the Vite plugin path exposed via `waku.config.ts`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 

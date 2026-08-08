@@ -6,86 +6,137 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "X-Generator: palamedes\n"
 
-msgid "Add to cart"
-msgstr "Add to cart"
-
-msgid "Attendees"
-msgstr "Attendees"
-
-msgid "Availability"
-msgstr "Availability"
-
-msgid "Behind the scenes"
-msgstr "Behind the scenes"
-
-msgid "Berlin, Germany"
-msgstr "Berlin, Germany"
-
-msgid "Book your seat at Frontend Stage 2026"
-msgstr "Book your seat at Frontend Stage 2026"
-
-msgid "Conference pass"
-msgstr "Conference pass"
-
-msgid "Currency"
-msgstr "Currency"
-
-msgid "Date"
-msgstr "Date"
-
-msgid "Fewer tickets"
-msgstr "Fewer tickets"
-
-msgid "Locale"
-msgstr "Locale"
-
-msgid "Localized for this document with Palamedes"
-msgstr "Localized for this document with Palamedes"
-
-msgid "More tickets"
-msgstr "More tickets"
-
-msgid "Number"
-msgstr "Number"
-
-msgid "Plural"
-msgstr "Plural"
-
-msgid "Refresh server result"
-msgstr "Refresh server result"
-
-msgid "Rendered with Waku"
-msgstr "Rendered with Waku"
-
-msgid "Server"
-msgstr "Server"
-
-msgid "Server action confirmed locale {locale}."
-msgstr "Server action confirmed locale {locale}."
-
-msgid "Three days of talks on the craft of building for the web. Choose your tickets below."
-msgstr "Three days of talks on the craft of building for the web. Choose your tickets below."
-
-msgid "Total"
-msgstr "Total"
-
-msgid "Venue"
-msgstr "Venue"
-
-msgid "Welcome back, {attendeeName}."
-msgstr "Welcome back, {attendeeName}."
-
-msgid "each"
-msgstr "each"
-
-msgid "one switch, every format"
-msgstr "one switch, every format"
-
-msgid "server locale"
-msgstr "server locale"
-
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{quantity, plural, one {# ticket} other {# tickets}}"
 msgstr "{quantity, plural, one {# ticket} other {# tickets}}"
 
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
 msgid "{seats, plural, one {# seat left} other {# seats left}}"
 msgstr "{seats, plural, one {# seat left} other {# seats left}}"
+
+#: examples/waku-cookie/src/components/ClientReady.tsx#ClientReady
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Add to cart"
+msgstr "Add to cart"
+
+#: examples/waku-cookie/src/lib/server-action-helpers.server.ts#asynchronousServerActionMessage
+msgid "Asynchronous server-action helper confirmed locale."
+msgstr "Asynchronous server-action helper confirmed locale."
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Attendees"
+msgstr "Attendees"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Availability"
+msgstr "Availability"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Behind the scenes"
+msgstr "Behind the scenes"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Berlin, Germany"
+msgstr "Berlin, Germany"
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "Book your seat at Frontend Stage 2026"
+msgstr "Book your seat at Frontend Stage 2026"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Conference pass"
+msgstr "Conference pass"
+
+#: examples/waku-cookie/src/lib/server-action-cross-module.server.ts#crossModuleServerActionMessage
+msgid "Cross-module server-action helper confirmed locale."
+msgstr "Cross-module server-action helper confirmed locale."
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Currency"
+msgstr "Currency"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Date"
+msgstr "Date"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "each"
+msgstr "each"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Fewer tickets"
+msgstr "Fewer tickets"
+
+#: examples/waku-cookie/src/components/LocaleSwitcher.tsx#LocaleSwitcher
+msgid "Locale"
+msgstr "Locale"
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "Localized for this document with Palamedes"
+msgstr "Localized for this document with Palamedes"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "More tickets"
+msgstr "More tickets"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Number"
+msgstr "Number"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "one switch, every format"
+msgstr "one switch, every format"
+
+#: examples/waku-cookie/src/pages/index.tsx#runProbe
+msgid "Parameter default confirmed locale."
+msgstr "Parameter default confirmed locale."
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Plural"
+msgstr "Plural"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Refresh server result"
+msgstr "Refresh server result"
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "Rendered with Waku"
+msgstr "Rendered with Waku"
+
+#: examples/waku-cookie/src/components/ProofPanel.tsx#ProofPanel
+msgid "Server"
+msgstr "Server"
+
+#: examples/waku-cookie/src/pages/index.tsx#runProbe
+msgid "Server action confirmed locale {locale}."
+msgstr "Server action confirmed locale {locale}."
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "server locale"
+msgstr "server locale"
+
+#: examples/waku-cookie/src/lib/server-action-helpers.server.ts#synchronousServerActionMessage
+msgid "Synchronous server-action helper confirmed locale."
+msgstr "Synchronous server-action helper confirmed locale."
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+msgstr ""
+"Three days of talks on the craft of building for the web. Choose your tickets "
+"below."
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Total"
+msgstr "Total"
+
+#: examples/waku-cookie/src/components/TicketPanel.tsx#TicketPanel
+msgid "Venue"
+msgstr "Venue"
+
+#: examples/waku-cookie/src/pages/index.tsx
+msgid "Welcome back, {attendeeName}."
+msgstr "Welcome back, {attendeeName}."
