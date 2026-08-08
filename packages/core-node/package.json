@@ -38,6 +38,7 @@
     "generate-native-types": "node ./scripts/generate-native-types.mjs",
     "check-native-types": "node ./scripts/generate-native-types.mjs --check",
     "build": "unbuild",
+    "pretest": "node ./scripts/build-test-support-addon.mjs",
     "test": "vitest run --globals src/index.test.ts && node --test ./scripts/package.test.mjs",
     "stub": "unbuild --stub"
   },
