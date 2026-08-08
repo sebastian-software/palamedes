@@ -90,6 +90,75 @@
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.15.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.14.0...palamedes-v1.15.0) (2026-08-08)
+
+
+### Features
+
+* add React Router RSC i18n scope ([#565](https://github.com/sebastian-software/palamedes/issues/565)) ([a81f347](https://github.com/sebastian-software/palamedes/commit/a81f3479f9fc8d146416798b92d674291ca3baf5))
+* add TanStack Start server i18n middleware ([50fd349](https://github.com/sebastian-software/palamedes/commit/50fd34901d0fdf76ab1ba97bb331de4a8842f386))
+* **waku:** add request-scoped server action i18n ([75bdd69](https://github.com/sebastian-software/palamedes/commit/75bdd694cef8477cf662476cb4e23767269bc81c))
+
+
+### Bug Fixes
+
+* **ci:** align example verification proof and scheduling ([2f367b6](https://github.com/sebastian-software/palamedes/commit/2f367b65f81e05ff7b7169071a72719680ecb696))
+* **ci:** distinguish example proof coverage ([7f32ec7](https://github.com/sebastian-software/palamedes/commit/7f32ec7369f38262b7f3485a74f8a62b98f52ef4))
+* **ci:** harden matrix and container contracts ([a9a96d3](https://github.com/sebastian-software/palamedes/commit/a9a96d309cd54e4899ca8293de42286f693574ab))
+* **ci:** simplify catalog cache test hook ([977ff9b](https://github.com/sebastian-software/palamedes/commit/977ff9b8a8a5c314e4cee498c78ae15566ae80e8))
+* **cli+core:** align audit verdict and locales ([841c5cb](https://github.com/sebastian-software/palamedes/commit/841c5cbb03be597c346eed8811323bb435df08dd))
+* **cli:** complete lint suppression scanner ([f55ebfa](https://github.com/sebastian-software/palamedes/commit/f55ebfa6fce45d5944bd0472ff5e6661802da7e8))
+* **cli:** handle Windows tar entry endings ([c2d40cc](https://github.com/sebastian-software/palamedes/commit/c2d40ccf66ef8c5705493f42a6f96ae5e39a077d))
+* **cli:** harden lint analysis ([35428f5](https://github.com/sebastian-software/palamedes/commit/35428f5c3471017e2a9421e4a6af2bbc6f7c9515))
+* **cli:** reserve all clap plugin namespaces ([6db57e0](https://github.com/sebastian-software/palamedes/commit/6db57e0cd0ae28c9d30bad963a1c8556b4d3d4ac))
+* **cli:** reserve lint plugin namespace ([d330c3a](https://github.com/sebastian-software/palamedes/commit/d330c3a6ce934a3b7355252aca6d10180d8d1c91))
+* **cli:** resolve catalog merge driver paths ([4a35a5f](https://github.com/sebastian-software/palamedes/commit/4a35a5f48e740fde5774fef5483e72971397a07c))
+* **cli:** restrict npm tarball runtime files ([b410e3b](https://github.com/sebastian-software/palamedes/commit/b410e3bb2bd55eb679c61077dc4e7a6e9f315e4d))
+* **cli:** scan nested lint suppression comments ([16c96fe](https://github.com/sebastian-software/palamedes/commit/16c96fe58dd2e46ebbb349188849402a8edc865b))
+* **core-node:** catch panics at N-API boundary ([46628c0](https://github.com/sebastian-software/palamedes/commit/46628c08960beb4f31e22cb6e3f14387e748fc59))
+* **core-node:** harden native boundary contracts ([fb8f418](https://github.com/sebastian-software/palamedes/commit/fb8f4189b73e12a6e02ad47407ecadd4aba64c55))
+* **core-node:** preserve snapshot input semantics ([6e859a4](https://github.com/sebastian-software/palamedes/commit/6e859a4eb59af771abc918ae9b8d156d01c4bac7))
+* **core-node:** snapshot native boundary inputs ([1ec9632](https://github.com/sebastian-software/palamedes/commit/1ec9632dc4bcd2c5ce4fac2abca3fcc1cdda318b))
+* **core:** canonicalize translation candidate origins ([57cad3a](https://github.com/sebastian-software/palamedes/commit/57cad3aea8be2cdfc34de424e9345976485fbc31))
+* **core:** fingerprint complete translation origins ([cfca9d8](https://github.com/sebastian-software/palamedes/commit/cfca9d8fd65b901138e099e1576433b8a4a2ff01))
+* **core:** harden macro import cleanup ([b2bec80](https://github.com/sebastian-software/palamedes/commit/b2bec80ab50b12f24415f240820f46efee06e122))
+* **core:** keep translation workflows target-only ([c2661da](https://github.com/sebastian-software/palamedes/commit/c2661da372fc81b9cca185b92bd4116cf9a4b35b))
+* **core:** preserve explicit translation failures ([d798095](https://github.com/sebastian-software/palamedes/commit/d798095d07a747b8b10d5892a291622cb44ed752))
+* **core:** preserve live macro imports ([a616ec4](https://github.com/sebastian-software/palamedes/commit/a616ec434f63da6fde7acae978ec95dbe6d44cd4))
+* **core:** reject invalid plural ICU patches ([37d6762](https://github.com/sebastian-software/palamedes/commit/37d6762e0331bc85e854659f978d44cd59629310))
+* **core:** scope Trans import reuse ([e154da2](https://github.com/sebastian-software/palamedes/commit/e154da2e4b50b079bd157461c079f85eb7956eb9))
+* **eslint-plugin:** report native failures once ([19f3c14](https://github.com/sebastian-software/palamedes/commit/19f3c14202bcdc0979c714e0448f2ed8414a706f))
+* **eslint-plugin:** track native failure claims with WeakMap ([ba5ff66](https://github.com/sebastian-software/palamedes/commit/ba5ff660ff115bfe0e943f53c1d95e403e42eac4))
+* **examples:** preserve server locale during hydration ([125ee22](https://github.com/sebastian-software/palamedes/commit/125ee2210b57fbe1dfe0dd4e282a4b8940902c90))
+* **examples:** scope server i18n per request ([03e1121](https://github.com/sebastian-software/palamedes/commit/03e1121a5128667fe2e071703883b29c7e3afe54))
+* **examples:** strengthen cookie hydration regression ([256f936](https://github.com/sebastian-software/palamedes/commit/256f936efa4ea69f2b6086b134880bf005fd3df3))
+* harden React Router RSC request proof ([bea1e70](https://github.com/sebastian-software/palamedes/commit/bea1e70bc0b10874287ed81b0ad95cd6888d0abe))
+* keep published type fixtures separate ([cd2ffec](https://github.com/sebastian-software/palamedes/commit/cd2ffecde2b87ddda214f554b4e0b1558d962132))
+* make TanStack middleware ESM-only ([7fb7391](https://github.com/sebastian-software/palamedes/commit/7fb7391b243f9b8c52eaeff9582e01ff86e3b0b6))
+* **next-example:** allow localhost dev origin for catalog test ([6e86e9d](https://github.com/sebastian-software/palamedes/commit/6e86e9d404ad7a54ed156e535b14e5e535daeda8))
+* **next-example:** reload after cookie locale switch ([0ecf6ed](https://github.com/sebastian-software/palamedes/commit/0ecf6ed43fde4102d305f397c00137c78e2e0d3b))
+* **next:** avoid empty split cleanup warnings ([aa22831](https://github.com/sebastian-software/palamedes/commit/aa228312b24c5e4486437716082e5e2290b66556))
+* **next:** degrade failed client catalog fragments ([0cb9215](https://github.com/sebastian-software/palamedes/commit/0cb9215a9b3a0658dddd285f4a90525c72846718))
+* **next:** harden catalog cache lifecycle ([d71ac89](https://github.com/sebastian-software/palamedes/commit/d71ac89bccc5dc90c04f771fd66974def884265d))
+* **next:** harden fragment failure diagnostics ([83b719e](https://github.com/sebastian-software/palamedes/commit/83b719eb910030ec53a2c160c32c308ca3311710))
+* **next:** harden split-catalog dev invalidation ([e5c383e](https://github.com/sebastian-software/palamedes/commit/e5c383e80519c804e86b8201290831f6a6fc19d8))
+* **next:** initialize client fragments before module body ([fec7a3b](https://github.com/sebastian-software/palamedes/commit/fec7a3bc8ad38bcda10a6d6ab34714ded4dda017))
+* **next:** rebase indexed client source maps ([fa1d565](https://github.com/sebastian-software/palamedes/commit/fa1d56596263e14cde61ab645d536cf1b1cb291a))
+* **node:** retain partial patch reports on write failures ([5e65dfa](https://github.com/sebastian-software/palamedes/commit/5e65dfa05c178bca434b2b8584fe4f0bfe511719))
+* **react:** evict catalog after boundary errors ([4b938d6](https://github.com/sebastian-software/palamedes/commit/4b938d6bcfa0954a7be43d6e57ea291c0e8c99ae))
+* **react:** evict rejected catalog resources ([d8a3326](https://github.com/sebastian-software/palamedes/commit/d8a332626292a1d3df1beba178f599c8182b574c))
+* **react:** surface rejected catalog loads ([7a2ac6a](https://github.com/sebastian-software/palamedes/commit/7a2ac6ac6913edb4da037ac8f7854f00384f0153))
+* run TanStack package tests on Windows ([f464066](https://github.com/sebastian-software/palamedes/commit/f464066d9dec879aeeb1201222b25e5d1f2de117))
+* satisfy llms guard lint ([2f3a44c](https://github.com/sebastian-software/palamedes/commit/2f3a44c98af5b1085895a43ca9f780da52307c95))
+* **transform:** instrument local server action handlers ([704f490](https://github.com/sebastian-software/palamedes/commit/704f4902d2506529530c1b0aff44f4d35656ca8b))
+* **transform:** resolve local handlers by binding ([7d33098](https://github.com/sebastian-software/palamedes/commit/7d330984897d5ac8b94fd2275b6c53ae005fcc07))
+* **waku:** ship an ESM-only adapter ([5565820](https://github.com/sebastian-software/palamedes/commit/55658209ad8c1404dfa374f46a3dac72929add54))
+
+
+### Performance Improvements
+
+* **next:** cache selected catalog snapshots ([a763478](https://github.com/sebastian-software/palamedes/commit/a763478ad0da21ac57f2b179eddbaf1948f81bac))
+
 ## [1.14.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.13.0...palamedes-v1.14.0) (2026-08-06)
 
 
