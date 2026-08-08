@@ -563,13 +563,13 @@ msgstr ""
     expect(
       defaultResult.diagnostics.map((diagnostic) => ({
         ...diagnostic,
-        catalogPath: diagnostic.catalogPath?.replaceAll("\\\\", "/"),
+        catalogPath: diagnostic.catalogPath?.replaceAll("\\", "/"),
       }))
     ).toStrictEqual([
       expect.objectContaining({
         code: "translation.missing_catalog",
         locale: "fr",
-        catalogPath: path.join(rootDir, "locales", "fr", "messages.po").replaceAll("\\\\", "/"),
+        catalogPath: path.join(rootDir, "locales", "fr", "messages.po").replaceAll("\\", "/"),
       }),
     ])
 
