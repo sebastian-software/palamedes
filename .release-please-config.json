@@ -207,6 +207,11 @@
         },
         {
           "type": "json",
+          "path": "packages/react-router-rsc/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "packages/remix/package.json",
           "jsonpath": "$.version"
         },

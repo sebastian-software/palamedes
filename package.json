@@ -26,6 +26,7 @@
     "check:example-contracts": "vitest run scripts/example-matrix-guard.test.mjs scripts/container/start-plan.test.mjs",
     "verify:examples:smoke": "node ./scripts/verify-examples.mjs",
     "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
+    "verify:react-router-rsc": "node ./scripts/verify-react-router-rsc.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
     "benchmark:proof:large": "pnpm build && node ./scripts/benchmark-proof.mjs --large-messages 10000",
     "benchmark:e2e-workflow": "cargo build --release -p palamedes-cli && pnpm --filter @palamedes/benchmark-e2e-workflow benchmark",

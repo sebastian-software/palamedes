@@ -14,6 +14,7 @@ const generatedAndBuildIgnores = {
     "**/.tanstack/**",
     "**/.vinxi/**",
     "**/coverage/**",
+    "**/build/**",
     "**/target/**",
     "**/.react-router/**",
     "site/build/**",

@@ -298,6 +298,7 @@ jobs:
           --filter @palamedes/extractor
           --filter @palamedes/eslint-plugin
           --filter @palamedes/react
+          --filter @palamedes/react-router-rsc
           --filter @palamedes/remix
           --filter @palamedes/solid
           --filter @palamedes/cli
@@ -317,6 +318,7 @@ jobs:
           node ./scripts/publish-package-if-needed.mjs @palamedes/extractor
           node ./scripts/publish-package-if-needed.mjs @palamedes/eslint-plugin
           node ./scripts/publish-package-if-needed.mjs @palamedes/react
+          node ./scripts/publish-package-if-needed.mjs @palamedes/react-router-rsc
           node ./scripts/publish-package-if-needed.mjs @palamedes/remix
           node ./scripts/publish-package-if-needed.mjs @palamedes/solid
           node ./scripts/publish-package-if-needed.mjs @palamedes/cli

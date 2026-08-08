@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url"
 import { generateApiDocs } from "ardo/typedoc"
 import {
   EXAMPLE_MATRIX,
+  FOCUSED_EXAMPLES,
   LOCALE_STRATEGIES,
   SERVER_FRAMEWORKS,
   selectBrowserExamples,
@@ -102,10 +103,16 @@ async function writeContentStats(adrEntries) {
   const exampleDirs = (await readdir(join(repoRoot, "examples"), { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-  const matrixIds = new Set(EXAMPLE_MATRIX.map((example) => example.id))
+  const expectedExampleIds = new Set([
+    ...EXAMPLE_MATRIX.map((example) => example.id),
+    ...FOCUSED_EXAMPLES,
+  ])
 
-  if (matrixIds.size !== exampleDirs.length || exampleDirs.some((id) => !matrixIds.has(id))) {
-    throw new Error("The example matrix and examples directory must contain the same entries")
+  if (
+    expectedExampleIds.size !== exampleDirs.length ||
+    exampleDirs.some((id) => !expectedExampleIds.has(id))
+  ) {
+    throw new Error("The example matrix, focused fixtures, and examples directory must align")
   }
 
   const stats = {
@@ -455,6 +462,13 @@ function typedocPackages() {
         "packages/react/src/client.tsx",
         "packages/react/src/macro.ts",
       ],
+    },
+    {
+      slug: "react-router-rsc",
+      label: "React Router RSC",
+      packageDir: "react-router-rsc",
+      position: 45,
+      entryPoints: ["packages/react-router-rsc/src/index.ts"],
     },
     {
       slug: "solid",

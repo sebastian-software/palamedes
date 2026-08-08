@@ -1,0 +1,25 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\\n"
+"Language: de\\n"
+
+msgid "Asynchronous helper confirmed locale."
+msgstr "Asynchroner Helfer bestätigte Sprache."
+
+msgid "Cross-module helper confirmed locale."
+msgstr "Modulübergreifender Helfer bestätigte Sprache."
+
+msgid "Default parameter confirmed locale."
+msgstr "Parameterstandard bestätigte Sprache."
+
+msgid "Direct Server Function macro confirmed locale."
+msgstr "Direktes Serverfunktionsmakro bestätigte Sprache."
+
+msgid "React Router RSC request scope"
+msgstr "React Router RSC-Anfragebereich"
+
+msgid "Server render confirmed locale."
+msgstr "Server-Rendern bestätigte Sprache."
+
+msgid "Synchronous helper confirmed locale."
+msgstr "Synchroner Helfer bestätigte Sprache."
