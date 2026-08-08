@@ -52,8 +52,12 @@ misses helpers before the initializer, and cannot cover default parameters.
 - Vite's current graph-splitting manifest does not identify RSC Server Function
   module fragments. Applications load the active locale's server catalog in
   the resolver until upstream exposes a safe mapping.
-- Node-compatible `AsyncLocalStorage` is required; Edge/Worker and detached
-  async work remain unsupported without application-specific verification.
+- Node-compatible `AsyncLocalStorage` is required; Edge/Worker runtimes remain
+  unsupported without application-specific verification. `scope.run()`
+  restores its caller after the entry settles, while async resources created
+  inside the request inherit its locale if they execute later. Separately
+  initiated work without an inherited context has no active locale and needs
+  explicit data or an appropriate new scope.
 
 ## Validation And Review Triggers
 

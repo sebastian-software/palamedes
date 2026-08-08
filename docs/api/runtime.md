@@ -61,11 +61,15 @@ serverI18n.activate(i18n)
 
 `createServerI18nScope()` uses Node `AsyncLocalStorage`, so keep it out of
 client bundles and Edge-only runtime paths. `scope.activate()` lasts for the
-current inherited async context; `scope.run()` lasts for its callback. A host
-adapter can supply `requestKeyProvider` when the framework exposes a stable
-render identity across context changes. Provider IDs replace earlier
-registrations from the same adapter, so repeated dev/HMR scope creation stays
-bounded, and instances are stored against weak request keys.
+current inherited async context; `scope.run()` restores its caller when its
+callback settles. Async resources created while either scope is active retain
+that store when they execute later. Work started separately without inheriting
+the request context has no active i18n, so pass explicit data or establish an
+appropriate new scope. A host adapter can supply `requestKeyProvider` when the
+framework exposes a stable render identity across context changes. Provider
+IDs replace earlier registrations from the same adapter, so repeated dev/HMR
+scope creation stays bounded, and instances are stored against weak request
+keys.
 
 Next.js App Router rendering has separate RSC and Client Component server
 passes and can resume work from a context captured before activation. Use

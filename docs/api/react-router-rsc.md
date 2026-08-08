@@ -18,3 +18,8 @@ error as the error cause.
 Only React Router `8.3.0` RSC Framework Mode with `@vitejs/plugin-rsc`
 `0.5.32` is supported. RSC Data Mode and non-RSC React Router applications are
 out of scope.
+
+`scope.run()` restores its caller after dispatch settles. Async resources
+created inside the scope retain the request's `AsyncLocalStorage` store when
+they run later; separately initiated work without an inherited context has no
+active locale and must receive explicit data or a suitable new scope.

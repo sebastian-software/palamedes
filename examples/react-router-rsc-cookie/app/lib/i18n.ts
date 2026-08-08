@@ -8,7 +8,7 @@ export type Locale = "en" | "de"
 
 function resolveLocale(request: Request): Locale {
   const cookie = request.headers.get("cookie") ?? ""
-  if (/(?:^|;\\s*)locale=de(?:;|$)/u.test(cookie)) {
+  if (/(?:^|;\s*)locale=de(?:;|$)/u.test(cookie)) {
     return "de"
   }
   return request.headers.get("accept-language")?.startsWith("de") ? "de" : "en"
