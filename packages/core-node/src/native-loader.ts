@@ -384,6 +384,14 @@ function nativeVisiblePropertyNames(
   }
 }
 
+function enumerablePropertyNames(value: object, argumentPath: NativeArgumentPath): string[] {
+  try {
+    return Object.keys(value)
+  } catch (error) {
+    throw nativeBoundaryReadError(argumentPath, error)
+  }
+}
+
 function defineSnapshotProperty(target: object, key: string, value: unknown): void {
   Object.defineProperty(target, key, {
     configurable: true,
