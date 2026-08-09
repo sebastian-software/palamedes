@@ -211,7 +211,7 @@ describe("palamedes-loader.cjs", () => {
 
     const output = await runLoader({ clientMessageSplitting: true })
 
-    expect(output).toContain("_locale = document.documentElement.lang")
+    expect(output).toContain("_existingI18n?.locale ?? document.documentElement.lang")
     expect(output).toContain("_modules = await Promise.all")
     expect(output).toContain("_fragments = await Promise.all")
     expect(output).toContain('"en": () => import("./locales/en.po?palamedes-selected=')
@@ -294,6 +294,88 @@ describe("palamedes-loader.cjs", () => {
       restoreGlobal("document", originalDocument)
       restoreGlobal("__pmds_test_getI18n", originalGetI18n)
       restoreGlobal("__pmds_test_label", originalLabel)
+    }
+  })
+
+  it("uses the installed client locale when the document locale changes", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "globalThis.__pmds_test_body_ran = true;",
+      map: null,
+      compiledIds: ["id-a"],
+    })
+    const originalDocument = globalThis.document
+    const originalBodyRan = globalThis.__pmds_test_body_ran
+    const loaded: Array<{ locale: string; messages: Record<string, unknown> }> = []
+    const i18n = {
+      locale: "de",
+      load(locale: string, messages: Record<string, unknown>) {
+        loaded.push({ locale, messages })
+      },
+    }
+    const initializeClientI18n = vi.fn()
+
+    try {
+      globalThis.document = { documentElement: { lang: "fr" } } as Document
+      const output = await runLoader({
+        clientMessageSplitting: true,
+        clientFragmentFailureMode: "degrade",
+      })
+      await expect(
+        executeGeneratedClientModule(output, async (specifier) => {
+          if (specifier === "@palamedes/core/compiled") return { createI18n: vi.fn() }
+          if (specifier === "@palamedes/runtime")
+            return { getI18n: () => i18n, initializeClientI18n }
+          if (specifier.includes("./locales/de.po?palamedes-selected="))
+            return { messages: { id: "translated" } }
+          throw new Error(`Unexpected import: ${specifier}`)
+        })
+      ).resolves.toBeUndefined()
+      expect(globalThis.__pmds_test_body_ran).toBe(true)
+      expect(initializeClientI18n).not.toHaveBeenCalled()
+      expect(loaded).toEqual([{ locale: "de", messages: { id: "translated" } }])
+    } finally {
+      restoreGlobal("document", originalDocument)
+      restoreGlobal("__pmds_test_body_ran", originalBodyRan)
+    }
+  })
+
+  it("degrades an unsupported document locale before a client i18n is installed", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "globalThis.__pmds_test_body_ran = true;",
+      map: null,
+      compiledIds: ["id-a"],
+    })
+    const originalDocument = globalThis.document
+    const originalBodyRan = globalThis.__pmds_test_body_ran
+    const originalConsoleError = console.error
+    const errors: unknown[][] = []
+    try {
+      globalThis.document = { documentElement: { lang: "fr" } } as Document
+      console.error = (...args: unknown[]) => errors.push(args)
+      const output = await runLoader({
+        clientMessageSplitting: true,
+        clientFragmentFailureMode: "degrade",
+      })
+      await expect(
+        executeGeneratedClientModule(output, async (specifier) => {
+          if (specifier === "@palamedes/core/compiled") return { createI18n: vi.fn() }
+          if (specifier === "@palamedes/runtime")
+            return {
+              getI18n() {
+                throw new Error("No active client i18n")
+              },
+              initializeClientI18n: vi.fn(),
+            }
+          throw new Error(`Unexpected import: ${specifier}`)
+        })
+      ).resolves.toBeUndefined()
+      expect(globalThis.__pmds_test_body_ran).toBe(true)
+      expect(errors).toHaveLength(1)
+      expect(errors[0]?.[0]).toBeInstanceOf(Error)
+    } finally {
+      restoreGlobal("document", originalDocument)
+      restoreGlobal("__pmds_test_body_ran", originalBodyRan)
+      console.error = originalConsoleError
     }
   })
 
