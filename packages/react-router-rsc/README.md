@@ -17,6 +17,9 @@ pnpm add -D @palamedes/cli @palamedes/vite-plugin @react-router/dev@8.3.0 \
   @vitejs/plugin-rsc@0.5.32 vite react-router@8.3.0
 ```
 
+`@palamedes/react-router-rsc` is ESM-only, matching React Router's RSC and Vite
+runtime. Use `import`; CommonJS `require()` is deliberately unsupported.
+
 This adapter supports only RSC Framework Mode. It does not change ordinary
 React Router Framework Mode applications or route actions. RSC Data Mode owns
 its RSC/SSR entry wiring, so it is not supported by this adapter.
