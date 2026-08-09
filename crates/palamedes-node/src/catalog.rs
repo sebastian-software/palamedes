@@ -1765,6 +1765,13 @@ pub fn apply_translation_patches_with_injected_write_failure(
     )
 }
 
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+#[napi(catch_unwind)]
+pub fn panic_for_test_support() {
+    panic!("Palamedes test-support panic")
+}
+
 fn translation_patch_result_or_throw(
     env: Env,
     result: palamedes::PalamedesResult<palamedes::TranslationPatchResult>,

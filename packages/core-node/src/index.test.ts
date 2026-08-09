@@ -683,6 +683,12 @@ msgstr ""
     await expect(readFile(secondPath, "utf8")).resolves.toBe(catalog)
   })
 
+  it("surfaces a native panic as a catchable JavaScript error", async () => {
+    const addon = await loadTestSupportAddon()
+
+    expect(() => addon.panicForTestSupport()).toThrowError(/Palamedes test-support panic/u)
+  })
+
   it("patches candidates listed with truncated origins using a stable fingerprint", async () => {
     const rootDir = await createTempDir()
     const catalogDir = path.join(rootDir, "locales", "de")
@@ -1080,6 +1086,7 @@ type TestSupportBindings = Pick<GeneratedNativeBindings, "listTranslationCandida
     request: GeneratedTranslationPatchRequest,
     failingPath: string
   ): GeneratedTranslationPatchResult
+  panicForTestSupport(): void
 }
 
 async function loadTestSupportAddon(): Promise<TestSupportBindings> {
