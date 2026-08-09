@@ -1,9 +1,6 @@
 import { fsRouter } from "waku"
 import adapter from "waku/adapters/default"
-import {
-  markServerI18nTestBarrierReached,
-  waitForServerI18nTestBarrier,
-} from "@palamedes/runtime/server/test"
+import { markServerI18nTestBarrierReached } from "@palamedes/runtime/server/test"
 
 // Glob keys must keep the `pages/` prefix so fsRouter's default `pagesDir: "pages"`
 // matches them. Globbing from `/src` and stripping the leading `/src/` yields
@@ -21,9 +18,9 @@ export default adapter(fsRouter(modules), {
   middlewareFns: [
     () => async (context, next) => {
       const request = context.req.raw
-      await waitForServerI18nTestBarrier(request)
+      const result = await next()
       markServerI18nTestBarrierReached(request, context.res.headers)
-      return await next()
+      return result
     },
   ],
 })
