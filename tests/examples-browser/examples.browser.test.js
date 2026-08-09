@@ -56,14 +56,6 @@ function hasClientLocaleProbe(example) {
   return ["solidstart-cookie", "tanstack-cookie", "waku-cookie"].includes(example.id)
 }
 
-function hasServerDocumentLocale(example) {
-  return example.id !== "waku-cookie"
-}
-
-function documentLocale(example, locale) {
-  return hasServerDocumentLocale(example) ? locale : "en"
-}
-
 function isHydrationMismatch(message) {
   return (
     /\b(?:hydration|hydrate|hydrated)\b.*\b(?:mismatch|failed|error)/iu.test(message) ||
@@ -239,7 +231,7 @@ test("matrix example browser contract", async () => {
     .toMatch(example.strategy === "cookie" ? /español/iu : /english/iu)
   await expect
     .poll(() => page.locator("html").getAttribute("lang"))
-    .toBe(documentLocale(example, example.strategy === "cookie" ? "es" : "en"))
+    .toBe(example.strategy === "cookie" ? "es" : "en")
   await waitForClientReady(page)
   expect(pageErrors).toEqual([])
   if (hasClientLocaleProbe(example)) {
@@ -257,9 +249,7 @@ test("matrix example browser contract", async () => {
       .click({ force: true, noWaitAfter: true, timeout: 15_000 })
     await navigation
 
-    await expect
-      .poll(() => page.locator("html").getAttribute("lang"))
-      .toBe(documentLocale(example, "de"))
+    await expect.poll(() => page.locator("html").getAttribute("lang")).toBe("de")
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
 
     await waitForClientReady(page)

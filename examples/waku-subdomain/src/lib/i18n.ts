@@ -52,6 +52,7 @@ export function initializeClientI18n(locale: Locale) {
   clientI18n.activate(locale)
 
   if (typeof window !== "undefined") {
+    document.documentElement.lang = locale
     setClientI18n(clientI18n)
   }
 
