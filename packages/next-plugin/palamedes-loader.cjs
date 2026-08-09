@@ -137,10 +137,13 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
     `  import("@palamedes/core/compiled"),\n` +
     `  import("@palamedes/runtime"),\n` +
     `]);\n` +
-    `const ${identifier}_i18n = ${identifier}_modules[1].initializeClientI18n(\n` +
-    `  ${identifier}_locale,\n` +
-    `  ${identifier}_modules[0].createI18n,\n` +
-    `);\n`
+    `let ${identifier}_existingI18n;\n` +
+    `try {\n` +
+    `  ${identifier}_existingI18n = ${identifier}_modules[1].getI18n();\n` +
+    `} catch {\n` +
+    `  // No client i18n has been installed yet.\n` +
+    `}\n` +
+    `const ${identifier}_locale = ${identifier}_existingI18n?.locale ?? document.documentElement.lang;\n`
   const fragmentImports =
     fragmentFailureMode === "degrade"
       ? `await Promise.all(${identifier}_activeLoaders.map(async (load) => {\n` +
@@ -173,13 +176,24 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
         `  ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
         `}\n`
 
-  return `const ${identifier}_locale = document.documentElement.lang;
-const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];
+  const initialize = `const ${identifier}_i18n = ${identifier}_existingI18n ?? ${identifier}_modules[1].initializeClientI18n(
+  ${identifier}_locale,
+  ${identifier}_modules[0].createI18n,
+);
+`
+  const unsupportedLocale = `new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`)`
+  const unsupportedLocaleHandling =
+    fragmentFailureMode === "degrade"
+      ? `try {\n  console.error(${unsupportedLocale});\n} catch {\n  // Logging must not prevent the client graph from hydrating.\n}\n`
+      : `throw ${unsupportedLocale};\n`
+
+  return `const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];
+${imports}
 const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => loaders[${identifier}_locale]);
 if (${identifier}_activeLoaders.some((loader) => loader === undefined)) {
-  throw new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`);
-}
-${imports}${fragmentImports}${fragmentRegistration}
+  ${unsupportedLocaleHandling}}
+else {
+${initialize}${fragmentImports}${fragmentRegistration}}
 `
 }
 
