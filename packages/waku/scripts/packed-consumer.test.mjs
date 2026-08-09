@@ -69,7 +69,7 @@ try {
   // that peer boundary; the Waku example smoke tests exercise it at runtime.
   assert.match(
     readFileSync(path.join(installedWaku, "dist", "index.mjs"), "utf8"),
-    /from "waku\/router\/server"/
+    /from ['"]waku\/router\/server['"]/
   )
   execFileSync(
     process.execPath,
