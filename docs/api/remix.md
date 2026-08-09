@@ -141,10 +141,25 @@ plain runtime calls with no per-request transform work. The cost moves from
 build time to process start and recurs per cold start — the same tradeoff Remix
 makes for its own TypeScript and JSX lowering via `oxc-transform`.
 
-Rich JSX message macros remain experimental for Remix v3 because Remix's
-default loader lowers JSX before the Palamedes register hook sees the module.
-Track the Remix UI adapter, rich-message, and Frames follow-up in
-[palamedes#357](https://github.com/sebastian-software/palamedes/issues/357).
+## Remix UI Frames and Rich Messages
+
+Server-rendered Remix UI Frames are supported. Put the full document and the
+endpoint used by each `<Frame>` inside `remixI18n.run()` (or middleware) so the
+initial stream and direct frame reload each establish request-local i18n state.
+The `remix-cookie` smoke test requests both `/frames` and
+`/frames/locale-summary` with a German locale and verifies the same translated
+frame content.
+
+Ordinary JavaScript macros, including `t`, remain supported in Remix UI
+components because they survive Remix's JSX lowering. Rich JSX macros, such as
+`<Trans>`, are deliberately unsupported: `remix/node-tsx` lowers JSX to
+`remix/ui/jsx-runtime` before the Palamedes loader sees it, so the transform can
+no longer read the original children and derive placeholders. The compiled
+`@palamedes/react` runtime also returns React elements, while Remix UI uses a
+different element model. Supporting rich messages needs a public pre-lowering
+transform hook plus a dedicated Remix UI runtime; there is no safe adapter to
+ship against the current public API. Client-side macro support remains tracked
+by [remix-run/remix#11580](https://github.com/remix-run/remix/issues/11580).
 
 ## Migration From The Experimental Cookie Example
 
