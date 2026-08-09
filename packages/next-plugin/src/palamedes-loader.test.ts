@@ -384,6 +384,67 @@ describe("palamedes-loader.cjs", () => {
     }
   })
 
+  it("degrades an invalid resolved production catalog fragment and hydrates the module", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "globalThis.__pmds_test_body_ran = true;",
+      map: null,
+      compiledIds: ["id-a"],
+    })
+
+    const originalDocument = globalThis.document
+    const originalBodyRan = globalThis.__pmds_test_body_ran
+    const originalConsoleError = console.error
+    const errors: unknown[][] = []
+    const catalogError = new TypeError("Expected compiled catalog messages")
+    const loaded: Array<{ locale: string; messages: Record<string, unknown> }> = []
+    const i18n = {
+      load(locale: string, messages: Record<string, unknown> | undefined) {
+        if (messages === undefined) {
+          throw catalogError
+        }
+        loaded.push({ locale, messages })
+      },
+    }
+
+    try {
+      globalThis.document = { documentElement: { lang: "de" } } as Document
+      console.error = (...args: unknown[]) => errors.push(args)
+
+      const output = await runLoader({
+        clientMessageSplitting: true,
+        clientFragmentFailureMode: "degrade",
+      })
+      const modulePromise = executeGeneratedClientModule(output, async (specifier) => {
+        if (specifier === "@palamedes/core/compiled") {
+          return { createI18n: () => i18n }
+        }
+        if (specifier === "@palamedes/runtime") {
+          return { initializeClientI18n: () => i18n }
+        }
+        if (specifier.includes("./locales/de.po?palamedes-selected=")) {
+          return { default: "not a catalog" }
+        }
+        throw new Error(`Unexpected import: ${specifier}`)
+      })
+
+      await expect(modulePromise).resolves.toBeUndefined()
+      expect(globalThis.__pmds_test_body_ran).toBe(true)
+      expect(loaded).toEqual([])
+      expect(errors).toEqual([
+        [
+          "Palamedes client graph message splitting failed to load a catalog fragment for src/page.tsx (",
+          "de",
+          "). Continuing without that fragment.",
+          catalogError,
+        ],
+      ])
+    } finally {
+      restoreGlobal("document", originalDocument)
+      restoreGlobal("__pmds_test_body_ran", originalBodyRan)
+      console.error = originalConsoleError
+    }
+  })
+
   it("continues production hydration when diagnostic logging throws", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "globalThis.__pmds_test_body_ran = true;",

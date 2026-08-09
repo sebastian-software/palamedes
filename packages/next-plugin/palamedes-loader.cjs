@@ -143,9 +143,12 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
     `);\n`
   const fragmentImports =
     fragmentFailureMode === "degrade"
-      ? `const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map(async (load) => {\n` +
+      ? `await Promise.all(${identifier}_activeLoaders.map(async (load) => {\n` +
         `  try {\n` +
-        `    return await load();\n` +
+        `    const fragment = await load();\n` +
+        `    if (fragment === null) return;\n` +
+        `    const { messages } = fragment;\n` +
+        `    ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
         `  } catch (error) {\n` +
         `    try {\n` +
         `      console.error(\n` +
@@ -157,10 +160,18 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
         `    } catch {\n` +
         `      // Logging must not prevent the client graph from hydrating.\n` +
         `    }\n` +
-        `    return null;\n` +
         `  }\n` +
         `}));\n`
       : `const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map((load) => load()));\n`
+
+  const fragmentRegistration =
+    fragmentFailureMode === "degrade"
+      ? ""
+      : `for (const fragment of ${identifier}_fragments) {\n` +
+        `  if (fragment === null) continue;\n` +
+        `  const { messages } = fragment;\n` +
+        `  ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
+        `}\n`
 
   return `const ${identifier}_locale = document.documentElement.lang;
 const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];
@@ -168,11 +179,7 @@ const ${identifier}_activeLoaders = ${identifier}_loaderGroups.map((loaders) => 
 if (${identifier}_activeLoaders.some((loader) => loader === undefined)) {
   throw new Error(\`Palamedes client graph bootstrap does not support document locale "\${${identifier}_locale}". Configured locales: ${supportedLocales}.\`);
 }
-${imports}${fragmentImports}for (const fragment of ${identifier}_fragments) {
-  if (fragment === null) continue;
-  const { messages } = fragment;
-  ${identifier}_i18n.load(${identifier}_locale, messages);
-}
+${imports}${fragmentImports}${fragmentRegistration}
 `
 }
 
