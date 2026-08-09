@@ -147,34 +147,45 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, fragmentFailure
     `  // No client i18n has been installed yet.\n` +
     `}\n` +
     `const ${identifier}_locale = ${identifier}_existingI18n?.locale ?? document.documentElement.lang;\n`
+  // Fragments are imported in parallel but registered in loader-group order, so
+  // two catalogs carrying the same message id resolve to the same winner in
+  // both failure modes. Degrading isolates a failure; it does not reorder.
+  const reportFragmentFailure =
+    `const ${identifier}_reportFragmentFailure = (error) => {\n` +
+    `  try {\n` +
+    `    console.error(\n` +
+    `      ${fragmentFailurePrefix},\n` +
+    `      ${identifier}_locale,\n` +
+    `      ${fragmentFailureSuffix},\n` +
+    `      error,\n` +
+    `    );\n` +
+    `  } catch {\n` +
+    `    // Logging must not prevent the client graph from hydrating.\n` +
+    `  }\n` +
+    `};\n`
   const fragmentImports =
     fragmentFailureMode === "degrade"
-      ? `await Promise.all(${identifier}_activeLoaders.map(async (load) => {\n` +
+      ? `${reportFragmentFailure}const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map(async (load) => {\n` +
         `  try {\n` +
-        `    const fragment = await load();\n` +
-        `    if (fragment === null) return;\n` +
-        `    const { messages } = fragment;\n` +
-        `    ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
+        `    return await load();\n` +
         `  } catch (error) {\n` +
-        `    try {\n` +
-        `      console.error(\n` +
-        `        ${fragmentFailurePrefix},\n` +
-        `        ${identifier}_locale,\n` +
-        `        ${fragmentFailureSuffix},\n` +
-        `        error,\n` +
-        `      );\n` +
-        `    } catch {\n` +
-        `      // Logging must not prevent the client graph from hydrating.\n` +
-        `    }\n` +
+        `    ${identifier}_reportFragmentFailure(error);\n` +
+        `    return null;\n` +
         `  }\n` +
         `}));\n`
       : `const ${identifier}_fragments = await Promise.all(${identifier}_activeLoaders.map((load) => load()));\n`
 
   const fragmentRegistration =
     fragmentFailureMode === "degrade"
-      ? ""
-      : `for (const fragment of ${identifier}_fragments) {\n` +
+      ? `for (const fragment of ${identifier}_fragments) {\n` +
         `  if (fragment === null) continue;\n` +
+        `  try {\n` +
+        `    ${identifier}_i18n.load(${identifier}_locale, fragment.messages);\n` +
+        `  } catch (error) {\n` +
+        `    ${identifier}_reportFragmentFailure(error);\n` +
+        `  }\n` +
+        `}\n`
+      : `for (const fragment of ${identifier}_fragments) {\n` +
         `  const { messages } = fragment;\n` +
         `  ${identifier}_i18n.load(${identifier}_locale, messages);\n` +
         `}\n`
