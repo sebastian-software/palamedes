@@ -53,6 +53,25 @@ describe("example matrix guard", () => {
     expect(() => assertExampleMatrix(duplicatedPort)).toThrow(/ports must be unique/)
   })
 
+  it("rejects a smoke check that omits or empties its document locale", () => {
+    const omitted = cloneMatrix()
+    const withChecks = omitted.findIndex((example) => example.smokeChecks.length > 0)
+    omitted[withChecks] = {
+      ...omitted[withChecks],
+      smokeChecks: omitted[withChecks].smokeChecks.map(
+        ({ htmlLang: _htmlLang, ...check }) => check
+      ),
+    }
+    expect(() => assertExampleMatrix(omitted)).toThrow(/must declare htmlLang/)
+
+    const emptied = cloneMatrix()
+    emptied[withChecks] = {
+      ...emptied[withChecks],
+      smokeChecks: emptied[withChecks].smokeChecks.map((check) => ({ ...check, htmlLang: "" })),
+    }
+    expect(() => assertExampleMatrix(emptied)).toThrow(/must set htmlLang to a locale or null/)
+  })
+
   it("keeps Vite as the single client-only browser proof", () => {
     const misplacedVite = cloneMatrix()
     const viteIndex = misplacedVite.findIndex((example) => example.id === "vite-mdx")

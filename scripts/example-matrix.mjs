@@ -35,6 +35,7 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { "accept-language": "de" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
     ],
@@ -51,11 +52,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { "accept-language": "de" },
         path: "/en",
+        htmlLang: "en",
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
       {
         headers: { host: "de.lvh.me:4011" },
         path: "/en",
+        htmlLang: "en",
         substrings: ["This host is mapped to Deutsch"],
       },
     ],
@@ -166,11 +169,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { "accept-language": "de" },
         path: "/en",
+        htmlLang: "en",
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
       {
         headers: { host: "de.lvh.me:4041" },
         path: "/en",
+        htmlLang: "en",
         substrings: ["This host is mapped to Deutsch"],
       },
     ],
@@ -203,11 +208,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { "accept-language": "de" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { "accept-language": "en" },
         path: "/",
+        htmlLang: "en",
         substrings: ["English", "seats left"],
       },
     ],
@@ -224,15 +231,20 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { "accept-language": "de" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { "accept-language": "de" },
+        htmlLang: "de",
         path: "/frames",
         substrings: ["Diese Antwort", "Active frame locale", "Deutsch"],
       },
       {
+        // The frame endpoint streams the partial on its own, so this response
+        // has no document element to carry a lang attribute.
         headers: { "accept-language": "de" },
+        htmlLang: null,
         path: "/frames/locale-summary",
         substrings: ["Diese Antwort", "Active frame locale", "Deutsch"],
       },
@@ -250,10 +262,12 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { "accept-language": "de" },
         path: "/en",
+        htmlLang: "en",
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
       {
         path: "/de",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
     ],
@@ -270,11 +284,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { host: "de.lvh.me:4062" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { host: "en.lvh.me:4062", "accept-language": "de" },
         path: "/",
+        htmlLang: "en",
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
     ],
@@ -291,11 +307,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { host: "remix.example.de:4063" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { host: "remix.example.com:4063", "accept-language": "de" },
         path: "/",
+        htmlLang: "en",
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
     ],
@@ -339,11 +357,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { host: "de.lvh.me:4012" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { host: "en.lvh.me:4012", "accept-language": "de" },
         path: "/",
+        htmlLang: "en",
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
     ],
@@ -395,11 +415,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { host: "de.lvh.me:4042" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { host: "en.lvh.me:4042", "accept-language": "de" },
         path: "/",
+        htmlLang: "en",
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
     ],
@@ -443,11 +465,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { host: "palamedes-i18n.de:4013" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { host: "palamedes-i18n.fr:4013" },
         path: "/",
+        htmlLang: "fr",
         substrings: ["français", "places restantes"],
       },
       {
@@ -455,6 +479,7 @@ export const EXAMPLE_MATRIX = [
         // wins over the browser preference (Accept-Language `de`).
         headers: { host: "palamedes-i18n.com:4013", "accept-language": "de" },
         path: "/",
+        htmlLang: "en",
         substrings: ["English", "seats left"],
       },
     ],
@@ -514,11 +539,13 @@ export const EXAMPLE_MATRIX = [
       {
         headers: { host: "palamedes-i18n.de:4043" },
         path: "/",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { host: "palamedes-i18n.fr:4043" },
         path: "/",
+        htmlLang: "fr",
         substrings: ["français", "places restantes"],
       },
       {
@@ -526,6 +553,7 @@ export const EXAMPLE_MATRIX = [
         // wins over the browser preference (Accept-Language `de`).
         headers: { host: "palamedes-i18n.com:4043", "accept-language": "de" },
         path: "/",
+        htmlLang: "en",
         substrings: ["English", "seats left"],
       },
     ],
