@@ -110,10 +110,8 @@ describe("@palamedes/core-node", () => {
       ])
     ).toThrow(/compileCatalogModule\.argument\[0\]\.config\.locales\[1\]/u)
     expect(() =>
-      assertWellFormedNativeArguments("renderCatalogModule", [
-        new Map([["message", ["valid", "\ud800"]]]),
-      ])
-    ).toThrow(/renderCatalogModule\.argument\[0\]\.get\(message\)\[1\]/u)
+      assertWellFormedNativeArguments("renderCatalogModule", [{ message: ["valid", "\ud800"] }])
+    ).toThrow(/renderCatalogModule\.argument\[0\]\.message\[1\]/u)
 
     const isWellFormed = Reflect.getOwnPropertyDescriptor(String.prototype, "isWellFormed")
     Reflect.deleteProperty(String.prototype, "isWellFormed")
@@ -159,7 +157,7 @@ describe("@palamedes/core-node", () => {
     expect(proxyRendered).not.toContain("�")
   })
 
-  it("snapshots nested accessors, arrays, Maps, and getter failures deterministically", () => {
+  it("snapshots nested accessors, arrays, and getter failures deterministically", () => {
     let nestedReads = 0
     const nested: { config: { locales: string[] } } = { config: {} as { locales: string[] } }
     Object.defineProperty(nested.config, "locales", {
@@ -169,13 +167,13 @@ describe("@palamedes/core-node", () => {
         return nestedReads === 1 ? ["en", "cafe\u0301", "😀"] : ["\ud800"]
       },
     })
-    const map = new Map([["request", nested]])
-    const snapshot = snapshotNativeArguments("compileCatalogModule", [map])
-    const snapshotMap = snapshot[0] as Map<string, { config: { locales: string[] } }>
+    const request = { request: nested }
+    const snapshot = snapshotNativeArguments("compileCatalogModule", [request])
+    const snapshotRequest = snapshot[0] as { request: { config: { locales: string[] } } }
 
     expect(nestedReads).toBe(1)
-    expect(snapshotMap).not.toBe(map)
-    expect(snapshotMap.get("request")).toStrictEqual({
+    expect(snapshotRequest).not.toBe(request)
+    expect(snapshotRequest.request).toStrictEqual({
       config: { locales: ["en", "cafe\u0301", "😀"] },
     })
     expect(nested.config.locales).toStrictEqual(["\ud800"])
@@ -224,6 +222,28 @@ describe("@palamedes/core-node", () => {
     }
     expect(renderCatalogModule(new PrototypeGetterMessages())).toContain("from prototype getter")
 
+    // A prototype method is a data property holding a function. Snapshotting it
+    // would push a function across the boundary, so it must stay out — the
+    // getter above is the only prototype member the binding sees. The declared
+    // parameter type rules such a class out, so the cast stands in for the
+    // untyped JavaScript caller the boundary has to survive.
+    class MethodBackedMessages {
+      public message = "from class with a method"
+
+      public format() {
+        return "helper"
+      }
+
+      public toString() {
+        return "helper"
+      }
+    }
+    const methodBacked = renderCatalogModule(
+      new MethodBackedMessages() as unknown as Record<string, string>
+    )
+    expect(methodBacked).toContain("from class with a method")
+    expect(methodBacked).not.toContain("format")
+
     const nonEnumerableMessages: Record<string, string> = {}
     Object.defineProperty(nonEnumerableMessages, "hidden", {
       configurable: true,
@@ -231,6 +251,29 @@ describe("@palamedes/core-node", () => {
       writable: true,
     })
     expect(renderCatalogModule(nonEnumerableMessages)).not.toContain("not native-visible")
+
+    // The same exclusion applies to a class instance, so the two record shapes
+    // cannot disagree about which own properties are native-visible.
+    const nonEnumerableInstance = new ClassBackedMessages()
+    Object.defineProperty(nonEnumerableInstance, "hidden", {
+      configurable: true,
+      value: "not native-visible",
+      writable: true,
+    })
+    expect(renderCatalogModule(nonEnumerableInstance)).not.toContain("not native-visible")
+  })
+
+  it("rejects a Map instead of silently rendering an empty catalog", () => {
+    expect(() => renderCatalogModule(new Map([["greeting", "hi"]]) as never)).toThrow(
+      /rejected a Map in renderCatalogModule\.argument\[0\]/u
+    )
+
+    class MessageMap extends Map<string, string> {}
+    expect(() => renderCatalogModule(new MessageMap([["greeting", "hi"]]) as never)).toThrow(
+      /rejected a Map in renderCatalogModule\.argument\[0\]/u
+    )
+
+    expect(renderCatalogModule(Object.fromEntries(new Map([["greeting", "hi"]])))).toContain("hi")
   })
 
   it("classifies Proxy metadata once and translates prototype and length errors", () => {

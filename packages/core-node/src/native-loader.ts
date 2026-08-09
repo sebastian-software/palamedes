@@ -193,41 +193,7 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
 
     const classification = classifySnapshotObject(value, currentPath)
     if (classification.kind === "map") {
-      const mapSnapshot = new Map<unknown, unknown>()
-      snapshots.set(value, mapSnapshot)
-      current.assign(mapSnapshot)
-      let mapEntries: Array<[unknown, unknown]>
-      try {
-        mapEntries = [...Map.prototype.entries.call(value)]
-      } catch (error) {
-        throw nativeBoundaryReadError(currentPath, error)
-      }
-      for (let index = mapEntries.length - 1; index >= 0; index -= 1) {
-        const [key, entry] = mapEntries[index] ?? []
-        const pair: { key?: unknown; value?: unknown } = {}
-        const setEntry = () => {
-          if ("key" in pair && "value" in pair) mapSnapshot.set(pair.key, pair.value)
-        }
-        pending.push({
-          kind: "value",
-          value: entry,
-          path: appendNativeArgumentPath(currentPath, mapValuePath(key)),
-          assign(snapshotValue: unknown) {
-            pair.value = snapshotValue
-            setEntry()
-          },
-        })
-        pending.push({
-          kind: "value",
-          value: key,
-          path: appendNativeArgumentPath(currentPath, ".<key>"),
-          assign(snapshotKey: unknown) {
-            pair.key = snapshotKey
-            setEntry()
-          },
-        })
-      }
-      continue
+      throw nativeBoundaryUnsupportedMapError(currentPath)
     }
     if (classification.kind === "array") {
       const arraySnapshot: unknown[] = []
@@ -307,13 +273,6 @@ function formatNativeArgumentPath(argumentPath: NativeArgumentPath): string {
   return segments.reverse().join("")
 }
 
-function mapValuePath(key: unknown): string {
-  if (typeof key === "string") {
-    return `.get(${key})`
-  }
-  return ".<map value>"
-}
-
 function arrayPropertyPath(key: string): string {
   return /^(?:0|[1-9]\d*)$/u.test(key) ? `[${key}]` : `.${key}`
 }
@@ -354,31 +313,44 @@ function isMapPrototype(prototype: object | null): boolean {
   return false
 }
 
+/**
+ * The property set the binding receives: own enumerable keys, plus getters
+ * declared on the prototype chain. Class getters are non-enumerable, so
+ * `Object.keys` alone would drop a class that computes its messages; every
+ * other prototype member stays out, because a prototype method is a function
+ * and functions do not cross the boundary. Own non-enumerable properties are
+ * excluded for every record, class instance or plain object alike.
+ */
 function nativeVisiblePropertyNames(
   value: object,
   classification: SnapshotObjectClassification,
   argumentPath: NativeArgumentPath
 ): string[] {
   try {
+    const names = Object.keys(value)
     if (
       classification.kind !== "record" ||
       classification.prototype === null ||
       classification.prototype === Object.prototype
     ) {
-      return Object.keys(value)
+      return names
     }
 
-    const names = new Set(Object.getOwnPropertyNames(value))
+    const seen = new Set(names)
     for (
       let prototype = classification.prototype;
       prototype !== null && prototype !== Object.prototype;
       prototype = Object.getPrototypeOf(prototype)
     ) {
       for (const name of Object.getOwnPropertyNames(prototype)) {
-        if (name !== "constructor") names.add(name)
+        if (name === "constructor" || seen.has(name)) continue
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, name)
+        if (typeof descriptor?.get !== "function") continue
+        seen.add(name)
+        names.push(name)
       }
     }
-    return [...names]
+    return names
   } catch (error) {
     throw nativeBoundaryReadError(argumentPath, error)
   }
@@ -407,6 +379,17 @@ function assertWellFormedPropertyName(key: string, argumentPath: NativeArgumentP
       `Palamedes native boundary rejected malformed Unicode in ${formatNativeArgumentPath(argumentPath)}.<key>; replace the unpaired UTF-16 surrogate in the property name.`
     )
   }
+}
+
+/**
+ * No native signature accepts a JS `Map`: the bindings build their maps from an
+ * object's properties, so a `Map` would convert to an empty one and produce a
+ * silently untranslated result. Reject it here instead.
+ */
+function nativeBoundaryUnsupportedMapError(argumentPath: NativeArgumentPath): TypeError {
+  return new TypeError(
+    `Palamedes native boundary rejected a Map in ${formatNativeArgumentPath(argumentPath)}; the native bindings read plain objects, so pass a record such as Object.fromEntries(map).`
+  )
 }
 
 function nativeBoundaryReadError(argumentPath: NativeArgumentPath, cause: unknown): TypeError {
