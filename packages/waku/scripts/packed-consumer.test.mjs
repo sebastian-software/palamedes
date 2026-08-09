@@ -64,15 +64,12 @@ try {
     "1.0.0-beta.9"
   )
 
-  execFileSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--input-type=module",
-      "--eval",
-      'const adapter = await import("@palamedes/waku"); if (typeof adapter.createWakuI18nInterceptor !== "function") process.exit(1)',
-    ],
-    { cwd: consumerRoot, stdio: "pipe" }
+  // Waku's router entry executes under its Vite React Server Components runtime,
+  // rather than directly in Node. Verify that the published adapter preserves
+  // that peer boundary; the Waku example smoke tests exercise it at runtime.
+  assert.match(
+    readFileSync(path.join(installedWaku, "dist", "index.mjs"), "utf8"),
+    /from "waku\/router\/server"/
   )
   execFileSync(
     process.execPath,
