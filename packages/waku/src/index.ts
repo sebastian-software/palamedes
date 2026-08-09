@@ -1,5 +1,5 @@
 import type { I18nInstance } from "@palamedes/runtime"
-import type { HandlerInterceptor } from "waku/router/server"
+import { unstable_getRequest, type HandlerInterceptor } from "waku/router/server"
 
 import { createScopedWakuI18nRunner } from "./scope"
 
@@ -19,7 +19,15 @@ export function createWakuI18nInterceptor<T extends I18nInstance = I18nInstance>
   const runner = createScopedWakuI18nRunner(resolveI18n)
 
   return async <Result>(next: () => Promise<Result>) => {
-    const { unstable_getRequest } = await import("waku/router/server")
-    return await runner.run(unstable_getRequest(), next)
+    let request: Request
+    try {
+      request = unstable_getRequest()
+    } catch (error) {
+      if (error instanceof Error && error.message === "Request is not available.") {
+        return await next()
+      }
+      throw error
+    }
+    return await runner.run(request, next)
   }
 }

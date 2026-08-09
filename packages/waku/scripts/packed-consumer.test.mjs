@@ -67,6 +67,7 @@ try {
   execFileSync(
     process.execPath,
     [
+      "--conditions=react-server",
       "--input-type=module",
       "--eval",
       'const adapter = await import("@palamedes/waku"); if (typeof adapter.createWakuI18nInterceptor !== "function") process.exit(1)',

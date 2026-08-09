@@ -5,7 +5,16 @@ import { unstable_getRequest, type HandlerInterceptor } from "waku/router/server
 // palamedes.server.ts, so reduceRight runs this barrier inside the Palamedes
 // request scope after i18n activation and before page rendering begins.
 const testBarrierInterceptor: HandlerInterceptor = async (next) => {
-  await waitForServerI18nTestBarrier(unstable_getRequest())
+  let request: Request
+  try {
+    request = unstable_getRequest()
+  } catch (error) {
+    if (error instanceof Error && error.message === "Request is not available.") {
+      return await next()
+    }
+    throw error
+  }
+  await waitForServerI18nTestBarrier(request)
   return await next()
 }
 
