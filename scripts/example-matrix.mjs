@@ -37,16 +37,6 @@ export const EXAMPLE_MATRIX = [
         path: "/",
         substrings: ["Deutsch", "Plätze frei"],
       },
-      {
-        headers: { "accept-language": "de" },
-        path: "/frames",
-        substrings: ["Diese Antwort", "Active frame locale", "Deutsch"],
-      },
-      {
-        headers: { "accept-language": "de" },
-        path: "/frames/locale-summary",
-        substrings: ["Diese Antwort", "Active frame locale", "Deutsch"],
-      },
     ],
   },
   {
@@ -235,6 +225,16 @@ export const EXAMPLE_MATRIX = [
         headers: { "accept-language": "de" },
         path: "/",
         substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { "accept-language": "de" },
+        path: "/frames",
+        substrings: ["Diese Antwort", "Active frame locale", "Deutsch"],
+      },
+      {
+        headers: { "accept-language": "de" },
+        path: "/frames/locale-summary",
+        substrings: ["Diese Antwort", "Active frame locale", "Deutsch"],
       },
     ],
   },
