@@ -62,6 +62,18 @@ Palamedes-side fixes already baked into these examples:
 - server-side activation for client widgets rendered during SSR, so no
   locale-local fallback copy maps are needed
 
+Current framework note:
+
+- **the served document always carries `<html lang="en">`.** Waku pre-renders
+  `src/pages/_root.tsx` once as a static shell, so it has no access to the
+  request and cannot emit a per-request locale. All four examples apply the
+  active locale to `document.documentElement.lang` from the client bootstrap in
+  `src/lib/i18n.ts` instead, which means a client without JavaScript — including
+  a crawler that does not execute it — still sees `lang="en"` on a non-English
+  document. This is a Waku constraint, not a Palamedes one; the other framework
+  families render `lang` on the server. Revisit if Waku exposes a dynamic root
+  or document-shell API.
+
 ## React Router
 
 The `react-router-cookie`, `react-router-route`, `react-router-subdomain`, and
