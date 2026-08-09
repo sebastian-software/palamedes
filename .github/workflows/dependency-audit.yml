@@ -1,0 +1,121 @@
+name: Dependency Audit
+
+# Advisories are published independently of this repository's changes, so this
+# runs on a schedule rather than per pull request: a newly disclosed CVE in a
+# build dependency should open a tracking issue, not block unrelated work.
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dependency-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Restore pnpm cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The curated `overrides` block in pnpm-workspace.yaml is the repository's
+      # mechanism for pinning patched transitive versions. This report is what
+      # tells maintainers when that list has fallen behind.
+      - name: Audit npm dependencies
+        id: npm-audit
+        continue-on-error: true
+        run: |
+          {
+            echo '## npm advisories'
+            echo
+            echo '```'
+            pnpm audit --audit-level=high 2>&1 || true
+            echo '```'
+          } >> audit-report.md
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        id: cargo-audit
+        continue-on-error: true
+        run: |
+          {
+            echo
+            echo '## Rust advisories'
+            echo
+            echo '```'
+            cargo audit 2>&1 || true
+            echo '```'
+          } >> audit-report.md
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-audit
+          path: audit-report.md
+
+      # One long-lived issue that is refreshed in place, so a weekly cron cannot
+      # accumulate a backlog of near-identical reports.
+      - name: Open or refresh the tracking issue
+        if: steps.npm-audit.outcome == 'failure' || steps.cargo-audit.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "chore(deps): dependency audit findings"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "The scheduled dependency audit reported findings."
+            echo
+            echo "Triage each entry against the curated \`overrides\` block in"
+            echo "\`pnpm-workspace.yaml\`, and pin the patched version where the parent"
+            echo "dependency line permits it."
+            echo
+            cat audit-report.md
+            echo
+            echo "Run: $RUN_URL"
+          } > issue-body.md
+
+          existing="$(gh issue list --state open --label dependencies --search "$TITLE" --json number,title \
+            --jq "[.[] | select(.title == \"$TITLE\")] | first | .number // empty")"
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file issue-body.md
+          else
+            gh issue create --title "$TITLE" --body-file issue-body.md --label dependencies
+          fi
