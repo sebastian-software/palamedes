@@ -53,6 +53,19 @@ async function expectMultiCookieLocale() {
   if (!response.ok || !html.includes("Server-Rendern bestätigte Sprache.")) {
     throw new Error("A production request with session and locale cookies did not render German.")
   }
+  // This fixture sits outside EXAMPLE_MATRIX, so its served document locale is
+  // asserted here rather than by the matrix smoke checks.
+  if (!/<html[^>]*\slang="de"/u.test(html)) {
+    throw new Error("A German document was served without a matching html lang attribute.")
+  }
+}
+
+async function expectDefaultDocumentLocale() {
+  const response = await fetch(baseUrl, { headers: { "accept-language": "en" } })
+  const html = await response.text()
+  if (!response.ok || !/<html[^>]*\slang="en"/u.test(html)) {
+    throw new Error("An English document was served without a matching html lang attribute.")
+  }
 }
 
 async function addServerFunctionBarrier(page, barrierId) {
@@ -83,6 +96,7 @@ const server = spawn("pnpm", ["--filter", "@palamedes/example-react-router-rsc-c
 try {
   await waitForServer()
   await expectMultiCookieLocale()
+  await expectDefaultDocumentLocale()
   const browser = await chromium.launch({ headless: true })
   try {
     const [deContext, enContext] = await Promise.all([browser.newContext(), browser.newContext()])
