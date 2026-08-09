@@ -49,6 +49,10 @@ function assertSetupBootstrap(steps) {
   const node = steps.find((step) => step.name === "Set up Node.js")
   const corepack = steps.find((step) => step.name === "Enable Corepack")
   const cache = steps.find((step) => step.name === "Set up pnpm cache")
+  const rust = steps.find((step) => step.name === "Set up Rust")
+  const worktree = findStep(steps, "canary-worktree")
+  const rustCache = steps.find((step) => step.name === "Cache Rust build artifacts")
+  const installDependencies = findStep(steps, "install-dependencies")
 
   assert.equal(node?.uses, "actions/setup-node@v7", "Node setup must use setup-node@v7")
   assert.equal(node?.with?.["node-version"], 24, "Node setup must select Node 24")
@@ -64,6 +68,19 @@ function assertSetupBootstrap(steps) {
   assert.ok(
     steps.indexOf(node) < steps.indexOf(corepack) && steps.indexOf(corepack) < steps.indexOf(cache),
     "Node setup, Corepack, and pnpm cache setup must run in that order"
+  )
+  assert.equal(rust?.uses, "dtolnay/rust-toolchain@stable", "Rust setup must use stable")
+  assert.equal(rustCache?.uses, "Swatinem/rust-cache@v2", "Rust build artifacts must be cached")
+  assert.equal(
+    rustCache?.with?.workspaces,
+    `${CANARY_WORKTREE} -> target`,
+    "Rust cache must target the isolated canary workspace"
+  )
+  assert.ok(
+    steps.indexOf(rust) < steps.indexOf(worktree) &&
+      steps.indexOf(worktree) < steps.indexOf(rustCache) &&
+      steps.indexOf(rustCache) < steps.indexOf(installDependencies),
+    "Rust setup, canary workspace, Rust cache, and install must run in that order"
   )
 }
 

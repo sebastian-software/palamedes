@@ -53,6 +53,11 @@ jobs:
           git worktree add --detach "$canary_dir" "$GITHUB_SHA"
           echo "path=$canary_dir" >> "$GITHUB_OUTPUT"
 
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ steps.canary-worktree.outputs.path }} -> target
+
       - name: Install locked dependencies
         id: install-dependencies
         working-directory: ${{ steps.canary-worktree.outputs.path }}
