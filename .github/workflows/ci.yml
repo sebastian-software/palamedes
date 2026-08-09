@@ -48,6 +48,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright Chromium
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Check remix@next canary workflow contract
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm check:remix-next-canary
@@ -72,6 +76,10 @@ jobs:
       - name: Verify Next.js RSC request scope with Webpack
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm --filter @palamedes/example-nextjs-cookie test:rsc-scope:webpack
+
+      - name: Verify React Router RSC request scope
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm verify:react-router-rsc
 
       - name: Verify Next.js development catalog invalidation
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
