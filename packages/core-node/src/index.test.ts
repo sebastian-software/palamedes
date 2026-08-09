@@ -116,15 +116,12 @@ describe("@palamedes/core-node", () => {
       ])
     ).toThrow(/renderCatalogModule\.argument\[0\]\.get\(message\)\[1\]/u)
 
-    const isWellFormed = Object.getOwnPropertyDescriptor(String.prototype, "isWellFormed")
-    Object.defineProperty(String.prototype, "isWellFormed", {
-      configurable: true,
-      value: undefined,
-    })
+    const isWellFormed = Reflect.getOwnPropertyDescriptor(String.prototype, "isWellFormed")
+    Reflect.deleteProperty(String.prototype, "isWellFormed")
     try {
       expect(() => parsePo("\ud800")).toThrow(/parsePo\.argument\[0\]/u)
     } finally {
-      if (isWellFormed) Object.defineProperty(String.prototype, "isWellFormed", isWellFormed)
+      if (isWellFormed) Reflect.defineProperty(String.prototype, "isWellFormed", isWellFormed)
     }
   })
 
@@ -222,8 +219,8 @@ describe("@palamedes/core-node", () => {
     class PrototypeGetterMessages implements Record<string, string> {
       [key: string]: string
 
-      get message() {
-        return "from prototype getter"
+      public get message() {
+        return ["from prototype getter"].join("")
       }
     }
     expect(renderCatalogModule(new PrototypeGetterMessages())).toContain("from prototype getter")
