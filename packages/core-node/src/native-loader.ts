@@ -114,6 +114,7 @@ function isWellFormed(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const codeUnit = value.charCodeAt(index)
     if (codeUnit >= 55_296 && codeUnit <= 56_319) {
+      if (index + 1 >= value.length) return false
       const next = value.charCodeAt(index + 1)
       if (next < 56_320 || next > 57_343) return false
       index += 1
@@ -252,7 +253,7 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
     const recordSnapshot: Record<string, unknown> = {}
     snapshots.set(value, recordSnapshot)
     current.assign(recordSnapshot)
-    for (const key of enumerablePropertyNames(value, currentPath).reverse()) {
+    for (const key of nativeVisiblePropertyNames(value, classification, currentPath).reverse()) {
       const propertyPath = appendNativeArgumentPath(currentPath, `.${key}`)
       assertWellFormedPropertyName(key, propertyPath)
       pending.push({
@@ -320,7 +321,7 @@ function arrayPropertyPath(key: string): string {
 type SnapshotObjectClassification =
   | { kind: "array"; length: number }
   | { kind: "map" }
-  | { kind: "record" }
+  | { kind: "record"; prototype: object | null }
 
 function classifySnapshotObject(
   value: object,
@@ -331,7 +332,8 @@ function classifySnapshotObject(
       return { kind: "array", length: readArrayLength(value) }
     }
 
-    return isMapPrototype(Object.getPrototypeOf(value)) ? { kind: "map" } : { kind: "record" }
+    const prototype = Object.getPrototypeOf(value)
+    return isMapPrototype(prototype) ? { kind: "map" } : { kind: "record", prototype }
   } catch (error) {
     throw nativeBoundaryReadError(argumentPath, error)
   }
@@ -350,6 +352,36 @@ function isMapPrototype(prototype: object | null): boolean {
     if (current === Map.prototype) return true
   }
   return false
+}
+
+function nativeVisiblePropertyNames(
+  value: object,
+  classification: SnapshotObjectClassification,
+  argumentPath: NativeArgumentPath
+): string[] {
+  try {
+    if (
+      classification.kind !== "record" ||
+      classification.prototype === null ||
+      classification.prototype === Object.prototype
+    ) {
+      return Object.keys(value)
+    }
+
+    const names = new Set(Object.getOwnPropertyNames(value))
+    for (
+      let prototype = classification.prototype;
+      prototype !== null && prototype !== Object.prototype;
+      prototype = Object.getPrototypeOf(prototype)
+    ) {
+      for (const name of Object.getOwnPropertyNames(prototype)) {
+        if (name !== "constructor") names.add(name)
+      }
+    }
+    return [...names]
+  } catch (error) {
+    throw nativeBoundaryReadError(argumentPath, error)
+  }
 }
 
 function enumerablePropertyNames(value: object, argumentPath: NativeArgumentPath): string[] {
