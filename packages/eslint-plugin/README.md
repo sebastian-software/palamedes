@@ -92,7 +92,12 @@ When a native error contains Palamedes' structured `at file:line:column` or
 otherwise it safely falls back to the start of the file.
 
 There are no fixes in this version. `pmds lint` suppressions are intentionally
-separate from ESLint/Oxlint directives and are only consumed by the CLI.
+separate from ESLint/Oxlint directives and are only consumed by the CLI: this
+plugin does not read `palamedes-lint-disable-*`, and `pmds lint` does not read
+host directives, so a project running both lanes needs the directive each lane
+understands. The rule names differ as well — the CLI reports the native
+diagnostic codes (`pmds/...`) while this plugin exposes them under its host
+plugin namespace (`palamedes/...`).
 
 MDX is not supported through the adapter because Oxlint JavaScript plugins do
 not currently support custom parsers or file formats. Use `pmds lint` for MDX.

@@ -14,6 +14,7 @@ expected to use directly.
 - [`@palamedes/config`](./config.md)
 - [`@palamedes/cli`](./cli.md)
 - [`pmds` binary plugin protocol](./cli-binary-plugin.md)
+- [`@palamedes/eslint-plugin`](./eslint-plugin.md)
 - [`@palamedes/vite-plugin`](./vite-plugin.md)
 - [`@palamedes/next-plugin`](./next-plugin.md)
 - [`@palamedes/core-node`](./core-node.md)
