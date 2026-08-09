@@ -427,7 +427,7 @@ where
             continue;
         }
 
-        for message in validate_plural_translation_branches(&patch.translation) {
+        for message in validate_translation_icu(&patch.translation) {
             rejected.insert(index);
             diagnostics.push(workflow_diagnostic(
                 "translation.invalid_icu",
@@ -968,29 +968,31 @@ fn validate_patch_translation(
     }
 }
 
-fn validate_plural_translation_branches(value: &TranslationValue) -> Vec<String> {
-    let TranslationValue::Plural {
-        variable,
-        plural_kind,
-        values,
-        ..
-    } = value
-    else {
-        return Vec::new();
-    };
-
-    values
-        .iter()
-        .filter_map(|(selector, branch)| {
-            parse_plural_branch(variable, *plural_kind, branch)
-                .err()
-                .map(|source| {
-                    format!(
-                        "Plural translation branch `translation.values.{selector}` is not valid ICU: {source}"
-                    )
-                })
-        })
-        .collect()
+fn validate_translation_icu(value: &TranslationValue) -> Vec<String> {
+    match value {
+        TranslationValue::Singular { value } => parse_runtime_icu(value)
+            .err()
+            .map(|source| format!("Singular translation is not valid ICU: {source}"))
+            .into_iter()
+            .collect(),
+        TranslationValue::Plural {
+            variable,
+            plural_kind,
+            values,
+            ..
+        } => values
+            .iter()
+            .filter_map(|(selector, branch)| {
+                parse_plural_branch(variable, *plural_kind, branch)
+                    .err()
+                    .map(|source| {
+                        format!(
+                            "Plural translation branch `translation.values.{selector}` is not valid ICU: {source}"
+                        )
+                    })
+            })
+            .collect(),
+    }
 }
 
 fn validate_machine_provenance(machine: &TranslationMachineProvenance) -> Result<(), &'static str> {
@@ -1109,11 +1111,19 @@ fn parse_plural_branch(
         TranslationPluralKind::Ordinal => "selectordinal",
     };
     let wrapped = format!("{{{variable}, {formatter}, other {{{value}}}}}");
-    let parsed = parse_icu(&wrapped)?;
+    let parsed = parse_runtime_icu(&wrapped)?;
     let [IcuNode::Plural { options, .. }] = parsed.nodes.as_slice() else {
         unreachable!("the generated plural wrapper always parses to one plural node");
     };
     Ok(options[0].value.clone())
+}
+
+fn parse_runtime_icu(value: &str) -> Result<IcuMessage, ferrocat_icu::IcuParseError> {
+    let canonical = ferrocat::canonicalize_icu_with_policy(
+        value,
+        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
+    );
+    parse_icu(&canonical)
 }
 
 fn render_target_catalog(
@@ -2027,6 +2037,74 @@ mod tests {
             .iter()
             .any(|diagnostic| diagnostic.message.contains("translation.values.other")));
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn rejects_invalid_singular_icu_as_a_per_patch_diagnostic_without_writing() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list singular patch candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+        let before = fs::read_to_string(&path).expect("read catalog before invalid patch");
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![singular_patch(hello, "Hallo {name")],
+        })
+        .expect("reject invalid singular ICU as a diagnostic");
+
+        assert!(!result.updated);
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Rejected
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "translation.invalid_icu"
+                && diagnostic.id.as_ref() == Some(&hello.id)
+                && diagnostic.message.contains("Singular translation")
+        }));
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn accepts_singular_literal_apostrophes_with_runtime_icu_policy() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        assert!(ferrocat_icu::parse_icu("don't translate {name}").is_err());
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list singular patch candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![singular_patch(hello, "don't translate {name}")],
+        })
+        .expect("apply singular literal-apostrophe patch");
+
+        assert!(result.updated);
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Applied
+        );
+        assert!(result.diagnostics.is_empty());
+        assert!(fs::read_to_string(&path)
+            .expect("read patched catalog")
+            .contains("don't translate {name}"));
     }
 
     #[test]
