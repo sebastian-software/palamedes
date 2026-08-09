@@ -161,6 +161,24 @@ impl CatalogCompilationCache {
 
     fn insert_ready(&self, key: CompilationCacheKey, compiled: Arc<CachedCompilation>) {
         let mut state = lock_unpoison(&self.state);
+        let superseded = state
+            .ready
+            .keys()
+            .filter(|existing| {
+                existing != &&key
+                    && existing.files.len() == key.files.len()
+                    && existing
+                        .files
+                        .iter()
+                        .zip(&key.files)
+                        .all(|(left, right)| left.path == right.path)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        for stale in superseded {
+            state.ready.remove(&stale);
+            state.last_used.remove(&stale);
+        }
         if state.ready.len() >= self.capacity {
             if let Some(oldest) = state
                 .last_used

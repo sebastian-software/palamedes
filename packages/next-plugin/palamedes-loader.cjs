@@ -1,7 +1,7 @@
 "use strict"
 
 const { createHash } = require("node:crypto")
-const { realpathSync, statSync } = require("node:fs")
+const { readFileSync, realpathSync, statSync } = require("node:fs")
 const path = require("node:path")
 const { decode, encode } = require("@jridgewell/sourcemap-codec")
 const { loadPalamedesConfigSync } = require("@palamedes/config")
@@ -29,7 +29,10 @@ function loadConfigCached(configPath) {
   const cached = configCache.get(key)
   if (cached) {
     try {
-      if (statSync(cached.config.configPath).mtimeMs === cached.mtimeMs) {
+      if (
+        createHash("sha256").update(readFileSync(cached.config.configPath)).digest("hex") ===
+        cached.digest
+      ) {
         return cached.config
       }
     } catch {
@@ -41,7 +44,7 @@ function loadConfigCached(configPath) {
   try {
     configCache.set(key, {
       config,
-      mtimeMs: statSync(config.configPath).mtimeMs,
+      digest: createHash("sha256").update(readFileSync(config.configPath)).digest("hex"),
     })
   } catch {
     // Tests and virtual configs may not have a stat-able config file.
@@ -82,7 +85,7 @@ function catalogResourcePath(config, catalog, locale) {
       `Palamedes Next message splitting currently supports PO catalogs only. Catalog ${catalog.path} uses format ${extension}.`
     )
   }
-  const configuredPath = path.resolve(config.rootDir, catalog.path.replace("{locale}", locale))
+  const configuredPath = path.resolve(config.rootDir, catalog.path.replaceAll("{locale}", locale))
   const parsed = path.parse(configuredPath)
   return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
 }
@@ -309,7 +312,9 @@ function shiftedGeneratedPosition(position, insertionPosition, insertion, metric
     return position
   }
   if (metrics.addedLines === 0) {
-    return { line: position.line, column: position.column + insertion.length }
+    return position.line === insertionPosition.line
+      ? { line: position.line, column: position.column + insertion.length }
+      : position
   }
   return {
     line: position.line + metrics.addedLines,

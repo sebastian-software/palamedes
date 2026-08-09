@@ -677,6 +677,11 @@ fn selected_catalog_cache_invalidates_equal_mtime_content_replacement() {
         Some("Guten Tag")
     );
     assert_eq!(
+        cache.ready_len(),
+        1,
+        "a changed catalog must replace, rather than retain, its superseded cache generation"
+    );
+    assert_eq!(
         cache.statistics(),
         super::cache::CacheStatistics {
             parses: 5,
