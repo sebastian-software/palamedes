@@ -64,7 +64,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.5",
     "solid-js": "^1.9.14",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vite": "8.2.1",
     "vite-plugin-solid": "^2.11.14",

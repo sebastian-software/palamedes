@@ -1,9 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime"
 import { createServerI18nScope } from "@palamedes/runtime/server"
 
+import { createWakuI18nInterceptor } from "./index"
 import { createScopedWakuI18nRunner } from "./scope"
+
+const getRequest = vi.hoisted(() => vi.fn())
+
+vi.mock("waku/router/server", () => ({ unstable_getRequest: getRequest }))
 
 function createTestI18n(locale: string): I18nInstance {
   return {
@@ -15,6 +20,35 @@ function createTestI18n(locale: string): I18nInstance {
 describe("Waku i18n request scope", () => {
   afterEach(() => {
     resetI18nRuntime()
+    getRequest.mockReset()
+  })
+
+  it("skips request-local activation during static generation", async () => {
+    getRequest.mockImplementation(() => {
+      throw new Error("Request is not available.")
+    })
+    const resolveI18n = vi.fn(() => createTestI18n("de"))
+    const interceptor = createWakuI18nInterceptor(resolveI18n)
+
+    await expect(interceptor(async () => "static output")).resolves.toBe("static output")
+
+    expect(resolveI18n).not.toHaveBeenCalled()
+  })
+
+  it("activates the request-local scope for a handled request", async () => {
+    const request = new Request("https://example.test/", { headers: { "x-locale": "de" } })
+    getRequest.mockReturnValue(request)
+    const resolveI18n = vi.fn(() => createTestI18n("de"))
+    const interceptor = createWakuI18nInterceptor(resolveI18n)
+
+    await expect(
+      interceptor(async () => {
+        expect(getI18n().locale).toBe("de")
+        return "request output"
+      })
+    ).resolves.toBe("request output")
+
+    expect(resolveI18n).toHaveBeenCalledWith(request)
   })
 
   it("uses original request headers and cookies before server-action work runs", async () => {
