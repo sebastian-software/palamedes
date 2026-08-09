@@ -115,6 +115,17 @@ describe("@palamedes/core-node", () => {
         new Map([["message", ["valid", "\ud800"]]]),
       ])
     ).toThrow(/renderCatalogModule\.argument\[0\]\.get\(message\)\[1\]/u)
+
+    const isWellFormed = Object.getOwnPropertyDescriptor(String.prototype, "isWellFormed")
+    Object.defineProperty(String.prototype, "isWellFormed", {
+      configurable: true,
+      value: undefined,
+    })
+    try {
+      expect(() => parsePo("\ud800")).toThrow(/parsePo\.argument\[0\]/u)
+    } finally {
+      if (isWellFormed) Object.defineProperty(String.prototype, "isWellFormed", isWellFormed)
+    }
   })
 
   it("passes the single validated accessor and Proxy snapshot to native bindings", () => {
@@ -207,6 +218,15 @@ describe("@palamedes/core-node", () => {
       public message = "from class"
     }
     expect(renderCatalogModule(new ClassBackedMessages())).toContain("from class")
+
+    class PrototypeGetterMessages implements Record<string, string> {
+      [key: string]: string
+
+      get message() {
+        return "from prototype getter"
+      }
+    }
+    expect(renderCatalogModule(new PrototypeGetterMessages())).toContain("from prototype getter")
 
     const nonEnumerableMessages: Record<string, string> = {}
     Object.defineProperty(nonEnumerableMessages, "hidden", {
