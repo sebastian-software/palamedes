@@ -73,6 +73,20 @@ describe("workflow contracts", () => {
     )
   })
 
+  it("caches Rust example builds and retries only scheduled browser verification", async () => {
+    const [exampleVerification, browserConfig] = await Promise.all([
+      readRepositoryFile(".github/workflows/example-verification.yml"),
+      readRepositoryFile("vitest.examples.config.mjs"),
+    ])
+
+    expect(exampleVerification).toContain("- name: Cache Rust build artifacts")
+    expect(exampleVerification).toContain("uses: Swatinem/rust-cache@v2")
+    expect(exampleVerification).toContain(
+      "PALAMEDES_BROWSER_RETRY: ${{ github.event_name == 'schedule' && '1' || '0' }}"
+    )
+    expect(browserConfig).toContain('retry: process.env.PALAMEDES_BROWSER_RETRY === "1" ? 1 : 0')
+  })
+
   it("requires locked Rust workspace tests before any release publishing", async () => {
     const publish = await readRepositoryFile(".github/workflows/publish.yml")
     const validateRelease = job(publish, "validate-release", "publish-native")

@@ -68,6 +68,21 @@ test("rejects cache setup before Corepack", () => {
   })
 })
 
+test("rejects missing or misconfigured Rust cache", () => {
+  assertRejected((workflow) => {
+    const steps = stepsFor(workflow)
+    steps.splice(
+      steps.findIndex((step) => step.name === "Cache Rust build artifacts"),
+      1
+    )
+  })
+
+  assertRejected((workflow) => {
+    stepsFor(workflow).find((step) => step.name === "Cache Rust build artifacts").with.workspaces =
+      ". -> target"
+  })
+})
+
 test("rejects every missing or incorrectly bound canary phase", () => {
   for (const id of ORDERED_STEP_IDS) {
     assertRejected((workflow) => {
