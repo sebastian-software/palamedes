@@ -43,12 +43,39 @@ this example; Start removes that branch from the client build.
 The resolver receives the original Fetch `Request`, including headers and
 cookies. It owns locale negotiation, catalog loading, and creation of a fresh
 i18n instance; Palamedes owns activation and cleanup. An initializer failure
-stops the server function and propagates as a server error.
+stops the server function and throws an error beginning `Palamedes TanStack
+i18n initialization failed`, with the original cause attached.
 
 Start invokes this boundary before decoding and invoking a server function. The
 scope stays active through awaited `next()`, including validation, handler work,
 and synchronous, asynchronous, or cross-module helpers that call translated
 code.
+
+## SSR page rendering
+
+TanStack Start does not run request middleware for page SSR or server routes.
+Wrap the server entry with a request-local scope using the same resolver:
+
+```ts
+import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server"
+import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createServerI18nFromRequest } from "./lib/i18n.server"
+
+const handler = createStartHandler(defaultStreamHandler)
+const ssrI18nScope = createServerI18nScope()
+
+export default {
+  async fetch(request: Request, options?: never) {
+    return await ssrI18nScope.run(await createServerI18nFromRequest(request), () =>
+      handler(request, options)
+    )
+  },
+}
+```
+
+The outer entry scope supplies SSR. If you also register the global request
+middleware, its fresh nested scope for server functions is intentional: it
+starts before Start decodes the function request.
 
 ## Composable server-function middleware
 

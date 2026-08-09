@@ -43,6 +43,36 @@ does not activate i18n for page rendering or server routes. It starts before
 Start decodes and invokes a server function, and keeps the request-local scope
 active until its awaited `next()` completes.
 
+If the resolver fails, the server function does not run and the middleware
+throws an error beginning `Palamedes TanStack i18n initialization failed`, with
+the original cause attached.
+
+## SSR page rendering
+
+TanStack Start invokes request middleware only for server functions. Scope SSR
+in the server entry separately, using the same request-to-i18n resolver:
+
+```ts
+import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server"
+import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createServerI18nFromRequest } from "./lib/i18n.server"
+
+const handler = createStartHandler(defaultStreamHandler)
+const ssrI18nScope = createServerI18nScope()
+
+export default {
+  async fetch(request: Request, options?: never) {
+    return await ssrI18nScope.run(await createServerI18nFromRequest(request), () =>
+      handler(request, options)
+    )
+  },
+}
+```
+
+When this entry scope and the request middleware are both registered, the
+nested initialization is intentional: the outer scope handles SSR, while the
+middleware starts a fresh scope before Start decodes a server function.
+
 ## Per-function middleware
 
 Use `createTanStackI18nMiddleware()` when only selected server functions need

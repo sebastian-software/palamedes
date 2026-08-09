@@ -15,7 +15,15 @@ export function createScopedTanStackI18nRunner<T extends I18nInstance>(
 
   return {
     async run(request, next) {
-      const i18n = await resolveI18n(request)
+      let i18n: T
+      try {
+        i18n = await resolveI18n(request)
+      } catch (error) {
+        throw new Error(
+          "Palamedes TanStack i18n initialization failed before server-function dispatch ran.",
+          { cause: error }
+        )
+      }
       return await scope.run(i18n, async () => await next())
     },
     scope,

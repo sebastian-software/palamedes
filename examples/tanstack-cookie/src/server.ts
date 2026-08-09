@@ -10,6 +10,8 @@ const handler = createStartHandler(defaultStreamHandler)
 
 export default {
   async fetch(request: Request, options?: never) {
+    // This outer scope owns SSR. The request middleware in start.ts deliberately
+    // creates a fresh nested scope for server functions before Start decodes them.
     const { locale } = locales.resolve({
       strategy: "cookie",
       acceptLanguageHeader: request.headers.get("accept-language"),

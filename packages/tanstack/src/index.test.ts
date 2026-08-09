@@ -61,8 +61,9 @@ describe("TanStack i18n request scope", () => {
   it("does not invoke the handler when initialization fails and restores an outer scope", async () => {
     const outerScope = createServerI18nScope<I18nInstance>()
     const outerI18n = createTestI18n("en")
+    const failure = new Error("catalog is unavailable")
     const runner = createScopedTanStackI18nRunner(async () => {
-      throw new Error("Palamedes TanStack i18n initialization failed")
+      throw failure
     })
 
     await outerScope.run(outerI18n, async () => {
@@ -70,7 +71,11 @@ describe("TanStack i18n request scope", () => {
         runner.run(new Request("https://example.test/_serverFn/probe"), async () => {
           throw new Error("handler must not run")
         })
-      ).rejects.toThrow("Palamedes TanStack i18n initialization failed")
+      ).rejects.toMatchObject({
+        message:
+          "Palamedes TanStack i18n initialization failed before server-function dispatch ran.",
+        cause: failure,
+      })
       expect(getI18n()).toBe(outerI18n)
     })
   })
