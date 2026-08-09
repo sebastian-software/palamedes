@@ -112,6 +112,26 @@ export default save;
 }
 
 #[test]
+fn instruments_async_functions_exported_by_const_alias_identifier() {
+    let source = r#""use server";
+async function saveHandler() { await persist(); }
+export const save = saveHandler;
+export const later = laterHandler;
+async function laterHandler() { await archive(); }
+"#;
+    let result = transform_macros_raw(source, "actions.ts", Some(server_function_options()))
+        .expect("const-aliased local Server Functions should be instrumented");
+
+    assert_eq!(
+        result
+            .code
+            .matches("await __palamedesServerFunctionInitializer();")
+            .count(),
+        2
+    );
+}
+
+#[test]
 fn instruments_async_callbacks_inside_exported_action_initializers() {
     let source = r#""use server";
 const hidden = withAuth(async () => hide());

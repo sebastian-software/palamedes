@@ -346,6 +346,17 @@ fn record_exported_initializer_functions(
     semantic: &Semantic<'_>,
     spans: &mut HashSet<(u32, u32)>,
 ) {
+    if let Expression::Identifier(identifier) = expression.get_inner_expression() {
+        if let Some(span) = identifier
+            .reference_id
+            .get()
+            .and_then(|reference_id| semantic.scoping().get_reference(reference_id).symbol_id())
+            .and_then(|symbol_id| local_async_function_spans.get(&symbol_id))
+        {
+            spans.insert(*span);
+        }
+    }
+
     let mut collector = ExportedInitializerFunctionCollector {
         spans,
         local_async_function_spans,
