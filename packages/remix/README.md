@@ -37,7 +37,8 @@ server-loaded Remix modules:
 | `.po` catalog imports                                | Supported through the Palamedes register hook                                 |
 | Request-local i18n                                   | Supported through `createRemixI18nServer()` and middleware/request helpers    |
 | Locale strategies                                    | Cookie, route, subdomain, and TLD examples are covered by smoke tests         |
-| Rich JSX messages                                    | Not supported yet; Remix lowers JSX before the Palamedes hook sees the source |
+| Server-rendered Remix UI Frames                       | Supported; document and direct frame requests retain their own locale scope   |
+| Rich JSX messages                                    | Not supported; the React `Trans` runtime is incompatible with Remix UI        |
 | Browser/client modules                               | Not supported yet; Remix's asset pipeline has no script transform hook        |
 
 The hook only reaches server-executed modules. Browser-delivered Remix v3 modules
@@ -45,10 +46,46 @@ are compiled by Remix's asset pipeline, which does not currently expose a script
 transform hook for Palamedes macros. The upstream tracking request is
 [remix-run/remix#11580](https://github.com/remix-run/remix/issues/11580).
 
-Rich JSX message macros are still experimental for Remix v3 because Remix's
-loader lowers JSX to `remix/ui/jsx-runtime` calls before this hook runs. The
-follow-up for a Remix UI adapter, rich messages, and Frames is
-[palamedes#357](https://github.com/sebastian-software/palamedes/issues/357).
+## Remix UI, Frames, and Rich Messages
+
+Remix UI Frames are supported on the server. Render both the document and the
+frame endpoint inside `remixI18n.run()` so a streamed frame and a later,
+client-initiated frame reload independently resolve the same request locale:
+
+```tsx
+import { Frame } from "remix/ui"
+import { renderToStream } from "remix/ui/server"
+
+function renderDocument(request: Request, locale: string) {
+  return renderToStream(
+    <html lang={locale}>
+      <body>
+        <Frame name="locale-summary" src="/frames/locale-summary" fallback={<p>Loading…</p>} />
+      </body>
+    </html>,
+    {
+      frameSrc: request.url,
+      signal: request.signal,
+      resolveFrame: () => renderLocaleSummary(),
+    }
+  )
+}
+```
+
+The cookie example exercises both `/frames` and `/frames/locale-summary` with
+German translations. Use ordinary JavaScript macros such as `t` inside Remix UI
+components; those calls remain visible to the server loader after JSX lowering.
+
+Rich JSX macros such as `<Trans>` are not supported in Remix UI. This is a
+specific runtime boundary, rather than an untested adapter: `remix/node-tsx`
+lowers JSX to `remix/ui/jsx-runtime` before the Palamedes loader receives a
+module. Palamedes' rich-message transform requires the original JSX tree to
+derive message placeholders, and its compiled `@palamedes/react` `Trans`
+component produces React elements, while Remix UI renders its own element
+model. A supported adapter therefore needs both a pre-lowering transform hook
+and a dedicated Remix UI rich-message runtime; neither is a public Remix API
+today. Browser/client macro parity is separately blocked on the
+[asset-pipeline transform hook](https://github.com/remix-run/remix/issues/11580).
 
 ## Runtime Cost
 
