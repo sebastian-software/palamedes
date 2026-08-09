@@ -1,0 +1,8 @@
+# Pins the toolchain to the workspace MSRV declared in Cargo.toml, so a local
+# `cargo build` installs it instead of failing with a resolver error listing
+# every oxc crate. CI keeps its explicit toolchains: dtolnay/rust-toolchain sets
+# RUSTUP_TOOLCHAIN, which takes precedence over this file, so the `stable` legs
+# still exercise stable.
+[toolchain]
+channel = "1.95"
+components = ["clippy", "rustfmt"]
