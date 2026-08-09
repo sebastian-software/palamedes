@@ -6,7 +6,6 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { runInNewContext } from "node:vm"
 
-import ts from "typescript"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
@@ -798,24 +797,14 @@ function Example() {
         'import { Trans } from "@palamedes/react/compiled";',
         'const Trans = () => "top-level-import";'
       )
-    const output = ts.transpileModule(executable, {
-      compilerOptions: {
-        jsx: ts.JsxEmit.React,
-        jsxFactory: "jsx",
-        module: ts.ModuleKind.None,
-        target: ts.ScriptTarget.ES2022,
-      },
-    }).outputText
+      .replace(/return <__palamedesTrans id="[^"]+" \/>/u, "return __palamedesTrans()")
     const context: {
-      Example?: () => { type: () => string }
-      jsx: (type: () => string) => { type: () => string }
-    } = {
-      jsx: (type) => ({ type }),
-    }
+      Example?: () => string
+    } = {}
 
-    runInNewContext(output, context)
+    runInNewContext(executable, context)
 
-    expect(context.Example?.().type()).toBe("compiled-component")
+    expect(context.Example?.()).toBe("compiled-component")
   })
 
   it.each(["react", "solid"] as const)(

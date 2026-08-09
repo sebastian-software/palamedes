@@ -16,7 +16,7 @@
     "@palamedes/runtime": "workspace:^",
     "@palamedes/tanstack": "workspace:^",
     "@tanstack/react-router": "^1.170.21",
-    "@tanstack/react-start": "^1.168.38",
+    "@tanstack/react-start": "^1.168.41",
     "@tanstack/router-plugin": "^1.168.26",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
@@ -29,7 +29,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "^8.2.1"
   }
 }

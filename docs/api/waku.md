@@ -10,7 +10,7 @@ applications do not change until an interceptor is registered.
 pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku
 ```
 
-The adapter supports `waku@^1.0.0-beta.8` and Node.js 22.22 or newer. Macros
+The adapter supports `waku@^1.0.0-beta.9` and Node.js 22.22 or newer. Macros
 still need the standard Vite transformation and catalog-loading setup.
 `@palamedes/waku` is ESM-only: use `import`; CommonJS `require()` is deliberately
 unsupported.

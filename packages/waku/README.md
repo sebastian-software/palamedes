@@ -49,7 +49,7 @@ the handler while they are consumed later. Those callbacks do not extend the
 caller's request ownership.
 
 `@palamedes/waku` uses `@palamedes/runtime/server`, which requires Node's
-`AsyncLocalStorage`. It supports the pinned Waku line `^1.0.0-beta.8` on
+`AsyncLocalStorage`. It supports the pinned Waku line `^1.0.0-beta.9` on
 Node.js 22.22 or later. Do not use this adapter in Edge or Worker runtimes
 unless their Node-compatible `AsyncLocalStorage` behavior has been independently
 verified. Waku's interceptor and request-accessor APIs are unstable-prefixed,
