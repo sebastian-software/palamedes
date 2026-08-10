@@ -13,6 +13,11 @@ packages/core-node-*/palamedes-node.node
 packages/cli-*/bin/
 packages/cli/bin/pmds-native*
 
+# Root LICENSE copied into the native packages at build time; `npm publish`
+# does not embed it the way `pnpm publish` does.
+packages/core-node-*/LICENSE
+packages/cli-*/LICENSE
+
 # Build output
 *.js.map
 *.d.ts.map

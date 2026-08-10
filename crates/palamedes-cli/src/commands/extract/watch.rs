@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use globset::GlobSet;
 use notify::{RecursiveMode, Watcher};
-use palamedes::ExtractCache;
+use palamedes::{ExtractCache, PalamedesCatalogFormat};
 
 use crate::commands::extract::cache::{
     load_extract_cache, persist_extract_cache, rebuild_extract_cache_for_reload,
@@ -72,13 +72,26 @@ impl WatchMatchers {
         {
             return false;
         }
-        if path.extension().and_then(|value| value.to_str()) == Some("po") {
+        if is_catalog_storage_path(path) {
             return false;
         }
         self.sets
             .iter()
             .any(|(include, exclude)| include.is_match(path) && !exclude.is_match(path))
     }
+}
+
+/// Whether a path is a catalog extraction itself writes. Include patterns that
+/// contain glob syntax pass through verbatim, so a catalog stored under such an
+/// include matches the include set — and every catalog write would schedule the
+/// next extraction. The list covers every storage format, not just PO.
+fn is_catalog_storage_path(path: &Path) -> bool {
+    let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    [PalamedesCatalogFormat::Po, PalamedesCatalogFormat::Fcl]
+        .into_iter()
+        .any(|format| format.extension() == extension)
 }
 
 /// Roots the watcher must observe: the config root plus every include root
@@ -241,11 +254,43 @@ mod tests {
 
     use palamedes::ExtractCache;
 
-    use super::run_watch_extraction;
+    use super::{run_watch_extraction, WatchMatchers};
     use crate::commands::extract::cache::{load_extract_cache, rebuild_extract_cache_for_reload};
     use crate::commands::extract::test_support::{cached_extract_options, extract_options};
     use crate::commands::test_support::{temp_dir, write_config};
     use crate::config::load_config;
+
+    /*
+     * Catalogs stored under a glob-style include match that include, so an
+     * unguarded catalog write schedules the extraction that wrote it. PO was
+     * exempt from the start; FCL catalogs looped.
+     */
+    #[test]
+    fn catalog_writes_never_look_like_source_changes() {
+        let app = temp_dir("watch-catalog-self-trigger");
+        fs::create_dir_all(app.join("src")).expect("create src");
+        let config_path = app.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}/messages
+    include: ["src/**/*"]
+  - path: src/locales/{locale}/lines
+    format: fcl
+    include: ["src/**/*"]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, Some(&config_path)).expect("load config");
+        let matchers = WatchMatchers::build(&config);
+
+        assert!(matchers.matches(&app.join("src/page.tsx")));
+        assert!(!matchers.matches(&app.join("src/locales/en/messages.po")));
+        assert!(!matchers.matches(&app.join("src/locales/en/lines.fcl")));
+    }
 
     #[test]
     fn watch_extraction_recovers_after_parse_failures() {

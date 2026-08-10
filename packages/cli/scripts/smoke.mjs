@@ -72,6 +72,7 @@ try {
   const cliArchive = packPackage(packageDir, archiveDir, "pnpm")
   const nativeArchive = packPackage(platformPackageDir, archiveDir, "npm")
   assertPackedCliRuntimeFiles(cliArchive)
+  assertPackedNativeLicense(nativeArchive)
   const cliInstallDir = path.join(fixtureRoot, "node_modules", "@palamedes", "cli")
   const nativeInstallDir = path.join(fixtureRoot, "node_modules", ...platformPackage.split("/"))
   extractPackage(cliArchive, cliInstallDir)
@@ -256,6 +257,14 @@ function assertPackedCliRuntimeFiles(archivePath) {
 
   assertPackedCliFiles(readTarEntries(archivePath))
   assertPackedCliFilesRejectMutations()
+}
+
+// The native packages publish through `npm publish`, which does not embed the
+// workspace-root LICENSE the way `pnpm publish` does for @palamedes/cli.
+function assertPackedNativeLicense(archivePath) {
+  if (!readTarEntries(archivePath).includes("package/LICENSE")) {
+    throw new Error(`The packed ${platformPackage} package ships no LICENSE.`)
+  }
 }
 
 function readTarEntries(archivePath) {

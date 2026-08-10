@@ -117,6 +117,20 @@ impl Command for MergeOptions {
         let config = match context.load_config(self.config.as_deref()) {
             Ok(config) => Some(config),
             Err(CliError::Config(ConfigError::NotFound)) if self.config.is_none() => None,
+            /*
+             * A JS/TS config is a fully supported project setup that only the
+             * JS toolchain can read, so refusing here would break the merge
+             * driver in those projects entirely. Say what is lost and merge.
+             */
+            Err(CliError::Config(ConfigError::JsConfigUnsupported { path }))
+                if self.config.is_none() =>
+            {
+                eprintln!(
+                    "Note: pmds cannot read {}, so configured PO output options and source-locale are not applied to this merge.",
+                    path.display()
+                );
+                None
+            }
             Err(error) => return Err(error),
         };
 

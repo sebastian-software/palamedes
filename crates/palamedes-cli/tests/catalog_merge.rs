@@ -210,6 +210,52 @@ fn extensionless_driver_files_report_the_logical_path_when_format_is_unknown() {
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }
 
+/// A JS/TS config is a supported project setup the native CLI cannot read.
+/// The merge driver has to merge anyway, or Git leaves every catalog conflicted
+/// in those projects.
+#[test]
+fn merges_in_a_project_configured_in_typescript() {
+    let fixture = fixture_dir("catalog-merge-js-config");
+    fs::create_dir_all(&fixture).expect("create fixture");
+    fs::write(
+        fixture.join("palamedes.config.ts"),
+        "export default { locales: [\"en\", \"de\"], sourceLocale: \"en\" }\n",
+    )
+    .expect("write TypeScript config");
+    let base = fixture.join("base.po");
+    let ours = fixture.join("ours.po");
+    let theirs = fixture.join("theirs.po");
+    let output = fixture.join("merged.po");
+    fs::write(&base, "msgid \"Hello\"\nmsgstr \"Alt\"\n").expect("write base");
+    fs::write(&ours, "msgid \"Hello\"\nmsgstr \"Unser\"\n").expect("write ours");
+    fs::write(&theirs, "msgid \"Hello\"\nmsgstr \"Ihr\"\n").expect("write theirs");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_pmds"))
+        .args([
+            "catalog",
+            "merge",
+            ours.to_str().expect("ours path"),
+            theirs.to_str().expect("theirs path"),
+            "--base",
+            base.to_str().expect("base path"),
+            "--output",
+            output.to_str().expect("output path"),
+            "--locale",
+            "de",
+        ])
+        .current_dir(&fixture)
+        .output()
+        .expect("run catalog merge");
+
+    assert!(result.status.success(), "{result:?}");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("palamedes.config.ts"), "{stderr}");
+    let merged = fs::read_to_string(&output).expect("read merged catalog");
+    assert!(merged.contains("msgstr \"Unser\""), "{merged}");
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
 const PO_CATALOG: &str = "apps/web/locales/de.po";
 const FCL_CATALOG: &str = "apps/web/fcl/de.fcl";
 

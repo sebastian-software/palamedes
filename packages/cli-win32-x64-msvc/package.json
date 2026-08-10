@@ -15,6 +15,7 @@
     "pmds": "./bin/pmds.exe"
   },
   "files": [
+    "LICENSE",
     "README.md",
     "bin/"
   ],
