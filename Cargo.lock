@@ -1188,7 +1188,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes"
-version = "1.16.0"
+version = "1.16.1"
 dependencies = [
  "ferrocat",
  "ferrocat-icu",
@@ -1214,7 +1214,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-cli"
-version = "1.16.0"
+version = "1.16.1"
 dependencies = [
  "clap",
  "config",
@@ -1232,7 +1232,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-node"
-version = "1.16.0"
+version = "1.16.1"
 dependencies = [
  "napi",
  "napi-build",
@@ -1243,7 +1243,7 @@ dependencies = [
 
 [[package]]
 name = "palamedes-plugin"
-version = "1.16.0"
+version = "1.16.1"
 dependencies = [
  "serde",
  "serde_json",
