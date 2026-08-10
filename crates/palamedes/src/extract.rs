@@ -29,13 +29,14 @@ use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, BindingPattern, CallExpression, CommentKind, Declaration, Expression,
-    ImportDeclaration, JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
-    LogicalOperator, MemberExpression, ObjectExpression, ObjectPropertyKind,
-    TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
+    Argument, BindingIdentifier, BindingPattern, CallExpression, CommentKind, Declaration,
+    Expression, ImportDeclaration, JSXAttributeValue, JSXChild, JSXElement, JSXExpression,
+    JSXOpeningElement, LogicalOperator, MemberExpression, ObjectExpression, ObjectPropertyKind,
+    Program, TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
+use oxc_semantic::SemanticBuilder;
 use oxc_span::{GetSpan, SourceType};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -156,21 +157,26 @@ struct AggregatedCatalogEntry {
     origins: Vec<CatalogUpdateOrigin>,
 }
 
-struct MacroCollector {
+struct MacroCollector<'a> {
     imported_macros: HashMap<String, ImportedMacro>,
     removed_macro_import: Option<(String, usize)>,
+    /// Names bound outside the import declarations, which are never walked
+    /// into. A macro local name appearing here is therefore a binding that can
+    /// shadow the import; see [`MacroResolution::resolve`].
+    binding_names: Vec<&'a str>,
 }
 
-impl MacroCollector {
+impl MacroCollector<'_> {
     fn new() -> Self {
         Self {
             imported_macros: HashMap::new(),
             removed_macro_import: None,
+            binding_names: Vec::new(),
         }
     }
 }
 
-impl<'a> Visit<'a> for MacroCollector {
+impl<'a> Visit<'a> for MacroCollector<'a> {
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         record_macro_import_declaration(
             it,
@@ -178,6 +184,66 @@ impl<'a> Visit<'a> for MacroCollector {
             &mut self.removed_macro_import,
             None,
         );
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.binding_names.push(it.name.as_str());
+    }
+}
+
+/// How an identifier that spells a macro import is matched to that import.
+enum MacroResolution {
+    /// No binding shadows a macro import, so the name alone identifies the use.
+    ByName,
+    /// Spans of the uses that resolve to a macro import binding.
+    ByReference(HashSet<(u32, u32)>),
+}
+
+impl MacroResolution {
+    /// Extraction deliberately avoids the semantic pass the transform runs
+    /// (ADR-019): it is the dominant remaining cost of `pmds extract`, and on
+    /// the realistic benchmark corpus it adds about 60% to parsing and visiting
+    /// a macro-bearing file. A name that is never re-bound in the module can
+    /// only resolve to the import, so the pass is built for the files that do
+    /// re-bind one — the same files where a name-only match would disagree with
+    /// the transform.
+    fn resolve(program: &Program<'_>, collector: &MacroCollector<'_>) -> Self {
+        let shadowed = collector
+            .binding_names
+            .iter()
+            .any(|name| collector.imported_macros.contains_key(*name));
+        if !shadowed {
+            return Self::ByName;
+        }
+
+        let semantic = SemanticBuilder::new()
+            .with_build_nodes(true)
+            .build(program)
+            .semantic;
+        let mut spans = HashSet::new();
+        for local_name in collector.imported_macros.keys() {
+            // Macro imports bind at module scope, so the root binding for a
+            // macro local name is the import itself.
+            let Some(symbol_id) = semantic
+                .scoping()
+                .get_root_binding(local_name.as_str().into())
+            else {
+                continue;
+            };
+            for reference in semantic.scoping().get_resolved_references(symbol_id) {
+                let span = semantic.nodes().get_node(reference.node_id()).span();
+                spans.insert((span.start, span.end));
+            }
+        }
+
+        Self::ByReference(spans)
+    }
+
+    fn is_macro_use(&self, span: (u32, u32)) -> bool {
+        match self {
+            Self::ByName => true,
+            Self::ByReference(spans) => spans.contains(&span),
+        }
     }
 }
 
@@ -240,6 +306,7 @@ struct ExtractionVisitor<'a> {
     source: &'a str,
     source_locator: &'a SourceLocator<'a>,
     imported_macros: &'a HashMap<String, ImportedMacro>,
+    macro_resolution: &'a MacroResolution,
     rules: &'a SourceRuleOptions,
     messages: Vec<ExtractedMessageRecord>,
     diagnostics: Vec<SourceDiagnostic>,
@@ -256,6 +323,7 @@ impl<'a> ExtractionVisitor<'a> {
         source: &'a str,
         source_locator: &'a SourceLocator<'a>,
         imported_macros: &'a HashMap<String, ImportedMacro>,
+        macro_resolution: &'a MacroResolution,
         rules: &'a SourceRuleOptions,
         reference_scopes: bool,
     ) -> Self {
@@ -264,6 +332,7 @@ impl<'a> ExtractionVisitor<'a> {
             source,
             source_locator,
             imported_macros,
+            macro_resolution,
             rules,
             messages: Vec::new(),
             diagnostics: Vec::new(),
@@ -423,12 +492,20 @@ impl<'a> ExtractionVisitor<'a> {
         format!("{}:{line}:{column}", self.filename)
     }
 
-    fn imported_macro_name(&self, local_name: &str, expected: &[&str]) -> Option<&str> {
-        self.imported_macros.get(local_name).and_then(|macro_info| {
-            expected
-                .contains(&macro_info.imported_name.as_str())
-                .then_some(macro_info.imported_name.as_str())
-        })
+    fn imported_macro_name(
+        &self,
+        local_name: &str,
+        span: (u32, u32),
+        expected: &[&str],
+    ) -> Option<&str> {
+        self.imported_macros
+            .get(local_name)
+            .filter(|_| self.macro_resolution.is_macro_use(span))
+            .and_then(|macro_info| {
+                expected
+                    .contains(&macro_info.imported_name.as_str())
+                    .then_some(macro_info.imported_name.as_str())
+            })
     }
 }
 
@@ -482,12 +559,18 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
         let tag_name = tag_name.as_str();
 
         if let Some(macro_name) = self
-            .imported_macro_name(tag_name, &["Trans", "Plural", "Select", "SelectOrdinal"])
+            .imported_macro_name(
+                tag_name,
+                jsx_element_name_span(it),
+                &["Trans", "Plural", "Select", "SelectOrdinal"],
+            )
             .map(str::to_string)
         {
-            if let Some(nested_start) =
-                nested_message_macro_in_children(&it.children, self.imported_macros)
-            {
+            if let Some(nested_start) = nested_message_macro_in_children(
+                &it.children,
+                self.imported_macros,
+                self.macro_resolution,
+            ) {
                 self.fail(PalamedesError::NestedMessageMacro {
                     location: self.location(nested_start),
                 });
@@ -554,9 +637,9 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             return;
         }
 
-        if let Some(tag_name) = identifier_name(&it.tag) {
+        if let Some((tag_name, tag_span)) = identifier_name(&it.tag) {
             if let Some(macro_name) = self
-                .imported_macro_name(tag_name, &["t"])
+                .imported_macro_name(tag_name, tag_span, &["t"])
                 .map(str::to_string)
             {
                 let macro_source = self
@@ -628,9 +711,13 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
             return;
         }
 
-        if let Some(callee_name) = identifier_name(&it.callee) {
+        if let Some((callee_name, callee_span)) = identifier_name(&it.callee) {
             if let Some(macro_name) = self
-                .imported_macro_name(callee_name, &["t", "plural", "select", "selectOrdinal"])
+                .imported_macro_name(
+                    callee_name,
+                    callee_span,
+                    &["t", "plural", "select", "selectOrdinal"],
+                )
                 .map(str::to_string)
             {
                 let macro_source = self
@@ -824,12 +911,14 @@ fn jsx_children_authored_parts(children: &[JSXChild<'_>]) -> Vec<AuthoredMessage
 fn nested_message_macro_in_children<'a>(
     children: &'a [JSXChild<'a>],
     imported_macros: &HashMap<String, ImportedMacro>,
+    macro_resolution: &MacroResolution,
 ) -> Option<usize> {
-    NestedMessageMacroFinder::find_in_children(children, imported_macros)
+    NestedMessageMacroFinder::find_in_children(children, imported_macros, macro_resolution)
 }
 
 struct NestedMessageMacroFinder<'a> {
     imported_macros: &'a HashMap<String, ImportedMacro>,
+    macro_resolution: &'a MacroResolution,
     nested_start: Option<usize>,
 }
 
@@ -837,9 +926,11 @@ impl<'a> NestedMessageMacroFinder<'a> {
     fn find_in_children(
         children: &[JSXChild<'a>],
         imported_macros: &'a HashMap<String, ImportedMacro>,
+        macro_resolution: &'a MacroResolution,
     ) -> Option<usize> {
         let mut finder = Self {
             imported_macros,
+            macro_resolution,
             nested_start: None,
         };
 
@@ -860,7 +951,7 @@ impl<'a> Visit<'a> for NestedMessageMacroFinder<'a> {
             return;
         }
 
-        if is_jsx_message_macro(it, self.imported_macros) {
+        if is_jsx_message_macro(it, self.imported_macros, self.macro_resolution) {
             self.nested_start = Some(it.span.start as usize);
             return;
         }
@@ -877,6 +968,7 @@ impl<'a> Visit<'a> for NestedMessageMacroFinder<'a> {
 fn is_jsx_message_macro(
     element: &JSXElement<'_>,
     imported_macros: &HashMap<String, ImportedMacro>,
+    macro_resolution: &MacroResolution,
 ) -> bool {
     let Some(tag_name) = element.opening_element.name.get_identifier_name() else {
         return false;
@@ -884,6 +976,7 @@ fn is_jsx_message_macro(
 
     imported_macros
         .get(tag_name.as_str())
+        .filter(|_| macro_resolution.is_macro_use(jsx_element_name_span(element)))
         .is_some_and(|macro_info| {
             matches!(
                 macro_info.imported_name.as_str(),
@@ -892,9 +985,18 @@ fn is_jsx_message_macro(
         })
 }
 
-fn identifier_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
+fn jsx_element_name_span(element: &JSXElement<'_>) -> (u32, u32) {
+    let span = element.opening_element.name.span();
+
+    (span.start, span.end)
+}
+
+fn identifier_name<'a>(expr: &'a Expression<'a>) -> Option<(&'a str, (u32, u32))> {
     match expr.without_parentheses() {
-        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
+        Expression::Identifier(identifier) => Some((
+            identifier.name.as_str(),
+            (identifier.span.start, identifier.span.end),
+        )),
         _ => None,
     }
 }
@@ -2069,10 +2171,13 @@ fn analyze_source_in(
         });
     }
 
-    validate_translation_macro_scopes(&parsed.program, filename, source, |local_name, _| {
+    let macro_resolution = MacroResolution::resolve(&parsed.program, &collector);
+
+    validate_translation_macro_scopes(&parsed.program, filename, source, |local_name, span| {
         collector
             .imported_macros
             .get(local_name)
+            .filter(|_| macro_resolution.is_macro_use(span))
             .map(|macro_info| macro_info.imported_name.clone())
     })?;
 
@@ -2081,6 +2186,7 @@ fn analyze_source_in(
         source,
         &source_locator,
         &collector.imported_macros,
+        &macro_resolution,
         rules,
         reference_scopes,
     );
@@ -3206,6 +3312,105 @@ function choices() {
         assert!(source_messages.contains(&"{count, plural, one {# item} other {# items}}"));
     }
 
+    /*
+     * Extraction and the transform must classify the same uses as macro uses.
+     * `does_not_transform_shadowed_macro_locals` in `transform/tests.rs` pins
+     * this fixture from the transform side: the shadowed tag is left alone
+     * there, so extracting it would put a never-rendered message in catalogs.
+     */
+    #[test]
+    fn does_not_extract_shadowed_macro_locals() {
+        let source = r#"import { t } from "@palamedes/core/macro";
+function Example() {
+  const label = t`Upload failed`;
+  return ((t) => t`runtime tag`)(runtimeTag) && label;
+}
+"#;
+
+        let messages = extract_messages_raw(source, "test.ts").expect("extract messages");
+        let source_messages = messages
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(source_messages, vec!["Upload failed"]);
+    }
+
+    #[test]
+    fn shadowed_macro_locals_in_unsupported_shapes_do_not_fail_extraction() {
+        let cases = [
+            (
+                r#"import { t } from "@palamedes/core/macro";
+function Example(lookup) {
+  const label = t`Upload failed`;
+  return ((t) => t(lookup))(String) && label;
+}
+"#,
+                "test.ts",
+            ),
+            (
+                r#"import { select, t } from "@palamedes/core/macro";
+function Example(node) {
+  const label = t`Upload failed`;
+  return ((select) => select(node))(querySelector) && label;
+}
+"#,
+                "test.ts",
+            ),
+        ];
+
+        for (source, filename) in cases {
+            let messages =
+                extract_messages_raw(source, filename).expect("shadowed locals are not macros");
+            let source_messages = messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>();
+
+            assert_eq!(source_messages, vec!["Upload failed"]);
+        }
+    }
+
+    #[test]
+    fn shadowed_macro_locals_outside_functions_are_not_eager_macro_uses() {
+        let source = r#"import { t } from "@palamedes/core/macro";
+function Example() {
+  return t`Upload failed`;
+}
+{
+  const t = createTranslator();
+  t({ id: "local" });
+}
+"#;
+
+        let messages =
+            extract_messages_raw(source, "test.ts").expect("shadowed locals are not macros");
+        let source_messages = messages
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(source_messages, vec!["Upload failed"]);
+    }
+
+    #[test]
+    fn shadowed_jsx_macro_locals_are_not_nested_message_macros() {
+        let source = r#"import { Trans } from "@palamedes/react/macro";
+function Example({ rows }) {
+  return <Trans>Upload {getRows((Trans) => <Trans key={1} />)} failed</Trans>;
+}
+"#;
+
+        let messages =
+            extract_messages_raw(source, "test.tsx").expect("shadowed locals are not macros");
+        let source_messages = messages
+            .iter()
+            .map(|message| message.message.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(source_messages, vec!["Upload {rows} failed"]);
+    }
+
     #[test]
     fn extracts_tagged_templates() {
         let messages = extract_messages(
@@ -4186,6 +4391,46 @@ const message = t({ message })
         assert_eq!(result.file_count, 1);
         assert!(result.failed_files.is_empty());
         assert!(result.messages.is_empty());
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /*
+     * Unsupported macro syntax is fatal for the whole batch, so classifying a
+     * shadowed local as a macro use failed `pmds extract` for the entire tree.
+     */
+    #[test]
+    fn batch_extracts_files_that_shadow_a_macro_local() {
+        let root = temp_root("batch-shadowed-macro");
+        fs::create_dir_all(&root).expect("root dir");
+        let source = root.join("shadowed.ts");
+        fs::write(
+            &source,
+            r#"
+              import { t } from "@palamedes/core/macro"
+              function message(lookup) {
+                return ((t) => t(lookup))(String) && t`Hello`
+              }
+            "#,
+        )
+        .expect("source");
+
+        let result = extract_catalog_messages_from_files(ExtractCatalogMessagesRequest {
+            root_dir: root.to_string_lossy().into_owned(),
+            files: vec![source.to_string_lossy().into_owned()],
+            max_threads: None,
+        })
+        .expect("shadowed locals are not macro uses");
+
+        assert!(result.failed_files.is_empty());
+        assert_eq!(
+            result
+                .messages
+                .iter()
+                .map(|message| message.message.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Hello"]
+        );
 
         fs::remove_dir_all(root).expect("cleanup");
     }
