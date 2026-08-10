@@ -24,7 +24,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::command::Context;
-use crate::config::{ConfigPluginDeclaration, LoadedConfig};
+use crate::config::{ConfigError, ConfigPluginDeclaration, LoadedConfig};
+use crate::error::CliError;
 
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
@@ -65,9 +66,27 @@ fn run_invocation(
     invocation: &PluginInvocation,
     context: &Context,
 ) -> Result<PluginOutput, PluginFailure> {
-    let config = context
-        .load_config(invocation.config_path.as_deref())
-        .map_err(|error| PluginFailure::new("PLUGIN_CONFIG_FAILED", error.to_string()))?;
+    let config = match context.load_config(invocation.config_path.as_deref()) {
+        Ok(config) => config,
+        /*
+         * Clap routes every token it does not recognize here, so a mistyped
+         * built-in arrives as a plugin namespace. With no config anywhere up
+         * the tree nothing can declare that namespace, which makes "unknown
+         * command" the honest answer — and a usage error rather than a config
+         * one. Every other config failure (a named --config, an unreadable or
+         * invalid file) stays a config failure: there the config is the problem
+         * the user has to fix before the namespace question even arises.
+         */
+        Err(CliError::Config(ConfigError::NotFound)) if invocation.config_path.is_none() => {
+            return Err(unknown_command_failure(&invocation.namespace))
+        }
+        Err(error) => {
+            return Err(PluginFailure::new(
+                "PLUGIN_CONFIG_FAILED",
+                error.to_string(),
+            ))
+        }
+    };
     if config.plugins.is_empty() {
         return Err(PluginFailure::with_exit_code(
             "PLUGIN_NAMESPACE_UNKNOWN",
@@ -121,7 +140,19 @@ fn run_invocation(
         ));
     };
 
-    if !plugin.manifest.commands.contains_key(&invocation.command) {
+    // Only a resolved plugin makes a bare namespace a missing-command mistake;
+    // before that it is indistinguishable from a mistyped built-in.
+    let Some(command) = invocation.command.as_deref() else {
+        return Err(PluginFailure::new(
+            "PLUGIN_COMMAND_REQUIRED",
+            format!(
+                "Plugin namespace \"{}\" requires a command name.",
+                invocation.namespace
+            ),
+        ));
+    };
+
+    if !plugin.manifest.commands.contains_key(command) {
         let available = plugin
             .manifest
             .commands
@@ -134,7 +165,7 @@ fn run_invocation(
             format!(
                 "Plugin \"{}\" has no command \"{}\". Available commands: {}.",
                 invocation.namespace,
-                invocation.command,
+                command,
                 if available.is_empty() {
                     "none"
                 } else {
@@ -148,7 +179,7 @@ fn run_invocation(
         "palamedesBinaryPluginProtocol": PROTOCOL_VERSION,
         "hostVersion": env!("CARGO_PKG_VERSION"),
         "kind": "run",
-        "command": invocation.command,
+        "command": command,
         "args": invocation.command_args,
         "options": plugin.options,
         "json": invocation.json,
@@ -884,9 +915,13 @@ fn plugin_catalogs(config: &LoadedConfig) -> Value {
                     "format": catalog.format,
                     "include": catalog.include,
                     "exclude": catalog.exclude,
+                    // The protocol documents these as real files, so they carry
+                    // the storage extension the extraction pass writes.
                     "locales": config.locales.iter().map(|locale| json!({
                         "locale": locale,
-                        "path": config.root_dir.join(catalog.path.replace("{locale}", locale)),
+                        "path": config
+                            .resolve_catalog_path(&catalog.path, locale)
+                            .with_extension(catalog.format.extension()),
                     })).collect::<Vec<_>>(),
                 })
             })
@@ -992,6 +1027,48 @@ fn exit_code(status: ExitStatus) -> u8 {
     1
 }
 
+fn unknown_command_failure(namespace: &str) -> PluginFailure {
+    let suggestion = nearest_builtin_command(namespace)
+        .map(|name| format!(" Did you mean \"{name}\"?"))
+        .unwrap_or_default();
+    PluginFailure::with_exit_code(
+        "COMMAND_UNKNOWN",
+        format!(
+            "Unknown command \"{namespace}\".{suggestion} No Palamedes config was found, so no configured binary plugin declares it either. Run \"pmds --help\" for the built-in commands."
+        ),
+        2,
+    )
+}
+
+/// The closest built-in command name within two edits, if any. Clap owns this
+/// for tokens it recognizes as near-misses of a subcommand, but an external
+/// subcommand swallows every unknown token before Clap gets there.
+fn nearest_builtin_command(namespace: &str) -> Option<String> {
+    reserved_plugin_namespaces()
+        .into_iter()
+        .map(|name| (edit_distance(namespace, &name), name))
+        .filter(|(distance, _)| *distance <= 2)
+        .min_by_key(|(distance, _)| *distance)
+        .map(|(_, name)| name)
+}
+
+fn edit_distance(left: &str, right: &str) -> usize {
+    let right: Vec<char> = right.chars().collect();
+    let mut previous: Vec<usize> = (0..=right.len()).collect();
+    let mut current = vec![0; right.len() + 1];
+    for (row, left_character) in left.chars().enumerate() {
+        current[0] = row + 1;
+        for (column, right_character) in right.iter().enumerate() {
+            let substitution = usize::from(left_character != *right_character);
+            current[column + 1] = (previous[column] + substitution)
+                .min(previous[column + 1] + 1)
+                .min(current[column] + 1);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+    previous[right.len()]
+}
+
 fn protocol_failure(resolved: &ResolvedPlugin, detail: impl AsRef<str>) -> PluginFailure {
     PluginFailure::new(
         "PLUGIN_BINARY_PROTOCOL",
@@ -1006,7 +1083,9 @@ fn protocol_failure(resolved: &ResolvedPlugin, detail: impl AsRef<str>) -> Plugi
 #[derive(Debug)]
 struct PluginInvocation {
     namespace: String,
-    command: String,
+    /// Absent for a bare namespace. Whether that is a missing command or an
+    /// unknown one only becomes clear once the config has been consulted.
+    command: Option<String>,
     command_args: Vec<String>,
     config_path: Option<PathBuf>,
     json: bool,
@@ -1017,12 +1096,7 @@ impl PluginInvocation {
         let namespace = args.first().cloned().ok_or_else(|| {
             PluginFailure::new("PLUGIN_ARGUMENT_INVALID", "Plugin namespace is required.")
         })?;
-        let command = args.get(1).cloned().ok_or_else(|| {
-            PluginFailure::new(
-                "PLUGIN_COMMAND_REQUIRED",
-                format!("Plugin namespace \"{namespace}\" requires a command name."),
-            )
-        })?;
+        let command = args.get(1).cloned();
         let mut command_args = Vec::new();
         let mut config_path = None;
         let mut json = false;
@@ -1090,7 +1164,7 @@ impl From<&PluginInvocation> for InvocationHint {
     fn from(invocation: &PluginInvocation) -> Self {
         Self {
             namespace: Some(invocation.namespace.clone()),
-            command: Some(invocation.command.clone()),
+            command: invocation.command.clone(),
             json: invocation.json,
         }
     }
@@ -1260,10 +1334,11 @@ mod tests {
 
     use super::{
         command_namespace_tokens, finish_run, is_kebab_name, matches_constraint, parse_event,
-        reserved_plugin_namespaces, resolve_binary_plugin, validate_manifest,
+        plugin_catalogs, reserved_plugin_namespaces, resolve_binary_plugin, validate_manifest,
         validate_manifest_with_reserved_namespaces, BinaryInvocation, ManifestCommand, PluginEvent,
         PluginInvocation, PluginManifest, ResolvedPlugin, PROTOCOL_VERSION,
     };
+    use crate::config::load_config;
 
     #[test]
     fn reserved_plugin_namespaces_match_the_built_clap_command_tree() {
@@ -1344,7 +1419,7 @@ mod tests {
         .expect("invocation");
 
         assert_eq!(invocation.namespace, "acme");
-        assert_eq!(invocation.command, "inspect");
+        assert_eq!(invocation.command.as_deref(), Some("inspect"));
         assert_eq!(invocation.command_args, ["first", "--json"]);
         assert_eq!(
             invocation.config_path.as_deref(),
@@ -1629,6 +1704,43 @@ plugins:
         assert_eq!(registry.skipped.len(), 1);
         assert_eq!(registry.skipped[0].specifier, "./missing");
         assert_eq!(registry.skipped[0].failure.code, "PLUGIN_MISSING");
+    }
+
+    /*
+     * The protocol documents catalogs[].locales[].path as the catalog file, so
+     * a plugin has to be able to open it. Without the storage extension every
+     * such open is an ENOENT the plugin author has to work around.
+     */
+    #[test]
+    fn per_locale_catalog_paths_carry_the_storage_extension() {
+        let root = temp_dir("plugin-catalog-paths");
+        let config_path = root.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en, de]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+  - path: locales/{locale}/lines
+    format: fcl
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let config = load_config(&root, Some(&config_path)).expect("load config");
+
+        let catalogs = plugin_catalogs(&config);
+
+        assert_eq!(
+            catalogs[0]["locales"][1]["path"],
+            json!(root.join("locales/de/messages.po")),
+        );
+        assert_eq!(
+            catalogs[1]["locales"][0]["path"],
+            json!(root.join("locales/en/lines.fcl")),
+        );
+        assert_eq!(catalogs[0]["path"], json!("locales/{locale}/messages"));
     }
 
     #[test]

@@ -5,6 +5,12 @@ import { execFileSync } from "node:child_process"
 const packageDir = process.cwd()
 const repoRoot = path.resolve(import.meta.dirname, "../../..")
 const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"))
+
+// Native packages ship via `npm publish`, which — unlike `pnpm publish` — does
+// not embed the workspace-root LICENSE, so a declared "license": "MIT" would
+// otherwise reach the registry without any license text.
+copyFileSync(path.join(repoRoot, "LICENSE"), path.join(packageDir, "LICENSE"))
+
 const targets = {
   "@palamedes/cli-darwin-arm64": {
     platform: "darwin",

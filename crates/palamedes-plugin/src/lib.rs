@@ -437,8 +437,8 @@ mod tests {
                 "include": ["src"],
                 "exclude": [],
                 "locales": [
-                    { "locale": "en", "path": "/project/locales/en/messages" },
-                    { "locale": "de", "path": "/project/locales/de/messages" }
+                    { "locale": "en", "path": "/project/locales/en/messages.po" },
+                    { "locale": "de", "path": "/project/locales/de/messages.po" }
                 ]
             }]
         })
@@ -582,7 +582,7 @@ mod tests {
         assert_eq!(request.catalogs[0].locales[1].locale, "de");
         assert_eq!(
             request.catalogs[0].locales[1].path,
-            "/project/locales/de/messages"
+            "/project/locales/de/messages.po"
         );
     }
 }

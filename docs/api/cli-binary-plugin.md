@@ -96,11 +96,15 @@ A `run` request carries the invocation and resolved project context:
       "format": "po",
       "include": ["src"],
       "exclude": [],
-      "locales": [{ "locale": "en", "path": "/project/locales/en/messages" }]
+      "locales": [{ "locale": "en", "path": "/project/locales/en/messages.po" }]
     }
   ]
 }
 ```
+
+`catalogs[].path` is the configured `{locale}` pattern; each
+`catalogs[].locales[].path` is the absolute file the extraction pass writes,
+storage extension included.
 
 The plugin emits zero or more diagnostic and output events followed by at most
 one result event:

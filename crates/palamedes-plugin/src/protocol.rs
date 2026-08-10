@@ -87,7 +87,7 @@ fn default_format() -> String {
 pub struct LocaleCatalog {
     /// The locale identifier, e.g. `de`.
     pub locale: String,
-    /// The absolute catalog path for this locale.
+    /// The absolute catalog path for this locale, storage extension included.
     pub path: String,
 }
 

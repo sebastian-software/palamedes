@@ -311,6 +311,11 @@ PO or FCL. This one driver supports mixed PO/FCL repositories. Outside a merge
 driver, omit `--path` and format inference continues to use the input/output
 catalog paths.
 
+The driver merges even where no data config is discoverable — including
+projects configured through `palamedes.config.ts` — because a registered driver
+runs wherever the conflicted worktree is. Configured PO output options and
+`source-locale` are then not applied, and the driver says so on stderr.
+
 ## `pmds catalog convert`
 
 Converts supported PO catalogs to Ferrocat Catalog Lines (FCL). Translator

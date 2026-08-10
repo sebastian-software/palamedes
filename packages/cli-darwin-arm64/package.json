@@ -15,6 +15,7 @@
     "pmds": "./bin/pmds"
   },
   "files": [
+    "LICENSE",
     "README.md",
     "bin/"
   ],
