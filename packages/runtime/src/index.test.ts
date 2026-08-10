@@ -319,4 +319,33 @@ describe("registerMessages", () => {
       "cannot load generated graph-split messages"
     )
   })
+
+  it("rejects a non-loadable instance before starting any lazy import", async () => {
+    // A resource created before that check is cached but never awaited, so its
+    // rejection would surface as a process-killing unhandled rejection.
+    const load = vi
+      .fn<() => Promise<Record<string, string>>>()
+      .mockRejectedValue(new Error("import failure"))
+    registerMessageLoaders("reg-server-unstarted", { "reg-server-unstarted": load })
+
+    await expect(
+      loadRegisteredMessages(createTestI18n("reg-server-unstarted"), "reg-server-unstarted")
+    ).rejects.toThrow("cannot load generated graph-split messages")
+
+    expect(load).not.toHaveBeenCalled()
+  })
+
+  it("replaces a keyed eager registration when its module evaluates again", async () => {
+    // Dev-server SSR re-evaluates an invalidated sidecar in the same process;
+    // without replacement a removed message id keeps resolving from the copy
+    // buffered before the edit.
+    registerMessages({ "reg-eager-key": { keyP: "old" } }, "sidecar-a")
+    registerMessages({ "reg-eager-key": { keyP: "new" } }, "sidecar-a")
+    registerMessages({ "reg-eager-key": { keyQ: "other" } }, "sidecar-b")
+
+    const i18n = createLoadableI18n("reg-eager-key")
+    await loadRegisteredMessages(i18n, "reg-eager-key")
+
+    expect(i18n.loaded["reg-eager-key"]).toEqual([{ keyP: "new" }, { keyQ: "other" }])
+  })
 })

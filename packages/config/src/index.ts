@@ -398,7 +398,9 @@ export function resolveCatalogPath(
   catalogPath: string,
   locale: string
 ): string {
-  return path.resolve(config.rootDir, catalogPath.replace("{locale}", locale))
+  // Every placeholder occurrence, matching the Rust resolver's `str::replace`
+  // and the Next loader; a path may name the locale in a directory and a file.
+  return path.resolve(config.rootDir, catalogPath.replaceAll("{locale}", locale))
 }
 
 export function resolveConfigPattern(

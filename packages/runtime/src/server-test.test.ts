@@ -1,10 +1,14 @@
+import { readFileSync } from "node:fs"
+
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import * as serverTest from "./server-test"
 import {
   SERVER_I18N_TEST_BARRIER_REACHED_HEADER,
   markServerI18nTestBarrierReached,
   waitForServerI18nTestBarrier,
 } from "./server-test"
+import * as serverTestUnavailable from "./server-test-unavailable"
 
 const TEST_BARRIER_HEADER = "x-palamedes-i18n-test-barrier"
 const TEST_BARRIERS_KEY = Symbol.for("palamedes.runtime.serverI18nTestBarriers")
@@ -129,5 +133,40 @@ describe("server i18n test barrier", () => {
     // barrier cannot report a false-positive isolation result.
     markServerI18nTestBarrierReached(barrierRequest("marked"), headers)
     expect(headers.get(SERVER_I18N_TEST_BARRIER_REACHED_HEADER)).toBe("marked")
+  })
+})
+
+describe("@palamedes/runtime/server/test fallback", () => {
+  it("mirrors every export, so non-Node resolution fails with the curated message", () => {
+    // A missing binding here would fail at module link time instead, which
+    // hides why the subpath is unavailable.
+    expect(Object.keys(serverTestUnavailable).sort()).toStrictEqual(Object.keys(serverTest).sort())
+    expect(serverTestUnavailable.SERVER_I18N_TEST_BARRIER_REACHED_HEADER).toBe(
+      SERVER_I18N_TEST_BARRIER_REACHED_HEADER
+    )
+    expect(() =>
+      serverTestUnavailable.waitForServerI18nTestBarrier(barrierRequest("fallback"))
+    ).toThrow(/only available in Node\.js server runtimes/)
+    expect(() =>
+      serverTestUnavailable.markServerI18nTestBarrierReached(
+        barrierRequest("fallback"),
+        new Headers()
+      )
+    ).toThrow(/only available in Node\.js server runtimes/)
+  })
+
+  it("maps the non-Node conditions of ./server/test to that fallback", () => {
+    const packageJson = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8")
+    ) as {
+      exports: Record<string, { browser: unknown; default: unknown }>
+    }
+    const fallback = {
+      import: "./dist/server-test-unavailable.mjs",
+      require: "./dist/server-test-unavailable.cjs",
+    }
+
+    expect(packageJson.exports["./server/test"]?.browser).toStrictEqual(fallback)
+    expect(packageJson.exports["./server/test"]?.default).toStrictEqual(fallback)
   })
 })

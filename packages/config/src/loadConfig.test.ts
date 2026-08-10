@@ -4,7 +4,7 @@ import os from "node:os"
 
 import { afterEach, describe, expect, it } from "vitest"
 
-import { loadPalamedesConfig, loadPalamedesConfigSync } from "./index"
+import { loadPalamedesConfig, loadPalamedesConfigSync, resolveCatalogPath } from "./index"
 
 const tempDirs: string[] = []
 
@@ -569,6 +569,16 @@ describe("loadPalamedesConfig", () => {
 
     await expect(loadPalamedesConfig({ cwd: fixtureDir })).rejects.toThrow(
       /"plugins\[0\]" must be a non-empty package specifier or \[specifier, options\]/
+    )
+  })
+})
+
+describe("resolveCatalogPath", () => {
+  it("replaces every {locale} placeholder", () => {
+    // The Rust resolver and the Next loader both replace all occurrences; a
+    // path may name the locale in a directory and in the file name.
+    expect(resolveCatalogPath({ rootDir: "/repo" }, "locales/{locale}/{locale}", "de")).toBe(
+      path.resolve("/repo/locales/de/de")
     )
   })
 })

@@ -12,6 +12,7 @@ import type { Plugin, FilterPattern } from "vite"
 import { createFilter, version as viteVersion } from "vite"
 import {
   loadPalamedesConfig,
+  resolveCatalogPath,
   type PalamedesCatalogConfig,
   type LoadedPalamedesConfig,
   type PalamedesMdxConfig,
@@ -136,7 +137,7 @@ function catalogResourcePath(
   locale: string
 ): string {
   const extension = catalog.format ?? "po"
-  const configuredPath = path.resolve(cfg.rootDir, catalog.path.replace("{locale}", locale))
+  const configuredPath = resolveCatalogPath(cfg, catalog.path, locale)
   const parsed = path.parse(configuredPath)
   return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
 }
@@ -625,17 +626,20 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   if (graphSplitting) {
     type SidecarEntry = { sourceId: string; compiledIds: string[] }
 
+    // `warn` is required rather than optional: an omitted channel would
+    // silently disable the `failOnMissing` gate below along with the warning,
+    // and every caller has a plugin context that provides one.
     function compileSidecarLocale(
       cfg: LoadedPalamedesConfig,
       entry: SidecarEntry,
       locale: string,
-      context: { addWatchFile?: (file: string) => void; warn?: (message: string) => void }
+      context: { addWatchFile?: (file: string) => void; warn: (message: string) => void }
     ): Record<string, string> | null {
       const catalogs = cfg.catalogs.filter((catalog) =>
         catalogMatchesSource(cfg, catalog, entry.sourceId)
       )
       if (catalogs.length === 0) {
-        context.warn?.(
+        context.warn(
           `Palamedes graph splitting: ${entry.sourceId} uses messages but is not included in any configured catalog; its messages will be missing at runtime.`
         )
         return null
@@ -651,7 +655,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           entry.compiledIds
         )
         result.watchFiles.forEach((file: string) => context.addWatchFile?.(file))
-        if (result.missing.length > 0 && context.warn) {
+        if (result.missing.length > 0) {
           const message =
             `${createMissingErrorMessage(locale, result.missing)}\n\n` +
             `Referenced by ${entry.sourceId}.`
@@ -736,12 +740,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
               `import { locale as l, messages as m } from "${BARE_MESSAGES_PREFIX}${key}";\n` +
               `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
               `import { registerMessages } from "@palamedes/runtime";\n` +
-              `registerMessages({ [l]: defineCompiledCatalog(m) });\n`
+              `registerMessages({ [l]: defineCompiledCatalog(m) }, ${JSON.stringify(key)});\n`
             return { code: boundCode, map: null, moduleSideEffects: true }
           }
 
           // Embedded binding: import each branded per-locale module and
-          // register it.
+          // register it under the sidecar key, so a dev-server SSR
+          // re-evaluation after a catalog edit replaces this registration
+          // instead of buffering another copy alongside the stale one.
           const imports = locales
             .map(
               (localeName, index) =>
@@ -754,7 +760,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           const code =
             `${imports}\n` +
             `import { registerMessages } from "@palamedes/runtime";\n` +
-            `registerMessages({ ${registration} });\n`
+            `registerMessages({ ${registration} }, ${JSON.stringify(key)});\n`
           return { code, map: null, moduleSideEffects: true }
         }
 
@@ -793,7 +799,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const sortedSidecars = [...sidecarModules.entries()].sort(([a], [b]) => a.localeCompare(b))
         for (const [key, entry] of sortedSidecars) {
           for (const locale of locales) {
-            const selected = compileSidecarLocale(cfg, entry, locale, {})
+            const selected = compileSidecarLocale(cfg, entry, locale, {
+              warn: (message) => this.warn(message),
+            })
             const asset = bareMessageAsset(renderCatalogModule(selected ?? {}), locale)
             const contentHash = createHash("sha256").update(asset).digest("hex").slice(0, 8)
             const fileName = `assets/palamedes-m-${key}.${locale}-${contentHash}.js`
