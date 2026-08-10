@@ -1203,8 +1203,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/waku
       hono:
-        specifier: ^4.13.0
-        version: 4.13.0
+        specifier: ^4.13.1
+        version: 4.13.1
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -8289,10 +8289,6 @@ packages:
 
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
-
-  hono@4.13.0:
-    resolution: {integrity: sha512-jhunvfHWxd7J5EFfSgH4xsYJzSe/lfqbUCxiyyeaQasUsXeEHXtzVid+7EOGByc5JnFa23SSFL3Y2RV/z1T+eQ==}
-    engines: {node: '>=16.9.0'}
 
   hono@4.13.1:
     resolution: {integrity: sha512-kdJoFVv2xmayw6cY09H7AbMJMt8Jn5jdlEdXsP7AGBdF2DIptVlKlOLKXP41yPip4/a3yQPv9gVcJYI8YY04dw==}
@@ -18168,8 +18164,6 @@ snapshots:
   hermes-parser@0.25.1:
     dependencies:
       hermes-estree: 0.25.1
-
-  hono@4.13.0: {}
 
   hono@4.13.1: {}
 
