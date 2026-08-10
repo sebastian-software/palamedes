@@ -56,19 +56,3 @@ export function initializeClientI18n(locale: Locale) {
   clientI18n.activate(locale)
   setClientI18n(clientI18n)
 }
-
-function bootstrapClientI18n() {
-  if (typeof window === "undefined") {
-    return
-  }
-
-  // Resolve the locale authoritatively from the current TLD so the very
-  // first client render matches the SSR output.
-  const { locale } = locales.resolve({
-    strategy: "tld",
-    requestHost: window.location.host,
-  })
-  initializeClientI18n(locale)
-}
-
-bootstrapClientI18n()
