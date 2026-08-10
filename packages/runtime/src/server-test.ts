@@ -10,7 +10,6 @@ const TEST_BARRIERS_KEY = Symbol.for("palamedes.runtime.serverI18nTestBarriers")
 
 type Barrier = {
   arrivals: number
-  reject(error: Error): void
   resolve(): void
   timeout: ReturnType<typeof setTimeout>
 }
@@ -69,7 +68,6 @@ export function waitForServerI18nTestBarrier(request: Request): Promise<void> | 
   return new Promise((resolve, reject) => {
     const barrier: Barrier = {
       arrivals: 1,
-      reject,
       resolve,
       timeout: setTimeout(() => {
         if (barriers.get(barrierId) !== barrier) return

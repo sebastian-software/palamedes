@@ -168,6 +168,16 @@ const inline = t`${status}` // palamedes-lint-disable-line pmds/no-placeholder-o
 
 Unknown codes, directives without a code, and valid suppressions that no longer
 match a finding are reported by `pmds lint`.
+
+`palamedes-lint-disable-*` directives are consumed by `pmds lint` only. The
+ESLint and Oxlint adapter in [`@palamedes/eslint-plugin`](./api/eslint-plugin.md)
+leaves suppression handling to its host, so the same finding is silenced with
+`eslint-disable-next-line palamedes/<rule>` or
+`oxlint-disable-next-line palamedes/<rule>` there. The two forms do not
+transfer: a project running both lanes needs the directive each lane
+understands. The rule names differ too — the CLI reports the native diagnostic
+codes (`pmds/...`), while the adapter exposes them under its host plugin
+namespace (`palamedes/...`).
 The default `.palamedes/extract-cache.json` stores compatible messages and
 diagnostics together, so `extract` and `lint` can reuse the same native parse.
 Lint follows extraction's bounded parallel read/parse model. Workers only

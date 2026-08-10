@@ -8,7 +8,8 @@ well-scoped changes are easiest to review.
 
 - Node.js `>=22.22`
 - pnpm via Corepack
-- Rust stable toolchain
+- Rust — `rust-toolchain.toml` pins the workspace MSRV, so `rustup` installs it
+  on the first `cargo` invocation; make sure `rustup` itself is up to date
 - GitHub CLI if you work on issue or PR automation locally
 
 ```bash

@@ -60,6 +60,36 @@ describe("workflow contracts", () => {
     expect(vitePlugin.scripts.test).toBe("vitest run --globals")
   })
 
+  it("keeps the hot CI lane cancellable, least-privileged, and cached", async () => {
+    const ci = await readRepositoryFile(".github/workflows/ci.yml")
+    const validate = job(ci, "validate", "validate-rust")
+
+    expect(ci).toContain("permissions:\n  contents: read")
+    expect(ci).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}")
+    // Both caches sit in the validate job because `pnpm build` drives cargo.
+    expect(validate).toContain("cache: pnpm")
+    expect(validate).toContain("uses: Swatinem/rust-cache@v2")
+    expect(validate.indexOf("uses: Swatinem/rust-cache@v2")).toBeLessThan(
+      validate.indexOf("run: pnpm install --frozen-lockfile")
+    )
+  })
+
+  it("runs the Rust workspace tests on every shipped host platform", async () => {
+    const [ci, toolchain] = await Promise.all([
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile("rust-toolchain.toml"),
+    ])
+    const validateRust = job(ci, "validate-rust")
+
+    for (const os of ["ubuntu-24.04", "windows-2025", "macos-14"]) {
+      expect(validateRust).toContain(`- os: ${os}`)
+    }
+    expect(validateRust).toContain("run: cargo test --workspace --locked")
+    // Format and lint are platform-independent; only the tests fan out.
+    expect(validateRust).toContain("if: ${{ matrix.lint }}")
+    expect(toolchain).toContain('channel = "1.95"')
+  })
+
   it("runs the React Router RSC request-isolation proof on Linux", async () => {
     const ci = await readRepositoryFile(".github/workflows/ci.yml")
     const validate = job(ci, "validate", "validate-rust")

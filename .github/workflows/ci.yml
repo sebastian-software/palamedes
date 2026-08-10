@@ -9,6 +9,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   validate:
     name: validate (${{ matrix.os }}, Node ${{ matrix.node }})
@@ -42,8 +49,19 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
+      - name: Restore pnpm cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      # `pnpm build` shells out to cargo for the native packages, so every
+      # validate leg would otherwise rebuild the oxc workspace from scratch.
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -135,13 +153,27 @@ jobs:
         run: pnpm check-types
 
   validate-rust:
-    runs-on: ubuntu-24.04
+    name: validate-rust (${{ matrix.os }}, Rust ${{ matrix.toolchain }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        toolchain:
-          - stable
-          - "1.95"
+        # The core reads and writes project files, so its path handling ships on
+        # Windows and macOS too. Format and lint are platform-independent and
+        # stay on the Linux legs; only the tests fan out.
+        include:
+          - os: ubuntu-24.04
+            toolchain: stable
+            lint: true
+          - os: ubuntu-24.04
+            toolchain: "1.95"
+            lint: true
+          - os: windows-2025
+            toolchain: stable
+            lint: false
+          - os: macos-14
+            toolchain: stable
+            lint: false
 
     steps:
       - name: Check out repository
@@ -162,9 +194,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check Rust formatting
+        if: ${{ matrix.lint }}
         run: cargo fmt --all --check
 
       - name: Run Rust lints
+        if: ${{ matrix.lint }}
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Run Rust tests

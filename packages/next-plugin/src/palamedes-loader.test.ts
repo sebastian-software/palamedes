@@ -527,6 +527,68 @@ describe("palamedes-loader.cjs", () => {
     }
   })
 
+  it.each(["degrade", "throw"] as const)(
+    "registers catalog fragments in loader-group order (%s mode)",
+    async (clientFragmentFailureMode) => {
+      transformPalamedesMacros.mockReturnValue({
+        code: "globalThis.__pmds_test_body_ran = true;",
+        map: null,
+        compiledIds: ["id-a"],
+      })
+      loadPalamedesConfigSync.mockReturnValue({
+        configPath: "/repo/palamedes.yaml",
+        rootDir: "/repo",
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [
+          { path: "src/locales/{locale}", include: ["src/**/*.tsx"] },
+          { path: "src/overrides/{locale}", include: ["src/**/*.tsx"] },
+        ],
+      })
+
+      const originalDocument = globalThis.document
+      const originalBodyRan = globalThis.__pmds_test_body_ran
+      const loaded: Array<Record<string, unknown>> = []
+      const i18n = {
+        load(_locale: string, messages: Record<string, unknown>) {
+          loaded.push(messages)
+        },
+      }
+
+      try {
+        globalThis.document = { documentElement: { lang: "de" } } as Document
+        const output = await runLoader({
+          clientMessageSplitting: true,
+          clientFragmentFailureMode,
+        })
+        await expect(
+          executeGeneratedClientModule(output, async (specifier) => {
+            if (specifier === "@palamedes/core/compiled") return { createI18n: () => i18n }
+            if (specifier === "@palamedes/runtime") return { initializeClientI18n: () => i18n }
+            // The first loader group resolves last, so a registration order that
+            // followed resolution order would invert the two catalogs.
+            if (specifier.includes("./locales/de.po?palamedes-selected=")) {
+              await new Promise((resolve) => setTimeout(resolve, 10))
+              return { messages: { greeting: "from the base catalog" } }
+            }
+            if (specifier.includes("./overrides/de.po?palamedes-selected=")) {
+              return { messages: { greeting: "from the override catalog" } }
+            }
+            throw new Error(`Unexpected import: ${specifier}`)
+          })
+        ).resolves.toBeUndefined()
+
+        expect(loaded).toEqual([
+          { greeting: "from the base catalog" },
+          { greeting: "from the override catalog" },
+        ])
+      } finally {
+        restoreGlobal("document", originalDocument)
+        restoreGlobal("__pmds_test_body_ran", originalBodyRan)
+      }
+    }
+  )
+
   it("continues production hydration when diagnostic logging throws", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "globalThis.__pmds_test_body_ran = true;",

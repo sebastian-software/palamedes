@@ -74,4 +74,25 @@ export function assertExampleMatrix(matrix) {
     0,
     "Vite has no screenshot artifact"
   )
+
+  /*
+   * The browser layer runs on a weekly cron, so the smoke checks are what
+   * asserts the served document locale on a pull request. Requiring the key to
+   * be present — `null` for a response that has no document element — keeps a
+   * client-only regression from hiding as one more check that simply omitted
+   * it, which is how the waku families drifted (#635, #667).
+   */
+  for (const example of matrix) {
+    for (const check of example.smokeChecks ?? []) {
+      assert.ok(
+        Object.hasOwn(check, "htmlLang"),
+        `${example.id} smoke check ${check.path} must declare htmlLang (use null for a non-document response)`
+      )
+      assert.ok(
+        check.htmlLang === null ||
+          (typeof check.htmlLang === "string" && check.htmlLang.length > 0),
+        `${example.id} smoke check ${check.path} must set htmlLang to a locale or null`
+      )
+    }
+  }
 }
