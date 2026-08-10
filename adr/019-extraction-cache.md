@@ -36,25 +36,31 @@ variant was not in the codebase.
 
 A later implementation adopted a broader, deliberately textual candidate gate.
 For non-MDX files, the gate treats a source as a parse candidate when its text
-contains either `@palamedes` or `i18n`; otherwise it returns no messages or
-source diagnostics without parsing. The `i18n` substring is the necessary
-correction to an `@palamedes`-only check: supported runtime forms include the
-call `i18n._(...)` and the tagged template ``i18n.t`...` ``; neither has a
-macro import. This is a substring
-check, not a match for an `@palamedes/i18n` import or a claim that the source
-is syntactically valid.
+contains `@palamedes`, `i18n`, or `palamedes-lint-`; otherwise it returns no
+messages or source diagnostics without parsing. The `i18n` substring is the
+necessary correction to an `@palamedes`-only check: supported runtime forms
+include the call `i18n._(...)` and the tagged template ``i18n.t`...` ``; neither
+has a macro import. `palamedes-lint-` keeps a file whose only Palamedes trace is
+a suppression comment on the parsed path, so the suppression is still read. This
+is a substring check, not a match for an `@palamedes/i18n` import or a claim
+that the source is syntactically valid.
 
-The policy appears in three source-analysis paths, whose symbols are the
+The policy appears in two source-analysis paths, whose symbols are the
 authoritative definition:
 
 - `extract_one_file` applies it before parsing in batch extraction, which is
   used by `pmds extract` and the native binding.
-- `analyze_source_file_cached` applies it while reading an uncached file for
-  shared source analysis, including `pmds lint`.
 - `analyze_source_in` applies a narrower, post-parse gate: after macro-import
   collection, a file with no imported macro and no `i18n` substring skips the
   remaining AST walks and line-index construction. Parse diagnostics therefore
   remain unchanged on this path.
+
+Shared source analysis — `analyze_source_file_cached` and the batch
+`analyze_source_files_cached` behind it, which back `pmds lint` — has no
+pre-parse gate of its own and reaches only the post-parse one above. It
+therefore parses marker-free files that batch extraction skips. That is the
+conservative direction: it costs parse work on the lint path and produces
+identical output.
 
 Batch extraction accepts the diagnostic trade-off that the 27 July alternative
 identified: a syntax-broken, marker-free non-MDX file is deliberately skipped
