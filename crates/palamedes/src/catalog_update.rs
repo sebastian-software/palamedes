@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -472,30 +473,58 @@ fn preserve_existing_po_apostrophe_identities_from_content(
     let extracted_identities = request
         .messages
         .iter()
-        .map(|message| (message.message.clone(), message.context.clone()))
-        .collect::<BTreeSet<_>>();
+        .map(|message| (message.message.as_str(), message.context.as_deref()))
+        .collect::<HashSet<_>>();
+    let existing_identities = existing
+        .iter()
+        .map(|(msgid, msgctxt)| (msgid.as_str(), msgctxt.as_deref()))
+        .collect::<HashSet<_>>();
+    let migrating = request
+        .messages
+        .iter()
+        .enumerate()
+        .filter(|(_, message)| {
+            !existing_identities.contains(&(message.message.as_str(), message.context.as_deref()))
+        })
+        .collect::<Vec<_>>();
+
+    /*
+     * Canonicalizing every migration target once, rather than once per
+     * (message, entry) pair, is what keeps this path off the quadratic scan it
+     * used to run for any corpus containing an apostrophe. Entries without one
+     * are indexed too: the equivalence below rejects a pair only when *neither*
+     * side has an apostrophe, so an entry's own spelling does not decide
+     * whether it can be a target.
+     */
+    let mut canonical_identities = HashMap::<(Cow<'_, str>, Option<&str>), Vec<usize>>::new();
+    if !migrating.is_empty() {
+        for (index, (msgid, msgctxt)) in existing.iter().enumerate() {
+            if extracted_identities.contains(&(msgid.as_str(), msgctxt.as_deref())) {
+                continue;
+            }
+            canonical_identities
+                .entry((apostrophe_canonical_form(msgid), msgctxt.as_deref()))
+                .or_default()
+                .push(index);
+        }
+    }
 
     let mut proposed = Vec::new();
-    for (message_index, message) in request.messages.iter().enumerate() {
-        let exact = existing
-            .iter()
-            .any(|identity| identity.0 == message.message && identity.1 == message.context);
-        if exact {
+    for (message_index, message) in migrating {
+        let key = (
+            apostrophe_canonical_form(&message.message),
+            message.context.as_deref(),
+        );
+        let Some(candidates) = canonical_identities.get(&key) else {
             continue;
-        }
-
-        let candidates = existing
+        };
+        let has_apostrophe = message.message.contains('\'');
+        let candidates = candidates
             .iter()
-            .enumerate()
-            .filter(|(_, identity)| {
-                identity.1 == message.context
-                    && !extracted_identities.contains(identity)
-                    && apostrophe_canonical_equivalent(&identity.0, &message.message)
-            })
-            .map(|(index, _)| index)
+            .filter(|index| has_apostrophe || existing[**index].0.contains('\''))
             .collect::<Vec<_>>();
         if let [existing_index] = candidates.as_slice() {
-            proposed.push((message_index, *existing_index));
+            proposed.push((message_index, **existing_index));
         }
     }
 
@@ -521,16 +550,9 @@ fn preserve_existing_po_apostrophe_identities_from_content(
     Ok(())
 }
 
-fn apostrophe_canonical_equivalent(left: &str, right: &str) -> bool {
-    if left == right || (!left.contains('\'') && !right.contains('\'')) {
-        return false;
-    }
-
+fn apostrophe_canonical_form(value: &str) -> Cow<'_, str> {
     ferrocat::canonicalize_icu_with_policy(
-        left,
-        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
-    ) == ferrocat::canonicalize_icu_with_policy(
-        right,
+        value,
         ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
     )
 }
@@ -1769,6 +1791,43 @@ msgstr "Zebra""#;
         assert_eq!(
             std::fs::read_to_string(path).expect("read repeated output"),
             output
+        );
+    }
+
+    /// An entry another extracted message already claims is not a migration
+    /// target, so the equivalent spelling enters the catalog as its own entry.
+    #[test]
+    fn apostrophe_migration_skips_entries_another_extracted_message_claims() {
+        let path = temp_file("apostrophe-claimed-entry");
+        std::fs::write(&path, "msgid \"don't\"\nmsgstr \"exact translation\"\n")
+            .expect("write existing catalog");
+
+        update_catalog_file(CatalogUpdateRequest {
+            target_path: path.clone(),
+            locale: "de".to_owned(),
+            source_locale: "en".to_owned(),
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: vec![
+                message("don't", None, "src/One.tsx"),
+                message("don''t", None, "src/Two.tsx"),
+            ],
+        })
+        .expect("update claimed identity");
+
+        let po =
+            parse_po(&std::fs::read_to_string(path).expect("read output")).expect("parse output");
+        let entries = po
+            .items
+            .iter()
+            .map(|item| (item.msgid.as_str(), item.msgstr.first().map(String::as_str)))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            entries,
+            vec![("don''t", Some("")), ("don't", Some("exact translation"))]
         );
     }
 
