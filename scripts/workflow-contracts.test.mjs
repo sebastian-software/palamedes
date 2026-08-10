@@ -121,6 +121,7 @@ describe("workflow contracts", () => {
     const publish = await readRepositoryFile(".github/workflows/publish.yml")
     const validateRelease = job(publish, "validate-release", "publish-native")
     const publishNative = job(publish, "publish-native", "publish-js")
+    const publishJs = job(publish, "publish-js", "__missing__")
 
     expect(validateRelease).toContain("ref: ${{ github.sha }}")
     expect(validateRelease).toContain("uses: Swatinem/rust-cache@v2")
@@ -128,6 +129,10 @@ describe("workflow contracts", () => {
     expect(validateRelease).toContain("run: cargo test --workspace --locked")
     expect(publishNative).toMatch(/needs:\n(?:\s+- .+\n)*\s+- validate-release/m)
     expect(publishNative).toContain("ref: ${{ github.sha }}")
-    expect(job(publish, "publish-js", "__missing__")).toContain("ref: ${{ github.sha }}")
+    expect(publishJs).toContain("ref: ${{ github.sha }}")
+    expect(publishJs).toContain("- name: Materialize pinned Rust toolchain")
+    expect(publishJs.indexOf("run: cargo --version")).toBeLessThan(
+      publishJs.indexOf("- name: Build publishable packages")
+    )
   })
 })

@@ -284,6 +284,12 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
+      # The JS package build also rebuilds the host-native CLI and core-node
+      # packages in parallel. Resolve the repository toolchain once up front so
+      # their cargo proxies cannot race while rustup installs it.
+      - name: Materialize pinned Rust toolchain
+        run: cargo --version
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
