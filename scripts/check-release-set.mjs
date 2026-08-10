@@ -97,10 +97,41 @@ const extraVersionFiles = new Set(
     .filter((file) => file?.type === "json" && file?.jsonpath === "$.version")
     .map((file) => file.path)
 )
+// `--filter <name>` selects every workspace project with that name, and the
+// private workspace root shares its name with the published umbrella package.
+// A bare name filter there silently drags the whole workspace build into the
+// publish job, so resolve each filter and reject the ambiguous ones.
+const rootPackageName = readJson("package.json").name
 const workflowFilters = new Set(
-  Array.from(publishWorkflow.matchAll(/--filter\s+([^\s]+)/g), (match) =>
-    match[1].replaceAll(/^"|"$/g, "")
+  Array.from(publishWorkflow.matchAll(/--filter\s+(\S+)/g), (match) =>
+    match[1].replaceAll(/^"|"$/g, "").replace(/\.\.\.$/, "")
   )
+    .filter((filter) => !filter.includes("${{"))
+    .map((filter) => {
+      if (!filter.startsWith("./")) {
+        const collisions = [
+          ...(filter === rootPackageName ? ["the workspace root"] : []),
+          ...publicPackages.filter((info) => info.name === filter).map((info) => info.path),
+        ]
+
+        if (collisions.length > 1) {
+          fail(
+            `publish workflow filters ${filter} by name, which matches ${collisions.join(" and ")}; filter by directory instead`
+          )
+        }
+
+        return filter
+      }
+
+      const filteredPackageJson = path.join(root, filter.slice(2), "package.json")
+
+      if (!existsSync(filteredPackageJson)) {
+        fail(`publish workflow filters ${filter}, which is not a workspace directory`)
+        return filter
+      }
+
+      return JSON.parse(readFileSync(filteredPackageJson, "utf8")).name
+    })
 )
 const nativeMatrixPackages = new Set(
   Array.from(publishWorkflow.matchAll(/package_name:\s+"([^"]+)"/g), (match) => match[1])

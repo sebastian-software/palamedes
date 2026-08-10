@@ -135,4 +135,77 @@ describe("workflow contracts", () => {
       publishJs.indexOf("- name: Build publishable packages")
     )
   })
+
+  it("stops a release before publishing anything when a package needs a first publish", async () => {
+    const publish = await readRepositoryFile(".github/workflows/publish.yml")
+    const validateRelease = job(publish, "validate-release", "publish-native")
+
+    expect(validateRelease).toContain("run: node ./scripts/check-first-publish.mjs")
+    // Before the build, so the check costs seconds rather than a full release gate.
+    expect(validateRelease.indexOf("run: node ./scripts/check-first-publish.mjs")).toBeLessThan(
+      validateRelease.indexOf("run: pnpm build")
+    )
+  })
+
+  it("verifies the published release set and reports a failed publish", async () => {
+    const publish = await readRepositoryFile(".github/workflows/publish.yml")
+    const verifyRelease = job(publish, "verify-release", "notify-failure")
+    const notifyFailure = job(publish, "notify-failure", "__missing__")
+
+    expect(verifyRelease).toMatch(/needs:\n(?:\s+- .+\n)*\s+- publish-js/m)
+    expect(verifyRelease).toContain("run: node ./scripts/check-published-versions.mjs")
+    expect(notifyFailure).toContain("issues: write")
+    expect(notifyFailure).toContain("failure()")
+    expect(notifyFailure).toContain("scripts/open-or-refresh-issue.mjs")
+    for (const jobName of [
+      "determine-release",
+      "validate-release",
+      "publish-native",
+      "publish-js",
+      "verify-release",
+    ]) {
+      expect(notifyFailure).toContain(`needs.${jobName}.result`)
+    }
+  })
+
+  it("filters the umbrella package by directory so the workspace root cannot match", async () => {
+    const [publish, rootPackageJson, umbrellaPackageJson] = await Promise.all([
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile("package.json").then(JSON.parse),
+      readRepositoryFile("packages/palamedes/package.json").then(JSON.parse),
+    ])
+
+    // The guard only matters while these two share a name; check-release-set.mjs
+    // rejects any ambiguous name filter, and this pins the known collision.
+    expect(rootPackageJson.name).toBe(umbrellaPackageJson.name)
+    expect(publish).toContain("--filter ./packages/palamedes")
+    expect(publish).not.toMatch(/--filter palamedes\s*$/m)
+  })
+
+  it("keeps the publish lanes least-privileged", async () => {
+    const [publish, container] = await Promise.all([
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile(".github/workflows/publish-examples-container.yml"),
+    ])
+
+    expect(publish).toContain("permissions:\n  contents: read")
+    expect(container).toContain("permissions:\n  contents: read")
+  })
+
+  it("lets the dependency audit exit code reach the tracking issue step", async () => {
+    const dependencyAudit = await readRepositoryFile(".github/workflows/dependency-audit.yml")
+
+    // `|| true` here would pin both step outcomes to success and make the issue
+    // step below permanently unreachable.
+    expect(dependencyAudit).not.toContain("pnpm audit --audit-level=high 2>&1 || true")
+    expect(dependencyAudit).not.toContain("cargo audit 2>&1 || true")
+    expect(dependencyAudit).toContain(
+      "pnpm audit --audit-level=high >> audit-report.md 2>&1 || status=$?"
+    )
+    expect(dependencyAudit).toContain("cargo audit >> audit-report.md 2>&1 || status=$?")
+    expect(dependencyAudit).toContain(
+      "if: steps.npm-audit.outcome == 'failure' || steps.cargo-audit.outcome == 'failure'"
+    )
+    expect(dependencyAudit).toContain("scripts/open-or-refresh-issue.mjs")
+  })
 })

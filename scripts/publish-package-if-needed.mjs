@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 
+import { isMissingFromRegistry } from "./release-packages.mjs"
+
 const root = process.cwd()
 // On Windows the package manager binaries resolve to `pnpm.cmd`/`npm.cmd`.
 // Node refuses to spawn `.cmd`/`.bat` files without a shell (CVE-2024-27980),
@@ -63,8 +65,10 @@ const publishResult = isNativeArtifactPackage(packageJson)
   : spawnSync(
       command("pnpm"),
       [
+        // Filter by directory, not by name: the private workspace root is also
+        // named `palamedes`, so a name filter selects two projects.
         "--filter",
-        packageName,
+        workspacePackage.filter,
         "publish",
         "--access",
         "public",
@@ -117,6 +121,8 @@ function findWorkspacePackage(name) {
     if (packageJson.name === name) {
       return {
         directory: path.join(root, "packages", directory),
+        // pnpm filter paths stay POSIX-style on every host.
+        filter: `./packages/${directory}`,
         packageJson,
       }
     }
@@ -127,14 +133,7 @@ function findWorkspacePackage(name) {
 }
 
 function isMissingPackageVersion(output) {
-  return (
-    output.includes("404 Not Found") ||
-    output.includes("[ERR_PNPM_FETCH_404]") ||
-    output.includes("[ERR_PNPM_PACKAGE_NOT_FOUND]") ||
-    output.includes("[E404]") ||
-    output.includes("No matching version found for") ||
-    output.includes("is not in the npm registry")
-  )
+  return isMissingFromRegistry(output)
 }
 
 function isNativeArtifactPackage(packageJson) {
