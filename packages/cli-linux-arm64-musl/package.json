@@ -1,0 +1,37 @@
+{
+  "name": "@palamedes/cli-linux-arm64-musl",
+  "version": "1.16.1",
+  "description": "Linux arm64 musl native CLI binary for @palamedes/cli",
+  "homepage": "https://github.com/sebastian-software/palamedes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastian-software/palamedes.git",
+    "directory": "packages/cli-linux-arm64-musl"
+  },
+  "bugs": "https://github.com/sebastian-software/palamedes/issues",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "pmds": "./bin/pmds"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "bin/"
+  ],
+  "scripts": {
+    "build": "node ../cli/scripts/build-native.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "musl"
+  ]
+}

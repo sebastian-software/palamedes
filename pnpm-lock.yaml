@@ -1414,6 +1414,9 @@ importers:
       '@palamedes/cli-linux-arm64-gnu':
         specifier: workspace:*
         version: link:../cli-linux-arm64-gnu
+      '@palamedes/cli-linux-arm64-musl':
+        specifier: workspace:*
+        version: link:../cli-linux-arm64-musl
       '@palamedes/cli-linux-x64-gnu':
         specifier: workspace:*
         version: link:../cli-linux-x64-gnu
@@ -1427,6 +1430,8 @@ importers:
   packages/cli-darwin-arm64: {}
 
   packages/cli-linux-arm64-gnu: {}
+
+  packages/cli-linux-arm64-musl: {}
 
   packages/cli-linux-x64-gnu: {}
 
@@ -1492,6 +1497,9 @@ importers:
       '@palamedes/core-node-linux-arm64-gnu':
         specifier: workspace:*
         version: link:../core-node-linux-arm64-gnu
+      '@palamedes/core-node-linux-arm64-musl':
+        specifier: workspace:*
+        version: link:../core-node-linux-arm64-musl
       '@palamedes/core-node-linux-x64-gnu':
         specifier: workspace:*
         version: link:../core-node-linux-x64-gnu
@@ -1505,6 +1513,8 @@ importers:
   packages/core-node-darwin-arm64: {}
 
   packages/core-node-linux-arm64-gnu: {}
+
+  packages/core-node-linux-arm64-musl: {}
 
   packages/core-node-linux-x64-gnu: {}
 

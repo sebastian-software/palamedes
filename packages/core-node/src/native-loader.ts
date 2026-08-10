@@ -7,6 +7,7 @@ import type { NativeBindings, NativeInfo } from "./generated/palamedes-node-type
 const SUPPORTED_NATIVE_PACKAGES = [
   "@palamedes/core-node-darwin-arm64",
   "@palamedes/core-node-linux-arm64-gnu",
+  "@palamedes/core-node-linux-arm64-musl",
   "@palamedes/core-node-linux-x64-gnu",
   "@palamedes/core-node-linux-x64-musl",
   "@palamedes/core-node-win32-x64-msvc",
@@ -62,6 +63,9 @@ function getNativePackageName(): string {
   }
   if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "gnu") {
     return "@palamedes/core-node-linux-arm64-gnu"
+  }
+  if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "musl") {
+    return "@palamedes/core-node-linux-arm64-musl"
   }
   if (process.platform === "win32" && process.arch === "x64") {
     return "@palamedes/core-node-win32-x64-msvc"

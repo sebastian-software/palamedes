@@ -10,6 +10,7 @@ test("runtime target selection covers every published CLI package", () => {
     [{ platform: "linux", arch: "x64", libc: "glibc" }, "@palamedes/cli-linux-x64-gnu"],
     [{ platform: "linux", arch: "x64", libc: "musl" }, "@palamedes/cli-linux-x64-musl"],
     [{ platform: "linux", arch: "arm64", libc: "glibc" }, "@palamedes/cli-linux-arm64-gnu"],
+    [{ platform: "linux", arch: "arm64", libc: "musl" }, "@palamedes/cli-linux-arm64-musl"],
     [{ platform: "win32", arch: "x64" }, "@palamedes/cli-win32-x64-msvc"],
   ]
 
