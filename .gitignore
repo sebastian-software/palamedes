@@ -40,6 +40,7 @@ benchmarks/*/.swc/
 
 # Browser verification artifacts
 .vitest-attachments/
+coverage/
 
 # SF plugin runtime state (config.json stays tracked)
 .sf-plugin/*

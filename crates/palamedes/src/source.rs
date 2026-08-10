@@ -32,6 +32,28 @@ pub struct SourceRange {
     pub column: usize,
 }
 
+/// Comment syntax recognized by the source parser.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SourceCommentKind {
+    /// JavaScript or TypeScript line comment (`//`).
+    Line,
+    /// JavaScript, TypeScript, or JSX block comment (`/* */`).
+    Block,
+    /// MDX HTML comment (`<!-- -->`).
+    Html,
+}
+
+/// Exact parsed range and syntax for one source comment.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceComment {
+    /// Full comment range including its opening and closing delimiters.
+    pub range: SourceRange,
+    /// Delimiter syntax used by the comment.
+    pub kind: SourceCommentKind,
+}
+
 /// Severity assigned to a source-authoring diagnostic.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -132,7 +154,8 @@ pub struct SourceDiagnostic {
     pub related: Option<SourceRange>,
 }
 
-/// Messages and non-fatal diagnostics produced by one source analysis.
+/// Messages, non-fatal diagnostics, and parsed comments produced by one source
+/// analysis.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceAnalysisResult {
@@ -140,6 +163,8 @@ pub struct SourceAnalysisResult {
     pub messages: Vec<ExtractedMessageRecord>,
     /// Source-authoring diagnostics in deterministic source order.
     pub diagnostics: Vec<SourceDiagnostic>,
+    /// Parsed comments in deterministic source order.
+    pub comments: Vec<SourceComment>,
 }
 
 /// Source text and structured result produced by one cached file analysis.
@@ -147,7 +172,7 @@ pub struct SourceAnalysisResult {
 pub struct SourceFileAnalysisResult {
     /// Exact source text used for both analysis and caller-side suppressions.
     pub source: String,
-    /// Messages and diagnostics derived from `source`.
+    /// Messages, diagnostics, and comments derived from `source`.
     pub analysis: SourceAnalysisResult,
 }
 

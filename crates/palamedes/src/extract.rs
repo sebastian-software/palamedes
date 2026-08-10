@@ -20,19 +20,19 @@ use crate::jsx_message::{
 use crate::mdx::{analyze_mdx, MdxOptions};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
 use crate::source::{
-    SourceAnalysisOptions, SourceAnalysisResult, SourceDiagnostic, SourceDiagnosticSeverity,
-    SourceFileAnalysisResult, SourceLocator, SourceRange, SourceRuleOptions,
-    SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
+    SourceAnalysisOptions, SourceAnalysisResult, SourceComment, SourceCommentKind,
+    SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceLocator,
+    SourceRange, SourceRuleOptions, SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
 };
 use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, BindingPattern, CallExpression, Declaration, Expression, ImportDeclaration,
-    JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement, LogicalOperator,
-    MemberExpression, ObjectExpression, ObjectPropertyKind, TaggedTemplateExpression,
-    TemplateLiteral, VariableDeclarator,
+    Argument, BindingPattern, CallExpression, CommentKind, Declaration, Expression,
+    ImportDeclaration, JSXAttributeValue, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
+    LogicalOperator, MemberExpression, ObjectExpression, ObjectPropertyKind,
+    TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -1672,9 +1672,9 @@ pub fn extract_messages_with_mdx_options(
 
 /// Analyze one JavaScript, TypeScript, JSX, TSX, or MDX source file.
 ///
-/// Extraction and non-type-aware source diagnostics share one native parse and
-/// Palamedes macro classification. Parse failures and unsupported macro syntax
-/// remain fatal errors.
+/// Extraction, non-type-aware source diagnostics, and comment discovery share
+/// one native parse and Palamedes macro classification. Parse failures and
+/// unsupported macro syntax remain fatal errors.
 ///
 /// # Errors
 ///
@@ -1822,6 +1822,7 @@ pub fn analyze_source_files_cached(
                         relative_origin_file(Path::new(root_dir), &path),
                         &analysis.messages,
                         &analysis.diagnostics,
+                        &analysis.comments,
                         fingerprint,
                     );
                 }
@@ -1863,7 +1864,7 @@ fn analyze_one_source_file_cached(
             });
         }
     };
-    if let Some((_relative_file, messages, diagnostics)) =
+    if let Some((_relative_file, messages, diagnostics, comments)) =
         cache.get_after_read(&file.path, fingerprint)
     {
         return SourceFileAnalysisOutcome::Analyzed {
@@ -1873,35 +1874,26 @@ fn analyze_one_source_file_cached(
             analysis: SourceAnalysisResult {
                 messages,
                 diagnostics,
+                comments,
             },
             fresh: false,
             fingerprint: None,
         };
     }
 
-    let analysis = if !is_mdx_filename(&file.path)
-        && !source.contains("@palamedes")
-        && !source.contains("i18n")
-    {
-        Ok(SourceAnalysisResult {
-            messages: Vec::new(),
-            diagnostics: Vec::new(),
-        })
-    } else {
-        EXTRACT_ARENA.with(|arena| {
-            let mut arena = arena.borrow_mut();
-            let analysis = analyze_source_in(
-                &arena,
-                &source,
-                &file.path,
-                options.reference_scopes,
-                &options.mdx,
-                &options.rules,
-            );
-            arena.reset();
-            analysis
-        })
-    };
+    let analysis = EXTRACT_ARENA.with(|arena| {
+        let mut arena = arena.borrow_mut();
+        let analysis = analyze_source_in(
+            &arena,
+            &source,
+            &file.path,
+            options.reference_scopes,
+            &options.mdx,
+            &options.rules,
+        );
+        arena.reset();
+        analysis
+    });
 
     match analysis {
         Ok(analysis) => SourceFileAnalysisOutcome::Analyzed {
@@ -2009,6 +2001,7 @@ fn analyze_source_in(
                     related: diagnostic.related,
                 })
                 .collect(),
+            comments: result.comments,
         });
     }
 
@@ -2024,6 +2017,22 @@ fn analyze_source_in(
             .join(", ");
         return Err(PalamedesError::ParseSource { messages });
     }
+
+    let source_locator = SourceLocator::new(source);
+    let comments = parsed
+        .program
+        .comments
+        .iter()
+        .map(|comment| SourceComment {
+            range: source_locator.range(comment.span.start as usize, comment.span.end as usize),
+            kind: match comment.kind {
+                CommentKind::Line => SourceCommentKind::Line,
+                CommentKind::SingleLineBlock | CommentKind::MultiLineBlock => {
+                    SourceCommentKind::Block
+                }
+            },
+        })
+        .collect::<Vec<_>>();
 
     let mut collector = MacroCollector::new();
     collector.visit_program(&parsed.program);
@@ -2047,10 +2056,10 @@ fn analyze_source_in(
         return Ok(SourceAnalysisResult {
             messages: Vec::new(),
             diagnostics: Vec::new(),
+            comments,
         });
     }
 
-    let source_locator = SourceLocator::new(source);
     if let Some((macro_name, offset)) = collector.removed_macro_import.as_ref() {
         let (line, column) = source_locator.location(*offset);
         return Err(PalamedesError::UnsupportedMacroSyntax {
@@ -2092,6 +2101,7 @@ fn analyze_source_in(
     Ok(SourceAnalysisResult {
         messages: extractor.messages,
         diagnostics: extractor.diagnostics,
+        comments,
     })
 }
 
@@ -2246,6 +2256,7 @@ pub fn extract_catalog_messages_cached(
                 relative_file,
                 messages,
                 diagnostics: file_diagnostics,
+                comments,
                 fresh,
                 fingerprint,
             } => {
@@ -2255,6 +2266,7 @@ pub fn extract_catalog_messages_cached(
                         relative_file.clone(),
                         &messages,
                         &file_diagnostics,
+                        &comments,
                         fingerprint,
                     );
                 }
@@ -2306,12 +2318,13 @@ fn extract_one_file(
     rules: &SourceRuleOptions,
     cache: &ExtractCache,
 ) -> FileExtraction {
-    if let Some((relative_file, messages, diagnostics)) = cache.get(file) {
+    if let Some((relative_file, messages, diagnostics, comments)) = cache.get(file) {
         return FileExtraction::Extracted {
             path: file.clone(),
             relative_file,
             messages,
             diagnostics,
+            comments,
             fresh: false,
             fingerprint: None,
         };
@@ -2352,13 +2365,20 @@ fn extract_one_file(
         .extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("mdx"));
-    if !is_mdx && !source.contains("@palamedes") && !source.contains("i18n") {
+    if !is_mdx
+        && !source.contains("@palamedes")
+        && !source.contains("i18n")
+        && !source.contains("palamedes-lint-")
+    {
         return FileExtraction::Extracted {
             path: file.clone(),
             relative_file: relative_origin_file(root_dir, file),
             messages: Vec::new(),
             diagnostics: Vec::new(),
-            fresh: true,
+            comments: Vec::new(),
+            // The marker fast path has not produced a complete comment list,
+            // so it must not seed the shared source-analysis cache.
+            fresh: false,
             fingerprint,
         };
     }
@@ -2381,6 +2401,7 @@ fn extract_one_file(
             relative_file: relative_origin_file(root_dir, file),
             messages: analysis.messages,
             diagnostics: analysis.diagnostics,
+            comments: analysis.comments,
             fresh: true,
             fingerprint,
         },
@@ -2429,7 +2450,8 @@ enum FileExtraction {
         relative_file: String,
         messages: Vec<ExtractedMessageRecord>,
         diagnostics: Vec<SourceDiagnostic>,
-        /// False when the result came from the cache and need not be stored again.
+        comments: Vec<SourceComment>,
+        /// Whether the result contains a complete parse and should be cached.
         fresh: bool,
         /// File identity observed before reading, used to reject mid-run edits.
         fingerprint: Option<ReadStartFingerprint>,
@@ -2607,7 +2629,8 @@ mod tests {
     use crate::extract_cache::ExtractCache;
     use crate::mdx::MdxOptions;
     use crate::source::{
-        SourceAnalysisOptions, SourceDiagnosticSeverity, SourceRuleLevel, SourceRuleOptions,
+        SourceAnalysisOptions, SourceCommentKind, SourceDiagnosticSeverity, SourceRuleLevel,
+        SourceRuleOptions,
     };
     use crate::test_support::scope_macro_test_source;
 
@@ -2636,6 +2659,96 @@ function Greeting({ name }: { name: string }) {
         assert_eq!(result.messages.len(), 1);
         assert_eq!(result.messages[0].message, "Hello {name}");
         assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn shared_source_analysis_returns_parser_comment_ranges() {
+        let source = r#"const continued = 'first\
+second';
+const comparison = continued</pattern/.test(value);
+const inert = `// not a comment`;
+const active = `value ${(
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  value
+)}`;
+/* block */
+"#;
+
+        let result = analyze_source(source, "test.ts").expect("analyze source comments");
+        let comments = result
+            .comments
+            .iter()
+            .map(|comment| {
+                (
+                    &source[comment.range.start..comment.range.end],
+                    comment.kind,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            comments,
+            vec![
+                (
+                    "// palamedes-lint-disable-next-line pmds/no-placeholder-only-message",
+                    SourceCommentKind::Line,
+                ),
+                ("/* block */", SourceCommentKind::Block),
+            ]
+        );
+    }
+
+    #[test]
+    fn shared_mdx_analysis_returns_only_semantic_comment_ranges() {
+        let source = r#"<!-- palamedes-lint-disable-line pmds/no-placeholder-only-message -->
+
+```mdx
+<!-- fenced example -->
+```
+
+{`raw <!-- not a comment --> ${(
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  value
+)}`}
+
+<Comp value={/* palamedes-lint-disable-line pmds/prefer-trans-in-jsx */ value} />
+"#;
+
+        let result = analyze_source(source, "guide.mdx").expect("analyze MDX comments");
+        let comments = result
+            .comments
+            .iter()
+            .map(|comment| {
+                (
+                    &source[comment.range.start..comment.range.end],
+                    comment.kind,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            comments,
+            vec![
+                (
+                    "<!-- palamedes-lint-disable-line pmds/no-placeholder-only-message -->",
+                    SourceCommentKind::Html,
+                ),
+                (
+                    "// palamedes-lint-disable-next-line pmds/no-placeholder-only-message",
+                    SourceCommentKind::Line,
+                ),
+                (
+                    "/* palamedes-lint-disable-line pmds/prefer-trans-in-jsx */",
+                    SourceCommentKind::Block,
+                ),
+            ]
+        );
+        assert!(comments
+            .iter()
+            .all(|(text, _)| !text.contains("fenced example")));
+        assert!(comments
+            .iter()
+            .all(|(text, _)| !text.contains("not a comment")));
     }
 
     #[test]
@@ -4318,6 +4431,54 @@ const message = t({ message })
             serde_json::to_vec(&uncached.analysis).expect("serialize uncached"),
             "cached and uncached analysis must be byte-for-byte equivalent"
         );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn extraction_marker_fast_path_does_not_cache_incomplete_comments() {
+        let root = temp_root("shared-analysis-fast-path");
+        fs::create_dir_all(&root).expect("create root");
+        let source_path = root.join("plain.ts");
+        fs::write(
+            &source_path,
+            "// ordinary comment\nexport const value = 1;\n",
+        )
+        .expect("write source");
+        fs::File::options()
+            .write(true)
+            .open(&source_path)
+            .expect("open source")
+            .set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(10))
+            .expect("age source");
+
+        let path = source_path.to_string_lossy().into_owned();
+        let root_dir = root.to_string_lossy().into_owned();
+        let options = ExtractCatalogMessagesOptions::default();
+        let mut cache =
+            ExtractCache::load_with_options(&root.join("cache.json"), &root_dir, &options);
+        extract_catalog_messages_cached(
+            ExtractCatalogMessagesRequest {
+                root_dir: root_dir.clone(),
+                files: vec![path.clone()],
+                max_threads: Some(1),
+            },
+            options.clone(),
+            &mut cache,
+        )
+        .expect("marker-free extraction");
+        assert_eq!(
+            cache.len(),
+            0,
+            "fast path must not seed an incomplete entry"
+        );
+
+        let analyzed =
+            analyze_source_file_cached(&path, "plain.ts", &root_dir, &options, &mut cache)
+                .expect("source analysis");
+        assert_eq!(analyzed.analysis.comments.len(), 1);
+        assert_eq!(analyzed.analysis.comments[0].kind, SourceCommentKind::Line);
+        assert_eq!(cache.len(), 1, "full analysis should seed the cache");
+
         fs::remove_dir_all(root).expect("cleanup");
     }
 
