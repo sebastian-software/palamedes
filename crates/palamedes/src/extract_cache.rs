@@ -2,10 +2,10 @@
 //!
 //! Extraction is dominated by reading and parsing source. On a repeat run most
 //! files are untouched, so their result is still valid and the work is pure
-//! waste. This caches extracted messages and source diagnostics per file and
-//! validates entries with a `stat` instead of a parse: on the realistic
-//! benchmark corpus, reading all 1500 files costs ~25 ms and parsing them ~94
-//! ms, against ~2.7 ms to stat them.
+//! waste. This caches extracted messages, source diagnostics, and parser-owned
+//! comment ranges per file, and validates entries with a `stat` instead of a
+//! parse: on the realistic benchmark corpus, reading all 1500 files costs ~25
+//! ms and parsing them ~94 ms, against ~2.7 ms to stat them.
 //!
 //! The cache is advisory. Anything unexpected — missing file, unreadable
 //! directory, corrupt or stale payload, schema change — degrades to a miss and
@@ -18,11 +18,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::extract::{ExtractCatalogMessagesOptions, ExtractedMessageRecord};
-use crate::source::{SourceDiagnostic, SourceRuleOptions};
+use crate::source::{SourceComment, SourceDiagnostic, SourceRuleOptions};
 
 /// Bumped whenever the cached payload shape or the extractor's output changes
 /// in a way that makes previously stored entries wrong.
-const CACHE_SCHEMA: u32 = 3;
+const CACHE_SCHEMA: u32 = 4;
 
 /*
  * A file modified in the same instant it was cached cannot be distinguished
@@ -80,7 +80,15 @@ struct CacheEntry {
     relative_file: String,
     messages: Vec<ExtractedMessageRecord>,
     diagnostics: Vec<SourceDiagnostic>,
+    comments: Vec<SourceComment>,
 }
+
+type CachedAnalysis = (
+    String,
+    Vec<ExtractedMessageRecord>,
+    Vec<SourceDiagnostic>,
+    Vec<SourceComment>,
+);
 
 /*
  * Everything that can change extraction output without changing any source
@@ -110,8 +118,8 @@ struct CachePayload {
 /// Extraction and source-analysis cache for one project root.
 ///
 /// Load once per process and keep it alive: a single `pmds extract` saves the
-/// read and parse of every unchanged file, `pmds lint` reuses its diagnostics,
-/// and watch mode reuses the same instance across rebuilds.
+/// read and parse of every unchanged file, `pmds lint` reuses its diagnostics
+/// and comment ranges, and watch mode reuses the same instance across rebuilds.
 #[derive(Debug)]
 pub struct ExtractCache {
     stamp: CacheStamp,
@@ -191,10 +199,7 @@ impl ExtractCache {
     }
 
     /// Cached result for `path`, if the file still looks exactly as it did.
-    pub(crate) fn get(
-        &self,
-        path: &str,
-    ) -> Option<(String, Vec<ExtractedMessageRecord>, Vec<SourceDiagnostic>)>
+    pub(crate) fn get(&self, path: &str) -> Option<CachedAnalysis>
     where
         ExtractedMessageRecord: Clone,
     {
@@ -210,6 +215,7 @@ impl ExtractCache {
             entry.relative_file.clone(),
             entry.messages.clone(),
             entry.diagnostics.clone(),
+            entry.comments.clone(),
         ))
     }
 
@@ -218,7 +224,7 @@ impl ExtractCache {
         &self,
         path: &str,
         before: Option<ReadStartFingerprint>,
-    ) -> Option<(String, Vec<ExtractedMessageRecord>, Vec<SourceDiagnostic>)>
+    ) -> Option<CachedAnalysis>
     where
         ExtractedMessageRecord: Clone,
     {
@@ -235,6 +241,7 @@ impl ExtractCache {
             entry.relative_file.clone(),
             entry.messages.clone(),
             entry.diagnostics.clone(),
+            entry.comments.clone(),
         ))
     }
 
@@ -297,6 +304,7 @@ impl ExtractCache {
         relative_file: String,
         messages: &[ExtractedMessageRecord],
         diagnostics: &[SourceDiagnostic],
+        comments: &[SourceComment],
         before: Option<ReadStartFingerprint>,
     ) where
         ExtractedMessageRecord: Clone,
@@ -324,6 +332,7 @@ impl ExtractCache {
                 relative_file,
                 messages: messages.to_vec(),
                 diagnostics: diagnostics.to_vec(),
+                comments: comments.to_vec(),
             },
         );
         self.dirty = true;
@@ -451,6 +460,15 @@ mod tests {
         let source = root.join("a.tsx");
         write_aged(&source, "const a = 1\n");
         let key = source.to_string_lossy().into_owned();
+        let comments = [SourceComment {
+            range: crate::SourceRange {
+                start: 0,
+                end: 12,
+                line: 1,
+                column: 1,
+            },
+            kind: crate::SourceCommentKind::Line,
+        }];
 
         let mut cache = ExtractCache::load(&root.join("cache.json"), "root", true);
         let before = cache.fingerprint_before_read(&key);
@@ -459,12 +477,14 @@ mod tests {
             "a.tsx".to_owned(),
             &[record("Hello")],
             &[],
+            &comments,
             before,
         );
 
         let hit = cache.get(&key).expect("cache hit");
         assert_eq!(hit.0, "a.tsx");
         assert_eq!(hit.1[0].message, "Hello");
+        assert_eq!(hit.3, comments);
 
         // Any content change moves size and mtime, so the entry stops matching.
         write_aged(&source, "const a = 22222\n");
@@ -487,6 +507,7 @@ mod tests {
             key.clone(),
             "a.tsx".to_owned(),
             &[record("Hello")],
+            &[],
             &[],
             cached_read,
         );
@@ -515,6 +536,7 @@ mod tests {
             key.clone(),
             "a.tsx".to_owned(),
             &[record("Hello")],
+            &[],
             &[],
             before,
         );
@@ -586,6 +608,7 @@ mod tests {
             "a.tsx".to_owned(),
             &[record("Hello")],
             &[],
+            &[],
             before,
         );
         assert!(cache.is_empty(), "young files must not be cached");
@@ -619,6 +642,7 @@ mod tests {
             key.clone(),
             "a.tsx".to_owned(),
             &[record("Stale")],
+            &[],
             &[],
             before,
         );
@@ -658,6 +682,7 @@ mod tests {
             "a.tsx".to_owned(),
             &[record("Hello")],
             &[],
+            &[],
             before,
         );
         assert!(
@@ -683,6 +708,7 @@ mod tests {
             "a.tsx".to_owned(),
             &[record("Hello")],
             &[],
+            &[],
             before,
         );
         assert_eq!(cache.len(), 1);
@@ -702,6 +728,7 @@ mod tests {
             key.clone(),
             "a.tsx".to_owned(),
             &[record("Hello")],
+            &[],
             &[],
             before,
         );
@@ -733,7 +760,14 @@ mod tests {
         for path in [&first, &second, &dropped] {
             let key = path.to_string_lossy().into_owned();
             let before = cache.fingerprint_before_read(&key);
-            cache.insert(key, "file.tsx".to_owned(), &[record("Hello")], &[], before);
+            cache.insert(
+                key,
+                "file.tsx".to_owned(),
+                &[record("Hello")],
+                &[],
+                &[],
+                before,
+            );
         }
         assert_eq!(cache.len(), 3);
 
@@ -789,6 +823,7 @@ mod tests {
             key.clone(),
             "a.tsx".to_owned(),
             &[record("Hello")],
+            &[],
             &[],
             before,
         );

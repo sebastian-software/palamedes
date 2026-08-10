@@ -140,6 +140,18 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm test
 
+      - name: Collect JavaScript coverage
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm test:coverage
+
+      - name: Upload JavaScript coverage summary
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.node == 24 }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: javascript-coverage
+          path: coverage/javascript/coverage-summary.json
+          if-no-files-found: warn
+
       - name: Test lifecycle-free CLI package
         if: ${{ !matrix.full }}
         run: pnpm --filter @palamedes/cli test
@@ -186,6 +198,10 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           components: clippy, rustfmt
 
+      - name: Install cargo-llvm-cov
+        if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable'
+        uses: taiki-e/install-action@cargo-llvm-cov
+
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
@@ -199,6 +215,20 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --workspace --locked
+
+      - name: Collect Rust coverage
+        if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable'
+        run: |
+          mkdir -p coverage/rust
+          cargo llvm-cov --workspace --locked --json --summary-only --output-path coverage/rust/coverage-summary.json
+
+      - name: Upload Rust coverage summary
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-coverage
+          path: coverage/rust/coverage-summary.json
+          if-no-files-found: warn
 
       # Palamedes ships prebuilt binaries for five platforms, so anything baked
       # into the executable multiplies. Checked once, on the pinned toolchain,

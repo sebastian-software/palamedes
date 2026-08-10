@@ -9,13 +9,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use ferromark::block::{CodeBlockKind, ListKind};
 use ferromark::mdx::{parse_events_strict, MdxDiagnostic, MdxEvent};
 use ferromark::{BlockEvent, InlineEvent, Range};
+use oxc_allocator::Allocator;
+use oxc_ast::ast::CommentKind;
+use oxc_parser::Parser;
+use oxc_span::SourceType;
 use serde::{Deserialize, Serialize};
 
 use crate::extract::ExtractedMessageRecord;
 use crate::icu_text::{compiled_message_key, escape_icu_literal, escape_icu_source_literal};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
-use crate::source::{SourceLocator, SourceRange};
+use crate::source::{SourceComment, SourceCommentKind, SourceLocator, SourceRange};
 use crate::transform::NativeTransformSourceMap;
 
 const DEFAULT_IGNORE_DIRECTIVE: &str = "palamedes-ignore";
@@ -141,6 +145,9 @@ pub struct MdxAnalysisResult {
     /// Native source map for generated code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub map: Option<NativeTransformSourceMap>,
+    /// Parsed JavaScript, JSX, and HTML comments in the authored MDX source.
+    #[serde(skip)]
+    pub comments: Vec<SourceComment>,
 }
 
 /// Analyze and compile an MDX document using one native semantic pipeline.
@@ -159,6 +166,7 @@ pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnal
                 code: None,
                 compiled_ids: Vec::new(),
                 map: None,
+                comments: Vec::new(),
             };
         }
     };
@@ -176,11 +184,15 @@ pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnal
             code: None,
             compiled_ids: Vec::new(),
             map: None,
+            comments: Vec::new(),
         };
     }
 
+    let comments = mdx_source_comments(source, &stream.events);
     let compiler = MdxCompiler::new(source, filename, options, &stream.link_references);
-    compiler.compile(&stream.events)
+    let mut result = compiler.compile(&stream.events);
+    result.comments = comments;
+    result
 }
 
 /// Extract MDX messages without exposing host-side parser details.
@@ -227,6 +239,239 @@ fn diagnostic_record(locator: &SourceLocator, diagnostic: MdxDiagnostic) -> MdxD
 
 fn source_range(locator: &SourceLocator, range: Range) -> MdxSourceRange {
     locator.range(range.start_usize(), range.end_usize())
+}
+
+fn mdx_source_comments(source: &str, events: &[MdxEvent]) -> Vec<SourceComment> {
+    let allocator = Allocator::default();
+    let locator = SourceLocator::new(source);
+    let mut comments = Vec::new();
+
+    for event in events {
+        match event {
+            MdxEvent::Esm(range) => {
+                append_javascript_comments(source, *range, &allocator, &locator, &mut comments)
+            }
+            MdxEvent::FlowExpression(range)
+            | MdxEvent::Inline(InlineEvent::MdxExpression(range)) => {
+                append_mdx_expression_comments(source, *range, &allocator, &locator, &mut comments)
+            }
+            MdxEvent::FlowJsxOpen(range)
+            | MdxEvent::FlowJsxSelfClose(range)
+            | MdxEvent::Inline(InlineEvent::MdxJsxOpen(range))
+            | MdxEvent::Inline(InlineEvent::MdxJsxSelfClose(range)) => {
+                append_jsx_attribute_comments(source, *range, &allocator, &locator, &mut comments);
+            }
+            MdxEvent::Inline(InlineEvent::Text(range) | InlineEvent::Html(range))
+            | MdxEvent::Block(BlockEvent::HtmlBlockText(range)) => {
+                append_html_comments(source, *range, &locator, &mut comments);
+            }
+            _ => {}
+        }
+    }
+
+    comments.sort_by_key(|comment| (comment.range.start, comment.range.end));
+    comments.dedup_by(|left, right| {
+        left.range.start == right.range.start
+            && left.range.end == right.range.end
+            && left.kind == right.kind
+    });
+    let fenced_ranges = mdx_fenced_ranges(source);
+    comments.retain(|comment| {
+        !fenced_ranges.iter().any(|range| {
+            range.start_usize() <= comment.range.start && comment.range.start < range.end_usize()
+        })
+    });
+    comments
+}
+
+fn mdx_fenced_ranges(source: &str) -> Vec<Range> {
+    let mut ranges = Vec::new();
+    let mut open: Option<(char, usize, usize)> = None;
+    let mut line_start = 0usize;
+    for line in source.split_inclusive('\n') {
+        if let Some((marker, width, range_start)) = open {
+            if is_closing_fence(line, marker, width) {
+                ranges.push(Range::from_usize(range_start, line_start + line.len()));
+                open = None;
+            }
+        } else if let Some((marker, width)) = opening_fence(line) {
+            open = Some((marker, width, line_start));
+        }
+        line_start += line.len();
+    }
+    if let Some((_, _, range_start)) = open {
+        ranges.push(Range::from_usize(range_start, source.len()));
+    }
+    ranges
+}
+
+fn opening_fence(line: &str) -> Option<(char, usize)> {
+    let content = commonmark_fence_content(line)?;
+    for marker in ['`', '~'] {
+        let width = fence_width(content, marker);
+        if width >= 3 && (marker != '`' || !content[width..].contains('`')) {
+            return Some((marker, width));
+        }
+    }
+    None
+}
+
+fn is_closing_fence(line: &str, marker: char, opening_width: usize) -> bool {
+    let Some(content) = commonmark_fence_content(line) else {
+        return false;
+    };
+    let width = fence_width(content, marker);
+    width >= opening_width
+        && content[width..]
+            .bytes()
+            .all(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
+}
+
+fn commonmark_fence_content(line: &str) -> Option<&str> {
+    let indent = line
+        .as_bytes()
+        .iter()
+        .take_while(|byte| **byte == b' ')
+        .count();
+    (indent <= 3).then_some(&line[indent..])
+}
+
+fn fence_width(line: &str, marker: char) -> usize {
+    line.chars()
+        .take_while(|character| *character == marker)
+        .count()
+}
+
+fn append_javascript_comments(
+    source: &str,
+    range: Range,
+    allocator: &Allocator,
+    locator: &SourceLocator,
+    comments: &mut Vec<SourceComment>,
+) {
+    let start = range.start_usize();
+    let end = range.end_usize();
+    let Some(snippet) = source.get(start..end) else {
+        return;
+    };
+    let parsed = Parser::new(allocator, snippet, SourceType::tsx()).parse();
+    comments.extend(parsed.program.comments.iter().filter_map(|comment| {
+        let comment_start = start.checked_add(comment.span.start as usize)?;
+        let comment_end = start.checked_add(comment.span.end as usize)?;
+        (comment_end <= end).then(|| SourceComment {
+            range: locator.range(comment_start, comment_end),
+            kind: match comment.kind {
+                CommentKind::Line => SourceCommentKind::Line,
+                CommentKind::SingleLineBlock | CommentKind::MultiLineBlock => {
+                    SourceCommentKind::Block
+                }
+            },
+        })
+    }));
+}
+
+fn append_mdx_expression_comments(
+    source: &str,
+    range: Range,
+    allocator: &Allocator,
+    locator: &SourceLocator,
+    comments: &mut Vec<SourceComment>,
+) {
+    let range_start = range.start_usize();
+    let range_end = range.end_usize();
+    let Some(raw) = source.get(range_start..range_end) else {
+        return;
+    };
+    let expression = raw.trim();
+    let start = range_start + raw.len() - raw.trim_start().len();
+    let end = start + expression.len();
+    if expression.as_bytes().first() != Some(&b'{')
+        || expression.len() <= 1
+        || expression.as_bytes().last() != Some(&b'}')
+    {
+        return;
+    }
+    append_javascript_comments(
+        source,
+        Range::from_usize(start + 1, end - 1),
+        allocator,
+        locator,
+        comments,
+    );
+}
+
+fn append_jsx_attribute_comments(
+    source: &str,
+    range: Range,
+    allocator: &Allocator,
+    locator: &SourceLocator,
+    comments: &mut Vec<SourceComment>,
+) {
+    let start = range.start_usize();
+    let end = range.end_usize();
+    let Some(tag) = source.get(start..end) else {
+        return;
+    };
+    let bytes = tag.as_bytes();
+    let mut position = 0usize;
+    while position < bytes.len() {
+        match bytes[position] {
+            quote @ (b'\'' | b'"') => {
+                position += 1;
+                while position < bytes.len() {
+                    match bytes[position] {
+                        b'\\' => position = (position + 2).min(bytes.len()),
+                        byte if byte == quote => {
+                            position += 1;
+                            break;
+                        }
+                        _ => position += 1,
+                    }
+                }
+            }
+            b'{' => {
+                let Some(length) = ferromark::mdx::expr::find_expression_end(&bytes[position..])
+                else {
+                    break;
+                };
+                append_mdx_expression_comments(
+                    source,
+                    Range::from_usize(start + position, start + position + length),
+                    allocator,
+                    locator,
+                    comments,
+                );
+                position += length;
+            }
+            _ => position += 1,
+        }
+    }
+}
+
+fn append_html_comments(
+    source: &str,
+    eligible_range: Range,
+    locator: &SourceLocator,
+    comments: &mut Vec<SourceComment>,
+) {
+    let start = eligible_range.start_usize();
+    let end = eligible_range.end_usize();
+    let Some(eligible) = source.get(start..end) else {
+        return;
+    };
+    let mut searched = 0usize;
+    while let Some(relative_open) = eligible[searched..].find("<!--") {
+        let open = start + searched + relative_open;
+        let Some(relative_close) = source[open + 4..].find("-->") else {
+            break;
+        };
+        let close = open + 4 + relative_close + 3;
+        comments.push(SourceComment {
+            range: locator.range(open, close),
+            kind: SourceCommentKind::Html,
+        });
+        searched += relative_open + 4;
+    }
 }
 
 #[derive(Debug)]
@@ -340,6 +585,7 @@ impl<'a> MdxCompiler<'a> {
             code: Some(code),
             compiled_ids: self.compiled_ids,
             map: Some(map),
+            comments: Vec::new(),
         }
     }
 

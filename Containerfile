@@ -38,6 +38,12 @@ WORKDIR /app
 # (packageManager) on first use — no hardcoded version here.
 RUN corepack enable
 
+# Materialize the workspace-pinned toolchain before pnpm launches the CLI and
+# Node native builds concurrently. Otherwise both cargo proxies can race while
+# rustup installs the same missing toolchain in a fresh image.
+COPY rust-toolchain.toml ./
+RUN cargo --version
+
 COPY . .
 
 RUN pnpm install --frozen-lockfile

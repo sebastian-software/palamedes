@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use clap::{Args, ValueEnum};
 use palamedes::{
     analyze_source_files_cached, default_cache_path, ExtractCache, ExtractCatalogMessagesOptions,
-    SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisRequest, SourceRange,
-    SOURCE_DIAGNOSTIC_CODES,
+    SourceComment, SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity,
+    SourceFileAnalysisRequest, SourceRange, SOURCE_DIAGNOSTIC_CODES,
 };
 use serde::Serialize;
 
@@ -114,10 +114,12 @@ impl Command for LintOptions {
         for (file, analysis) in analysis_files.iter().zip(analyses) {
             match analysis {
                 Ok(result) => {
+                    let comments = result.analysis.comments;
                     let (mut file_diagnostics, file_suppressed) = apply_suppressions(
                         &result.source,
                         &file.filename,
                         result.analysis.diagnostics,
+                        &comments,
                     );
                     diagnostics.append(&mut file_diagnostics);
                     suppressed += file_suppressed;
@@ -250,161 +252,14 @@ struct Suppression {
     primary: SourceRange,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum SuppressionFileKind {
-    Script,
-    Jsx,
-    Mdx,
-    Unsupported,
-}
-
-impl SuppressionFileKind {
-    fn from_filename(filename: &str) -> Self {
-        match Path::new(filename)
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .map(str::to_ascii_lowercase)
-            .as_deref()
-        {
-            Some("js" | "ts") => Self::Script,
-            Some("jsx" | "tsx") => Self::Jsx,
-            Some("mdx") => Self::Mdx,
-            _ => Self::Unsupported,
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-enum CommentSyntax {
-    Line,
-    Block,
-    Html,
-}
-
-impl CommentSyntax {
-    fn directive_body(self, source: &str) -> &str {
-        match self {
-            Self::Line => source,
-            Self::Block => source.split_once("*/").map_or(source, |(body, _)| body),
-            Self::Html => source.split_once("-->").map_or(source, |(body, _)| body),
-        }
-    }
-
-    fn closing_delimiter(self) -> Option<&'static str> {
-        match self {
-            Self::Line => None,
-            Self::Block => Some("*/"),
-            Self::Html => Some("-->"),
-        }
-    }
-}
-
-#[derive(Default)]
-struct CommentScanState {
-    javascript: Vec<JavascriptScanMode>,
-    javascript_regex_allowed: bool,
-    quote: Option<char>,
-    mdx_comment: Option<MdxComment>,
-    mdx_expression_depth: usize,
-    mdx_template: Vec<MdxTemplateMode>,
-}
-
-enum JavascriptScanMode {
-    Code,
-    TemplateRaw,
-    TemplateExpression { braces: usize },
-    SingleQuote,
-    DoubleQuote,
-    BlockComment { only_whitespace: bool },
-    Regex { character_class: bool },
-}
-
-#[derive(Clone, Copy)]
-enum MdxCommentSyntax {
-    Block,
-    Html,
-}
-
-struct MdxComment {
-    syntax: MdxCommentSyntax,
-    only_whitespace: bool,
-}
-
-enum MdxTemplateMode {
-    Raw,
-    Expression { braces: usize },
-    SingleQuote,
-    DoubleQuote,
-    BlockComment { only_whitespace: bool },
-}
-
-#[derive(Default)]
-struct MdxFenceState {
-    marker: Option<(char, usize)>,
-}
-
-impl MdxFenceState {
-    /// Returns whether this line is within a fenced MDX example, including fence lines.
-    fn contains(&mut self, line: &str) -> bool {
-        if let Some((marker, width)) = self.marker {
-            if is_closing_fence(line, marker, width) {
-                self.marker = None;
-            }
-            return true;
-        }
-        if let Some((marker, width)) = opening_fence(line) {
-            self.marker = Some((marker, width));
-            return true;
-        }
-        false
-    }
-}
-
-fn opening_fence(line: &str) -> Option<(char, usize)> {
-    let content = commonmark_fence_content(line)?;
-    for marker in ['`', '~'] {
-        let width = fence_width(content, marker);
-        if width >= 3 && (marker != '`' || !content[width..].contains('`')) {
-            return Some((marker, width));
-        }
-    }
-    None
-}
-
-fn is_closing_fence(line: &str, marker: char, opening_width: usize) -> bool {
-    let Some(content) = commonmark_fence_content(line) else {
-        return false;
-    };
-    let width = fence_width(content, marker);
-    width >= opening_width && content[width..].bytes().all(is_commonmark_line_whitespace)
-}
-
-const fn is_commonmark_line_whitespace(byte: u8) -> bool {
-    matches!(byte, b' ' | b'\t' | b'\r' | b'\n')
-}
-
-/// CommonMark permits up to three leading spaces before a fenced-code marker.
-fn commonmark_fence_content(line: &str) -> Option<&str> {
-    let indent = line
-        .as_bytes()
-        .iter()
-        .take_while(|byte| **byte == b' ')
-        .count();
-    (indent <= 3).then_some(&line[indent..])
-}
-
-fn fence_width(line: &str, marker: char) -> usize {
-    line.chars()
-        .take_while(|character| *character == marker)
-        .count()
-}
-
 fn apply_suppressions(
     source: &str,
     filename: &str,
     diagnostics: Vec<SourceDiagnostic>,
+    comments: &[SourceComment],
 ) -> (Vec<SourceDiagnostic>, usize) {
-    let (suppressions, mut suppression_diagnostics) = parse_suppressions(source, filename);
+    let (suppressions, mut suppression_diagnostics) =
+        parse_suppressions_from_comments(source, filename, comments);
     let mut used = vec![false; suppressions.len()];
     let mut suppressed = 0usize;
     for diagnostic in diagnostics {
@@ -431,7 +286,11 @@ fn apply_suppressions(
     (suppression_diagnostics, suppressed)
 }
 
-fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<SourceDiagnostic>) {
+fn parse_suppressions_from_comments(
+    source: &str,
+    filename: &str,
+    comments: &[SourceComment],
+) -> (Vec<Suppression>, Vec<SourceDiagnostic>) {
     const DIRECTIVES: &[(&str, usize)] = &[
         ("palamedes-lint-disable-next-line", 1),
         ("palamedes-lint-disable-line", 0),
@@ -439,533 +298,114 @@ fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<So
 
     let mut suppressions = Vec::new();
     let mut diagnostics = Vec::new();
-    let mut line_start = 0usize;
-    let file_kind = SuppressionFileKind::from_filename(filename);
-    let mut comments = CommentScanState::default();
-    let mut fences = MdxFenceState::default();
-    for (line_index, line) in source.split_inclusive('\n').enumerate() {
-        if file_kind == SuppressionFileKind::Mdx && fences.contains(line) {
-            line_start += line.len();
+    for comment in comments {
+        let Some((directive_start, directive_source)) = comment_directive_source(source, comment)
+        else {
+            continue;
+        };
+        let Some((directive, line_delta)) = DIRECTIVES
+            .iter()
+            .find(|(directive, _)| directive_source.starts_with(*directive))
+        else {
+            continue;
+        };
+        let rest = directive_source[directive.len()..].trim();
+        let codes = rest
+            .split([',', ' ', '\t'])
+            .filter(|code| !code.is_empty())
+            .collect::<BTreeSet<_>>();
+        let range = source_range(source, directive_start, directive.len());
+        if codes.is_empty() {
+            diagnostics.push(suppression_diagnostic(
+                filename,
+                range,
+                "pmds/invalid-suppression",
+                "This suppression does not name a diagnostic code.",
+                "Add one or more exact Palamedes diagnostic codes after the directive.",
+            ));
             continue;
         }
-        for (directive_start, syntax) in comment_openers(line, file_kind, &mut comments) {
-            let directive_source = &line[directive_start..];
-            let Some((directive, line_delta)) = DIRECTIVES
-                .iter()
-                .find(|(directive, _)| directive_source.starts_with(*directive))
-            else {
-                continue;
-            };
-            let rest = syntax
-                .directive_body(&directive_source[directive.len()..])
-                .trim();
-            let codes = rest
-                .split([',', ' ', '\t'])
-                .filter(|code| !code.is_empty())
-                .collect::<BTreeSet<_>>();
-            let range = SourceRange {
-                start: line_start + directive_start,
-                end: line_start + directive_start + directive.len(),
-                line: line_index + 1,
-                column: line[..directive_start].chars().count() + 1,
-            };
-            if codes.is_empty() {
+        for code in codes {
+            if SOURCE_DIAGNOSTIC_CODES.contains(&code) {
+                suppressions.push(Suppression {
+                    line: suppression_line(
+                        source,
+                        comment,
+                        directive_start,
+                        range.line,
+                        *line_delta,
+                    ),
+                    code: code.to_owned(),
+                    primary: range.clone(),
+                });
+            } else {
                 diagnostics.push(suppression_diagnostic(
                     filename,
-                    range,
-                    "pmds/invalid-suppression",
-                    "This suppression does not name a diagnostic code.",
-                    "Add one or more exact Palamedes diagnostic codes after the directive.",
+                    range.clone(),
+                    "pmds/unknown-suppression-code",
+                    &format!("Unknown Palamedes suppression code `{code}`."),
+                    "Use a diagnostic code emitted by `pmds lint`; suppressions are code-specific.",
                 ));
-                continue;
-            }
-            for code in codes {
-                if SOURCE_DIAGNOSTIC_CODES.contains(&code) {
-                    suppressions.push(Suppression {
-                        line: suppression_line(
-                            source,
-                            line_start + directive_start,
-                            syntax,
-                            line_index + 1,
-                            *line_delta,
-                        ),
-                        code: code.to_owned(),
-                        primary: range.clone(),
-                    });
-                } else {
-                    diagnostics.push(suppression_diagnostic(
-                        filename,
-                        range.clone(),
-                        "pmds/unknown-suppression-code",
-                        &format!("Unknown Palamedes suppression code `{code}`."),
-                        "Use a diagnostic code emitted by `pmds lint`; suppressions are code-specific.",
-                    ));
-                }
             }
         }
-        line_start += line.len();
     }
     (suppressions, diagnostics)
 }
 
+fn comment_directive_source<'a>(
+    source: &'a str,
+    comment: &SourceComment,
+) -> Option<(usize, &'a str)> {
+    let (opening_width, closing_width) = match comment.kind {
+        SourceCommentKind::Line => (2, 0),
+        SourceCommentKind::Block => (2, 2),
+        SourceCommentKind::Html => (4, 3),
+    };
+    let content_start = comment.range.start.checked_add(opening_width)?;
+    let content_end = comment.range.end.checked_sub(closing_width)?;
+    let content = source.get(content_start..content_end)?;
+    let directive_source = content.trim_start();
+    let directive_start = content_start + content.len() - directive_source.len();
+    Some((directive_start, directive_source))
+}
+
+fn source_range(source: &str, start: usize, length: usize) -> SourceRange {
+    let prefix = &source[..start];
+    let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
+    SourceRange {
+        start,
+        end: start + length,
+        line: prefix.bytes().filter(|byte| *byte == b'\n').count() + 1,
+        column: source[line_start..start].chars().count() + 1,
+    }
+}
+
 fn suppression_line(
     source: &str,
+    comment: &SourceComment,
     directive_start: usize,
-    syntax: CommentSyntax,
     directive_line: usize,
     line_delta: usize,
 ) -> usize {
     if line_delta == 0 {
         return directive_line;
     }
-
-    let Some(delimiter) = syntax.closing_delimiter() else {
-        return directive_line + line_delta;
-    };
-    let directive_to_close = &source[directive_start..];
-    let Some(close) = directive_to_close.find(delimiter) else {
-        return directive_line + line_delta;
-    };
-
+    if comment.kind == SourceCommentKind::Line {
+        return directive_line + 1;
+    }
     directive_line
-        + directive_to_close[..close]
+        + source[directive_start..comment.range.end]
             .bytes()
             .filter(|byte| *byte == b'\n')
             .count()
         + 1
 }
 
-/// Finds supported comment openers outside strings and existing block comments.
-/// Directives are intentionally recognized only immediately after an opener
-/// (modulo whitespace), so prose examples and trailing comment text stay inert.
-fn comment_openers(
-    line: &str,
-    file_kind: SuppressionFileKind,
-    state: &mut CommentScanState,
-) -> Vec<(usize, CommentSyntax)> {
-    match file_kind {
-        SuppressionFileKind::Script | SuppressionFileKind::Jsx => {
-            javascript_comment_openers(line, state)
-        }
-        SuppressionFileKind::Mdx => mdx_comment_openers(line, state),
-        SuppressionFileKind::Unsupported => Vec::new(),
-    }
-}
-
-fn javascript_comment_openers(
-    line: &str,
-    state: &mut CommentScanState,
-) -> Vec<(usize, CommentSyntax)> {
-    let mut openers = Vec::new();
-    if state.javascript.is_empty() {
-        state.javascript.push(JavascriptScanMode::Code);
-        state.javascript_regex_allowed = true;
-    }
-    reset_javascript_line_state(&mut state.javascript);
-    let modes = &mut state.javascript;
-    let regex_allowed = &mut state.javascript_regex_allowed;
-    let bytes = line.as_bytes();
-    let mut index = 0usize;
-    while index < bytes.len() {
-        match modes
-            .last_mut()
-            .expect("JavaScript scanner has a base mode")
-        {
-            JavascriptScanMode::BlockComment { only_whitespace } => {
-                if line[index..].starts_with("*/") {
-                    modes.pop();
-                    index += 2;
-                } else {
-                    if *only_whitespace {
-                        if directive_start(line, index) {
-                            openers.push((index, CommentSyntax::Block));
-                            *only_whitespace = false;
-                        } else if !line[index..].starts_with(char::is_whitespace) {
-                            *only_whitespace = false;
-                        }
-                    }
-                    index += char_width(bytes[index]);
-                }
-            }
-            JavascriptScanMode::SingleQuote => {
-                if bytes[index] == b'\\' {
-                    index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
-                } else if bytes[index] == b'\'' {
-                    modes.pop();
-                    *regex_allowed = false;
-                    index += 1;
-                } else {
-                    index += char_width(bytes[index]);
-                }
-            }
-            JavascriptScanMode::DoubleQuote => {
-                if bytes[index] == b'\\' {
-                    index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
-                } else if bytes[index] == b'"' {
-                    modes.pop();
-                    *regex_allowed = false;
-                    index += 1;
-                } else {
-                    index += char_width(bytes[index]);
-                }
-            }
-            JavascriptScanMode::TemplateRaw => {
-                if bytes[index] == b'\\' {
-                    index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
-                } else if bytes[index] == b'`' {
-                    modes.pop();
-                    *regex_allowed = false;
-                    index += 1;
-                } else if line[index..].starts_with("${") {
-                    modes.push(JavascriptScanMode::TemplateExpression { braces: 0 });
-                    *regex_allowed = true;
-                    index += 2;
-                } else {
-                    index += char_width(bytes[index]);
-                }
-            }
-            JavascriptScanMode::Regex { character_class } => {
-                if bytes[index] == b'\\' {
-                    index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
-                } else if *character_class && bytes[index] == b']' {
-                    *character_class = false;
-                    index += 1;
-                } else if !*character_class && bytes[index] == b'[' {
-                    *character_class = true;
-                    index += 1;
-                } else if !*character_class && bytes[index] == b'/' {
-                    modes.pop();
-                    *regex_allowed = false;
-                    index += 1;
-                } else {
-                    index += char_width(bytes[index]);
-                }
-            }
-            JavascriptScanMode::Code | JavascriptScanMode::TemplateExpression { .. } => {
-                if line[index..].starts_with("//") {
-                    let after_opener = &line[index + 2..];
-                    let whitespace = after_opener.len() - after_opener.trim_start().len();
-                    let directive = index + 2 + whitespace;
-                    if directive_start(line, directive) {
-                        openers.push((directive, CommentSyntax::Line));
-                    }
-                    break;
-                }
-                if line[index..].starts_with("/*") {
-                    modes.push(JavascriptScanMode::BlockComment {
-                        only_whitespace: true,
-                    });
-                    index += 2;
-                } else if bytes[index] == b'\'' {
-                    modes.push(JavascriptScanMode::SingleQuote);
-                    index += 1;
-                } else if bytes[index] == b'"' {
-                    modes.push(JavascriptScanMode::DoubleQuote);
-                    index += 1;
-                } else if bytes[index] == b'`' {
-                    modes.push(JavascriptScanMode::TemplateRaw);
-                    index += 1;
-                } else if bytes[index] == b'/'
-                    && *regex_allowed
-                    && !is_jsx_closing_tag_start(line, index)
-                {
-                    modes.push(JavascriptScanMode::Regex {
-                        character_class: false,
-                    });
-                    index += 1;
-                } else if let JavascriptScanMode::TemplateExpression { braces } = modes
-                    .last_mut()
-                    .expect("JavaScript scanner has a base mode")
-                {
-                    if bytes[index] == b'{' {
-                        *braces += 1;
-                        *regex_allowed = true;
-                    } else if bytes[index] == b'}' && *braces == 0 {
-                        modes.pop();
-                        *regex_allowed = false;
-                    } else if bytes[index] == b'}' {
-                        *braces -= 1;
-                        *regex_allowed = false;
-                    } else {
-                        index += update_javascript_regex_context(line, index, regex_allowed);
-                        continue;
-                    }
-                    index += 1;
-                } else {
-                    index += update_javascript_regex_context(line, index, regex_allowed);
-                }
-            }
-        }
-    }
-    openers
-}
-
-fn reset_javascript_line_state(modes: &mut Vec<JavascriptScanMode>) {
-    while matches!(
-        modes.last(),
-        Some(
-            JavascriptScanMode::SingleQuote
-                | JavascriptScanMode::DoubleQuote
-                | JavascriptScanMode::Regex { .. }
-        )
-    ) {
-        modes.pop();
-    }
-}
-
-fn is_jsx_closing_tag_start(line: &str, slash: usize) -> bool {
-    line[..slash].ends_with('<')
-}
-
-fn update_javascript_regex_context(line: &str, index: usize, regex_allowed: &mut bool) -> usize {
-    let bytes = line.as_bytes();
-    let byte = bytes[index];
-    if byte.is_ascii_whitespace() {
-        return 1;
-    }
-    if byte.is_ascii_alphabetic() || matches!(byte, b'_' | b'$') {
-        let end = line[index..]
-            .char_indices()
-            .find_map(|(offset, character)| {
-                (offset > 0
-                    && !(character.is_ascii_alphanumeric() || matches!(character, '_' | '$')))
-                .then_some(index + offset)
-            })
-            .unwrap_or(line.len());
-        *regex_allowed = matches!(
-            &line[index..end],
-            "case"
-                | "delete"
-                | "do"
-                | "else"
-                | "in"
-                | "instanceof"
-                | "new"
-                | "of"
-                | "return"
-                | "throw"
-                | "typeof"
-                | "void"
-                | "yield"
-                | "await"
-        );
-        return end - index;
-    }
-    if byte.is_ascii_digit() {
-        let end = line[index..]
-            .char_indices()
-            .find_map(|(offset, character)| {
-                (offset > 0 && !character.is_ascii_alphanumeric()).then_some(index + offset)
-            })
-            .unwrap_or(line.len());
-        *regex_allowed = false;
-        return end - index;
-    }
-    *regex_allowed = !matches!(byte, b')' | b']' | b'}');
-    char_width(byte)
-}
-
-fn mdx_comment_openers(line: &str, state: &mut CommentScanState) -> Vec<(usize, CommentSyntax)> {
-    let mut openers = Vec::new();
-    state.quote = None;
-    reset_mdx_template_line_state(&mut state.mdx_template);
-    let bytes = line.as_bytes();
-    let mut index = 0usize;
-    while index < bytes.len() {
-        if let Some(mode) = state.mdx_template.last_mut() {
-            match mode {
-                MdxTemplateMode::Raw => {
-                    if bytes[index] == b'\\' {
-                        index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
-                    } else if bytes[index] == b'`' {
-                        state.mdx_template.pop();
-                        index += 1;
-                    } else if line[index..].starts_with("${") {
-                        state
-                            .mdx_template
-                            .push(MdxTemplateMode::Expression { braces: 0 });
-                        index += 2;
-                    } else {
-                        index += char_width(bytes[index]);
-                    }
-                }
-                MdxTemplateMode::Expression { braces } => {
-                    if line[index..].starts_with("//") {
-                        let after_opener = &line[index + 2..];
-                        let whitespace = after_opener.len() - after_opener.trim_start().len();
-                        let directive = index + 2 + whitespace;
-                        if directive_start(line, directive) {
-                            openers.push((directive, CommentSyntax::Line));
-                        }
-                        break;
-                    }
-                    if line[index..].starts_with("/*") {
-                        state.mdx_template.push(MdxTemplateMode::BlockComment {
-                            only_whitespace: true,
-                        });
-                        index += 2;
-                    } else if bytes[index] == b'\'' {
-                        state.mdx_template.push(MdxTemplateMode::SingleQuote);
-                        index += 1;
-                    } else if bytes[index] == b'"' {
-                        state.mdx_template.push(MdxTemplateMode::DoubleQuote);
-                        index += 1;
-                    } else if bytes[index] == b'`' {
-                        state.mdx_template.push(MdxTemplateMode::Raw);
-                        index += 1;
-                    } else if bytes[index] == b'{' {
-                        *braces += 1;
-                        index += 1;
-                    } else if bytes[index] == b'}' && *braces == 0 {
-                        state.mdx_template.pop();
-                        index += 1;
-                    } else if bytes[index] == b'}' {
-                        *braces -= 1;
-                        index += 1;
-                    } else {
-                        index += char_width(bytes[index]);
-                    }
-                }
-                MdxTemplateMode::SingleQuote => {
-                    if bytes[index] == b'\\' {
-                        index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
-                    } else if bytes[index] == b'\'' {
-                        state.mdx_template.pop();
-                        index += 1;
-                    } else {
-                        index += char_width(bytes[index]);
-                    }
-                }
-                MdxTemplateMode::DoubleQuote => {
-                    if bytes[index] == b'\\' {
-                        index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
-                    } else if bytes[index] == b'"' {
-                        state.mdx_template.pop();
-                        index += 1;
-                    } else {
-                        index += char_width(bytes[index]);
-                    }
-                }
-                MdxTemplateMode::BlockComment { only_whitespace } => {
-                    if line[index..].starts_with("*/") {
-                        state.mdx_template.pop();
-                        index += 2;
-                    } else {
-                        if *only_whitespace {
-                            if directive_start(line, index) {
-                                openers.push((index, CommentSyntax::Block));
-                                *only_whitespace = false;
-                            } else if !line[index..].starts_with(char::is_whitespace) {
-                                *only_whitespace = false;
-                            }
-                        }
-                        index += char_width(bytes[index]);
-                    }
-                }
-            }
-            continue;
-        }
-        if let Some(comment) = state.mdx_comment.as_mut() {
-            let closes = match comment.syntax {
-                MdxCommentSyntax::Block => "*/",
-                MdxCommentSyntax::Html => "-->",
-            };
-            if line[index..].starts_with(closes) {
-                state.mdx_comment = None;
-                index += closes.len();
-                continue;
-            }
-            if comment.only_whitespace {
-                if directive_start(line, index) {
-                    openers.push((
-                        index,
-                        match comment.syntax {
-                            MdxCommentSyntax::Block => CommentSyntax::Block,
-                            MdxCommentSyntax::Html => CommentSyntax::Html,
-                        },
-                    ));
-                    comment.only_whitespace = false;
-                } else if !line[index..].starts_with(char::is_whitespace) {
-                    comment.only_whitespace = false;
-                }
-            }
-            index += char_width(bytes[index]);
-            continue;
-        }
-        if let Some(quote) = state.quote {
-            if bytes[index] == b'\\' {
-                index += 1 + bytes.get(index + 1).map_or(0, |byte| char_width(*byte));
-            } else {
-                if line[index..].starts_with(quote) {
-                    state.quote = None;
-                }
-                index += char_width(bytes[index]);
-            }
-            continue;
-        }
-        if bytes[index] == b'{' {
-            state.mdx_expression_depth += 1;
-            index += 1;
-        } else if bytes[index] == b'}' && state.mdx_expression_depth > 0 {
-            state.mdx_expression_depth -= 1;
-            index += 1;
-        } else if bytes[index] == b'`' && state.mdx_expression_depth > 0 {
-            state.mdx_template.push(MdxTemplateMode::Raw);
-            index += 1;
-        } else if state.mdx_expression_depth > 0 && matches!(bytes[index], b'\'' | b'"') {
-            state.quote = Some(bytes[index] as char);
-            index += 1;
-        } else if line[index..].starts_with("<!--") {
-            state.mdx_comment = Some(MdxComment {
-                syntax: MdxCommentSyntax::Html,
-                only_whitespace: true,
-            });
-            index += 4;
-        } else if line[index..].starts_with("/*") && is_jsx_comment_opener(line, index) {
-            state.mdx_comment = Some(MdxComment {
-                syntax: MdxCommentSyntax::Block,
-                only_whitespace: true,
-            });
-            index += 2;
-        } else {
-            index += char_width(bytes[index]);
-        }
-    }
-    openers
-}
-
-fn reset_mdx_template_line_state(modes: &mut Vec<MdxTemplateMode>) {
-    while matches!(
-        modes.last(),
-        Some(MdxTemplateMode::SingleQuote | MdxTemplateMode::DoubleQuote)
-    ) {
-        modes.pop();
-    }
-}
-
-fn directive_start(line: &str, index: usize) -> bool {
-    [
-        "palamedes-lint-disable-next-line",
-        "palamedes-lint-disable-line",
-    ]
-    .iter()
-    .any(|directive| line[index..].starts_with(directive))
-}
-
-fn is_jsx_comment_opener(line: &str, slash: usize) -> bool {
-    line[..slash].trim_end().ends_with('{')
-}
-
-const fn char_width(byte: u8) -> usize {
-    if byte < 0x80 {
-        1
-    } else if byte < 0xE0 {
-        2
-    } else if byte < 0xF0 {
-        3
-    } else {
-        4
-    }
+#[cfg(test)]
+fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<SourceDiagnostic>) {
+    let analysis = palamedes::analyze_source(source, filename)
+        .expect("suppression fixture should be valid authored source");
+    parse_suppressions_from_comments(source, filename, &analysis.comments)
 }
 
 fn suppression_diagnostic(
@@ -1107,7 +547,13 @@ const trailing = 1; /* explanation palamedes-lint-disable-line pmds/no-placehold
         let (suppressions, diagnostics) = super::parse_suppressions(source, "guide.mdx");
 
         assert!(diagnostics.is_empty());
-        assert_eq!(suppressions.len(), 2);
+        assert_eq!(
+            suppressions
+                .iter()
+                .map(|suppression| (suppression.primary.line, suppression.line))
+                .collect::<Vec<_>>(),
+            vec![(1, 2), (2, 2)]
+        );
         assert_eq!(suppressions[0].line, 2);
         assert_eq!(suppressions[1].line, 2);
         assert_eq!(suppressions[1].primary.line, 2);
@@ -1248,19 +694,6 @@ t`${status}`;
     }
 
     #[test]
-    fn suppression_parser_resets_unclosed_quotes_and_regexps_at_line_end() {
-        for source in [
-            "const message = 'unterminated\n// palamedes-lint-disable-next-line pmds/no-placeholder-only-message\nt`${status}`;\n",
-            "const pattern = /unterminated\n// palamedes-lint-disable-next-line pmds/no-placeholder-only-message\nt`${status}`;\n",
-        ] {
-            let (suppressions, diagnostics) = super::parse_suppressions(source, "view.tsx");
-            assert!(diagnostics.is_empty());
-            assert_eq!(suppressions.len(), 1);
-            assert_eq!(suppressions[0].line, 3);
-        }
-    }
-
-    #[test]
     fn suppression_parser_targets_after_multiline_comment_closes() {
         let source = "{/*\n palamedes-lint-disable-next-line pmds/no-placeholder-only-message\n*/}\nt`${status}`\n";
         let (suppressions, diagnostics) = super::parse_suppressions(source, "view.tsx");
@@ -1387,7 +820,9 @@ catalogs:
     fn lint_reports_unused_suppressions() {
         let source =
             "// palamedes-lint-disable-next-line pmds/no-placeholder-only-message\nconst ok = 1\n";
-        let (diagnostics, suppressed) = super::apply_suppressions(source, "view.tsx", Vec::new());
+        let analysis = palamedes::analyze_source(source, "view.tsx").expect("analyze source");
+        let (diagnostics, suppressed) =
+            super::apply_suppressions(source, "view.tsx", Vec::new(), &analysis.comments);
         assert_eq!(suppressed, 0);
         assert_eq!(diagnostics[0].code, "pmds/unused-suppression");
     }

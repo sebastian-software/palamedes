@@ -64,6 +64,22 @@ describe("buildStartEnv", () => {
 })
 
 describe("container publish contract", () => {
+  it("installs the pinned Rust toolchain before parallel workspace builds", async () => {
+    const containerfile = await readFile(
+      resolve(import.meta.dirname, "../../Containerfile"),
+      "utf8"
+    )
+    const toolchainCopy = containerfile.indexOf("COPY rust-toolchain.toml ./")
+    const toolchainInstall = containerfile.indexOf("RUN cargo --version")
+    const workspaceCopy = containerfile.indexOf("COPY . .")
+    const workspaceBuild = containerfile.indexOf("RUN pnpm build")
+
+    expect(toolchainCopy).toBeGreaterThan(-1)
+    expect(toolchainInstall).toBeGreaterThan(toolchainCopy)
+    expect(workspaceCopy).toBeGreaterThan(toolchainInstall)
+    expect(workspaceBuild).toBeGreaterThan(workspaceCopy)
+  })
+
   it("publishes Vite MDX on its container-reachable start-plan port", async () => {
     const vite = EXAMPLE_MATRIX.find((example) => example.id === "vite-mdx")
     expect(vite).toBeDefined()
