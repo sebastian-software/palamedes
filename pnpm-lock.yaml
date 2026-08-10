@@ -445,8 +445,8 @@ importers:
         specifier: 8.3.0
         version: 8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2)
       '@remix-run/node-fetch-server':
-        specifier: 0.13.3
-        version: 0.13.3
+        specifier: 0.14.0
+        version: 0.14.0
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -465,7 +465,7 @@ importers:
         version: link:../../packages/vite-plugin
       '@react-router/dev':
         specifier: 8.3.0
-        version: 8.3.0(@react-router/serve@8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2))(@vitejs/plugin-rsc@0.5.33(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)))(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+        version: 8.3.0(@react-router/serve@8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2))(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)))(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -476,8 +476,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.4(@types/react@19.2.18)
       '@vitejs/plugin-rsc':
-        specifier: 0.5.33
-        version: 0.5.33(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+        specifier: 0.5.34
+        version: 0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       react-server-dom-webpack:
         specifier: ^19.2.8
         version: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
@@ -1209,7 +1209,7 @@ importers:
         version: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
       waku:
         specifier: 1.0.0-beta.9
-        version: 1.0.0-beta.9(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
+        version: 1.0.0-beta.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
     devDependencies:
       '@palamedes/cli':
         specifier: workspace:^
@@ -1641,13 +1641,13 @@ importers:
     devDependencies:
       '@react-router/dev':
         specifier: 8.3.0
-        version: 8.3.0(@react-router/serve@8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2))(@vitejs/plugin-rsc@0.5.33(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)))(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+        version: 8.3.0(@react-router/serve@8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2))(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)))(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
       '@vitejs/plugin-rsc':
-        specifier: 0.5.33
-        version: 0.5.33(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+        specifier: 0.5.34
+        version: 0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -6642,17 +6642,6 @@ packages:
       '@rolldown/plugin-babel':
         optional: true
       babel-plugin-react-compiler:
-        optional: true
-
-  '@vitejs/plugin-rsc@0.5.33':
-    resolution: {integrity: sha512-3q4F9yyJQwOqUGHw60ZwdfmWTRERtd8iDiwRgQyudss5wGbNeQP1L4fDDQPAFSKdyRQlXfZiAt8naxvIOmiinQ==}
-    peerDependencies:
-      react: '*'
-      react-dom: '*'
-      react-server-dom-webpack: '*'
-      vite: '*'
-    peerDependenciesMeta:
-      react-server-dom-webpack:
         optional: true
 
   '@vitejs/plugin-rsc@0.5.34':
@@ -14355,45 +14344,6 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
-  '@react-router/dev@8.3.0(@react-router/serve@8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2))(@vitejs/plugin-rsc@0.5.33(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)))(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/generator': 7.29.7
-      '@babel/parser': 7.29.7
-      '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
-      '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-      '@babel/traverse': 7.29.7(supports-color@10.2.2)
-      '@babel/types': 7.29.7
-      '@react-router/node': 8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(typescript@7.0.2)
-      '@remix-run/node-fetch-server': 0.13.3
-      babel-dead-code-elimination: 1.0.12(supports-color@10.2.2)
-      chokidar: 5.0.0
-      dedent: 1.7.2
-      es-module-lexer: 2.3.1
-      exit-hook: 5.1.0
-      isbot: 5.2.1
-      jsesc: 3.1.0
-      lodash: 4.18.1
-      p-map: 7.0.5
-      pathe: 2.0.3
-      picocolors: 1.1.1
-      pkg-types: 2.3.1
-      prettier: 3.9.4
-      react-refresh: 0.18.0
-      react-router: 8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      semver: 7.8.5
-      tinyglobby: 0.2.17
-      valibot: 1.4.2(typescript@7.0.2)
-      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
-    optionalDependencies:
-      '@react-router/serve': 8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2)
-      '@vitejs/plugin-rsc': 0.5.33(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
-      react-server-dom-webpack: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
-      typescript: 7.0.2
-    transitivePeerDependencies:
-      - babel-plugin-macros
-      - supports-color
-
   '@react-router/dev@8.3.0(@react-router/serve@8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2))(@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)))(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
@@ -16189,21 +16139,10 @@ snapshots:
       '@rolldown/pluginutils': 1.0.1
       vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
 
-  '@vitejs/plugin-rsc@0.5.33(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))':
+  '@vitejs/plugin-react@6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      es-module-lexer: 2.3.1
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
-      srvx: 0.12.5
-      strip-literal: 3.1.0
-      turbo-stream: 3.2.0
-      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
-      vitefu: 1.1.3(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
-    optionalDependencies:
-      react-server-dom-webpack: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
+      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
 
   '@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
@@ -16236,7 +16175,6 @@ snapshots:
       vitefu: 1.1.3(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
     optionalDependencies:
       react-server-dom-webpack: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
-    optional: true
 
   '@vitest/coverage-v8@4.1.10(vitest@4.1.10)':
     dependencies:
@@ -18581,14 +18519,14 @@ snapshots:
   h3@2.0.1-rc.26(crossws@0.4.10(srvx@0.11.22)):
     dependencies:
       rou3: 0.9.1
-      srvx: 0.12.4
+      srvx: 0.12.5
     optionalDependencies:
       crossws: 0.4.10(srvx@0.11.22)
 
   h3@2.0.1-rc.26(crossws@0.4.10(srvx@0.12.5)):
     dependencies:
       rou3: 0.9.1
-      srvx: 0.12.4
+      srvx: 0.12.5
     optionalDependencies:
       crossws: 0.4.10(srvx@0.12.5)
 
@@ -22730,41 +22668,11 @@ snapshots:
     dependencies:
       xml-name-validator: 5.0.0
 
-  waku@1.0.0-beta.9(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0):
-    dependencies:
-      '@hono/node-server': 2.1.0(hono@4.13.1)
-      '@vitejs/plugin-react': 6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
-      '@vitejs/plugin-rsc': 0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
-      dotenv: 17.4.2
-      hono: 4.13.1
-      magic-string: 1.1.0
-      picocolors: 1.1.1
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
-      react-server-dom-webpack: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
-      rsc-html-stream: 0.0.7
-      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - '@rolldown/plugin-babel'
-      - '@types/node'
-      - '@vitejs/devtools'
-      - babel-plugin-react-compiler
-      - esbuild
-      - jiti
-      - less
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - terser
-      - tsx
-      - yaml
-
   waku@1.0.0-beta.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0):
     dependencies:
       '@hono/node-server': 2.1.0(hono@4.13.1)
-      '@vitejs/plugin-react': 6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
-      '@vitejs/plugin-rsc': 0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+      '@vitejs/plugin-react': 6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+      '@vitejs/plugin-rsc': 0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       dotenv: 17.4.2
       hono: 4.13.1
       magic-string: 1.1.0

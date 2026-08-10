@@ -16,7 +16,7 @@ calling `dispatch`. Resolver failures prevent dispatch and retain the original
 error as the error cause.
 
 Only React Router `8.3.0` RSC Framework Mode with `@vitejs/plugin-rsc`
-`0.5.33` is supported. RSC Data Mode and non-RSC React Router applications are
+`0.5.34` is supported. RSC Data Mode and non-RSC React Router applications are
 out of scope.
 
 `scope.run()` restores its caller after dispatch settles. Async resources

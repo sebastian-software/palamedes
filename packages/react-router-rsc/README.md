@@ -5,7 +5,7 @@ Functions.
 
 React Router marks RSC as experimental and allows breaking changes in patch and
 minor releases. This package is opt-in and intentionally pins its supported
-upstream contract to React Router `8.3.0` and `@vitejs/plugin-rsc` `0.5.33`.
+upstream contract to React Router `8.3.0` and `@vitejs/plugin-rsc` `0.5.34`.
 Review React Router's RSC release notes and rerun the production fixture before
 upgrading either package.
 
@@ -14,7 +14,7 @@ upgrading either package.
 ```sh
 pnpm add @palamedes/core @palamedes/runtime @palamedes/react-router-rsc
 pnpm add -D @palamedes/cli @palamedes/vite-plugin @react-router/dev@8.3.0 \
-  @vitejs/plugin-rsc@0.5.33 vite react-router@8.3.0
+  @vitejs/plugin-rsc@0.5.34 vite react-router@8.3.0
 ```
 
 `@palamedes/react-router-rsc` is ESM-only, matching React Router's RSC and Vite
