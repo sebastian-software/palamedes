@@ -98,7 +98,7 @@ jobs:
       # publishing token for stops the release in seconds, rather than after
       # the native packages have already shipped.
       - name: Check first-publish readiness
-        run: node ./scripts/check-first-publish.mjs
+        run: node ./scripts/check-first-publish.mjs ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--warn-only' || '' }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable

@@ -6,8 +6,13 @@
 // published and reports every package that needs a manual first publish at
 // once, so the maintainer handles them in one pass instead of discovering them
 // one 404 at a time.
+//
+// A dry run publishes nothing, so it passes `--warn-only`: blocking it would
+// make a newly added platform package impossible to build-verify before its
+// first publish, which is exactly when the verification matters most.
 import { publicWorkspacePackages, registryLookup } from "./release-packages.mjs"
 
+const warnOnly = process.argv.includes("--warn-only")
 const packages = publicWorkspacePackages()
 const unpublished = []
 const failures = []
@@ -59,4 +64,11 @@ console.error("")
 console.error(
   "Then configure a trusted publisher for each package on npmjs.com (repository sebastian-software/palamedes, workflow publish.yml, no environment) and re-run this workflow with force_publish."
 )
+
+if (warnOnly) {
+  console.error("")
+  console.error("Reported only: this run does not publish anything.")
+  process.exit(0)
+}
+
 process.exit(1)
