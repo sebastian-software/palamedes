@@ -90,6 +90,38 @@
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.16.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.15.0...palamedes-v1.16.0) (2026-08-10)
+
+
+### Features
+
+* **remix:** cover locale-scoped UI frames ([fdb1b4d](https://github.com/sebastian-software/palamedes/commit/fdb1b4ddd3e530eab2ab95d55cd096667f4c0439))
+
+
+### Bug Fixes
+
+* **cli:** synchronize lint suppression scanner ([de7f626](https://github.com/sebastian-software/palamedes/commit/de7f626ddd23036fe5ed844ee862e6b17a59e62d))
+* **cli:** synchronize lint suppression scanner ([39a9647](https://github.com/sebastian-software/palamedes/commit/39a964705d07be5c509662e9a3bfc118e72f1793))
+* **core-node:** prepare test support addon before tests ([ee43ed4](https://github.com/sebastian-software/palamedes/commit/ee43ed44b56d0119b5d0c824063b199cdd330267))
+* **core-node:** preserve prototype getter snapshots ([11c92b7](https://github.com/sebastian-software/palamedes/commit/11c92b7e5a5bc030ff72bd6ac805cecee4118b6e))
+* **core-node:** restore class-instance snapshot semantics and reject Maps ([6b14fec](https://github.com/sebastian-software/palamedes/commit/6b14fec9795ea6c3640d51161649a26c36e3c44f)), closes [#663](https://github.com/sebastian-software/palamedes/issues/663) [#664](https://github.com/sebastian-software/palamedes/issues/664)
+* **core:** limit target candidates to addressed locales ([949be14](https://github.com/sebastian-software/palamedes/commit/949be1425a32787bf070da5043964fb2dfb41cfc))
+* **core:** scope explicit target candidates to addressed locales ([f569041](https://github.com/sebastian-software/palamedes/commit/f5690414b1a987bc042372b101c49996ec4aed15))
+* **core:** validate singular translation ICU ([632f9c1](https://github.com/sebastian-software/palamedes/commit/632f9c1b89ab070fe99fa53a34c8974ffbbaca8f))
+* **examples:** keep the react-router-rsc root layout client-safe ([7102e6a](https://github.com/sebastian-software/palamedes/commit/7102e6a123a0995f5780bc056a3ce8b110bdc5f7))
+* **examples:** serve the negotiated locale as react-router-rsc document lang ([c6ccd14](https://github.com/sebastian-software/palamedes/commit/c6ccd14492a3dcfd7eeabbc712c8621acf4a381e)), closes [#665](https://github.com/sebastian-software/palamedes/issues/665)
+* **examples:** synchronize Waku document locale ([db3ca74](https://github.com/sebastian-software/palamedes/commit/db3ca74c1ddeb37b014444ee4d1d2e9f2484336b))
+* **next:** degrade invalid catalog fragments ([6c51e36](https://github.com/sebastian-software/palamedes/commit/6c51e369b389cc6aa0633c2d25c61ebd95c3a8dc))
+* **next:** harden split catalog caches ([4b9d5c9](https://github.com/sebastian-software/palamedes/commit/4b9d5c9e8e82dccf47edc163790e0264453acf12))
+* **next:** register catalog fragments in loader-group order while degrading ([8738fcb](https://github.com/sebastian-software/palamedes/commit/8738fcb2d83568d4fd3d44898912dca4a5d9a92f)), closes [#671](https://github.com/sebastian-software/palamedes/issues/671)
+* **next:** reuse installed client locale ([6520c08](https://github.com/sebastian-software/palamedes/commit/6520c08b444911dc6aab14f38c4f43db69f33153))
+* **react-router-rsc:** ship ESM-only package ([33a759b](https://github.com/sebastian-software/palamedes/commit/33a759bdcc3321d51629c252664da17520df8544))
+* resolve the 2026-08-09 audit findings ([1a74390](https://github.com/sebastian-software/palamedes/commit/1a74390a0a61bc5cf8bf5943e63085aadc021dcd))
+* **tanstack:** brand resolver failures ([069d9ab](https://github.com/sebastian-software/palamedes/commit/069d9abac00bd4c9654eb764db77d9c10b1c1860))
+* **transform:** instrument server action const aliases ([0dc6f63](https://github.com/sebastian-software/palamedes/commit/0dc6f63fdaf9596d97178e53d7bb1a9d3e496f97))
+* **waku:** resolve packed runtime locally ([1c8e4b9](https://github.com/sebastian-software/palamedes/commit/1c8e4b9e6363808b3e74f478f489723e41dbf9d4))
+* **waku:** resolve packed runtime locally ([f9c20bc](https://github.com/sebastian-software/palamedes/commit/f9c20bca995e7a14bfb5ca5e898737d2f7019f92))
+
 ## [1.15.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.14.0...palamedes-v1.15.0) (2026-08-08)
 
 
