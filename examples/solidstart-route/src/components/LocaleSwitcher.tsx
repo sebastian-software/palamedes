@@ -27,6 +27,12 @@ export function LocaleSwitcher(props: LocaleSwitcherProps) {
               data-testid={item.testId}
               aria-current={item.active ? "page" : undefined}
               href={`/${item.locale}`}
+              // Solid Router intercepts same-origin anchors and navigates on the
+              // client. The active locale is document bootstrap state, so a
+              // client-side hop would leave the English client catalog active
+              // under a German document. `rel="external"` is the router's opt-out
+              // and makes the browser load the new document.
+              rel="external"
               onClick={() => {
                 document.cookie = locales.serializeChoice(item.locale)
               }}

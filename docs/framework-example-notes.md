@@ -46,6 +46,12 @@ Current framework note:
 
 - the route example now uses a dynamic `/$locale` segment; this is the intended
   canonical TanStack shape and should stay under verification
+- Solid Router intercepts same-origin anchor clicks, so a locale link would
+  navigate on the client and leave the previously activated catalog under the new
+  document. `solidstart-route` marks its locale links `rel="external"` — the
+  router's own opt-out — so the strategy switch stays a document load. The other
+  SolidStart examples switch across hosts or assign `window.location`, so only
+  the route example needs it.
 
 ## Waku
 
