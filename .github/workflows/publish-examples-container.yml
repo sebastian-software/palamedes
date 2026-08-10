@@ -19,6 +19,11 @@ concurrency:
   group: publish-examples-container-${{ github.ref }}
   cancel-in-progress: false
 
+# The container build installs and executes the full dependency tree, so the
+# jobs default to read-only; the publishing job opts into what it needs.
+permissions:
+  contents: read
+
 jobs:
   # Mirror publish.yml: only proceed when a release-please "chore: release <version>"
   # commit just landed on main (i.e. a release PR was merged), or on a manual

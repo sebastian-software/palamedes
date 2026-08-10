@@ -26,6 +26,12 @@ concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
 
+# The release gate installs and executes the full dependency tree, so the jobs
+# around it default to read-only; the publish jobs opt into `id-token: write`
+# for trusted publishing and the failure notifier into `issues: write`.
+permissions:
+  contents: read
+
 jobs:
   determine-release:
     runs-on: ubuntu-24.04
@@ -87,6 +93,12 @@ jobs:
 
       - name: Enable Corepack
         run: corepack enable
+
+      # Runs before the build so a package that npm cannot mint a trusted
+      # publishing token for stops the release in seconds, rather than after
+      # the native packages have already shipped.
+      - name: Check first-publish readiness
+        run: node ./scripts/check-first-publish.mjs
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -312,7 +324,7 @@ jobs:
           --filter @palamedes/cli
           --filter @palamedes/vite-plugin
           --filter @palamedes/next-plugin
-          --filter palamedes
+          --filter ./packages/palamedes
           --filter create-palamedes
           build
 
@@ -336,3 +348,79 @@ jobs:
           node ./scripts/publish-package-if-needed.mjs @palamedes/next-plugin
           node ./scripts/publish-package-if-needed.mjs palamedes
           node ./scripts/publish-package-if-needed.mjs create-palamedes
+
+  # A publish job that dies partway through leaves the registry carrying a mixed
+  # release set. Nothing reported that until someone tried to install, so assert
+  # the finished state instead of trusting the publish jobs' exit codes.
+  verify-release:
+    needs:
+      - determine-release
+      - publish-native
+      - publish-js
+    if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify every package reached the registry
+        run: node ./scripts/check-published-versions.mjs
+
+  notify-failure:
+    needs:
+      - determine-release
+      - validate-release
+      - publish-native
+      - publish-js
+      - verify-release
+    if: ${{ failure() && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) && (needs.determine-release.result == 'failure' || needs.determine-release.outputs.should_publish == 'true') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Open or refresh the release failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "chore(release): publish workflow failed"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "The publish workflow failed, so this release may be only partially on npm."
+            echo
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| determine-release | ${{ needs.determine-release.result }} |"
+            echo "| validate-release | ${{ needs.validate-release.result }} |"
+            echo "| publish-native | ${{ needs.publish-native.result }} |"
+            echo "| publish-js | ${{ needs.publish-js.result }} |"
+            echo "| verify-release | ${{ needs.verify-release.result }} |"
+            echo
+            echo "Commit: \`${{ github.sha }}\`"
+            echo
+            echo "Re-run the workflow with \`force_publish\` once the cause is fixed."
+            echo "Packages that are already published at the release version are skipped,"
+            echo "so a re-run is safe and only ships what is still missing."
+            echo
+            echo "Run: $RUN_URL"
+          } > issue-body.md
+
+          node ./scripts/open-or-refresh-issue.mjs \
+            --title "$TITLE" \
+            --body-file issue-body.md \
+            --label bug

@@ -55,17 +55,26 @@ jobs:
       # The curated `overrides` block in pnpm-workspace.yaml is the repository's
       # mechanism for pinning patched transitive versions. This report is what
       # tells maintainers when that list has fallen behind.
+      # The audit exit code is the signal that decides whether the tracking issue
+      # is opened, so it has to survive into the step outcome. `continue-on-error`
+      # keeps the job going; swallowing the code here with `|| true` would make
+      # that outcome permanently `success` and the issue step unreachable.
       - name: Audit npm dependencies
         id: npm-audit
         continue-on-error: true
         run: |
+          set -uo pipefail
           {
             echo '## npm advisories'
             echo
             echo '```'
-            pnpm audit --audit-level=high 2>&1 || true
-            echo '```'
           } >> audit-report.md
+
+          status=0
+          pnpm audit --audit-level=high >> audit-report.md 2>&1 || status=$?
+
+          echo '```' >> audit-report.md
+          exit "$status"
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
@@ -74,14 +83,19 @@ jobs:
         id: cargo-audit
         continue-on-error: true
         run: |
+          set -uo pipefail
           {
             echo
             echo '## Rust advisories'
             echo
             echo '```'
-            cargo audit 2>&1 || true
-            echo '```'
           } >> audit-report.md
+
+          status=0
+          cargo audit >> audit-report.md 2>&1 || status=$?
+
+          echo '```' >> audit-report.md
+          exit "$status"
 
       - name: Upload audit report
         uses: actions/upload-artifact@v7
@@ -111,11 +125,7 @@ jobs:
             echo "Run: $RUN_URL"
           } > issue-body.md
 
-          existing="$(gh issue list --state open --label dependencies --search "$TITLE" --json number,title \
-            --jq "[.[] | select(.title == \"$TITLE\")] | first | .number // empty")"
-
-          if [ -n "$existing" ]; then
-            gh issue edit "$existing" --body-file issue-body.md
-          else
-            gh issue create --title "$TITLE" --body-file issue-body.md --label dependencies
-          fi
+          node ./scripts/open-or-refresh-issue.mjs \
+            --title "$TITLE" \
+            --body-file issue-body.md \
+            --label dependencies
