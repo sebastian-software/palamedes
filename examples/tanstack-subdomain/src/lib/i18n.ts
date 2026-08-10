@@ -52,6 +52,18 @@ export function initializeClientI18n(locale: Locale) {
   setClientI18n(clientI18n)
 }
 
+// The host label is authoritative for the server, not for the client: a host
+// without a locale label (`localhost`, a bare preview domain) makes the server
+// fall back to Accept-Language, which client code cannot read. Re-deriving the
+// locale from `window.location` would therefore diverge from the document the
+// root route rendered, so the server-rendered `lang` is the source here.
 if (typeof window !== "undefined") {
-  initializeClientI18n(normalizeLocale(window.location.hostname.split(".")[0]))
+  const locale = document.documentElement.lang
+  if (!locales.isLocale(locale)) {
+    throw new Error(
+      `Expected a supported server document locale, received ${JSON.stringify(locale)}`
+    )
+  }
+
+  initializeClientI18n(locale)
 }

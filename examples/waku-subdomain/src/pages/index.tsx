@@ -50,6 +50,11 @@ export default async function IndexPage() {
   return (
     <>
       <title>Frontend Stage · Palamedes + Waku · Subdomain</title>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `window.__PALAMEDES_LOCALE__=${JSON.stringify(currentLocale)};`,
+        }}
+      />
 
       {banner ? (
         <SuggestionBanner

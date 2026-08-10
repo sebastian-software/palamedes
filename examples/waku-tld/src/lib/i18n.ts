@@ -10,6 +10,12 @@ export const LOCALES = ["en", "de", "es", "fr"] as const
 export const DEFAULT_LOCALE = "en"
 export type Locale = (typeof LOCALES)[number]
 
+declare global {
+  interface Window {
+    __PALAMEDES_LOCALE__?: string
+  }
+}
+
 /**
  * Headless locale controls for this demo (TLD strategy). The rightmost DNS
  * label is authoritative for the locale (`.de` -> `de`, `.es` -> `es`,
@@ -63,9 +69,20 @@ export function initializeClientI18n(locale: Locale) {
   return clientI18n
 }
 
+// The tld is authoritative for the server, not for the client: a host without a
+// locale tld (`localhost`, a bare preview domain) makes the server fall back to
+// Accept-Language, which client code cannot read. Re-deriving the locale from
+// `window.location` would therefore diverge from the rendered document, so the
+// page injects the resolved server locale instead.
 if (typeof window !== "undefined") {
-  const tld = window.location.hostname.split(".").at(-1)
-  initializeClientI18n(normalizeLocale(tld === "com" ? "en" : tld))
+  const locale = window.__PALAMEDES_LOCALE__
+  if (!locales.isLocale(locale)) {
+    throw new Error(
+      `Expected an injected supported server locale, received ${JSON.stringify(locale)}`
+    )
+  }
+
+  initializeClientI18n(locale)
 }
 
 export function createBanner(headers: Record<string, string | undefined>, locale: Locale) {

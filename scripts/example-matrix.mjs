@@ -56,6 +56,11 @@ export const EXAMPLE_MATRIX = [
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
       {
+        path: "/de",
+        htmlLang: "de",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
         headers: { host: "de.lvh.me:4011" },
         path: "/en",
         htmlLang: "en",
@@ -102,6 +107,11 @@ export const EXAMPLE_MATRIX = [
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
       {
+        path: "/de",
+        htmlLang: "de",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
         headers: { host: "de.lvh.me:4021" },
         path: "/en",
         htmlLang: "en",
@@ -117,10 +127,20 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-cookie"),
     build: ["build"],
     start: ["start"],
-    // The normal smoke pass only confirms that Waku boots. The verifier's
-    // deterministic i18n-concurrency pass below fetches the localized SSR/RSC
-    // response after both request scopes have rendezvoused.
-    smokeChecks: [],
+    // Waku pre-renders `src/pages/_root.tsx` once, so the served document always
+    // carries `lang="en"` and the client bootstrap applies the active locale (see
+    // the waku section of `docs/framework-example-notes.md`). Asserting that
+    // literal `en` keeps the constraint visible: it turns red once Waku can emit
+    // a per-request shell. The verifier's deterministic i18n-concurrency pass
+    // below additionally overlaps two request scopes.
+    smokeChecks: [
+      {
+        headers: { "accept-language": "de" },
+        path: "/",
+        htmlLang: "en",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
   },
   {
     id: "waku-route",
@@ -130,9 +150,14 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-route"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie: the normal smoke only confirms boot; the deterministic
-    // i18n-concurrency pass asserts localized SSR/RSC output.
-    smokeChecks: [],
+    // See waku-cookie for why the document lang stays `en` on every locale.
+    smokeChecks: [
+      {
+        path: "/de",
+        htmlLang: "en",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
   },
   {
     id: "react-router-cookie",
@@ -173,6 +198,11 @@ export const EXAMPLE_MATRIX = [
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
       {
+        path: "/de",
+        htmlLang: "de",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
         headers: { host: "de.lvh.me:4041" },
         path: "/en",
         htmlLang: "en",
@@ -191,6 +221,8 @@ export const EXAMPLE_MATRIX = [
     // This is a client-only Vite application. The browser contract below
     // verifies all three MDX pages and the document-level locale switch.
     smokeChecks: [],
+    smokeDocumentOptOut:
+      "the served document is the static index.html shell; every locale decision happens after the bundle boots, so there is no server-rendered locale to fetch",
   },
   {
     id: "solidstart-cookie",
@@ -338,6 +370,11 @@ export const EXAMPLE_MATRIX = [
         substrings: ["currently rendering", "Switch to the recommended locale"],
       },
       {
+        path: "/de",
+        htmlLang: "de",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
         headers: { host: "de.lvh.me:4051" },
         path: "/en",
         htmlLang: "en",
@@ -399,9 +436,15 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-subdomain"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie: the normal smoke only confirms boot; the deterministic
-    // i18n-concurrency pass asserts localized SSR/RSC output.
-    smokeChecks: [],
+    // See waku-cookie for why the document lang stays `en` on every locale.
+    smokeChecks: [
+      {
+        headers: { host: "de.lvh.me:4032" },
+        path: "/",
+        htmlLang: "en",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
   },
   {
     id: "react-router-subdomain",
@@ -523,9 +566,15 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-tld"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie: the normal smoke only confirms boot; the deterministic
-    // i18n-concurrency pass asserts localized SSR/RSC output.
-    smokeChecks: [],
+    // See waku-cookie for why the document lang stays `en` on every locale.
+    smokeChecks: [
+      {
+        headers: { host: "palamedes-i18n.de:4033" },
+        path: "/",
+        htmlLang: "en",
+        substrings: ["Deutsch", "Plätze frei"],
+      },
+    ],
   },
   {
     id: "react-router-tld",

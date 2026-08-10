@@ -103,12 +103,31 @@ afterEach(async () => {
   browser = undefined
 })
 
+// React recovers from a hydration mismatch instead of throwing, so it only
+// surfaces as a console error. Both buckets are therefore checked together,
+// once the document has settled and again after the locale switch.
+function expectNoRuntimeErrors(pageErrors, hydrationErrors) {
+  expect(pageErrors).toEqual([])
+  expect(hydrationErrors).toEqual([])
+}
+
 async function currentServerLocale(page) {
   return (await page.getByTestId("server-locale-value").textContent())?.trim() ?? ""
 }
 
 async function waitForClientReady(page) {
   await page.getByTestId("client-ready").waitFor({ state: "attached", timeout: 10_000 })
+}
+
+// The served document carries the locale, but hydration and any revalidation
+// that follows it can reassign `lang` from client state. A poll alone would
+// accept the served value and never see the later flip, so the attribute is
+// read again after the app has had time to settle.
+async function expectSettledDocumentLocale(page, locale) {
+  await waitForClientReady(page)
+  await expect.poll(() => page.locator("html").getAttribute("lang")).toBe(locale)
+  await page.waitForTimeout(500)
+  expect(await page.locator("html").getAttribute("lang")).toBe(locale)
 }
 
 async function expectTanStackServerFunctionMessages(page, locale) {
@@ -222,6 +241,7 @@ test("matrix example browser contract", async () => {
     await expect
       .poll(async () => (await mdxPage.textContent())?.trim() ?? "")
       .toContain("Palamedes-MDX-Handbuch")
+    expectNoRuntimeErrors(pageErrors, hydrationErrors)
     await captureScreenshot(page, example, "interactive")
     return
   }
@@ -229,16 +249,12 @@ test("matrix example browser contract", async () => {
   await expect
     .poll(() => currentServerLocale(page))
     .toMatch(example.strategy === "cookie" ? /español/iu : /english/iu)
-  await expect
-    .poll(() => page.locator("html").getAttribute("lang"))
-    .toBe(example.strategy === "cookie" ? "es" : "en")
-  await waitForClientReady(page)
-  expect(pageErrors).toEqual([])
+  await expectSettledDocumentLocale(page, example.strategy === "cookie" ? "es" : "en")
+  expectNoRuntimeErrors(pageErrors, hydrationErrors)
   if (hasClientLocaleProbe(example)) {
     await expect
       .poll(() => page.getByTestId("client-locale-value").textContent())
       .toBe("Añadir al carrito")
-    expect(hydrationErrors).toEqual([])
   }
   await captureScreenshot(page, example, "initial")
 
@@ -307,6 +323,8 @@ test("matrix example browser contract", async () => {
       await englishContext.close()
     }
     await expectTanStackServerFunctionMessages(page, "de")
+    await expectSettledDocumentLocale(page, "de")
+    expectNoRuntimeErrors(pageErrors, hydrationErrors)
     await captureScreenshot(page, example, "interactive")
     return
   }
@@ -330,6 +348,8 @@ test("matrix example browser contract", async () => {
         async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
       )
       .toContain("de")
+    await expectSettledDocumentLocale(page, "de")
+    expectNoRuntimeErrors(pageErrors, hydrationErrors)
     await captureScreenshot(page, example, "interactive")
     return
   }
@@ -353,6 +373,8 @@ test("matrix example browser contract", async () => {
         async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? ""
       )
       .toContain("de")
+    await expectSettledDocumentLocale(page, "de")
+    expectNoRuntimeErrors(pageErrors, hydrationErrors)
     await captureScreenshot(page, example, "interactive")
     return
   }
@@ -362,6 +384,7 @@ test("matrix example browser contract", async () => {
     .click({ force: true, noWaitAfter: true, timeout: 15_000 })
   await page.waitForURL(/\/de$/)
   expect(page.url()).toContain("/de")
+  await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
 
   await waitForClientReady(page)
   await page.evaluate(() => {
@@ -370,6 +393,8 @@ test("matrix example browser contract", async () => {
   await expect
     .poll(async () => (await page.getByTestId("server-proof-message").textContent())?.trim() ?? "")
     .toContain("de")
+  await expectSettledDocumentLocale(page, "de")
+  expectNoRuntimeErrors(pageErrors, hydrationErrors)
   await captureScreenshot(page, example, "interactive")
 
   if (!example.hostMismatchUrl) {
@@ -384,4 +409,8 @@ test("matrix example browser contract", async () => {
   await page.waitForURL(/\/de$/)
   expect(page.url()).toContain("/de")
   expect(page.url()).toContain("de.lvh.me")
+  await waitForClientReady(page)
+  await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
+  await expectSettledDocumentLocale(page, "de")
+  expectNoRuntimeErrors(pageErrors, hydrationErrors)
 })

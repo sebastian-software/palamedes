@@ -77,7 +77,14 @@ export function getRootRedirectLocale(request: Request) {
 
 export function resolveLocaleFromRequest(request: Request): Locale {
   const pathname = new URL(request.url).pathname
-  const segment = pathname.split("/").filter(Boolean)[0]
+  // Single Fetch revalidates a route through `/<path>.data`, so the locale
+  // segment arrives suffixed on every client-side loader call. Without stripping
+  // it the root loader falls through to Accept-Language and the document lang
+  // flips away from the locale the page was served with.
+  const segment = pathname
+    .split("/")
+    .filter(Boolean)[0]
+    ?.replace(/\.data$/u, "")
 
   if (LOCALES.includes(segment as Locale)) {
     return segment as Locale
