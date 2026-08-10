@@ -178,5 +178,4 @@ manually in the example controller. Move those pieces to the server-first setup:
 
 The Remix examples are pinned to `remix@3.0.0-beta.5`. Keep the examples pinned
 to the exact beta that `pnpm verify:examples:smoke -- --framework remix`
-validates. A separate `remix@next` canary run is useful for detecting beta churn,
-but it should not replace the pinned-version smoke gate.
+validates.

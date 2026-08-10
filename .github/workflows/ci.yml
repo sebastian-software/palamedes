@@ -70,10 +70,6 @@ jobs:
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Check remix@next canary workflow contract
-        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
-        run: pnpm check:remix-next-canary
-
       - name: Check release package set
         if: ${{ matrix.full }}
         run: pnpm check:release-set
