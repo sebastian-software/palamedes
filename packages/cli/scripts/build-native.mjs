@@ -32,6 +32,12 @@ const targets = {
     arch: "arm64",
     libc: "glibc",
   },
+  "@palamedes/cli-linux-arm64-musl": {
+    platform: "linux",
+    arch: "arm64",
+    libc: "musl",
+    rustTarget: "aarch64-unknown-linux-musl",
+  },
   "@palamedes/cli-win32-x64-msvc": {
     platform: "win32",
     arch: "x64",

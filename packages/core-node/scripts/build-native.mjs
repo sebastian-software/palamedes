@@ -35,6 +35,12 @@ const targets = {
     arch: "arm64",
     libc: "glibc",
   },
+  "@palamedes/core-node-linux-arm64-musl": {
+    platform: "linux",
+    arch: "arm64",
+    libc: "musl",
+    rustTarget: "aarch64-unknown-linux-musl",
+  },
   "@palamedes/core-node-win32-x64-msvc": {
     platform: "win32",
     arch: "x64",
@@ -88,7 +94,7 @@ if (!extension) {
   throw new Error(`Unsupported platform for Palamedes native build: ${process.platform}`)
 }
 
-const muslNodeAddon = packageJson.name === "@palamedes/core-node-linux-x64-musl"
+const muslNodeAddon = target.libc === "musl"
 const cargoArgs = ["build", "--package", "palamedes-node"]
 
 if (profile === "release") {
@@ -113,14 +119,15 @@ if (muslNodeAddon) {
   //
   // IMPORTANT: with crt-static off the cdylib links *dynamically*, so this build
   // must run in a musl-native toolchain (see the "Build musl core-node addon"
-  // step in .github/workflows/publish.yml, which runs it inside `rust:alpine`).
-  // Cross-linking the dynamic cdylib from a glibc host makes the linker emit a
-  // glibc program interpreter (`ld-linux-x86-64.so.2`), and the resulting
-  // `.node` then fails to load inside a musl runtime with `ERR_DLOPEN_FAILED`.
-  // A musl-native `cc` instead resolves the correct `ld-musl-x86-64.so.1`
-  // loader, so no external `musl-gcc` linker or `link-self-contained` flag is
-  // needed. (The static-musl CLI *binary* keeps `+crt-static` and links fully
-  // statically, which is why it builds fine on the glibc host.)
+  // step in .github/workflows/publish.yml, which runs it inside `rust:alpine`
+  // on a runner of the same architecture). Cross-linking the dynamic cdylib
+  // from a glibc host makes the linker emit a glibc program interpreter
+  // (`ld-linux-*.so`), and the resulting `.node` then fails to load inside a
+  // musl runtime with `ERR_DLOPEN_FAILED`. A musl-native `cc` instead resolves
+  // the correct `ld-musl-*.so.1` loader, so no external `musl-gcc` linker or
+  // `link-self-contained` flag is needed. (The static-musl CLI *binary* keeps
+  // `+crt-static` and links fully statically, which is why it builds fine on
+  // the glibc host.)
   //
   // `panic=abort` is intentionally not forced here. Every synchronous export in
   // `palamedes-node` opts into napi-rs's `#[napi(catch_unwind)]` guard, so Rust
@@ -130,8 +137,9 @@ if (muslNodeAddon) {
   //
   // Prepend any inherited target rustflags so an externally provided value
   // (e.g. CI optimisation overrides) is preserved rather than dropped.
-  cargoEnv.CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS = [
-    process.env.CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS ?? "",
+  const rustflagsVariable = `CARGO_TARGET_${target.rustTarget.toUpperCase().replaceAll("-", "_")}_RUSTFLAGS`
+  cargoEnv[rustflagsVariable] = [
+    process.env[rustflagsVariable] ?? "",
     "-C target-feature=-crt-static",
   ]
     .filter(Boolean)

@@ -151,15 +151,25 @@ jobs:
           - package_name: "@palamedes/core-node-linux-x64-musl"
             runner: ubuntu-24.04
             rust_target: x86_64-unknown-linux-musl
+            package_dir: packages/core-node-linux-x64-musl
           - package_name: "@palamedes/cli-linux-x64-musl"
             runner: ubuntu-24.04
             rust_target: x86_64-unknown-linux-musl
+            package_dir: packages/cli-linux-x64-musl
           - package_name: "@palamedes/core-node-linux-arm64-gnu"
             runner: ubuntu-24.04-arm
             rust_target: ""
           - package_name: "@palamedes/cli-linux-arm64-gnu"
             runner: ubuntu-24.04-arm
             rust_target: ""
+          - package_name: "@palamedes/core-node-linux-arm64-musl"
+            runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-musl
+            package_dir: packages/core-node-linux-arm64-musl
+          - package_name: "@palamedes/cli-linux-arm64-musl"
+            runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-musl
+            package_dir: packages/cli-linux-arm64-musl
           - package_name: "@palamedes/core-node-win32-x64-msvc"
             runner: windows-2025
             rust_target: ""
@@ -198,30 +208,33 @@ jobs:
         run: rustup target add "${{ matrix.rust_target }}"
 
       - name: Install musl toolchain
-        if: matrix.rust_target == 'x86_64-unknown-linux-musl'
+        if: matrix.rust_target != ''
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build native package
-        if: matrix.package_name != '@palamedes/core-node-linux-x64-musl'
+        if: "!(startsWith(matrix.package_name, '@palamedes/core-node-') && matrix.rust_target != '')"
         run: pnpm --filter "${{ matrix.package_name }}" build
 
       # The core-node musl addon is a `cdylib`, so it cannot use musl's default
       # `+crt-static` (cargo refuses a statically linked cdylib) and must link
       # dynamically. Cross-linking that dynamic cdylib from the glibc host makes
-      # the linker emit a glibc program interpreter (`ld-linux-x86-64.so.2`),
-      # which then fails to load inside a musl runtime. Building it in a
-      # musl-native environment instead makes the toolchain resolve the correct
-      # `ld-musl-x86-64.so.1` loader. (The static-musl CLI binary has no such
+      # the linker emit a glibc program interpreter (`ld-linux-*.so`), which then
+      # fails to load inside a musl runtime. Building it in a musl-native
+      # environment instead makes the toolchain resolve the correct
+      # `ld-musl-*.so.1` loader. (The static-musl CLI binary has no such
       # problem, so it keeps building on the host above.)
+      #
+      # `rust:alpine` and `node:24-alpine` are multi-arch, so each musl leg pulls
+      # the image matching its own runner; nothing is emulated.
       - name: Build musl core-node addon (native musl toolchain)
-        if: matrix.package_name == '@palamedes/core-node-linux-x64-musl'
+        if: startsWith(matrix.package_name, '@palamedes/core-node-') && matrix.rust_target != ''
         run: >
           docker run --rm
           -v "$PWD:/workspace"
-          -w /workspace/packages/core-node-linux-x64-musl
+          -w "/workspace/${{ matrix.package_dir }}"
           -e PALAMEDES_RUST_PROFILE=release
           rust:alpine
           sh -c "apk add --no-cache nodejs build-base &&
@@ -232,11 +245,11 @@ jobs:
         run: pnpm --filter "${{ matrix.package_name }}" exec node --input-type=module -e "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); const native = require('./palamedes-node.node'); if (typeof native.transformMacros !== 'function') process.exit(1)"
 
       - name: Smoke-test musl native Node package
-        if: startsWith(matrix.package_name, '@palamedes/core-node-') && matrix.rust_target == 'x86_64-unknown-linux-musl'
+        if: startsWith(matrix.package_name, '@palamedes/core-node-') && matrix.rust_target != ''
         run: >
           docker run --rm
           -v "$PWD:/workspace"
-          -w "/workspace/packages/core-node-linux-x64-musl"
+          -w "/workspace/${{ matrix.package_dir }}"
           node:24-alpine
           node --input-type=module -e
           "import { createRequire } from 'node:module';
@@ -254,11 +267,11 @@ jobs:
           if (!out.includes('pmds (Palamedes)')) process.exit(1)"
 
       - name: Smoke-test musl native CLI package
-        if: startsWith(matrix.package_name, '@palamedes/cli-') && matrix.rust_target == 'x86_64-unknown-linux-musl'
+        if: startsWith(matrix.package_name, '@palamedes/cli-') && matrix.rust_target != ''
         run: >
           docker run --rm
           -v "$PWD:/workspace"
-          -w "/workspace/packages/cli-linux-x64-musl"
+          -w "/workspace/${{ matrix.package_dir }}"
           node:24-alpine
           node --input-type=module -e
           "import { execFileSync } from 'node:child_process';

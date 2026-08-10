@@ -29,7 +29,7 @@ test("the packed wrapper pins every native optional dependency exactly", (contex
   const platformPackages = Object.entries(manifest.optionalDependencies).filter(([name]) =>
     name.startsWith("@palamedes/core-node-")
   )
-  assert.equal(platformPackages.length, 5)
+  assert.equal(platformPackages.length, 6)
   for (const [name, version] of platformPackages) {
     assert.equal(version, manifest.version, `${name} must be pinned in the packed manifest`)
   }

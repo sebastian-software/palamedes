@@ -122,6 +122,11 @@
         },
         {
           "type": "json",
+          "path": "packages/cli-linux-arm64-musl/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "packages/cli-linux-x64-gnu/package.json",
           "jsonpath": "$.version"
         },
@@ -158,6 +163,11 @@
         {
           "type": "json",
           "path": "packages/core-node-linux-arm64-gnu/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/core-node-linux-arm64-musl/package.json",
           "jsonpath": "$.version"
         },
         {

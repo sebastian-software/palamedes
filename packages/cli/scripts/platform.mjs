@@ -4,7 +4,7 @@ import path from "node:path"
 
 const require = createRequire(import.meta.url)
 const SUPPORTED_TARGETS =
-  "darwin/arm64, linux/x64 glibc, linux/x64 musl, linux/arm64 glibc, and win32/x64"
+  "darwin/arm64, linux/x64 glibc, linux/x64 musl, linux/arm64 glibc, linux/arm64 musl, and win32/x64"
 
 export function resolveNativeExecutable(options = {}) {
   const platform = options.platform ?? process.platform
@@ -58,6 +58,9 @@ export function resolvePlatformPackage(options = {}) {
   }
   if (platform === "linux" && arch === "arm64" && libc === "glibc") {
     return "@palamedes/cli-linux-arm64-gnu"
+  }
+  if (platform === "linux" && arch === "arm64" && libc === "musl") {
+    return "@palamedes/cli-linux-arm64-musl"
   }
   if (platform === "win32" && arch === "x64") {
     return "@palamedes/cli-win32-x64-msvc"
