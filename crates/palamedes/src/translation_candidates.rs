@@ -1039,6 +1039,11 @@ fn patch_changes_candidate(
     if candidate.translation != patch.translation {
         return Ok(true);
     }
+    // Confirming a fuzzy entry rewrites the catalog even when the patch repeats
+    // the value already stored there.
+    if patch.machine.is_none() && candidate.review.fuzzy {
+        return Ok(true);
+    }
     let expected_machine = match &patch.machine {
         Some(machine) => {
             let rendered = render_translation_value(&patch.translation)?;
@@ -1071,6 +1076,20 @@ fn apply_patch_to_po(po: &mut PoFile, patch: &TranslationPatch) -> PalamedesResu
     let rendered = render_translation_value(&patch.translation)?;
     item.msgstr = MsgStr::Singular(rendered.clone());
     item.msgid_plural = None;
+    /*
+     * A patch without machine provenance is an authored completion, which is
+     * what `fuzzy` asks for — gettext clears the marker at exactly that point,
+     * and leaving it set kept the entry incomplete in coverage with no API able
+     * to finish it. Machine patches keep whatever review state they had: they
+     * record provenance in `lock`/`ai` and are the case review exists for. All
+     * other flags survive either way.
+     */
+    if patch.machine.is_none() {
+        item.flags = std::mem::take(&mut item.flags)
+            .into_iter()
+            .filter(|flag| flag != "fuzzy")
+            .collect();
+    }
     item.metadata = std::mem::take(&mut item.metadata)
         .into_iter()
         .filter(|(key, _)| key != "lock" && key != "ai")
@@ -1137,7 +1156,20 @@ fn parse_plural_branch(
     let [IcuNode::Plural { options, .. }] = parsed.nodes.as_slice() else {
         unreachable!("the generated plural wrapper always parses to one plural node");
     };
-    Ok(options[0].value.clone())
+    /*
+     * A value such as `# Datei} one {# Dateien` closes the wrapper's own branch
+     * and opens another one, which is valid ICU. Keeping the first option would
+     * accept the value and then write it truncated; a branch that describes
+     * more than its own branch is a rejection.
+     */
+    let [option] = options.as_slice() else {
+        return Err(ferrocat_icu::IcuParseError::syntax(
+            "a plural branch value must not open another plural branch",
+            value,
+            0,
+        ));
+    };
+    Ok(option.value.clone())
 }
 
 fn render_target_catalog(
@@ -1738,6 +1770,96 @@ mod tests {
     }
 
     #[test]
+    fn authored_patches_confirm_fuzzy_entries_without_touching_other_flags() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("messages/de.po"), "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Review me", None)],
+            max_origins: 8,
+        })
+        .expect("list fuzzy candidate");
+        let review = candidate(&listed.candidates, "Review me");
+        assert!(review.review.fuzzy);
+
+        // Repeating the stored value is the shape of "this translation is fine
+        // as it stands", which is the only way to finish a fuzzy entry.
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![singular_patch(review, "Bitte prüfen")],
+        })
+        .expect("apply authored patch");
+
+        assert_eq!(result.stats.applied, 1);
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Applied
+        );
+
+        let output = fs::read_to_string(fixture.path().join("messages/de.po"))
+            .expect("read patched catalog");
+        let patched = parse_po(&output).expect("parse patched PO");
+        let review = patched
+            .items
+            .iter()
+            .find(|item| item.msgid == "Review me")
+            .expect("review entry");
+
+        assert!(!review.flags.iter().any(|flag| flag == "fuzzy"));
+        assert!(review.flags.iter().any(|flag| flag == "x-custom"));
+        assert_eq!(review.msgstr.first(), Some("Bitte prüfen"));
+        assert_eq!(
+            review.comments.first().map(String::as_str),
+            Some("Translator-owned review note")
+        );
+    }
+
+    #[test]
+    fn machine_patches_leave_the_fuzzy_marker_for_review() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("messages/de.po"), "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Review me", None)],
+            max_origins: 8,
+        })
+        .expect("list fuzzy candidate");
+        let review = candidate(&listed.candidates, "Review me");
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![TranslationPatch {
+                id: review.id.clone(),
+                fingerprint: review.fingerprint.clone(),
+                translation: TranslationValue::Singular {
+                    value: "Maschinell geprüft".to_owned(),
+                },
+                machine: Some(TranslationMachineProvenance { ai: None }),
+            }],
+        })
+        .expect("apply machine patch");
+
+        assert_eq!(result.stats.applied, 1);
+
+        let output = fs::read_to_string(fixture.path().join("messages/de.po"))
+            .expect("read patched catalog");
+        let patched = parse_po(&output).expect("parse patched PO");
+        let review = patched
+            .items
+            .iter()
+            .find(|item| item.msgid == "Review me")
+            .expect("review entry");
+
+        assert!(review.flags.iter().any(|flag| flag == "fuzzy"));
+        assert!(review.flags.iter().any(|flag| flag == "x-custom"));
+        assert!(review.metadata.iter().any(|(key, _)| key == "lock"));
+    }
+
+    #[test]
     fn rejects_source_locale_patch_ids_before_any_catalog_write() {
         let fixture = tempfile::tempdir().expect("fixture directory");
         let target_path = fixture.path().join("messages/de.po");
@@ -2131,6 +2253,61 @@ mod tests {
         assert!(diagnostics
             .iter()
             .any(|diagnostic| diagnostic.message.contains("translation.values.other")));
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+    }
+
+    /// A branch value that closes its own branch and opens another one parses
+    /// as valid ICU, so it used to be accepted and then written truncated.
+    #[test]
+    fn rejects_plural_branch_values_that_escape_their_branch() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id(
+                "messages/{locale}",
+                "de",
+                "{count, plural, one {# file} other {# files}}",
+                None,
+            )],
+            max_origins: 8,
+        })
+        .expect("list plural patch candidate");
+        let plural = candidate(
+            &listed.candidates,
+            "{count, plural, one {# file} other {# files}}",
+        );
+        let mut translation = plural.source.clone();
+        let TranslationValue::Plural { values, .. } = &mut translation else {
+            panic!("expected a plural candidate");
+        };
+        values.insert("one".to_owned(), "# Datei} one {# Dateien".to_owned());
+        values.insert("other".to_owned(), "# Dateien".to_owned());
+        let before = fs::read_to_string(&path).expect("read catalog before invalid patch");
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![TranslationPatch {
+                id: plural.id.clone(),
+                fingerprint: plural.fingerprint.clone(),
+                translation,
+                machine: None,
+            }],
+        })
+        .expect("reject an escaping branch as a diagnostic");
+
+        assert!(!result.updated);
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Rejected
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "translation.invalid_icu"
+                && diagnostic.message.contains("translation.values.one")
+        }));
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
     }
 
