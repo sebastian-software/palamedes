@@ -1156,7 +1156,20 @@ fn parse_plural_branch(
     let [IcuNode::Plural { options, .. }] = parsed.nodes.as_slice() else {
         unreachable!("the generated plural wrapper always parses to one plural node");
     };
-    Ok(options[0].value.clone())
+    /*
+     * A value such as `# Datei} one {# Dateien` closes the wrapper's own branch
+     * and opens another one, which is valid ICU. Keeping the first option would
+     * accept the value and then write it truncated; a branch that describes
+     * more than its own branch is a rejection.
+     */
+    let [option] = options.as_slice() else {
+        return Err(ferrocat_icu::IcuParseError::syntax(
+            "a plural branch value must not open another plural branch",
+            value,
+            0,
+        ));
+    };
+    Ok(option.value.clone())
 }
 
 fn render_target_catalog(
@@ -2240,6 +2253,61 @@ mod tests {
         assert!(diagnostics
             .iter()
             .any(|diagnostic| diagnostic.message.contains("translation.values.other")));
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+    }
+
+    /// A branch value that closes its own branch and opens another one parses
+    /// as valid ICU, so it used to be accepted and then written truncated.
+    #[test]
+    fn rejects_plural_branch_values_that_escape_their_branch() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id(
+                "messages/{locale}",
+                "de",
+                "{count, plural, one {# file} other {# files}}",
+                None,
+            )],
+            max_origins: 8,
+        })
+        .expect("list plural patch candidate");
+        let plural = candidate(
+            &listed.candidates,
+            "{count, plural, one {# file} other {# files}}",
+        );
+        let mut translation = plural.source.clone();
+        let TranslationValue::Plural { values, .. } = &mut translation else {
+            panic!("expected a plural candidate");
+        };
+        values.insert("one".to_owned(), "# Datei} one {# Dateien".to_owned());
+        values.insert("other".to_owned(), "# Dateien".to_owned());
+        let before = fs::read_to_string(&path).expect("read catalog before invalid patch");
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![TranslationPatch {
+                id: plural.id.clone(),
+                fingerprint: plural.fingerprint.clone(),
+                translation,
+                machine: None,
+            }],
+        })
+        .expect("reject an escaping branch as a diagnostic");
+
+        assert!(!result.updated);
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Rejected
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "translation.invalid_icu"
+                && diagnostic.message.contains("translation.values.one")
+        }));
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
     }
 
