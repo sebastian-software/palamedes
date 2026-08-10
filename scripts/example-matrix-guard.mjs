@@ -83,7 +83,8 @@ export function assertExampleMatrix(matrix) {
    * it, which is how the waku families drifted (#635, #667).
    */
   for (const example of matrix) {
-    for (const check of example.smokeChecks ?? []) {
+    const checks = example.smokeChecks ?? []
+    for (const check of checks) {
       assert.ok(
         Object.hasOwn(check, "htmlLang"),
         `${example.id} smoke check ${check.path} must declare htmlLang (use null for a non-document response)`
@@ -94,5 +95,26 @@ export function assertExampleMatrix(matrix) {
         `${example.id} smoke check ${check.path} must set htmlLang to a locale or null`
       )
     }
+
+    /*
+     * Per-check validation is vacuous for an entry that declares no checks at
+     * all — the shape the waku family sat in while its document locale went
+     * unasserted on pull requests. An entry whose served document genuinely
+     * carries no locale (the client-only Vite shell) says so in writing.
+     */
+    const documentChecks = checks.filter((check) => typeof check.htmlLang === "string")
+    const optOut = example.smokeDocumentOptOut
+    assert.ok(
+      optOut === undefined || (typeof optOut === "string" && optOut.length > 0),
+      `${example.id} smokeDocumentOptOut must state why the served document carries no locale`
+    )
+    assert.ok(
+      documentChecks.length > 0 || optOut !== undefined,
+      `${example.id} must smoke-check the locale of at least one served document, or declare smokeDocumentOptOut`
+    )
+    assert.ok(
+      documentChecks.length === 0 || optOut === undefined,
+      `${example.id} smoke-checks a served document locale, so it must drop smokeDocumentOptOut`
+    )
   }
 }
