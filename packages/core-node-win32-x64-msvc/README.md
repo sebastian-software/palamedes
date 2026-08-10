@@ -31,8 +31,10 @@ pnpm add @palamedes/core-node
 
 - [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node)
 - [`@palamedes/core-node-darwin-arm64`](https://www.npmjs.com/package/@palamedes/core-node-darwin-arm64)
-- [`@palamedes/core-node-linux-x64-gnu`](https://www.npmjs.com/package/@palamedes/core-node-linux-x64-gnu)
 - [`@palamedes/core-node-linux-arm64-gnu`](https://www.npmjs.com/package/@palamedes/core-node-linux-arm64-gnu)
+- [`@palamedes/core-node-linux-arm64-musl`](https://www.npmjs.com/package/@palamedes/core-node-linux-arm64-musl)
+- [`@palamedes/core-node-linux-x64-gnu`](https://www.npmjs.com/package/@palamedes/core-node-linux-x64-gnu)
+- [`@palamedes/core-node-linux-x64-musl`](https://www.npmjs.com/package/@palamedes/core-node-linux-x64-musl)
 
 ## License
 
