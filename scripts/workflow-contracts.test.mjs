@@ -3,6 +3,8 @@ import { resolve } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
+import { selectScreenshotExamples } from "./example-matrix.mjs"
+
 const repositoryRoot = resolve(import.meta.dirname, "..")
 
 async function readRepositoryFile(path) {
@@ -207,5 +209,36 @@ describe("workflow contracts", () => {
       "if: steps.npm-audit.outcome == 'failure' || steps.cargo-audit.outcome == 'failure'"
     )
     expect(dependencyAudit).toContain("scripts/open-or-refresh-issue.mjs")
+  })
+
+  it("offers every screenshot-capturable example in the capture dropdown", async () => {
+    const capture = await readRepositoryFile(".github/workflows/capture-example-screenshots.yml")
+    const options = Array.from(
+      capture.slice(capture.indexOf("options:")).matchAll(/^ {10}- (\S+)$/gm),
+      (match) => match[1]
+    )
+
+    // Workflow YAML cannot derive a choice list, so the matrix is the source of
+    // truth and this is what notices when the two drift apart.
+    expect(options).toEqual(["all", ...selectScreenshotExamples({}).map((example) => example.id)])
+  })
+
+  it("verifies the built site before the deploy job publishes it", async () => {
+    const [deploySite, packageJson] = await Promise.all([
+      readRepositoryFile(".github/workflows/deploy-site.yml"),
+      readRepositoryFile("package.json").then(JSON.parse),
+    ])
+    const build = job(deploySite, "build", "deploy")
+
+    expect(packageJson.scripts["verify:site-routes"]).toBe(
+      "node ./scripts/verify-site-routes.mjs"
+    )
+    expect(build).toContain("run: pnpm verify:site-routes")
+    // In the build job, so a dead route blocks the deploy rather than being
+    // reported by the post-deploy curl checks after it is already live.
+    expect(build.indexOf("run: pnpm build:site")).toBeLessThan(
+      build.indexOf("run: pnpm verify:site-routes")
+    )
+    expect(build).toContain("run: pnpm exec playwright install --with-deps chromium")
   })
 })

@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+<!--
+  Everything in this first section is hand-maintained; release-please owns every
+  version section below it and never rewrites this one. That is why it must not
+  be labeled "Unreleased": the label never expires on its own, so it kept
+  telling upgraders that shipped behavior changes were still pending.
+  When a note here is no longer worth carrying, delete it.
+-->
+
+## Behavior Notes (1.x)
+
+Changes across the 1.x line that need more context than a release entry gives.
+All of them have shipped; the version sections below record the release each one
+landed in.
 
 ### Compatibility Notes
 

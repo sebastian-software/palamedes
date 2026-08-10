@@ -6,6 +6,10 @@ env:
 on:
   workflow_dispatch:
     inputs:
+      # Workflow YAML cannot build a choice list from the example matrix, so this
+      # is generated from `selectScreenshotExamples` and pinned against it by
+      # scripts/workflow-contracts.test.mjs — an example added to the matrix
+      # fails that test until it is listed here.
       example_id:
         description: Example to capture
         required: true
@@ -21,6 +25,18 @@ on:
           - waku-route
           - react-router-cookie
           - react-router-route
+          - solidstart-cookie
+          - solidstart-route
+          - nextjs-subdomain
+          - tanstack-subdomain
+          - waku-subdomain
+          - react-router-subdomain
+          - solidstart-subdomain
+          - nextjs-tld
+          - tanstack-tld
+          - waku-tld
+          - react-router-tld
+          - solidstart-tld
 
 jobs:
   capture:

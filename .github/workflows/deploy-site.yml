@@ -73,6 +73,16 @@ jobs:
       - name: Add SPA fallback as 404 page
         run: cp site/build/client/__spa-fallback.html site/build/client/404.html
 
+      # Runs against the exact artifact that is about to deploy, and before the
+      # deploy job, so a dead route or a console error blocks the release
+      # instead of being found by the post-deploy curl checks, which only grep
+      # for fixed strings on a handful of pages.
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Verify built site routes
+        run: pnpm verify:site-routes
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
         with:
