@@ -754,11 +754,27 @@ impl From<palamedes::MachineMetadata> for MachineMetadata {
     }
 }
 
+/// Widens the stored `f32` confidence to the `f64` the JavaScript surface
+/// declares.
+///
+/// A plain `f64::from` surfaces the binary32 representation error, so a provider
+/// that wrote `0.87` reads back `0.8700000047683716` and any equality or diff
+/// check against the value it just sent reports a change that never happened.
+/// The shortest decimal that round-trips to the same `f32` is the number the
+/// caller actually wrote, and it stays correct whatever precision the storage
+/// format keeps. Precision beyond what `f32` holds is still lost — that loss is
+/// real, and this only keeps it from arriving as binary noise.
+fn widen_confidence(confidence: f32) -> f64 {
+    format!("{confidence}")
+        .parse()
+        .unwrap_or(f64::from(confidence))
+}
+
 impl From<palamedes::AiProvenance> for AiProvenance {
     fn from(value: palamedes::AiProvenance) -> Self {
         Self {
             model: value.model,
-            confidence: value.confidence.map(f64::from),
+            confidence: value.confidence.map(widen_confidence),
         }
     }
 }
@@ -2374,5 +2390,32 @@ fn append_hint(message: String, hint: Option<&str>) -> String {
     match hint {
         Some(hint) => format!("{message}\n\n{hint}"),
         None => message,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::widen_confidence;
+
+    #[test]
+    fn confidence_round_trips_through_the_boundary() {
+        // Every value here is one a provider can send as an f64 and must read
+        // back unchanged; `f64::from` returns 0.870000004768371... for the first.
+        for sent in [0.87, 0.95, 0.5, 0.0, 1.0, 0.333] {
+            assert_eq!(
+                widen_confidence(sent as f32),
+                sent,
+                "confidence {sent} drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn confidence_beyond_f32_precision_stays_a_clean_decimal() {
+        // f32 cannot hold this, so the value does change — but it comes back as
+        // the shortest decimal for the stored float rather than binary noise.
+        let widened = widen_confidence(0.123_456_789_f64 as f32);
+
+        assert_eq!(widened, 0.123_456_79);
     }
 }

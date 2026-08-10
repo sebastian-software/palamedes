@@ -390,6 +390,25 @@ function mapNativeDiagnosticSeverity(
   }
 }
 
+// Exhaustive by construction: a severity added on the Rust side widens the
+// generated union and turns this switch into a type error, which is the whole
+// reason the boundary carries an enum rather than a bare string.
+function mapNativeSourceDiagnosticSeverity(
+  severity: GeneratedNativeSourceDiagnostic["severity"]
+): SourceDiagnosticSeverity {
+  switch (severity) {
+    case "Info": {
+      return "info"
+    }
+    case "Warning": {
+      return "warning"
+    }
+    case "Error": {
+      return "error"
+    }
+  }
+}
+
 export function getNativeInfo(): NativeInfo {
   return native.getNativeInfo()
 }
@@ -927,7 +946,10 @@ export function analyzeSourceNative(
   return {
     ...result,
     messages: mapExtractedMessages(result.messages),
-    diagnostics: result.diagnostics as SourceDiagnostic[],
+    diagnostics: result.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      severity: mapNativeSourceDiagnosticSeverity(diagnostic.severity),
+    })),
   }
 }
 
