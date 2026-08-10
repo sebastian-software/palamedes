@@ -39,12 +39,12 @@
         "require": "./dist/server-test.cjs"
       },
       "browser": {
-        "import": "./dist/server-unavailable.mjs",
-        "require": "./dist/server-unavailable.cjs"
+        "import": "./dist/server-test-unavailable.mjs",
+        "require": "./dist/server-test-unavailable.cjs"
       },
       "default": {
-        "import": "./dist/server-unavailable.mjs",
-        "require": "./dist/server-unavailable.cjs"
+        "import": "./dist/server-test-unavailable.mjs",
+        "require": "./dist/server-test-unavailable.cjs"
       }
     }
   },

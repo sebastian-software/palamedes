@@ -25,6 +25,16 @@ type InitializableClientI18n = I18nInstance & {
   load(locale: string, messages: Record<string, unknown>): unknown
 }
 
+/**
+ * One buffered eager registration. `key` identifies the registering module, so
+ * a module that evaluates again replaces its own entry instead of adding a
+ * second copy; keyless registrations always append.
+ */
+type RegisteredMessageEntry = {
+  key?: string
+  messages: Record<string, unknown>
+}
+
 export type RegisteredMessageLoader = () => Promise<Record<string, unknown>>
 
 type RegisteredMessageLoaderState = {
@@ -64,7 +74,7 @@ type GlobalRuntimeState = typeof globalThis & {
     activate(i18n: I18nInstance): void
     get(): I18nInstance | undefined
   }
-  [REGISTERED_MESSAGES_KEY]?: Map<string, Record<string, unknown>[]>
+  [REGISTERED_MESSAGES_KEY]?: Map<string, RegisteredMessageEntry[]>
   [REGISTERED_MESSAGE_LOADERS_KEY]?: Map<string, RegisteredMessageLoaderState>
   [REGISTERED_MESSAGE_LOADER_GROUPS_KEY]?: Map<string, RegisteredMessageLoaderGroup>
 }
@@ -79,13 +89,13 @@ function isServerEnvironment(): boolean {
 
 function getRegisteredMessages(
   state = globalRuntimeState()
-): Map<string, Record<string, unknown>[]> {
+): Map<string, RegisteredMessageEntry[]> {
   const existing = state[REGISTERED_MESSAGES_KEY]
   if (existing) {
     return existing
   }
 
-  const registered = new Map<string, Record<string, unknown>[]>()
+  const registered = new Map<string, RegisteredMessageEntry[]>()
   state[REGISTERED_MESSAGES_KEY] = registered
   return registered
 }
@@ -137,16 +147,29 @@ function createRegisteredMessageLoaderState(
  * Registrations are module-evaluation facts, not instance state. They survive
  * `resetI18nRuntime()` because the registering modules will not evaluate a
  * second time.
+ *
+ * `key` is the optional stable identity of the registering module. It is what
+ * makes re-evaluation idempotent: dev-server SSR re-runs an invalidated
+ * generated module in the same process, and without a key every catalog edit
+ * would buffer another full copy and keep serving removed message ids from the
+ * older ones. Re-registering a key replaces its entry in place, so buffer size
+ * and load order stay stable. Keyless registrations always append.
  */
-export function registerMessages(catalogs: RegisteredMessages): void {
+export function registerMessages(catalogs: RegisteredMessages, key?: string): void {
   const state = globalRuntimeState()
   const registered = getRegisteredMessages(state)
   for (const [locale, messages] of Object.entries(catalogs)) {
     const existing = registered.get(locale)
-    if (existing) {
-      existing.push(messages)
+    if (!existing) {
+      registered.set(locale, [{ key, messages }])
+      continue
+    }
+
+    const previous = key === undefined ? -1 : existing.findIndex((entry) => entry.key === key)
+    if (previous === -1) {
+      existing.push({ key, messages })
     } else {
-      registered.set(locale, [messages])
+      existing[previous] = { key, messages }
     }
   }
 
@@ -241,38 +264,45 @@ export async function loadRegisteredMessages<T extends I18nInstance>(
 ): Promise<T> {
   const loadable = i18n as MessageLoadingI18n
   const registered = globalRuntimeState()[REGISTERED_MESSAGES_KEY]
-  const eagerMessages = registered?.get(locale) ?? []
-  const lazyResources: Promise<Record<string, unknown>>[] = []
+  const eagerEntries = registered?.get(locale) ?? []
+  const pending: { state: RegisteredMessageLoaderState; loader: RegisteredMessageLoader }[] = []
 
   for (const state of getRegisteredMessageLoaders().values()) {
     const loader = state.loaders[locale]
     if (!loader) {
       continue
     }
-
-    let resource = state.resources.get(locale)
-    if (!resource) {
-      resource = loader().catch((error: unknown) => {
-        state.resources.delete(locale)
-        throw error
-      })
-      state.resources.set(locale, resource)
-    }
-    lazyResources.push(resource)
+    pending.push({ state, loader })
   }
 
-  if (eagerMessages.length === 0 && lazyResources.length === 0) {
+  if (eagerEntries.length === 0 && pending.length === 0) {
     return i18n
   }
+  // Rejected before any loader starts: a resource created here is cached and
+  // awaited below, so throwing afterwards would leave its rejection unhandled.
   if (!loadable.load) {
     throw new TypeError(
       "The active i18n instance cannot load generated graph-split messages. Provide an instance with load(locale, messages)."
     )
   }
 
+  const lazyResources = pending.map(({ state, loader }) => {
+    const existing = state.resources.get(locale)
+    if (existing) {
+      return existing
+    }
+
+    const resource = loader().catch((error: unknown) => {
+      state.resources.delete(locale)
+      throw error
+    })
+    state.resources.set(locale, resource)
+    return resource
+  })
+
   const lazyMessages = await Promise.all(lazyResources)
-  for (const messages of eagerMessages) {
-    loadable.load(locale, messages)
+  for (const entry of eagerEntries) {
+    loadable.load(locale, entry.messages)
   }
   for (const messages of lazyMessages) {
     loadable.load(locale, messages)
@@ -286,9 +316,9 @@ export function setClientI18n<T extends I18nInstance>(i18n: T): T {
   const registered = state[REGISTERED_MESSAGES_KEY]
   const loadable = i18n as MessageLoadingI18n
   if (registered && loadable.load) {
-    for (const [locale, maps] of registered) {
-      for (const messages of maps) {
-        loadable.load(locale, messages)
+    for (const [locale, entries] of registered) {
+      for (const entry of entries) {
+        loadable.load(locale, entry.messages)
       }
     }
   }
