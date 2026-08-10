@@ -65,8 +65,13 @@ can recover the completed per-file outcomes from
 `TranslationPatchResult`, and its `cause` describes the failed catalog write.
 This remains an error rather than a successful partial result.
 
-Applying a patch does not clear `fuzzy` or other review flags automatically.
-That is workflow policy and remains the caller's responsibility.
+A patch without `machine` provenance is an authored completion and clears the
+entry's `fuzzy` marker, the way gettext tools do when a translator confirms a
+guessed entry; without it a fuzzy entry could never be finished through the API
+and stayed incomplete in coverage. A patch carrying `machine` provenance leaves
+review flags as they were — it records `lock` and `ai` instead. Every other flag
+is preserved in both cases, and setting review flags remains the caller's
+responsibility.
 
 ## Provider-neutral TypeScript example
 
