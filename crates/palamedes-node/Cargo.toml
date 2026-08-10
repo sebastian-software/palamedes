@@ -16,10 +16,10 @@ crate-type = ["cdylib"]
 test-support = ["palamedes/test-support"]
 
 [dependencies]
-napi = { version = "3.9.4", default-features = false, features = ["napi9"] }
-napi-derive = "3.5.7"
+napi = { version = "3.12.1", default-features = false, features = ["napi9"] }
+napi-derive = "3.6.3"
 palamedes = { path = "../palamedes" }
 serde_json = "1.0.151"
 
 [build-dependencies]
-napi-build = "2.3.2"
+napi-build = "2.4.1"
