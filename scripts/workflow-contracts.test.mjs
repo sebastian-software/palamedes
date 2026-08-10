@@ -230,9 +230,7 @@ describe("workflow contracts", () => {
     ])
     const build = job(deploySite, "build", "deploy")
 
-    expect(packageJson.scripts["verify:site-routes"]).toBe(
-      "node ./scripts/verify-site-routes.mjs"
-    )
+    expect(packageJson.scripts["verify:site-routes"]).toBe("node ./scripts/verify-site-routes.mjs")
     expect(build).toContain("run: pnpm verify:site-routes")
     // In the build job, so a dead route blocks the deploy rather than being
     // reported by the post-deploy curl checks after it is already live.
