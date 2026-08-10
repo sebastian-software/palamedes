@@ -504,9 +504,10 @@ export interface NativeSourceRange {
   line: number;
   column: number;
 }
+export type NativeSourceDiagnosticSeverity = "Info" | "Warning" | "Error"
 export interface NativeSourceDiagnostic {
   code: string;
-  severity: string;
+  severity: NativeSourceDiagnosticSeverity;
   file: string;
   primary: NativeSourceRange;
   message: string;

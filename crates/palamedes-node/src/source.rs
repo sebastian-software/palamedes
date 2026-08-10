@@ -26,10 +26,17 @@ pub struct NativeSourceRange {
     pub column: u32,
 }
 
+#[napi(string_enum)]
+pub enum NativeSourceDiagnosticSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
 #[napi(object)]
 pub struct NativeSourceDiagnostic {
     pub code: String,
-    pub severity: String,
+    pub severity: NativeSourceDiagnosticSeverity,
     pub file: String,
     pub primary: NativeSourceRange,
     pub message: String,
@@ -61,13 +68,13 @@ impl TryFrom<palamedes::SourceDiagnostic> for NativeSourceDiagnostic {
 
     fn try_from(value: palamedes::SourceDiagnostic) -> Result<Self> {
         let severity = match value.severity {
-            palamedes::SourceDiagnosticSeverity::Error => "error",
-            palamedes::SourceDiagnosticSeverity::Warning => "warning",
-            palamedes::SourceDiagnosticSeverity::Info => "info",
+            palamedes::SourceDiagnosticSeverity::Error => NativeSourceDiagnosticSeverity::Error,
+            palamedes::SourceDiagnosticSeverity::Warning => NativeSourceDiagnosticSeverity::Warning,
+            palamedes::SourceDiagnosticSeverity::Info => NativeSourceDiagnosticSeverity::Info,
         };
         Ok(Self {
             code: value.code,
-            severity: severity.to_owned(),
+            severity,
             file: value.file,
             primary: NativeSourceRange::try_from(value.primary)?,
             message: value.message,
