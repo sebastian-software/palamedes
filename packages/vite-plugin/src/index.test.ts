@@ -2,6 +2,7 @@ import path from "node:path"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type * as PalamedesConfigModule from "@palamedes/config"
 import type * as PalamedesTransformModule from "@palamedes/transform"
 
 const mocks = vi.hoisted(() => ({
@@ -14,9 +15,15 @@ const mocks = vi.hoisted(() => ({
   transformPalamedesMacros: vi.fn(),
 }))
 
-vi.mock("@palamedes/config", () => ({
-  loadPalamedesConfig: mocks.loadPalamedesConfig,
-}))
+vi.mock("@palamedes/config", async (importOriginal) => {
+  // Catalog path resolution is pure and shared with the Next loader — exercise
+  // the real implementation so these tests pin the resolved paths.
+  const actual = await importOriginal<typeof PalamedesConfigModule>()
+  return {
+    loadPalamedesConfig: mocks.loadPalamedesConfig,
+    resolveCatalogPath: actual.resolveCatalogPath,
+  }
+})
 
 vi.mock("@palamedes/core-node", () => ({
   analyzeMdxNative: mocks.analyzeMdxNative,
@@ -486,7 +493,7 @@ describe("experimental graph splitting", () => {
         `import { messages as m1 } from "virtual:palamedes-messages/${key}/de";\n` +
         `import { messages as m2 } from "virtual:palamedes-messages/${key}/pseudo";\n` +
         `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ "en": m0, "de": m1, "pseudo": m2 });\n`
+        `registerMessages({ "en": m0, "de": m1, "pseudo": m2 }, "${key}");\n`
     )
     expect(result?.moduleSideEffects).toBe(true)
     // Message compilation happens in the per-locale modules, not the aggregator.
@@ -558,6 +565,25 @@ describe("experimental graph splitting", () => {
     expect(addWatchFile).toHaveBeenCalledWith(deCatalogPath)
   })
 
+  it("replaces every {locale} placeholder in a catalog path", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/{locale}", include: ["src/**/*"] }],
+    })
+
+    const { load, key } = await runSidecarLoad(["id-a"])
+    await load(`\0palamedes:messages/${key}/de`)
+
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledWith(
+      expect.objectContaining({ rootDir: "/repo" }),
+      path.resolve("/repo/locales/de/de.po"),
+      ["id-a"]
+    )
+  })
+
   it("warns on missing translations and keeps the sidecar buildable", async () => {
     mocks.compileCatalogArtifactSelected.mockReturnValue({
       messages: {},
@@ -598,7 +624,7 @@ describe("experimental graph splitting", () => {
       `import { locale as l, messages as m } from "#pmds/${key}";\n` +
         `import { defineCompiledCatalog } from "@palamedes/core/compiled";\n` +
         `import { registerMessages } from "@palamedes/runtime";\n` +
-        `registerMessages({ [l]: defineCompiledCatalog(m) });\n`
+        `registerMessages({ [l]: defineCompiledCatalog(m) }, "${key}");\n`
     )
   })
 
@@ -697,6 +723,64 @@ describe("experimental graph splitting", () => {
     // Only chunks with bare message imports appear, so servers can preload
     // the mapped assets of the chunks they serve.
     expect(parsed.chunkImports).toEqual({ "assets/home-abc.js": [`#pmds/${key}`] })
+  })
+
+  it("fails the import-map build on missing translations when configured", async () => {
+    // The emitted assets are the only client-visible artifact of this binding,
+    // so the gate has to hold here as well as on the embedded load path.
+    mocks.compileCatalogArtifactSelected.mockReturnValue({
+      messages: {},
+      missing: [{ id: "id-a", message: "Hello" }],
+      diagnostics: [],
+      watchFiles: [],
+      resolvedLocaleChain: [],
+    })
+
+    const { sidecarPlugin } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      {
+        pluginOptions: { ...IMPORT_MAP_OPTIONS, failOnMissing: true },
+        command: "build",
+      }
+    )
+    const emitFile = vi.fn()
+
+    await expect(
+      sidecarPlugin.generateBundle.call(
+        { environment: { name: "client" }, emitFile, warn: vi.fn() } as never,
+        {},
+        {}
+      )
+    ).rejects.toThrow(/Missing 1 translation\(s\) for locale en/)
+    expect(emitFile).not.toHaveBeenCalled()
+  })
+
+  it("warns about incomplete import-map assets when missing is not fatal", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages))
+    )
+    mocks.compileCatalogArtifactSelected.mockReturnValue({
+      messages: {},
+      missing: [{ id: "id-a", message: "Hello" }],
+      diagnostics: [],
+      watchFiles: [],
+      resolvedLocaleChain: [],
+    })
+
+    const { sidecarPlugin } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
+    )
+    const warn = vi.fn()
+    await sidecarPlugin.generateBundle.call(
+      { environment: { name: "client" }, emitFile: vi.fn(), warn } as never,
+      {},
+      {}
+    )
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"))
   })
 
   it("skips asset emission for SSR bundles", async () => {
