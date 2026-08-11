@@ -602,7 +602,9 @@ describe("catalog source matching", () => {
   })
 
   it("resolves the configured locale path through one implementation", () => {
-    expect(catalogResourcePath(config, catalog, "de")).toBe("/repo/locales/de.po")
+    expect(catalogResourcePath(config, catalog, "de")).toBe(
+      path.join(config.rootDir, "locales", "de.po")
+    )
   })
 })
 
