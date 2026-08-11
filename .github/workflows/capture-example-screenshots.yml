@@ -41,28 +41,15 @@ on:
 jobs:
   capture:
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Set up pnpm cache
-        uses: actions/setup-node@v7
-        with:
-          cache: pnpm
-          node-version: 24
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -34,23 +34,16 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version: 24
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Set up pnpm cache
-        uses: actions/setup-node@v7
-        with:
-          cache: pnpm
-          node-version: 24
+          rust: "false"
+          rust-cache: "false"
 
       - name: Install dependencies
         shell: bash

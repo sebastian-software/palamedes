@@ -1,0 +1,64 @@
+name: Set up workspace
+description: Set up Node.js, Corepack, pnpm and the Rust workspace toolchain.
+
+inputs:
+  node-version:
+    description: Node.js version to install.
+    required: false
+    default: "24"
+  pnpm-cache:
+    description: Restore the pnpm dependency cache.
+    required: false
+    default: "true"
+  rust:
+    description: Install the Rust toolchain.
+    required: false
+    default: "true"
+  rust-cache:
+    description: Restore the Rust build cache.
+    required: false
+    default: "true"
+  rust-toolchain:
+    description: Rust toolchain to install when Rust is enabled.
+    required: false
+    default: stable
+  rust-components:
+    description: Comma-separated Rust components to install.
+    required: false
+    default: ""
+  registry-url:
+    description: Optional npm registry URL used for publishing jobs.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    # Corepack has to run before setup-node asks pnpm for the cache directory.
+    - name: Restore pnpm cache
+      if: inputs.pnpm-cache == 'true'
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+
+    - name: Set up Rust
+      if: inputs.rust == 'true'
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ inputs.rust-toolchain }}
+        components: ${{ inputs.rust-components }}
+
+    - name: Cache Rust build artifacts
+      if: inputs.rust == 'true' && inputs.rust-cache == 'true'
+      uses: Swatinem/rust-cache@v2
