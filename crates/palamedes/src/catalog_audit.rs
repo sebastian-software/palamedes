@@ -3,15 +3,16 @@ use std::fs;
 use std::path::PathBuf;
 
 use ferrocat::{
-    canonicalize_icu_with_policy, parse_catalog_for_review, parse_icu, CatalogAuditIcuOptions,
-    CatalogAuditOptions, CatalogMessage, EffectiveTranslationRef, IcuMessage, IcuNode,
-    IcuSyntaxPolicy, NormalizedParsedCatalog, ParseCatalogOptions,
+    parse_catalog_for_review, parse_icu, CatalogAuditIcuOptions, CatalogAuditOptions,
+    CatalogMessage, EffectiveTranslationRef, IcuMessage, IcuNode, NormalizedParsedCatalog,
+    ParseCatalogOptions,
 };
 use ferrocat_po::audit_catalogs as ferrocat_audit_catalogs;
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::{canonicalize_runtime_icu, RUNTIME_ICU_SYNTAX_POLICY};
 use crate::message_metadata::MessageMetadataInput;
 
 use super::catalog_artifact::{resolve_catalog_path, CatalogArtifactConfig, CatalogConfig};
@@ -142,8 +143,8 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
-        let icu_options = CatalogAuditIcuOptions::new()
-            .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes);
+        let icu_options =
+            CatalogAuditIcuOptions::new().with_syntax_policy(RUNTIME_ICU_SYNTAX_POLICY);
         let options = CatalogAuditOptions::new(&request.config.source_locale)
             .with_locales(&locale_refs)
             .with_metadata(&metadata)
@@ -286,7 +287,7 @@ fn singular_translation(message: &CatalogMessage) -> Option<&str> {
 }
 
 fn plain_argument_occurrences(value: &str) -> Option<BTreeMap<String, usize>> {
-    let canonical = canonicalize_icu_with_policy(value, IcuSyntaxPolicy::RuntimeLiteralApostrophes);
+    let canonical = canonicalize_runtime_icu(value);
     let message = parse_icu(&canonical).ok()?;
     let mut counts = BTreeMap::new();
     count_plain_arguments(&message, &mut counts).then_some(counts)

@@ -17,6 +17,7 @@ use ferrocat::{
 };
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::RUNTIME_ICU_SYNTAX_POLICY;
 
 pub use self::cache::CatalogCompilationCache;
 use self::compile::{build_artifact_result, runtime_icu_options};
@@ -103,7 +104,7 @@ pub fn compile_catalog_artifact_selected(
     let compiled_id_index = CompiledCatalogIdIndex::new_with_policy(
         &catalogs,
         CompiledKeyStrategy::FerrocatV1,
-        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
+        RUNTIME_ICU_SYNTAX_POLICY,
     )
     .map_err(PalamedesError::BuildCompiledIdIndex)?;
     compile_selected_prepared(&prepared, &compiled_id_index, request)

@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::diagnostic::CatalogDiagnostic;
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::canonicalize_runtime_icu;
 use ferrocat::{
     parse_catalog as ferrocat_parse_catalog, update_catalog as ferrocat_update_catalog,
     update_catalog_file as ferrocat_update_catalog_file, ApiError, CatalogOrigin, CatalogStats,
@@ -503,7 +504,7 @@ fn preserve_existing_po_apostrophe_identities_from_content(
                 continue;
             }
             canonical_identities
-                .entry((apostrophe_canonical_form(msgid), msgctxt.as_deref()))
+                .entry((canonicalize_runtime_icu(msgid), msgctxt.as_deref()))
                 .or_default()
                 .push(index);
         }
@@ -512,7 +513,7 @@ fn preserve_existing_po_apostrophe_identities_from_content(
     let mut proposed = Vec::new();
     for (message_index, message) in migrating {
         let key = (
-            apostrophe_canonical_form(&message.message),
+            canonicalize_runtime_icu(&message.message),
             message.context.as_deref(),
         );
         let Some(candidates) = canonical_identities.get(&key) else {
@@ -548,13 +549,6 @@ fn preserve_existing_po_apostrophe_identities_from_content(
     }
 
     Ok(())
-}
-
-fn apostrophe_canonical_form(value: &str) -> Cow<'_, str> {
-    ferrocat::canonicalize_icu_with_policy(
-        value,
-        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
-    )
 }
 
 fn validate_po_options(

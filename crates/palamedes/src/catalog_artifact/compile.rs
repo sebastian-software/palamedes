@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use ferrocat::{
     pseudolocalize_compiled_catalog_artifact, CompileCatalogArtifactIcuOptions,
     CompiledCatalogPseudolocalizationOptions, IcuArgumentKind, IcuDiagnosticSeverity, IcuFormatter,
-    IcuFormatterSupport, IcuPseudolocalizationOptions, IcuSyntaxPolicy,
+    IcuFormatterSupport, IcuPseudolocalizationOptions,
 };
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::RUNTIME_ICU_SYNTAX_POLICY;
 
 use super::types::{
     CatalogArtifactDiagnostic, CatalogArtifactMissingMessage, CatalogArtifactResult,
@@ -20,7 +21,7 @@ use super::types::{
 /// the same contract.
 pub(super) fn runtime_icu_options() -> CompileCatalogArtifactIcuOptions {
     CompileCatalogArtifactIcuOptions::new()
-        .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes)
+        .with_syntax_policy(RUNTIME_ICU_SYNTAX_POLICY)
         .with_formatter_support(runtime_icu_formatter_support)
 }
 
@@ -34,7 +35,7 @@ pub(super) fn build_artifact_result(
     let artifact = if pseudo_locale == Some(locale) {
         let options = CompiledCatalogPseudolocalizationOptions::new()
             .with_icu_options(IcuPseudolocalizationOptions::new())
-            .with_syntax_policy(IcuSyntaxPolicy::RuntimeLiteralApostrophes);
+            .with_syntax_policy(RUNTIME_ICU_SYNTAX_POLICY);
         pseudolocalize_compiled_catalog_artifact(&artifact, &options)
             .map_err(PalamedesError::PseudolocalizeCatalogArtifact)?
     } else {
