@@ -73,6 +73,13 @@
   .term-body { background: var(--ink); color: #dbe4ef; padding: 16px 18px; font-family: var(--mono); font-size: 12.5px; line-height: 1.85; }
   .term .p { color: #8fa3bd; } .term .ok { color: var(--ok); } .term .t { color: var(--warn); } .term .bad { color: #e5534b; }
 
+  .sheetlike { margin-top: 26px; max-width: 720px; border: 1px solid var(--ink); }
+  .ptable { width: 100%; border-collapse: collapse; }
+  .ptable th { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gray); background: var(--track); text-align: left; padding: 10px 14px; font-weight: 400; width: 1%; white-space: nowrap; border-bottom: 1px solid var(--hair); }
+  .ptable td { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; padding: 10px 14px; text-align: center; border-bottom: 1px solid var(--hair); }
+  .ptable tr:last-child th, .ptable tr:last-child td { border-bottom: 0; }
+  .ptable td.win { color: var(--accent); font-weight: 700; outline: 1px solid var(--accent); outline-offset: -4px; }
+
   .rail { margin-top: 26px; max-width: 900px; border-left: 2px solid var(--accent); padding: 4px 0 4px 20px; }
   .rail .h { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
   .rail p { margin-top: 8px; font-size: 13px; line-height: 1.7; color: #2c4463; max-width: 54em; }
@@ -105,7 +112,7 @@
       <p class="lede">
         Rust buys speed; it doesn&rsquo;t buy architecture. The interesting part
         is what Palamedes refuses to do at runtime — parse, guess, or
-        duplicate — and the machinery that makes those refusals stick. Six
+        duplicate — and the machinery that makes those refusals stick. Nine
         mechanisms, each with the decision record that explains it.
       </p>
       <div class="ctas">
@@ -207,9 +214,95 @@ msgstr <span class="dim">"{seats, plural, one {Noch # Platz}
       <a class="adrchip" href="#">ADR-014 · native transform source maps</a>
     </section>
 
-    <!-- 03 — ferrocat -->
+    <!-- 03 — memory -->
     <section class="section">
-      <div class="num">03 — One catalog engine</div>
+      <div class="num">03 — Memory: arenas, not allocations</div>
+      <h2>One arena per worker. One reset per file. Not thousands of frees.</h2>
+      <p class="slede">
+        Every parsed file's AST — nodes and strings — lives in a bump arena
+        (oxc's allocator). Nothing is allocated per node, and message strings
+        are borrowed from the arena until aggregation. Each extraction worker
+        reuses its arena across files with a single <code>reset()</code>: one
+        deallocation per file instead of one per AST node. The napi boundary
+        follows the same philosophy — one native call carries a whole extract,
+        so allocation and copy costs are paid per workflow, not per message.
+      </p>
+      <div class="code2">
+        <div class="codecol">
+          <div class="head">Shape of crates/palamedes/src/extract.rs</div>
+          <pre><span class="dim">// one arena per worker, reused across files</span>
+thread_local! ARENA: RefCell&lt;Allocator&gt;
+
+<span class="kw">for</span> file <span class="kw">in</span> worker_files {
+  <span class="kw">let</span> ast = parse_in(&amp;arena, source)
+  collect_messages(ast)  <span class="dim">// borrowed, zero-copy</span>
+  arena.reset()          <span class="dim">// one free, not thousands</span>
+}</pre>
+        </div>
+        <div class="codecol">
+          <div class="head">The boundary pays per workflow</div>
+          <pre><span class="dim">// ADR-009: workflow-first native ops —</span>
+<span class="dim">// "large workflow calls pay additional</span>
+<span class="dim">//  allocation and copy costs" → so the</span>
+<span class="dim">//  boundary is crossed once per extract,</span>
+<span class="dim">//  not 6,000 times per message.</span>
+extractWorkspace(options) <span class="dim">// one crossing</span></pre>
+        </div>
+      </div>
+      <div class="rail">
+        <div class="h">SIMD, honestly</div>
+        <p>
+          Byte scanning in the lexer is SIMD-accelerated — <code>memchr</code>
+          inside the oxc parser. Palamedes' own crates contain no hand-written
+          SIMD, and this page will not pretend otherwise. If a profile ever
+          shows a hot loop that wants it, the ADR will say so first.
+        </p>
+      </div>
+      <a class="adrchip" href="#">oxc_allocator · bump arena</a>
+      <a class="adrchip" href="#">ADR-009 · workflow-first boundary</a>
+    </section>
+
+    <!-- 04 — parallelism, earned -->
+    <section class="section">
+      <div class="num">04 — Parallelism that had to be earned</div>
+      <h2>Naive parallelism made it slower. So we profiled the kernel.</h2>
+      <p class="slede">
+        Handing 1,500 files to a per-core thread pool made extraction 1.6×
+        slower than running it serially. The profile (samply, 10&#8201;kHz)
+        showed why: at twenty workers, 92.8% of samples sat in
+        <code>mach_vm_protect</code> — kernel virtual-memory setup serialized
+        on the process-wide lock. A one-shot CLI pays that setup on every run
+        and never reaches the steady state that would repay it.
+      </p>
+      <div class="sheetlike">
+        <table class="ptable">
+          <tr><th>Workers</th><td>1</td><td>2</td><td class="win">4</td><td>8</td><td>12</td><td>20</td></tr>
+          <tr><th>Extraction</th><td>119 ms</td><td>69 ms</td><td class="win">45 ms</td><td>70 ms</td><td>151 ms</td><td>197 ms</td></tr>
+        </table>
+      </div>
+      <p class="slede" style="margin-top: 18px;">
+        The answer is a <b>bounded</b> pool of four workers — the measured
+        floor of that curve, deliberately a constant rather than a function of
+        core count, configurable and clamped. Extract phase: 122&#8201;ms →
+        53&#8201;ms. Aggregation stays serial and in input order, and a test
+        proves catalog equality at 1, 2, 4, and 8 workers.
+      </p>
+      <div class="rail">
+        <div class="h">What didn't move the number</div>
+        <p>
+          Thread-local arenas with reset, mimalloc as global allocator,
+          <code>with_min_len</code> chunking, 128&#8201;KB worker stacks — all
+          built, all measured, none explained the curve. Only the worker count
+          did. The arena stayed because it is the right memory shape; mimalloc
+          did not ship. It's all written down.
+        </p>
+      </div>
+      <a class="adrchip" href="#">ADR-013 · bounded parallel extraction</a>
+    </section>
+
+    <!-- 05 — ferrocat -->
+    <section class="section">
+      <div class="num">05 — One catalog engine</div>
       <h2>ferrocat: catalog semantics live in exactly one place.</h2>
       <p class="slede">
         Parsing, updating, auditing, ICU diagnostics, PO/FCL storage, and
@@ -240,7 +333,7 @@ msgstr <span class="dim">"{seats, plural, one {Noch # Platz}
 
     <!-- 04 — napi boundary -->
     <section class="section">
-      <div class="num">04 — The typed boundary</div>
+      <div class="num">06 — The typed boundary</div>
       <h2>The TypeScript types are generated from the native surface. They cannot lie.</h2>
       <p class="slede">
         The JS/Rust boundary is crossed per workflow, not per message — one
@@ -273,7 +366,7 @@ msgstr <span class="dim">"{seats, plural, one {Noch # Platz}
 
     <!-- 05 — adapters as renderers -->
     <section class="section">
-      <div class="num">05 — Thin adapters, by contract</div>
+      <div class="num">07 — Thin adapters, by contract</div>
       <h2>Adapters render module source. They never touch catalog semantics.</h2>
       <p class="slede">
         A framework adapter's whole job is to hand compiled catalog artifacts
@@ -298,7 +391,7 @@ msgstr <span class="dim">"{seats, plural, one {Noch # Platz}
 
     <!-- 06 — runtime scope -->
     <section class="section">
-      <div class="num">06 — One runtime contract</div>
+      <div class="num">08 — One runtime contract</div>
       <h2>getI18n() everywhere — request-scoped on the server, fixed per document in the browser.</h2>
       <p class="slede">
         On the server, the active instance rides an AsyncLocalStorage request
@@ -328,7 +421,7 @@ msgstr <span class="dim">"{seats, plural, one {Noch # Platz}
 
     <!-- 07 — the verification machine -->
     <section class="section" style="border-bottom: 0;">
-      <div class="num">07 — The machine that checks the marketing</div>
+      <div class="num">09 — The machine that checks the marketing</div>
       <h2>This website fails its build when the numbers drift.</h2>
       <p class="slede">
         The benchmark figures quoted across palamedes.dev are hardcoded

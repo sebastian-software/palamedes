@@ -656,7 +656,7 @@ magic named. Hero: *"«Written in Rust» is the boring half."* — Rust buys
 speed, not architecture; the page is about what Palamedes refuses to do at
 runtime. Opens with the **machine map** (five layers: app → toolchain →
 native core → artifacts → runtime, with the typed napi boundary as an ink
-band between toolchain and core), then seven mechanisms, each with a real
+band between toolchain and core), then nine mechanisms, each with a real
 artifact and ADR chips:
 
 1. Compiled, not interpreted — catalogs become executable message
@@ -664,7 +664,21 @@ artifact and ADR chips:
    code pair, labeled illustrative until real compiled output is dropped in.
 2. The cache that trusts `stat` — flow diagram + cold/warm terminal
    (ADR-019/013/014).
-3. ferrocat — one catalog engine; audit JSON + merge-driver command
+3. Memory: arenas, not allocations — AST + strings in oxc's bump arena,
+   thread-local arena reused with one `reset()` per file (verified in
+   `crates/palamedes/src/extract.rs`), workflow-first boundary against copy
+   costs. Includes the **"SIMD, honestly" rail**: byte scanning is
+   SIMD-accelerated via `memchr` inside the oxc parser; Palamedes' own
+   crates contain no hand-written SIMD and the page says so — mimalloc was
+   tried during the ADR-013 investigation and deliberately not shipped, so
+   it is likewise not claimed.
+4. Parallelism that had to be earned — the ADR-013 story rendered whole:
+   naive per-core Rayon was 1.6× slower, samply @ 10 kHz found 92.8% of
+   samples in `mach_vm_protect`, the shipped answer is a bounded pool of
+   four (a measured constant, not a core count), with the real worker-count
+   table (119/69/**45**/70/151/197 ms) and the honest "what didn't move the
+   number" list.
+5. ferrocat — one catalog engine; audit JSON + merge-driver command
    (ADR-006/015).
 4. The typed boundary — workflow-first napi calls; TS types generated from
    the binding surface, "they cannot lie"; per-platform prebuilds
