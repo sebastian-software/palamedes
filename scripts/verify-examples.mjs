@@ -1,6 +1,7 @@
-import { execFileSync, spawn } from "node:child_process"
+import { spawn } from "node:child_process"
 import http from "node:http"
 import { parseExampleArgs, selectExamples } from "./example-matrix.mjs"
+import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs"
 
 let barrierSequence = 0
 const SERVER_I18N_TEST_BARRIER_REACHED_HEADER = "x-palamedes-i18n-test-barrier-reached"
@@ -24,102 +25,6 @@ function runCommand({ args, cwd, env }) {
       }
     })
   })
-}
-
-function startCommand({ args, cwd, env }) {
-  return spawn("pnpm", args, {
-    cwd,
-    detached: process.platform !== "win32",
-    env: {
-      ...process.env,
-      ...env,
-    },
-    stdio: "inherit",
-  })
-}
-
-function getListeningPids(port) {
-  try {
-    const output = execFileSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-
-    return output
-      .split(/\r?\n/u)
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .map((value) => Number(value))
-      .filter((value) => Number.isInteger(value))
-  } catch {
-    return []
-  }
-}
-
-async function ensurePortFree(port) {
-  const pids = getListeningPids(port)
-
-  if (pids.length === 0) {
-    return
-  }
-
-  for (const pid of pids) {
-    try {
-      process.kill(pid, "SIGTERM")
-    } catch {}
-  }
-
-  const startedAt = Date.now()
-  while (Date.now() - startedAt < 2000) {
-    if (getListeningPids(port).length === 0) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-
-  for (const pid of getListeningPids(port)) {
-    try {
-      process.kill(pid, "SIGKILL")
-    } catch {}
-  }
-}
-
-function waitForExit(child) {
-  return new Promise((resolve) => {
-    child.once("exit", () => resolve())
-  })
-}
-
-async function stopCommand(child) {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return
-  }
-
-  try {
-    if (process.platform === "win32") {
-      child.kill("SIGTERM")
-    } else {
-      process.kill(-child.pid, "SIGTERM")
-    }
-  } catch {}
-
-  const exitPromise = waitForExit(child)
-  const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000))
-  await Promise.race([exitPromise, timeoutPromise])
-
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return
-  }
-
-  try {
-    if (process.platform === "win32") {
-      child.kill("SIGKILL")
-    } else {
-      process.kill(-child.pid, "SIGKILL")
-    }
-  } catch {}
-
-  await waitForExit(child)
 }
 
 function requestText(port, requestPath, headers = {}) {

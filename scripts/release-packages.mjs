@@ -25,6 +25,7 @@ export function publicWorkspacePackages(root = process.cwd()) {
 
       return {
         directory: packagePath,
+        manifest: packageJson,
         name: packageJson.name,
         nativeArtifact: nativeArtifact(packageJson),
         version: packageJson.version,
