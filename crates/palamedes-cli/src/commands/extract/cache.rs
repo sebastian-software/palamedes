@@ -5,22 +5,17 @@ use std::path::{Path, PathBuf};
 
 use palamedes::ExtractCache;
 
-use crate::commands::extract::ExtractOptions;
-use crate::config::LoadedConfig;
+use crate::config::{ConfigLintRules, LoadedConfig};
 
 /// Resolves and loads the cache, or a disabled one when it is turned off.
-pub(super) fn load_extract_cache(config: &LoadedConfig, options: &ExtractOptions) -> ExtractCache {
-    if options.no_cache || !config.extract_cache {
+pub(crate) fn load_extract_cache(config: &LoadedConfig, no_cache: bool) -> ExtractCache {
+    if no_cache || !config.extract_cache {
         return ExtractCache::disabled();
     }
     ExtractCache::load_with_options(
         &extract_cache_path(config),
         &config.source_reference_root.to_string_lossy(),
-        &palamedes::ExtractCatalogMessagesOptions {
-            reference_scopes: config.reference_scopes,
-            mdx: config.mdx.clone(),
-            rules: config.lint.rules.clone().into(),
-        },
+        &config.analysis_options(),
     )
 }
 
@@ -33,13 +28,21 @@ pub(super) fn extract_cache_path(config: &LoadedConfig) -> PathBuf {
 /// instance that is being reused across config reloads.
 fn extract_cache_identity(
     config: &LoadedConfig,
-) -> (&Path, &Path, bool, bool, &palamedes::MdxOptions) {
+) -> (
+    &Path,
+    &Path,
+    bool,
+    bool,
+    &palamedes::MdxOptions,
+    &ConfigLintRules,
+) {
     (
         config.root_dir.as_path(),
         config.source_reference_root.as_path(),
         config.reference_scopes,
         config.extract_cache,
         &config.mdx,
+        &config.lint.rules,
     )
 }
 
@@ -54,15 +57,16 @@ fn extract_cache_identity(
 pub(super) fn rebuild_extract_cache_for_reload(
     previous: &LoadedConfig,
     next: &LoadedConfig,
-    options: &ExtractOptions,
+    no_cache: bool,
+    verbose: bool,
     cache: &mut ExtractCache,
 ) {
     if extract_cache_identity(previous) == extract_cache_identity(next) {
         return;
     }
 
-    persist_extract_cache(previous, options, cache);
-    *cache = load_extract_cache(next, options);
+    persist_extract_cache(previous, verbose, cache);
+    *cache = load_extract_cache(next, no_cache);
 }
 
 /*
@@ -70,13 +74,13 @@ pub(super) fn rebuild_extract_cache_for_reload(
  * cold. Report it once so a permanently unwritable directory is not silently
  * costing every invocation.
  */
-pub(super) fn persist_extract_cache(
+pub(crate) fn persist_extract_cache(
     config: &LoadedConfig,
-    options: &ExtractOptions,
+    verbose: bool,
     cache: &mut ExtractCache,
 ) {
     if let Err(error) = cache.save(&extract_cache_path(config)) {
-        if options.verbose {
+        if verbose {
             eprintln!(
                 "Warning: could not write the extraction cache to {}: {error}",
                 extract_cache_path(config).display()
