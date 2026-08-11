@@ -67,6 +67,9 @@ console.error(
 
 if (warnOnly) {
   console.error("")
+  console.error(
+    `::warning title=First-publish setup required::${unpublished.length} package(s) need a manual bootstrap publish and npm trusted-publisher configuration before a release can succeed.`
+  )
   console.error("Reported only: this run does not publish anything.")
   process.exit(0)
 }
