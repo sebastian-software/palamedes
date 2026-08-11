@@ -72,3 +72,13 @@ export function getTldSwitchLinks(request: Request) {
     locale,
   }))
 }
+
+export function resolveLocaleRedirect(
+  request: Request,
+  locale: Locale,
+  redirect: FormDataEntryValue | null,
+  fallback: string
+): string {
+  const allowedRedirect = getTldSwitchLinks(request).find((item) => item.locale === locale)?.href
+  return typeof redirect === "string" && redirect === allowedRedirect ? redirect : fallback
+}

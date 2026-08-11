@@ -1,23 +1,19 @@
 use std::collections::HashMap;
 
 use oxc_ast::ast::{
-    Argument, Expression, JSXAttributeValue, JSXChild, JSXExpression, JSXOpeningElement,
-    ObjectExpression, ObjectPropertyKind, TemplateLiteral,
+    Argument, Expression, JSXChild, JSXOpeningElement, ObjectExpression, TemplateLiteral,
 };
 use oxc_span::GetSpan;
 
-use crate::choice::{
-    expression_offset_value, invalid_choice_option, invalid_offset, is_plural_format,
-    jsx_offset_value, normalize_choice_option_key,
-};
 use crate::error::PalamedesResult;
 use crate::icu_text::escape_icu_literal;
-use crate::jsx_entities::decode_jsx_entities;
-use crate::placeholder_name::{expression_name, jsx_expression_name};
+use crate::placeholder_name::expression_name;
 use crate::source_message::{
     build_icu_message as shared_build_icu_message, expression_source as shared_expression_source,
-    jsx_attributes as shared_jsx_attributes, jsx_expression_source as shared_jsx_expression_source,
-    lower_jsx_children, lower_template, make_unique_value_name,
+    jsx_attributes as shared_jsx_attributes,
+    lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
+    lower_choice_options_from_object, lower_jsx_children, lower_jsx_choice_value_binding,
+    lower_template, make_unique_value_name,
 };
 
 use super::Replacement;
@@ -51,49 +47,27 @@ pub(super) fn extract_choice_options(
     macro_name: &str,
     location: &str,
 ) -> PalamedesResult<ExtractedChoiceOptions> {
-    let mut options = Vec::new();
-    let mut values = Vec::new();
-    let mut offset = None;
-
-    for property in &object.properties {
-        let ObjectPropertyKind::ObjectProperty(property) = property else {
-            continue;
-        };
-        let Some(key) = property.key.static_name() else {
-            continue;
-        };
-        let key = key.into_owned();
-        if is_plural_format(format) && key == "offset" {
-            offset = Some(
-                expression_offset_value(&property.value)
-                    .ok_or_else(|| invalid_offset(macro_name, location))?,
-            );
-            continue;
-        }
-        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
-            return Err(invalid_choice_option(macro_name, location, &key));
-        };
-        let (value, option_values) = match property.value.without_parentheses() {
-            Expression::StringLiteral(literal) => {
-                (escape_icu_literal(literal.value.as_str()), Vec::new())
-            }
-            Expression::TemplateLiteral(template) => template_to_message_with_state(
-                template,
-                source,
-                "choice option template expression",
-                used_value_names,
-            )?,
-            _ => continue,
-        };
-
-        options.push((normalized_key, value));
-        append_unique_bindings(&mut values, option_values);
-    }
+    let lowered = lower_choice_options_from_object(
+        object,
+        source,
+        used_value_names,
+        format,
+        macro_name,
+        location,
+        escape_icu_literal,
+    )?;
 
     Ok(ExtractedChoiceOptions {
-        options,
-        values,
-        offset,
+        options: lowered.options,
+        values: lowered
+            .values
+            .into_iter()
+            .map(|value| ValueBinding {
+                expression: value.expression,
+                name: value.name,
+            })
+            .collect(),
+        offset: lowered.offset,
     })
 }
 
@@ -102,25 +76,14 @@ pub(super) fn extract_jsx_value_binding(
     source: &str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<Option<ValueBinding>> {
-    for attr in &opening_element.attributes {
-        let Some(attr) = attr.as_attribute() else {
-            continue;
-        };
-        if attr.name.get_identifier().name != "value" {
-            continue;
-        }
-        let Some(JSXAttributeValue::ExpressionContainer(container)) = attr.value.as_ref() else {
-            continue;
-        };
-
-        return Ok(Some(choice_jsx_value_binding(
-            &container.expression,
-            source,
-            used_value_names,
-        )));
-    }
-
-    Ok(None)
+    Ok(
+        lower_jsx_choice_value_binding(opening_element, source, used_value_names).map(|value| {
+            ValueBinding {
+                expression: value.expression,
+                name: value.name,
+            }
+        }),
+    )
 }
 
 pub(super) fn extract_choice_options_from_jsx(
@@ -131,64 +94,27 @@ pub(super) fn extract_choice_options_from_jsx(
     macro_name: &str,
     location: &str,
 ) -> PalamedesResult<ExtractedChoiceOptions> {
-    let mut options = Vec::new();
-    let mut values = Vec::new();
-    let mut offset = None;
-
-    for attr in &opening_element.attributes {
-        let Some(attr) = attr.as_attribute() else {
-            continue;
-        };
-        let key = attr.name.get_identifier().name.to_string();
-        if matches!(
-            key.as_str(),
-            "id" | "message" | "comment" | "context" | "value"
-        ) {
-            continue;
-        }
-        if is_plural_format(format) && key == "offset" {
-            offset = Some(
-                attr.value
-                    .as_ref()
-                    .and_then(jsx_offset_value)
-                    .ok_or_else(|| invalid_offset(macro_name, location))?,
-            );
-            continue;
-        }
-        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
-            return Err(invalid_choice_option(macro_name, location, &key));
-        };
-        let Some(attr_value) = attr.value.as_ref() else {
-            continue;
-        };
-        let (value, option_values) = match attr_value {
-            JSXAttributeValue::StringLiteral(literal) => (
-                escape_icu_literal(&decode_jsx_entities(literal.value.as_str())),
-                Vec::new(),
-            ),
-            JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::StringLiteral(literal) => {
-                    (escape_icu_literal(literal.value.as_str()), Vec::new())
-                }
-                JSXExpression::TemplateLiteral(template) => template_to_message_with_state(
-                    template,
-                    source,
-                    "choice option template expression",
-                    used_value_names,
-                )?,
-                _ => continue,
-            },
-            _ => continue,
-        };
-
-        options.push((normalized_key, value));
-        append_unique_bindings(&mut values, option_values);
-    }
+    let lowered = shared_lower_choice_options_from_jsx(
+        opening_element,
+        source,
+        used_value_names,
+        format,
+        macro_name,
+        location,
+        escape_icu_literal,
+    )?;
 
     Ok(ExtractedChoiceOptions {
-        options,
-        values,
-        offset,
+        options: lowered.options,
+        values: lowered
+            .values
+            .into_iter()
+            .map(|value| ValueBinding {
+                expression: value.expression,
+                name: value.name,
+            })
+            .collect(),
+        offset: lowered.offset,
     })
 }
 
@@ -339,19 +265,6 @@ pub(super) fn choice_expression_binding(
         expression_name(expr).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
     let expression =
         shared_expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
-    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
-
-    ValueBinding { expression, name }
-}
-
-pub(super) fn choice_jsx_value_binding(
-    expr: &JSXExpression<'_>,
-    source: &str,
-    used_value_names: &mut HashMap<String, String>,
-) -> ValueBinding {
-    let expression = shared_jsx_expression_source(expr, source).unwrap_or_default();
-    let preferred_name =
-        jsx_expression_name(expr).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
     let name = make_unique_value_name(preferred_name, &expression, used_value_names);
 
     ValueBinding { expression, name }
