@@ -93,8 +93,7 @@
     "@palamedes/config": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "@palamedes/transform": "workspace:^",
-    "picomatch": "^4.0.5"
+    "@palamedes/transform": "workspace:^"
   },
   "peerDependencies": {
     "next": "^16"

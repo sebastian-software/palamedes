@@ -5,7 +5,7 @@ use std::path::Path;
 use ferrocat::{parse_catalog, NormalizedParsedCatalog, ParseCatalogOptions};
 use sha2::{Digest, Sha256};
 
-use super::resolve::normalize_path;
+use super::resolve::{catalog_locale_matcher, normalize_path};
 use super::types::{CatalogArtifactConfig, CatalogConfig};
 use crate::error::{PalamedesError, PalamedesResult};
 
@@ -40,7 +40,7 @@ pub(super) fn read_catalog_sources(
     let mut sources = Vec::new();
 
     for (index, file) in files.iter().enumerate() {
-        let locale = infer_locale_from_path(file, config)
+        let locale = infer_locale_from_path(file, config)?
             .ok_or_else(|| PalamedesError::CouldNotInferLocale { path: file.clone() })?;
         let content = match fs::read_to_string(file) {
             Ok(content) => content,
@@ -55,7 +55,7 @@ pub(super) fn read_catalog_sources(
                 });
             }
         };
-        let catalog = catalog_for_path(file, config)
+        let catalog = catalog_for_path(file, config)?
             .ok_or_else(|| PalamedesError::CouldNotInferLocale { path: file.clone() })?;
         let digest = Sha256::digest(content.as_bytes()).into();
         sources.push(CatalogSource {
@@ -109,37 +109,30 @@ where
     Ok(loaded)
 }
 
-fn infer_locale_from_path(path: &Path, config: &CatalogArtifactConfig) -> Option<String> {
+fn infer_locale_from_path(
+    path: &Path,
+    config: &CatalogArtifactConfig,
+) -> PalamedesResult<Option<String>> {
     let normalized_resource = normalize_path(path);
     for catalog in &config.catalogs {
-        let absolute_catalog_path = Path::new(&config.root_dir)
-            .join(&catalog.path)
-            .with_extension(catalog.format.extension());
-        let pattern = normalize_path(&absolute_catalog_path);
-        let escaped = regex::escape(&pattern);
-        let regex_pattern = escaped.replace("\\{locale\\}", "([^/]+)");
-        let matcher = regex::Regex::new(&format!("^{regex_pattern}$")).ok()?;
+        let matcher = catalog_locale_matcher(Path::new(&config.root_dir), catalog)?;
         if let Some(captures) = matcher.captures(&normalized_resource) {
-            return captures.get(1).map(|value| value.as_str().to_owned());
+            return Ok(captures.get(1).map(|value| value.as_str().to_owned()));
         }
     }
-    None
+    Ok(None)
 }
 
 fn catalog_for_path<'a>(
     path: &Path,
     config: &'a CatalogArtifactConfig,
-) -> Option<&'a CatalogConfig> {
+) -> PalamedesResult<Option<&'a CatalogConfig>> {
     let normalized_resource = normalize_path(path);
-    config.catalogs.iter().find(|catalog| {
-        let absolute_catalog_path = Path::new(&config.root_dir)
-            .join(&catalog.path)
-            .with_extension(catalog.format.extension());
-        let pattern = normalize_path(&absolute_catalog_path);
-        let escaped = regex::escape(&pattern);
-        let regex_pattern = escaped.replace("\\{locale\\}", "([^/]+)");
-        regex::Regex::new(&format!("^{regex_pattern}$"))
-            .map(|matcher| matcher.is_match(&normalized_resource))
-            .unwrap_or(false)
-    })
+    for catalog in &config.catalogs {
+        let matcher = catalog_locale_matcher(Path::new(&config.root_dir), catalog)?;
+        if matcher.is_match(&normalized_resource) {
+            return Ok(Some(catalog));
+        }
+    }
+    Ok(None)
 }

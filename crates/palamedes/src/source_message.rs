@@ -6,10 +6,15 @@
 use std::collections::{BTreeMap, HashMap};
 
 use oxc_ast::ast::{
-    Expression, JSXAttributeValue, JSXChild, JSXExpression, JSXOpeningElement, TemplateLiteral,
+    Expression, JSXAttributeValue, JSXChild, JSXExpression, JSXOpeningElement, ObjectExpression,
+    ObjectPropertyKind, TemplateLiteral,
 };
 use oxc_span::GetSpan;
 
+use crate::choice::{
+    expression_offset_value, invalid_choice_option, invalid_offset, is_plural_format,
+    jsx_offset_value, normalize_choice_option_key,
+};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
@@ -27,6 +32,14 @@ pub(crate) struct LoweredJsxMessage {
     pub(crate) values: Vec<SourceValue>,
     pub(crate) components: Vec<SourceValue>,
 }
+
+pub(crate) struct LoweredChoiceOptions {
+    pub(crate) options: Vec<(String, String)>,
+    pub(crate) values: Vec<SourceValue>,
+    pub(crate) offset: Option<String>,
+}
+
+const CHOICE_VALUE_FALLBACK_NAME: &str = "value";
 
 pub(crate) fn make_unique_value_name(
     preferred_name: String,
@@ -160,6 +173,160 @@ pub(crate) fn build_icu_message(
         .unwrap_or_default();
 
     format!("{{{value_name}, {format},{offset_part} {option_parts}}}")
+}
+
+pub(crate) fn lower_choice_options_from_object(
+    object: &ObjectExpression<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+    format: &str,
+    macro_name: &str,
+    location: &str,
+    escape_literal: impl Fn(&str) -> String + Copy,
+) -> PalamedesResult<LoweredChoiceOptions> {
+    let mut options = Vec::new();
+    let mut values = Vec::new();
+    let mut offset = None;
+
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            continue;
+        };
+        let Some(key) = property.key.static_name() else {
+            continue;
+        };
+        let key = key.into_owned();
+        if is_plural_format(format) && key == "offset" {
+            offset = Some(
+                expression_offset_value(&property.value)
+                    .ok_or_else(|| invalid_offset(macro_name, location))?,
+            );
+            continue;
+        }
+        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
+            return Err(invalid_choice_option(macro_name, location, &key));
+        };
+        let (value, option_values) = match property.value.without_parentheses() {
+            Expression::StringLiteral(literal) => {
+                (escape_literal(literal.value.as_str()), Vec::new())
+            }
+            Expression::TemplateLiteral(template) => lower_template(
+                template,
+                source,
+                "choice option template expression",
+                used_value_names,
+                escape_literal,
+            )?,
+            _ => continue,
+        };
+
+        options.push((normalized_key, value));
+        append_unique_values(&mut values, option_values);
+    }
+
+    Ok(LoweredChoiceOptions {
+        options,
+        values,
+        offset,
+    })
+}
+
+pub(crate) fn lower_jsx_choice_value_binding(
+    opening_element: &JSXOpeningElement<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+) -> Option<SourceValue> {
+    for attr in &opening_element.attributes {
+        let Some(attr) = attr.as_attribute() else {
+            continue;
+        };
+        if attr.name.get_identifier().name != "value" {
+            continue;
+        }
+        let Some(JSXAttributeValue::ExpressionContainer(container)) = attr.value.as_ref() else {
+            continue;
+        };
+
+        let preferred_name = jsx_expression_name(&container.expression)
+            .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
+        let expression = jsx_expression_source(&container.expression, source)
+            .unwrap_or_else(|| preferred_name.clone());
+        let name = make_unique_value_name(preferred_name, &expression, used_value_names);
+        return Some(SourceValue { expression, name });
+    }
+
+    None
+}
+
+pub(crate) fn lower_choice_options_from_jsx(
+    opening_element: &JSXOpeningElement<'_>,
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
+    format: &str,
+    macro_name: &str,
+    location: &str,
+    escape_literal: impl Fn(&str) -> String + Copy,
+) -> PalamedesResult<LoweredChoiceOptions> {
+    let mut options = Vec::new();
+    let mut values = Vec::new();
+    let mut offset = None;
+
+    for attr in &opening_element.attributes {
+        let Some(attr) = attr.as_attribute() else {
+            continue;
+        };
+        let key = attr.name.get_identifier().name.to_string();
+        if matches!(
+            key.as_str(),
+            "id" | "message" | "comment" | "context" | "value"
+        ) {
+            continue;
+        }
+        if is_plural_format(format) && key == "offset" {
+            offset = Some(
+                attr.value
+                    .as_ref()
+                    .and_then(jsx_offset_value)
+                    .ok_or_else(|| invalid_offset(macro_name, location))?,
+            );
+            continue;
+        }
+        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
+            return Err(invalid_choice_option(macro_name, location, &key));
+        };
+        let Some(attr_value) = attr.value.as_ref() else {
+            continue;
+        };
+        let (value, option_values) = match attr_value {
+            JSXAttributeValue::StringLiteral(literal) => (
+                escape_literal(&decode_jsx_entities(literal.value.as_str())),
+                Vec::new(),
+            ),
+            JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::StringLiteral(literal) => {
+                    (escape_literal(literal.value.as_str()), Vec::new())
+                }
+                JSXExpression::TemplateLiteral(template) => lower_template(
+                    template,
+                    source,
+                    "choice option template expression",
+                    used_value_names,
+                    escape_literal,
+                )?,
+                _ => continue,
+            },
+            _ => continue,
+        };
+
+        options.push((normalized_key, value));
+        append_unique_values(&mut values, option_values);
+    }
+
+    Ok(LoweredChoiceOptions {
+        options,
+        values,
+        offset,
+    })
 }
 
 pub(crate) fn lower_jsx_children(

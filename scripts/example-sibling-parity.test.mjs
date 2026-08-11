@@ -228,4 +228,19 @@ describe("example sibling byte parity", () => {
       true
     )
   })
+
+  it("allowlists Remix locale redirects against generated switch targets", async () => {
+    for (const strategy of ["route", "subdomain", "tld"]) {
+      const directory = path.join(REPOSITORY_ROOT, "examples", `remix-${strategy}`, "app")
+      const [controller, i18n] = await Promise.all([
+        readFile(path.join(directory, "actions/controller.ts"), "utf8"),
+        readFile(path.join(directory, "i18n.ts"), "utf8"),
+      ])
+
+      expect(controller).toContain("resolveLocaleRedirect(context.request, locale, redirect,")
+      expect(controller).not.toContain('redirect.startsWith("/")')
+      expect(i18n).toContain("item.locale === locale")
+      expect(i18n).toContain('typeof redirect === "string" && redirect === allowedRedirect')
+    }
+  })
 })

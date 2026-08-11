@@ -1597,9 +1597,6 @@ importers:
       '@palamedes/transform':
         specifier: workspace:^
         version: link:../transform
-      picomatch:
-        specifier: ^4.0.5
-        version: 4.0.5
     devDependencies:
       next:
         specifier: 16.3.0

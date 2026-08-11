@@ -200,7 +200,7 @@ fn collect_watch_files(
 
 /// Builds the locale-capturing matcher used to resolve a catalog resource and
 /// its fallback watch files. Invalid patterns must fail both paths equally.
-fn catalog_locale_matcher(
+pub(super) fn catalog_locale_matcher(
     root_dir: &Path,
     catalog: &super::types::CatalogConfig,
 ) -> PalamedesResult<Regex> {

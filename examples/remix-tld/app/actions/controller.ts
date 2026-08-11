@@ -7,6 +7,7 @@ import {
   locales,
   normalizeLocale,
   remixI18n,
+  resolveLocaleRedirect,
 } from "../i18n.ts"
 import { renderHomePage } from "../page.ts"
 import { routes } from "../routes.ts"
@@ -42,7 +43,7 @@ export default createController(routes, {
       return new Response(null, {
         status: 303,
         headers: {
-          location: typeof redirect === "string" && redirect.startsWith("/") ? redirect : "/",
+          location: resolveLocaleRedirect(context.request, locale, redirect, "/"),
           "set-cookie": locales.serializeChoice(locale),
         },
       })

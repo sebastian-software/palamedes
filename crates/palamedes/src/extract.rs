@@ -3,20 +3,15 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::catalog_update::{CatalogUpdateMessage, CatalogUpdateOrigin};
-use crate::choice::{
-    expression_offset_value, invalid_choice_option, invalid_offset, is_plural_format,
-    jsx_offset_value, normalize_choice_option_key,
-};
 use crate::descriptor::{
     descriptor_property_value, descriptor_static_property, unsupported_macro_syntax,
 };
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract_cache::{ExtractCache, ReadStartFingerprint};
 use crate::icu_text::escape_icu_source_literal;
-use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::clean_jsx_text;
 use crate::mdx::{analyze_mdx, MdxOptions};
-use crate::placeholder_name::{expression_name, jsx_expression_name};
+use crate::placeholder_name::expression_name;
 use crate::source::{
     SourceAnalysisOptions, SourceAnalysisResult, SourceComment, SourceCommentKind,
     SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceLocator,
@@ -26,15 +21,17 @@ use crate::source::{
 use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
 use crate::source_message::{
     build_icu_message as shared_build_icu_message, expression_source, jsx_attributes,
-    lower_jsx_children, lower_template,
+    lower_choice_options_from_jsx as shared_lower_choice_options_from_jsx,
+    lower_choice_options_from_object, lower_jsx_children, lower_jsx_choice_value_binding,
+    lower_template,
 };
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, BindingIdentifier, BindingPattern, CallExpression, CommentKind, Declaration,
-    Expression, ImportDeclaration, JSXAttributeValue, JSXChild, JSXElement, JSXExpression,
-    JSXOpeningElement, LogicalOperator, MemberExpression, ObjectExpression, ObjectPropertyKind,
-    Program, TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
+    Expression, ImportDeclaration, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
+    LogicalOperator, MemberExpression, ObjectExpression, ObjectPropertyKind, Program,
+    TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
@@ -1050,47 +1047,24 @@ fn extract_choice_options_from_object(
     macro_name: &str,
     location: &str,
 ) -> PalamedesResult<ExtractedChoiceOptions> {
-    let mut options = Vec::new();
-    let mut placeholders = BTreeMap::new();
-    let mut offset = None;
-
-    for property in &object.properties {
-        let ObjectPropertyKind::ObjectProperty(property) = property else {
-            continue;
-        };
-        let Some(key) = property.key.static_name() else {
-            continue;
-        };
-        let key = key.into_owned();
-        if is_plural_format(format) && key == "offset" {
-            offset = Some(
-                expression_offset_value(&property.value)
-                    .ok_or_else(|| invalid_offset(macro_name, location))?,
-            );
-            continue;
-        }
-        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
-            return Err(invalid_choice_option(macro_name, location, &key));
-        };
-        let (value, option_placeholders) = match property.value.without_parentheses() {
-            Expression::StringLiteral(literal) => (literal.value.to_string(), BTreeMap::new()),
-            Expression::TemplateLiteral(template) => template_to_message_with_state(
-                template,
-                source,
-                "choice option template expression",
-                used_value_names,
-            )?,
-            _ => continue,
-        };
-
-        options.push((normalized_key, value));
-        placeholders.extend(option_placeholders);
-    }
+    let lowered = lower_choice_options_from_object(
+        object,
+        source,
+        used_value_names,
+        format,
+        macro_name,
+        location,
+        ToOwned::to_owned,
+    )?;
 
     Ok(ExtractedChoiceOptions {
-        options,
-        placeholders,
-        offset,
+        options: lowered.options,
+        placeholders: lowered
+            .values
+            .into_iter()
+            .map(|value| (value.name, value.expression))
+            .collect(),
+        offset: lowered.offset,
     })
 }
 
@@ -1461,31 +1435,11 @@ fn extract_jsx_choice_value(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
 ) -> PalamedesResult<Option<(String, String)>> {
-    for attr in &opening_element.attributes {
-        let Some(attr) = attr.as_attribute() else {
-            continue;
-        };
-        if attr.name.get_identifier().name != "value" {
-            continue;
-        }
-        let Some(JSXAttributeValue::ExpressionContainer(container)) = attr.value.as_ref() else {
-            continue;
-        };
-
-        let name = jsx_expression_name(&container.expression)
-            .unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
-        let span = container.expression.span();
-        let expression = source
-            .get(span.start as usize..span.end as usize)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(name.as_str())
-            .to_string();
-
-        return Ok(Some((name, expression)));
-    }
-
-    Ok(None)
+    let mut used_value_names = HashMap::new();
+    Ok(
+        lower_jsx_choice_value_binding(opening_element, source, &mut used_value_names)
+            .map(|value| (value.name, value.expression)),
+    )
 }
 
 fn extract_jsx_children_as_message(
@@ -1504,63 +1458,24 @@ fn extract_choice_options_from_jsx(
     macro_name: &str,
     location: &str,
 ) -> PalamedesResult<ExtractedChoiceOptions> {
-    let mut options = Vec::new();
-    let mut placeholders = BTreeMap::new();
-    let mut offset = None;
-
-    for attr in &opening_element.attributes {
-        let Some(attr) = attr.as_attribute() else {
-            continue;
-        };
-        let key = attr.name.get_identifier().name.to_string();
-        if matches!(
-            key.as_str(),
-            "id" | "message" | "comment" | "context" | "value"
-        ) {
-            continue;
-        }
-        if is_plural_format(format) && key == "offset" {
-            offset = Some(
-                attr.value
-                    .as_ref()
-                    .and_then(jsx_offset_value)
-                    .ok_or_else(|| invalid_offset(macro_name, location))?,
-            );
-            continue;
-        }
-        let Some(normalized_key) = normalize_choice_option_key(format, &key) else {
-            return Err(invalid_choice_option(macro_name, location, &key));
-        };
-        let Some(attr_value) = attr.value.as_ref() else {
-            continue;
-        };
-        let (value, option_placeholders) = match attr_value {
-            JSXAttributeValue::StringLiteral(literal) => {
-                (decode_jsx_entities(literal.value.as_str()), BTreeMap::new())
-            }
-            JSXAttributeValue::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::StringLiteral(literal) => {
-                    (literal.value.to_string(), BTreeMap::new())
-                }
-                JSXExpression::TemplateLiteral(template) => template_to_message_with_state(
-                    template,
-                    source,
-                    "choice option template expression",
-                    used_value_names,
-                )?,
-                _ => continue,
-            },
-            _ => continue,
-        };
-
-        options.push((normalized_key, value));
-        placeholders.extend(option_placeholders);
-    }
+    let lowered = shared_lower_choice_options_from_jsx(
+        opening_element,
+        source,
+        used_value_names,
+        format,
+        macro_name,
+        location,
+        ToOwned::to_owned,
+    )?;
 
     Ok(ExtractedChoiceOptions {
-        options,
-        placeholders,
-        offset,
+        options: lowered.options,
+        placeholders: lowered
+            .values
+            .into_iter()
+            .map(|value| (value.name, value.expression))
+            .collect(),
+        offset: lowered.offset,
     })
 }
 
