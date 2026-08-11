@@ -174,10 +174,6 @@ stores, query clients, browser state, and third-party code remain the
 application's responsibility. Palamedes intentionally provides no convenience
 API or correctness guarantee for this pattern.
 
-A project that is neither React nor Solid can state `framework: "none"` for its
-MDX component contract. `@palamedes/remix` defaults to `"none"` because Remix 3
-ships its own UI layer and does not depend on React.
-
 ## Why The Matrix Is Split Per Framework
 
 Each framework family implements routing, request state, and server-side actions
@@ -185,6 +181,8 @@ differently. The example matrix is therefore intentionally explicit:
 
 - one cookie app per framework
 - one route app per framework
+- one subdomain app per framework
+- one tld app per framework
 
 This keeps the integration legible and gives Palamedes a real regression
 baseline for:

@@ -31,6 +31,9 @@ The `tanstack-cookie`, `tanstack-route`, `tanstack-subdomain`, and
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
+The route example uses a dynamic `/$locale` segment; this is the canonical
+TanStack shape and remains under verification.
+
 ## SolidStart
 
 The `solidstart-cookie`, `solidstart-route`, `solidstart-subdomain`, and
@@ -44,8 +47,6 @@ The `solidstart-cookie`, `solidstart-route`, `solidstart-subdomain`, and
 
 Current framework note:
 
-- the route example now uses a dynamic `/$locale` segment; this is the intended
-  canonical TanStack shape and should stay under verification
 - Solid Router intercepts same-origin anchor clicks, so a locale link would
   navigate on the client and leave the previously activated catalog under the new
   document. `solidstart-route` marks its locale links `rel="external"` — the

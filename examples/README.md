@@ -365,3 +365,5 @@ The example scripts use a fixed port layout so the apps can run in parallel:
 - `4061` `remix-route`
 - `4062` `remix-subdomain`
 - `4063` `remix-tld`
+- `4070` `vite-mdx`
+- `4071` `react-router-rsc` verifier
