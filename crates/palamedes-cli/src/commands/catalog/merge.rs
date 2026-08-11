@@ -6,8 +6,8 @@ use std::process::Command as ProcessCommand;
 use clap::{Args, ValueEnum};
 use palamedes::{
     combine_catalog_files, merge_catalog_files_three_way, CatalogConflictStrategy,
-    CatalogFileCombineRequest, CatalogFileCombineResult, CatalogFileFormat,
-    CatalogFileThreeWayMergeRequest,
+    CatalogFileCombineRequest, CatalogFileCombineResult, CatalogFileThreeWayMergeRequest,
+    PalamedesCatalogFormat,
 };
 
 use crate::command::{Command, Context};
@@ -236,21 +236,17 @@ impl MergeDriverOptions {
 }
 
 impl MergeFormat {
-    fn core(self) -> CatalogFileFormat {
+    fn core(self) -> PalamedesCatalogFormat {
         match self {
-            Self::Po => CatalogFileFormat::Po,
-            Self::Fcl => CatalogFileFormat::Fcl,
+            Self::Po => PalamedesCatalogFormat::Po,
+            Self::Fcl => PalamedesCatalogFormat::Fcl,
         }
     }
 
-    fn from_path(path: &Path) -> Option<CatalogFileFormat> {
-        match path.extension().and_then(|extension| extension.to_str()) {
-            Some(extension) if extension.eq_ignore_ascii_case("po") => Some(CatalogFileFormat::Po),
-            Some(extension) if extension.eq_ignore_ascii_case("fcl") => {
-                Some(CatalogFileFormat::Fcl)
-            }
-            _ => None,
-        }
+    fn from_path(path: &Path) -> Option<PalamedesCatalogFormat> {
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .and_then(PalamedesCatalogFormat::from_extension)
     }
 }
 
@@ -258,7 +254,7 @@ impl MergeOptions {
     fn inference_error(
         &self,
         error: CliError,
-        logical_format: Option<CatalogFileFormat>,
+        logical_format: Option<PalamedesCatalogFormat>,
     ) -> CliError {
         let merge_paths = self
             .base

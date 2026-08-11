@@ -1180,7 +1180,7 @@ impl TryFrom<palamedes::CatalogCombineResult> for CatalogCombineResult {
     }
 }
 
-impl From<CatalogFileFormat> for palamedes::CatalogFileFormat {
+impl From<CatalogFileFormat> for palamedes::PalamedesCatalogFormat {
     fn from(value: CatalogFileFormat) -> Self {
         match value {
             CatalogFileFormat::Po => Self::Po,
@@ -1189,13 +1189,13 @@ impl From<CatalogFileFormat> for palamedes::CatalogFileFormat {
     }
 }
 
-impl TryFrom<palamedes::CatalogFileFormat> for CatalogFileFormat {
+impl TryFrom<palamedes::PalamedesCatalogFormat> for CatalogFileFormat {
     type Error = napi::Error;
 
-    fn try_from(value: palamedes::CatalogFileFormat) -> Result<Self> {
+    fn try_from(value: palamedes::PalamedesCatalogFormat) -> Result<Self> {
         match value {
-            palamedes::CatalogFileFormat::Po => Ok(Self::Po),
-            palamedes::CatalogFileFormat::Fcl => Ok(Self::Fcl),
+            palamedes::PalamedesCatalogFormat::Po => Ok(Self::Po),
+            palamedes::PalamedesCatalogFormat::Fcl => Ok(Self::Fcl),
         }
     }
 }
@@ -1205,7 +1205,7 @@ impl From<CatalogFileCombineRequest> for palamedes::CatalogFileCombineRequest {
         Self {
             input_paths: value.input_paths.into_iter().map(PathBuf::from).collect(),
             output_path: PathBuf::from(value.output_path),
-            format: value.format.map(palamedes::CatalogFileFormat::from),
+            format: value.format.map(palamedes::PalamedesCatalogFormat::from),
             source_locale: value.source_locale,
             locale: value.locale,
             conflict_strategy: value

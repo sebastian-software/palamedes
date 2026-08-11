@@ -8,19 +8,11 @@ use ferrocat::{
 
 use crate::catalog_update::{po_serialize_options, PoOutputOptions};
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::PalamedesCatalogFormat;
 
 pub use ferrocat::{
     CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats, CatalogConflictStrategy,
 };
-
-/// Catalog file format exposed by Palamedes combine operations.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CatalogFileFormat {
-    /// gettext PO catalog files.
-    Po,
-    /// Ferrocat Catalog Lines files.
-    Fcl,
-}
 
 /// Result returned by catalog file combine operations.
 #[derive(Debug)]
@@ -28,20 +20,11 @@ pub struct CatalogFileCombineResult {
     /// Output path replaced by the operation.
     pub output_path: PathBuf,
     /// File format used for reading inputs and writing the output.
-    pub format: CatalogFileFormat,
+    pub format: PalamedesCatalogFormat,
     /// Summary counters for the operation.
     pub stats: CatalogCombineStats,
     /// Non-fatal diagnostics collected during processing.
     pub diagnostics: Vec<ferrocat::Diagnostic>,
-}
-
-impl From<CatalogFileFormat> for ferrocat::CatalogFileFormat {
-    fn from(value: CatalogFileFormat) -> Self {
-        match value {
-            CatalogFileFormat::Po => Self::Po,
-            CatalogFileFormat::Fcl => Self::Fcl,
-        }
-    }
 }
 
 /// Request for combining multiple catalog contents into one catalog.
@@ -78,7 +61,7 @@ pub struct CatalogFileCombineRequest {
     /// Output catalog file path to replace after a successful combine.
     pub output_path: PathBuf,
     /// Optional explicit format. When absent, the format is inferred from file paths.
-    pub format: Option<CatalogFileFormat>,
+    pub format: Option<PalamedesCatalogFormat>,
     /// Source locale used for source-side semantics and validation.
     pub source_locale: String,
     /// Locale of the combined catalog. When `None`, Ferrocat uses the first input locale if present.
@@ -165,15 +148,11 @@ pub fn combine_catalog_files(
 
     Ok(CatalogFileCombineResult {
         output_path: result.output_path,
-        format: match result.format {
-            ferrocat::CatalogFileFormat::Po => CatalogFileFormat::Po,
-            ferrocat::CatalogFileFormat::Fcl => CatalogFileFormat::Fcl,
-            _ => {
-                return Err(PalamedesError::UnsupportedCatalogFileFormat {
-                    format: format!("{:?}", result.format),
-                });
-            }
-        },
+        format: PalamedesCatalogFormat::from_ferrocat_file_format(result.format).ok_or_else(
+            || PalamedesError::UnsupportedCatalogFileFormat {
+                format: format!("{:?}", result.format),
+            },
+        )?,
         stats: result.stats,
         diagnostics: result.diagnostics,
     })
@@ -188,7 +167,7 @@ mod tests {
     use super::{
         combine_catalog_files, combine_catalogs, CatalogCombineInput, CatalogCombineRequest,
         CatalogCombineSelection, CatalogConflictStrategy, CatalogFileCombineRequest,
-        CatalogFileFormat,
+        PalamedesCatalogFormat,
     };
 
     #[test]
@@ -365,7 +344,7 @@ mod tests {
         })
         .expect("merge");
 
-        assert_eq!(result.format, CatalogFileFormat::Po);
+        assert_eq!(result.format, PalamedesCatalogFormat::Po);
         let parsed = ferrocat::parse_po(&fs::read_to_string(&ours).expect("read output"))
             .expect("parse output");
         assert_eq!(
@@ -458,7 +437,7 @@ mod tests {
         let result = combine_catalog_files(CatalogFileCombineRequest {
             input_paths: vec![ours, theirs],
             output_path: output.clone(),
-            format: Some(CatalogFileFormat::Fcl),
+            format: Some(PalamedesCatalogFormat::Fcl),
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
@@ -466,7 +445,7 @@ mod tests {
         })
         .expect("merge");
 
-        assert_eq!(result.format, CatalogFileFormat::Fcl);
+        assert_eq!(result.format, PalamedesCatalogFormat::Fcl);
         let merged = fs::read_to_string(output).expect("read output");
         assert!(merged.starts_with("%FCL1"));
         assert!(merged.contains("Hello\t\tHallo"));

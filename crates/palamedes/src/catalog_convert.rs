@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use ferrocat::{ConvertCatalogFileOptions, OrderBy};
 
-use crate::catalog_combine::CatalogFileFormat;
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::PalamedesCatalogFormat;
 
 /// Request for converting one catalog file into another storage format.
 #[derive(Debug)]
@@ -13,9 +13,9 @@ pub struct CatalogFileConvertRequest {
     /// Output catalog path to replace atomically.
     pub output_path: PathBuf,
     /// Explicit source storage format.
-    pub source_format: CatalogFileFormat,
+    pub source_format: PalamedesCatalogFormat,
     /// Explicit target storage format.
-    pub target_format: CatalogFileFormat,
+    pub target_format: PalamedesCatalogFormat,
     /// Source locale used for catalog semantics and validation.
     pub source_locale: String,
     /// Optional expected catalog locale.
@@ -73,7 +73,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{convert_catalog_file, CatalogFileConvertRequest};
-    use crate::CatalogFileFormat;
+    use crate::PalamedesCatalogFormat;
 
     #[test]
     fn converts_po_to_fcl_and_preserves_review_metadata() {
@@ -97,8 +97,8 @@ mod tests {
         let result = convert_catalog_file(CatalogFileConvertRequest {
             input_path: input,
             output_path: output.clone(),
-            source_format: CatalogFileFormat::Po,
-            target_format: CatalogFileFormat::Fcl,
+            source_format: PalamedesCatalogFormat::Po,
+            target_format: PalamedesCatalogFormat::Fcl,
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
         })

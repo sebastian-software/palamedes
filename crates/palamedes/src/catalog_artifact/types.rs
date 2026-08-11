@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use ferrocat::{
-    CatalogMode as FerrocatCatalogMode, DiagnosticSeverity as FerrocatDiagnosticSeverity,
+    CatalogFileFormat as FerrocatCatalogFileFormat, CatalogMode as FerrocatCatalogMode,
+    DiagnosticSeverity as FerrocatDiagnosticSeverity,
 };
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -96,6 +97,18 @@ impl<'de> Deserialize<'de> for PalamedesCatalogFormat {
 }
 
 impl PalamedesCatalogFormat {
+    /// Returns the storage format for a file extension, case-insensitively.
+    #[must_use]
+    pub fn from_extension(extension: &str) -> Option<Self> {
+        if extension.eq_ignore_ascii_case("po") {
+            Some(Self::Po)
+        } else if extension.eq_ignore_ascii_case("fcl") {
+            Some(Self::Fcl)
+        } else {
+            None
+        }
+    }
+
     /// Returns the file extension used for this storage format.
     pub const fn extension(self) -> &'static str {
         match self {
@@ -110,6 +123,41 @@ impl PalamedesCatalogFormat {
             Self::Po => FerrocatCatalogMode::IcuPo,
             Self::Fcl => FerrocatCatalogMode::IcuFcl,
         }
+    }
+
+    pub(crate) fn from_ferrocat_file_format(format: FerrocatCatalogFileFormat) -> Option<Self> {
+        match format {
+            FerrocatCatalogFileFormat::Po => Some(Self::Po),
+            FerrocatCatalogFileFormat::Fcl => Some(Self::Fcl),
+            _ => None,
+        }
+    }
+}
+
+impl From<PalamedesCatalogFormat> for FerrocatCatalogFileFormat {
+    fn from(value: PalamedesCatalogFormat) -> Self {
+        match value {
+            PalamedesCatalogFormat::Po => Self::Po,
+            PalamedesCatalogFormat::Fcl => Self::Fcl,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PalamedesCatalogFormat;
+
+    #[test]
+    fn infers_supported_extensions_case_insensitively() {
+        assert_eq!(
+            PalamedesCatalogFormat::from_extension("po"),
+            Some(PalamedesCatalogFormat::Po)
+        );
+        assert_eq!(
+            PalamedesCatalogFormat::from_extension("FCL"),
+            Some(PalamedesCatalogFormat::Fcl)
+        );
+        assert_eq!(PalamedesCatalogFormat::from_extension("json"), None);
     }
 }
 

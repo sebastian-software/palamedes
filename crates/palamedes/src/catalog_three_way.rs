@@ -4,16 +4,15 @@ use std::path::{Path, PathBuf};
 
 use ferrocat::{
     merge_catalogs_three_way as ferrocat_merge_catalogs_three_way,
-    CatalogCombineInput as FerrocatCombineInput, CatalogMode, MergeCatalogsThreeWayOptions,
-    OrderBy,
+    CatalogCombineInput as FerrocatCombineInput, MergeCatalogsThreeWayOptions, OrderBy,
 };
 
 use crate::catalog_combine::{
     CatalogCombineInput, CatalogCombineResult, CatalogConflictStrategy, CatalogFileCombineResult,
-    CatalogFileFormat,
 };
 use crate::catalog_update::{po_serialize_options, PoOutputOptions};
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::PalamedesCatalogFormat;
 
 pub use ferrocat::CatalogMergeSide;
 
@@ -31,7 +30,7 @@ pub struct CatalogThreeWayMergeRequest {
     /// Incoming-side catalog. This side wins with [`CatalogConflictStrategy::UseLast`].
     pub theirs: CatalogCombineInput,
     /// Catalog format used to parse and render all three roles.
-    pub format: CatalogFileFormat,
+    pub format: PalamedesCatalogFormat,
     /// Source locale used for source-side semantics and validation.
     pub source_locale: String,
     /// Locale of the merged catalog.
@@ -54,7 +53,7 @@ pub struct CatalogFileThreeWayMergeRequest {
     /// Output path replaced only after parsing and merging succeed.
     pub output_path: PathBuf,
     /// Optional explicit format. When absent, it is inferred from every path.
-    pub format: Option<CatalogFileFormat>,
+    pub format: Option<PalamedesCatalogFormat>,
     /// Source locale used for source-side semantics and validation.
     pub source_locale: String,
     /// Locale of the merged catalog.
@@ -79,7 +78,7 @@ pub struct CatalogFileThreeWayMergeRequest {
 /// ```rust
 /// use palamedes::{
 ///     merge_catalogs_three_way, CatalogCombineInput, CatalogConflictStrategy,
-///     CatalogFileFormat, CatalogThreeWayMergeRequest,
+///     CatalogThreeWayMergeRequest, PalamedesCatalogFormat,
 /// };
 ///
 /// let input = |content: &str, label: &str| CatalogCombineInput {
@@ -90,7 +89,7 @@ pub struct CatalogFileThreeWayMergeRequest {
 ///     ancestor: input("msgid \"Removed\"\nmsgstr \"Alt\"\n", "base"),
 ///     ours: input("", "ours"),
 ///     theirs: input("", "theirs"),
-///     format: CatalogFileFormat::Po,
+///     format: PalamedesCatalogFormat::Po,
 ///     source_locale: "en".to_owned(),
 ///     locale: Some("de".to_owned()),
 ///     conflict_strategy: CatalogConflictStrategy::UseFirst,
@@ -108,7 +107,7 @@ pub struct CatalogFileThreeWayMergeRequest {
 pub fn merge_catalogs_three_way(
     request: CatalogThreeWayMergeRequest,
 ) -> PalamedesResult<CatalogCombineResult> {
-    let mode = request.format.mode();
+    let mode = request.format.ferrocat_mode();
     let ancestor = FerrocatCombineInput {
         content: &request.ancestor.content,
         label: request.ancestor.label.as_deref().or(Some("ancestor")),
@@ -188,27 +187,16 @@ pub fn merge_catalog_files_three_way(
     })
 }
 
-impl CatalogFileFormat {
-    fn mode(self) -> CatalogMode {
-        match self {
-            Self::Po => CatalogMode::IcuPo,
-            Self::Fcl => CatalogMode::IcuFcl,
-        }
-    }
-}
-
-fn infer_file_format(paths: &[&Path]) -> PalamedesResult<CatalogFileFormat> {
+fn infer_file_format(paths: &[&Path]) -> PalamedesResult<PalamedesCatalogFormat> {
     let mut inferred = None;
     for path in paths {
-        let format = match ferrocat::CatalogFileFormat::infer_from_path(path)? {
-            ferrocat::CatalogFileFormat::Po => CatalogFileFormat::Po,
-            ferrocat::CatalogFileFormat::Fcl => CatalogFileFormat::Fcl,
-            _ => {
-                return Err(PalamedesError::UnsupportedCatalogFileFormat {
-                    format: path.display().to_string(),
-                });
-            }
-        };
+        let format = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .and_then(PalamedesCatalogFormat::from_extension)
+            .ok_or_else(|| PalamedesError::UnsupportedCatalogFileFormat {
+                format: path.display().to_string(),
+            })?;
         if let Some(expected) = inferred {
             if expected != format {
                 return Err(PalamedesError::from(ferrocat::ApiError::InvalidArguments(
@@ -267,7 +255,7 @@ mod tests {
         CatalogThreeWayMergeRequest, CATALOG_MODIFY_DELETE_RESOLVED,
     };
     use crate::{
-        CatalogCombineInput, CatalogConflictStrategy, CatalogFileFormat, CatalogMergeSide,
+        CatalogCombineInput, CatalogConflictStrategy, CatalogMergeSide, PalamedesCatalogFormat,
         PalamedesError,
     };
 
@@ -342,7 +330,7 @@ mod tests {
             ancestor: input("%FCL1\tsource=en\tlocale=de\nRemoved\t\tAlt\n", "base"),
             ours: input("%FCL1\tsource=en\tlocale=de\nNew ours\t\tUnser\n", "ours"),
             theirs: input("%FCL1\tsource=en\tlocale=de\nNew theirs\t\tIhr\n", "theirs"),
-            format: CatalogFileFormat::Fcl,
+            format: PalamedesCatalogFormat::Fcl,
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
@@ -363,7 +351,7 @@ mod tests {
             ancestor: input(&content, "base"),
             ours: input(&content, "ours"),
             theirs: input(&content, "theirs"),
-            format: CatalogFileFormat::Po,
+            format: PalamedesCatalogFormat::Po,
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
@@ -396,7 +384,7 @@ mod tests {
             ours_path: ours,
             theirs_path: theirs,
             output_path: output.clone(),
-            format: Some(CatalogFileFormat::Po),
+            format: Some(PalamedesCatalogFormat::Po),
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::UseFirst,
@@ -427,7 +415,7 @@ mod tests {
             ours_path: ours,
             theirs_path: theirs,
             output_path: output.clone(),
-            format: Some(CatalogFileFormat::Po),
+            format: Some(PalamedesCatalogFormat::Po),
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy: CatalogConflictStrategy::Error,
@@ -451,7 +439,7 @@ mod tests {
             ancestor: input(ancestor, "base"),
             ours: input(ours, "ours"),
             theirs: input(theirs, "theirs"),
-            format: CatalogFileFormat::Po,
+            format: PalamedesCatalogFormat::Po,
             source_locale: "en".to_owned(),
             locale: Some("de".to_owned()),
             conflict_strategy,
