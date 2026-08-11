@@ -54,8 +54,8 @@ it has more than one adapter, but because the same runtime and identity model
 are verified across Next.js, TanStack Start, SolidStart, Waku, React Router,
 and Remix, with Vite MDX as the client-only proof. The matrix is evidence of
 the architecture, not a requirement that one team use several frameworks. It
-follows the integration instinct Lingui got right early; see
-[the detailed comparison](./comparison-with-lingui.md#the-real-positioning).
+follows the integration model covered in
+[the detailed Lingui comparison](./comparison-with-lingui.md#the-real-positioning).
 
 The performance story follows from that discipline more than from "Rust" as a
 branding point.

@@ -140,9 +140,9 @@ generated report does on every run.
 The report has two lanes per profile, and they answer different questions.
 
 **Cold** clears every tool cache along with the catalogs before each run. It is
-the like-for-like comparison — the same work for every tool — and it is the only
-lane that feeds the speedup table, `site/app/data/bench.ts`, and the figures
-quoted on the website.
+the like-for-like comparison — the same work for every tool — and the only lane
+that feeds the speedup table. Both cold medians and Palamedes warm medians feed
+`site/app/data/bench.ts` and the corresponding figures quoted on the website.
 
 **Warm** keeps tool caches, resets the catalogs, and touches a few source files
 to model an edit before each run. It answers "what does the next run cost?",

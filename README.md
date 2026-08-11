@@ -39,11 +39,12 @@ The current proof:
   runtime model, message identity, native boundary, adapter architecture, and
   the work deliberately kept out of scope.
 - Benchmark commands, fixtures, and machine-readable reports are checked in so
-  the numbers can be rerun locally. The current medians, comparison numbers,
-  and recorded tool versions live in one place: the
+  the numbers can be rerun locally. The
   [end-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
-  and its checked report
-  [`benchmarks/e2e-workflow/results/latest.md`](https://github.com/sebastian-software/palamedes/blob/main/benchmarks/e2e-workflow/results/latest.md).
+  documents the methodology; the dated medians, comparison numbers, and tool
+  versions live in the checked
+  [`benchmarks/e2e-workflow/results/latest.md`](https://github.com/sebastian-software/palamedes/blob/main/benchmarks/e2e-workflow/results/latest.md)
+  snapshot.
 
 **The run you trigger all day.** Cross-tool comparisons have to run cold —
 every cache cleared, every tool doing the same work — and that is the lane the
@@ -335,8 +336,9 @@ Palamedes as an app team:
 - [`@palamedes/extractor`](https://www.npmjs.com/package/@palamedes/extractor)
 - [`@palamedes/core-node`](https://www.npmjs.com/package/@palamedes/core-node)
 
-Internal native packages exist behind `@palamedes/core-node`, but they are
-implementation detail and not part of the normal install story.
+Internal native packages exist behind `@palamedes/core-node` and
+`@palamedes/cli`, but they are implementation detail and not part of the normal
+install story.
 
 ## Reserved Package Names
 

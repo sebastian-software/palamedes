@@ -34,12 +34,12 @@ then gettext context using the CLDR root collation. See
 spellings.
 
 One divergence is worth knowing about when catalogs move between Palamedes and
-gettext tooling: with automatic width folding, Ferrocat may open a long value
-with an empty `msgid`/`msgstr` line and continuation lines, as GNU gettext and
-`pofile` do. Set `line-breaks: "off"` to avoid width-driven folding; a value
-that starts with a real newline still needs the leading empty-string spelling.
-All forms parse to the same message, but their spelling can show up as
-mechanical diffs.
+gettext tooling: Ferrocat keeps a short value with embedded newlines in the
+compact `msgid "First line\\n"` plus continuation-line form under both `auto`
+and `off`. GNU gettext and `pofile` commonly use a leading empty `msgid ""` or
+`msgstr ""` line for the same value. Set `line-breaks: "off"` to avoid
+additional width-driven folding. Both spellings parse to the same message, but
+the difference can show up as mechanical diffs.
 
 ## FCL
 

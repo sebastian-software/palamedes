@@ -11,10 +11,12 @@ All publishable Palamedes packages ship in lockstep.
 Published packages declare Node.js `>=22.0.0` unless a package has a specific
 runtime reason to require a higher Node floor. `@palamedes/waku`,
 `@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`;
-server-first `@palamedes/remix` requires `>=24.3.0`. Platform CLI shells do not
-declare a Node engine because they are native binaries. The repository development and
-CI floor is stricter: contributors should use Node.js `>=22.22`, matching the
-root `package.json`, README badge, and contribution guide.
+server-first `@palamedes/remix` requires `>=24.3.0`. The `@palamedes/cli-*`
+platform shells intentionally leave Node compatibility to their `@palamedes/cli`
+wrapper and therefore omit an engine declaration; the `@palamedes/core-node-*`
+native addons are loaded directly by Node and declare `>=22.0.0`. The repository
+development and CI floor is stricter: contributors should use Node.js `>=22.22`,
+matching the root `package.json`, README badge, and contribution guide.
 
 From 1.0 onward:
 
@@ -49,12 +51,14 @@ may change faster than Stable surfaces.
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                          |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                  |
 | `@palamedes/eslint-plugin`                            | Preview  | Thin ESLint/Oxlint facades over native diagnostics; Oxlint's JavaScript plugin API is still alpha.                            |
+| `@palamedes/extractor` and `@palamedes/transform`     | Preview  | Published advanced-tooling APIs; their integration boundaries may evolve before promotion.                                    |
 | `pmds` binary plugin protocol                         | Preview  | Protocol v1 is version-negotiated; native package resolution and capabilities may evolve before promotion.                    |
 | Source-string-first PO catalogs                       | Stable   | Message identity is `message + context`. Catalog files remain user-owned.                                                     |
 | FCL catalog storage                                   | Preview  | Supported through config, CLI, and native catalog APIs; app-facing framework imports remain PO-loader based for now.          |
 | Macro syntax                                          | Stable   | Supported macros remain the authoring model. Unsupported explicit IDs are not a compatibility target.                         |
 | `@palamedes/core-node`                                | Preview  | It is usable directly, but primarily exists as the JS boundary to the Rust core. Generated type details may change in minors. |
-| Platform native packages                              | Internal | `@palamedes/core-node-*` packages are optional dependency carriers for native binaries. Apps should not import them directly. |
+| `@palamedes/core-node-*` platform packages            | Internal | Optional dependency carriers for native Node addons; apps should not import them directly.                                    |
+| `@palamedes/cli-*` platform packages                  | Internal | Optional dependency carriers for native CLI executables; apps should not import them directly.                                |
 | `palamedes` and `create-palamedes`                    | Reserved | Placeholder top-level packages exist, but there is no supported first-run entry yet.                                          |
 | Compiled catalog artifact internals                   | Preview  | Public loaders can consume them; the internal representation may evolve in minors.                                            |
 | `crates/*` Rust APIs                                  | Preview  | The Rust crates support the Node toolchain today. They are not yet a separately promised public Rust SDK.                     |
