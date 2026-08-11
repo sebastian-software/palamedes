@@ -1,55 +1,61 @@
-# ADR-011: Host Adapters Render Module Source from Compiled Catalog Artifacts
+# ADR-011: Native Catalog Rendering Produces Bundler Modules
 
 **Status:** Accepted
 **Date:** 2026-03-17
+**Revised:** 2026-08-11
 
 ## Context
 
-Palamedes compiles configured catalogs into runtime lookup maps, but Vite and
-Next do not consume that data directly. They consume generated JavaScript
-modules.
+Palamedes compiles configured catalogs into runtime lookup maps, while Vite and
+Next consume generated JavaScript modules. A short-lived design put final module
+rendering in each host adapter, but it duplicated escaping and generated-module
+semantics at every adapter boundary.
 
-The Rust core previously combined both responsibilities:
-
-- compile catalog data into runtime messages
-- render JavaScript module source for bundler loaders
-
-That mixed a host-neutral concern with a host-specific one. It also kept `serde_json` in the Rust core solely to emit JavaScript-safe module source.
-
-This is the wrong boundary. The Rust core should own catalog semantics and compilation. Host adapters should own JavaScript module rendering.
+The compiler already owns message lowering, JavaScript-safe literal escaping,
+and the executable message-function representation described by ADR-022. Keeping
+the final module renderer beside that lowering gives every host the same output
+and diagnostics without asking adapters to maintain a second generator.
 
 ## Decision
 
-The Rust core returns compiled catalog artifacts, not JavaScript module source.
+The native catalog renderer is the canonical producer of executable catalog
+modules.
 
 The rules are:
 
-- `compile_catalog_artifact` returns compiled messages plus diagnostics and watch metadata
-- it does not render ESM or CJS source code
-- host adapters such as the Vite plugin and Next loader render the final module source from that compiled artifact
-- simple host-side rendering duplication is acceptable when it keeps JavaScript code generation out of the Rust core
+- native catalog compilation returns generated module `code`, diagnostics, and
+  watch metadata
+- `RuntimeModuleRenderer` owns safe ESM generation, including JavaScript
+  escaping and executable message-function lowering
+- Vite and Next loaders consume the native `code`; they do not render catalog
+  messages themselves
+- the public TypeScript `renderCatalogModule()` compatibility helper delegates
+  to the same native renderer
 
 The intended stack is:
 
-- Rust core compiles configured PO or FCL catalogs into runtime-ready message maps
-- `palamedes-node` exposes that artifact through typed N-API bindings
-- Vite and Next adapters render the final module source for their host environment
+- Rust compiles configured PO or FCL catalogs and renders the runtime module
+- `palamedes-node` exposes that result through typed N-API bindings
+- Vite and Next adapters handle host integration around the returned module
 
 ## Alternatives Considered
 
-### 1. Keep JavaScript module rendering in Rust
+### 1. Render catalog modules in every host adapter
 
-Rejected because it couples the core to a specific host output format and keeps JavaScript-oriented escaping logic in the wrong layer.
+Rejected because escaping and compiled-message lowering are compiler semantics,
+not framework integration concerns. Separate renderers drifted and gave each
+adapter a distinct correctness surface.
 
-### 2. Introduce a shared JavaScript module renderer in the core wrapper before moving loaders
+### 2. Keep a shared JavaScript renderer in the wrapper
 
-Rejected for now because the rendering logic is small and duplication in the host adapters is preferable to reintroducing a centralized cross-host rendering abstraction too early.
+Rejected because it would still duplicate the native compiler's lowered message
+representation and make the wrapper a second compiler boundary.
 
 ## Consequences
 
-- The Rust core no longer needs `serde_json` for catalog module generation.
-- `CatalogArtifactResult` exposes `messages` instead of `code`.
-- Host adapters are responsible for rendering their own module source.
-- The core becomes more host-neutral and easier to reuse outside the current Vite/Next integrations.
-- Catalog storage can evolve from PO-only to PO/FCL without moving JavaScript
-  module rendering back into Rust.
+- The compiler owns one generated-module format and its escaping guarantees.
+- Host adapters stay thin and consume native module code.
+- `renderCatalogModule()` remains compatible for JavaScript callers without
+  reviving a second renderer.
+- Catalog storage can evolve from PO-only to PO/FCL without changing the host
+  rendering boundary.

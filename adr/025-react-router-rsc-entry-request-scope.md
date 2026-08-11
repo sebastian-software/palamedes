@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-08
+**Revised:** 2026-08-11
 
 ## Context
 
@@ -26,7 +27,7 @@ a fresh, activated i18n instance. The package runs the complete default entry
 inside `@palamedes/runtime/server`'s `AsyncLocalStorage` scope.
 
 Support exactly the tested RSC Framework Mode contract: `@react-router/dev`
-and `react-router` 8.3.0 plus `@vitejs/plugin-rsc` 0.5.32. Do not instrument
+and `react-router` 8.3.0 plus `@vitejs/plugin-rsc` 0.5.34. Do not instrument
 `"use server"` bodies for this integration. Do not claim RSC Data Mode support.
 
 ## Alternatives Considered
