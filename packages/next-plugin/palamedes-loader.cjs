@@ -7,10 +7,10 @@ const { decode, encode } = require("@jridgewell/sourcemap-codec")
 const { loadPalamedesConfigSync } = require("@palamedes/config")
 const { transformPalamedesMacros } = require("@palamedes/transform")
 const picomatch = require("picomatch")
+const { loadConfigCachedSync } = require("./palamedes-config-cache.cjs")
 const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected"
-const configCache = new Map()
 
 function canonicalPath(value) {
   try {
@@ -22,34 +22,6 @@ function canonicalPath(value) {
 
 function normalizePath(value) {
   return value.split(path.sep).join("/")
-}
-
-function loadConfigCached(configPath) {
-  const key = configPath ?? ""
-  const cached = configCache.get(key)
-  if (cached) {
-    try {
-      if (
-        createHash("sha256").update(readFileSync(cached.config.configPath)).digest("hex") ===
-        cached.digest
-      ) {
-        return cached.config
-      }
-    } catch {
-      // Config moved, changed, or is not stat-able; reload it below.
-    }
-  }
-
-  const config = loadPalamedesConfigSync({ configPath })
-  try {
-    configCache.set(key, {
-      config,
-      digest: createHash("sha256").update(readFileSync(config.configPath)).digest("hex"),
-    })
-  } catch {
-    // Tests and virtual configs may not have a stat-able config file.
-  }
-  return config
 }
 
 function catalogMatchesSource(config, catalog, sourcePath) {
@@ -539,7 +511,7 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
   }
 
   try {
-    const config = loadConfigCached(options.configPath)
+    const config = loadConfigCachedSync(options.configPath, loadPalamedesConfigSync)
     if (typeof this.addDependency === "function" && config.configPath) {
       this.addDependency(config.configPath)
     } else {

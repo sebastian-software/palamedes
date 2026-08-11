@@ -1,49 +1,13 @@
 "use strict"
 
-const { createHash } = require("node:crypto")
-const { readFileSync } = require("node:fs")
 const path = require("node:path")
 const { loadPalamedesConfig } = require("@palamedes/config")
 const { compileCatalogArtifactSelected, compileCatalogModule } = require("@palamedes/core-node")
 const { createCatalogLoaderResult, createMissingErrorMessage } = require("@palamedes/transform")
+const { loadConfigCached } = require("./palamedes-config-cache.cjs")
 const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected"
-
-/*
- * Loading the config walks the filesystem upward and parses the file; doing
- * that once per .po file per rebuild is wasteful. Cache per requested path
- * and invalidate on config-file content changes, so webpack rebuilds triggered
- * by the addDependency below observe the edited config.
- */
-const configCache = new Map()
-
-async function loadConfigCached(configPath) {
-  const key = configPath ?? ""
-  const cached = configCache.get(key)
-  if (cached) {
-    try {
-      if (
-        createHash("sha256").update(readFileSync(cached.cfg.configPath)).digest("hex") ===
-        cached.digest
-      ) {
-        return cached.cfg
-      }
-    } catch {
-      // Config file moved or deleted — fall through to a fresh load.
-    }
-  }
-  const cfg = await loadPalamedesConfig({ configPath })
-  try {
-    configCache.set(key, {
-      cfg,
-      digest: createHash("sha256").update(readFileSync(cfg.configPath)).digest("hex"),
-    })
-  } catch {
-    // Config not stat-able (e.g. stubbed in tests) — serve it uncached.
-  }
-  return cfg
-}
 
 module.exports = function palamedesPoLoader() {
   const callback = this.async()
@@ -52,7 +16,7 @@ module.exports = function palamedesPoLoader() {
   const failOnCompileError = options.failOnCompileError === true
 
   ;(async () => {
-    const cfg = await loadConfigCached(options.configPath)
+    const cfg = await loadConfigCached(options.configPath, loadPalamedesConfig)
     const locale = path.basename(this.resourcePath, ".po")
     const artifactConfig = {
       rootDir: cfg.rootDir,
