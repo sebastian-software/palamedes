@@ -34,6 +34,14 @@ export {
 } from "./compiledMessage"
 export { formatMessageArgument, formatMessagePattern, parseMessagePattern }
 export {
+  buildChoiceMessage,
+  type ChoiceComponentProps,
+  type ChoiceKind,
+  type PluralProps,
+  type SelectOrdinalProps,
+  type SelectProps,
+} from "./choice"
+export {
   replacePoundPlaceholders,
   resolveChoice,
   stringifyValue,
