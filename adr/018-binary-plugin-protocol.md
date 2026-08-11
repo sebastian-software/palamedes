@@ -1,4 +1,4 @@
-# 018 — Binary Plugin Protocol For Rust-Hosted Extensions
+# ADR-018: Binary Plugin Protocol For Rust-Hosted Extensions
 
 - Status: Accepted
 - Date: 2026-07-25

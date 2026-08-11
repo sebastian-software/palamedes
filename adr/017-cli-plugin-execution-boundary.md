@@ -1,4 +1,4 @@
-# 017 — Host Explicit Binary CLI Plugins In Rust
+# ADR-017: Host Explicit Binary CLI Plugins In Rust
 
 - Status: Accepted
 - Date: 2026-07-22

@@ -125,6 +125,10 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm check:llms
 
+      - name: Check ADR decision index
+        if: ${{ matrix.full }}
+        run: pnpm check:decisions
+
       - name: Build site
         if: ${{ matrix.full }}
         run: pnpm build:site
