@@ -26,6 +26,7 @@ use crate::source::{
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
 };
 use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
+use crate::source_message::{expression_source, jsx_attributes, make_unique_value_name};
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -1456,8 +1457,7 @@ fn template_to_message_with_state(
             };
             let expression =
                 expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
-            let placeholder =
-                make_unique_placeholder_name(preferred_name, &expression, used_value_names);
+            let placeholder = make_unique_value_name(preferred_name, &expression, used_value_names);
             message.push('{');
             message.push_str(&placeholder);
             message.push('}');
@@ -1466,81 +1466,6 @@ fn template_to_message_with_state(
     }
 
     Ok((escape_icu_source_literal(&message), placeholders))
-}
-
-fn make_unique_placeholder_name(
-    preferred_name: String,
-    expression: &str,
-    used_value_names: &mut HashMap<String, String>,
-) -> String {
-    if let Some(existing_expression) = used_value_names.get(&preferred_name) {
-        if existing_expression == expression {
-            return preferred_name;
-        }
-    } else {
-        used_value_names.insert(preferred_name.clone(), expression.to_string());
-        return preferred_name;
-    }
-
-    let mut suffix = 1usize;
-    loop {
-        let candidate = format!("{preferred_name}_{suffix}");
-        match used_value_names.get(&candidate) {
-            Some(existing_expression) if existing_expression != expression => suffix += 1,
-            _ => {
-                used_value_names.insert(candidate.clone(), expression.to_string());
-                return candidate;
-            }
-        }
-    }
-}
-
-fn expression_source(expr: &Expression<'_>, source: &str) -> Option<String> {
-    let span = expr.span();
-    source
-        .get(span.start as usize..span.end as usize)
-        .map(str::trim)
-        .filter(|expression| !expression.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> BTreeMap<String, String> {
-    let mut attrs = BTreeMap::new();
-
-    for attr in &opening_element.attributes {
-        let Some(attr) = attr.as_attribute() else {
-            continue;
-        };
-        let key = attr.name.get_identifier().name.to_string();
-        let Some(value) = attr.value.as_ref().and_then(jsx_attribute_string_value) else {
-            continue;
-        };
-        attrs.insert(key, value);
-    }
-
-    attrs
-}
-
-fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
-    match value {
-        JSXAttributeValue::StringLiteral(literal) => {
-            Some(decode_jsx_entities(literal.value.as_str()))
-        }
-        JSXAttributeValue::ExpressionContainer(container) => {
-            jsx_expression_string_value(&container.expression)
-        }
-        _ => None,
-    }
-}
-
-fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
-    match expr {
-        JSXExpression::StringLiteral(literal) => Some(literal.value.to_string()),
-        JSXExpression::TemplateLiteral(template) => {
-            template.single_quasi().map(|value| value.to_string())
-        }
-        _ => None,
-    }
 }
 
 fn extract_jsx_choice_value(
@@ -1625,7 +1550,7 @@ fn extract_jsx_children_as_message_with_state(
                         .map(ToOwned::to_owned)
                         .unwrap_or_else(|| preferred_name.clone());
                     let name =
-                        make_unique_placeholder_name(preferred_name, &expression, used_value_names);
+                        make_unique_value_name(preferred_name, &expression, used_value_names);
                     parts.push(JsxMessagePart::ValuePlaceholder(format!("{{{name}}}")));
                 }
             },

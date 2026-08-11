@@ -17,6 +17,10 @@ use crate::jsx_message::{
     clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
 };
 use crate::placeholder_name::{expression_name, jsx_expression_name};
+use crate::source_message::{
+    expression_source as shared_expression_source, jsx_attributes as shared_jsx_attributes,
+    jsx_expression_source as shared_jsx_expression_source, make_unique_value_name,
+};
 
 use super::Replacement;
 
@@ -93,45 +97,6 @@ pub(super) fn extract_choice_options(
         values,
         offset,
     })
-}
-
-pub(super) fn jsx_attribute_string_value(value: &JSXAttributeValue<'_>) -> Option<String> {
-    match value {
-        JSXAttributeValue::StringLiteral(literal) => {
-            Some(decode_jsx_entities(literal.value.as_str()))
-        }
-        JSXAttributeValue::ExpressionContainer(container) => {
-            jsx_expression_string_value(&container.expression)
-        }
-        _ => None,
-    }
-}
-
-fn jsx_expression_string_value(expr: &JSXExpression<'_>) -> Option<String> {
-    match expr {
-        JSXExpression::StringLiteral(literal) => Some(literal.value.to_string()),
-        JSXExpression::TemplateLiteral(template) => {
-            template.single_quasi().map(|value| value.to_string())
-        }
-        _ => None,
-    }
-}
-
-pub(super) fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> HashMap<String, String> {
-    let mut attrs = HashMap::new();
-
-    for attr in &opening_element.attributes {
-        let Some(attr) = attr.as_attribute() else {
-            continue;
-        };
-        let key = attr.name.get_identifier().name.to_string();
-        let Some(value) = attr.value.as_ref().and_then(jsx_attribute_string_value) else {
-            continue;
-        };
-        attrs.insert(key, value);
-    }
-
-    attrs
 }
 
 pub(super) fn extract_jsx_value_binding(
@@ -450,37 +415,13 @@ pub(super) fn append_unique_bindings(
 }
 
 pub(super) fn expression_source(expr: &Expression<'_>, source: &str) -> String {
-    let span = expr.span();
-    source[span.start as usize..span.end as usize].to_string()
+    shared_expression_source(expr, source).unwrap_or_default()
 }
 
-fn make_unique_binding_name(
-    preferred_name: String,
-    expression: &str,
-    used_value_names: &mut HashMap<String, String>,
-) -> String {
-    if let Some(existing_expression) = used_value_names.get(&preferred_name) {
-        if existing_expression == expression {
-            return preferred_name;
-        }
-    } else {
-        used_value_names.insert(preferred_name.clone(), expression.to_string());
-        return preferred_name;
-    }
-
-    let mut suffix = 1usize;
-    loop {
-        let candidate = format!("{preferred_name}_{suffix}");
-        match used_value_names.get(&candidate) {
-            Some(existing_expression) if existing_expression != expression => {
-                suffix += 1;
-            }
-            _ => {
-                used_value_names.insert(candidate.clone(), expression.to_string());
-                return candidate;
-            }
-        }
-    }
+pub(super) fn jsx_attributes(
+    opening_element: &JSXOpeningElement<'_>,
+) -> std::collections::BTreeMap<String, String> {
+    shared_jsx_attributes(opening_element)
 }
 
 pub(super) fn expression_binding(
@@ -489,11 +430,12 @@ pub(super) fn expression_binding(
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<ValueBinding> {
-    let expression = expression_source(expr, source);
     let Some(preferred_name) = expression_name(expr) else {
         return Err(PalamedesError::UnnamedPlaceholder { syntax });
     };
-    let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
+    let expression =
+        shared_expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
+    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
 
     Ok(ValueBinding { expression, name })
 }
@@ -503,22 +445,13 @@ pub(super) fn choice_expression_binding(
     source: &str,
     used_value_names: &mut HashMap<String, String>,
 ) -> ValueBinding {
-    let expression = expression_source(expr, source);
     let preferred_name =
         expression_name(expr).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
-    let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
+    let expression =
+        shared_expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
+    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
 
     ValueBinding { expression, name }
-}
-
-fn jsx_expression_source(expr: &JSXExpression<'_>, source: &str) -> Option<String> {
-    match expr {
-        JSXExpression::EmptyExpression(_) => None,
-        _ => {
-            let span = expr.span();
-            Some(source[span.start as usize..span.end as usize].to_string())
-        }
-    }
 }
 
 pub(super) fn jsx_value_binding(
@@ -527,11 +460,11 @@ pub(super) fn jsx_value_binding(
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<ValueBinding> {
-    let expression = jsx_expression_source(expr, source).unwrap_or_default();
+    let expression = shared_jsx_expression_source(expr, source).unwrap_or_default();
     let Some(preferred_name) = jsx_expression_name(expr) else {
         return Err(PalamedesError::UnnamedPlaceholder { syntax });
     };
-    let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
+    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
 
     Ok(ValueBinding { expression, name })
 }
@@ -541,10 +474,10 @@ pub(super) fn choice_jsx_value_binding(
     source: &str,
     used_value_names: &mut HashMap<String, String>,
 ) -> ValueBinding {
-    let expression = jsx_expression_source(expr, source).unwrap_or_default();
+    let expression = shared_jsx_expression_source(expr, source).unwrap_or_default();
     let preferred_name =
         jsx_expression_name(expr).unwrap_or_else(|| CHOICE_VALUE_FALLBACK_NAME.to_string());
-    let name = make_unique_binding_name(preferred_name, &expression, used_value_names);
+    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
 
     ValueBinding { expression, name }
 }
