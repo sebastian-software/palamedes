@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { describe, expect, it, afterEach, vi } from "vitest"
 
 import { type I18nInstance, getI18n, resetI18nRuntime, setServerI18nGetter } from "./index"
-import { createServerI18nScope } from "./server"
+import { createScopedI18nRunner, createServerI18nScope } from "./server"
 
 function createTestI18n(locale = "en"): I18nInstance {
   return {
@@ -43,6 +43,38 @@ describe("@palamedes/runtime/server", () => {
     })
 
     expect(scope.get()).toBeUndefined()
+  })
+
+  it("resolves request i18n before running shared adapter dispatch", async () => {
+    const failure = new Error("catalog is unavailable")
+    const runner = createScopedI18nRunner(
+      (request) => createTestI18n(request.headers.get("x-locale") ?? "en"),
+      { failureMessage: "adapter initialization failed" }
+    )
+
+    await expect(
+      runner.run(
+        new Request("https://example.test/", { headers: { "x-locale": "de" } }),
+        (i18n) => {
+          expect(i18n.locale).toBe("de")
+          expect(getI18n()).toBe(i18n)
+          return i18n._("message")
+        }
+      )
+    ).resolves.toBe("message")
+    expect(runner.scope.get()).toBeUndefined()
+
+    const failingRunner = createScopedI18nRunner(
+      async () => {
+        throw failure
+      },
+      { failureMessage: "adapter initialization failed" }
+    )
+    await expect(
+      failingRunner.run(new Request("https://example.test/"), () => {
+        throw new Error("dispatch must not run")
+      })
+    ).rejects.toMatchObject({ message: "adapter initialization failed", cause: failure })
   })
 
   it("shares the active request scope with isolated module graphs", async () => {

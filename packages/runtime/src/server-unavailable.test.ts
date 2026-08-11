@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 import type { I18nInstance } from "./index"
+import * as server from "./server"
+import * as serverUnavailable from "./server-unavailable"
 import { createServerI18nScope } from "./server-unavailable"
 
 describe("@palamedes/runtime/server fallback", () => {
@@ -10,6 +12,10 @@ describe("@palamedes/runtime/server fallback", () => {
     expect(() => createServerI18nScope<I18nInstance>()).toThrow(
       /only available in Node\.js server runtimes/
     )
+  })
+
+  it("mirrors the Node server export surface", () => {
+    expect(Object.keys(serverUnavailable).sort()).toStrictEqual(Object.keys(server).sort())
   })
 
   it("provides matching ESM and CJS fallbacks for non-Node conditions", () => {

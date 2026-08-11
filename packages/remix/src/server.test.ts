@@ -67,6 +67,22 @@ describe("createRemixI18nRequestScope", () => {
     ])
   })
 
+  it("wraps resolver failures without entering the request callback", async () => {
+    const failure = new Error("catalog is unavailable")
+    const remixI18n = createRemixI18nRequestScope(async () => {
+      throw failure
+    })
+
+    await expect(
+      remixI18n.run(new Request("https://example.test/"), () => {
+        throw new Error("callback must not run")
+      })
+    ).rejects.toMatchObject({
+      message: "Palamedes Remix i18n initialization failed before the handler ran.",
+      cause: failure,
+    })
+  })
+
   it("keeps request scope active while a returned response body is streamed", async () => {
     const remixI18n = createRemixI18nRequestScope(() => createTestI18n("de"))
     const encoder = new TextEncoder()

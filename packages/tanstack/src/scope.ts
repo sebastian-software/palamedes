@@ -1,4 +1,4 @@
-import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/server"
+import { createScopedI18nRunner, type ServerI18nScope } from "@palamedes/runtime/server"
 import type { I18nInstance } from "@palamedes/runtime"
 
 import type { TanStackI18nResolver } from "./index"
@@ -11,21 +11,15 @@ export type ScopedTanStackI18nRunner<T extends I18nInstance> = {
 export function createScopedTanStackI18nRunner<T extends I18nInstance>(
   resolveI18n: TanStackI18nResolver<T>
 ): ScopedTanStackI18nRunner<T> {
-  const scope = createServerI18nScope<T>()
+  const runner = createScopedI18nRunner(resolveI18n, {
+    failureMessage:
+      "Palamedes TanStack i18n initialization failed before server-function dispatch ran.",
+  })
 
   return {
-    async run(request, next) {
-      let i18n: T
-      try {
-        i18n = await resolveI18n(request)
-      } catch (error) {
-        throw new Error(
-          "Palamedes TanStack i18n initialization failed before server-function dispatch ran.",
-          { cause: error }
-        )
-      }
-      return await scope.run(i18n, async () => await next())
+    run(request, next) {
+      return runner.run(request, () => next())
     },
-    scope,
+    scope: runner.scope,
   }
 }
