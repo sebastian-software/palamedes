@@ -6,7 +6,7 @@ import { NATIVE_TARBALL_MIN_UNPACKED_SIZE, nativeTarballFailure } from "./releas
 
 describe("release tarball verification", () => {
   const publishedVersionCheck = readFileSync(
-    new URL("./check-published-versions.mjs", import.meta.url),
+    new URL("check-published-versions.mjs", import.meta.url),
     "utf8"
   )
   const nativePackage = {
