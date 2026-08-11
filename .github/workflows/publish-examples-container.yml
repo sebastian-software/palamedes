@@ -37,35 +37,14 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ github.sha }}
 
       - name: Detect release commit
         id: release
-        shell: bash
         env:
+          BASE_REF: ${{ github.event.before }}
           FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_publish && 'true' || 'false' }}
-        run: |
-          set -euo pipefail
-
-          has_release_commit=false
-
-          if [ "$FORCE_PUBLISH" = "true" ]; then
-            has_release_commit=true
-          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            base_ref="${{ github.event.before }}"
-            if [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
-              base_ref="$(git rev-parse HEAD^)"
-            fi
-
-            if git log --format=%s "$base_ref..${{ github.sha }}" | grep -Eq '^chore: release '; then
-              has_release_commit=true
-            fi
-          fi
-
-          if [ "$has_release_commit" = true ]; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: node ./scripts/determine-release.mjs
 
   build-and-push:
     needs: determine-release

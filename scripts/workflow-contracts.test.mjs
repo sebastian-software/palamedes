@@ -207,6 +207,27 @@ describe("workflow contracts", () => {
     expect(container).toContain("permissions:\n  contents: read")
   })
 
+  it("shares pinned release detection between package and container publishing", async () => {
+    const [publish, container, releaseDetection] = await Promise.all([
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile(".github/workflows/publish-examples-container.yml"),
+      readRepositoryFile("scripts/determine-release.mjs"),
+    ])
+
+    for (const [workflow, nextJob] of [
+      [publish, "validate-release"],
+      [container, "build-and-push"],
+    ]) {
+      const determineRelease = job(workflow, "determine-release", nextJob)
+      expect(determineRelease).toContain("fetch-depth: 0")
+      expect(determineRelease).toContain("ref: ${{ github.sha }}")
+      expect(determineRelease).toContain("run: node ./scripts/determine-release.mjs")
+      expect(determineRelease).toContain("BASE_REF: ${{ github.event.before }}")
+    }
+    expect(releaseDetection).toContain("chore: release ")
+    expect(releaseDetection).toContain("0000000000000000000000000000000000000000")
+  })
+
   it("lets the dependency audit exit code reach the tracking issue step", async () => {
     const dependencyAudit = await readRepositoryFile(".github/workflows/dependency-audit.yml")
 
