@@ -1,5 +1,5 @@
 import type { I18nInstance } from "@palamedes/runtime"
-import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/server"
+import { createScopedI18nRunner, type ServerI18nScope } from "@palamedes/runtime/server"
 
 import type { WakuI18nResolver } from "./index"
 
@@ -11,20 +11,14 @@ export type ScopedWakuI18nRunner<T extends I18nInstance> = {
 export function createScopedWakuI18nRunner<T extends I18nInstance>(
   resolveI18n: WakuI18nResolver<T>
 ): ScopedWakuI18nRunner<T> {
-  const scope = createServerI18nScope<T>()
+  const runner = createScopedI18nRunner(resolveI18n, {
+    failureMessage: "Palamedes Waku i18n initialization failed before the handler ran.",
+  })
 
   return {
-    async run(request, next) {
-      let i18n: T
-      try {
-        i18n = await resolveI18n(request)
-      } catch (error) {
-        throw new Error("Palamedes Waku i18n initialization failed before the handler ran.", {
-          cause: error,
-        })
-      }
-      return await scope.run(i18n, async () => await next())
+    run(request, next) {
+      return runner.run(request, () => next())
     },
-    scope,
+    scope: runner.scope,
   }
 }

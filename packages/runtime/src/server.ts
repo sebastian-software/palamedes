@@ -9,6 +9,23 @@ import {
 
 export type { CreateServerI18nScopeOptions, ServerI18nScope } from "./index"
 
+/** Resolves the i18n instance that belongs to an incoming server request. */
+export type ServerI18nResolver<T extends I18nInstance = I18nInstance> = (
+  request: Request
+) => T | Promise<T>
+
+/** Configuration for a request-scoped i18n runner. */
+export type CreateScopedI18nRunnerOptions = {
+  /** Adapter-specific error text when resolving request i18n fails. */
+  failureMessage: string
+}
+
+/** Runs adapter dispatch inside one resolved request-local i18n scope. */
+export type ScopedI18nRunner<T extends I18nInstance = I18nInstance> = {
+  run<Result>(request: Request, next: (i18n: T) => Result | Promise<Result>): Promise<Result>
+  scope: ServerI18nScope<T>
+}
+
 const SERVER_SCOPE_STATE_KEY = Symbol.for("palamedes.runtime.serverI18nScopeState")
 
 type ServerScopeState = {
@@ -123,4 +140,31 @@ export function createServerI18nScope<T extends I18nInstance = I18nInstance>(
   setServerI18nGetter(() => sharedState.get())
 
   return scope
+}
+
+/**
+ * Resolves request i18n and runs adapter dispatch in its shared server scope.
+ *
+ * Framework packages supply their own public wrapper and curated resolver
+ * failure text, while this function owns the identical resolution and async
+ * scope lifecycle.
+ */
+export function createScopedI18nRunner<T extends I18nInstance = I18nInstance>(
+  resolveI18n: ServerI18nResolver<T>,
+  { failureMessage }: CreateScopedI18nRunnerOptions
+): ScopedI18nRunner<T> {
+  const scope = createServerI18nScope<T>()
+
+  return {
+    async run(request, next) {
+      let i18n: T
+      try {
+        i18n = await resolveI18n(request)
+      } catch (error) {
+        throw new Error(failureMessage, { cause: error })
+      }
+      return await scope.run(i18n, async () => await next(i18n))
+    },
+    scope,
+  }
 }

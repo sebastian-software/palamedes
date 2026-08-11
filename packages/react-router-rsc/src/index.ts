@@ -1,5 +1,5 @@
 import type { I18nInstance } from "@palamedes/runtime"
-import { createServerI18nScope, type ServerI18nScope } from "@palamedes/runtime/server"
+import { createScopedI18nRunner, type ServerI18nScope } from "@palamedes/runtime/server"
 
 /** Resolves a fresh, activated i18n instance from React Router's original Fetch request. */
 export type ReactRouterRscI18nResolver<T extends I18nInstance = I18nInstance> = (
@@ -24,22 +24,15 @@ export type ReactRouterRscI18nRequestScope<T extends I18nInstance = I18nInstance
 export function createReactRouterRscI18nRequestScope<T extends I18nInstance = I18nInstance>(
   resolveI18n: ReactRouterRscI18nResolver<T>
 ): ReactRouterRscI18nRequestScope<T> {
-  const scope = createServerI18nScope<T>()
+  const runner = createScopedI18nRunner(resolveI18n, {
+    failureMessage:
+      "Palamedes React Router RSC i18n initialization failed before RSC dispatch ran.",
+  })
 
   return {
-    async run(request, dispatch) {
-      let i18n: T
-      try {
-        i18n = await resolveI18n(request)
-      } catch (error) {
-        throw new Error(
-          "Palamedes React Router RSC i18n initialization failed before RSC dispatch ran.",
-          { cause: error }
-        )
-      }
-
-      return await scope.run(i18n, async () => await dispatch())
+    run(request, dispatch) {
+      return runner.run(request, () => dispatch())
     },
-    scope,
+    scope: runner.scope,
   }
 }

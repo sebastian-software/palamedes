@@ -1,7 +1,7 @@
 import { createI18n, type CatalogMessages, type PalamedesI18n } from "@palamedes/core"
 import type { LocaleControls, LocaleSource } from "@palamedes/core/locale"
 import type { I18nInstance } from "@palamedes/runtime"
-import { createServerI18nScope } from "@palamedes/runtime/server"
+import { createScopedI18nRunner, createServerI18nScope } from "@palamedes/runtime/server"
 import { AcceptLanguage } from "remix/headers"
 import { createContextKey, type Middleware, type RequestContext } from "remix/router"
 
@@ -77,20 +77,23 @@ export const remixI18nContext: RemixContextKey<RemixI18nContextValue<string, I18
 export function createRemixI18nRequestScope<T extends I18nInstance = I18nInstance>(
   resolveI18n: RemixI18nResolver<T>
 ): RemixI18nRequestScope<T> {
-  const scope = createServerI18nScope<T>()
+  const runner = createScopedI18nRunner(resolveI18n, {
+    failureMessage: "Palamedes Remix i18n initialization failed before the handler ran.",
+  })
 
   return {
     async run(request, callback) {
-      const i18n = await resolveI18n(request)
-      return await scope.run(i18n, async () => bindScopedResult(await callback(i18n), i18n, scope))
+      return await runner.run(request, async (i18n) =>
+        bindScopedResult(await callback(i18n), i18n, runner.scope)
+      )
     },
 
     activate(i18n) {
-      return scope.activate(i18n)
+      return runner.scope.activate(i18n)
     },
 
     get() {
-      return scope.get()
+      return runner.scope.get()
     },
   }
 }
