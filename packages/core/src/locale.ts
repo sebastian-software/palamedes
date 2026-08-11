@@ -1,8 +1,8 @@
 /**
  * Headless locale controls: resolution, the deliberate-choice cookie, and the
  * suggestion decision — all framework-agnostic and configurable. UI and router
- * navigation stay with the caller. See the RFC in
- * `docs/plans/2026-07-01-locale-controls-library-rfc.md`.
+ * navigation stay with the caller. See `docs/locale-strategies.md` for the
+ * durable integration guidance.
  */
 
 export type LocaleSource =

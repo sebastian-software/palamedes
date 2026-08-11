@@ -21,13 +21,13 @@ If that path is split across many TypeScript layers and utility packages, the pr
 - performance improvements are harder to realize end-to-end
 - it becomes unclear which layer actually owns i18n behavior
 
-At the same time, Palamedes still lives in JavaScript application ecosystems. Some responsibilities are naturally host-specific:
+At the same time, Palamedes still lives in JavaScript application ecosystems.
+Some responsibilities are naturally specific to those hosts:
 
-- config loading
-- file watching
+- JavaScript-host config loading
 - bundler integration
 - framework hooks
-- CLI UX
+- packaging and host-facing API ergonomics
 
 That means Palamedes needs a strict ownership split rather than a vague "native helpers under a JavaScript toolchain" model.
 
@@ -69,9 +69,13 @@ Rejected because it preserves duplicated semantics and encourages the exact spli
 
 ### 2. Move everything possible into Rust
 
-This would also push config loading, bundler integration, and other host-specific concerns into the native layer.
+This would also push JavaScript-host config loading, bundler integration,
+framework hooks, and packaging concerns into the native layer.
 
-Rejected because those concerns are defined by JavaScript ecosystem APIs and become awkward when forced into the core.
+Rejected because those concerns are defined by JavaScript ecosystem APIs and
+become awkward when forced into the core. Native CLI config, file watching, and
+command-line UX remain Rust responsibilities because they do not depend on
+those host APIs.
 
 ### 3. Keep separate semantic pipelines per package
 

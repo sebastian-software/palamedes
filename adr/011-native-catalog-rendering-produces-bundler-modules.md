@@ -23,12 +23,15 @@ modules.
 
 The rules are:
 
-- native catalog compilation returns generated module `code`, diagnostics, and
-  watch metadata
+- full module compilation returns `CatalogModuleResult` with generated `code`,
+  `warnings`, `watchFiles`, and `locale`; lower-level artifact compilation
+  returns no code, but exposes `messages` and `diagnostics` alongside watch,
+  missing-message, and resolved-locale-chain metadata in `CatalogArtifactResult`
 - `RuntimeModuleRenderer` owns safe ESM generation, including JavaScript
   escaping and executable message-function lowering
-- Vite and Next loaders consume the native `code`; they do not render catalog
-  messages themselves
+- Vite and Next loaders consume native module `code` for full catalogs; selected
+  and sidecar paths pass native-compiled message maps to `renderCatalogModule()`
+  rather than maintaining adapter-specific renderers
 - the public TypeScript `renderCatalogModule()` compatibility helper delegates
   to the same native renderer
 
@@ -36,7 +39,8 @@ The intended stack is:
 
 - Rust compiles configured PO or FCL catalogs and renders the runtime module
 - `palamedes-node` exposes that result through typed N-API bindings
-- Vite and Next adapters handle host integration around the returned module
+- Vite and Next adapters handle host integration around returned modules and
+  selected message maps
 
 ## Alternatives Considered
 

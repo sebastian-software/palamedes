@@ -164,7 +164,7 @@ keeps the variants comparable:
 
 Constraints carried over from the ADRs: identity stays source-string-first
 (ADR-003), compiled keys stay internal (ADR-004), the runtime primitive stays
-`getI18n()` (ADR-005), Rust compiles artifacts while adapters render modules
+`getI18n()` (ADR-005), native catalog rendering produces bundler modules
 (ADR-011), and adapters stay thin orchestration layers (ADR-008). Translator
 workflow is a hard invariant: catalogs remain whole `.po`/FCL files; splitting
 is a compile/build concern and must never leak into authoring or translation.
