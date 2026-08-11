@@ -621,6 +621,43 @@ Sequencing: homepage first (this concept), then /proof and /compare (both
 inherit decided elements: unit grid, number policy, masthead language), then
 the index pages for /docs//decisions, then the smaller fixes.
 
+### Detail concepts: /proof and /compare (mocked 2026-08-12)
+
+Mocks: `homepage-revamp-mocks/r5-proof.html`, `r5-compare-hub.html`,
+`r5-compare-rival.html` (Lingui as the example, copy taken from `rivals.ts`).
+
+**Inner-page chrome — running head.** The broadsheet logic carried through:
+only the homepage gets the full masthead; inner pages get a slim running
+head (small crest · wordmark · accent section label · nav) over the double
+rule. Sub-context extends the label ("Compare · Lingui").
+
+**/proof — receipts as artifacts.** Hero keeps "Claims you can re-run." and
+adds the copyable `pnpm bench:e2e` next to the primary CTA. Then: receipts
+strip → 01 Benchmarks (three-corpora ledger with cold/warm/same-job-range
+columns + environment header, unit grid, honest-note rail on the React Intl
+scope) → 02 Verification (Build/Drive/Capture pipeline, the 6×4 matrix with
+●/○ legend, versioned-capture strip) → 03 Catalog quality (ferrocat sheet)
+→ 04 ICU boundary (exact-boundary rail) → 05 **the decision ledger**: the
+ADR trail becomes a framed numbered table (no. · title · status) instead of
+three bare links — fixing the page's weakest-rendered block. Close:
+"Re-run the claims. Then start."
+
+**/compare hub — cards become a ledger.** The rival grid becomes a spec
+table: tool · position one-liner · measured column ("29.57× slower,
+same-job lane" / "5.67× — extract only, narrower scope" / literal
+"not measured — no claim implied") · researched date. The honesty rules
+turn into visible table columns. "When Palamedes is wrong for you" stays as
+four honest exits; NATIVE_SHIFT lives here once, explicitly ("this argument
+lives here, once — not repeated on every comparison page").
+
+**Rival template — verdict first, 8 → 6 sections.** The decide-picklists
+move from position 06 to position 01 ("The verdict, first — ten seconds,
+honestly") directly under the thesis rail; then credit & cost, differences,
+code, the short table, the honest bit, sibling links. NATIVE_SHIFT is
+removed from the template (hub-only). The closing CTA becomes
+rival-specific ("Keep your authoring model. Swap the engine." for Lingui,
+primary: migration guide).
+
 ## 10. Open questions & next steps
 
 1. **Headline decision** — done: A, "CLEAR. COMPLETE. FAST. / PICK THREE."

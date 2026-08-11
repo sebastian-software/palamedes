@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>R5 — /compare hub</title>
+<style>
+  @font-face { font-family: "Cinzel Hellenic"; src: url("../public/fonts/CinzelHellenic-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  :root {
+    --paper: #faf9f4; --ink: #0e2a4d; --hair: #ddd6c6; --accent: #8e6628;
+    --gold: #bc8a45; --gray: #7d7869; --track: #f1ede0;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --display: "Cinzel Hellenic", "Times New Roman", serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
+  .page { max-width: 1320px; margin-inline: auto; border-inline: 1px solid var(--hair); }
+
+  .runhead { display: flex; justify-content: space-between; align-items: center; padding: 12px 32px; border-bottom: 2px solid var(--ink); position: relative; }
+  .runhead::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 1px; background: var(--ink); }
+  .runhead .brand { display: flex; align-items: center; gap: 12px; }
+  .runhead img { width: 26px; height: 26px; }
+  .runhead .word { font-family: var(--display); font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .runhead .sect { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); border-left: 1px solid var(--hair); padding-left: 12px; }
+  .runhead nav { display: flex; gap: 22px; }
+  .runhead a { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); text-decoration: none; }
+
+  .hero { padding: 56px 32px 48px; max-width: 940px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gray); }
+  h1 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(32px, 4vw, 52px); line-height: 1.14; margin-top: 18px; }
+  h1 .l2 { display: block; color: var(--accent); }
+  .lede { margin-top: 18px; max-width: 42em; font-size: 15.5px; line-height: 1.7; }
+
+  .section { padding: 60px 32px 68px; border-bottom: 1px solid var(--hair); }
+  .section .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+  .section h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(22px, 2.3vw, 30px); line-height: 1.25; margin-top: 14px; }
+  .section .slede { max-width: 46em; margin-top: 16px; font-size: 14.5px; line-height: 1.7; color: #2c4463; }
+
+  /* Rival ledger — cards become spec rows */
+  .rivals { margin-top: 32px; border: 1px solid var(--ink); }
+  .rhead, .rrow { display: grid; grid-template-columns: 150px 1fr 190px 110px 40px; align-items: baseline; }
+  .rhead { background: var(--track); border-bottom: 1px solid var(--ink); font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gray); }
+  .rhead span { padding: 10px 16px; }
+  .rrow { border-bottom: 1px solid var(--hair); text-decoration: none; color: var(--ink); }
+  .rrow:last-child { border-bottom: 0; }
+  .rrow:hover { background: var(--track); }
+  .rrow .name { padding: 14px 16px; font-family: var(--display); font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .rrow .pos { padding: 14px 16px; font-size: 13px; line-height: 1.55; color: #2c4463; }
+  .rrow .meas { padding: 14px 16px; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .rrow .meas b { color: var(--accent); font-weight: 600; }
+  .rrow .meas small { display: block; font-size: 10px; color: var(--gray); }
+  .rrow .date { padding: 14px 16px; font-family: var(--mono); font-size: 10.5px; color: var(--gray); }
+  .rrow .go { padding: 14px 16px 14px 0; color: var(--accent); }
+
+  /* not-for-you cells */
+  .nfy { margin-top: 32px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--hair); border: 1px solid var(--hair); }
+  .nfy .c { background: var(--paper); padding: 18px; }
+  .nfy .h { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+  .nfy p { margin-top: 8px; font-size: 12.5px; line-height: 1.6; color: #2c4463; }
+
+  .rail { margin-top: 32px; max-width: 900px; border-left: 2px solid var(--accent); padding: 4px 0 4px 20px; }
+  .rail .h { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+  .rail p { margin-top: 8px; font-size: 13px; line-height: 1.7; color: #2c4463; max-width: 52em; }
+
+  .honest { text-align: center; padding: 64px 40px; border-bottom: 1px solid var(--hair); }
+  .honest .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+  .honest p { font-family: var(--display); text-transform: uppercase; font-size: clamp(18px, 2vw, 26px); line-height: 1.5; max-width: 34em; margin: 18px auto 0; }
+
+  .cta { background: var(--ink); color: var(--paper); text-align: center; padding: 64px 40px; }
+  .cta h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(22px, 2.6vw, 32px); }
+  .btn { display: inline-block; padding: 0.75rem 1.5rem; border: 1px solid var(--ink); font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; text-decoration: none; color: var(--ink); }
+  .btn.goldfill { background: var(--gold); border-color: var(--gold); color: #0a1f3a; }
+  .btn.ghost { border-color: var(--paper); color: var(--paper); }
+  .cta .ctas { margin-top: 32px; display: flex; justify-content: center; gap: 12px; }
+
+  .concept-badge { position: fixed; right: 12px; bottom: 12px; z-index: 99; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; background: var(--ink); color: var(--paper); padding: 6px 10px; }
+</style>
+</head>
+<body>
+  <div class="concept-badge">R5 · /compare hub — cards become a ledger</div>
+  <div class="page">
+
+    <div class="runhead">
+      <span class="brand">
+        <img src="../public/logo.svg" alt="" />
+        <span class="word">Palamedes</span>
+        <span class="sect">Compare</span>
+      </span>
+      <nav><a href="#">Frameworks</a><a href="#">Proof</a><a href="#">Compare</a><a href="#">Blog</a><a href="#">Docs</a><a href="#">GitHub</a></nav>
+    </div>
+
+    <section class="hero">
+      <p class="eyebrow">Seven head-to-head comparisons · dated research</p>
+      <h1>Compare it properly.<span class="l2">We argue the other side for you.</span></h1>
+      <p class="lede">
+        Every page starts with what the other tool earned, names what that
+        costs, and tells you when to pick them instead. Claims carry research
+        dates; where nothing was measured, nothing is implied.
+      </p>
+    </section>
+
+    <!-- 01 — the ledger -->
+    <section class="section">
+      <div class="num">01 — Head to head</div>
+      <h2>Pick your incumbent.</h2>
+      <div class="rivals">
+        <div class="rhead"><span>Tool</span><span>Position</span><span>Measured</span><span>Researched</span><span></span></div>
+        <a class="rrow" href="#">
+          <span class="name">Lingui</span>
+          <span class="pos">The closest relative — same authoring instinct, and the checked benchmark says 29.57× on the same corpus.</span>
+          <span class="meas"><b>29.57×</b> slower<small>same-job lane</small></span>
+          <span class="date">Jul 2026</span><span class="go">→</span>
+        </a>
+        <a class="rrow" href="#">
+          <span class="name">i18next</span>
+          <span class="pos">The ubiquitous key-based runtime with a plugin for everything — and an extractor we measured.</span>
+          <span class="meas"><b>79.21×</b> slower<small>i18next-cli, same-job lane</small></span>
+          <span class="date">Jul 2026</span><span class="go">→</span>
+        </a>
+        <a class="rrow" href="#">
+          <span class="name">React Intl</span>
+          <span class="pos">The standards play — ICU everywhere, but extraction stops before catalogs begin.</span>
+          <span class="meas"><b>5.67×</b> slower<small>extract only — narrower scope</small></span>
+          <span class="date">Jul 2026</span><span class="go">→</span>
+        </a>
+        <a class="rrow" href="#">
+          <span class="name">next-intl</span>
+          <span class="pos">The Next.js specialist — deep App Router integration, key-based messages.</span>
+          <span class="meas">not measured<small>no claim implied</small></span>
+          <span class="date">Jul 2026</span><span class="go">→</span>
+        </a>
+        <a class="rrow" href="#">
+          <span class="name">Paraglide</span>
+          <span class="pos">The compiler play from inlang — per-key tree-shaking, its own format.</span>
+          <span class="meas">not measured<small>no claim implied</small></span>
+          <span class="date">Jul 2026</span><span class="go">→</span>
+        </a>
+        <a class="rrow" href="#">
+          <span class="name">Tolgee</span>
+          <span class="pos">The platform SDK — in-context editing against a hosted workflow.</span>
+          <span class="meas">not measured<small>no claim implied</small></span>
+          <span class="date">Jul 2026</span><span class="go">→</span>
+        </a>
+        <a class="rrow" href="#">
+          <span class="name">Intlayer</span>
+          <span class="pos">The content-layer approach — per-component dictionaries.</span>
+          <span class="meas">not measured<small>no claim implied</small></span>
+          <span class="date">Jul 2026</span><span class="go">→</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- 02 — not for you -->
+    <section class="section">
+      <div class="num">02 — When Palamedes is wrong for you</div>
+      <h2>Four honest exits.</h2>
+      <div class="nfy">
+        <div class="c"><div class="h">Vue / React Native</div><p>You need them today. Palamedes has neither and will not fake it — Lingui covers both first-party.</p></div>
+        <div class="c"><div class="h">Hosted TMS</div><p>You want in-context editing against a hosted workflow now. That's Tolgee's home game.</p></div>
+        <div class="c"><div class="h">No build step</div><p>You want runtime-only i18n without extraction or compilation. Key-based runtimes fit better.</p></div>
+        <div class="c"><div class="h">Built-in MT</div><p>You want machine translation inside the tool. Palamedes keeps translation out of scope, deliberately.</p></div>
+      </div>
+      <div class="rail">
+        <div class="h">Why native tooling, why now</div>
+        <p>
+          The JS-toolchain generation is converging on the same answer from
+          different directions — worker threads, experimental Rolldown hosts,
+          native rewrites. Palamedes started on a Rust core instead of chasing
+          one. This argument lives here, once — not repeated on every
+          comparison page.
+        </p>
+      </div>
+    </section>
+
+    <div class="honest">
+      <div class="num">03 — The honest bit</div>
+      <p>
+        Comparison pages you can trust are comparison pages that credit first.
+        If we ever fail that bar, file an issue — the research notes are public.
+      </p>
+    </div>
+
+    <section class="cta">
+      <h2>Or skip the arguing and try it.</h2>
+      <div class="ctas">
+        <a class="btn goldfill" href="#">First translation in 5 minutes</a>
+        <a class="btn ghost" href="#">See the receipts</a>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
