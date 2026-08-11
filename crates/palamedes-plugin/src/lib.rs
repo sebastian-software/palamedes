@@ -42,9 +42,10 @@ use std::process::ExitCode;
 
 use serde_json::Value;
 
-pub use protocol::{Catalog, LocaleCatalog, Request, RequestKind, Severity, PROTOCOL_VERSION};
-
-use protocol::{Event, ManifestCommand};
+pub use protocol::{
+    Catalog, Event, LocaleCatalog, ManifestCommand, PluginDiagnostic, PluginManifest, PluginResult,
+    Request, RequestKind, Severity, PROTOCOL_VERSION,
+};
 
 /// Environment variable carrying the absolute path of the native `pmds`
 /// executable, set by the host for every plugin invocation.
@@ -131,15 +132,17 @@ impl Plugin {
                         (
                             command.name.clone(),
                             ManifestCommand {
-                                description: command.description.clone(),
+                                description: Some(command.description.clone()),
                             },
                         )
                     })
                     .collect();
                 let manifest = Event::Manifest {
-                    name: self.name.clone(),
-                    protocol_version: PROTOCOL_VERSION,
-                    commands,
+                    manifest: PluginManifest {
+                        name: self.name.clone(),
+                        protocol_version: PROTOCOL_VERSION,
+                        commands,
+                    },
                 };
                 if write_event(&mut output, &manifest).is_err() {
                     return 1;
@@ -152,18 +155,22 @@ impl Plugin {
                 // mismatch. A run request past that negotiation must match.
                 if request.protocol_version != PROTOCOL_VERSION {
                     let diagnostic = Event::Diagnostic {
-                        severity: Severity::Error,
-                        message: format!(
-                            "Request speaks binary plugin protocol {}; this plugin supports {PROTOCOL_VERSION}.",
-                            request.protocol_version
-                        ),
-                        code: Some("PLUGIN_PROTOCOL_INCOMPATIBLE".to_owned()),
-                        details: None,
+                        diagnostic: PluginDiagnostic {
+                            severity: Severity::Error,
+                            message: format!(
+                                "Request speaks binary plugin protocol {}; this plugin supports {PROTOCOL_VERSION}.",
+                                request.protocol_version
+                            ),
+                            code: Some("PLUGIN_PROTOCOL_INCOMPATIBLE".to_owned()),
+                            details: None,
+                        },
                     };
                     let result = Event::Result {
-                        text: None,
-                        data: None,
-                        exit_code: 1,
+                        result: PluginResult {
+                            text: None,
+                            data: None,
+                            exit_code: Some(1),
+                        },
                     };
                     if write_event(&mut output, &diagnostic).is_err()
                         || write_event(&mut output, &result).is_err()
@@ -184,18 +191,22 @@ impl Plugin {
             .find(|command| command.name == request.command)
         else {
             let diagnostic = Event::Diagnostic {
-                severity: Severity::Error,
-                message: format!(
-                    "Plugin \"{}\" has no command \"{}\".",
-                    self.name, request.command
-                ),
-                code: Some("PLUGIN_COMMAND_UNKNOWN".to_owned()),
-                details: None,
+                diagnostic: PluginDiagnostic {
+                    severity: Severity::Error,
+                    message: format!(
+                        "Plugin \"{}\" has no command \"{}\".",
+                        self.name, request.command
+                    ),
+                    code: Some("PLUGIN_COMMAND_UNKNOWN".to_owned()),
+                    details: None,
+                },
             };
             let result = Event::Result {
-                text: None,
-                data: None,
-                exit_code: 2,
+                result: PluginResult {
+                    text: None,
+                    data: None,
+                    exit_code: Some(2),
+                },
             };
             if write_event(output, &diagnostic).is_err() || write_event(output, &result).is_err() {
                 return 1;
@@ -218,9 +229,11 @@ impl Plugin {
             .exit_code
             .unwrap_or(if context.errored { 1 } else { 0 });
         let result = Event::Result {
-            text: outcome.text,
-            data: outcome.data,
-            exit_code,
+            result: PluginResult {
+                text: outcome.text,
+                data: outcome.data,
+                exit_code: Some(exit_code),
+            },
         };
         if write_event(output, &result).is_err() {
             return 1;
@@ -307,10 +320,12 @@ impl CommandContext<'_> {
             self.errored = true;
         }
         self.write(&Event::Diagnostic {
-            severity,
-            message: message.into(),
-            code,
-            details,
+            diagnostic: PluginDiagnostic {
+                severity,
+                message: message.into(),
+                code,
+                details,
+            },
         });
     }
 

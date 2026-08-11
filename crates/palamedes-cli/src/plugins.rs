@@ -20,8 +20,10 @@ use std::sync::Once;
 use std::thread;
 
 use clap::CommandFactory;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+use palamedes_plugin::{Event as PluginEvent, PluginDiagnostic, PluginManifest, Severity};
+use serde::Deserialize;
 
 use crate::command::Context;
 use crate::config::{ConfigError, ConfigPluginDeclaration, LoadedConfig};
@@ -295,7 +297,7 @@ fn manifest_from_invocation(
         .events
         .into_iter()
         .filter_map(|event| match event {
-            PluginEvent::Manifest(manifest) => Some(manifest),
+            PluginEvent::Manifest { manifest } => Some(manifest),
             _ => None,
         });
     let Some(manifest) = manifests.next() else {
@@ -377,15 +379,15 @@ fn finish_run(
 
     for event in invocation.events {
         match event {
-            PluginEvent::Manifest(_) => {
+            PluginEvent::Manifest { .. } => {
                 return Err(protocol_failure(
                     resolved,
                     "run must not emit a manifest event",
                 ));
             }
-            PluginEvent::Diagnostic(diagnostic) => diagnostics.push(diagnostic),
-            PluginEvent::Output(text) => outputs.push(text),
-            PluginEvent::Result(candidate) => {
+            PluginEvent::Diagnostic { diagnostic } => diagnostics.push(diagnostic),
+            PluginEvent::Output { text } => outputs.push(text),
+            PluginEvent::Result { result: candidate } => {
                 if result.replace(candidate).is_some() {
                     return Err(protocol_failure(
                         resolved,
@@ -518,7 +520,7 @@ fn invoke_binary(
         }
         match parse_event_line(&line, resolved) {
             Ok(event) => {
-                if let PluginEvent::Output(text) = &event {
+                if let PluginEvent::Output { text } = &event {
                     if let Some(stream) = stream_output.as_mut() {
                         stream(text);
                     }
@@ -642,45 +644,11 @@ fn parse_event(value: Value) -> Result<PluginEvent, String> {
     let kind = value
         .get("event")
         .and_then(Value::as_str)
+        .map(str::to_owned)
         .ok_or_else(|| "event lines must be objects with an \"event\" kind".to_owned())?;
-    match kind {
-        "manifest" => serde_json::from_value(value)
-            .map(PluginEvent::Manifest)
-            .map_err(|error| format!("invalid manifest event: {error}")),
-        "diagnostic" => serde_json::from_value(value)
-            .map(PluginEvent::Diagnostic)
-            .map_err(|error| format!("invalid diagnostic event: {error}")),
-        "output" => value
-            .get("text")
-            .and_then(Value::as_str)
-            .map(|text| PluginEvent::Output(text.to_owned()))
-            .ok_or_else(|| "output events must contain string text".to_owned()),
-        "result" => {
-            let text = value
-                .get("text")
-                .map(|text| {
-                    text.as_str()
-                        .map(str::to_owned)
-                        .ok_or_else(|| "result text must be a string".to_owned())
-                })
-                .transpose()?;
-            let data = value.get("data").cloned();
-            let exit_code = value
-                .get("exitCode")
-                .map(|code| {
-                    code.as_u64()
-                        .filter(|code| *code <= u8::MAX.into())
-                        .map(|code| code as u8)
-                        .ok_or_else(|| {
-                            "result exitCode must be an integer from 0 to 255".to_owned()
-                        })
-                })
-                .transpose()?;
-            Ok(PluginEvent::Result(PluginResult {
-                text,
-                data,
-                exit_code,
-            }))
+    match kind.as_str() {
+        "manifest" | "diagnostic" | "output" | "result" => {
+            serde_json::from_value(value).map_err(|error| format!("invalid {kind} event: {error}"))
         }
         other => Err(format!("unknown event \"{other}\"")),
     }
@@ -1202,74 +1170,6 @@ struct BinaryInvocation {
 }
 
 #[derive(Debug)]
-enum PluginEvent {
-    Manifest(PluginManifest),
-    Diagnostic(PluginDiagnostic),
-    Output(String),
-    Result(PluginResult),
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PluginManifest {
-    name: String,
-    protocol_version: u64,
-    commands: BTreeMap<String, ManifestCommand>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManifestCommand {
-    #[allow(dead_code)]
-    description: Option<String>,
-}
-
-#[derive(Debug)]
-struct PluginResult {
-    text: Option<String>,
-    data: Option<Value>,
-    exit_code: Option<u8>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-enum Severity {
-    Info,
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct PluginDiagnostic {
-    severity: Severity,
-    message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    details: Option<Value>,
-}
-
-impl PluginDiagnostic {
-    fn display(&self) -> String {
-        let code = self
-            .code
-            .as_deref()
-            .map(|code| format!(" {code}"))
-            .unwrap_or_default();
-        format!("[{}{}] {}", self.severity.as_str(), code, self.message)
-    }
-}
-
-impl Severity {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::Info => "info",
-            Self::Warning => "warning",
-            Self::Error => "error",
-        }
-    }
-}
-
-#[derive(Debug)]
 struct PluginOutput {
     outputs: Vec<String>,
     text: Option<String>,
@@ -1335,10 +1235,11 @@ mod tests {
     use super::{
         command_namespace_tokens, finish_run, is_kebab_name, matches_constraint, parse_event,
         plugin_catalogs, reserved_plugin_namespaces, resolve_binary_plugin, validate_manifest,
-        validate_manifest_with_reserved_namespaces, BinaryInvocation, ManifestCommand, PluginEvent,
+        validate_manifest_with_reserved_namespaces, BinaryInvocation, PluginEvent,
         PluginInvocation, PluginManifest, ResolvedPlugin, PROTOCOL_VERSION,
     };
     use crate::config::load_config;
+    use palamedes_plugin::ManifestCommand;
 
     #[test]
     fn reserved_plugin_namespaces_match_the_built_clap_command_tree() {
@@ -1437,12 +1338,31 @@ mod tests {
             "exitCode": 9,
         }))
         .expect("result event");
-        let PluginEvent::Result(result) = event else {
+        let PluginEvent::Result { result } = event else {
             panic!("expected result event");
         };
         assert_eq!(result.text.as_deref(), Some("done"));
         assert_eq!(result.data, Some(json!(null)));
         assert_eq!(result.exit_code, Some(9));
+    }
+
+    #[test]
+    fn parses_shared_manifest_with_a_missing_command_description() {
+        let event = parse_event(json!({
+            "event": "manifest",
+            "name": "acme",
+            "protocolVersion": PROTOCOL_VERSION,
+            "commands": { "inspect": {} },
+        }))
+        .expect("manifest event");
+        let PluginEvent::Manifest { manifest } = event else {
+            panic!("expected manifest event");
+        };
+        assert_eq!(manifest.name, "acme");
+        assert_eq!(
+            manifest.commands["inspect"].description, None,
+            "the shared wire type retains host-side manifest leniency"
+        );
     }
 
     #[test]
