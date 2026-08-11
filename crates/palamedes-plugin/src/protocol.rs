@@ -92,7 +92,7 @@ pub struct LocaleCatalog {
 }
 
 /// Diagnostic severities rendered consistently by the native CLI host.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// Informational note.
@@ -103,37 +103,116 @@ pub enum Severity {
     Error,
 }
 
-#[derive(Debug, Serialize)]
+impl Severity {
+    /// The lowercase protocol spelling for this severity.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Warning => "warning",
+            Self::Error => "error",
+        }
+    }
+}
+
+/// A newline-delimited event a binary plugin writes to stdout.
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
-pub(crate) enum Event {
+pub enum Event {
+    /// Describes the plugin namespace and its commands.
     Manifest {
-        name: String,
-        #[serde(rename = "protocolVersion")]
-        protocol_version: u64,
-        commands: BTreeMap<String, ManifestCommand>,
+        /// Manifest payload. Flattened to preserve the protocol shape.
+        #[serde(flatten)]
+        manifest: PluginManifest,
     },
+    /// Surfaces a diagnostic to the host.
     Diagnostic {
-        severity: Severity,
-        message: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        code: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        details: Option<Value>,
+        /// Diagnostic payload. Flattened to preserve the protocol shape.
+        #[serde(flatten)]
+        diagnostic: PluginDiagnostic,
     },
+    /// Streams human-readable output through the host.
     Output {
+        /// Output line text.
         text: String,
     },
+    /// Completes a command invocation.
     Result {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        text: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        data: Option<Value>,
-        #[serde(rename = "exitCode")]
-        exit_code: u8,
+        /// Result payload. Flattened to preserve the protocol shape.
+        #[serde(flatten)]
+        result: PluginResult,
     },
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct ManifestCommand {
-    pub(crate) description: String,
+/// A plugin manifest emitted during protocol negotiation.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginManifest {
+    /// Lowercase kebab-case plugin namespace.
+    pub name: String,
+    /// Binary plugin protocol major implemented by the plugin.
+    pub protocol_version: u64,
+    /// Commands exposed by the plugin, keyed by command name.
+    #[serde(default)]
+    pub commands: BTreeMap<String, ManifestCommand>,
+}
+
+/// A command exposed by a plugin manifest.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ManifestCommand {
+    /// Optional human-readable command description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// A structured diagnostic emitted by a binary plugin.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PluginDiagnostic {
+    /// Severity rendered by the native host.
+    pub severity: Severity,
+    /// Human-readable diagnostic text.
+    pub message: String,
+    /// Stable machine-readable diagnostic code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// Optional structured diagnostic metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
+}
+
+impl PluginDiagnostic {
+    /// Formats this diagnostic as the native host renders it for terminals.
+    pub fn display(&self) -> String {
+        let code = self
+            .code
+            .as_deref()
+            .map(|code| format!(" {code}"))
+            .unwrap_or_default();
+        format!("[{}{}] {}", self.severity.as_str(), code, self.message)
+    }
+}
+
+/// A command result emitted by a binary plugin.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PluginResult {
+    /// Optional human-readable result text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Optional structured result data. An explicit JSON null is preserved.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_value",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub data: Option<Value>,
+    /// Optional explicit process exit code. The host accepts omission and
+    /// derives a default from emitted diagnostics.
+    #[serde(rename = "exitCode", default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<u8>,
+}
+
+fn deserialize_optional_value<'de, D>(deserializer: D) -> Result<Option<Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Value::deserialize(deserializer).map(Some)
 }
