@@ -9,7 +9,10 @@ minor releases.
 All publishable Palamedes packages ship in lockstep.
 
 Published packages declare Node.js `>=22.0.0` unless a package has a specific
-runtime reason to require a higher patch level. The repository development and
+runtime reason to require a higher Node floor. `@palamedes/waku`,
+`@palamedes/tanstack`, and `@palamedes/react-router-rsc` require `>=22.22.0`;
+server-first `@palamedes/remix` requires `>=24.3.0`. Platform CLI shells do not
+declare a Node engine because they are native binaries. The repository development and
 CI floor is stricter: contributors should use Node.js `>=22.22`, matching the
 root `package.json`, README badge, and contribution guide.
 
@@ -41,6 +44,8 @@ may change faster than Stable surfaces.
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                        |
 | `@palamedes/waku`                                     | Preview  | ESM-only Waku handler interceptor and request resolver contract; Waku currently exposes the required APIs as unstable.        |
 | `@palamedes/tanstack`                                 | Stable   | TanStack Start server-function middleware and its request resolver contract are public integration APIs.                      |
+| `@palamedes/remix`                                    | Preview  | Server-first Remix v3 adapter; its Node `>=24.3.0` floor reflects the supported Remix runtime.                                |
+| `@palamedes/react-router-rsc`                         | Preview  | Opt-in React Router RSC Framework Mode request scope; the upstream RSC contract remains experimental.                         |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                          |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                  |
 | `@palamedes/eslint-plugin`                            | Preview  | Thin ESLint/Oxlint facades over native diagnostics; Oxlint's JavaScript plugin API is still alpha.                            |

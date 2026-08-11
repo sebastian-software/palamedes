@@ -22,16 +22,16 @@ evidence easy to inspect.
 
 ## Current Maturity
 
-| Topic                 | Current state                                                                     |
-| --------------------- | --------------------------------------------------------------------------------- |
-| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring |
-| Supported frameworks  | See verification cadence above; Remix v3 smoke-only                               |
-| Runtime model         | `@palamedes/runtime` with `getI18n()`                                             |
-| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in         |
-| Native core           | Rust + `napi-rs`                                                                  |
-| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                      |
-| Node requirement      | `>=22.22`                                                                         |
-| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                        |
+| Topic                 | Current state                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------- |
+| Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring                     |
+| Supported frameworks  | See verification cadence above; Remix v3 smoke-only                                                   |
+| Runtime model         | `@palamedes/runtime` with `getI18n()`                                                                 |
+| Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in                             |
+| Native core           | Rust + `napi-rs`                                                                                      |
+| Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                                          |
+| Node requirement      | Package-specific: most `>=22.0.0`; Waku, TanStack, and React Router RSC `>=22.22.0`; Remix `>=24.3.0` |
+| Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                                            |
 
 ## What Counts As Proof In This Repo
 
