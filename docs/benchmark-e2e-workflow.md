@@ -160,110 +160,16 @@ become warm ones.
 
 ## Latest Checked Run
 
-> **Recorded from the current checkout.** The version line below is the version
-> embedded in the locally built release binary. Re-record after releases or
-> material benchmark changes so the provenance and binary stay aligned.
+The checked result is a dated, machine-local snapshot, not a claim about the
+current checkout. Its generated report is the single source for the timestamp,
+tool versions, corpus shape, samples, medians, and speedup ratios:
 
-Latest checked full run:
+- [`benchmarks/e2e-workflow/results/latest.md`](../benchmarks/e2e-workflow/results/latest.md)
+- [`benchmarks/e2e-workflow/results/latest.json`](../benchmarks/e2e-workflow/results/latest.json)
 
-- timestamp: `2026-08-05T09:07:39.077Z`
-- Node: `v24.18.0`
-- platform: `darwin/arm64`
-- warmup: `3`
-- measured runs: `7`
-- Palamedes CLI: `1.12.0`
-- Lingui CLI: `6.6.0`
-- React Intl extraction CLI (`@formatjs/cli`): `6.16.16`
-- i18next-cli: `1.67.3`
-- General Translation CLI (`gtx-cli`): `2.16.0`, corpus authored against
-  `gt-react` `11.1.4`
-
-### Small
-
-Corpus:
-
-- `80` files
-- `640` current messages
-- `624` baseline messages
-- `48` changed, `64` new, `48` removed
-
-Median results:
-
-| Tool                |      Median |
-| ------------------- | ----------: |
-| Palamedes           |  `14.11 ms` |
-| Lingui              | `747.18 ms` |
-| React Intl          | `288.59 ms` |
-| i18next-cli         | `625.87 ms` |
-| General Translation | `577.89 ms` |
-
-On this run, Palamedes measured `52.94x` faster than Lingui, `20.45x` faster
-than React Intl, `44.35x` faster than i18next-cli, and `40.95x` faster than
-General Translation.
-
-Warm lane: after touching `5` source files, Palamedes re-ran in `10.76 ms`
-against its own cold `14.11 ms`. The compared tools re-extract in full, so
-their warm medians repeat their cold ones.
-
-### Medium
-
-Corpus:
-
-- `240` files
-- `1,920` current messages
-- `1,872` baseline messages
-- `144` changed, `192` new, `144` removed
-
-Median results:
-
-| Tool                |      Median |
-| ------------------- | ----------: |
-| Palamedes           |  `23.80 ms` |
-| Lingui              | `836.69 ms` |
-| React Intl          | `344.09 ms` |
-| i18next-cli         | `658.40 ms` |
-| General Translation | `669.27 ms` |
-
-On this run, Palamedes measured `35.15x` faster than Lingui, `14.46x` faster
-than React Intl, `27.66x` faster than i18next-cli, and `28.12x` faster than
-General Translation.
-
-Warm lane: after touching `5` source files, Palamedes re-ran in `15.16 ms`
-against its own cold `23.80 ms`. The compared tools re-extract in full, so
-their warm medians repeat their cold ones.
-
-### Realistic
-
-Corpus (modeled on a production web app's Lingui include roots — most source is
-not i18n, but the extractor still has to scan all of it; figures rounded so they
-read as a shape, not false precision):
-
-- `1,500` files (`750` with i18n markers, `750` without)
-- `~400,000` source lines (~3% carry i18n syntax)
-- `6,000` current messages (~15% with a `{name}` variable)
-- `5,850` baseline messages
-- `450` changed, `600` new, `450` removed
-
-Median results:
-
-| Tool                |       Median |
-| ------------------- | -----------: |
-| Palamedes           |   `83.89 ms` |
-| Lingui              | `2480.24 ms` |
-| React Intl          |  `475.85 ms` |
-| i18next-cli         | `6644.63 ms` |
-| General Translation | `6116.43 ms` |
-
-On this run, Palamedes measured `29.57x` faster than Lingui, `5.67x` faster
-than React Intl, `79.21x` faster than i18next-cli, and `72.91x` faster than
-General Translation.
-
-Warm lane: after touching `5` source files, Palamedes re-ran in `33.08 ms`
-against its own cold `83.89 ms` — the corpus where the cache has the most to
-skip, and the shape of a real repository. The compared tools re-extract in
-full, so their warm medians repeat their cold ones (`2459.89 ms`, `481.17 ms`,
-`6708.17 ms`, and `5877.81 ms`), which is why this lane never enters a speedup
-ratio.
+Re-run `pnpm benchmark:e2e-workflow` after releases or material benchmark
+changes. The command writes a new timestamped snapshot and replaces `latest.*`
+with the result from the locally built release binary.
 
 ## Reading The Numbers
 
@@ -271,10 +177,7 @@ These are machine-local CLI workflow timings, not universal cross-machine
 claims. They are useful because the corpus, semantic validation, raw samples,
 and generated reports are checked in and reproducible.
 
-Use the JSON report when quoting numbers:
-
-- [`benchmarks/e2e-workflow/results/latest.json`](../benchmarks/e2e-workflow/results/latest.json)
-- [`benchmarks/e2e-workflow/results/latest.md`](../benchmarks/e2e-workflow/results/latest.md)
+Use the checked report when quoting numbers.
 
 The Palamedes timing breakdown in the JSON comes from `PALAMEDES_TIMING_JSON=1`
 on `pmds extract`; the end-to-end median still uses the outer process timing so
