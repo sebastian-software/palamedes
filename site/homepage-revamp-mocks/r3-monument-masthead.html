@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Round 3 — Monument × Editorial Masthead</title>
+<style>
+  @font-face {
+    font-family: "Cinzel Hellenic";
+    src: url("../public/fonts/CinzelHellenic-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-display: swap;
+  }
+  :root {
+    --paper: #faf9f4; --ink: #0e2a4d; --hair: #ddd6c6; --accent: #8e6628;
+    --gold: #bc8a45; --gray: #7d7869; --track: #f1ede0;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --display: "Cinzel Hellenic", "Times New Roman", serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
+  .page { max-width: 1320px; margin-inline: auto; border-inline: 1px solid var(--hair); min-height: 100vh; }
+  .inner { padding-inline: 40px; }
+
+  /* Masthead from V4: crest + wordmark + dateline rules */
+  .masthead { text-align: center; padding: 26px 0 0; }
+  .masthead .crest { width: 54px; height: 54px; }
+  .masthead .word { font-family: var(--display); font-size: 38px; letter-spacing: 0.16em; text-transform: uppercase; margin-top: 10px; }
+  .dateline {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 18px; padding: 9px 0;
+    border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink);
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gray);
+  }
+  .dateline nav { display: flex; gap: 22px; }
+  .dateline a { color: var(--ink); text-decoration: none; }
+
+  /* Hero core from V1: centered, monumental, airy */
+  .hero { text-align: center; padding: 72px 40px 0; }
+  h1 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(40px, 5.4vw, 72px); line-height: 1.14; }
+  h1 .l2 { display: block; color: var(--accent); }
+  .rule-accent { width: 88px; height: 2px; background: var(--accent); margin: 38px auto 0; }
+  .lede { max-width: 42em; margin: 34px auto 0; font-size: 16.5px; line-height: 1.7; }
+  .ctas { margin-top: 38px; display: flex; justify-content: center; gap: 12px; }
+  .btn { display: inline-block; padding: 0.8rem 1.6rem; border: 1px solid var(--ink); font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; text-decoration: none; }
+  .btn.primary { background: var(--ink); color: var(--paper); }
+  .btn.outline { color: var(--ink); }
+  .install { margin: 28px auto 0; display: inline-flex; gap: 10px; border: 1px solid var(--hair); background: var(--track); padding: 10px 14px; font-family: var(--mono); font-size: 12.5px; }
+  .install .p { color: var(--accent); }
+
+  /* Tri-construct: one calm full-width band of three equal cells */
+  .tri { margin-top: 78px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--hair); border-block: 1px solid var(--hair); }
+  .cell { background: var(--paper); padding: 38px 32px 42px; text-align: center; }
+  .cell .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+  .cell .word { font-family: var(--display); text-transform: uppercase; font-size: 21px; letter-spacing: 0.1em; margin-top: 14px; }
+  .cell .proof { margin-top: 20px; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 28px; }
+  .cell .proof .tag { color: var(--accent); }
+  .cell .proof.code { font-size: 15px; }
+  .cell .sub { margin-top: 12px; font-size: 12.5px; line-height: 1.55; color: var(--gray); }
+
+  .receipts { padding: 24px 0 32px; text-align: center; font-family: var(--mono); font-size: 12px; color: var(--gray); letter-spacing: 0.04em; }
+  .receipts b { color: var(--ink); font-weight: 500; }
+
+  /* Page-flow sample: section 03 with the V3 terminal adopted */
+  .section { border-top: 1px solid var(--hair); padding: 64px 40px 72px; }
+  .section .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); text-align: center; }
+  .section h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(24px, 2.6vw, 34px); line-height: 1.25; text-align: center; margin-top: 16px; }
+  .section .slede { max-width: 46em; margin: 20px auto 0; font-size: 15px; line-height: 1.7; text-align: center; color: #2c4463; }
+  .termwrap { max-width: 780px; margin: 40px auto 0; }
+  .term { border: 1px solid var(--ink); }
+  .term-head { display: flex; justify-content: space-between; padding: 10px 16px; background: var(--track); border-bottom: 1px solid var(--ink); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gray); }
+  .term-body { background: var(--ink); color: #dbe4ef; padding: 20px 18px 22px; font-family: var(--mono); font-size: 13.5px; line-height: 1.9; text-align: left; }
+  .term .p { color: #8fa3bd; }
+  .term .ok { color: #3fb950; }
+  .term .t { color: #d29922; }
+  .term .cmt { color: #8fa3bd; }
+  .term-caption { display: flex; justify-content: space-between; padding: 9px 16px; border: 1px solid var(--hair); border-top: 0; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gray); }
+  .term-caption b { color: var(--accent); font-weight: 500; }
+  .flow-note { margin-top: 34px; text-align: center; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gray); }
+
+  .concept-badge { position: fixed; right: 12px; bottom: 12px; z-index: 99; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; background: var(--ink); color: var(--paper); padding: 6px 10px; }
+</style>
+</head>
+<body>
+  <div class="concept-badge">Round 3 · Monument core × Editorial masthead</div>
+  <div class="page">
+    <div class="inner">
+      <header class="masthead">
+        <img class="crest" src="../public/logo.svg" alt="" />
+        <div class="word">Palamedes</div>
+        <div class="dateline">
+          <span>palamedes.dev · MMXXVI</span>
+          <nav><a href="#">Docs</a><a href="#">Frameworks</a><a href="#">Proof</a><a href="#">Decisions</a><a href="#">Blog</a><a href="#">GitHub</a></nav>
+          <span>Open-source i18n for TypeScript</span>
+        </div>
+      </header>
+    </div>
+
+    <section class="hero">
+      <h1>
+        Clear. Complete. Fast.
+        <span class="l2">Pick three.</span>
+      </h1>
+      <div class="rule-accent"></div>
+      <p class="lede">
+        i18n tooling usually makes you trade developer experience, scope, or
+        speed against each other. Palamedes keeps one coherent model from
+        source to runtime — a Rust core, first-party framework adapters, and
+        catalogs your repository owns — so you don&rsquo;t have to.
+      </p>
+      <div class="ctas">
+        <a class="btn primary" href="#">First translation in 5 minutes</a>
+        <a class="btn outline" href="#">See the receipts</a>
+      </div>
+      <div><span class="install"><span class="p">$</span> pnpm add @palamedes/core @palamedes/runtime @palamedes/vite-plugin</span></div>
+    </section>
+
+    <div class="tri">
+      <div class="cell">
+        <div class="num">01 · Clear</div>
+        <div class="word">Developer Experience</div>
+        <div class="proof code"><span class="tag">&lt;Trans&gt;</span>Save changes<span class="tag">&lt;/Trans&gt;</span></div>
+        <div class="sub">No IDs. No dictionaries. One runtime call.</div>
+      </div>
+      <div class="cell">
+        <div class="num">02 · Complete</div>
+        <div class="word">Everything Included</div>
+        <div class="proof">25</div>
+        <div class="sub">verified example apps — 6 frameworks, 4 locale strategies</div>
+      </div>
+      <div class="cell">
+        <div class="num">03 · Fast</div>
+        <div class="word">Performance</div>
+        <div class="proof">29–79×</div>
+        <div class="sub">faster than every tool doing the same job</div>
+      </div>
+    </div>
+
+    <p class="receipts">
+      <b>83.89 ms</b> cold · <b>33.08 ms</b> warm — 1,500-file corpus &nbsp;·&nbsp;
+      <b>25</b> ADRs &nbsp;·&nbsp; MIT · no account · your repo owns the catalogs
+    </p>
+
+    <section class="section">
+      <div class="num">03 · Fast — Performance</div>
+      <h2>Every extract finishes faster than a blink.</h2>
+      <p class="slede">
+        A full extract and catalog update over 1,500 files takes
+        83.89&#8201;ms — 29× to 79× faster than every tool we measured doing
+        the same job. (The one tool that skips catalog updates entirely is
+        still 5.7× slower.) And that is the slow lane: touch five files and
+        re-run, and it drops to 33&#8201;ms, because unchanged files are
+        neither read nor parsed. The compared tools re-extract everything,
+        every time.
+      </p>
+      <div class="termwrap">
+        <div class="term">
+          <div class="term-head">
+            <span>~/app — pmds</span>
+            <span>rust core · oxc transforms</span>
+          </div>
+          <div class="term-body">
+            <div><span class="p">$</span> pmds extract</div>
+            <div><span class="ok">✓</span> 1,500 files scanned <span class="t">83.89 ms</span></div>
+            <div><span class="ok">✓</span> 6,000 messages · 0 errors</div>
+            <div style="margin-top:12px;"><span class="p">$</span> pmds extract <span class="cmt"># after editing 5 files</span></div>
+            <div><span class="ok">✓</span> cache hit 1,495/1,500 <span class="t">33.08 ms</span></div>
+          </div>
+        </div>
+        <div class="term-caption">
+          <span>The run you trigger all day</span>
+          <span>cache per file · <b>ADR-019</b></span>
+        </div>
+      </div>
+      <div class="flow-note">page-flow sample — sections 01 · Clear and 02 · Complete follow the same pattern</div>
+    </section>
+  </div>
+</body>
+</html>
