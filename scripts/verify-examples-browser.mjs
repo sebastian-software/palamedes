@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process"
 import http from "node:http"
 import path from "node:path"
-import { parseExampleArgs, ROOT, selectBrowserExamples } from "./example-matrix.mjs"
+import {
+  parseExampleArgs,
+  ROOT,
+  selectBrowserExamples,
+  selectScreenshotExamples,
+} from "./example-matrix.mjs"
 import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs"
 
 function parseBrowserArgs(argv) {
@@ -126,7 +131,12 @@ async function verifyExample(example, options) {
 
 async function main() {
   const browserOptions = parseBrowserArgs(process.argv)
-  const selected = selectBrowserExamples(parseExampleArgs(process.argv))
+  const filters = parseExampleArgs(process.argv)
+  // Vite has a browser contract but deliberately has no checked-in screenshot
+  // artifact. Capture uses its narrower selector so `all` cannot write one.
+  const selected = browserOptions.captureScreenshots
+    ? selectScreenshotExamples(filters)
+    : selectBrowserExamples(filters)
 
   if (selected.length === 0) {
     throw new Error("No browser-verifiable examples matched the provided filters")
