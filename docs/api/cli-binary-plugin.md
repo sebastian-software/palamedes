@@ -42,6 +42,12 @@ namespace. Commands of other configured plugins still run and report the
 skipped plugin as a `PLUGIN_UNAVAILABLE` warning; the failure is fatal only
 when the requested namespace cannot be served.
 
+The host consumes its own invocation flags before it forwards `args` to the
+plugin: `--json`, `--config PATH`, `-c PATH`, and `--config=PATH` never appear
+there. A bare `--` is likewise a host passthrough marker rather than a plugin
+argument; every token after it is forwarded verbatim, including flag-shaped
+ones.
+
 ## Protocol
 
 Protocol version `1` must match exactly. It is versioned independently of the

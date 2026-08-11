@@ -10,13 +10,31 @@ macro output.
 - `activateServerI18n(i18n)`
 - `setServerI18nGetter(getter)`
 - `resetI18nRuntime()`
+- `registerMessages(catalogs, key?)`
+- `registerMessageLoaders(key, loaders)`
+- `registerMessageLoaderGroup(key, loaderGroups)`
+- `loadRegisteredMessages(i18n, locale)`
+- `initializeClientI18n(locale, createI18n)`
 - `I18nInstance`
+- `RegisteredMessages`
+- `RegisteredMessageLoader`
 
 The server subpath `@palamedes/runtime/server` exports:
 
 - `createServerI18nScope<T>()`
 - `CreateServerI18nScopeOptions`
 - `ServerI18nScope`
+- `ServerI18nResolver`
+- `CreateScopedI18nRunnerOptions`
+- `ScopedI18nRunner`
+- `createScopedI18nRunner(resolveI18n, options)`
+
+The Node-only test subpath `@palamedes/runtime/server/test` exports
+`waitForServerI18nTestBarrier(request)` and
+`markServerI18nTestBarrierReached(request, headers)`. It is an opt-in
+two-request rendezvous for server-scope isolation tests: it is inert until the
+test process sets `PALAMEDES_I18N_TEST_BARRIER=1` and a request supplies the
+matching barrier header. Browser and non-Node imports intentionally throw.
 
 ## Client Runtime
 
@@ -29,6 +47,12 @@ setClientI18n(i18n)
 ```
 
 Call `setClientI18n()` before translated client UI renders.
+
+Generated graph-split catalogs register their fragments with
+`registerMessages()` or the lazy loader registration helpers. `setClientI18n()`
+and `initializeClientI18n()` flush registrations that evaluated before the
+client instance existed; application code normally needs these APIs only when
+building a custom graph-splitting integration.
 
 ## `getI18n<T>()`
 

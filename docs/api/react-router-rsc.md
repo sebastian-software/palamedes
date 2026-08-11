@@ -15,6 +15,9 @@ The request scope's `run(request, dispatch)` resolves and activates i18n before
 calling `dispatch`. Resolver failures prevent dispatch and retain the original
 error as the error cause.
 
+Its `scope` property exposes the underlying `ServerI18nScope`, for adapters
+that need to read or activate the current request instance alongside `run()`.
+
 Only React Router `8.3.0` RSC Framework Mode with `@vitejs/plugin-rsc`
 `0.5.34` is supported. RSC Data Mode and non-RSC React Router applications are
 out of scope.

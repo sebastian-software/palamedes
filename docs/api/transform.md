@@ -8,6 +8,8 @@ plugins.
 - `transformPalamedesMacros(source, filename, options?)`
 - `mightContainPalamedesMacros(source)`
 - `findMacroImports(program)`
+- `resolveMacroRuntimeModule(runtimeModule?)`
+- `mdxFrameworkFor(framework)`
 - `PALAMEDES_MACRO_PACKAGES`
 - `JS_MACROS`
 - `JSX_MACROS`
@@ -25,10 +27,16 @@ plugins.
 - `CatalogLoaderResult`
 - `CatalogSourceKey`
 - `MissingCatalogMessage`
+- `PalamedesFramework`
 
 `findMacroImports()` expects a parsed AST program, not a source string. Use
 `mightContainPalamedesMacros(source)` as the cheap string pre-check before
 parsing.
+
+`resolveMacroRuntimeModule()` selects the runtime import used by generated
+macro calls (default `@palamedes/runtime`). `PalamedesFramework` is `"react"`,
+`"solid"`, or `"none"`; `mdxFrameworkFor()` maps it to the optional React or
+Solid setting understood by MDX compilation.
 
 The `@palamedes/transform/catalog-loader` subpath exports compatibility helpers
 for custom bundlers that already consume compiled catalog artifacts. The

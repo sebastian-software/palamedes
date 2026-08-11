@@ -29,6 +29,7 @@ interface PalamedesPluginOptions {
   runtimeModule?: string
   keepSourceFallbacks?: boolean
   mdx?: PalamedesMdxConfig | false
+  experimentalGraphSplitting?: boolean | { localeBinding?: "embed" | "import-map" }
 }
 ```
 
@@ -43,6 +44,7 @@ Defaults:
 - `runtimeModule`: `"@palamedes/runtime"`
 - `keepSourceFallbacks`: `true` during `vite serve`, `false` during `vite build`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
+- `experimentalGraphSplitting`: `false`
 
 `framework` states which UI framework the app compiles for and selects the
 component contract for generated MDX modules. Solid apps must set
@@ -61,6 +63,13 @@ readable source-message fallbacks.
 
 Generated MDX modules can set `mdx.runtime-module` in `palamedes.yaml` or
 `mdx.runtimeModule` on the plugin when integrating a custom runtime.
+
+`experimentalGraphSplitting` emits generated message sidecars per transformed
+source module. The default `"embed"` form carries every locale in each sidecar;
+the experimental `"import-map"` form emits locale-specific assets and requires
+the server to inject the active locale's import map before browser modules
+load. Both modes require `setClientI18n()` rather than eager application-owned
+PO imports, and locale changes require document navigation.
 
 With `failOnMissing: true`, compiled MDX IDs are checked against every target
 locale in each catalog whose `include` patterns cover that MDX file. This
