@@ -69,80 +69,16 @@ pnpm verify:react-router-rsc
 
 ## Live Reference URLs
 
-The URLs below are the intended public reference shape for the same design
-across each verified framework. Switch language in a reachable demo and watch copy,
-plural seat counts, currency, and dates change together. See
-[docs/demo-deployments.md](../docs/demo-deployments.md) for current hosting
-status before treating a row as publicly reachable.
+The canonical framework-by-strategy URL matrix, reachability notes, and hosting
+ownership live in [Demo Deployments](../docs/demo-deployments.md). It is the
+source of truth for public URLs because DNS and deployment state can change
+without changing the local example contracts.
 
-How each strategy encodes the locale:
-
-- **cookie** — one host; the locale is negotiated from `Accept-Language`, then
-  persisted in a cookie, so there is no per-locale URL.
-- **route** — one host; the locale is the first path segment (`/en`, `/de`, `/es`).
-- **subdomain** — the leftmost DNS label is the locale
-  (`de.<app>-subdomain.examples.palamedes.dev`).
-- **tld** — the top-level domain is the locale
-  (`<app>.examples.palamedes-i18n.de`); `.com` maps to `en` via an explicit
-  override.
-
-### Next.js
-
-| Strategy  | Live demos                                                                                                                                                                                             |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| cookie    | [nextjs-cookie.examples.palamedes.dev](https://nextjs-cookie.examples.palamedes.dev)                                                                                                                   |
-| route     | [en](https://nextjs-route.examples.palamedes.dev/en) · [de](https://nextjs-route.examples.palamedes.dev/de) · [es](https://nextjs-route.examples.palamedes.dev/es)                                     |
-| subdomain | [en](https://en.nextjs-subdomain.examples.palamedes.dev) · [de](https://de.nextjs-subdomain.examples.palamedes.dev) · [es](https://es.nextjs-subdomain.examples.palamedes.dev)                         |
-| tld       | [en](https://nextjs.examples.palamedes-i18n.com) · [de](https://nextjs.examples.palamedes-i18n.de) · [es](https://nextjs.examples.palamedes-i18n.es) · [fr](https://nextjs.examples.palamedes-i18n.fr) |
-
-### TanStack Start
-
-| Strategy  | Live demos                                                                                                                                                                                                     |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| cookie    | [tanstack-cookie.examples.palamedes.dev](https://tanstack-cookie.examples.palamedes.dev)                                                                                                                       |
-| route     | [en](https://tanstack-route.examples.palamedes.dev/en) · [de](https://tanstack-route.examples.palamedes.dev/de) · [es](https://tanstack-route.examples.palamedes.dev/es)                                       |
-| subdomain | [en](https://en.tanstack-subdomain.examples.palamedes.dev) · [de](https://de.tanstack-subdomain.examples.palamedes.dev) · [es](https://es.tanstack-subdomain.examples.palamedes.dev)                           |
-| tld       | [en](https://tanstack.examples.palamedes-i18n.com) · [de](https://tanstack.examples.palamedes-i18n.de) · [es](https://tanstack.examples.palamedes-i18n.es) · [fr](https://tanstack.examples.palamedes-i18n.fr) |
-
-### Waku
-
-| Strategy  | Live demos                                                                                                                                                                                     |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| cookie    | [waku-cookie.examples.palamedes.dev](https://waku-cookie.examples.palamedes.dev)                                                                                                               |
-| route     | [en](https://waku-route.examples.palamedes.dev/en) · [de](https://waku-route.examples.palamedes.dev/de) · [es](https://waku-route.examples.palamedes.dev/es)                                   |
-| subdomain | [en](https://en.waku-subdomain.examples.palamedes.dev) · [de](https://de.waku-subdomain.examples.palamedes.dev) · [es](https://es.waku-subdomain.examples.palamedes.dev)                       |
-| tld       | [en](https://waku.examples.palamedes-i18n.com) · [de](https://waku.examples.palamedes-i18n.de) · [es](https://waku.examples.palamedes-i18n.es) · [fr](https://waku.examples.palamedes-i18n.fr) |
-
-### React Router
-
-| Strategy  | Live demos                                                                                                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| cookie    | [react-router-cookie.examples.palamedes.dev](https://react-router-cookie.examples.palamedes.dev)                                                                                                                               |
-| route     | [en](https://react-router-route.examples.palamedes.dev/en) · [de](https://react-router-route.examples.palamedes.dev/de) · [es](https://react-router-route.examples.palamedes.dev/es)                                           |
-| subdomain | [en](https://en.react-router-subdomain.examples.palamedes.dev) · [de](https://de.react-router-subdomain.examples.palamedes.dev) · [es](https://es.react-router-subdomain.examples.palamedes.dev)                               |
-| tld       | [en](https://react-router.examples.palamedes-i18n.com) · [de](https://react-router.examples.palamedes-i18n.de) · [es](https://react-router.examples.palamedes-i18n.es) · [fr](https://react-router.examples.palamedes-i18n.fr) |
-
-### Remix v3
-
-Remix v3 examples are local/CI proof surfaces while Remix's beta hosting and UI
-adapter story settles. They are pinned to the tested Remix beta and verified by
-`pnpm verify:examples:smoke -- --framework remix`.
-
-| Strategy  | Local entry point                           |
-| --------- | ------------------------------------------- |
-| cookie    | [examples/remix-cookie](remix-cookie)       |
-| route     | [examples/remix-route](remix-route)         |
-| subdomain | [examples/remix-subdomain](remix-subdomain) |
-| tld       | [examples/remix-tld](remix-tld)             |
-
-### SolidStart
-
-| Strategy  | Live demos                                                                                                                                                                                                             |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| cookie    | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)                                                                                                                           |
-| route     | [en](https://solidstart-route.examples.palamedes.dev/en) · [de](https://solidstart-route.examples.palamedes.dev/de) · [es](https://solidstart-route.examples.palamedes.dev/es)                                         |
-| subdomain | [en](https://en.solidstart-subdomain.examples.palamedes.dev) · [de](https://de.solidstart-subdomain.examples.palamedes.dev) · [es](https://es.solidstart-subdomain.examples.palamedes.dev)                             |
-| tld       | [en](https://solidstart.examples.palamedes-i18n.com) · [de](https://solidstart.examples.palamedes-i18n.de) · [es](https://solidstart.examples.palamedes-i18n.es) · [fr](https://solidstart.examples.palamedes-i18n.fr) |
+Try a reachable cookie demo such as
+[nextjs-cookie](https://nextjs-cookie.examples.palamedes.dev), or a route demo
+such as [Waku in German](https://waku-route.examples.palamedes.dev/de). For how
+each strategy encodes and switches locale, see
+[Locale Strategies](../docs/locale-strategies.md).
 
 ## Locale Strategy Matrix
 
