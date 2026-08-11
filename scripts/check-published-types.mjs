@@ -106,7 +106,7 @@ function assertExportTargetsExist(packages) {
       if (typeof manifest[field] === "string") targets.add(manifest[field])
     }
     for (const target of [...targets].sort()) {
-      if (existsSync(path.join(root, "packages", directory, target))) continue
+      if (existsSync(path.join(root, directory, target))) continue
       problems.push(
         `${manifest.name} advertises ${target}, which is missing after a build; drop the condition or emit the file.`
       )
