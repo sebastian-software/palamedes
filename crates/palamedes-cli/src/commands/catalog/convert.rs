@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
-use palamedes::{convert_catalog_file, CatalogFileConvertRequest, CatalogFileFormat};
+use palamedes::{convert_catalog_file, CatalogFileConvertRequest, PalamedesCatalogFormat};
 
 use crate::command::{Command, Context};
 use crate::error::CliError;
@@ -145,7 +145,12 @@ fn convert_one_catalog(
     locale: Option<&str>,
     to: ConvertFormat,
 ) -> Result<(), CliError> {
-    if input.extension().and_then(|ext| ext.to_str()) != Some("po") {
+    if input
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .and_then(PalamedesCatalogFormat::from_extension)
+        != Some(PalamedesCatalogFormat::Po)
+    {
         return Err(CliError::UnsupportedConvertSource);
     }
     if let Some(parent) = output
@@ -160,9 +165,9 @@ fn convert_one_catalog(
     convert_catalog_file(CatalogFileConvertRequest {
         input_path: input.to_path_buf(),
         output_path: output.to_path_buf(),
-        source_format: CatalogFileFormat::Po,
+        source_format: PalamedesCatalogFormat::Po,
         target_format: match to {
-            ConvertFormat::Fcl => CatalogFileFormat::Fcl,
+            ConvertFormat::Fcl => PalamedesCatalogFormat::Fcl,
         },
         source_locale: source_locale.to_owned(),
         locale: locale.map(str::to_owned),

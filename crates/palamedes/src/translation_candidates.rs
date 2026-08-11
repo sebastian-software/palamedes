@@ -4,10 +4,10 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use ferrocat::{
-    convert_catalog, convert_catalog_file, machine_translation_hash, parse_catalog,
-    CatalogFileFormat as FerrocatCatalogFileFormat, CatalogMessage, CatalogMessageKey, CatalogMode,
-    ConvertCatalogFileOptions, ConvertCatalogOptions, EffectiveTranslationRef, MsgStr,
-    ParseCatalogOptions, PoFile, PoItem, SerializeOptions, TranslationShape,
+    convert_catalog, convert_catalog_file, machine_translation_hash, parse_catalog, CatalogMessage,
+    CatalogMessageKey, CatalogMode, ConvertCatalogFileOptions, ConvertCatalogOptions,
+    EffectiveTranslationRef, MsgStr, ParseCatalogOptions, PoFile, PoItem, SerializeOptions,
+    TranslationShape,
 };
 use ferrocat_icu::{parse_icu, stringify_icu, IcuMessage, IcuNode, IcuOption, IcuPluralKind};
 use serde::{Deserialize, Serialize};
@@ -1172,10 +1172,7 @@ fn render_target_catalog(
     format: PalamedesCatalogFormat,
     po_options: Option<&PoOutputOptions>,
 ) -> PalamedesResult<String> {
-    let target_mode = match format {
-        PalamedesCatalogFormat::Po => CatalogMode::IcuPo,
-        PalamedesCatalogFormat::Fcl => CatalogMode::IcuFcl,
-    };
+    let target_mode = format.ferrocat_mode();
     Ok(convert_catalog(
         ConvertCatalogOptions::new(po_content, source_locale, CatalogMode::IcuPo, target_mode)
             .with_locale(locale)
@@ -1206,10 +1203,7 @@ fn atomic_replace_catalog(
             path: catalog.path.clone(),
             source,
         })?;
-    let format = match catalog.format {
-        PalamedesCatalogFormat::Po => FerrocatCatalogFileFormat::Po,
-        PalamedesCatalogFormat::Fcl => FerrocatCatalogFileFormat::Fcl,
-    };
+    let format = catalog.format.into();
     convert_catalog_file(
         ConvertCatalogFileOptions::new(temporary.path(), &catalog.path, source_locale)
             .with_source_format(format)

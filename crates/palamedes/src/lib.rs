@@ -64,7 +64,7 @@ pub use catalog_audit::{
 pub use catalog_combine::{
     combine_catalog_files, combine_catalogs, CatalogCombineInput, CatalogCombineRequest,
     CatalogCombineResult, CatalogCombineSelection, CatalogCombineStats, CatalogConflictStrategy,
-    CatalogFileCombineRequest, CatalogFileCombineResult, CatalogFileFormat,
+    CatalogFileCombineRequest, CatalogFileCombineResult,
 };
 pub use catalog_convert::{
     convert_catalog_file, CatalogFileConvertRequest, CatalogFileConvertResult,
