@@ -241,7 +241,7 @@ jobs:
           path: coverage/rust/coverage-summary.json
           if-no-files-found: warn
 
-      # Palamedes ships prebuilt binaries for five platforms, so anything baked
+      # Palamedes ships prebuilt binaries for six platforms, so anything baked
       # into the executable multiplies. Checked once, on the pinned toolchain,
       # because the number only has to be watched — not watched twice.
       - name: Check shipped binary size
