@@ -10,8 +10,8 @@ describe("release tarball verification", () => {
   }
 
   it("rejects native tarballs too small to contain their expected binary", () => {
-    expect(nativeTarballFailure(nativePackage, 1_961)).toContain("bin/pmds")
-    expect(nativeTarballFailure(nativePackage, 1_961)).toContain(
+    expect(nativeTarballFailure(nativePackage, 1961)).toContain("bin/pmds")
+    expect(nativeTarballFailure(nativePackage, 1961)).toContain(
       String(NATIVE_TARBALL_MIN_UNPACKED_SIZE)
     )
   })
