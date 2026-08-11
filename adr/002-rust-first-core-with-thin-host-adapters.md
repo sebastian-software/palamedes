@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-17
+**Revised:** 2026-08-11
 
 ## Context
 
@@ -48,12 +49,12 @@ Rust is the primary home for:
 - compiled catalog preparation
 - other host-neutral i18n semantics
 
-TypeScript is the primary home for:
+Rust also owns the native CLI's config discovery and validation, source-file
+traversal and watch orchestration, command-line UX, and reporting. TypeScript
+is the primary home for:
 
-- project config discovery
-- filesystem traversal and watch orchestration
 - Vite and Next.js adapter wiring
-- CLI UX and reporting
+- JavaScript-host configuration integration
 - packaging and host-facing API ergonomics
 
 The TypeScript layer should call coarse native operations rather than rebuilding semantic pipelines locally.

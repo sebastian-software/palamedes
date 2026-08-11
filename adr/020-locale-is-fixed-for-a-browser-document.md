@@ -1,6 +1,7 @@
 # ADR-020: Locale Is Fixed for a Browser Document
 
 **Status:** Accepted
+**Revised:** 2026-08-11
 
 ## Context
 
@@ -37,9 +38,11 @@ A locale is immutable for the lifetime of a browser document.
 - Palamedes does not provide a reactive locale subscription or a live-switching
   contract.
 
-Neither framework nor locale lifecycle moves into `palamedes.yaml`. Extraction
-produces identical messages for all UI frameworks, and request locale selection
-belongs to the host application.
+Locale lifecycle does not move into `palamedes.yaml`; request locale selection
+belongs to the host application. MDX's `framework` setting does belong in the
+data config because it selects the generated component contract; when present,
+that config value overrides a Vite plugin option. Extraction otherwise produces
+the same messages for every UI framework.
 
 ## Application-Owned Remount
 

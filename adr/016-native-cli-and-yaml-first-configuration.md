@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-28
-**Revised:** 2026-08-03
+**Revised:** 2026-08-11
 
 ## Context
 
@@ -45,7 +45,8 @@ The canonical CLI implementation lives in the Cargo workspace as
 - data-only Palamedes config discovery and validation
 - source file discovery and glob handling
 - native watch mode
-- extraction, audit, report, and catalog merge orchestration
+- extraction, lint, audit, report, catalog conversion, merge, and merge-driver
+  orchestration
 - human-readable output and machine-readable JSON output
 
 `palamedes.yaml` is the canonical CLI config file. The native `pmds` CLI also
@@ -59,7 +60,12 @@ The documented schema uses kebab-case field names:
 - `pseudo-locale`
 - `source-reference-root`
 - `reference-scopes`
+- `extract-threads`
+- `extract-cache`
+- `mdx`
+- `lint`
 - `catalogs`
+- `plugins`
 
 Snake-case field names remain accepted aliases at the loader boundary for
 secondary TOML files and migration tolerance, but new docs and examples should
