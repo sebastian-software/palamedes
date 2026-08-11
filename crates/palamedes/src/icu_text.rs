@@ -13,6 +13,24 @@
 //! while [`escape_icu_source_literal`] preserves natural apostrophes in catalog
 //! identities and only escapes a run that could start ICU syntax.
 
+use std::borrow::Cow;
+
+use ferrocat_icu::{parse_icu, IcuMessage, IcuParseError};
+
+/// ICU quoting policy implemented by the Palamedes JavaScript runtime.
+pub(crate) const RUNTIME_ICU_SYNTAX_POLICY: ferrocat::IcuSyntaxPolicy =
+    ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes;
+
+/// Canonicalizes ICU text under the JavaScript runtime's apostrophe policy.
+pub(crate) fn canonicalize_runtime_icu(value: &str) -> Cow<'_, str> {
+    ferrocat::canonicalize_icu_with_policy(value, RUNTIME_ICU_SYNTAX_POLICY)
+}
+
+/// Parses ICU text after applying the JavaScript runtime's apostrophe policy.
+pub(crate) fn parse_runtime_icu(value: &str) -> Result<IcuMessage, IcuParseError> {
+    parse_icu(&canonicalize_runtime_icu(value))
+}
+
 /// Escapes authored literal text for embedding into an ICU message pattern.
 ///
 /// Odd apostrophe runs are doubled; already doubled ICU apostrophes stay a
@@ -70,17 +88,15 @@ fn escape_apostrophe_runs(
 /// The runtime syntax policy keeps transform-side IDs aligned with Ferrocat's
 /// policy-aware artifact compilation. Context is not ICU and stays untouched.
 pub(crate) fn compiled_message_key(message: &str, context: Option<&str>) -> String {
-    ferrocat::compiled_key_with_policy(
-        message,
-        context,
-        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
-    )
+    ferrocat::compiled_key_with_policy(message, context, RUNTIME_ICU_SYNTAX_POLICY)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{compiled_message_key, escape_icu_literal, escape_icu_source_literal};
-    use ferrocat::{canonicalize_icu_with_policy, IcuSyntaxPolicy};
+    use super::{
+        canonicalize_runtime_icu, compiled_message_key, escape_icu_literal,
+        escape_icu_source_literal,
+    };
 
     #[test]
     fn doubles_authored_apostrophes() {
@@ -123,8 +139,7 @@ mod tests {
         ];
 
         for (pattern, expected) in cases {
-            let canonical =
-                canonicalize_icu_with_policy(pattern, IcuSyntaxPolicy::RuntimeLiteralApostrophes);
+            let canonical = canonicalize_runtime_icu(pattern);
             assert_eq!(canonical.as_ref(), expected, "pattern: {pattern}");
         }
     }
@@ -138,12 +153,8 @@ mod tests {
             "'#' items",
             "''",
         ] {
-            let canonical =
-                canonicalize_icu_with_policy(pattern, IcuSyntaxPolicy::RuntimeLiteralApostrophes);
-            let repeated = canonicalize_icu_with_policy(
-                canonical.as_ref(),
-                IcuSyntaxPolicy::RuntimeLiteralApostrophes,
-            );
+            let canonical = canonicalize_runtime_icu(pattern);
+            let repeated = canonicalize_runtime_icu(canonical.as_ref());
             assert_eq!(repeated, canonical, "pattern: {pattern}");
         }
     }

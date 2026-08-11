@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 
 use crate::catalog_artifact::resolve_catalog_path;
 use crate::catalog_update::{po_serialize_options, AiProvenance, MachineMetadata};
+use crate::icu_text::parse_runtime_icu;
 use crate::{
     CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError, PalamedesResult,
     PoOutputOptions,
@@ -1007,14 +1008,6 @@ fn validate_translation_icu(value: &TranslationValue) -> Vec<String> {
             })
             .collect(),
     }
-}
-
-fn parse_runtime_icu(value: &str) -> Result<IcuMessage, ferrocat_icu::IcuParseError> {
-    let canonical = ferrocat::canonicalize_icu_with_policy(
-        value,
-        ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
-    );
-    parse_icu(&canonical)
 }
 
 fn validate_machine_provenance(machine: &TranslationMachineProvenance) -> Result<(), &'static str> {

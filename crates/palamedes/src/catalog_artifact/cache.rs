@@ -4,6 +4,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use ferrocat::{CompiledCatalogIdIndex, CompiledKeyStrategy};
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::icu_text::RUNTIME_ICU_SYNTAX_POLICY;
 
 use super::resolve::{prepare_compilation_snapshot, CompilationSnapshot};
 use super::types::{CatalogArtifactConfig, CatalogArtifactSelectedRequest};
@@ -216,7 +217,7 @@ impl CatalogCompilationCache {
         let compiled_id_index = CompiledCatalogIdIndex::new_with_policy(
             &catalogs,
             CompiledKeyStrategy::FerrocatV1,
-            ferrocat::IcuSyntaxPolicy::RuntimeLiteralApostrophes,
+            RUNTIME_ICU_SYNTAX_POLICY,
         )
         .map_err(PalamedesError::BuildCompiledIdIndex)?;
         Ok(CachedCompilation {
