@@ -650,6 +650,37 @@ turn into visible table columns. "When Palamedes is wrong for you" stays as
 four honest exits; NATIVE_SHIFT lives here once, explicitly ("this argument
 lives here, once — not repeated on every comparison page").
 
+**/engineering — the machine room (new page, mocked 2026-08-12,
+`r6-engineering.html`).** For the technical audience that wants the black
+magic named. Hero: *"«Written in Rust» is the boring half."* — Rust buys
+speed, not architecture; the page is about what Palamedes refuses to do at
+runtime. Opens with the **machine map** (five layers: app → toolchain →
+native core → artifacts → runtime, with the typed napi boundary as an ink
+band between toolchain and core), then seven mechanisms, each with a real
+artifact and ADR chips:
+
+1. Compiled, not interpreted — catalogs become executable message
+   functions; no ICU parser ships to production (ADR-022/023). PO-vs-artifact
+   code pair, labeled illustrative until real compiled output is dropped in.
+2. The cache that trusts `stat` — flow diagram + cold/warm terminal
+   (ADR-019/013/014).
+3. ferrocat — one catalog engine; audit JSON + merge-driver command
+   (ADR-006/015).
+4. The typed boundary — workflow-first napi calls; TS types generated from
+   the binding surface, "they cannot lie"; per-platform prebuilds
+   (ADR-009/010/007).
+5. Thin adapters by contract — adapters render module source from compiled
+   artifacts, catalog semantics physically out of reach (ADR-011/008/002).
+6. One runtime contract — AsyncLocalStorage request scope, RSC entry scope,
+   locale fixed per document (ADR-005/025/020).
+7. The machine that checks the marketing — `verify-site-bench-data.mjs`
+   fails the site build when quoted numbers drift from the checked report;
+   "the marketing is downstream of CI."
+
+Open point: placement — own top-nav item vs. linked from /proof and the
+homepage mechanism section. The ADR-chip device (mono chip linking each
+claim to its decision record) is reusable site-wide.
+
 **Rival template — verdict first, 8 → 6 sections.** The decide-picklists
 move from position 06 to position 01 ("The verdict, first — ten seconds,
 honestly") directly under the thesis rail; then credit & cost, differences,

@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>R6 — /engineering</title>
+<style>
+  @font-face { font-family: "Cinzel Hellenic"; src: url("../public/fonts/CinzelHellenic-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  :root {
+    --paper: #faf9f4; --ink: #0e2a4d; --hair: #ddd6c6; --accent: #8e6628;
+    --gold: #bc8a45; --accent-soft: #d9ba7c; --gray: #7d7869; --track: #f1ede0;
+    --ok: #3fb950; --warn: #d29922;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --display: "Cinzel Hellenic", "Times New Roman", serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
+  .page { max-width: 1320px; margin-inline: auto; border-inline: 1px solid var(--hair); }
+
+  .runhead { display: flex; justify-content: space-between; align-items: center; padding: 12px 32px; border-bottom: 2px solid var(--ink); position: relative; }
+  .runhead::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 1px; background: var(--ink); }
+  .runhead .brand { display: flex; align-items: center; gap: 12px; }
+  .runhead img { width: 26px; height: 26px; }
+  .runhead .word { font-family: var(--display); font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .runhead .sect { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); border-left: 1px solid var(--hair); padding-left: 12px; }
+  .runhead nav { display: flex; gap: 22px; }
+  .runhead a { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); text-decoration: none; }
+
+  .hero { padding: 56px 32px 48px; max-width: 960px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gray); }
+  h1 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(32px, 4vw, 52px); line-height: 1.14; margin-top: 18px; }
+  h1 .q { color: var(--accent); }
+  .lede { margin-top: 18px; max-width: 42em; font-size: 15.5px; line-height: 1.7; }
+  .ctas { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-block; padding: 0.75rem 1.5rem; border: 1px solid var(--ink); font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; text-decoration: none; color: var(--ink); }
+  .btn.primary { background: var(--ink); color: var(--paper); }
+
+  /* The machine map */
+  .map { margin: 0 32px 0; border: 1px solid var(--ink); max-width: 1000px; }
+  .map .maphead { padding: 10px 18px; border-bottom: 1px solid var(--ink); background: var(--track); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; display: flex; justify-content: space-between; }
+  .layer { display: grid; grid-template-columns: 130px 1fr; border-bottom: 1px solid var(--hair); }
+  .layer:last-child { border-bottom: 0; }
+  .layer .lname { padding: 14px 18px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); border-right: 1px solid var(--hair); }
+  .layer .lcells { display: flex; flex-wrap: wrap; gap: 1px; background: var(--hair); }
+  .layer .lcells span { background: var(--paper); padding: 13px 14px; font-family: var(--mono); font-size: 11.5px; flex: 1 1 auto; text-align: center; white-space: nowrap; }
+  .layer .lcells span.hl { color: var(--accent); font-weight: 600; }
+  .napi { display: flex; align-items: center; gap: 14px; padding: 7px 18px; background: var(--ink); color: var(--accent-soft); font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; }
+  .napi::before, .napi::after { content: ""; flex: 1; height: 1px; background: var(--accent-soft); opacity: 0.5; }
+
+  .section { padding: 60px 32px 68px; border-bottom: 1px solid var(--hair); }
+  .section .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+  .section h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(21px, 2.2vw, 28px); line-height: 1.25; margin-top: 14px; max-width: 30em; }
+  .section .slede { max-width: 46em; margin-top: 16px; font-size: 14.5px; line-height: 1.7; color: #2c4463; }
+  .adrchip { display: inline-block; margin-top: 18px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--hair); padding: 5px 10px; text-decoration: none; }
+  .adrchip + .adrchip { margin-left: 8px; }
+
+  .code2 { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hair); border: 1px solid var(--hair); max-width: 1000px; }
+  .codecol { background: var(--paper); min-width: 0; }
+  .codecol .head { padding: 9px 16px; border-bottom: 1px solid var(--hair); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gray); background: var(--track); }
+  .codecol pre { padding: 16px; font-family: var(--mono); font-size: 12px; line-height: 1.75; overflow: hidden; }
+  .kw { color: var(--accent); }
+  .dim { color: var(--gray); }
+  .codenote { max-width: 1000px; margin-top: 12px; font-size: 12px; line-height: 1.6; color: var(--gray); }
+
+  .flow { margin-top: 28px; display: flex; align-items: stretch; gap: 0; max-width: 1000px; flex-wrap: wrap; }
+  .fbox { border: 1px solid var(--hair); background: var(--paper); padding: 14px 16px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; }
+  .fbox b { display: block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; font-weight: 500; }
+  .farr { display: flex; align-items: center; padding: 0 10px; color: var(--accent); font-family: var(--mono); }
+  .fbox.dark { background: var(--ink); color: #dbe4ef; border-color: var(--ink); }
+
+  .term { border: 1px solid var(--ink); max-width: 720px; margin-top: 24px; }
+  .term-body { background: var(--ink); color: #dbe4ef; padding: 16px 18px; font-family: var(--mono); font-size: 12.5px; line-height: 1.85; }
+  .term .p { color: #8fa3bd; } .term .ok { color: var(--ok); } .term .t { color: var(--warn); } .term .bad { color: #e5534b; }
+
+  .rail { margin-top: 26px; max-width: 900px; border-left: 2px solid var(--accent); padding: 4px 0 4px 20px; }
+  .rail .h { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+  .rail p { margin-top: 8px; font-size: 13px; line-height: 1.7; color: #2c4463; max-width: 54em; }
+
+  .cta { background: var(--ink); color: var(--paper); text-align: center; padding: 64px 40px; }
+  .cta h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(22px, 2.6vw, 32px); }
+  .cta .ctas { justify-content: center; }
+  .btn.goldfill { background: var(--gold); border-color: var(--gold); color: #0a1f3a; }
+  .btn.ghost { border-color: var(--paper); color: var(--paper); }
+
+  .concept-badge { position: fixed; right: 12px; bottom: 12px; z-index: 99; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; background: var(--ink); color: var(--paper); padding: 6px 10px; }
+</style>
+</head>
+<body>
+  <div class="concept-badge">R6 · /engineering — the machine room</div>
+  <div class="page">
+
+    <div class="runhead">
+      <span class="brand">
+        <img src="../public/logo.svg" alt="" />
+        <span class="word">Palamedes</span>
+        <span class="sect">Engineering</span>
+      </span>
+      <nav><a href="#">Frameworks</a><a href="#">Proof</a><a href="#">Compare</a><a href="#">Blog</a><a href="#">Docs</a><a href="#">GitHub</a></nav>
+    </div>
+
+    <section class="hero">
+      <p class="eyebrow">How it actually works</p>
+      <h1><span class="q">&ldquo;Written in Rust&rdquo;</span> is the boring half.</h1>
+      <p class="lede">
+        Rust buys speed; it doesn&rsquo;t buy architecture. The interesting part
+        is what Palamedes refuses to do at runtime — parse, guess, or
+        duplicate — and the machinery that makes those refusals stick. Six
+        mechanisms, each with the decision record that explains it.
+      </p>
+      <div class="ctas">
+        <a class="btn primary" href="#">Read the 25 ADRs</a>
+        <a class="btn" href="#">Browse the crates</a>
+      </div>
+    </section>
+
+    <!-- the machine map -->
+    <div class="map">
+      <div class="maphead"><span>The machine, in one diagram</span><span>catalogs stay in your repo at every layer</span></div>
+      <div class="layer">
+        <span class="lname">Your app</span>
+        <span class="lcells"><span>&lt;Trans&gt; in TSX</span><span>next-plugin</span><span>tanstack</span><span>solid</span><span>waku</span><span>react-router-rsc</span><span>remix</span><span>vite-plugin</span><span>hono / express</span></span>
+      </div>
+      <div class="layer">
+        <span class="lname">Toolchain</span>
+        <span class="lcells"><span class="hl">pmds</span><span>extract</span><span>update</span><span>audit</span><span>merge-driver</span><span>compile</span><span>watch</span></span>
+      </div>
+      <div class="napi">typed napi boundary — generated TS types, workflow-first ops · ADR-009/010</div>
+      <div class="layer">
+        <span class="lname">Native core</span>
+        <span class="lcells"><span class="hl">palamedes</span><span>oxc transforms + source maps</span><span class="hl">ferrocat</span><span>ICU diagnostics</span><span>palamedes-plugin</span><span>bounded parallel extraction</span></span>
+      </div>
+      <div class="layer">
+        <span class="lname">Artifacts</span>
+        <span class="lcells"><span>.po / FCL catalogs — yours, in git</span><span class="hl">compiled message functions</span><span>audit reports (JSON)</span><span>source maps</span></span>
+      </div>
+      <div class="layer">
+        <span class="lname">Runtime</span>
+        <span class="lcells"><span class="hl">getI18n()</span><span>server: request scope (AsyncLocalStorage)</span><span>client: island hydration</span><span>parser-free production</span></span>
+      </div>
+    </div>
+
+    <!-- 01 — parser-free production -->
+    <section class="section">
+      <div class="num">01 — Compiled, not interpreted</div>
+      <h2>Your translations become code. No parser ships to production.</h2>
+      <p class="slede">
+        Most i18n runtimes ship an ICU parser to every visitor and interpret
+        message syntax on the fly. Palamedes compiles catalogs into executable
+        message functions at build time — plurals become plain functions, and
+        the production runtime contains no parser at all.
+      </p>
+      <div class="code2">
+        <div class="codecol">
+          <div class="head">What you write — de.po</div>
+          <pre>msgctxt <span class="dim">"checkout"</span>
+msgid <span class="dim">"{seats, plural, one {# seat left}
+  other {# seats left}}"</span>
+msgstr <span class="dim">"{seats, plural, one {Noch # Platz}
+  other {Noch # Plätze}}"</span></pre>
+        </div>
+        <div class="codecol">
+          <div class="head">What ships — compiled artifact (illustrative)</div>
+          <pre><span class="dim">// generated — executable message function</span>
+<span class="kw">export const</span> m_checkout_seats =
+  (v) => plural(v.seats, {
+    one:  <span class="dim">`Noch ${v.seats} Platz`</span>,
+    other:<span class="dim">`Noch ${v.seats} Plätze`</span>,
+  })</pre>
+        </div>
+      </div>
+      <p class="codenote">Sketch, not literal output — the shape is the point: message syntax is resolved before deploy, not in your visitor's browser.</p>
+      <a class="adrchip" href="#">ADR-022 · executable message functions</a>
+      <a class="adrchip" href="#">ADR-023 · parser-free production runtime</a>
+    </section>
+
+    <!-- 02 — the cache -->
+    <section class="section">
+      <div class="num">02 — The cache that trusts stat</div>
+      <h2>Unchanged files are neither read nor parsed.</h2>
+      <p class="slede">
+        Extraction keeps a per-file cache validated by a filesystem
+        <code>stat</code>: if a file's identity hasn't changed, its messages are
+        reused without opening it. Files that do change are parsed in bounded
+        parallel workers. In watch mode the cache lives in memory for the life
+        of the process.
+      </p>
+      <div class="flow">
+        <div class="fbox"><b>Source file</b>1 of 1,500</div>
+        <div class="farr">→</div>
+        <div class="fbox"><b>stat check</b>size · mtime<br/>identity unchanged?</div>
+        <div class="farr">→</div>
+        <div class="fbox"><b>yes — reuse</b>cached messages<br/>file never opened</div>
+        <div class="farr">/</div>
+        <div class="fbox dark"><b style="color:var(--accent-soft)">no — parse</b>oxc, native,<br/>bounded parallel</div>
+      </div>
+      <div class="term">
+        <div class="term-body">
+          <div><span class="p">$</span> pmds extract <span class="p"># cold — every cache cleared</span></div>
+          <div><span class="ok">✓</span> 1,500 files parsed <span class="t">83.89 ms</span></div>
+          <div><span class="p">$</span> pmds extract <span class="p"># after editing 5 files</span></div>
+          <div><span class="ok">✓</span> cache hit 1,495/1,500 · 5 parsed <span class="t">33.08 ms</span></div>
+        </div>
+      </div>
+      <a class="adrchip" href="#">ADR-019 · extraction cache</a>
+      <a class="adrchip" href="#">ADR-013 · bounded parallel extraction</a>
+      <a class="adrchip" href="#">ADR-014 · native transform source maps</a>
+    </section>
+
+    <!-- 03 — ferrocat -->
+    <section class="section">
+      <div class="num">03 — One catalog engine</div>
+      <h2>ferrocat: catalog semantics live in exactly one place.</h2>
+      <p class="slede">
+        Parsing, updating, auditing, ICU diagnostics, PO/FCL storage, and
+        semantic merging are one Rust engine — not a family of plugins that
+        agree most of the time. An audit result cannot depend on which side of
+        the toolchain asked. The same engine is the Git merge driver, so
+        catalog conflicts resolve by meaning, not by line.
+      </p>
+      <div class="code2">
+        <div class="codecol">
+          <div class="head">CI gate — machine-readable audit (illustrative)</div>
+          <pre><span class="p">$</span> pmds extract --check --json
+{ <span class="kw">"catalog"</span>: <span class="dim">"src/locales/de.po"</span>,
+  <span class="kw">"missing"</span>: 3, <span class="kw">"stale"</span>: 1,
+  <span class="kw">"icu"</span>: [{ <span class="kw">"issue"</span>:
+    <span class="dim">"plural: missing 'other' branch"</span> }] }</pre>
+        </div>
+        <div class="codecol">
+          <div class="head">Git merge driver — semantic, not line-based</div>
+          <pre><span class="p">$</span> git config merge.palamedes-catalog.driver \
+  <span class="dim">'pmds catalog merge-driver %O %A %B %A \
+   --path %P --conflict-strategy=use-first'</span></pre>
+        </div>
+      </div>
+      <a class="adrchip" href="#">ADR-006 · ferrocat as catalog &amp; ICU foundation</a>
+      <a class="adrchip" href="#">ADR-015 · runtime formatter subset diagnostics</a>
+    </section>
+
+    <!-- 04 — napi boundary -->
+    <section class="section">
+      <div class="num">04 — The typed boundary</div>
+      <h2>The TypeScript types are generated from the native surface. They cannot lie.</h2>
+      <p class="slede">
+        The JS/Rust boundary is crossed per workflow, not per message — one
+        native call runs a whole extract, not 6,000 little ones. And the
+        public TypeScript types are derived from the native binding surface at
+        build time, so the types you code against are the binding, not
+        somebody's memory of it.
+      </p>
+      <div class="code2">
+        <div class="codecol">
+          <div class="head">@palamedes/core-node — generated declarations</div>
+          <pre><span class="dim">// derived from the native binding surface —</span>
+<span class="dim">// not handwritten, cannot drift</span>
+<span class="kw">export declare function</span> extractWorkspace(
+  options: ExtractOptions
+): WorkspaceExtractReport</pre>
+        </div>
+        <div class="codecol">
+          <div class="head">Distribution</div>
+          <pre>@palamedes/core-node-darwin-arm64
+@palamedes/core-node-linux-{x64,arm64}-{gnu,musl}
+@palamedes/core-node-win32-x64-msvc
+<span class="dim">// prebuilt per platform — no postinstall compile</span></pre>
+        </div>
+      </div>
+      <a class="adrchip" href="#">ADR-009 · typed napi boundary</a>
+      <a class="adrchip" href="#">ADR-010 · generated types from the binding surface</a>
+      <a class="adrchip" href="#">ADR-007 · native boundary &amp; distribution</a>
+    </section>
+
+    <!-- 05 — adapters as renderers -->
+    <section class="section">
+      <div class="num">05 — Thin adapters, by contract</div>
+      <h2>Adapters render module source. They never touch catalog semantics.</h2>
+      <p class="slede">
+        A framework adapter's whole job is to hand compiled catalog artifacts
+        to its host as module source — Next.js gets what Next.js expects,
+        Vite gets what Vite expects. Extraction, identity, and ICU behavior
+        are physically out of reach for adapter code, which is why 25 example
+        apps across six frameworks can behave identically.
+      </p>
+      <div class="flow">
+        <div class="fbox"><b>Compiled artifact</b>message functions,<br/>per locale</div>
+        <div class="farr">→</div>
+        <div class="fbox"><b>Adapter</b>renders module source<br/>for its host</div>
+        <div class="farr">→</div>
+        <div class="fbox"><b>Host bundler</b>imports it like any<br/>other module</div>
+        <div class="farr">→</div>
+        <div class="fbox dark"><b style="color:var(--accent-soft)">Runtime</b>getI18n() — same<br/>behavior, every host</div>
+      </div>
+      <a class="adrchip" href="#">ADR-011 · adapters render from compiled artifacts</a>
+      <a class="adrchip" href="#">ADR-008 · framework adapter architecture</a>
+      <a class="adrchip" href="#">ADR-002 · rust-first core, thin host adapters</a>
+    </section>
+
+    <!-- 06 — runtime scope -->
+    <section class="section">
+      <div class="num">06 — One runtime contract</div>
+      <h2>getI18n() everywhere — request-scoped on the server, fixed per document in the browser.</h2>
+      <p class="slede">
+        On the server, the active instance rides an AsyncLocalStorage request
+        scope — two concurrent requests in different locales cannot bleed into
+        each other, including through React Server Components. In the browser,
+        the locale is fixed for the life of the document: switching locale is
+        a navigation, never a half-translated page.
+      </p>
+      <div class="code2">
+        <div class="codecol">
+          <div class="head">Server — request scope</div>
+          <pre><span class="kw">await</span> runWithI18n(reqI18n, () =>
+  renderApp()
+) <span class="dim">// concurrent requests, isolated locales</span></pre>
+        </div>
+        <div class="codecol">
+          <div class="head">Anywhere — one call</div>
+          <pre><span class="kw">const</span> i18n = getI18n()
+<span class="dim">// server component, client island,</span>
+<span class="dim">// or Express handler — same contract</span></pre>
+        </div>
+      </div>
+      <a class="adrchip" href="#">ADR-005 · universal getI18n()</a>
+      <a class="adrchip" href="#">ADR-025 · RSC request scope</a>
+      <a class="adrchip" href="#">ADR-020 · locale fixed per document</a>
+    </section>
+
+    <!-- 07 — the verification machine -->
+    <section class="section" style="border-bottom: 0;">
+      <div class="num">07 — The machine that checks the marketing</div>
+      <h2>This website fails its build when the numbers drift.</h2>
+      <p class="slede">
+        The benchmark figures quoted across palamedes.dev are hardcoded
+        constants — deliberately. A build-time guard parses the checked-in
+        benchmark report and fails the site build if any quoted number no
+        longer matches it. A new benchmark run forces every marketing claim to
+        be updated consciously, or the site does not ship.
+      </p>
+      <div class="term">
+        <div class="term-body">
+          <div><span class="p">$</span> node scripts/verify-site-bench-data.mjs</div>
+          <div><span class="bad">✗</span> bench.ts BENCH_REALISTIC.rows[0].medianMs = 83.89</div>
+          <div>&nbsp;&nbsp;report benchmarks/e2e-workflow/results/latest.md says <span class="t">79.41</span></div>
+          <div><span class="bad">✗</span> site build refused — update the constants (and the prose quoting them)</div>
+        </div>
+      </div>
+      <div class="rail">
+        <div class="h">Why this exists</div>
+        <p>
+          The same discipline runs the other way: 25 example apps are
+          smoke-checked on PRs, 21 run the full Playwright flow weekly, and the
+          screenshots on this site are versioned browser output. The marketing
+          is downstream of CI — not the other way around.
+        </p>
+      </div>
+      <a class="adrchip" href="#">scripts/verify-site-bench-data.mjs</a>
+      <a class="adrchip" href="#">examples/README · the verification story</a>
+    </section>
+
+    <section class="cta">
+      <h2>Read the decisions before you depend on them.</h2>
+      <div class="ctas" style="display:flex; gap:12px;">
+        <a class="btn goldfill" href="#">The 25 ADRs</a>
+        <a class="btn ghost" href="#">Browse the source</a>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
