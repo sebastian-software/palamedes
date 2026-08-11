@@ -49,6 +49,11 @@ Defaults:
 - `serverFunctions`: `false`
 - `messageSplitting`: `false`
 
+Catalog `include` and `exclude` globs match dot-prefixed path segments. Since
+1.17.1 this behavior is shared with the Vite integration, so a matching source
+file below a dot-directory is transformed and participates in
+`failOnMissing` validation.
+
 ## Usage
 
 ```js

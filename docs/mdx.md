@@ -132,9 +132,10 @@ those readable fallbacks. `MdxOptions` accepts the same key in data config, but
 the Vite plugin overwrites it with its own build-output setting, so configure
 the plugin option when using Vite.
 
-A Vite MDX integration that is neither React nor Solid can set
-`mdx.framework: "none"` for its component contract. This is a Vite plugin
-option; `@palamedes/remix` does not expose a `framework` option.
+A Vite MDX integration that is neither React nor Solid can set the Vite
+plugin's top-level `framework: "none"` option to omit framework-specific MDX
+compilation. The data-config override `mdx.framework` accepts only `"react"` or
+`"solid"`; `@palamedes/remix` does not expose the Vite plugin option.
 
 Translated frontmatter remains explicit. The compiler exports the original
 scalar object as `frontmatter`; when configured fields are present it also

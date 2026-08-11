@@ -18,10 +18,12 @@ macro output.
 - `I18nInstance`
 - `RegisteredMessages`
 - `RegisteredMessageLoader`
+- `CreateServerI18nScopeOptions`
+- `ServerI18nScope`
 
 The server subpath `@palamedes/runtime/server` exports:
 
-- `createServerI18nScope<T>()`
+- `createServerI18nScope<T>(options?)`
 - `CreateServerI18nScopeOptions`
 - `ServerI18nScope`
 - `ServerI18nResolver`
@@ -30,11 +32,14 @@ The server subpath `@palamedes/runtime/server` exports:
 - `createScopedI18nRunner(resolveI18n, options)`
 
 The Node-only test subpath `@palamedes/runtime/server/test` exports
-`waitForServerI18nTestBarrier(request)` and
-`markServerI18nTestBarrierReached(request, headers)`. It is an opt-in
-two-request rendezvous for server-scope isolation tests: it is inert until the
-test process sets `PALAMEDES_I18N_TEST_BARRIER=1` and a request supplies the
-matching barrier header. Browser and non-Node imports intentionally throw.
+`waitForServerI18nTestBarrier(request)`,
+`markServerI18nTestBarrierReached(request, headers)`, and
+`SERVER_I18N_TEST_BARRIER_REACHED_HEADER`. It is an opt-in two-request
+rendezvous for server-scope isolation tests: it is inert until the test process
+sets `PALAMEDES_I18N_TEST_BARRIER=1` and a request supplies the matching barrier
+header. Browser and non-Node imports intentionally link against fallback
+exports so bundlers can resolve every binding; calling either function then
+throws a curated runtime error.
 
 ## Client Runtime
 
@@ -48,11 +53,13 @@ setClientI18n(i18n)
 
 Call `setClientI18n()` before translated client UI renders.
 
-Generated graph-split catalogs register their fragments with
-`registerMessages()` or the lazy loader registration helpers. `setClientI18n()`
-and `initializeClientI18n()` flush registrations that evaluated before the
-client instance existed; application code normally needs these APIs only when
-building a custom graph-splitting integration.
+Generated graph-split catalogs register eager fragments with
+`registerMessages()` or server-side lazy resources with the loader registration
+helpers. `setClientI18n()` and `initializeClientI18n()` flush only eager message
+registrations that evaluated before the client instance existed. Lazy loader
+registrations are consumed explicitly by `loadRegisteredMessages()`; application
+code normally needs these APIs only when building a custom graph-splitting
+integration.
 
 ## `getI18n<T>()`
 

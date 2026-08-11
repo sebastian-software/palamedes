@@ -45,6 +45,10 @@ The `solidstart-cookie`, `solidstart-route`, `solidstart-subdomain`, and
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
 
+The route example uses `[locale].tsx` for its dynamic segment, following Solid
+Router's bracketed file-route convention (rather than TanStack's `$locale`
+filename convention).
+
 Current framework note:
 
 - Solid Router intercepts same-origin anchor clicks, so a locale link would
