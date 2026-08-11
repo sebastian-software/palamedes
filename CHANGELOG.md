@@ -102,6 +102,25 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.17.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.16.1...palamedes-v1.17.0) (2026-08-11)
+
+
+### Features
+
+* **packaging:** publish linux-arm64-musl native packages ([#727](https://github.com/sebastian-software/palamedes/issues/727)) ([988475a](https://github.com/sebastian-software/palamedes/commit/988475a928592320837db916b39531177ee1ef8b))
+
+
+### Bug Fixes
+
+* **ci:** stop partial releases and make the audit alerts reachable ([#718](https://github.com/sebastian-software/palamedes/issues/718)) ([259f026](https://github.com/sebastian-software/palamedes/commit/259f026daaa4e3036f36a73486adad2226806734))
+* **cli:** merge with a JS/TS config, guard FCL in watch, and fix command errors ([#722](https://github.com/sebastian-software/palamedes/issues/722)) ([ebb6986](https://github.com/sebastian-software/palamedes/commit/ebb6986aca5c9f355b61ace797f7ef5a43218e66)), closes [#696](https://github.com/sebastian-software/palamedes/issues/696) [#697](https://github.com/sebastian-software/palamedes/issues/697) [#698](https://github.com/sebastian-software/palamedes/issues/698) [#699](https://github.com/sebastian-software/palamedes/issues/699) [#700](https://github.com/sebastian-software/palamedes/issues/700)
+* close four verification and documentation gaps from the audit ([#725](https://github.com/sebastian-software/palamedes/issues/725)) ([fba8372](https://github.com/sebastian-software/palamedes/commit/fba837215eb0ee500e9217401856456b6dd9f6d5))
+* **core-node:** keep confidence stable and severity typed across the boundary ([#721](https://github.com/sebastian-software/palamedes/issues/721)) ([ca9a599](https://github.com/sebastian-software/palamedes/commit/ca9a599c75118c29faee4f0899b6e1cc5ea3edf9))
+* **core:** four audit findings in macro resolution, catalog updates, and translation patches ([#726](https://github.com/sebastian-software/palamedes/issues/726)) ([d2b5979](https://github.com/sebastian-software/palamedes/commit/d2b5979127af37ff7dfb9ba1686cc742b0287ab2))
+* **examples:** close the client/server locale gaps in the example matrix ([#723](https://github.com/sebastian-software/palamedes/issues/723)) ([0f22753](https://github.com/sebastian-software/palamedes/commit/0f227536dd50b36508635ff4a3bebd6de3a577cb))
+* five audit findings in the graph-splitting and runtime registration surface ([#720](https://github.com/sebastian-software/palamedes/issues/720)) ([9ec126c](https://github.com/sebastian-software/palamedes/commit/9ec126cc2e7481a3327e5ec994bd6cece1d8f107))
+* **site:** stop tracking the generated route registry ([#728](https://github.com/sebastian-software/palamedes/issues/728)) ([9afa998](https://github.com/sebastian-software/palamedes/commit/9afa998d9c955655df3f57bcfa3320ff98d409a8))
+
 ## [1.16.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.16.0...palamedes-v1.16.1) (2026-08-10)
 
 
