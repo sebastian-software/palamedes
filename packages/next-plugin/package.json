@@ -39,6 +39,7 @@
     "LICENSE",
     "README.md",
     "dist/",
+    "palamedes-config-cache.cjs",
     "palamedes-loader.cjs",
     "palamedes-dev-warning.cjs",
     "palamedes-po-loader.cjs"
