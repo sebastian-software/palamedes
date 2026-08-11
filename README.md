@@ -148,7 +148,11 @@ Evidence:
 - [`llms.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms.txt) and [`llms-full.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms-full.txt) for AI coding assistants
 - [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin) for Vite projects
 - [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) for Next.js projects
-- [`@palamedes/waku`](https://www.npmjs.com/package/@palamedes/waku) for ESM-only Waku server actions
+- [`@palamedes/tanstack`](https://www.npmjs.com/package/@palamedes/tanstack) for TanStack Start projects
+- [`@palamedes/waku`](https://www.npmjs.com/package/@palamedes/waku) for Preview ESM-only Waku server actions
+- [`@palamedes/remix`](https://www.npmjs.com/package/@palamedes/remix) for Preview server-first Remix v3 projects
+- [`@palamedes/react-router-rsc`](https://www.npmjs.com/package/@palamedes/react-router-rsc) for Preview React Router RSC request scopes
+- [`@palamedes/config`](https://www.npmjs.com/package/@palamedes/config) for JavaScript host configuration
 - [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) for extraction workflows and CI
 - [`@palamedes/eslint-plugin`](https://www.npmjs.com/package/@palamedes/eslint-plugin) for preview ESLint/Oxlint editor diagnostics
 
@@ -157,17 +161,21 @@ Palamedes today, start with the scoped packages above.
 
 ## Recommended Packages
 
-| Package                                                                              | Role                                    | Typical audience |
-| ------------------------------------------------------------------------------------ | --------------------------------------- | ---------------- |
-| [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin)     | Recommended Vite entry point            | App teams        |
-| [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin)     | Recommended Next.js entry point         | App teams        |
-| [`@palamedes/waku`](https://www.npmjs.com/package/@palamedes/waku)                   | ESM-only Waku server-action interceptor | App teams        |
-| [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)                     | Extraction CLI                          | App teams, CI    |
-| [`@palamedes/eslint-plugin`](https://www.npmjs.com/package/@palamedes/eslint-plugin) | Preview lint/editor adapter             | App teams        |
-| [`@palamedes/core`](https://www.npmjs.com/package/@palamedes/core)                   | App-facing i18n instance                | App teams        |
-| [`@palamedes/react`](https://www.npmjs.com/package/@palamedes/react)                 | React translation components            | React app teams  |
-| [`@palamedes/solid`](https://www.npmjs.com/package/@palamedes/solid)                 | Solid translation components            | Solid app teams  |
-| [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)             | Runtime bridge for transformed code     | App teams        |
+| Package                                                                                    | Role                                   | Typical audience |
+| ------------------------------------------------------------------------------------------ | -------------------------------------- | ---------------- |
+| [`@palamedes/vite-plugin`](https://www.npmjs.com/package/@palamedes/vite-plugin)           | Recommended Vite entry point           | App teams        |
+| [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin)           | Recommended Next.js entry point        | App teams        |
+| [`@palamedes/tanstack`](https://www.npmjs.com/package/@palamedes/tanstack)                 | TanStack Start middleware              | App teams        |
+| [`@palamedes/waku`](https://www.npmjs.com/package/@palamedes/waku)                         | Preview ESM-only Waku interceptor      | App teams        |
+| [`@palamedes/remix`](https://www.npmjs.com/package/@palamedes/remix)                       | Preview server-first Remix v3 adapter  | App teams        |
+| [`@palamedes/react-router-rsc`](https://www.npmjs.com/package/@palamedes/react-router-rsc) | Preview React Router RSC request scope | App teams        |
+| [`@palamedes/config`](https://www.npmjs.com/package/@palamedes/config)                     | JavaScript host configuration          | App teams        |
+| [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)                           | Extraction CLI                         | App teams, CI    |
+| [`@palamedes/eslint-plugin`](https://www.npmjs.com/package/@palamedes/eslint-plugin)       | Preview lint/editor adapter            | App teams        |
+| [`@palamedes/core`](https://www.npmjs.com/package/@palamedes/core)                         | App-facing i18n instance               | App teams        |
+| [`@palamedes/react`](https://www.npmjs.com/package/@palamedes/react)                       | React translation components           | React app teams  |
+| [`@palamedes/solid`](https://www.npmjs.com/package/@palamedes/solid)                       | Solid translation components           | Solid app teams  |
+| [`@palamedes/runtime`](https://www.npmjs.com/package/@palamedes/runtime)                   | Runtime bridge for transformed code    | App teams        |
 
 Both UI packages also expose headless frontend helpers for locale sync and
 locale-switch modelling. The example matrix uses those public helpers directly
