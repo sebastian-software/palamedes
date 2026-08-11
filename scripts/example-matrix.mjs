@@ -326,6 +326,12 @@ export const EXAMPLE_MATRIX = [
         htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
+      {
+        headers: { host: "de.lvh.me:4061" },
+        path: "/en",
+        htmlLang: "en",
+        substrings: ["This host is mapped to Deutsch"],
+      },
     ],
   },
   {
@@ -365,6 +371,12 @@ export const EXAMPLE_MATRIX = [
         path: "/",
         htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "remix.example.fr:4063" },
+        path: "/",
+        htmlLang: "fr",
+        substrings: ["Remix v3 affiche", "places restantes"],
       },
       {
         headers: { host: "remix.example.com:4063", "accept-language": "de" },

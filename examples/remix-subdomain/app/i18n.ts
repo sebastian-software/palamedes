@@ -18,6 +18,7 @@ export type ResolvedLocale = {
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
+  cookies: { choice: LOCALE_COOKIE },
   hosts: { mode: "subdomain" },
 })
 

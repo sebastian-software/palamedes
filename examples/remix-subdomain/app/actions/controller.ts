@@ -4,6 +4,7 @@ import {
   getLocaleLabel,
   getSubdomainBanner,
   getSubdomainSwitchLinks,
+  locales,
   normalizeLocale,
   remixI18n,
 } from "../i18n.ts"
@@ -32,6 +33,19 @@ export default createController(routes, {
             }
           )
       )
+    },
+
+    async setLocale(context) {
+      const formData = await context.request.formData()
+      const locale = normalizeLocale(formData.get("locale"))
+      const redirect = formData.get("redirect")
+      return new Response(null, {
+        status: 303,
+        headers: {
+          location: typeof redirect === "string" && redirect.startsWith("/") ? redirect : "/",
+          "set-cookie": locales.serializeChoice(locale),
+        },
+      })
     },
   },
 })

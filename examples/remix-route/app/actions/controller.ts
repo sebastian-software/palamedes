@@ -5,6 +5,7 @@ import {
   getRootRedirectLocale,
   getRouteBanner,
   getRouteSwitchLinks,
+  locales,
   normalizeLocale,
   remixI18n,
 } from "../i18n.ts"
@@ -31,7 +32,7 @@ export default createController(routes, {
               locale,
               localeLabel: getLocaleLabel(normalizeLocale(locale)),
               strategyLabel: "route",
-              switchLinks: getRouteSwitchLinks(),
+              switchLinks: getRouteSwitchLinks(context.request),
             }),
             {
               headers: {
@@ -41,6 +42,20 @@ export default createController(routes, {
             }
           )
       )
+    },
+
+    async setLocale(context) {
+      const formData = await context.request.formData()
+      const locale = normalizeLocale(formData.get("locale"))
+      const redirect = formData.get("redirect")
+      return new Response(null, {
+        status: 303,
+        headers: {
+          location:
+            typeof redirect === "string" && redirect.startsWith("/") ? redirect : `/${locale}`,
+          "set-cookie": locales.serializeChoice(locale),
+        },
+      })
     },
   },
 })

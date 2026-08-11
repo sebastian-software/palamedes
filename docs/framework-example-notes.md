@@ -81,6 +81,16 @@ Current framework note:
   families render `lang` on the server. Revisit if Waku exposes a dynamic root
   or document-shell API.
 
+## Remix v3
+
+The `remix-cookie`, `remix-route`, `remix-subdomain`, and `remix-tld` examples
+verify the same four locale strategies through Remix's server-first controller
+API. Route examples include the fixed `lvh.me` host map; the tld example
+includes French alongside English, German, and Spanish. All non-cookie
+strategies submit a normal locale-choice form before navigating to their
+canonical URL, so an explicit choice is retained for later mismatch hints
+without introducing client-side locale switching.
+
 ## React Router
 
 The `react-router-cookie`, `react-router-route`, `react-router-subdomain`, and
