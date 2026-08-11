@@ -74,6 +74,11 @@ setClientI18n(i18n)
 export { i18n }
 ```
 
+This guide uses the parser-free `/compiled` entrypoint because the Vite loader
+turns generated `.po` catalogs into compiled messages. Use the package root only
+when you intentionally load runtime ICU strings; see the
+[`@palamedes/core` API reference](./api/core.md#exports).
+
 ## 5. Add one translated component
 
 ```tsx

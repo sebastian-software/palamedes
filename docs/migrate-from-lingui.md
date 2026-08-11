@@ -167,11 +167,25 @@ Make the active i18n instance available through `@palamedes/runtime`.
 Client-side:
 
 ```ts
-import { createI18n } from "@palamedes/core"
+import { createI18n } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
 const i18n = createI18n()
 setClientI18n(i18n)
+```
+
+When the app loads generated `.po` catalogs, use the parser-free `/compiled`
+entrypoint and its loader type. Keep the package-root factory only for an
+intentional runtime-ICU compatibility path; see the
+[`@palamedes/core` API reference](./api/core.md#exports).
+
+```ts
+// src/po.d.ts
+declare module "*.po" {
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
+
+  export const messages: CompiledCatalogMessages
+}
 ```
 
 Server-side:
