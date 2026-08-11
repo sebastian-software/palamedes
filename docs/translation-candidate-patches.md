@@ -9,6 +9,33 @@ requests, build prompts, or decide whether a translation is linguistically
 acceptable. A CLI, editor, hosted workflow, or local script can own those
 choices while sharing the same catalog semantics.
 
+## Translation Foundation And Boundaries
+
+`translation_candidates` is the implemented local foundation: it enumerates
+work with stable identities and optimistic-concurrency fingerprints, then
+applies completed values with validation and per-file atomic writes. This page
+is the reference for that shipped boundary.
+
+Adjacent local foundations may build on it without moving repository-owned
+catalog semantics into a separate product stack:
+
+- terminology and protected-term loading for candidate preparation and QA;
+- deterministic QA for placeholders, ICU structure, whitespace, and review
+  signals;
+- compact PO metadata and stale-metadata detection;
+- flagged/unresolved report shapes; and
+- bounded batching and retry decision support.
+
+Those concerns belong in Palamedes only while they remain host-neutral,
+repository-local, and independent of account or provider concerns. Remote
+translation execution, provider routing, authentication, billing, policy packs,
+and hosted review or collaboration are product-layer responsibilities.
+
+That split lets an optional managed layer compose discovery, request building,
+remote calls, retry coordination, incremental writeback, and reporting without
+reimplementing catalog semantics. Palamedes remains the complete open-source
+local toolchain and never requires that managed layer.
+
 ## Enumerating candidates
 
 `listTranslationCandidates()` scans every configured non-source locale by
