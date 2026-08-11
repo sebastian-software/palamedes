@@ -5,7 +5,7 @@ path for teams that already like macro-based i18n and want the stack underneath
 to feel more coherent, steadier, and easier to trust.
 
 If you want the broader architectural comparison, including `next-intl` and
-General Translation, read [Comparing Modern i18n Approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md).
+General Translation, read [Comparing Modern i18n Approaches](./approach-comparison.md).
 
 The real difference is not "Rust vs. JavaScript." It is the end state:
 
@@ -113,8 +113,8 @@ work developers feel every day.
 
 See the benchmark and proof material here:
 
-- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
-- [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
+- [Proof, benchmarks, and current maturity](./proof-and-benchmarks.md)
+- [Benchmarking against Lingui v6 Preview](./benchmark-lingui-v6-preview.md)
 
 ## Who Should Switch Now
 
@@ -154,7 +154,7 @@ translation model that stays coherent from source to runtime.**
 
 ## Continue Here
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
-- [Migration from Lingui to Palamedes](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
-- [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
-- [Comparing modern i18n approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
+- [First working translation in 5 minutes](./first-working-translation.md)
+- [Migration from Lingui to Palamedes](./migrate-from-lingui.md)
+- [Benchmarking against Lingui v6 Preview](./benchmark-lingui-v6-preview.md)
+- [Comparing modern i18n approaches](./approach-comparison.md)

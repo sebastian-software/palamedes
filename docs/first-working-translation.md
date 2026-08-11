@@ -157,6 +157,6 @@ are identified.
 ## What To Read Next
 
 - [Root README](https://github.com/sebastian-software/palamedes/blob/main/README.md)
-- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
-- [Migration from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
+- [Proof, benchmarks, and current maturity](./proof-and-benchmarks.md)
+- [Migration from Lingui](./migrate-from-lingui.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)

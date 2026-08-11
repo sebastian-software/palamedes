@@ -160,6 +160,6 @@ render trees. It also fits classic request/response servers.
 ## Related Docs
 
 - [Root README](https://github.com/sebastian-software/palamedes/blob/main/README.md)
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
-- [Migration from Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md)
+- [First working translation in 5 minutes](./first-working-translation.md)
+- [Migration from Lingui](./migrate-from-lingui.md)
 - [Example matrix](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)

@@ -112,12 +112,12 @@ pnpm benchmark:lingui-v6:quick
 
 See the full methodology here:
 
-- [Benchmarking against Lingui v6](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
+- [Benchmarking against Lingui v6](./benchmark-lingui-v6-preview.md)
 
 For the broader architectural picture, including `next-intl` and where General
 Translation's measured lane ends, see:
 
-- [Comparing modern i18n approaches](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md)
+- [Comparing modern i18n approaches](./approach-comparison.md)
 
 That separate harness measures Lingui macro rewrite through distinct Babel and
 SWC lanes instead of folding them into one number.
@@ -137,7 +137,7 @@ pnpm benchmark:e2e-workflow:quick
 
 See the methodology and latest checked report here:
 
-- [End-to-end extract and catalog update benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
+- [End-to-end extract and catalog update benchmark](./benchmark-e2e-workflow.md)
 
 That workflow benchmark times source discovery, source parsing needed for
 message extraction, extraction, catalog update/merge, and catalog writes in one
@@ -277,12 +277,12 @@ The goal is simpler: show the work and make local verification easy.
 
 ## Related Proof Assets
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
-- [Catalog formats: PO and FCL](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
-- [Migrating to Palamedes 1.0](https://github.com/sebastian-software/palamedes/blob/main/docs/migrations/1.0.0.md)
+- [First working translation in 5 minutes](./first-working-translation.md)
+- [Catalog formats: PO and FCL](./catalog-formats.md)
+- [Migrating to Palamedes 1.0](./migrations/1.0.0.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
-- [Example screenshots](https://github.com/sebastian-software/palamedes/blob/main/docs/example-screenshots/README.md)
-- [Framework example notes](https://github.com/sebastian-software/palamedes/blob/main/docs/framework-example-notes.md)
-- [Palamedes principles](https://github.com/sebastian-software/palamedes/blob/main/docs/principles.md)
-- [Benchmarking against Lingui v6](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
-- [End-to-end workflow benchmark](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-e2e-workflow.md)
+- [Example screenshots](./example-screenshots/README.md)
+- [Framework example notes](./framework-example-notes.md)
+- [Palamedes principles](./principles.md)
+- [Benchmarking against Lingui v6](./benchmark-lingui-v6-preview.md)
+- [End-to-end workflow benchmark](./benchmark-e2e-workflow.md)
