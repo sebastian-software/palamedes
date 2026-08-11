@@ -26,11 +26,32 @@ export function publicWorkspacePackages(root = process.cwd()) {
       return {
         directory: packagePath,
         name: packageJson.name,
+        nativeArtifact: nativeArtifact(packageJson),
         version: packageJson.version,
       }
     })
     .filter(Boolean)
     .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function nativeArtifact(packageJson) {
+  const isPlatformPackage =
+    typeof packageJson.name === "string" &&
+    (packageJson.name.startsWith("@palamedes/core-node-") ||
+      packageJson.name.startsWith("@palamedes/cli-")) &&
+    Array.isArray(packageJson.os) &&
+    Array.isArray(packageJson.cpu)
+
+  if (!isPlatformPackage) {
+    return null
+  }
+
+  if (typeof packageJson.bin === "object" && packageJson.bin !== null) {
+    const artifact = Object.values(packageJson.bin).find((value) => typeof value === "string")
+    return artifact?.replace(/^\.\//, "") ?? null
+  }
+
+  return typeof packageJson.main === "string" ? packageJson.main.replace(/^\.\//, "") : null
 }
 
 // `npm view` exits non-zero both for "this does not exist" and for transport or
