@@ -62,6 +62,34 @@ const catalogCommandSources = {
   },
 }
 
+const adrInventory = [
+  "001-project-scope-and-positioning",
+  "002-rust-first-core-with-thin-host-adapters",
+  "003-source-string-first-message-identity",
+  "004-internal-compiled-lookup-keys",
+  "005-universal-geti18n-runtime-model",
+  "006-ferrocat-as-catalog-and-icu-foundation",
+  "007-native-boundary-and-distribution",
+  "008-framework-adapter-architecture",
+  "009-typed-napi-boundary-with-workflow-first-native-operations",
+  "010-generated-typescript-types-derived-from-the-native-binding-surface",
+  "011-host-adapters-render-module-source-from-compiled-catalog-artifacts",
+  "012-translation-augmentation-boundary",
+  "013-bounded-parallel-extraction",
+  "014-native-transform-source-maps",
+  "015-runtime-formatter-subset-diagnostics",
+  "016-native-cli-and-yaml-first-configuration",
+  "017-cli-plugin-execution-boundary",
+  "018-binary-plugin-protocol",
+  "019-extraction-cache",
+  "020-locale-is-fixed-for-a-browser-document",
+  "021-shared-cross-repository-site-ui",
+  "022-generated-catalogs-use-executable-message-functions",
+  "023-generated-production-runtime-is-parser-free",
+  "024-npm-launcher-is-a-packaging-bridge",
+  "025-react-router-rsc-entry-request-scope",
+]
+
 export function normalize(text) {
   return text.replaceAll(/\s+/gu, " ").trim()
 }
@@ -249,6 +277,16 @@ function verifyFeatureNarrative(read) {
   }
 }
 
+function verifyAdrInventory(read) {
+  const full = read("llms-full.txt")
+  const adrSection = full.split("ADRs:\n", 2)[1]?.split("## Development commands\n", 2)[0]
+  if (!adrSection) throw new Error("llms-full.txt is missing its ADR inventory")
+  const documented = [...adrSection.matchAll(/^- `\/adr\/([\w-]+)\.md`$/gmu)].map(
+    ([, filename]) => filename
+  )
+  assertSameInventory(documented, adrInventory, "LLMS ADR inventory")
+}
+
 function assertMatches(text, expression, expectedCount, label) {
   const matches = text.match(expression) ?? []
   if (matches.length !== expectedCount) {
@@ -389,6 +427,7 @@ export function checkLlmsSurface({ read, listDirectories } = {}) {
   verifyCli(readFile)
   verifyTranslationApi(readFile)
   verifyFeatureNarrative(readFile)
+  verifyAdrInventory(readFile)
   verifyMergeDriverGuidance(readFile)
   verifyCanonicalQuickstart(readFile)
 }
