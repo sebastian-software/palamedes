@@ -132,11 +132,8 @@ async function verifyExample(example, options) {
 async function main() {
   const browserOptions = parseBrowserArgs(process.argv)
   const filters = parseExampleArgs(process.argv)
-  // Vite has a browser contract but deliberately has no checked-in screenshot
-  // artifact. Capture uses its narrower selector so `all` cannot write one.
-  const selected = browserOptions.captureScreenshots
-    ? selectScreenshotExamples(filters)
-    : selectBrowserExamples(filters)
+  const selected = selectBrowserExamples(filters)
+  const screenshotIds = new Set(selectScreenshotExamples(filters).map((example) => example.id))
 
   if (selected.length === 0) {
     throw new Error("No browser-verifiable examples matched the provided filters")
@@ -144,7 +141,12 @@ async function main() {
 
   for (const example of selected) {
     console.log(`\n[verify:browser] ${example.id} on port ${example.port}`)
-    await verifyExample(example, browserOptions)
+    // Vite has a browser contract but deliberately has no checked-in screenshot
+    // artifact. Gate capture per example without narrowing the verification set.
+    await verifyExample(example, {
+      ...browserOptions,
+      captureScreenshots: browserOptions.captureScreenshots && screenshotIds.has(example.id),
+    })
   }
 }
 
