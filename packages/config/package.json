@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "jiti": "^2.7.0",
+    "picomatch": "^4.0.5",
     "smol-toml": "^1.7.1",
     "yaml": "^2.9.0"
   },

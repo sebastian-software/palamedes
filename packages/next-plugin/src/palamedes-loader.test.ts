@@ -44,7 +44,10 @@ beforeEach(() => {
       return { transformPalamedesMacros }
     }
     if (request === "@palamedes/config") {
-      return { loadPalamedesConfigSync }
+      return {
+        ...(originalLoad.call(Module, request, parent, isMain) as object),
+        loadPalamedesConfigSync,
+      }
     }
     return originalLoad.call(Module, request, parent, isMain)
   }

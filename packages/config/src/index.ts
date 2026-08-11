@@ -1,8 +1,9 @@
 import path from "node:path"
-import { accessSync, constants, readFileSync } from "node:fs"
+import { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { access } from "node:fs/promises"
 import createJiti from "jiti"
+import picomatch from "picomatch"
 import { parse as parseToml } from "smol-toml"
 import { parse as parseYaml } from "yaml"
 
@@ -408,6 +409,73 @@ export function resolveConfigPattern(
   pattern: string
 ): string {
   return path.resolve(config.rootDir, pattern)
+}
+
+function canonicalCatalogPath(value: string): string {
+  try {
+    return realpathSync.native(value)
+  } catch {
+    return path.resolve(value)
+  }
+}
+
+function normalizeCatalogPath(value: string): string {
+  return value.replaceAll("\\", "/")
+}
+
+function catalogSourcePattern(
+  rootDir: string,
+  pattern: string,
+  expandBareDirectory: boolean
+): string {
+  const absolute = path.resolve(rootDir, pattern)
+  if (expandBareDirectory) {
+    try {
+      if (statSync(absolute).isDirectory()) {
+        return `${normalizeCatalogPath(absolute)}/**/*.{js,jsx,ts,tsx,mdx}`
+      }
+    } catch {
+      // Keep non-existent paths and explicit glob patterns unchanged.
+    }
+  }
+  return normalizeCatalogPath(absolute)
+}
+
+/**
+ * Whether a source file belongs to a configured catalog.
+ *
+ * This is shared by the Vite and Next integrations. Dot-prefixed source path
+ * segments intentionally match, matching Vite's historic filter behaviour.
+ */
+export function catalogMatchesSource(
+  config: Pick<LoadedPalamedesConfig, "rootDir">,
+  catalog: PalamedesCatalogConfig,
+  sourcePath: string
+): boolean {
+  const rootDir = canonicalCatalogPath(config.rootDir)
+  const source = normalizeCatalogPath(canonicalCatalogPath(sourcePath))
+  const include = catalog.include.map((pattern) => catalogSourcePattern(rootDir, pattern, true))
+  const exclude = (catalog.exclude ?? ["**/node_modules/**"]).map((pattern) =>
+    catalogSourcePattern(rootDir, pattern, false)
+  )
+  const options = { dot: true }
+
+  return (
+    include.some((pattern) => picomatch.isMatch(source, pattern, options)) &&
+    !exclude.some((pattern) => picomatch.isMatch(source, pattern, options))
+  )
+}
+
+/** Resolve a configured catalog to its locale-specific on-disk resource path. */
+export function catalogResourcePath(
+  config: Pick<LoadedPalamedesConfig, "rootDir">,
+  catalog: PalamedesCatalogConfig,
+  locale: string
+): string {
+  const extension = catalog.format ?? "po"
+  const configuredPath = resolveCatalogPath(config, catalog.path, locale)
+  const parsed = path.parse(configuredPath)
+  return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
 }
 
 export function expandFallbackLocales(
