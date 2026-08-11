@@ -5,7 +5,7 @@ ESLint and Oxlint. The rules are thin facades: the plugin does not re-implement
 macro analysis in JavaScript, it forwards one native Core analysis per file.
 
 This package is Preview. Oxlint's JavaScript plugin API is still alpha, so
-[`pmds lint`](../cli.md#lint) remains the stable CI and MDX interface.
+[`pmds lint`](../cli.md#pmds-lint) remains the stable CI and MDX interface.
 
 ## Installation
 
@@ -79,7 +79,7 @@ each lane understands, and the rule names differ as well: the CLI reports the
 native diagnostic codes (`pmds/no-placeholder-only-message`), while the plugin
 exposes the same diagnostic under its host plugin namespace
 (`palamedes/no-placeholder-only-message`). See
-[the CLI suppression reference](../cli.md#lint) for the `pmds lint` side.
+[the CLI suppression reference](../cli.md#pmds-lint) for the `pmds lint` side.
 
 ## Coverage and limits
 

@@ -20,6 +20,8 @@
 - `PalamedesFallbackLocales`
 - `PalamedesSourceReferenceRoot`
 - `PalamedesMdxConfig`
+- `PalamedesLintConfig`
+- `PalamedesSourceRuleLevel`
 - `PalamedesPluginDeclaration`
 
 ## Config Files

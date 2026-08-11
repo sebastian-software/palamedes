@@ -17,15 +17,16 @@ The package root is the compatibility entrypoint. It exports:
 - `resolveChoice(node, value, locale?)` and `ResolvedChoice`
 - `replacePoundPlaceholders(value, numericValue, locale?)`
 - `stringifyValue(value)`
-- `parseAcceptLanguage(header)` from `@palamedes/core/locale`
-- `buildLocaleSwitchItems(options)` from `@palamedes/core/locale`
-- `defineLocaleControls(config)` from `@palamedes/core/locale`
 - `MessageMetadata`
+- `MessageValues`
 - `CatalogMessages`
 - `CatalogMessage`
 - `CompiledCatalogMessages`
 - `CompiledMessage`
+- `CompiledMessageBranch`
+- `CompiledMessageBranches`
 - `CompiledMessageRuntime`
+- `ExecutableMessageRenderer`
 - `PalamedesI18n`
 - `CreateI18nOptions`
 - `MissingMessageInfo`
@@ -106,6 +107,11 @@ raw ICU pattern and never as a catalog key. It is optional so custom and older
 instances remain compatible; the parser-free `@palamedes/core/compiled`
 factory deliberately omits it. React and Solid use the capability for lazy
 fallback patterns emitted by generated message functions.
+
+`getMessageNodes()` remains in the shared instance type for compatibility, but
+the parser-free `@palamedes/core/compiled` factory throws when it is called.
+Use its direct compiled-message rendering path instead; code that needs parse
+trees must use the package-root compatibility entrypoint.
 
 `renderMessage()` executes a generated function directly against a host result
 renderer and applies the same telemetry and fallback behavior as `_()`.

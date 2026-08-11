@@ -13,6 +13,8 @@ storage/import boundary.
 - default export `withPalamedes`
 - `WithPalamedesOptions`
 - `createNextServerI18nScope<T>()` from `@palamedes/next-plugin/server`
+- `@palamedes/next-plugin/server-function-initializer`
+- `@palamedes/next-plugin/server-function-entry`
 - internal loader subpaths used by plugin wiring:
   `@palamedes/next-plugin/palamedes-loader` and
   `@palamedes/next-plugin/palamedes-po-loader`

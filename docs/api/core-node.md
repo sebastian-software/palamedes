@@ -9,6 +9,9 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `parsePo(source)`
 - `parseCatalog(request)`
 - `updateCatalogFile(request)`
+- `listTranslationCandidates(request)`
+- `applyTranslationPatches(request)`
+- `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
 - `deriveMessageMetadata(message, context?)`
 - `normalizeMessageMetadata(input)`
@@ -22,6 +25,7 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `compileCatalogModule(config, resourcePath, options)`
 - `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
+- `analyzeSourceNative(source, filename, options?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
 - `transformMacrosNative(source, filename, options?)`
@@ -48,6 +52,15 @@ imports.
 custom integrations that already have a compiled message map. The TypeScript
 compatibility helper delegates to this function; there is no second ICU parser
 or code generator.
+
+`listTranslationCandidates()` and `applyTranslationPatches()` form the native
+translation-review workflow. A failed catalog write can still include completed
+per-file outcomes: identify that error with `isTranslationPatchWriteError()`
+and read its `report`. See [Translation candidate patches](../translation-candidate-patches.md).
+
+`analyzeSourceNative()` performs the source-level semantic analysis used by
+linting and extraction, returning extracted messages and diagnostics in one
+native pass.
 
 ## Stability
 

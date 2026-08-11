@@ -101,8 +101,9 @@ by locale at module scope, and preserves that request-local instance while a
 returned `Response.body` is streamed.
 
 Supported strategies are `cookie`, `route`, `subdomain`, and `tld`. Route
-strategy reads `context.params.locale` by default; pass `routeParam` to use a
-different param name. Cookie serialization is available through
+strategy reads `context.params.locale` by default; when that param is absent,
+it falls back to the request URL's first path segment. Pass `routeParam` to use
+a different param name. Cookie serialization is available through
 `remixI18n.serializeLocaleCookie(locale)`.
 
 Further `createRemixI18nServer` options: `createI18n` (factory for the
