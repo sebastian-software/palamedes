@@ -1576,17 +1576,26 @@ fn extract_jsx_choice_value(
 
 fn extract_jsx_children_as_message(
     children: &[JSXChild<'_>],
-    _source: &str,
+    source: &str,
 ) -> PalamedesResult<String> {
+    let mut used_value_names = HashMap::new();
     let mut next_component_index = 0usize;
 
     Ok(escape_icu_source_literal(
-        &extract_jsx_children_as_message_with_state(children, &mut next_component_index)?.message,
+        &extract_jsx_children_as_message_with_state(
+            children,
+            source,
+            &mut used_value_names,
+            &mut next_component_index,
+        )?
+        .message,
     ))
 }
 
 fn extract_jsx_children_as_message_with_state(
     children: &[JSXChild<'_>],
+    source: &str,
+    used_value_names: &mut HashMap<String, String>,
     next_component_index: &mut usize,
 ) -> PalamedesResult<JoinedJsxMessage> {
     let mut parts = Vec::new();
@@ -1605,11 +1614,18 @@ fn extract_jsx_children_as_message_with_state(
                     parts.push(JsxMessagePart::Text(literal.value.to_string()));
                 }
                 expr => {
-                    let Some(name) = jsx_expression_name(expr) else {
+                    let Some(preferred_name) = jsx_expression_name(expr) else {
                         return Err(PalamedesError::UnnamedPlaceholder {
                             syntax: "JSX expression",
                         });
                     };
+                    let span = expr.span();
+                    let expression = source
+                        .get(span.start as usize..span.end as usize)
+                        .map(ToOwned::to_owned)
+                        .unwrap_or_else(|| preferred_name.clone());
+                    let name =
+                        make_unique_placeholder_name(preferred_name, &expression, used_value_names);
                     parts.push(JsxMessagePart::ValuePlaceholder(format!("{{{name}}}")));
                 }
             },
@@ -1618,6 +1634,8 @@ fn extract_jsx_children_as_message_with_state(
                 *next_component_index += 1;
                 let inner = extract_jsx_children_as_message_with_state(
                     &element.children,
+                    source,
+                    used_value_names,
                     next_component_index,
                 )?;
                 let is_empty = inner.message.is_empty();
@@ -1631,6 +1649,8 @@ fn extract_jsx_children_as_message_with_state(
             JSXChild::Fragment(fragment) => {
                 let inner = extract_jsx_children_as_message_with_state(
                     &fragment.children,
+                    source,
+                    used_value_names,
                     next_component_index,
                 )?;
                 if !inner.message.is_empty() {
