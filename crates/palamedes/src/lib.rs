@@ -40,6 +40,7 @@ mod placeholder_name;
 mod runtime_message;
 mod source;
 mod source_macros;
+mod source_message;
 #[cfg(test)]
 mod test_support;
 mod transform;
