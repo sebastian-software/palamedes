@@ -146,5 +146,5 @@ versioned binary plugin protocol. See `/docs/cli.md` and
 - `/adr/005-universal-geti18n-runtime-model.md`: runtime access model
 - `/adr/013-bounded-parallel-extraction.md`: why extraction parallelism is bounded rather than one worker per core
 - `/adr/017-cli-plugin-execution-boundary.md`: explicit CLI plugin execution boundary
-- `/adr/018-binary-plugin-protocol.md`: binary plugin protocol for Rust-first extensions
+- `/adr/018-binary-plugin-protocol.md`: binary plugin protocol for Rust-hosted extensions
 - `/adr/019-extraction-cache.md`: the on-disk extraction cache and how it is validated

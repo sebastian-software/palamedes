@@ -15,6 +15,8 @@
   "scripts": {
     "test:llms": "node --test ./scripts/check-llms-surface.test.mjs",
     "check:llms": "node ./scripts/check-llms-surface.mjs && pnpm test:llms",
+    "test:decisions": "node --test ./scripts/check-decisions-index.test.mjs",
+    "check:decisions": "node ./scripts/check-decisions-index.mjs && pnpm test:decisions",
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
     "build:site": "pnpm --filter @palamedes/site build",
@@ -37,7 +39,7 @@
     "benchmark:runtime-browser": "pnpm build && pnpm --filter @palamedes/example-vite-mdx build && node ./scripts/check-runtime-browser-bundle.mjs",
     "proof:icu": "pnpm build && node ./scripts/proof-icu-semantics.mjs",
     "proof:icu:check": "node ./scripts/proof-icu-semantics.mjs",
-    "test": "pnpm test:llms && pnpm -r --filter \"./packages/**\" --if-present test && pnpm check:example-contracts && pnpm check:workflow-contracts",
+    "test": "pnpm test:llms && pnpm test:decisions && pnpm -r --filter \"./packages/**\" --if-present test && pnpm check:example-contracts && pnpm check:workflow-contracts",
     "test:coverage": "vitest run --config vitest.coverage.config.mts --coverage",
     "test:platform": "pnpm -r --filter @palamedes/config --filter @palamedes/core-node --filter @palamedes/next-plugin --filter @palamedes/tanstack --filter @palamedes/vite-plugin test",
     "check:binary-size": "node ./scripts/check-binary-size.mjs",
@@ -57,7 +59,7 @@
     "build:native": "cargo build --workspace",
     "check:rust": "cargo check --workspace",
     "test:rust": "cargo test --workspace",
-    "agent:check": "pnpm build && concurrently --kill-others-on-fail --group --names release,published-types,llms,format,lint,test,types,rustfmt,rust \"pnpm check:release-set\" \"pnpm check:published-types\" \"pnpm check:llms\" \"pnpm format:check\" \"pnpm lint\" \"pnpm test\" \"pnpm check-types\" \"cargo fmt --all --check\" \"cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked\""
+    "agent:check": "pnpm build && concurrently --kill-others-on-fail --group --names release,published-types,llms,decisions,format,lint,test,types,rustfmt,rust \"pnpm check:release-set\" \"pnpm check:published-types\" \"pnpm check:llms\" \"pnpm check:decisions\" \"pnpm format:check\" \"pnpm lint\" \"pnpm test\" \"pnpm check-types\" \"cargo fmt --all --check\" \"cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked\""
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

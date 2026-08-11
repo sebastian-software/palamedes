@@ -48,14 +48,15 @@ Then read the product boundary, CLI, and diagnostics decisions:
 
 Then read the remaining cross-cutting decisions:
 
-17. [ADR-017: Host Explicit CLI Plugins in the npm Wrapper](./adr/017-cli-plugin-execution-boundary.md)
-18. [ADR-018: Binary Plugin Protocol for Rust-First Extensions](./adr/018-binary-plugin-protocol.md)
+17. [ADR-017: Host Explicit Binary CLI Plugins In Rust](./adr/017-cli-plugin-execution-boundary.md)
+18. [ADR-018: Binary Plugin Protocol For Rust-Hosted Extensions](./adr/018-binary-plugin-protocol.md)
 19. [ADR-019: Extraction Cache](./adr/019-extraction-cache.md)
-20. [ADR-020: Locale Is Fixed for a Browser Document](./adr/020-framework-selection-lives-on-the-plugins.md)
+20. [ADR-020: Locale Is Fixed for a Browser Document](./adr/020-locale-is-fixed-for-a-browser-document.md)
 21. [ADR-021: Shared Cross-Repository Site UI](./adr/021-shared-cross-repository-site-ui.md)
 22. [ADR-022: Generated Catalogs Use Executable Message Functions](./adr/022-generated-catalogs-use-executable-message-functions.md)
 23. [ADR-023: Generated Production Runtime Is Parser-Free](./adr/023-generated-production-runtime-is-parser-free.md)
 24. [ADR-024: The npm Launcher Is A Packaging Bridge With A Node-Free Escape Hatch](./adr/024-npm-launcher-is-a-packaging-bridge.md)
+25. [ADR-025: React Router RSC Entry Request Scope](./adr/025-react-router-rsc-entry-request-scope.md)
 
 ## ADR Policy
 
