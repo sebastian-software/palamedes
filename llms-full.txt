@@ -467,6 +467,12 @@ ADRs:
 - `/adr/017-cli-plugin-execution-boundary.md`
 - `/adr/018-binary-plugin-protocol.md`
 - `/adr/019-extraction-cache.md`
+- `/adr/020-locale-is-fixed-for-a-browser-document.md`
+- `/adr/021-shared-cross-repository-site-ui.md`
+- `/adr/022-generated-catalogs-use-executable-message-functions.md`
+- `/adr/023-generated-production-runtime-is-parser-free.md`
+- `/adr/024-npm-launcher-is-a-packaging-bridge.md`
+- `/adr/025-react-router-rsc-entry-request-scope.md`
 
 ## Development commands
 

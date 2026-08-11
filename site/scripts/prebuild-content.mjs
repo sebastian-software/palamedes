@@ -72,10 +72,9 @@ console.log(
 )
 
 function buildTypedocPackages() {
-  const filters = typedocPackages().flatMap(({ packageDir }) => [
-    "--filter",
-    `./packages/${packageDir}`,
-  ])
+  const packages = typedocPackages()
+  assertTypedocEntryPoints(packages)
+  const filters = packages.flatMap(({ packageDir }) => ["--filter", `./packages/${packageDir}`])
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 
   console.log("prebuild-content: building TypeDoc workspace packages")
@@ -91,6 +90,15 @@ function buildTypedocPackages() {
   }
   if (result.status !== 0) {
     throw new Error(`TypeDoc workspace package build failed with status ${result.status}`)
+  }
+}
+
+function assertTypedocEntryPoints(packages) {
+  const missing = packages.flatMap(({ entryPoints }) =>
+    entryPoints.filter((entryPoint) => !existsSync(join(repoRoot, entryPoint)))
+  )
+  if (missing.length > 0) {
+    throw new Error(`TypeDoc entry points are missing: ${missing.join(", ")}`)
   }
 }
 
@@ -139,6 +147,8 @@ async function collectDocs() {
     ["catalog-formats.md", 40],
     ["mdx.md", 45],
     ["locale-strategies.md", 50],
+    ["framework-example-notes.md", 55],
+    ["demo-deployments.md", 56],
     ["backend-servers.md", 60],
     ["migrate-from-lingui.md", 70],
     ["comparison-with-lingui.md", 80],
@@ -150,6 +160,9 @@ async function collectDocs() {
     ["stability.md", 130],
     ["principles.md", 140],
     ["pseudo-localization.md", 150],
+    ["translation-workflow-surface.md", 152],
+    ["translation-module-boundaries.md", 153],
+    ["translation-candidate-patches.md", 154],
     ["troubleshooting.md", 160],
   ])
 
@@ -475,12 +488,7 @@ function typedocPackages() {
       label: "Solid",
       packageDir: "solid",
       position: 50,
-      entryPoints: [
-        "packages/solid/src/index.tsx",
-        "packages/solid/src/client.ts",
-        "packages/solid/src/runtime.ts",
-        "packages/solid/src/macro.ts",
-      ],
+      entryPoints: ["packages/solid/src/index.tsx", "packages/solid/src/macro.ts"],
     },
     {
       slug: "vite-plugin",
