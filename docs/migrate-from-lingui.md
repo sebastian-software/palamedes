@@ -158,7 +158,7 @@ Start by wiring:
 - one extraction run
 - one translated route or component
 
-The [first working translation guide](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md) is the best way to establish that baseline.
+The [first working translation guide](./first-working-translation.md) is the best way to establish that baseline.
 
 ### 2. Migrate runtime wiring
 
@@ -233,7 +233,7 @@ a global server getter from every Server Component render.
 For backend servers outside React frameworks, use the same runtime getter with
 request-local storage. The Hono/Express pattern is documented here:
 
-- [Palamedes in backend servers](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
+- [Palamedes in backend servers](./backend-servers.md)
 
 ### 3. Remove explicit IDs
 
@@ -328,6 +328,6 @@ familiar, but the stack under it gets easier to understand and easier to trust.
 
 ## Next Steps
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
-- [Palamedes vs. Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
-- [Proof, benchmarks, and current maturity](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
+- [First working translation in 5 minutes](./first-working-translation.md)
+- [Palamedes vs. Lingui](./comparison-with-lingui.md)
+- [Proof, benchmarks, and current maturity](./proof-and-benchmarks.md)

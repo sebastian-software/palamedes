@@ -198,8 +198,8 @@ choices, and architectural tradeoffs instead of in a number.
 
 ## Further Reading
 
-- [Comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md)
-- [Benchmarking against Lingui v6 Preview](https://github.com/sebastian-software/palamedes/blob/main/docs/benchmark-lingui-v6-preview.md)
+- [Comparison with Lingui](./comparison-with-lingui.md)
+- [Benchmarking against Lingui v6 Preview](./benchmark-lingui-v6-preview.md)
 - [next-intl `useExtracted`](https://github.com/amannn/next-intl/blob/main/docs/src/pages/blog/use-extracted.mdx)
 - [next-intl ICU precompilation RFC](https://github.com/amannn/next-intl/blob/main/rfcs/002-icu-message-precompilation.md)
 - [General Translation compiler docs](https://generaltranslation.com/en/docs/next/concepts/compiler)
