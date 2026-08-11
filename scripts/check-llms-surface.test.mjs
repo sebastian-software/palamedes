@@ -28,6 +28,26 @@ test("accepts the checked-in public surface", () => {
   assert.doesNotThrow(() => checkLlmsSurface({ read }))
 })
 
+test("rejects a quickstart that uses the parser-carrying runtime for generated catalogs", () => {
+  expectRejected(
+    "llms.txt",
+    (text) =>
+      text.replace(
+        'import { createI18n } from "@palamedes/core/compiled"',
+        'import { createI18n } from "@palamedes/core"'
+      ),
+    /llms\.txt quickstart runtime is missing required surface/
+  )
+})
+
+test("rejects a quickstart that loses the compiled .po module type", () => {
+  expectRejected(
+    "docs/first-working-translation.md",
+    (text) => text.replace("CompiledCatalogMessages", "CatalogMessages"),
+    /docs\/first-working-translation\.md quickstart \.po declaration/
+  )
+})
+
 test("rejects a renamed implemented lint flag", () => {
   expectRejected(
     "crates/palamedes-cli/src/commands/lint.rs",

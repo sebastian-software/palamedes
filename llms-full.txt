@@ -102,13 +102,26 @@ Register runtime:
 
 ```ts
 // src/i18n.ts
-import { createI18n } from "@palamedes/core"
+import { createI18n } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
 const i18n = createI18n()
 setClientI18n(i18n)
 
 export { i18n }
+```
+
+Generated `.po` catalogs use the parser-free `/compiled` entrypoint and its
+`CompiledCatalogMessages` type. Use the package root only when runtime ICU
+strings are intentional; see `/docs/api/core.md`.
+
+```ts
+// src/po.d.ts
+declare module "*.po" {
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
+
+  export const messages: CompiledCatalogMessages
+}
 ```
 
 Write translated code:

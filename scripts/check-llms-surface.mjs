@@ -249,6 +249,53 @@ function verifyFeatureNarrative(read) {
   }
 }
 
+function assertMatches(text, expression, expectedCount, label) {
+  const matches = text.match(expression) ?? []
+  if (matches.length !== expectedCount) {
+    throw new Error(
+      `${label} must contain ${expectedCount} matching surface${expectedCount === 1 ? "" : "s"}; found ${matches.length}`
+    )
+  }
+}
+
+function verifyCanonicalQuickstart(read) {
+  const compiledRuntime = 'import { createI18n } from "@palamedes/core/compiled"'
+  const compiledMessages = 'import type { CompiledCatalogMessages } from "@palamedes/core/compiled"'
+  const documentSurfaces = [
+    "README.md",
+    "docs/first-working-translation.md",
+    "llms.txt",
+    "llms-full.txt",
+    "docs/migrate-from-lingui.md",
+  ]
+
+  for (const file of documentSurfaces) {
+    const text = read(file)
+    assertContains(text, compiledRuntime, `${file} quickstart runtime`)
+    assertContains(text, compiledMessages, `${file} quickstart .po declaration`)
+  }
+
+  const siteSteps = read("site/app/data/steps.ts")
+  assertContains(siteSteps, compiledMessages, "site quickstart .po declaration")
+  assertMatches(
+    siteSteps,
+    /import \{ createI18n \} from "@palamedes\/core\/compiled"/gu,
+    4,
+    "site quickstart compiled runtime imports"
+  )
+
+  for (const [file, text] of [
+    ...documentSurfaces.map((file) => [file, read(file)]),
+    ["site/app/data/steps.ts", siteSteps],
+  ]) {
+    if (text.includes('import { createI18n } from "@palamedes/core"')) {
+      throw new Error(
+        `${file} quickstart must use @palamedes/core/compiled for generated .po catalogs`
+      )
+    }
+  }
+}
+
 function codeExamples(text) {
   const fenced = [...text.matchAll(/^```[^\r\n]*\r?\n([\s\S]*?)^```/gmu)].map(([, example]) => ({
     example,
@@ -343,6 +390,7 @@ export function checkLlmsSurface({ read, listDirectories } = {}) {
   verifyTranslationApi(readFile)
   verifyFeatureNarrative(readFile)
   verifyMergeDriverGuidance(readFile)
+  verifyCanonicalQuickstart(readFile)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -15,9 +15,9 @@ export const STACKS: Array<{ id: StackId; label: string }> = [
 
 const PO_DECLARATION = `// src/po.d.ts
 declare module "*.po" {
-  import type { CatalogMessages } from "@palamedes/core"
+  import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
 
-  export const messages: CatalogMessages
+  export const messages: CompiledCatalogMessages
 }`
 
 export const QUICKSTART_STEPS: Record<StackId, Step[]> = {
@@ -40,13 +40,13 @@ catalogs:
     },
     {
       title: "Wire the plugin & runtime",
-      body: "The Vite plugin handles the macro transform; the runtime holds the active i18n instance.",
+      body: "The Vite plugin handles the macro transform and compiles .po catalogs; the runtime holds the active i18n instance.",
       code: `// vite.config.ts
 import { palamedes } from "@palamedes/vite-plugin"
 export default defineConfig({ plugins: [palamedes(), react()] })
 
 // src/i18n.ts
-import { createI18n } from "@palamedes/core"
+import { createI18n } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
 export const i18n = createI18n()
@@ -104,14 +104,14 @@ catalogs:
     },
     {
       title: "Wire the plugin & runtime",
-      body: "The Vite plugin handles the macro transform; the runtime holds the active i18n instance.",
+      body: "The Vite plugin handles the macro transform and compiles .po catalogs; the runtime holds the active i18n instance.",
       code: `// vite.config.ts
 import { palamedes } from "@palamedes/vite-plugin"
 import solid from "vite-plugin-solid"
 export default defineConfig({ plugins: [palamedes(), solid({ extensions: [".mdx"] })] })
 
 // src/i18n.ts
-import { createI18n } from "@palamedes/core"
+import { createI18n } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
 export const i18n = createI18n()
@@ -182,7 +182,7 @@ export default withPalamedes({})
 
 // src/lib/i18n.server.ts
 import "server-only"
-import { createI18n } from "@palamedes/core"
+import { createI18n } from "@palamedes/core/compiled"
 import { createNextServerI18nScope } from "@palamedes/next-plugin/server"
 
 export const serverI18n = createNextServerI18nScope<ReturnType<typeof createI18n>>()`,
@@ -213,7 +213,7 @@ msgstr "Willkommen bei Palamedes"`,
       code: `${PO_DECLARATION}
 
 // src/lib/load-i18n.server.ts
-import { createI18n } from "@palamedes/core"
+import { createI18n } from "@palamedes/core/compiled"
 import { serverI18n } from "./i18n.server"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
