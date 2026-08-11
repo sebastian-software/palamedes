@@ -128,8 +128,13 @@ hook-free. The plugin's `runtimeModule` option applies to macros only — use
 The Vite plugin preserves inline source-message fallbacks in development and
 strips them from generated MDX during production builds. Configure
 `keepSourceFallbacks` on `palamedes()` when a production module must retain
-those readable fallbacks; this build-output policy intentionally does not live
-in the extraction-oriented `mdx` data config.
+those readable fallbacks. `MdxOptions` accepts the same key in data config, but
+the Vite plugin overwrites it with its own build-output setting, so configure
+the plugin option when using Vite.
+
+A Vite MDX integration that is neither React nor Solid can set
+`mdx.framework: "none"` for its component contract. This is a Vite plugin
+option; `@palamedes/remix` does not expose a `framework` option.
 
 Translated frontmatter remains explicit. The compiler exports the original
 scalar object as `frontmatter`; when configured fields are present it also

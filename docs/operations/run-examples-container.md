@@ -74,31 +74,42 @@ container with an error code as soon as a server dies unexpectedly (fail-fast).
 
 ## Port overview
 
-| Port | Example                | Strategy  |
-| ---- | ---------------------- | --------- |
-| 4010 | `nextjs-cookie`        | cookie    |
-| 4011 | `nextjs-route`         | route     |
-| 4020 | `tanstack-cookie`      | cookie    |
-| 4021 | `tanstack-route`       | route     |
-| 4030 | `waku-cookie`          | cookie    |
-| 4031 | `waku-route`           | route     |
-| 4040 | `react-router-cookie`  | cookie    |
-| 4041 | `react-router-route`   | route     |
-| 4050 | `solidstart-cookie`    | cookie    |
-| 4051 | `solidstart-route`     | route     |
-| 4052 | `solidstart-subdomain` | subdomain |
-| 4053 | `solidstart-tld`       | tld       |
-| 4060 | `remix-cookie`         | cookie    |
-| 4061 | `remix-route`          | route     |
-| 4062 | `remix-subdomain`      | subdomain |
-| 4063 | `remix-tld`            | tld       |
-| 4070 | `vite-mdx`             | client    |
+| Port | Example                     | Strategy          |
+| ---- | --------------------------- | ----------------- |
+| 4010 | `nextjs-cookie`             | cookie            |
+| 4011 | `nextjs-route`              | route             |
+| 4012 | `nextjs-subdomain`          | subdomain         |
+| 4013 | `nextjs-tld`                | tld               |
+| 4020 | `tanstack-cookie`           | cookie            |
+| 4021 | `tanstack-route`            | route             |
+| 4022 | `tanstack-subdomain`        | subdomain         |
+| 4023 | `tanstack-tld`              | tld               |
+| 4030 | `waku-cookie`               | cookie            |
+| 4031 | `waku-route`                | route             |
+| 4032 | `waku-subdomain`            | subdomain         |
+| 4033 | `waku-tld`                  | tld               |
+| 4040 | `react-router-cookie`       | cookie            |
+| 4041 | `react-router-route`        | route             |
+| 4042 | `react-router-subdomain`    | subdomain         |
+| 4043 | `react-router-tld`          | tld               |
+| 4050 | `solidstart-cookie`         | cookie            |
+| 4051 | `solidstart-route`          | route             |
+| 4052 | `solidstart-subdomain`      | subdomain         |
+| 4053 | `solidstart-tld`            | tld               |
+| 4060 | `remix-cookie`              | cookie            |
+| 4061 | `remix-route`               | route             |
+| 4062 | `remix-subdomain`           | subdomain         |
+| 4063 | `remix-tld`                 | tld               |
+| 4070 | `vite-mdx`                  | client            |
+| 4071 | `react-router-rsc` verifier | verifier-assigned |
 
 `scripts/example-matrix.mjs` is the single source of truth for the ports. The
 supervisor binds according to it automatically, and the `print-podman-ports.mjs`
 call shown above generates the `-p` flags from it too – both follow along with no
 manual step. Only the static `EXPOSE` line in the `Containerfile` is purely
 informational and must be updated by hand when a port changes.
+Port `4071` is assigned only while `verify-react-router-rsc.mjs` runs its
+ephemeral verifier server; it is not part of the container supervisor.
 
 ## Host binding
 
