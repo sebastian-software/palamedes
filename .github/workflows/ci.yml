@@ -49,6 +49,13 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
+      # A new public package needs one manual bootstrap publish before npm can
+      # issue the OIDC token used by the release workflow. Surface that release
+      # prerequisite while the package-adding PR is still reviewable.
+      - name: Check first-publish readiness
+        if: ${{ matrix.full }}
+        run: node ./scripts/check-first-publish.mjs --warn-only
+
       - name: Restore pnpm cache
         uses: actions/setup-node@v7
         with:

@@ -149,13 +149,26 @@ describe("workflow contracts", () => {
     )
   })
 
+  it("surfaces first-publish setup in the full PR validation lane", async () => {
+    const ci = await readRepositoryFile(".github/workflows/ci.yml")
+    const validate = job(ci, "validate", "validate-rust")
+
+    expect(validate).toContain("run: node ./scripts/check-first-publish.mjs --warn-only")
+    expect(
+      validate.indexOf("run: node ./scripts/check-first-publish.mjs --warn-only")
+    ).toBeLessThan(validate.indexOf("run: pnpm install --frozen-lockfile"))
+  })
+
   it("verifies the published release set and reports a failed publish", async () => {
     const publish = await readRepositoryFile(".github/workflows/publish.yml")
+    const publishJs = job(publish, "publish-js", "verify-release")
     const verifyRelease = job(publish, "verify-release", "notify-failure")
     const notifyFailure = job(publish, "notify-failure", "__missing__")
 
     expect(verifyRelease).toMatch(/needs:\n(?:\s+- .+\n)*\s+- publish-js/m)
     expect(verifyRelease).toContain("run: node ./scripts/check-published-versions.mjs")
+    expect(publishJs).toContain("failures=()")
+    expect(publishJs).toContain("JavaScript package publishing failed")
     expect(notifyFailure).toContain("issues: write")
     expect(notifyFailure).toContain("failure()")
     expect(notifyFailure).toContain("scripts/open-or-refresh-issue.mjs")
