@@ -1167,6 +1167,7 @@ import { Trans } from "@palamedes/react/macro";
 const descriptor = t({ message: "Don't greet {name}" }, { name });
 const rich = <Trans message="Don't wave at {name}" />;
 const authored = t`L'${title} est prêt`;
+const colliding = <Trans>{user.name} vs {team.name}</Trans>;
 "##;
     let scoped_source = scope_macro_test_source(source, "test.tsx");
     let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
@@ -1191,6 +1192,7 @@ const authored = t`L'${title} est prêt`;
             "Don't greet {name}",
             "Don't wave at {name}",
             "L''{title} est prêt",
+            "{name} vs {name_1}",
         ]
     );
 
@@ -1251,6 +1253,7 @@ const authored = t`L'${title} est prêt`;
         "DE Don''t greet {name}",
         "DE Don''t wave at {name}",
         "DE L''{title} est prêt",
+        "DE {name} vs {name_1}",
     ];
     for (id, expected) in transformed.compiled_ids.iter().zip(expected_translations) {
         assert_eq!(result.messages.get(id).map(String::as_str), Some(expected));
@@ -1270,6 +1273,10 @@ const authored = t`L'${title} est prêt`;
     assert_eq!(
         transformed.compiled_ids[2],
         compiled_key("L''{title} est prêt", None)
+    );
+    assert_eq!(
+        transformed.compiled_ids[3],
+        compiled_key("{name} vs {name_1}", None)
     );
 
     // The embedded runtime message text is untouched: only the key is derived
