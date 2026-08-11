@@ -458,7 +458,7 @@ ADRs:
 - `/adr/008-framework-adapter-architecture.md`
 - `/adr/009-typed-napi-boundary-with-workflow-first-native-operations.md`
 - `/adr/010-generated-typescript-types-derived-from-the-native-binding-surface.md`
-- `/adr/011-host-adapters-render-module-source-from-compiled-catalog-artifacts.md`
+- `/adr/011-native-catalog-rendering-produces-bundler-modules.md`
 - `/adr/012-translation-augmentation-boundary.md`
 - `/adr/013-bounded-parallel-extraction.md`
 - `/adr/014-native-transform-source-maps.md`

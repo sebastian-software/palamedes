@@ -10,5 +10,4 @@ Rules:
 
 Current state:
 
-- [2026-07-01 Headless locale controls RFC](2026-07-01-locale-controls-library-rfc.md)
 - [2026-08-01 Code splitting for localized messages RFC](2026-08-01-code-splitting-localization-rfc.md)

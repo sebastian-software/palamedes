@@ -40,9 +40,10 @@ A locale is immutable for the lifetime of a browser document.
 
 Locale lifecycle does not move into `palamedes.yaml`; request locale selection
 belongs to the host application. MDX's `framework` setting does belong in the
-data config because it selects the generated component contract; when present,
-that config value overrides a Vite plugin option. Extraction otherwise produces
-the same messages for every UI framework.
+data config because it selects the generated component contract. A configured
+`mdx.framework` overrides the Vite plugin's top-level `framework` default, while
+an explicit Vite `mdx` override is applied last and wins over data config.
+Extraction otherwise produces the same messages for every UI framework.
 
 ## Application-Owned Remount
 

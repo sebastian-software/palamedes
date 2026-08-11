@@ -55,6 +55,7 @@ loads `palamedes.yml`, `palamedes.json`, and `palamedes.toml` via Rust's
 
 The documented schema uses kebab-case field names:
 
+- `locales`
 - `source-locale`
 - `fallback-locales`
 - `pseudo-locale`

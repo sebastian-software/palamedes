@@ -190,4 +190,4 @@ baseline for:
 - tests
 - docs
 - benchmark-style verification artifacts
-- future extraction of shared public helper APIs
+- future evolution of the shared public locale-control APIs
