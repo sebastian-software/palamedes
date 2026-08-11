@@ -142,6 +142,7 @@ Evidence:
 - [API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md)
 - [Configuration reference](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md)
 - [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md)
+- **Migrating from Lingui or comparing approaches:** [migration guide](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md), [comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md), [approach comparison](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md), [locale strategies](https://github.com/sebastian-software/palamedes/blob/main/docs/locale-strategies.md), and [catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 - [Backend servers with Hono, Express, and request-local i18n](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
 - [Troubleshooting common setup failures](https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md)
 - [`llms.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms.txt) and [`llms-full.txt`](https://github.com/sebastian-software/palamedes/blob/main/llms-full.txt) for AI coding assistants
@@ -338,6 +339,9 @@ These names are reserved for future top-level entry points. They are not the
 recommended starting point today.
 
 ## Development
+
+Want to contribute? Read [CONTRIBUTING.md](./CONTRIBUTING.md) for the repository
+layout, local checks, and pull request expectations.
 
 ```bash
 pnpm install

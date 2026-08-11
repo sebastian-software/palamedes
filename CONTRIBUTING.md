@@ -77,6 +77,8 @@ the package unit tests.
 User-facing behavior should be discoverable from the README, package READMEs,
 or `docs/`. Durable product, architecture, communication, and operational
 decisions that constrain future work belong in `adr/`.
+The [product context](./PRODUCT.md) records the audience and evidence-first
+documentation goals that guide this public surface.
 
 When adding a feature, include:
 

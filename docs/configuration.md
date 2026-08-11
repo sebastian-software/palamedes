@@ -248,6 +248,8 @@ catalogs:
 
 Plugin integrations pass `pseudo-locale` through to catalog compilation and skip
 `failOnMissing` failures for that locale.
+See [pseudo-localization](./pseudo-localization.md) for how Palamedes renders
+that catalog for visual QA.
 
 ## CLI Plugins
 
