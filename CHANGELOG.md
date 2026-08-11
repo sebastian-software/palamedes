@@ -102,6 +102,19 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.17.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.17.0...palamedes-v1.17.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* **config:** declare picomatch matcher API ([3cc9b53](https://github.com/sebastian-software/palamedes/commit/3cc9b536d897ecf75c8780e084c7e6854d1e52d5))
+* **examples:** align remix locale strategies ([#811](https://github.com/sebastian-software/palamedes/issues/811)) ([df684d4](https://github.com/sebastian-software/palamedes/commit/df684d4c44fcd3d2993a592de8f1a4cb154e273c))
+* **extract:** unique Trans JSX placeholders ([#776](https://github.com/sebastian-software/palamedes/issues/776)) ([46e0c55](https://github.com/sebastian-software/palamedes/commit/46e0c55a291d6660f05d86c28829f7e42f6e839f))
+* **release:** guard native publish artifacts ([#773](https://github.com/sebastian-software/palamedes/issues/773)) ([d2b02c4](https://github.com/sebastian-software/palamedes/commit/d2b02c4f95c54fc195a907ea39441caa32968017))
+* **scripts:** resolve shared workspace paths ([44bbb8e](https://github.com/sebastian-software/palamedes/commit/44bbb8ec115b7d96b2bae978f312bd686283498c))
+* **scripts:** select screenshot examples for capture ([cec2677](https://github.com/sebastian-software/palamedes/commit/cec2677d6184fba5fe6ff1186d915de7f4c4005b))
+* **scripts:** select screenshot examples for capture ([782d98b](https://github.com/sebastian-software/palamedes/commit/782d98b5e925895c9cbb03022b580c768c866032))
+
 ## [1.17.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.16.1...palamedes-v1.17.0) (2026-08-11)
 
 
