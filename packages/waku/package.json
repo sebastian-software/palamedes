@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/waku",
-  "version": "1.17.1",
+  "version": "1.17.2",
   "description": "Waku request-scoped i18n interceptor for Palamedes",
   "keywords": [
     "waku",
