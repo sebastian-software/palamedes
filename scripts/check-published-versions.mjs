@@ -10,6 +10,7 @@
 import { setTimeout as delay } from "node:timers/promises"
 
 import { publicWorkspacePackages, registryLookup } from "./release-packages.mjs"
+import { nativeTarballFailure } from "./release-verification.mjs"
 
 const attempts = Number(process.env.PALAMEDES_REGISTRY_ATTEMPTS ?? 5)
 const retryDelayMs = Number(process.env.PALAMEDES_REGISTRY_RETRY_MS ?? 15_000)
@@ -36,7 +37,13 @@ for (const packageInfo of packages) {
   }
 
   if (lookup.state === "found") {
-    console.log(`${spec} ✓`)
+    const tarballFailure = await nativeTarballCheck(packageInfo, spec)
+
+    if (tarballFailure) {
+      failures.push({ detail: tarballFailure, spec })
+    } else {
+      console.log(`${spec} ✓`)
+    }
   } else if (lookup.state === "missing") {
     missing.push(spec)
   } else {
@@ -70,3 +77,26 @@ if (missing.length > 0 || failures.length > 0) {
 
 console.log("")
 console.log(`All ${packages.length} public packages are published at ${packages[0]?.version}.`)
+
+async function nativeTarballCheck(packageInfo, spec) {
+  if (!packageInfo.nativeArtifact) {
+    return null
+  }
+
+  let lookup
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    lookup = registryLookup(spec, "dist.unpackedSize")
+    if (lookup.state === "found") {
+      return nativeTarballFailure(packageInfo, lookup.value)
+    }
+
+    if (attempt < attempts) {
+      console.log(
+        `${spec} tarball metadata not visible yet (attempt ${attempt}/${attempts}); retrying.`
+      )
+      await delay(retryDelayMs)
+    }
+  }
+
+  return `${spec}: could not read native tarball metadata: ${lookup.detail ?? "unknown registry error"}`
+}
