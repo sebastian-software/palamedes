@@ -177,8 +177,8 @@ describe("workflow contracts", () => {
 
     expect(verifyRelease).toMatch(/needs:\n(?:\s+- .+\n)*\s+- publish-js/m)
     expect(verifyRelease).toContain("run: node ./scripts/check-published-versions.mjs")
-    expect(publishJs).toContain("failures=()")
-    expect(publishJs).toContain("JavaScript package publishing failed")
+    expect(publishJs).toContain("publish-package-if-needed.mjs --all-js")
+    expect(publishJs).not.toContain("publish_package @palamedes/")
     expect(notifyFailure).toContain("issues: write")
     expect(notifyFailure).toContain("failure()")
     expect(notifyFailure).toContain("scripts/open-or-refresh-issue.mjs")

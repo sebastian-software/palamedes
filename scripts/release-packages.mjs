@@ -35,6 +35,10 @@ export function publicWorkspacePackages(root = process.cwd()) {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
+export function javascriptWorkspacePackages(root = process.cwd()) {
+  return publicWorkspacePackages(root).filter((packageInfo) => !packageInfo.nativeArtifact)
+}
+
 function nativeArtifact(packageJson) {
   const isPlatformPackage =
     typeof packageJson.name === "string" &&

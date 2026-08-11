@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 
-import { isMissingFromRegistry } from "./release-packages.mjs"
+import { isMissingFromRegistry, javascriptWorkspacePackages } from "./release-packages.mjs"
 
 const root = process.cwd()
 // On Windows the package manager binaries resolve to `pnpm.cmd`/`npm.cmd`.
@@ -11,11 +11,22 @@ const root = process.cwd()
 const useShell = process.platform === "win32"
 const args = process.argv.slice(2)
 const dryRun = args.includes("--dry-run")
+const allJavaScript = args.includes("--all-js")
 const packageName = args.find((arg) => !arg.startsWith("--"))
 const prereleaseTag = process.env.PALAMEDES_NPM_PRERELEASE_TAG?.trim() || "next"
 
+if (allJavaScript) {
+  if (packageName) {
+    console.error("Usage: node ./scripts/publish-package-if-needed.mjs --all-js [--dry-run]")
+    process.exit(1)
+  }
+  process.exit(publishAllJavaScriptPackages())
+}
+
 if (!packageName) {
-  console.error("Usage: node ./scripts/publish-package-if-needed.mjs <package-name> [--dry-run]")
+  console.error(
+    "Usage: node ./scripts/publish-package-if-needed.mjs <package-name> [--dry-run] | --all-js [--dry-run]"
+  )
   process.exit(1)
 }
 
@@ -91,6 +102,32 @@ process.exit(publishResult.status ?? 1)
 
 function command(name) {
   return process.platform === "win32" ? `${name}.cmd` : name
+}
+
+function publishAllJavaScriptPackages() {
+  const failures = []
+  const script = process.argv[1]
+  const childArgs = dryRun ? ["--dry-run"] : []
+
+  for (const packageInfo of javascriptWorkspacePackages(root)) {
+    const result = spawnSync(process.execPath, [script, packageInfo.name, ...childArgs], {
+      cwd: root,
+      stdio: "inherit",
+    })
+    if (result.error) {
+      console.error(result.error)
+      failures.push(packageInfo.name)
+    } else if (result.status !== 0) {
+      failures.push(packageInfo.name)
+    }
+  }
+
+  if (failures.length === 0) {
+    return 0
+  }
+
+  console.error(`JavaScript package publishing failed: ${failures.join(", ")}`)
+  return 1
 }
 
 function npmPublishTagArgs(version) {

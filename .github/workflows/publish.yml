@@ -300,36 +300,7 @@ jobs:
           build
 
       - name: Publish JavaScript packages
-        run: |
-          failures=()
-          publish_package() {
-            if ! node ./scripts/publish-package-if-needed.mjs "$1"; then
-              failures+=("$1")
-            fi
-          }
-          publish_package @palamedes/core
-          publish_package @palamedes/config
-          publish_package @palamedes/runtime
-          publish_package @palamedes/core-node
-          publish_package @palamedes/transform
-          publish_package @palamedes/extractor
-          publish_package @palamedes/eslint-plugin
-          publish_package @palamedes/react
-          publish_package @palamedes/react-router-rsc
-          publish_package @palamedes/remix
-          publish_package @palamedes/waku
-          publish_package @palamedes/tanstack
-          publish_package @palamedes/solid
-          publish_package @palamedes/cli
-          publish_package @palamedes/vite-plugin
-          publish_package @palamedes/next-plugin
-          publish_package palamedes
-          publish_package create-palamedes
-          if ((${#failures[@]} > 0)); then
-            echo "::error title=JavaScript package publishing failed::${failures[*]}"
-            printf 'JavaScript package publish failures:\n%s\n' "${failures[*]}" >&2
-            exit 1
-          fi
+        run: node ./scripts/publish-package-if-needed.mjs --all-js
 
   # A publish job that dies partway through leaves the registry carrying a mixed
   # release set. Nothing reported that until someone tried to install, so assert
