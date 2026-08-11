@@ -38,6 +38,12 @@ export const EXAMPLE_MATRIX = [
         htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
+      {
+        headers: { "accept-language": "en" },
+        path: "/",
+        htmlLang: "en",
+        substrings: ["English", "seats left"],
+      },
     ],
   },
   {
@@ -140,6 +146,12 @@ export const EXAMPLE_MATRIX = [
         htmlLang: "en",
         substrings: ["Deutsch", "Plätze frei"],
       },
+      {
+        headers: { "accept-language": "en" },
+        path: "/",
+        htmlLang: "en",
+        substrings: ["English", "seats left"],
+      },
     ],
   },
   {
@@ -153,9 +165,21 @@ export const EXAMPLE_MATRIX = [
     // See waku-cookie for why the document lang stays `en` on every locale.
     smokeChecks: [
       {
+        headers: { "accept-language": "de" },
+        path: "/en",
+        htmlLang: "en",
+        substrings: ["currently rendering", "Switch to the recommended locale"],
+      },
+      {
         path: "/de",
         htmlLang: "en",
         substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "de.lvh.me:4031" },
+        path: "/en",
+        htmlLang: "en",
+        substrings: ["This host is mapped to Deutsch"],
       },
     ],
   },
@@ -444,6 +468,12 @@ export const EXAMPLE_MATRIX = [
         htmlLang: "en",
         substrings: ["Deutsch", "Plätze frei"],
       },
+      {
+        headers: { host: "en.lvh.me:4032", "accept-language": "de" },
+        path: "/",
+        htmlLang: "en",
+        substrings: ["currently rendering", "Switch to the recommended locale"],
+      },
     ],
   },
   {
@@ -573,6 +603,18 @@ export const EXAMPLE_MATRIX = [
         path: "/",
         htmlLang: "en",
         substrings: ["Deutsch", "Plätze frei"],
+      },
+      {
+        headers: { host: "palamedes-i18n.fr:4033" },
+        path: "/",
+        htmlLang: "en",
+        substrings: ["français", "places restantes"],
+      },
+      {
+        headers: { host: "palamedes-i18n.com:4033", "accept-language": "de" },
+        path: "/",
+        htmlLang: "en",
+        substrings: ["English", "seats left"],
       },
     ],
   },

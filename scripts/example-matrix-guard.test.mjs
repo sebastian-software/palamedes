@@ -110,4 +110,39 @@ describe("example matrix guard", () => {
     ])
     expect(selectScreenshotExamples({ framework: "vite" })).toEqual([])
   })
+
+  it("keeps Waku and Next cookie smoke depth aligned with the server matrix", () => {
+    const example = (id) => EXAMPLE_MATRIX.find((entry) => entry.id === id)
+    const hasCheck = (id, headers, path, substrings) =>
+      example(id).smokeChecks.some(
+        (check) =>
+          check.path === path &&
+          JSON.stringify(check.headers) === JSON.stringify(headers) &&
+          substrings.every((substring) => check.substrings.includes(substring))
+      )
+
+    for (const id of ["nextjs-cookie", "waku-cookie"]) {
+      expect(hasCheck(id, { "accept-language": "en" }, "/", ["English", "seats left"])).toBe(true)
+    }
+    expect(
+      hasCheck("waku-route", { "accept-language": "de" }, "/en", ["currently rendering"])
+    ).toBe(true)
+    expect(
+      hasCheck("waku-subdomain", { host: "en.lvh.me:4032", "accept-language": "de" }, "/", [
+        "currently rendering",
+      ])
+    ).toBe(true)
+    expect(
+      hasCheck("waku-tld", { host: "palamedes-i18n.fr:4033" }, "/", [
+        "français",
+        "places restantes",
+      ])
+    ).toBe(true)
+    expect(
+      hasCheck("waku-tld", { host: "palamedes-i18n.com:4033", "accept-language": "de" }, "/", [
+        "English",
+        "seats left",
+      ])
+    ).toBe(true)
+  })
 })
