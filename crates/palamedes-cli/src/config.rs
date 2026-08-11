@@ -3,8 +3,9 @@ use std::path::{Component, Path, PathBuf};
 
 use ::config as config_rs;
 use palamedes::{
-    CatalogArtifactConfig, CatalogConfig, FallbackLocales, MdxOptions, PalamedesCatalogFormat,
-    PoLineBreaks, PoOutputOptions, SourceRuleLevel, SourceRuleOptions,
+    CatalogArtifactConfig, CatalogConfig, ExtractCatalogMessagesOptions, FallbackLocales,
+    MdxOptions, PalamedesCatalogFormat, PoLineBreaks, PoOutputOptions, SourceRuleLevel,
+    SourceRuleOptions,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -78,7 +79,7 @@ pub struct ConfigLintOptions {
     pub rules: ConfigLintRules,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ConfigLintRules {
     pub placeholder_only: SourceRuleLevel,
@@ -302,6 +303,15 @@ fn unknown_top_level_keys(value: &serde_json::Value) -> Vec<String> {
 }
 
 impl LoadedConfig {
+    /// Options that define the source-analysis result and its cache stamp.
+    pub fn analysis_options(&self) -> ExtractCatalogMessagesOptions {
+        ExtractCatalogMessagesOptions {
+            reference_scopes: self.reference_scopes,
+            mdx: self.mdx.clone(),
+            rules: self.lint.rules.clone().into(),
+        }
+    }
+
     pub fn artifact_config(&self) -> CatalogArtifactConfig {
         CatalogArtifactConfig {
             root_dir: self.root_dir.to_string_lossy().into_owned(),

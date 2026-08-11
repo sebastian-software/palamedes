@@ -5,13 +5,13 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    analyze_source_files_cached, default_cache_path, ExtractCache, ExtractCatalogMessagesOptions,
-    SourceComment, SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity,
-    SourceFileAnalysisRequest, SourceRange, SOURCE_DIAGNOSTIC_CODES,
+    analyze_source_files_cached, SourceComment, SourceCommentKind, SourceDiagnostic,
+    SourceDiagnosticSeverity, SourceFileAnalysisRequest, SourceRange, SOURCE_DIAGNOSTIC_CODES,
 };
 use serde::Serialize;
 
 use crate::command::{render_json, Command, Context};
+use crate::commands::extract::cache::{load_extract_cache, persist_extract_cache};
 use crate::commands::extract::sources::{collect_source_files, sort_and_dedupe_paths};
 use crate::error::CliError;
 
@@ -80,21 +80,8 @@ impl Command for LintOptions {
         let mut diagnostics = Vec::new();
         let mut failed_files = Vec::new();
         let mut suppressed = 0usize;
-        let analysis_options = ExtractCatalogMessagesOptions {
-            reference_scopes: config.reference_scopes,
-            mdx: config.mdx.clone(),
-            rules: config.lint.rules.clone().into(),
-        };
-        let cache_path = default_cache_path(&config.root_dir);
-        let mut cache = if self.no_cache || !config.extract_cache {
-            ExtractCache::disabled()
-        } else {
-            ExtractCache::load_with_options(
-                &cache_path,
-                &config.source_reference_root.to_string_lossy(),
-                &analysis_options,
-            )
-        };
+        let analysis_options = config.analysis_options();
+        let mut cache = load_extract_cache(&config, self.no_cache);
 
         let analysis_files = files
             .iter()
@@ -136,7 +123,7 @@ impl Command for LintOptions {
             .map(|path| path.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         cache.retain_paths(&cache_keys.iter().map(String::as_str).collect());
-        let _ = cache.save(&cache_path);
+        persist_extract_cache(&config, false, &mut cache);
 
         diagnostics.sort_by(|left, right| {
             (

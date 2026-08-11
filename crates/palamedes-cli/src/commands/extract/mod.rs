@@ -1,6 +1,6 @@
 //! `pmds extract` — read source files, update catalogs.
 
-mod cache;
+pub(crate) mod cache;
 pub(crate) mod sources;
 #[cfg(test)]
 mod test_support;
@@ -239,9 +239,9 @@ fn run_extraction(
     config: &LoadedConfig,
     options: &ExtractOptions,
 ) -> Result<ExtractOutput, CliError> {
-    let mut cache = load_extract_cache(config, options);
+    let mut cache = load_extract_cache(config, options.no_cache);
     let result = run_extraction_with_cache(config, options, &mut cache);
-    persist_extract_cache(config, options, &mut cache);
+    persist_extract_cache(config, options.verbose, &mut cache);
     result
 }
 
@@ -390,11 +390,7 @@ fn extract_from_catalog(
             // --threads wins over the config file; both fall back to the core default.
             max_threads: options.threads.or(config.extract_threads),
         },
-        palamedes::ExtractCatalogMessagesOptions {
-            reference_scopes: config.reference_scopes,
-            mdx: config.mdx.clone(),
-            rules: config.lint.rules.clone().into(),
-        },
+        config.analysis_options(),
         cache,
     )?;
     let extract_ms = extract_started_at.elapsed().as_millis();
@@ -987,7 +983,7 @@ catalogs:
 
         let options = cached_extract_options();
         let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
-        let mut cache = load_extract_cache(&config, &options);
+        let mut cache = load_extract_cache(&config, options.no_cache);
         run_extraction_with_cache(&config, &options, &mut cache).expect("extract");
 
         assert_eq!(
@@ -1028,7 +1024,7 @@ catalogs:
         let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
         let catalog_path = app.join("locales/en/messages.po");
 
-        let mut cache = load_extract_cache(&config, &options);
+        let mut cache = load_extract_cache(&config, options.no_cache);
         run_extraction_with_cache(&config, &options, &mut cache).expect("cold cached run");
         let cold = fs::read_to_string(&catalog_path).expect("read catalog");
 

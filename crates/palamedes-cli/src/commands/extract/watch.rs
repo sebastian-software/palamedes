@@ -120,7 +120,7 @@ pub(super) fn run_watch_mode(
      * therefore skips the read and parse of files nobody touched, which is the
      * whole point of watch mode.
      */
-    let mut cache = load_extract_cache(&config, options);
+    let mut cache = load_extract_cache(&config, options.no_cache);
     run_watch_extraction(&config, options, &mut cache)?;
 
     let (tx, rx) = mpsc::channel();
@@ -206,7 +206,13 @@ pub(super) fn run_watch_mode(
                     }
                     watched_roots = next_roots;
 
-                    rebuild_extract_cache_for_reload(&config, &reloaded, options, &mut cache);
+                    rebuild_extract_cache_for_reload(
+                        &config,
+                        &reloaded,
+                        options.no_cache,
+                        options.verbose,
+                        &mut cache,
+                    );
                     config = reloaded;
                     matchers = WatchMatchers::build(&config);
                 }
@@ -238,7 +244,7 @@ fn run_watch_extraction(
     cache: &mut ExtractCache,
 ) -> Result<(), CliError> {
     let result = run_extraction_with_cache(config, options, cache);
-    persist_extract_cache(config, options, cache);
+    persist_extract_cache(config, options.verbose, cache);
     match result {
         Ok(_) => Ok(()),
         Err(error) => {
@@ -337,22 +343,26 @@ catalogs:
         let app = repo.join("apps/web");
         fs::create_dir_all(app.join("app")).expect("create app");
         let config_path = app.join("palamedes.yaml");
-        let write_watch_config = |reference_root: &str, extract_cache: bool| {
-            fs::write(
-                &config_path,
-                format!(
-                    r#"locales: [en]
+        let write_watch_config =
+            |reference_root: &str, extract_cache: bool, placeholder_only: &str| {
+                fs::write(
+                    &config_path,
+                    format!(
+                        r#"locales: [en]
 source-locale: en
 source-reference-root: {reference_root}
 extract-cache: {extract_cache}
+lint:
+  rules:
+    placeholder-only: {placeholder_only}
 catalogs:
   - path: locales/{{locale}}/messages
     include: [app]
 "#
-                ),
-            )
-            .expect("write config");
-        };
+                    ),
+                )
+                .expect("write config");
+            };
         fs::write(
             app.join("app/page.tsx"),
             "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Dashboard`; }\n",
@@ -360,9 +370,9 @@ catalogs:
         .expect("write source");
 
         let options = cached_extract_options();
-        write_watch_config("config", true);
+        write_watch_config("config", true, "warning");
         let config = load_config(&app, Some(&config_path)).expect("load config");
-        let mut cache = load_extract_cache(&config, &options);
+        let mut cache = load_extract_cache(&config, options.no_cache);
         run_watch_extraction(&config, &options, &mut cache).expect("first extraction");
 
         let catalog_path = app.join("locales/en/messages.po");
@@ -372,9 +382,15 @@ catalogs:
 
         // Origins move to the git root; every source file is unchanged, so
         // without a rebuilt cache the catalog would keep the old origins.
-        write_watch_config("git", true);
+        write_watch_config("git", true, "warning");
         let reloaded = load_config(&app, Some(&config_path)).expect("reload config");
-        rebuild_extract_cache_for_reload(&config, &reloaded, &options, &mut cache);
+        rebuild_extract_cache_for_reload(
+            &config,
+            &reloaded,
+            options.no_cache,
+            options.verbose,
+            &mut cache,
+        );
         assert!(
             cache.is_empty(),
             "a stamp-relevant reload must start from an empty cache"
@@ -385,11 +401,35 @@ catalogs:
             .expect("read catalog")
             .contains("#: apps/web/app/page.tsx"));
 
+        // Rule levels contribute to the source-analysis cache stamp too.
+        // Reloading only a rule must therefore discard stale analysis.
+        write_watch_config("git", true, "off");
+        let rules_reloaded = load_config(&app, Some(&config_path)).expect("reload rules");
+        rebuild_extract_cache_for_reload(
+            &reloaded,
+            &rules_reloaded,
+            options.no_cache,
+            options.verbose,
+            &mut cache,
+        );
+        assert!(
+            cache.is_empty(),
+            "a rule-level reload must start from an empty cache"
+        );
+        run_watch_extraction(&rules_reloaded, &options, &mut cache)
+            .expect("extraction after rules reload");
+
         // Turning the cache off mid-watch has to take effect immediately.
-        let previous = reloaded;
-        write_watch_config("git", false);
+        let previous = rules_reloaded;
+        write_watch_config("git", false, "off");
         let disabled = load_config(&app, Some(&config_path)).expect("reload config");
-        rebuild_extract_cache_for_reload(&previous, &disabled, &options, &mut cache);
+        rebuild_extract_cache_for_reload(
+            &previous,
+            &disabled,
+            options.no_cache,
+            options.verbose,
+            &mut cache,
+        );
         run_watch_extraction(&disabled, &options, &mut cache).expect("extraction without cache");
         assert!(cache.is_empty(), "a disabled cache must not store entries");
         assert!(!cache.is_dirty());
