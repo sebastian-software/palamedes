@@ -1,5 +1,12 @@
 /.react-router/
 /build/
+
+# Ardo's Vite plugin materializes the content sources and then writes both the
+# route modules below and the routes.ts that registers them, on every build and
+# typecheck. Tracking the registry while ignoring what it points at kept a stale
+# copy in review: it listed a page that no longer existed and omitted a docs
+# page that had been added, neither of which the deployed site ever reflected.
+/app/routes.ts
 /app/routes/api-reference/
 /app/routes/blog/*.md
 /app/routes/decisions/
