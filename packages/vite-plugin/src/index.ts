@@ -6,13 +6,14 @@
  */
 
 import { createHash } from "node:crypto"
-import { realpathSync, statSync } from "node:fs"
+import { realpathSync } from "node:fs"
 import path from "node:path"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter, version as viteVersion } from "vite"
 import {
   loadPalamedesConfig,
-  resolveCatalogPath,
+  catalogMatchesSource,
+  catalogResourcePath,
   type PalamedesCatalogConfig,
   type LoadedPalamedesConfig,
   type PalamedesMdxConfig,
@@ -74,10 +75,6 @@ function stripQuery(id: string): string {
   return id.split("?")[0] ?? id
 }
 
-function normalizeFilterPath(value: string): string {
-  return value.replaceAll("\\", "/")
-}
-
 function canonicalPath(value: string): string {
   try {
     return realpathSync.native(value)
@@ -103,43 +100,6 @@ function catalogArtifactConfig(
       ...(catalog.format ? { format: catalog.format } : {}),
     })),
   }
-}
-
-function catalogMatchesSource(
-  cfg: LoadedPalamedesConfig,
-  catalog: PalamedesCatalogConfig,
-  id: string
-): boolean {
-  const rootDir = canonicalPath(cfg.rootDir)
-  const normalizePattern = (pattern: string, expandBareDirectory: boolean) => {
-    const absolute = path.resolve(rootDir, pattern)
-    if (expandBareDirectory) {
-      try {
-        if (statSync(absolute).isDirectory()) {
-          return `${normalizeFilterPath(absolute)}/**/*.{js,jsx,ts,tsx,mdx}`
-        }
-      } catch {
-        // Let the filter handle non-existent paths and glob patterns unchanged.
-      }
-    }
-    return normalizeFilterPath(absolute)
-  }
-  const include = catalog.include.map((pattern) => normalizePattern(pattern, true))
-  const exclude = (catalog.exclude ?? ["**/node_modules/**"]).map((pattern) =>
-    normalizePattern(pattern, false)
-  )
-  return createFilter(include, exclude)(normalizeFilterPath(canonicalPath(id)))
-}
-
-function catalogResourcePath(
-  cfg: LoadedPalamedesConfig,
-  catalog: PalamedesCatalogConfig,
-  locale: string
-): string {
-  const extension = catalog.format ?? "po"
-  const configuredPath = resolveCatalogPath(cfg, catalog.path, locale)
-  const parsed = path.parse(configuredPath)
-  return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
 }
 
 export type PalamedesPluginOptions = {

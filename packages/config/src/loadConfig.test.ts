@@ -4,7 +4,13 @@ import os from "node:os"
 
 import { afterEach, describe, expect, it } from "vitest"
 
-import { loadPalamedesConfig, loadPalamedesConfigSync, resolveCatalogPath } from "./index"
+import {
+  catalogMatchesSource,
+  catalogResourcePath,
+  loadPalamedesConfig,
+  loadPalamedesConfigSync,
+  resolveCatalogPath,
+} from "./index"
 
 const tempDirs: string[] = []
 
@@ -580,6 +586,23 @@ describe("resolveCatalogPath", () => {
     expect(resolveCatalogPath({ rootDir: "/repo" }, "locales/{locale}/{locale}", "de")).toBe(
       path.resolve("/repo/locales/de/de")
     )
+  })
+})
+
+describe("catalog source matching", () => {
+  const config = { rootDir: "/repo" }
+  const catalog = { path: "locales/{locale}", include: ["src/**/*.tsx"] }
+
+  it("includes dot-prefixed source paths consistently", () => {
+    expect(catalogMatchesSource(config, catalog, "/repo/src/.generated/page.tsx")).toBe(true)
+  })
+
+  it("applies the default node_modules exclusion", () => {
+    expect(catalogMatchesSource(config, catalog, "/repo/src/node_modules/page.tsx")).toBe(false)
+  })
+
+  it("resolves the configured locale path through one implementation", () => {
+    expect(catalogResourcePath(config, catalog, "de")).toBe("/repo/locales/de.po")
   })
 })
 

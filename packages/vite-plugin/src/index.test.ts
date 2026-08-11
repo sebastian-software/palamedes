@@ -22,6 +22,8 @@ vi.mock("@palamedes/config", async (importOriginal) => {
   return {
     loadPalamedesConfig: mocks.loadPalamedesConfig,
     resolveCatalogPath: actual.resolveCatalogPath,
+    catalogMatchesSource: actual.catalogMatchesSource,
+    catalogResourcePath: actual.catalogResourcePath,
   }
 })
 

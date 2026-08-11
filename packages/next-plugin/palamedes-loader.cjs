@@ -1,12 +1,15 @@
 "use strict"
 
 const { createHash } = require("node:crypto")
-const { readFileSync, realpathSync, statSync } = require("node:fs")
+const { readFileSync, realpathSync } = require("node:fs")
 const path = require("node:path")
 const { decode, encode } = require("@jridgewell/sourcemap-codec")
-const { loadPalamedesConfigSync } = require("@palamedes/config")
+const {
+  catalogMatchesSource,
+  catalogResourcePath,
+  loadPalamedesConfigSync,
+} = require("@palamedes/config")
 const { transformPalamedesMacros } = require("@palamedes/transform")
-const picomatch = require("picomatch")
 const { loadConfigCachedSync } = require("./palamedes-config-cache.cjs")
 const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 
@@ -24,42 +27,14 @@ function normalizePath(value) {
   return value.split(path.sep).join("/")
 }
 
-function catalogMatchesSource(config, catalog, sourcePath) {
-  // Keep catalog include/exclude matching in sync with catalogMatchesSource in
-  // packages/vite-plugin/src/index.ts.
-  const rootDir = canonicalPath(config.rootDir)
-  const source = normalizePath(canonicalPath(sourcePath))
-  const include = catalog.include.map((pattern) => {
-    const absolute = path.resolve(rootDir, pattern)
-    try {
-      if (statSync(absolute).isDirectory()) {
-        return `${normalizePath(absolute)}/**/*.{js,jsx,ts,tsx,mdx}`
-      }
-    } catch {
-      // Keep non-existent paths and explicit glob patterns unchanged.
-    }
-    return normalizePath(absolute)
-  })
-  const exclude = (catalog.exclude ?? ["**/node_modules/**"]).map((pattern) =>
-    normalizePath(path.resolve(rootDir, pattern))
-  )
-
-  return (
-    include.some((pattern) => picomatch.isMatch(source, pattern)) &&
-    !exclude.some((pattern) => picomatch.isMatch(source, pattern))
-  )
-}
-
-function catalogResourcePath(config, catalog, locale) {
+function nextCatalogResourcePath(config, catalog, locale) {
   const extension = catalog.format ?? "po"
   if (extension !== "po") {
     throw new Error(
       `Palamedes Next message splitting currently supports PO catalogs only. Catalog ${catalog.path} uses format ${extension}.`
     )
   }
-  const configuredPath = path.resolve(config.rootDir, catalog.path.replaceAll("{locale}", locale))
-  const parsed = path.parse(configuredPath)
-  return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
+  return catalogResourcePath(config, catalog, locale)
 }
 
 function selectedMessageImports(config, sourcePath, compiledIds) {
@@ -73,7 +48,7 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
   const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url")
   return catalogs.map((catalog) =>
     config.locales.map((locale) => {
-      const resourcePath = catalogResourcePath(config, catalog, locale)
+      const resourcePath = nextCatalogResourcePath(config, catalog, locale)
       return {
         locale,
         specifier: `${relativeImport(sourcePath, resourcePath)}?${SELECTED_MESSAGES_QUERY}=${selection}`,
