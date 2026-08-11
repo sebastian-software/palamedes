@@ -5,10 +5,28 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use oxc_ast::ast::{Expression, JSXAttributeValue, JSXExpression, JSXOpeningElement};
+use oxc_ast::ast::{
+    Expression, JSXAttributeValue, JSXChild, JSXExpression, JSXOpeningElement, TemplateLiteral,
+};
 use oxc_span::GetSpan;
 
+use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
+use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
+use crate::placeholder_name::{expression_name, jsx_expression_name};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SourceValue {
+    pub(crate) expression: String,
+    pub(crate) name: String,
+}
+
+pub(crate) struct LoweredJsxMessage {
+    pub(crate) ends_with_placeholder: bool,
+    pub(crate) message: String,
+    pub(crate) values: Vec<SourceValue>,
+    pub(crate) components: Vec<SourceValue>,
+}
 
 pub(crate) fn make_unique_value_name(
     preferred_name: String,
@@ -89,4 +107,195 @@ pub(crate) fn jsx_attributes(opening_element: &JSXOpeningElement<'_>) -> BTreeMa
         attrs.insert(key, value);
     }
     attrs
+}
+
+pub(crate) fn lower_template(
+    template: &TemplateLiteral<'_>,
+    source: &str,
+    syntax: &'static str,
+    used_value_names: &mut HashMap<String, String>,
+    escape_literal: impl Fn(&str) -> String,
+) -> PalamedesResult<(String, Vec<SourceValue>)> {
+    let mut message = String::new();
+    let mut values = Vec::new();
+
+    for (index, quasi) in template.quasis.iter().enumerate() {
+        let literal = quasi
+            .value
+            .cooked
+            .map(|value| value.as_str())
+            .unwrap_or_else(|| quasi.value.raw.as_str());
+        message.push_str(&escape_literal(literal));
+
+        if let Some(expr) = template.expressions.get(index) {
+            let Some(preferred_name) = expression_name(expr) else {
+                return Err(PalamedesError::UnnamedPlaceholder { syntax });
+            };
+            let expression =
+                expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
+            let name = make_unique_value_name(preferred_name, &expression, used_value_names);
+            message.push('{');
+            message.push_str(&name);
+            message.push('}');
+            push_unique_value(&mut values, SourceValue { expression, name });
+        }
+    }
+
+    Ok((message, values))
+}
+
+pub(crate) fn build_icu_message(
+    format: &str,
+    value_name: &str,
+    options: &[(String, String)],
+    offset: Option<&str>,
+) -> String {
+    let option_parts = options
+        .iter()
+        .map(|(key, value)| format!("{key} {{{value}}}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let offset_part = offset
+        .map(|value| format!(" offset:{value}"))
+        .unwrap_or_default();
+
+    format!("{{{value_name}, {format},{offset_part} {option_parts}}}")
+}
+
+pub(crate) fn lower_jsx_children(
+    children: &[JSXChild<'_>],
+    source: &str,
+    escape_literal: fn(&str) -> String,
+    component_expression: impl Fn(&JSXOpeningElement<'_>) -> String,
+) -> PalamedesResult<LoweredJsxMessage> {
+    let mut used_value_names = HashMap::new();
+    let mut next_component_index = 0usize;
+
+    lower_jsx_children_with_state(
+        children,
+        source,
+        escape_literal,
+        &component_expression,
+        &mut used_value_names,
+        &mut next_component_index,
+    )
+}
+
+fn lower_jsx_children_with_state<F>(
+    children: &[JSXChild<'_>],
+    source: &str,
+    escape_literal: fn(&str) -> String,
+    component_expression: &F,
+    used_value_names: &mut HashMap<String, String>,
+    next_component_index: &mut usize,
+) -> PalamedesResult<LoweredJsxMessage>
+where
+    F: Fn(&JSXOpeningElement<'_>) -> String,
+{
+    let mut parts = Vec::new();
+    let mut values = Vec::new();
+    let mut components = Vec::new();
+
+    for child in children {
+        match child {
+            JSXChild::Text(text) => {
+                let value = escape_literal(&clean_jsx_text(text.value.as_str()));
+                if !value.is_empty() {
+                    parts.push(JsxMessagePart::Text(value));
+                }
+            }
+            JSXChild::ExpressionContainer(container) => match &container.expression {
+                JSXExpression::EmptyExpression(_) => {}
+                JSXExpression::StringLiteral(literal) => {
+                    parts.push(JsxMessagePart::Text(escape_literal(literal.value.as_str())));
+                }
+                expr => {
+                    let Some(preferred_name) = jsx_expression_name(expr) else {
+                        return Err(PalamedesError::UnnamedPlaceholder {
+                            syntax: "JSX expression",
+                        });
+                    };
+                    let expression = jsx_expression_source(expr, source)
+                        .unwrap_or_else(|| preferred_name.clone());
+                    let name =
+                        make_unique_value_name(preferred_name, &expression, used_value_names);
+                    parts.push(JsxMessagePart::ValuePlaceholder(format!("{{{name}}}")));
+                    push_unique_value(&mut values, SourceValue { expression, name });
+                }
+            },
+            JSXChild::Element(element) => {
+                let name = next_component_index.to_string();
+                *next_component_index += 1;
+                let inner = lower_jsx_children_with_state(
+                    &element.children,
+                    source,
+                    escape_literal,
+                    component_expression,
+                    used_value_names,
+                    next_component_index,
+                )?;
+                let is_empty = inner.message.is_empty();
+                let value = if is_empty {
+                    format!("<{name}/>")
+                } else {
+                    format!("<{name}>{}</{name}>", inner.message)
+                };
+                parts.push(JsxMessagePart::ComponentPlaceholder { value, is_empty });
+                append_unique_values(&mut values, inner.values);
+                components.push(SourceValue {
+                    expression: component_expression(&element.opening_element),
+                    name,
+                });
+                components.extend(inner.components);
+            }
+            JSXChild::Fragment(fragment) => {
+                let inner = lower_jsx_children_with_state(
+                    &fragment.children,
+                    source,
+                    escape_literal,
+                    component_expression,
+                    used_value_names,
+                    next_component_index,
+                )?;
+                if !inner.message.is_empty() {
+                    parts.push(JsxMessagePart::Message {
+                        value: inner.message,
+                        ends_with_placeholder: inner.ends_with_placeholder,
+                    });
+                }
+                append_unique_values(&mut values, inner.values);
+                components.extend(inner.components);
+            }
+            JSXChild::Spread(_) => {
+                return Err(PalamedesError::UnnamedPlaceholder {
+                    syntax: "JSX spread child",
+                });
+            }
+        }
+    }
+
+    let joined = join_jsx_message_parts(&parts);
+    Ok(LoweredJsxMessage {
+        ends_with_placeholder: joined.ends_with_placeholder,
+        message: joined.message,
+        values,
+        components,
+    })
+}
+
+fn push_unique_value(values: &mut Vec<SourceValue>, value: SourceValue) {
+    if values
+        .iter()
+        .any(|existing| existing.name == value.name && existing.expression == value.expression)
+    {
+        return;
+    }
+
+    values.push(value);
+}
+
+fn append_unique_values(values: &mut Vec<SourceValue>, incoming: Vec<SourceValue>) {
+    for value in incoming {
+        push_unique_value(values, value);
+    }
 }
