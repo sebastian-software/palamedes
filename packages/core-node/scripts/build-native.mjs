@@ -1,18 +1,7 @@
-import { copyFileSync, existsSync, readFileSync } from "node:fs"
+import { copyFileSync, existsSync } from "node:fs"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { execFileSync } from "node:child_process"
-
-const scriptDir = import.meta.dirname
-const packageDir = process.cwd()
-const repoRoot = path.resolve(scriptDir, "../../..")
-
-const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"))
-
-// Native packages ship via `npm publish`, which — unlike `pnpm publish` — does
-// not embed the workspace-root LICENSE, so a declared "license": "MIT" would
-// otherwise reach the registry without any license text.
-copyFileSync(path.join(repoRoot, "LICENSE"), path.join(packageDir, "LICENSE"))
+import { buildNativePackage } from "../../../scripts/build-native-lib.mjs"
 
 const targets = {
   "@palamedes/core-node-darwin-arm64": {
@@ -47,139 +36,85 @@ const targets = {
   },
 }
 
-function detectLinuxLibc() {
-  const report = process.report?.getReport?.()
-  const glibcVersion = report?.header?.glibcVersionRuntime
+buildNativePackage({
+  targets,
+  cargoPackage: "palamedes-node",
+  unsupportedTargetMessage: (packageName) => `Unsupported native target package: ${packageName}`,
+  configureCargo({ cargoEnv, target }) {
+    if (target.libc !== "musl") {
+      return
+    }
 
-  if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
-    return "glibc"
-  }
+    // musl defaults to `+crt-static`, and cargo refuses to produce a `cdylib` for a
+    // statically linked target ("does not support these crate types"). Disabling
+    // crt-static has to reach cargo's crate-type check in the build *plan*, so it
+    // must go through RUSTFLAGS rather than trailing `cargo rustc -- <flags>`, which
+    // only reach the final crate too late for that check.
+    //
+    // The override is scoped to the musl *target* (not the global RUSTFLAGS), so
+    // host build scripts and proc-macros stay untouched.
+    //
+    // IMPORTANT: with crt-static off the cdylib links *dynamically*, so this build
+    // must run in a musl-native toolchain (see the "Build musl core-node addon"
+    // step in .github/workflows/publish.yml, which runs it inside `rust:alpine`
+    // on a runner of the same architecture). Cross-linking the dynamic cdylib
+    // from a glibc host makes the linker emit a glibc program interpreter
+    // (`ld-linux-*.so`), and the resulting `.node` then fails to load inside a
+    // musl runtime with `ERR_DLOPEN_FAILED`. A musl-native `cc` instead resolves
+    // the correct `ld-musl-*.so.1` loader, so no external `musl-gcc` linker or
+    // `link-self-contained` flag is needed. (The static-musl CLI *binary* keeps
+    // `+crt-static` and links fully statically, which is why it builds fine on
+    // the glibc host.)
+    //
+    // `panic=abort` is intentionally not forced here. Every synchronous export in
+    // `palamedes-node` opts into napi-rs's `#[napi(catch_unwind)]` guard, so Rust
+    // panics become catchable JavaScript errors instead of unwinding across the
+    // FFI boundary — matching the gnu, darwin, and win32 addons, which all build
+    // with the default unwind strategy.
+    //
+    // Prepend any inherited target rustflags so an externally provided value
+    // (e.g. CI optimisation overrides) is preserved rather than dropped.
+    const rustflagsVariable = `CARGO_TARGET_${target.rustTarget.toUpperCase().replaceAll("-", "_")}_RUSTFLAGS`
+    cargoEnv[rustflagsVariable] = [
+      process.env[rustflagsVariable] ?? "",
+      "-C target-feature=-crt-static",
+    ]
+      .filter(Boolean)
+      .join(" ")
+  },
+  postBuild({ packageDir, profile, repoRoot, target }) {
+    const extensionByPlatform = {
+      darwin: "dylib",
+      linux: "so",
+      win32: "dll",
+    }
+    const extension = extensionByPlatform[process.platform]
+    if (!extension) {
+      throw new Error(`Unsupported platform for Palamedes native build: ${process.platform}`)
+    }
 
-  return "musl"
-}
+    const binaryName =
+      process.platform === "win32" ? "palamedes_node.dll" : `libpalamedes_node.${extension}`
+    const sourcePath = target.rustTarget
+      ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
+      : path.join(repoRoot, "target", profile, binaryName)
+    const targetPath = path.join(packageDir, "palamedes-node.node")
 
-const target = targets[packageJson.name]
-const skipIncompatibleTarget = process.argv.includes("--if-compatible")
+    if (!existsSync(sourcePath)) {
+      throw new Error(`Expected native binary at ${sourcePath}`)
+    }
 
-if (!target) {
-  throw new Error(`Unsupported native target package: ${packageJson.name}`)
-}
+    copyFileSync(sourcePath, targetPath)
 
-if (process.platform !== target.platform || process.arch !== target.arch) {
-  incompatibleTarget(`requires ${target.platform}/${target.arch}`)
-}
+    if (process.platform !== "darwin") {
+      return
+    }
 
-if (
-  target.platform === "linux" &&
-  target.libc &&
-  detectLinuxLibc() !== target.libc &&
-  (!target.rustTarget || process.env.PALAMEDES_ALLOW_CROSS_NATIVE !== "1")
-) {
-  incompatibleTarget(`requires ${target.libc} libc`)
-}
-
-function incompatibleTarget(requirement) {
-  const message = `Cannot build ${packageJson.name} on ${process.platform}/${process.arch}: ${requirement}.`
-
-  if (skipIncompatibleTarget) {
-    console.log(`${message} Skipping because --if-compatible was requested.`)
-    process.exit(0)
-  }
-
-  throw new Error(
-    `${message} Re-run on its target host, or use --if-compatible for a workspace-wide build.`
-  )
-}
-
-const profile = process.env.PALAMEDES_RUST_PROFILE === "release" ? "release" : "debug"
-const extensionByPlatform = {
-  darwin: "dylib",
-  linux: "so",
-  win32: "dll",
-}
-
-const extension = extensionByPlatform[process.platform]
-
-if (!extension) {
-  throw new Error(`Unsupported platform for Palamedes native build: ${process.platform}`)
-}
-
-const muslNodeAddon = target.libc === "musl"
-const cargoArgs = ["build", "--package", "palamedes-node"]
-
-if (profile === "release") {
-  cargoArgs.push("--release")
-}
-
-if (target.rustTarget) {
-  cargoArgs.push("--target", target.rustTarget)
-}
-
-const cargoEnv = { ...process.env }
-
-if (muslNodeAddon) {
-  // musl defaults to `+crt-static`, and cargo refuses to produce a `cdylib` for a
-  // statically linked target ("does not support these crate types"). Disabling
-  // crt-static has to reach cargo's crate-type check in the build *plan*, so it
-  // must go through RUSTFLAGS rather than trailing `cargo rustc -- <flags>`, which
-  // only reach the final crate too late for that check.
-  //
-  // The override is scoped to the musl *target* (not the global RUSTFLAGS), so
-  // host build scripts and proc-macros stay untouched.
-  //
-  // IMPORTANT: with crt-static off the cdylib links *dynamically*, so this build
-  // must run in a musl-native toolchain (see the "Build musl core-node addon"
-  // step in .github/workflows/publish.yml, which runs it inside `rust:alpine`
-  // on a runner of the same architecture). Cross-linking the dynamic cdylib
-  // from a glibc host makes the linker emit a glibc program interpreter
-  // (`ld-linux-*.so`), and the resulting `.node` then fails to load inside a
-  // musl runtime with `ERR_DLOPEN_FAILED`. A musl-native `cc` instead resolves
-  // the correct `ld-musl-*.so.1` loader, so no external `musl-gcc` linker or
-  // `link-self-contained` flag is needed. (The static-musl CLI *binary* keeps
-  // `+crt-static` and links fully statically, which is why it builds fine on
-  // the glibc host.)
-  //
-  // `panic=abort` is intentionally not forced here. Every synchronous export in
-  // `palamedes-node` opts into napi-rs's `#[napi(catch_unwind)]` guard, so Rust
-  // panics become catchable JavaScript errors instead of unwinding across the
-  // FFI boundary — matching the gnu, darwin, and win32 addons, which all build
-  // with the default unwind strategy.
-  //
-  // Prepend any inherited target rustflags so an externally provided value
-  // (e.g. CI optimisation overrides) is preserved rather than dropped.
-  const rustflagsVariable = `CARGO_TARGET_${target.rustTarget.toUpperCase().replaceAll("-", "_")}_RUSTFLAGS`
-  cargoEnv[rustflagsVariable] = [
-    process.env[rustflagsVariable] ?? "",
-    "-C target-feature=-crt-static",
-  ]
-    .filter(Boolean)
-    .join(" ")
-}
-
-execFileSync("cargo", cargoArgs, {
-  cwd: repoRoot,
-  env: cargoEnv,
-  stdio: "inherit",
+    // The copied N-API module can carry an invalid embedded signature after the
+    // cargo build/copy step. Re-sign it ad hoc so Node can dlopen it reliably.
+    execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", targetPath], {
+      cwd: packageDir,
+      stdio: "inherit",
+    })
+  },
 })
-
-const binaryName =
-  process.platform === "win32" ? "palamedes_node.dll" : `libpalamedes_node.${extension}`
-const sourcePath = target.rustTarget
-  ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
-  : path.join(repoRoot, "target", profile, binaryName)
-const targetPath = path.join(packageDir, "palamedes-node.node")
-
-if (!existsSync(sourcePath)) {
-  throw new Error(`Expected native binary at ${sourcePath}`)
-}
-
-copyFileSync(sourcePath, targetPath)
-
-if (process.platform === "darwin") {
-  // The copied N-API module can carry an invalid embedded signature after the
-  // cargo build/copy step. Re-sign it ad hoc so Node can dlopen it reliably.
-  execFileSync("codesign", ["--force", "--sign", "-", "--timestamp=none", targetPath], {
-    cwd: packageDir,
-    stdio: "inherit",
-  })
-}

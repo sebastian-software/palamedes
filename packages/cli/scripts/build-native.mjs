@@ -1,15 +1,6 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
-import { execFileSync } from "node:child_process"
-
-const packageDir = process.cwd()
-const repoRoot = path.resolve(import.meta.dirname, "../../..")
-const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"))
-
-// Native packages ship via `npm publish`, which — unlike `pnpm publish` — does
-// not embed the workspace-root LICENSE, so a declared "license": "MIT" would
-// otherwise reach the registry without any license text.
-copyFileSync(path.join(repoRoot, "LICENSE"), path.join(packageDir, "LICENSE"))
+import { buildNativePackage } from "../../../scripts/build-native-lib.mjs"
 
 const targets = {
   "@palamedes/cli-darwin-arm64": {
@@ -43,79 +34,27 @@ const targets = {
     arch: "x64",
   },
 }
-const target = targets[packageJson.name]
-const skipIncompatibleTarget = process.argv.includes("--if-compatible")
+buildNativePackage({
+  targets,
+  cargoPackage: "palamedes-cli",
+  unsupportedTargetMessage: (packageName) =>
+    `Unsupported native CLI target package: ${packageName}`,
+  postBuild({ packageDir, profile, repoRoot, target }) {
+    const binaryName = process.platform === "win32" ? "pmds.exe" : "pmds"
+    const sourcePath = target.rustTarget
+      ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
+      : path.join(repoRoot, "target", profile, binaryName)
+    const binDir = path.join(packageDir, "bin")
+    const targetPath = path.join(binDir, binaryName)
 
-if (!target) {
-  throw new Error(`Unsupported native CLI target package: ${packageJson.name}`)
-}
+    if (!existsSync(sourcePath)) {
+      throw new Error(`Expected pmds binary at ${sourcePath}`)
+    }
 
-if (process.platform !== target.platform || process.arch !== target.arch) {
-  incompatibleTarget(`requires ${target.platform}/${target.arch}`)
-}
-
-if (
-  target.platform === "linux" &&
-  target.libc &&
-  detectLinuxLibc() !== target.libc &&
-  (!target.rustTarget || process.env.PALAMEDES_ALLOW_CROSS_NATIVE !== "1")
-) {
-  incompatibleTarget(`requires ${target.libc} libc`)
-}
-
-function incompatibleTarget(requirement) {
-  const message = `Cannot build ${packageJson.name} on ${process.platform}/${process.arch}: ${requirement}.`
-
-  if (skipIncompatibleTarget) {
-    console.log(`${message} Skipping because --if-compatible was requested.`)
-    process.exit(0)
-  }
-
-  throw new Error(
-    `${message} Re-run on its target host, or use --if-compatible for a workspace-wide build.`
-  )
-}
-
-function detectLinuxLibc() {
-  const report = process.report?.getReport?.()
-  const glibcVersion = report?.header?.glibcVersionRuntime
-
-  if (typeof glibcVersion === "string" && glibcVersion.length > 0) {
-    return "glibc"
-  }
-
-  return "musl"
-}
-
-const profile = process.env.PALAMEDES_RUST_PROFILE === "release" ? "release" : "debug"
-const binaryName = process.platform === "win32" ? "pmds.exe" : "pmds"
-const cargoArgs = ["build", "--package", "palamedes-cli"]
-
-if (profile === "release") {
-  cargoArgs.push("--release")
-}
-
-if (target.rustTarget) {
-  cargoArgs.push("--target", target.rustTarget)
-}
-
-execFileSync("cargo", cargoArgs, {
-  cwd: repoRoot,
-  stdio: "inherit",
+    mkdirSync(binDir, { recursive: true })
+    copyFileSync(sourcePath, targetPath)
+    if (process.platform !== "win32") {
+      chmodSync(targetPath, 0o755)
+    }
+  },
 })
-
-const sourcePath = target.rustTarget
-  ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
-  : path.join(repoRoot, "target", profile, binaryName)
-const binDir = path.join(packageDir, "bin")
-const targetPath = path.join(binDir, binaryName)
-
-if (!existsSync(sourcePath)) {
-  throw new Error(`Expected pmds binary at ${sourcePath}`)
-}
-
-mkdirSync(binDir, { recursive: true })
-copyFileSync(sourcePath, targetPath)
-if (process.platform !== "win32") {
-  chmodSync(targetPath, 0o755)
-}
