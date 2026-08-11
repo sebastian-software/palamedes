@@ -63,16 +63,24 @@ describe("workflow contracts", () => {
   })
 
   it("keeps the hot CI lane cancellable, least-privileged, and cached", async () => {
-    const ci = await readRepositoryFile(".github/workflows/ci.yml")
+    const [ci, setupWorkspace] = await Promise.all([
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile(".github/actions/setup-workspace/action.yml"),
+    ])
     const validate = job(ci, "validate", "validate-rust")
 
     expect(ci).toContain("permissions:\n  contents: read")
     expect(ci).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}")
-    // Both caches sit in the validate job because `pnpm build` drives cargo.
-    expect(validate).toContain("cache: pnpm")
-    expect(validate).toContain("uses: Swatinem/rust-cache@v2")
-    expect(validate.indexOf("uses: Swatinem/rust-cache@v2")).toBeLessThan(
-      validate.indexOf("run: pnpm install --frozen-lockfile")
+    expect(validate).toContain("uses: ./.github/actions/setup-workspace")
+    expect(setupWorkspace).toContain("node-version:")
+    expect(setupWorkspace).toContain("pnpm-cache:")
+    expect(setupWorkspace).toContain("rust:")
+    expect(setupWorkspace).toContain("rust-cache:")
+    expect(setupWorkspace).toContain("registry-url:")
+    expect(setupWorkspace).toContain("cache: pnpm")
+    expect(setupWorkspace).toContain("uses: Swatinem/rust-cache@v2")
+    expect(setupWorkspace.indexOf("cache: pnpm")).toBeLessThan(
+      setupWorkspace.indexOf("uses: Swatinem/rust-cache@v2")
     )
   })
 
@@ -87,6 +95,9 @@ describe("workflow contracts", () => {
       expect(validateRust).toContain(`- os: ${os}`)
     }
     expect(validateRust).toContain("run: cargo test --workspace --locked")
+    expect(validateRust).toContain("uses: ./.github/actions/setup-workspace")
+    expect(validateRust).toContain("rust-toolchain: ${{ matrix.toolchain }}")
+    expect(validateRust).toContain("rust-components: clippy, rustfmt")
     // Format and lint are platform-independent; only the tests fan out.
     expect(validateRust).toContain("if: ${{ matrix.lint }}")
     expect(toolchain).toContain('channel = "1.95"')
@@ -111,8 +122,7 @@ describe("workflow contracts", () => {
       readRepositoryFile("vitest.examples.config.mjs"),
     ])
 
-    expect(exampleVerification).toContain("- name: Cache Rust build artifacts")
-    expect(exampleVerification).toContain("uses: Swatinem/rust-cache@v2")
+    expect(exampleVerification).toContain("uses: ./.github/actions/setup-workspace")
     expect(exampleVerification).toContain(
       "PALAMEDES_BROWSER_RETRY: ${{ github.event_name == 'schedule' && '1' || '0' }}"
     )
@@ -126,7 +136,7 @@ describe("workflow contracts", () => {
     const publishJs = job(publish, "publish-js", "__missing__")
 
     expect(validateRelease).toContain("ref: ${{ github.sha }}")
-    expect(validateRelease).toContain("uses: Swatinem/rust-cache@v2")
+    expect(validateRelease).toContain("uses: ./.github/actions/setup-workspace")
     expect(validateRelease).toContain("run: pnpm test")
     expect(validateRelease).toContain("run: cargo test --workspace --locked")
     expect(publishNative).toMatch(/needs:\n(?:\s+- .+\n)*\s+- validate-release/m)
@@ -255,6 +265,27 @@ describe("workflow contracts", () => {
     // Workflow YAML cannot derive a choice list, so the matrix is the source of
     // truth and this is what notices when the two drift apart.
     expect(options).toEqual(["all", ...selectScreenshotExamples({}).map((example) => example.id)])
+  })
+
+  it("uses the shared workspace preamble and gives expensive jobs a deadline", async () => {
+    const workflowPaths = [
+      ".github/workflows/ci.yml",
+      ".github/workflows/dependency-audit.yml",
+      ".github/workflows/example-verification.yml",
+      ".github/workflows/deploy-site.yml",
+      ".github/workflows/capture-example-screenshots.yml",
+      ".github/workflows/publish.yml",
+    ]
+    const workflows = await Promise.all(workflowPaths.map(readRepositoryFile))
+
+    for (const workflow of workflows) {
+      expect(workflow).toContain("uses: ./.github/actions/setup-workspace")
+    }
+
+    const [capture, publish] = [workflows[4], workflows[5]]
+    expect(capture).toContain("timeout-minutes: 90")
+    expect(job(publish, "publish-native", "publish-js")).toContain("timeout-minutes: 45")
+    expect(job(publish, "publish-js", "verify-release")).toContain("timeout-minutes: 45")
   })
 
   it("verifies the built site before the deploy job publishes it", async () => {

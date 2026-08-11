@@ -64,25 +64,14 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
 
       # Runs before the build so a package that npm cannot mint a trusted
       # publishing token for stops the release in seconds, rather than after
       # the native packages have already shipped.
       - name: Check first-publish readiness
         run: node ./scripts/check-first-publish.mjs ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--warn-only' || '' }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -155,6 +144,7 @@ jobs:
             runner: windows-2025
             rust_target: ""
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
@@ -169,17 +159,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version: 24
           registry-url: https://registry.npmjs.org
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
 
       - name: Add musl Rust target
         if: matrix.rust_target != ''
@@ -266,6 +249,7 @@ jobs:
       - publish-native
     if: ${{ needs.determine-release.outputs.should_publish == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
@@ -278,14 +262,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version: 24
           registry-url: https://registry.npmjs.org
-
-      - name: Enable Corepack
-        run: corepack enable
 
       # The JS package build also rebuilds the host-native CLI and core-node
       # packages in parallel. Resolve the repository toolchain once up front so
@@ -368,10 +348,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version: 24
+          pnpm-cache: "false"
+          rust: "false"
+          rust-cache: "false"
           registry-url: https://registry.npmjs.org
 
       - name: Verify every package reached the registry

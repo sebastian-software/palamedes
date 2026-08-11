@@ -41,13 +41,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
         with:
           node-version: ${{ matrix.node }}
-
-      - name: Enable Corepack
-        run: corepack enable
 
       # A new public package needs one manual bootstrap publish before npm can
       # issue the OIDC token used by the release workflow. Surface that release
@@ -55,20 +52,6 @@ jobs:
       - name: Check first-publish readiness
         if: ${{ matrix.full }}
         run: node ./scripts/check-first-publish.mjs --warn-only
-
-      - name: Restore pnpm cache
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node }}
-          cache: pnpm
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      # `pnpm build` shells out to cargo for the native packages, so every
-      # validate leg would otherwise rebuild the oxc workspace from scratch.
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -198,23 +181,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
         with:
           node-version: 24
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.toolchain }}
-          components: clippy, rustfmt
+          pnpm-cache: "false"
+          rust-toolchain: ${{ matrix.toolchain }}
+          rust-components: clippy, rustfmt
 
       - name: Install cargo-llvm-cov
         if: matrix.os == 'ubuntu-24.04' && matrix.toolchain == 'stable'
         uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
 
       - name: Check Rust formatting
         if: ${{ matrix.lint }}
