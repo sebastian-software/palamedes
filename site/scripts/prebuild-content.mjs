@@ -160,8 +160,6 @@ async function collectDocs() {
     ["stability.md", 130],
     ["principles.md", 140],
     ["pseudo-localization.md", 150],
-    ["translation-workflow-surface.md", 152],
-    ["translation-module-boundaries.md", 153],
     ["translation-candidate-patches.md", 154],
     ["troubleshooting.md", 160],
   ])

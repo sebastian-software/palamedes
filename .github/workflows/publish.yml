@@ -162,6 +162,7 @@ jobs:
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
         with:
+          rust-cache: "false"
           registry-url: https://registry.npmjs.org
 
       - name: Add musl Rust target
@@ -265,6 +266,7 @@ jobs:
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
         with:
+          rust-cache: "false"
           registry-url: https://registry.npmjs.org
 
       # The JS package build also rebuilds the host-native CLI and core-node

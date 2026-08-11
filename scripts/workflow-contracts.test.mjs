@@ -141,7 +141,9 @@ describe("workflow contracts", () => {
     expect(validateRelease).toContain("run: cargo test --workspace --locked")
     expect(publishNative).toMatch(/needs:\n(?:\s+- .+\n)*\s+- validate-release/m)
     expect(publishNative).toContain("ref: ${{ github.sha }}")
+    expect(publishNative).toContain('rust-cache: "false"')
     expect(publishJs).toContain("ref: ${{ github.sha }}")
+    expect(publishJs).toContain('rust-cache: "false"')
     expect(publishJs).toContain("- name: Materialize pinned Rust toolchain")
     expect(publishJs.indexOf("run: cargo --version")).toBeLessThan(
       publishJs.indexOf("- name: Build publishable packages")
@@ -234,6 +236,7 @@ describe("workflow contracts", () => {
       expect(determineRelease).toContain("run: node ./scripts/determine-release.mjs")
       expect(determineRelease).toContain("BASE_REF: ${{ github.event.before }}")
     }
+    expect(job(container, "build-and-push", "__missing__")).toContain("ref: ${{ github.sha }}")
     expect(releaseDetection).toContain("chore: release ")
     expect(releaseDetection).toContain("0000000000000000000000000000000000000000")
   })

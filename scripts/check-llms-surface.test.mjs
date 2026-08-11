@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
@@ -12,6 +12,10 @@ const source = new Map()
 function read(file) {
   if (!source.has(file)) source.set(file, readFileSync(path.join(root, file), "utf8"))
   return source.get(file)
+}
+
+function list(directory) {
+  return readdirSync(path.join(root, directory))
 }
 
 function withMutation(file, mutate) {
@@ -93,6 +97,18 @@ test("rejects an incomplete ADR inventory in full context", () => {
   expectRejected(
     "llms-full.txt",
     (text) => text.replace("- `/adr/025-react-router-rsc-entry-request-scope.md`\n", ""),
+    /LLMS ADR inventory changed/
+  )
+})
+
+test("rejects an ADR file added outside the full-context inventory", () => {
+  assert.throws(
+    () =>
+      checkLlmsSurface({
+        read,
+        listDirectories: (directory) =>
+          directory === "adr" ? [...list(directory), "026-new-decision.md"] : list(directory),
+      }),
     /LLMS ADR inventory changed/
   )
 })
