@@ -7,6 +7,7 @@ import { messages as esMessages } from "./locales/es.po"
 
 export const LOCALES = ["en", "de", "es"] as const
 export const DEFAULT_LOCALE = "en"
+export const LOCALE_COOKIE = "locale"
 
 export type Locale = (typeof LOCALES)[number]
 export type ResolvedLocale = {
@@ -17,6 +18,8 @@ export type ResolvedLocale = {
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
+  cookies: { choice: LOCALE_COOKIE },
+  hosts: { locales: { en: "en.lvh.me", de: "de.lvh.me", es: "es.lvh.me" } },
 })
 
 export const LOCALE_LABELS = locales.labels
@@ -54,8 +57,10 @@ export function getRootRedirectLocale(request: Request): Locale {
 export function getRouteBanner(request: Request, locale: Locale): string | null {
   const suggestion = locales.suggest({
     acceptLanguageHeader: request.headers.get("accept-language"),
+    cookieHeader: request.headers.get("cookie"),
     currentLocale: locale,
     pathname: `/${locale}`,
+    requestHost: request.headers.get("host"),
   })
 
   return suggestion
@@ -63,6 +68,10 @@ export function getRouteBanner(request: Request, locale: Locale): string | null 
     : null
 }
 
-export function getRouteSwitchLinks() {
-  return LOCALES.map((locale) => ({ href: `/${locale}`, locale }))
+export function getRouteSwitchLinks(request: Request) {
+  const host = request.headers.get("host") ?? "en.lvh.me:4061"
+  return LOCALES.map((locale) => ({
+    href: locales.canonicalUrl({ locale, pathname: `/${locale}`, requestHost: host }),
+    locale,
+  }))
 }

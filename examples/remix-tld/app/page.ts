@@ -73,9 +73,12 @@ function renderLocaleSwitcher(
       const locale = item.locale
       const active = locale === currentLocale
       if (item.href) {
-        return `<a aria-current="${active ? "page" : "false"}" href="${escapeHtml(item.href)}">
-        ${escapeHtml(LOCALE_LABELS[locale])}
-      </a>`
+        return `<form action="/locale" method="post">
+        <input name="redirect" type="hidden" value="${escapeHtml(item.href)}" />
+        <button aria-pressed="${active}" name="locale" type="submit" value="${escapeHtml(locale)}">
+          ${escapeHtml(LOCALE_LABELS[locale])}
+        </button>
+      </form>`
       }
 
       return `<form action="/locale" method="post">

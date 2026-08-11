@@ -4,8 +4,9 @@ import { createRemixI18nServer } from "@palamedes/remix/server"
 import { messages as deMessages } from "./locales/de.po"
 import { messages as enMessages } from "./locales/en.po"
 import { messages as esMessages } from "./locales/es.po"
+import { messages as frMessages } from "./locales/fr.po"
 
-export const LOCALES = ["en", "de", "es"] as const
+export const LOCALES = ["en", "de", "es", "fr"] as const
 export const DEFAULT_LOCALE = "en"
 export const LOCALE_COOKIE = "locale"
 
@@ -18,6 +19,7 @@ export type ResolvedLocale = {
 export const locales = defineLocaleControls<Locale>({
   locales: LOCALES,
   defaultLocale: DEFAULT_LOCALE,
+  cookies: { choice: LOCALE_COOKIE },
   hosts: { mode: "tld", tld: { com: "en" }, defaultTld: "com" },
 })
 
@@ -28,6 +30,7 @@ const CATALOGS: Record<Locale, CatalogMessages> = {
   en: enMessages,
   de: deMessages,
   es: esMessages,
+  fr: frMessages,
 }
 
 export function getLocaleLabel(locale: Locale): string {
