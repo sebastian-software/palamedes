@@ -1,17 +1,9 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
 import ts from "typescript"
+import { publicWorkspacePackages } from "./release-packages.mjs"
 
 const root = process.cwd()
 const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-published-types-"))
@@ -45,22 +37,6 @@ const UNTYPED_PACKAGES = new Map([
 const UNTYPED_SUBPATHS = new Map([
   ["@palamedes/next-plugin", new Set(["./palamedes-loader", "./palamedes-po-loader"])],
 ])
-
-function readPackages() {
-  const packages = []
-  for (const directory of readdirSync(path.join(root, "packages")).sort()) {
-    const manifestPath = path.join(root, "packages", directory, "package.json")
-    let manifest
-    try {
-      manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
-    } catch {
-      continue
-    }
-    if (manifest.private) continue
-    packages.push({ directory, manifest })
-  }
-  return packages
-}
 
 function typedSubpaths({ manifest }) {
   const skipped = UNTYPED_SUBPATHS.get(manifest.name) ?? new Set()
@@ -130,7 +106,7 @@ function assertExportTargetsExist(packages) {
       if (typeof manifest[field] === "string") targets.add(manifest[field])
     }
     for (const target of [...targets].sort()) {
-      if (existsSync(path.join(root, "packages", directory, target))) continue
+      if (existsSync(path.join(root, directory, target))) continue
       problems.push(
         `${manifest.name} advertises ${target}, which is missing after a build; drop the condition or emit the file.`
       )
@@ -142,8 +118,8 @@ function assertExportTargetsExist(packages) {
 }
 
 function linkPackage(name) {
-  const packageDirectory = path.join(root, "packages", name)
-  const fixturePackage = path.join(scopeDirectory, name)
+  const packageDirectory = path.join(root, name)
+  const fixturePackage = path.join(scopeDirectory, path.basename(name))
   symlinkSync(packageDirectory, fixturePackage, process.platform === "win32" ? "junction" : "dir")
 }
 
@@ -172,7 +148,7 @@ function checkProgram(fileName, compilerOptions) {
 
 try {
   mkdirSync(scopeDirectory, { recursive: true })
-  const packages = readPackages()
+  const packages = publicWorkspacePackages(root)
   assertEveryPublishedPackageIsCovered(packages)
 
   const typedPackages = packages.filter(({ manifest }) => manifest.types)

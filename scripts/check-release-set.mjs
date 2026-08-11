@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
+import { publicWorkspacePackages } from "./release-packages.mjs"
 
 const root = process.cwd()
 const nativePackagePattern = /^@palamedes\/(?:core-node|cli)-.+/
@@ -67,30 +68,12 @@ const requiredTomlExtraFiles = [
   },
 ]
 
-const publicPackages = readdirSync(path.join(root, "packages"))
-  .map((directory) => {
-    const packagePath = path.join("packages", directory)
-    const packageJsonPath = path.join(packagePath, "package.json")
-
-    if (!existsSync(path.join(root, packageJsonPath))) {
-      return null
-    }
-
-    const packageJson = readJson(packageJsonPath)
-
-    if (packageJson.private) {
-      return null
-    }
-
-    return {
-      isNative: nativePackagePattern.test(packageJson.name),
-      name: packageJson.name,
-      path: packagePath,
-      version: packageJson.version,
-    }
-  })
-  .filter(Boolean)
-  .sort((a, b) => a.name.localeCompare(b.name))
+const publicPackages = publicWorkspacePackages(root).map(({ directory, name, version }) => ({
+  isNative: nativePackagePattern.test(name),
+  name,
+  path: directory,
+  version,
+}))
 
 const extraVersionFiles = new Set(
   rootReleaseExtraFiles
