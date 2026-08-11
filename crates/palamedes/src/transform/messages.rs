@@ -10,16 +10,14 @@ use crate::choice::{
     expression_offset_value, invalid_choice_option, invalid_offset, is_plural_format,
     jsx_offset_value, normalize_choice_option_key,
 };
-use crate::error::{PalamedesError, PalamedesResult};
+use crate::error::PalamedesResult;
 use crate::icu_text::escape_icu_literal;
 use crate::jsx_entities::decode_jsx_entities;
-use crate::jsx_message::{
-    clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
-};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
 use crate::source_message::{
-    expression_source as shared_expression_source, jsx_attributes as shared_jsx_attributes,
-    jsx_expression_source as shared_jsx_expression_source, make_unique_value_name,
+    build_icu_message as shared_build_icu_message, expression_source as shared_expression_source,
+    jsx_attributes as shared_jsx_attributes, jsx_expression_source as shared_jsx_expression_source,
+    lower_jsx_children, lower_template, make_unique_value_name,
 };
 
 use super::Replacement;
@@ -273,125 +271,33 @@ pub(super) fn extract_jsx_children_parts(
     solid_wrappers: bool,
     replacements: &[Replacement],
 ) -> PalamedesResult<(String, Vec<ValueBinding>, Vec<ValueBinding>)> {
-    let mut used_value_names = HashMap::<String, String>::new();
-    let mut next_component_index = 0usize;
-
-    let (joined_message, values, components) = extract_jsx_children_parts_with_state(
-        children,
-        source,
-        solid_wrappers,
-        replacements,
-        &mut used_value_names,
-        &mut next_component_index,
-    )?;
-
-    Ok((joined_message.message, values, components))
-}
-
-fn extract_jsx_children_parts_with_state(
-    children: &[JSXChild<'_>],
-    source: &str,
-    solid_wrappers: bool,
-    replacements: &[Replacement],
-    used_value_names: &mut HashMap<String, String>,
-    next_component_index: &mut usize,
-) -> PalamedesResult<(JoinedJsxMessage, Vec<ValueBinding>, Vec<ValueBinding>)> {
-    let mut parts = Vec::new();
-    let mut values = Vec::new();
-    let mut components = Vec::new();
-
-    for child in children {
-        match child {
-            JSXChild::Text(text) => {
-                let value = escape_icu_literal(&clean_jsx_text(text.value.as_str()));
-                if !value.is_empty() {
-                    parts.push(JsxMessagePart::Text(value));
-                }
-            }
-            JSXChild::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::EmptyExpression(_) => {}
-                JSXExpression::StringLiteral(literal) => {
-                    parts.push(JsxMessagePart::Text(escape_icu_literal(
-                        literal.value.as_str(),
-                    )));
-                }
-                expr => {
-                    let binding =
-                        jsx_value_binding(expr, source, "JSX expression", used_value_names)?;
-                    parts.push(JsxMessagePart::ValuePlaceholder(format!(
-                        "{{{}}}",
-                        binding.name
-                    )));
-                    push_unique_binding(&mut values, binding);
-                }
-            },
-            JSXChild::Element(element) => {
-                let component_expression = if solid_wrappers {
-                    opening_element_to_component_wrapper(
-                        &element.opening_element,
-                        source,
-                        replacements,
-                    )
-                } else {
-                    opening_element_to_component(&element.opening_element, source, replacements)
-                };
-                let component_name = next_component_index.to_string();
-                *next_component_index += 1;
-
-                let (inner_message, inner_values, inner_components) =
-                    extract_jsx_children_parts_with_state(
-                        &element.children,
-                        source,
-                        solid_wrappers,
-                        replacements,
-                        used_value_names,
-                        next_component_index,
-                    )?;
-                let is_empty = inner_message.message.is_empty();
-                let value = if is_empty {
-                    format!("<{component_name}/>")
-                } else {
-                    format!(
-                        "<{component_name}>{}</{component_name}>",
-                        inner_message.message
-                    )
-                };
-                parts.push(JsxMessagePart::ComponentPlaceholder { value, is_empty });
-                append_unique_bindings(&mut values, inner_values);
-                components.push(ValueBinding {
-                    expression: component_expression,
-                    name: component_name,
-                });
-                components.extend(inner_components);
-            }
-            JSXChild::Fragment(fragment) => {
-                let (inner_message, inner_values, inner_components) =
-                    extract_jsx_children_parts_with_state(
-                        &fragment.children,
-                        source,
-                        solid_wrappers,
-                        replacements,
-                        used_value_names,
-                        next_component_index,
-                    )?;
-                if !inner_message.message.is_empty() {
-                    parts.push(JsxMessagePart::Message {
-                        value: inner_message.message,
-                        ends_with_placeholder: inner_message.ends_with_placeholder,
-                    });
-                }
-                append_unique_bindings(&mut values, inner_values);
-                components.extend(inner_components);
-            }
-            JSXChild::Spread(_) => {
-                return Err(PalamedesError::UnnamedPlaceholder {
-                    syntax: "JSX spread child",
-                });
-            }
+    let lowered = lower_jsx_children(children, source, escape_icu_literal, |opening_element| {
+        if solid_wrappers {
+            opening_element_to_component_wrapper(opening_element, source, replacements)
+        } else {
+            opening_element_to_component(opening_element, source, replacements)
         }
-    }
+    })?;
 
-    Ok((join_jsx_message_parts(&parts), values, components))
+    Ok((
+        lowered.message,
+        lowered
+            .values
+            .into_iter()
+            .map(|value| ValueBinding {
+                expression: value.expression,
+                name: value.name,
+            })
+            .collect(),
+        lowered
+            .components
+            .into_iter()
+            .map(|value| ValueBinding {
+                expression: value.expression,
+                name: value.name,
+            })
+            .collect(),
+    ))
 }
 
 fn push_unique_binding(bindings: &mut Vec<ValueBinding>, binding: ValueBinding) {
@@ -424,22 +330,6 @@ pub(super) fn jsx_attributes(
     shared_jsx_attributes(opening_element)
 }
 
-pub(super) fn expression_binding(
-    expr: &Expression<'_>,
-    source: &str,
-    syntax: &'static str,
-    used_value_names: &mut HashMap<String, String>,
-) -> PalamedesResult<ValueBinding> {
-    let Some(preferred_name) = expression_name(expr) else {
-        return Err(PalamedesError::UnnamedPlaceholder { syntax });
-    };
-    let expression =
-        shared_expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
-    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
-
-    Ok(ValueBinding { expression, name })
-}
-
 pub(super) fn choice_expression_binding(
     expr: &Expression<'_>,
     source: &str,
@@ -452,21 +342,6 @@ pub(super) fn choice_expression_binding(
     let name = make_unique_value_name(preferred_name, &expression, used_value_names);
 
     ValueBinding { expression, name }
-}
-
-pub(super) fn jsx_value_binding(
-    expr: &JSXExpression<'_>,
-    source: &str,
-    syntax: &'static str,
-    used_value_names: &mut HashMap<String, String>,
-) -> PalamedesResult<ValueBinding> {
-    let expression = shared_jsx_expression_source(expr, source).unwrap_or_default();
-    let Some(preferred_name) = jsx_expression_name(expr) else {
-        return Err(PalamedesError::UnnamedPlaceholder { syntax });
-    };
-    let name = make_unique_value_name(preferred_name, &expression, used_value_names);
-
-    Ok(ValueBinding { expression, name })
 }
 
 pub(super) fn choice_jsx_value_binding(
@@ -510,28 +385,23 @@ fn template_to_message_with_state(
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<(String, Vec<ValueBinding>)> {
-    let mut message = String::new();
-    let mut values = Vec::new();
-
-    for (index, quasi) in template.quasis.iter().enumerate() {
-        // Authored literal text: escape before appending so an apostrophe at a
-        // segment boundary cannot quote the placeholder that follows.
-        if let Some(value) = quasi.value.cooked {
-            message.push_str(&escape_icu_literal(value.as_str()));
-        } else {
-            message.push_str(&escape_icu_literal(quasi.value.raw.as_str()));
-        }
-
-        if let Some(expr) = template.expressions.get(index) {
-            let binding = expression_binding(expr, source, syntax, used_value_names)?;
-            message.push('{');
-            message.push_str(&binding.name);
-            message.push('}');
-            push_unique_binding(&mut values, binding);
-        }
-    }
-
-    Ok((message, values))
+    let (message, values) = lower_template(
+        template,
+        source,
+        syntax,
+        used_value_names,
+        escape_icu_literal,
+    )?;
+    Ok((
+        message,
+        values
+            .into_iter()
+            .map(|value| ValueBinding {
+                expression: value.expression,
+                name: value.name,
+            })
+            .collect(),
+    ))
 }
 
 pub(super) fn build_icu_message(
@@ -540,16 +410,7 @@ pub(super) fn build_icu_message(
     options: &[(String, String)],
     offset: Option<&str>,
 ) -> String {
-    let option_parts = options
-        .iter()
-        .map(|(key, value)| format!("{key} {{{value}}}"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let offset_part = offset
-        .map(|value| format!(" offset:{value}"))
-        .unwrap_or_default();
-
-    format!("{{{value_name}, {format},{offset_part} {option_parts}}}")
+    shared_build_icu_message(format, value_name, options, offset)
 }
 
 pub(super) fn escape_string(value: &str) -> String {

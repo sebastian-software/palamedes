@@ -1116,6 +1116,32 @@ const richChoice = <Plural value={props.quantity()} one="# task" other="# tasks"
 }
 
 #[test]
+fn shared_lowering_keeps_complex_template_and_jsx_message_ids_aligned() {
+    let source = r##"import { plural, t } from "@palamedes/core/macro";
+import { Plural, Trans } from "@palamedes/react/macro";
+
+const template = t`Welcome ${user.name} and ${owner.name}`;
+const rich = <Trans>Hi {user.name}<strong>{owner.name}</strong><>{user.name}!</></Trans>;
+const choice = plural(items.length, {
+  one: `${user.name} has one item`,
+  other: `${owner.name} has # items`,
+});
+const richChoice = <Plural value={items.length} one={`${user.name} has one entry`} other={`${owner.name} has # entries`} />;
+"##;
+    let scoped_source = scope_macro_test_source(source, "test.tsx");
+    let extracted = crate::extract::extract_messages(&scoped_source, "test.tsx")
+        .expect("complex authored messages should extract");
+    let transformed = transform_macros(source, "test.tsx", None)
+        .expect("complex authored messages should transform");
+    let extracted_ids = extracted
+        .iter()
+        .map(|message| compiled_message_key(&message.message, message.context.as_deref()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(transformed.compiled_ids, extracted_ids);
+}
+
+#[test]
 fn extractor_preserves_source_apostrophes_while_transform_escapes_runtime_text() {
     let source = r##"import { plural, t } from "@palamedes/core/macro";
 import { Trans } from "@palamedes/react/macro";

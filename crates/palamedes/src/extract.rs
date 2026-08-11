@@ -14,9 +14,7 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract_cache::{ExtractCache, ReadStartFingerprint};
 use crate::icu_text::escape_icu_source_literal;
 use crate::jsx_entities::decode_jsx_entities;
-use crate::jsx_message::{
-    clean_jsx_text, join_jsx_message_parts, JoinedJsxMessage, JsxMessagePart,
-};
+use crate::jsx_message::clean_jsx_text;
 use crate::mdx::{analyze_mdx, MdxOptions};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
 use crate::source::{
@@ -26,7 +24,10 @@ use crate::source::{
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
 };
 use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
-use crate::source_message::{expression_source, jsx_attributes, make_unique_value_name};
+use crate::source_message::{
+    build_icu_message as shared_build_icu_message, expression_source, jsx_attributes,
+    lower_jsx_children, lower_template,
+};
 use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -1441,29 +1442,17 @@ fn template_to_message_with_state(
     syntax: &'static str,
     used_value_names: &mut HashMap<String, String>,
 ) -> PalamedesResult<(String, BTreeMap<String, String>)> {
-    let mut message = String::new();
-    let mut placeholders = BTreeMap::new();
-
-    for (index, quasi) in template.quasis.iter().enumerate() {
-        if let Some(value) = quasi.value.cooked {
-            message.push_str(value.as_str());
-        } else {
-            message.push_str(quasi.value.raw.as_str());
-        }
-
-        if let Some(expr) = template.expressions.get(index) {
-            let Some(preferred_name) = expression_name(expr) else {
-                return Err(PalamedesError::UnnamedPlaceholder { syntax });
-            };
-            let expression =
-                expression_source(expr, source).unwrap_or_else(|| preferred_name.clone());
-            let placeholder = make_unique_value_name(preferred_name, &expression, used_value_names);
-            message.push('{');
-            message.push_str(&placeholder);
-            message.push('}');
-            placeholders.insert(placeholder, expression);
-        }
-    }
+    let (message, values) = lower_template(
+        template,
+        source,
+        syntax,
+        used_value_names,
+        ToOwned::to_owned,
+    )?;
+    let placeholders = values
+        .into_iter()
+        .map(|value| (value.name, value.expression))
+        .collect();
 
     Ok((escape_icu_source_literal(&message), placeholders))
 }
@@ -1503,97 +1492,8 @@ fn extract_jsx_children_as_message(
     children: &[JSXChild<'_>],
     source: &str,
 ) -> PalamedesResult<String> {
-    let mut used_value_names = HashMap::new();
-    let mut next_component_index = 0usize;
-
-    Ok(escape_icu_source_literal(
-        &extract_jsx_children_as_message_with_state(
-            children,
-            source,
-            &mut used_value_names,
-            &mut next_component_index,
-        )?
-        .message,
-    ))
-}
-
-fn extract_jsx_children_as_message_with_state(
-    children: &[JSXChild<'_>],
-    source: &str,
-    used_value_names: &mut HashMap<String, String>,
-    next_component_index: &mut usize,
-) -> PalamedesResult<JoinedJsxMessage> {
-    let mut parts = Vec::new();
-
-    for child in children {
-        match child {
-            JSXChild::Text(text) => {
-                let value = clean_jsx_text(text.value.as_str());
-                if !value.is_empty() {
-                    parts.push(JsxMessagePart::Text(value));
-                }
-            }
-            JSXChild::ExpressionContainer(container) => match &container.expression {
-                JSXExpression::EmptyExpression(_) => {}
-                JSXExpression::StringLiteral(literal) => {
-                    parts.push(JsxMessagePart::Text(literal.value.to_string()));
-                }
-                expr => {
-                    let Some(preferred_name) = jsx_expression_name(expr) else {
-                        return Err(PalamedesError::UnnamedPlaceholder {
-                            syntax: "JSX expression",
-                        });
-                    };
-                    let span = expr.span();
-                    let expression = source
-                        .get(span.start as usize..span.end as usize)
-                        .map(ToOwned::to_owned)
-                        .unwrap_or_else(|| preferred_name.clone());
-                    let name =
-                        make_unique_value_name(preferred_name, &expression, used_value_names);
-                    parts.push(JsxMessagePart::ValuePlaceholder(format!("{{{name}}}")));
-                }
-            },
-            JSXChild::Element(element) => {
-                let name = next_component_index.to_string();
-                *next_component_index += 1;
-                let inner = extract_jsx_children_as_message_with_state(
-                    &element.children,
-                    source,
-                    used_value_names,
-                    next_component_index,
-                )?;
-                let is_empty = inner.message.is_empty();
-                let value = if is_empty {
-                    format!("<{name}/>")
-                } else {
-                    format!("<{name}>{}</{name}>", inner.message)
-                };
-                parts.push(JsxMessagePart::ComponentPlaceholder { value, is_empty });
-            }
-            JSXChild::Fragment(fragment) => {
-                let inner = extract_jsx_children_as_message_with_state(
-                    &fragment.children,
-                    source,
-                    used_value_names,
-                    next_component_index,
-                )?;
-                if !inner.message.is_empty() {
-                    parts.push(JsxMessagePart::Message {
-                        value: inner.message,
-                        ends_with_placeholder: inner.ends_with_placeholder,
-                    });
-                }
-            }
-            JSXChild::Spread(_) => {
-                return Err(PalamedesError::UnnamedPlaceholder {
-                    syntax: "JSX spread child",
-                });
-            }
-        }
-    }
-
-    Ok(join_jsx_message_parts(&parts))
+    let lowered = lower_jsx_children(children, source, ToOwned::to_owned, |_| String::new())?;
+    Ok(escape_icu_source_literal(&lowered.message))
 }
 
 fn extract_choice_options_from_jsx(
@@ -1670,17 +1570,8 @@ fn build_icu_message(
     options: &ChoiceOptions,
     offset: Option<&str>,
 ) -> String {
-    let option_parts = options
-        .iter()
-        .map(|(key, value)| format!("{key} {{{value}}}"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let offset_part = offset
-        .map(|value| format!(" offset:{value}"))
-        .unwrap_or_default();
-
-    escape_icu_source_literal(&format!(
-        "{{{value_name}, {format},{offset_part} {option_parts}}}"
+    escape_icu_source_literal(&shared_build_icu_message(
+        format, value_name, options, offset,
     ))
 }
 
