@@ -224,6 +224,8 @@ describe("example sibling byte parity", () => {
     const actual = await actualSiblingFiles()
 
     expect([...declared].sort()).toEqual([...actual].sort())
-    expect(INTENDED_DIVERGENCES.every(([, , reason]) => reason.length > 0)).toBe(true)
+    expect(INTENDED_DIVERGENCES.every(([_example, _component, reason]) => reason.length > 0)).toBe(
+      true
+    )
   })
 })
