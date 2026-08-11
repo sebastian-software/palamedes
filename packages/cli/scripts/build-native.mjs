@@ -44,16 +44,14 @@ const targets = {
   },
 }
 const target = targets[packageJson.name]
+const skipIncompatibleTarget = process.argv.includes("--if-compatible")
 
 if (!target) {
   throw new Error(`Unsupported native CLI target package: ${packageJson.name}`)
 }
 
 if (process.platform !== target.platform || process.arch !== target.arch) {
-  console.log(
-    `Skipping native CLI build for ${packageJson.name} on ${process.platform}/${process.arch}`
-  )
-  process.exit(0)
+  incompatibleTarget(`requires ${target.platform}/${target.arch}`)
 }
 
 if (
@@ -62,8 +60,20 @@ if (
   detectLinuxLibc() !== target.libc &&
   (!target.rustTarget || process.env.PALAMEDES_ALLOW_CROSS_NATIVE !== "1")
 ) {
-  console.log(`Skipping native CLI build for ${packageJson.name} due to libc mismatch`)
-  process.exit(0)
+  incompatibleTarget(`requires ${target.libc} libc`)
+}
+
+function incompatibleTarget(requirement) {
+  const message = `Cannot build ${packageJson.name} on ${process.platform}/${process.arch}: ${requirement}.`
+
+  if (skipIncompatibleTarget) {
+    console.log(`${message} Skipping because --if-compatible was requested.`)
+    process.exit(0)
+  }
+
+  throw new Error(
+    `${message} Re-run on its target host, or use --if-compatible for a workspace-wide build.`
+  )
 }
 
 function detectLinuxLibc() {

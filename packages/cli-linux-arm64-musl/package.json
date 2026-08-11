@@ -20,7 +20,8 @@
     "bin/"
   ],
   "scripts": {
-    "build": "node ../cli/scripts/build-native.mjs"
+    "build": "node ../cli/scripts/build-native.mjs --if-compatible",
+    "prepublishOnly": "node ../../scripts/assert-native-artifact.mjs"
   },
   "publishConfig": {
     "access": "public"
