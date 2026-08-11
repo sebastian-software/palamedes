@@ -656,8 +656,11 @@ magic named. Hero: *"«Written in Rust» is the boring half."* — Rust buys
 speed, not architecture; the page is about what Palamedes refuses to do at
 runtime. Opens with the **machine map** (five layers: app → toolchain →
 native core → artifacts → runtime, with the typed napi boundary as an ink
-band between toolchain and core), then nine mechanisms, each with a real
-artifact and ADR chips:
+band between toolchain and core), then a **00 preamble answering the
+wrapper question** ("so it's glue around oxc and ferrocat?" — borrowed
+deliberately / ours-but-extracted / the decisions live in palamedes itself;
+closing line: "A wrapper has no opinions. This one is made of them.") and
+ten mechanisms, each with a real artifact and ADR chips:
 
 1. Compiled, not interpreted — catalogs become executable message
    functions; no ICU parser ships to production (ADR-022/023). PO-vs-artifact
@@ -667,27 +670,32 @@ artifact and ADR chips:
 3. Memory: arenas, not allocations — AST + strings in oxc's bump arena,
    thread-local arena reused with one `reset()` per file (verified in
    `crates/palamedes/src/extract.rs`), workflow-first boundary against copy
-   costs. Includes the **"SIMD, honestly" rail**: byte scanning is
-   SIMD-accelerated via `memchr` inside the oxc parser; Palamedes' own
-   crates contain no hand-written SIMD and the page says so — mimalloc was
-   tried during the ADR-013 investigation and deliberately not shipped, so
-   it is likewise not claimed.
-4. Parallelism that had to be earned — the ADR-013 story rendered whole:
+   costs. (mimalloc was tried during the ADR-013 investigation and
+   deliberately not shipped, so it is not claimed.)
+4. SIMD where it pays — **hand-written NEON in ferrocat-po's
+   escapable-byte scanner** (16 bytes per iteration, five needles at once,
+   `memchr3` fallback on other architectures — ferrocat is first-party, so
+   the intrinsics are too, source comment quoted verbatim); `memchr2/3`
+   structural scanning throughout the PO scanner and ICU parser ("literal
+   segments skipped in bulk"); `smallvec` union layout + FxHash. The
+   "pinned to the crate that carries it" rail keeps attribution exact:
+   the palamedes crates themselves contain no hand-written SIMD.
+5. Parallelism that had to be earned — the ADR-013 story rendered whole:
    naive per-core Rayon was 1.6× slower, samply @ 10 kHz found 92.8% of
    samples in `mach_vm_protect`, the shipped answer is a bounded pool of
    four (a measured constant, not a core count), with the real worker-count
    table (119/69/**45**/70/151/197 ms) and the honest "what didn't move the
    number" list.
-5. ferrocat — one catalog engine; audit JSON + merge-driver command
+6. ferrocat — one catalog engine; audit JSON + merge-driver command
    (ADR-006/015).
-4. The typed boundary — workflow-first napi calls; TS types generated from
+7. The typed boundary — workflow-first napi calls; TS types generated from
    the binding surface, "they cannot lie"; per-platform prebuilds
    (ADR-009/010/007).
-5. Thin adapters by contract — adapters render module source from compiled
+8. Thin adapters by contract — adapters render module source from compiled
    artifacts, catalog semantics physically out of reach (ADR-011/008/002).
-6. One runtime contract — AsyncLocalStorage request scope, RSC entry scope,
+9. One runtime contract — AsyncLocalStorage request scope, RSC entry scope,
    locale fixed per document (ADR-005/025/020).
-7. The machine that checks the marketing — `verify-site-bench-data.mjs`
+10. The machine that checks the marketing — `verify-site-bench-data.mjs`
    fails the site build when quoted numbers drift from the checked report;
    "the marketing is downstream of CI."
 

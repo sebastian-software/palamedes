@@ -73,6 +73,11 @@
   .term-body { background: var(--ink); color: #dbe4ef; padding: 16px 18px; font-family: var(--mono); font-size: 12.5px; line-height: 1.85; }
   .term .p { color: #8fa3bd; } .term .ok { color: var(--ok); } .term .t { color: var(--warn); } .term .bad { color: #e5534b; }
 
+  .diffs { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--hair); border: 1px solid var(--hair); max-width: 1100px; }
+  .diff { background: var(--paper); padding: 22px; }
+  .diff .t { font-size: 14.5px; font-weight: 600; line-height: 1.4; }
+  .diff p { margin-top: 10px; font-size: 12.5px; line-height: 1.65; color: #2c4463; }
+
   .sheetlike { margin-top: 26px; max-width: 720px; border: 1px solid var(--ink); }
   .ptable { width: 100%; border-collapse: collapse; }
   .ptable th { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gray); background: var(--track); text-align: left; padding: 10px 14px; font-weight: 400; width: 1%; white-space: nowrap; border-bottom: 1px solid var(--hair); }
@@ -112,8 +117,8 @@
       <p class="lede">
         Rust buys speed; it doesn&rsquo;t buy architecture. The interesting part
         is what Palamedes refuses to do at runtime — parse, guess, or
-        duplicate — and the machinery that makes those refusals stick. Nine
-        mechanisms, each with the decision record that explains it.
+        duplicate — and the machinery that makes those refusals stick. Ten
+        mechanisms, each with the receipt that proves it.
       </p>
       <div class="ctas">
         <a class="btn primary" href="#">Read the 25 ADRs</a>
@@ -146,6 +151,53 @@
         <span class="lcells"><span class="hl">getI18n()</span><span>server: request scope (AsyncLocalStorage)</span><span>client: island hydration</span><span>parser-free production</span></span>
       </div>
     </div>
+
+    <!-- 00 — the wrapper question -->
+    <section class="section">
+      <div class="num">00 — The wrapper question</div>
+      <h2>&ldquo;So it's glue around oxc and ferrocat?&rdquo; Fair question. Here's the anatomy.</h2>
+      <p class="slede">
+        The map invites exactly that reading, so let's answer it precisely:
+        what is borrowed, what is ours-but-extracted, and what lives in the
+        palamedes crates themselves.
+      </p>
+      <div class="diffs">
+        <div class="diff">
+          <div class="t">Borrowed, deliberately — oxc</div>
+          <p>
+            Parsing JavaScript and TypeScript correctly is a solved, brutal
+            problem. Rebuilding a parser would be vanity, not value — so
+            Palamedes stands on oxc for parsing, spans, and the arena, and
+            spends its effort where no one else has.
+          </p>
+        </div>
+        <div class="diff">
+          <div class="t">Ours, extracted on purpose — ferrocat</div>
+          <p>
+            The catalog and ICU engine is first-party, published as its own
+            crate family so the foundation outlives any single tool. That's
+            not a dependency — it's separation of concerns with a version
+            number. Other tools are welcome to build on it.
+          </p>
+        </div>
+        <div class="diff">
+          <div class="t">Palamedes itself — the decisions</div>
+          <p>
+            The identity model, the macro transform and source maps, the
+            stat-validated cache, the measured parallelism, compilation to
+            executable message functions, the typed boundary, the adapter
+            contracts, the runtime scopes. Everything you actually experience.
+          </p>
+        </div>
+      </div>
+      <div class="rail">
+        <div class="h">The short answer</div>
+        <p>
+          A wrapper has no opinions. This one is made of them — the parts are
+          excellent, and the decisions are the product.
+        </p>
+      </div>
+    </section>
 
     <!-- 01 — parser-free production -->
     <section class="section">
@@ -249,22 +301,68 @@ thread_local! ARENA: RefCell&lt;Allocator&gt;
 extractWorkspace(options) <span class="dim">// one crossing</span></pre>
         </div>
       </div>
-      <div class="rail">
-        <div class="h">SIMD, honestly</div>
-        <p>
-          Byte scanning in the lexer is SIMD-accelerated — <code>memchr</code>
-          inside the oxc parser. Palamedes' own crates contain no hand-written
-          SIMD, and this page will not pretend otherwise. If a profile ever
-          shows a hot loop that wants it, the ADR will say so first.
-        </p>
-      </div>
       <a class="adrchip" href="#">oxc_allocator · bump arena</a>
       <a class="adrchip" href="#">ADR-009 · workflow-first boundary</a>
     </section>
 
+    <!-- 04 — SIMD -->
+    <section class="section">
+      <div class="num">04 — SIMD where it pays</div>
+      <h2>Hand-written NEON in the hot loop. memchr everywhere else.</h2>
+      <p class="slede">
+        The catalog engine is first-party — the whole ferro-family is — so its
+        scanner is too. The PO/FCL escapable-byte search runs a dedicated NEON
+        path on aarch64: sixteen bytes per iteration, five needles compared at
+        once, with a <code>memchr3</code> fallback on every other
+        architecture. Around it, structural scanning is SIMD-accelerated
+        throughout — the PO scanner and the ICU parser jump over literal
+        segments in bulk instead of decoding char by char. Same discipline in
+        the small things: <code>smallvec</code> with the union layout for
+        inline vectors, FxHash where hashing is hot.
+      </p>
+      <div class="code2">
+        <div class="codecol">
+          <div class="head">crates/ferrocat-po/src/scan.rs — aarch64, verbatim shape</div>
+          <pre><span class="kw">#[target_feature(enable = "neon")]</span>
+<span class="kw">unsafe fn</span> neon_find_escapable_byte(h: &amp;[u8]) {
+  <span class="kw">while</span> offset + 16 &lt;= h.len() {
+    <span class="kw">let</span> chunk = vld1q_u8(h.as_ptr().add(offset));
+    <span class="kw">let mut</span> m = vceqq_u8(chunk, vdupq_n_u8(b'"'));
+    m = vorrq_u8(m, vceqq_u8(chunk, vdupq_n_u8(b'\\')));
+    m = vorrq_u8(m, vceqq_u8(chunk, vdupq_n_u8(b'\n')));
+    <span class="dim">// … 16 bytes, 5 needles, one pass</span></pre>
+        </div>
+        <div class="codecol">
+          <div class="head">The philosophy, from the source comments</div>
+          <pre><span class="dim">// "Apple Silicon is our primary target, so
+//  this is the first place where a dedicated
+//  NEON path is worth the maintenance cost."</span>
+
+<span class="dim">// "memchr3 is SIMD-accelerated (NEON on
+//  aarch64) so this stays fast without any
+//  hand-written intrinsics."</span>
+
+<span class="dim">// non-aarch64 falls back to memchr3 —
+// correctness proven by shared tests</span></pre>
+        </div>
+      </div>
+      <div class="rail">
+        <div class="h">Pinned to the crate that carries it</div>
+        <p>
+          The palamedes crates themselves contain no hand-written SIMD — the
+          intrinsics live in ferrocat's scanner, where the profile earned
+          them, and the oxc lexer underneath uses memchr as well. Claims on
+          this page stay pinned to the exact crate and file that carry them.
+        </p>
+      </div>
+      <a class="adrchip" href="#">ferrocat-po · scan.rs — NEON path</a>
+      <a class="adrchip" href="#">ferrocat-icu · parser.rs — bulk literal skips</a>
+      <a class="adrchip" href="#">smallvec(union) · rustc-hash</a>
+    </section>
+
     <!-- 04 — parallelism, earned -->
     <section class="section">
-      <div class="num">04 — Parallelism that had to be earned</div>
+      <div class="num">05 — Parallelism that had to be earned</div>
       <h2>Naive parallelism made it slower. So we profiled the kernel.</h2>
       <p class="slede">
         Handing 1,500 files to a per-core thread pool made extraction 1.6×
@@ -302,7 +400,7 @@ extractWorkspace(options) <span class="dim">// one crossing</span></pre>
 
     <!-- 05 — ferrocat -->
     <section class="section">
-      <div class="num">05 — One catalog engine</div>
+      <div class="num">06 — One catalog engine</div>
       <h2>ferrocat: catalog semantics live in exactly one place.</h2>
       <p class="slede">
         Parsing, updating, auditing, ICU diagnostics, PO/FCL storage, and
@@ -333,7 +431,7 @@ extractWorkspace(options) <span class="dim">// one crossing</span></pre>
 
     <!-- 04 — napi boundary -->
     <section class="section">
-      <div class="num">06 — The typed boundary</div>
+      <div class="num">07 — The typed boundary</div>
       <h2>The TypeScript types are generated from the native surface. They cannot lie.</h2>
       <p class="slede">
         The JS/Rust boundary is crossed per workflow, not per message — one
@@ -366,7 +464,7 @@ extractWorkspace(options) <span class="dim">// one crossing</span></pre>
 
     <!-- 05 — adapters as renderers -->
     <section class="section">
-      <div class="num">07 — Thin adapters, by contract</div>
+      <div class="num">08 — Thin adapters, by contract</div>
       <h2>Adapters render module source. They never touch catalog semantics.</h2>
       <p class="slede">
         A framework adapter's whole job is to hand compiled catalog artifacts
@@ -391,7 +489,7 @@ extractWorkspace(options) <span class="dim">// one crossing</span></pre>
 
     <!-- 06 — runtime scope -->
     <section class="section">
-      <div class="num">08 — One runtime contract</div>
+      <div class="num">09 — One runtime contract</div>
       <h2>getI18n() everywhere — request-scoped on the server, fixed per document in the browser.</h2>
       <p class="slede">
         On the server, the active instance rides an AsyncLocalStorage request
@@ -421,7 +519,7 @@ extractWorkspace(options) <span class="dim">// one crossing</span></pre>
 
     <!-- 07 — the verification machine -->
     <section class="section" style="border-bottom: 0;">
-      <div class="num">09 — The machine that checks the marketing</div>
+      <div class="num">10 — The machine that checks the marketing</div>
       <h2>This website fails its build when the numbers drift.</h2>
       <p class="slede">
         The benchmark figures quoted across palamedes.dev are hardcoded
