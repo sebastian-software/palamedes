@@ -12,7 +12,9 @@ if (artifacts.length === 0) {
   )
 }
 
-const missing = artifacts.filter((artifact) => !isRegularFile(path.join(packageDirectory, artifact)))
+const missing = artifacts.filter(
+  (artifact) => !isRegularFile(path.join(packageDirectory, artifact))
+)
 
 if (missing.length > 0) {
   throw new Error(

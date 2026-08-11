@@ -71,7 +71,9 @@ function incompatibleTarget(requirement) {
     process.exit(0)
   }
 
-  throw new Error(`${message} Re-run on its target host, or use --if-compatible for a workspace-wide build.`)
+  throw new Error(
+    `${message} Re-run on its target host, or use --if-compatible for a workspace-wide build.`
+  )
 }
 
 function detectLinuxLibc() {
