@@ -18,7 +18,8 @@
     "palamedes-node.node"
   ],
   "scripts": {
-    "build": "node ../core-node/scripts/build-native.mjs"
+    "build": "node ../core-node/scripts/build-native.mjs --if-compatible",
+    "prepublishOnly": "node ../../scripts/assert-native-artifact.mjs"
   },
   "engines": {
     "node": ">=22.0.0"
