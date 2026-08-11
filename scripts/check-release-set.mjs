@@ -228,8 +228,13 @@ for (const packageInfo of publicPackages) {
     const platformDependencies = Object.entries(
       readJson(path.join(packageInfo.path, "package.json")).optionalDependencies ?? {}
     ).filter(([name]) => name.startsWith(`${packageInfo.name}-`))
-    if (platformDependencies.length !== 6) {
-      fail(`${packageInfo.name} must declare all six native platform dependencies`)
+    const platformPackageCount = publicPackages.filter((info) =>
+      info.name.startsWith(`${packageInfo.name}-`)
+    ).length
+    if (platformDependencies.length !== platformPackageCount) {
+      fail(
+        `${packageInfo.name} must declare all ${platformPackageCount} native platform dependencies`
+      )
     }
     for (const [name, version] of platformDependencies) {
       if (version !== "workspace:*") {
