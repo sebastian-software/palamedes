@@ -340,19 +340,51 @@ four only where they materially improve scanning. A replacement requires a
 like-for-like Sharp Duo asset and an update to the manifest. Avoid icon cards,
 decorative repetition, and a pictogram beside every paragraph.
 
+### Streamline illustration system
+
+Use a second, explicitly separate asset layer for the few places that benefit
+from a richer editorial image: **Streamline UX Duotone**. This does not loosen
+the icon rule. Small and repeated pictograms remain Sharp Duo; larger
+illustrative anchors remain UX Duotone. Do not introduce UX Colors, UX Line,
+Plump, or another illustration family.
+
+The first implementation should try exactly three illustrations:
+
+| Intended placement                                 | UX Duotone asset                                                                                            |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Brand story, maintainer trust, or closing sequence | [Quill Software Writing](https://www.streamlinehq.com/illustrations/download/quill-software-writing--10413) |
+| Complete local workflow introduction               | [Flowchart Paper](https://www.streamlinehq.com/illustrations/download/flowchart-paper--10295)               |
+| `/proof` verification/testing introduction         | [App Testing](https://www.streamlinehq.com/illustrations/download/app-testing--10295)                       |
+
+Treat these placements as an implementation experiment, not a requirement to
+ship all three. Quill Software Writing has the strongest brand fit and should
+be tested first. Flowchart Paper must introduce the real workflow artifact,
+not replace it. App Testing must support the evidence surface, not turn proof
+into a generic decorative scene.
+
+UX Duotone uses the same navy and bronze palette as Sharp Duo. Remove or
+recolor its default blue fields; preserve the original geometry and readable
+two-tone hierarchy. Use illustrations at editorial scale with surrounding
+space. Never reduce them until they read as competing icons, and never place
+an illustration beside every section.
+
 ### License and repository handling
 
 The account screen reviewed on 2026-08-12 confirms **Full Access plan / 1
-user**, including **All Pro Icons**. The account owner is the licensed source
-user and exports the prepared selection; contributors may work with those
-project assets without receiving access to the full source library.
+user**, including **All Pro Icons** and **All Pro Illustrations**. The account
+owner is the licensed source user and exports the prepared selection;
+contributors may work with those project assets without receiving access to
+the full source library.
 
 Repository rules:
 
 - stay below the standard allowance of 100 unique icons per project; the first
   selection uses eight;
+- stay below the separate allowance of 50 illustrations per project; the first
+  experiment uses three;
 - store only used, optimized SVGs under
-  `site/public/icons/streamline/sharp-duo/`;
+  `site/public/icons/streamline/sharp-duo/` and
+  `site/public/illustrations/streamline/ux-duotone/`;
 - never publish the selection as a standalone icon package, public asset
   library, design resource, or user-selectable icon catalog;
 - keep Streamline assets outside the repository's MIT grant and add a root
@@ -367,14 +399,15 @@ Repository rules:
   allowance.
 
 The project manifest is
-[`streamline-icon-manifest.md`](streamline-icon-manifest.md). It records the
+[`streamline-asset-manifest.md`](streamline-asset-manifest.md). It records the
 chosen assets without relicensing or redistributing them.
 
 Before assets ship:
 
-1. export the selected SVGs from Sharp Duo using the licensed account;
+1. export the selected SVGs from Sharp Duo and UX Duotone using the licensed
+   account;
 2. compare them at real display sizes against the Cinzel/ledger type and only
-   replace an asset inside the same set;
+   replace an asset inside its respective set;
 3. preserve one shared stroke treatment and map the two color planes to the
    navy/bronze tokens; use `currentColor` for one-color placements where
    practical;
