@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/eslint-plugin",
-  "version": "1.17.2",
+  "version": "1.17.3",
   "description": "ESLint and Oxlint adapter for native Palamedes source diagnostics",
   "keywords": [
     "palamedes",
@@ -52,7 +52,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@oxlint/plugins": "^1.77.0",
+    "@oxlint/plugins": "^1.78.0",
     "@palamedes/core-node": "workspace:^"
   },
   "peerDependencies": {
@@ -70,7 +70,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "eslint": "^10.8.1",
-    "oxlint": "^1.77.0",
+    "oxlint": "^1.78.0",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.10"

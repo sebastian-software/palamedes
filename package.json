@@ -70,8 +70,8 @@
     "concurrently": "^10.0.4",
     "eslint": "^10.8.1",
     "eslint-config-setup": "^0.5.2",
-    "oxfmt": "^0.62.0",
-    "oxlint": "^1.77.0",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   }

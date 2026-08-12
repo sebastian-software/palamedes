@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/solid",
-  "version": "1.17.2",
+  "version": "1.17.3",
   "description": "Solid runtime components and macro entry points for Palamedes",
   "keywords": [
     "palamedes",
@@ -60,7 +60,7 @@
     "solid-js": "^1.9.12"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/jest-dom": "^7.0.1",
     "solid-js": "^1.9.14",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",

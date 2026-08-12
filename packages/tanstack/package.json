@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/tanstack",
-  "version": "1.17.2",
+  "version": "1.17.3",
   "description": "TanStack Start request-scoped i18n middleware for Palamedes",
   "keywords": [
     "tanstack-start",
@@ -47,7 +47,7 @@
     "@tanstack/react-start": "^1.168.38"
   },
   "devDependencies": {
-    "@tanstack/react-start": "1.168.42",
+    "@tanstack/react-start": "1.168.44",
     "@types/node": "^24.0.0",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
