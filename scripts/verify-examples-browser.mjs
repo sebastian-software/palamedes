@@ -1,12 +1,7 @@
 import { spawn } from "node:child_process"
 import http from "node:http"
 import path from "node:path"
-import {
-  parseExampleArgs,
-  ROOT,
-  selectBrowserExamples,
-  selectScreenshotExamples,
-} from "./example-matrix.mjs"
+import { parseExampleArgs, planBrowserRun, ROOT } from "./example-matrix.mjs"
 import { ensurePortFree, startCommand, stopCommand } from "./example-process.mjs"
 
 function parseBrowserArgs(argv) {
@@ -132,21 +127,15 @@ async function verifyExample(example, options) {
 async function main() {
   const browserOptions = parseBrowserArgs(process.argv)
   const filters = parseExampleArgs(process.argv)
-  const selected = selectBrowserExamples(filters)
-  const screenshotIds = new Set(selectScreenshotExamples(filters).map((example) => example.id))
+  const plan = planBrowserRun(filters, browserOptions)
 
-  if (selected.length === 0) {
+  if (plan.length === 0) {
     throw new Error("No browser-verifiable examples matched the provided filters")
   }
 
-  for (const example of selected) {
+  for (const { example, options } of plan) {
     console.log(`\n[verify:browser] ${example.id} on port ${example.port}`)
-    // Vite has a browser contract but deliberately has no checked-in screenshot
-    // artifact. Gate capture per example without narrowing the verification set.
-    await verifyExample(example, {
-      ...browserOptions,
-      captureScreenshots: browserOptions.captureScreenshots && screenshotIds.has(example.id),
-    })
+    await verifyExample(example, options)
   }
 }
 

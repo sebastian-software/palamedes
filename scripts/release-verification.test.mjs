@@ -37,5 +37,8 @@ describe("release tarball verification", () => {
     expect(publishedVersionCheck).toContain(
       "return nativeTarballFailure(packageInfo, lookup.value)"
     )
+    // Computing the failure is not enough: it has to reach the failure list, or
+    // verify-release degrades back to presence-only while these assertions pass.
+    expect(publishedVersionCheck).toContain("failures.push({ detail: tarballFailure, spec })")
   })
 })
