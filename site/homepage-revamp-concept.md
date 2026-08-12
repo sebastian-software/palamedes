@@ -320,37 +320,67 @@ calm, technical authority of the product. Use navy and bronze as the two icon
 colors. A one-color treatment is allowed where the layout needs restraint, but
 the asset must still be the Sharp Duo version.
 
-Initial shortlist, researched in the Streamline catalog on 2026-08-12:
+The first implementation selection is fixed to eight icons, researched in the
+Streamline catalog on 2026-08-12:
 
-| Use                       | Sharp Duo asset                                                                                                               |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Clear / source inspection | [Code Analysis](https://www.streamlinehq.com/icons/download/code-analysis--25116)                                             |
-| Complete / pipeline       | [Deployment Workflow Collaboration](https://www.streamlinehq.com/icons/download/deployment-workflow-collaboration--25115)     |
-| Fast / benchmark          | [Browser Flash](https://www.streamlinehq.com/icons/download/browser-flash--25121)                                             |
-| Architecture              | [Web Hierarchy](https://www.streamlinehq.com/icons/download/web-hierarchy--25115)                                             |
-| Integration model         | [Connection Integration System API](https://www.streamlinehq.com/icons/download/connection-integration-system-api--25115)     |
-| Adapter breadth           | [App Widgets Plugin Extension](https://www.streamlinehq.com/icons/download/app-widgets-plugin-extension--25122)               |
-| Locale architecture       | [Globe App Network](https://www.streamlinehq.com/icons/download/globe-app-network--25115)                                     |
-| Routing / composition     | [Network Node Connection Integration](https://www.streamlinehq.com/icons/download/network-node-connection-integration--25115) |
-| Documentation             | [Programming Book](https://www.streamlinehq.com/icons/download/programming-book--25116)                                       |
-| Proof / verified example  | [Browser Check](https://www.streamlinehq.com/icons/download/browser-check--25121)                                             |
+| Use                          | Sharp Duo asset                                                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Clear / source inspection    | [Code Analysis](https://www.streamlinehq.com/icons/download/code-analysis--25116)                                         |
+| Complete / pipeline          | [Deployment Workflow Collaboration](https://www.streamlinehq.com/icons/download/deployment-workflow-collaboration--25115) |
+| Fast / benchmark             | [Browser Flash](https://www.streamlinehq.com/icons/download/browser-flash--25121)                                         |
+| Architecture                 | [Web Hierarchy](https://www.streamlinehq.com/icons/download/web-hierarchy--25115)                                         |
+| First-party adapter breadth  | [App Widgets Plugin Extension](https://www.streamlinehq.com/icons/download/app-widgets-plugin-extension--25122)           |
+| Locale architecture          | [Globe App Network](https://www.streamlinehq.com/icons/download/globe-app-network--25115)                                 |
+| Documentation / maintenance  | [Programming Book](https://www.streamlinehq.com/icons/download/programming-book--25116)                                   |
+| Proof / verified application | [Browser Check](https://www.streamlinehq.com/icons/download/browser-check--25121)                                         |
 
-Treat this as a coherent shortlist, not a requirement to illustrate every
-row. Use icons where they improve scanning: major benefit markers, pipeline
-steps, locale architectures, proof/navigation signposts, and empty states.
-Avoid icon cards, decorative repetition, and a pictogram beside every
-paragraph.
+These are the defaults for the first implementation, not eight mandatory page
+placements. Start with Clear, Complete, Fast, and Architecture; add the other
+four only where they materially improve scanning. A replacement requires a
+like-for-like Sharp Duo asset and an update to the manifest. Avoid icon cards,
+decorative repetition, and a pictogram beside every paragraph.
+
+### License and repository handling
+
+The account screen reviewed on 2026-08-12 confirms **Full Access plan / 1
+user**, including **All Pro Icons**. The account owner is the licensed source
+user and exports the prepared selection; contributors may work with those
+project assets without receiving access to the full source library.
+
+Repository rules:
+
+- stay below the standard allowance of 100 unique icons per project; the first
+  selection uses eight;
+- store only used, optimized SVGs under
+  `site/public/icons/streamline/sharp-duo/`;
+- never publish the selection as a standalone icon package, public asset
+  library, design resource, or user-selectable icon catalog;
+- keep Streamline assets outside the repository's MIT grant and add a root
+  `THIRD_PARTY_NOTICES.md` entry when the first SVG is committed;
+- include the required open-source attribution and link to Streamline in that
+  notice and in an appropriate public credits/about surface;
+- keep the account screenshot, invoice, and accepted license text in private
+  company records, not in the public repository;
+- count unique assets, not placements; repeated use of one SVG still counts as
+  one icon;
+- treat the weekly 1,000-asset figure as an export limit, not a project usage
+  allowance.
+
+The project manifest is
+[`streamline-icon-manifest.md`](streamline-icon-manifest.md). It records the
+chosen assets without relicensing or redistributing them.
 
 Before assets ship:
 
-1. compare the shortlist at real display sizes against the Cinzel/ledger type;
-2. export every selected SVG from Sharp Duo using the licensed account;
+1. export the selected SVGs from Sharp Duo using the licensed account;
+2. compare them at real display sizes against the Cinzel/ledger type and only
+   replace an asset inside the same set;
 3. preserve one shared stroke treatment and map the two color planes to the
    navy/bronze tokens; use `currentColor` for one-color placements where
    practical;
-4. record asset name, Streamline URL, set, export date, and license owner in an
-   asset manifest without committing private license/account data;
-5. verify accessible labels: decorative icons stay hidden, meaningful icons
+4. complete the manifest with export date, repository path, and file hash;
+5. add the third-party notice and public attribution before committing SVGs;
+6. verify accessible labels: decorative icons stay hidden, meaningful icons
    receive adjacent text rather than standalone tooltips.
 
 ## 8. Implementation sequence
