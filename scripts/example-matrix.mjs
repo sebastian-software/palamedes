@@ -756,3 +756,20 @@ export function selectScreenshotExamples(filters) {
     (example) => example.framework !== "remix" && example.framework !== "vite"
   )
 }
+
+// The browser lane verifies every browser-capable example and gates capture per
+// example, so narrowing the screenshot set can never narrow what runs. Pairing
+// the two selections here keeps that rule testable instead of leaving it inside
+// the runner script.
+export function planBrowserRun(filters, browserOptions) {
+  const screenshotIds = new Set(selectScreenshotExamples(filters).map((example) => example.id))
+
+  return selectBrowserExamples(filters).map((example) => ({
+    example,
+    options: {
+      ...browserOptions,
+      captureScreenshots:
+        Boolean(browserOptions.captureScreenshots) && screenshotIds.has(example.id),
+    },
+  }))
+}

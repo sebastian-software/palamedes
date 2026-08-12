@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   EXAMPLE_MATRIX,
+  planBrowserRun,
   selectBrowserExamples,
   selectExamples,
   selectScreenshotExamples,
@@ -109,6 +110,29 @@ describe("example matrix guard", () => {
       "vite-mdx",
     ])
     expect(selectScreenshotExamples({ framework: "vite" })).toEqual([])
+  })
+
+  it("runs every browser-capable example while gating capture to the screenshot set", () => {
+    const plan = planBrowserRun({}, { captureScreenshots: true, screenshotDir: "/tmp/shots" })
+    const captureFor = (id) =>
+      plan.find(({ example }) => example.id === id)?.options.captureScreenshots
+
+    expect(plan.map(({ example }) => example.id)).toEqual(
+      selectBrowserExamples({}).map((example) => example.id)
+    )
+    expect(captureFor("vite-mdx")).toBe(false)
+    expect(captureFor("nextjs-cookie")).toBe(true)
+    expect(plan.every(({ options }) => options.screenshotDir === "/tmp/shots")).toBe(true)
+    expect(plan.filter(({ options }) => options.captureScreenshots)).toHaveLength(
+      selectScreenshotExamples({}).length
+    )
+  })
+
+  it("keeps capture off everywhere when the flag is absent", () => {
+    const plan = planBrowserRun({}, { captureScreenshots: false })
+
+    expect(plan).toHaveLength(selectBrowserExamples({}).length)
+    expect(plan.some(({ options }) => options.captureScreenshots)).toBe(false)
   })
 
   it("keeps Waku and Next cookie smoke depth aligned with the server matrix", () => {

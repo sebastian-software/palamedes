@@ -35,7 +35,7 @@ spellings.
 
 One divergence is worth knowing about when catalogs move between Palamedes and
 gettext tooling: Ferrocat keeps a short value with embedded newlines in the
-compact `msgid "First line\\n"` plus continuation-line form under both `auto`
+compact `msgid "First line\n"` plus continuation-line form under both `auto`
 and `off`. GNU gettext and `pofile` commonly use a leading empty `msgid ""` or
 `msgstr ""` line for the same value. Set `line-breaks: "off"` to avoid
 additional width-driven folding. Both spellings parse to the same message, but
