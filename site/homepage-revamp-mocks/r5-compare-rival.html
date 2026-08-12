@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>R5 — /compare/lingui</title>
+<style>
+  @font-face { font-family: "Cinzel Hellenic"; src: url("../public/fonts/CinzelHellenic-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  :root {
+    --paper: #faf9f4; --ink: #0e2a4d; --hair: #ddd6c6; --accent: #8e6628;
+    --gold: #bc8a45; --gray: #7d7869; --track: #f1ede0;
+    --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --display: "Cinzel Hellenic", "Times New Roman", serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
+  .page { max-width: 1320px; margin-inline: auto; border-inline: 1px solid var(--hair); }
+
+  .runhead { display: flex; justify-content: space-between; align-items: center; padding: 12px 32px; border-bottom: 2px solid var(--ink); position: relative; }
+  .runhead::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 1px; background: var(--ink); }
+  .runhead .brand { display: flex; align-items: center; gap: 12px; }
+  .runhead img { width: 26px; height: 26px; }
+  .runhead .word { font-family: var(--display); font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .runhead .sect { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); border-left: 1px solid var(--hair); padding-left: 12px; }
+  .runhead nav { display: flex; gap: 22px; }
+  .runhead a { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); text-decoration: none; }
+
+  .hero { padding: 56px 32px 44px; max-width: 980px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gray); }
+  h1 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(30px, 3.6vw, 46px); line-height: 1.16; margin-top: 18px; }
+  .lede { margin-top: 18px; max-width: 46em; font-size: 15px; line-height: 1.7; }
+  .facts { margin-top: 26px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--hair); border: 1px solid var(--hair); max-width: 820px; }
+  .facts div { background: var(--paper); padding: 12px 16px; }
+  .facts dt { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gray); }
+  .facts dd { margin-top: 6px; font-size: 13px; font-weight: 600; }
+  .researched { margin-top: 12px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; color: var(--gray); }
+
+  .rail { margin-top: 28px; max-width: 900px; border-left: 2px solid var(--accent); padding: 4px 0 4px 20px; }
+  .rail .h { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+  .rail p { margin-top: 8px; font-size: 13px; line-height: 1.7; color: #2c4463; max-width: 54em; }
+
+  .section { padding: 56px 32px 64px; border-bottom: 1px solid var(--hair); }
+  .section .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+  .section h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(21px, 2.2vw, 28px); line-height: 1.25; margin-top: 14px; }
+
+  /* Verdict — moved from position 06 to position 01 */
+  .verdict { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--ink); border: 1px solid var(--ink); max-width: 1000px; }
+  .pick { background: var(--paper); padding: 24px; }
+  .pick .h { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; }
+  .pick.them .h { color: var(--gray); }
+  .pick.us .h { color: var(--accent); }
+  .pick ul { margin-top: 14px; list-style: none; }
+  .pick li { font-size: 13.5px; line-height: 1.6; padding: 7px 0 7px 18px; position: relative; border-top: 1px solid var(--hair); }
+  .pick li:first-child { border-top: 0; }
+  .pick li::before { content: "—"; position: absolute; left: 0; color: var(--gray); }
+  .pick.us li::before { color: var(--accent); }
+
+  /* credit & cost */
+  .twocol { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hair); border: 1px solid var(--hair); max-width: 1000px; }
+  .lcol { background: var(--paper); padding: 24px; }
+  .lcol .h { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+  .lcol ul { margin-top: 14px; list-style: none; }
+  .lcol li { font-size: 13px; line-height: 1.65; padding: 8px 0; border-top: 1px solid var(--hair); }
+  .lcol li:first-child { border-top: 0; }
+
+  /* differences */
+  .diffs { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--hair); border: 1px solid var(--hair); }
+  .diff { background: var(--paper); padding: 22px; }
+  .diff .t { font-size: 14.5px; font-weight: 600; line-height: 1.4; }
+  .diff p { margin-top: 10px; font-size: 12.5px; line-height: 1.65; color: #2c4463; }
+
+  /* code compare */
+  .code2 { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hair); border: 1px solid var(--hair); max-width: 1000px; }
+  .codecol { background: var(--paper); }
+  .codecol .head { padding: 9px 16px; border-bottom: 1px solid var(--hair); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gray); background: var(--track); }
+  .codecol pre { padding: 16px; font-family: var(--mono); font-size: 12.5px; line-height: 1.75; overflow: hidden; }
+  .codecol .kw { color: var(--accent); }
+  .codenote { max-width: 1000px; margin-top: 14px; font-size: 12.5px; line-height: 1.65; color: var(--gray); }
+
+  /* side-by-side matrix */
+  .sxs { margin-top: 30px; border: 1px solid var(--ink); max-width: 1000px; }
+  .sxs table { width: 100%; border-collapse: collapse; }
+  .sxs th, .sxs td { padding: 11px 16px; text-align: left; font-size: 13px; line-height: 1.5; border-bottom: 1px solid var(--hair); vertical-align: top; }
+  .sxs th { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gray); background: var(--track); font-weight: 400; }
+  .sxs tr:last-child td { border-bottom: 0; }
+  .sxs td:first-child { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); white-space: nowrap; width: 1%; padding-right: 24px; }
+  .sxs .fn { padding: 10px 16px; font-size: 11px; color: var(--gray); border-top: 1px solid var(--ink); background: var(--track); }
+
+  .honest { text-align: center; padding: 60px 40px; border-bottom: 1px solid var(--hair); }
+  .honest .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+  .honest p { font-family: var(--display); text-transform: uppercase; font-size: clamp(17px, 1.9vw, 24px); line-height: 1.5; max-width: 36em; margin: 18px auto 0; }
+
+  .also { padding: 28px 32px; border-bottom: 1px solid var(--hair); display: flex; gap: 28px; align-items: baseline; }
+  .also .h { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gray); }
+  .also a { font-family: var(--mono); font-size: 12px; color: var(--accent); text-decoration: none; }
+
+  .cta { background: var(--ink); color: var(--paper); text-align: center; padding: 60px 40px; }
+  .cta h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(22px, 2.6vw, 32px); }
+  .btn { display: inline-block; padding: 0.75rem 1.5rem; border: 1px solid var(--ink); font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; text-decoration: none; color: var(--ink); }
+  .btn.goldfill { background: var(--gold); border-color: var(--gold); color: #0a1f3a; }
+  .btn.ghost { border-color: var(--paper); color: var(--paper); }
+  .cta .ctas { margin-top: 30px; display: flex; justify-content: center; gap: 12px; }
+
+  .concept-badge { position: fixed; right: 12px; bottom: 12px; z-index: 99; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; background: var(--ink); color: var(--paper); padding: 6px 10px; }
+</style>
+</head>
+<body>
+  <div class="concept-badge">R5 · /compare/lingui — verdict first, 6 sections</div>
+  <div class="page">
+
+    <div class="runhead">
+      <span class="brand">
+        <img src="../public/logo.svg" alt="" />
+        <span class="word">Palamedes</span>
+        <span class="sect">Compare · Lingui</span>
+      </span>
+      <nav><a href="#">Frameworks</a><a href="#">Proof</a><a href="#">Compare</a><a href="#">Blog</a><a href="#">Docs</a><a href="#">GitHub</a></nav>
+    </div>
+
+    <section class="hero">
+      <p class="eyebrow">Compare · Lingui</p>
+      <h1>The same idea, on an engine 29.57× faster.</h1>
+      <p class="lede">
+        Lingui got the authoring model right, and we are not going to pretend
+        otherwise — write the message where the UI happens, let the source
+        string be the identity, keep catalogs translators already know.
+        Palamedes agrees with every part of that, then replaces the machinery
+        underneath: one Rust core instead of a JS plugin stack, one runtime
+        access model instead of several.
+      </p>
+      <dl class="facts">
+        <div><dt>Licence</dt><dd>MIT</dd></div>
+        <div><dt>Identity</dt><dd>Source-derived or explicit IDs</dd></div>
+        <div><dt>Catalogs</dt><dd>.po, native</dd></div>
+        <div><dt>Checked benchmark</dt><dd>29.57× slower</dd></div>
+      </dl>
+      <p class="researched">Researched July 2026 · @lingui/core 6.5.0 · sourced research notes are public</p>
+      <div class="rail">
+        <div class="h">Our position</div>
+        <p>
+          If you already believe in macro-based authoring and .po catalogs, the
+          argument is not about the model — you and Lingui and we all agree on
+          it. The argument is about what runs it.
+        </p>
+      </div>
+    </section>
+
+    <!-- 01 — VERDICT, moved up from position 06 -->
+    <section class="section">
+      <div class="num">01 — The verdict, first</div>
+      <h2>Ten seconds, honestly.</h2>
+      <div class="verdict">
+        <div class="pick them">
+          <div class="h">Pick Lingui if</div>
+          <ul>
+            <li>You need Vue or React Native. Palamedes has neither and will not fake it.</li>
+            <li>Your catalogs depend on explicit custom IDs — Palamedes deliberately offers no second identity convention.</li>
+            <li>You want a decade of production history over a younger toolchain.</li>
+          </ul>
+        </div>
+        <div class="pick us">
+          <div class="h">Pick Palamedes if</div>
+          <ul>
+            <li>You want the same authoring model on a native engine — 29.57× faster on the checked, re-runnable benchmark.</li>
+            <li>You want one runtime call — getI18n() — across server components, client islands, and backend handlers.</li>
+            <li>You want semantic .po merges and machine-readable audits as CI gates, not plugins.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 — credit & cost -->
+    <section class="section">
+      <div class="num">02 — Credit &amp; cost</div>
+      <h2>What Lingui earned — and what that history costs you.</h2>
+      <div class="twocol">
+        <div class="lcol">
+          <div class="h">What Lingui earned</div>
+          <ul>
+            <li>Macro-based authoring, source-derived identity and native PO catalogs form a coherent client-to-catalog workflow.</li>
+            <li>Genuinely broad framework support: React, React Native, Vue 3, SolidJS and vanilla JS are first-party, not community ports.</li>
+            <li>Native ICU MessageFormat and first-class .po catalogs, so translator tooling works without adapters.</li>
+          </ul>
+        </div>
+        <div class="lcol">
+          <div class="h">What that history costs</div>
+          <ul>
+            <li>v6 was a hard cut — ESM-only, Node ≥22.19, YAML config removed, a changed auto-ID encoding that forces manual catalog rewrites.</li>
+            <li>Breadth thins out per target: Astro requested since 2023, still not first-party; the App Router dynamic-route extraction limitation open since 2025.</li>
+            <li>The performance ceiling is architectural — worker threads and an experimental Rolldown extractor chase a constraint a native core does not have.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 — differences -->
+    <section class="section">
+      <div class="num">03 — What is actually different</div>
+      <h2>Three decisions, not thirty features.</h2>
+      <div class="diffs">
+        <div class="diff">
+          <div class="t">One runtime model, not several entry points</div>
+          <p>Exactly one way for transformed code to reach the active instance: getI18n(). The same call works in a Next.js server component, a Solid island, and an Express handler — the runtime chapter of your onboarding doc is one paragraph long.</p>
+        </div>
+        <div class="diff">
+          <div class="t">Catalog semantics in one native engine</div>
+          <p>Parsing, updating, auditing, ICU diagnostics and compilation live in one Rust core, not spread across JS plugins. The speed is the visible consequence; the useful one is that audit results cannot depend on which side of the toolchain asked.</p>
+        </div>
+        <div class="diff">
+          <div class="t">One identity convention, permanently</div>
+          <p>Lingui lets you choose between source-derived and explicit IDs. Palamedes refuses the second path on purpose: one fewer decision at the start, one fewer schism at year three.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 — code -->
+    <section class="section">
+      <div class="num">04 — In code</div>
+      <h2>Authoring barely changes. That is the point.</h2>
+      <div class="code2">
+        <div class="codecol">
+          <div class="head">Lingui</div>
+          <pre><span class="kw">import</span> { t } <span class="kw">from</span> "@lingui/core/macro"
+
+<span class="kw">function</span> checkoutLabel(seats) {
+  <span class="kw">return</span> t`Buy ${seats} seats`
+}</pre>
+        </div>
+        <div class="codecol">
+          <div class="head">Palamedes</div>
+          <pre><span class="kw">import</span> { t } <span class="kw">from</span> "@palamedes/core/macro"
+
+<span class="kw">function</span> checkoutLabel(seats) {
+  <span class="kw">return</span> t`Buy ${seats} seats`
+}</pre>
+        </div>
+      </div>
+      <p class="codenote">
+        If your Lingui code already avoids explicit IDs, most of it reads
+        identically after the import swap. Your components are not the
+        migration — the catalogs and the runtime wiring are, and the playbook
+        covers both.
+      </p>
+    </section>
+
+    <!-- 05 — side by side -->
+    <section class="section">
+      <div class="num">05 — Side by side</div>
+      <h2>The short table.</h2>
+      <div class="sxs">
+        <table>
+          <tr><th></th><th>Lingui</th><th>Palamedes</th></tr>
+          <tr><td>Authoring</td><td>Macros, JSX-first</td><td>Macros, JSX-first — deliberately familiar</td></tr>
+          <tr><td>Identity</td><td>Source-derived IDs or explicit custom IDs</td><td>message + context only, no second convention</td></tr>
+          <tr><td>Runtime</td><td>i18n object, hooks, macros</td><td>getI18n(), one model everywhere</td></tr>
+          <tr><td>Engine</td><td>JS tooling with a plugin ecosystem</td><td>Native Rust core, semantic merge and audits</td></tr>
+          <tr><td>Extract + update</td><td>2,480.24 ms on the realistic corpus¹</td><td>83.89 ms — 29.57× faster on the checked run¹</td></tr>
+          <tr><td>Coverage</td><td>React, React Native, Vue, Solid, vanilla</td><td>React and Solid across 6 server frameworks; no Vue, no React Native</td></tr>
+        </table>
+        <div class="fn">¹ Same corpus, same job, machine-local, median of 7 — checked into the repository with commands and fixtures.</div>
+      </div>
+    </section>
+
+    <div class="honest">
+      <div class="num">06 — The honest bit</div>
+      <p>
+        Lingui carries Vue and React Native first-party. Palamedes does not,
+        and will not pretend a community port is the same thing.
+      </p>
+    </div>
+
+    <div class="also">
+      <span class="h">Also weighing</span>
+      <a href="#">i18next →</a><a href="#">React Intl →</a><a href="#">next-intl →</a><a href="#">All comparisons →</a>
+    </div>
+
+    <section class="cta">
+      <h2>Keep your authoring model. Swap the engine.</h2>
+      <div class="ctas">
+        <a class="btn goldfill" href="#">Migration guide</a>
+        <a class="btn ghost" href="#">First translation in 5 minutes</a>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
