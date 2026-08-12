@@ -26,18 +26,18 @@ sections: Model → Workflow → Proof → Scope → Maintainer → Packages →
 - **ProofStrip** directly under the hero: receipts within the first scroll,
   exactly what PRODUCT.md demands.
 - **Calm brand voice** and the one-accent Swiss grid. The revamp gets louder
-  in *claim structure*, not in decoration.
+  in _claim structure_, not in decoration.
 - **QuickInstall + 5-minute CTA**: low activation energy, correct.
 
 ### What underperforms — the actual revamp targets
 
 1. **The hero sells the architecture, not the payoff.** "One translation
-   model. From source to runtime." describes *how* Palamedes is built. The
-   *why-better* — the thing a skeptical visitor must get in 5 seconds — is
+   model. From source to runtime." describes _how_ Palamedes is built. The
+   _why-better_ — the thing a skeptical visitor must get in 5 seconds — is
    nowhere above the fold.
 2. **The strongest narrative asset is missing from the page.** The README has
-   it: *"Most i18n stacks eventually ask teams to choose between convenience,
-   speed, and clarity."* That trilemma is precisely Sebastian's tri-construct
+   it: _"Most i18n stacks eventually ask teams to choose between convenience,
+   speed, and clarity."_ That trilemma is precisely Sebastian's tri-construct
    (Performance + Tools + DX) — and it only lives in the README today.
 3. **The hero paragraph is a feature enumeration.** Seven framework names in
    the first body text = curse of knowledge + cognitive load. Frameworks are
@@ -71,17 +71,17 @@ Why this frame wins:
 - **"Pick three" is native dev culture** ("fast, good, cheap — pick two").
   It's a bold marketing hook that costs zero credibility because every piece
   links to checked-in evidence.
-- **The puzzle metaphor gets a job.** The three pieces interlock *because*
+- **The puzzle metaphor gets a job.** The three pieces interlock _because_
   they are cut from one model. The hero figure doubles as the architecture
   diagram later on the page — the metaphor pays off twice.
 
 ### The three pieces, each with its receipt
 
-| # | Word | Piece | Claim | Receipt |
-|---|------|-------|-------|---------|
-| 01 | CLEAR | Developer experience | Write the message where the UI happens; no ID bookkeeping; one runtime call | Code showcase + live demos + readable `.po` catalogs |
-| 02 | COMPLETE | Everything included | Extraction, catalog updates, audits, ICU diagnostics, semantic merging, compilation, adapters, backend — one toolchain | 25 smoke-verified example apps, 6 framework families × 4 locale strategies |
-| 03 | FAST | Performance | Cold extract over 1,500 files in **83.89 ms**; the warm re-run you trigger all day: **33.08 ms** | `benchmarks/e2e-workflow/results/latest.md`, drift-guarded |
+| #   | Word     | Piece                | Claim                                                                                                                  | Receipt                                                                    |
+| --- | -------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 01  | CLEAR    | Developer experience | Write the message where the UI happens; no ID bookkeeping; one runtime call                                            | Code showcase + live demos + readable `.po` catalogs                       |
+| 02  | COMPLETE | Everything included  | Extraction, catalog updates, audits, ICU diagnostics, semantic merging, compilation, adapters, backend — one toolchain | 25 smoke-verified example apps, 6 framework families × 4 locale strategies |
+| 03  | FAST     | Performance          | Cold extract over 1,500 files in **83.89 ms**; the warm re-run you trigger all day: **33.08 ms**                       | `benchmarks/e2e-workflow/results/latest.md`, drift-guarded                 |
 
 Ordering rationale: the words escalate from subjective to measurable and land
 on the most provable claim right before "PICK THREE." Tiles and page sections
@@ -115,17 +115,17 @@ returns in the Mechanism section as the architecture diagram.
 Where each principle earns its place (and its ethical bound: every trigger is
 backed by a real artifact — nothing manufactured):
 
-| Principle | Placement |
-|---|---|
-| Framing / contrast | "Pick three" flips the familiar "pick two" resignation |
-| Anchoring | Benchmark chart: competitor bars anchor, Palamedes bar lands |
-| Loss aversion | Pain framing in section copy: broken `.po` merges after rebase, migrations that reopen i18n |
+| Principle                           | Placement                                                                                                                                                                           |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framing / contrast                  | "Pick three" flips the familiar "pick two" resignation                                                                                                                              |
+| Anchoring                           | Benchmark chart: competitor bars anchor, Palamedes bar lands                                                                                                                        |
+| Loss aversion                       | Pain framing in section copy: broken `.po` merges after rebase, migrations that reopen i18n                                                                                         |
 | Authority (social-proof substitute) | Maintainer track record (qooxdoo → Lingui-migration at Regrello → Salesforce acquisition), ADR series. No fake logo walls — when real adopters exist, a logo strip slot is reserved |
-| Pratfall / honesty | "What Palamedes doesn't do" — deliberate scope, Palamedes+ optional, preview labels stay visible |
-| Zero-price + endowment | MIT, no account, catalogs live in *your* repo — "you own it" is literal |
-| Activation energy / goal gradient | QuickInstall in hero, "first translation in 5 minutes" as primary CTA everywhere |
-| Hick's law | One primary CTA per viewport; packages table leaves the homepage |
-| Curse-of-knowledge check | Hero lede must parse for someone who never used Lingui — test copy on an outsider |
+| Pratfall / honesty                  | "What Palamedes doesn't do" — deliberate scope, Palamedes+ optional, preview labels stay visible                                                                                    |
+| Zero-price + endowment              | MIT, no account, catalogs live in _your_ repo — "you own it" is literal                                                                                                             |
+| Activation energy / goal gradient   | QuickInstall in hero, "first translation in 5 minutes" as primary CTA everywhere                                                                                                    |
+| Hick's law                          | One primary CTA per viewport; packages table leaves the homepage                                                                                                                    |
+| Curse-of-knowledge check            | Hero lede must parse for someone who never used Lingui — test copy on an outsider                                                                                                   |
 
 ---
 
@@ -139,7 +139,6 @@ they can be reused.
   {/* ================================================== HERO — the claim */}
   <Hero>
     <Eyebrow>OPEN-SOURCE I18N FOR TYPESCRIPT</Eyebrow>
-
     {/*
      * The tri-construct. Three tiles tessellating into one square block —
      * hairline joints, accent-blue seams. Each tile is claim + receipt and
@@ -148,29 +147,34 @@ they can be reused.
     {/* Each tile carries its headline word as the mono micro-label, so the
         word ↔ piece mapping resolves without reading a single paragraph. */}
     <TriLock>
-      <Tile n="01" label="CLEAR — DEVELOPER EXPERIENCE"
-            code={`<Trans>Save changes</Trans>`}
-            sub="no IDs, no dictionaries, one runtime call" />
-      <Tile n="02" label="COMPLETE — EVERYTHING INCLUDED"
-            stat={contentStats.smokeExampleCount}
-            sub="verified example apps, 6 frameworks, 4 locale strategies" />
-      <Tile n="03" label="FAST — PERFORMANCE"
-            stat="29–79×"
-            sub="faster than every tool doing the same job" />
+      <Tile
+        n="01"
+        label="CLEAR — DEVELOPER EXPERIENCE"
+        code={`<Trans>Save changes</Trans>`}
+        sub="no IDs, no dictionaries, one runtime call"
+      />
+      <Tile
+        n="02"
+        label="COMPLETE — EVERYTHING INCLUDED"
+        stat={contentStats.smokeExampleCount}
+        sub="verified example apps, 6 frameworks, 4 locale strategies"
+      />
+      <Tile
+        n="03"
+        label="FAST — PERFORMANCE"
+        stat="29–79×"
+        sub="faster than every tool doing the same job"
+      />
     </TriLock>
-
     <H1>
       <Line>CLEAR. COMPLETE. FAST.</Line>
       <Line accent>PICK THREE.</Line>
     </H1>
-
     <Lede>
-      i18n tooling usually makes you trade developer experience, scope, or
-      speed against each other. Palamedes keeps one coherent model from
-      source to runtime — a Rust core, first-party framework adapters, and
-      catalogs your repository owns — so you don't have to.
+      i18n tooling usually makes you trade developer experience, scope, or speed against each other.
+      Palamedes keeps one coherent model from source to runtime — a Rust core, first-party framework
+      adapters, and catalogs your repository owns — so you don't have to.
     </Lede>
-
     <CtaRow>
       <Primary href="/get-started">First translation in 5 minutes</Primary>
       <Secondary href="/proof">See the receipts</Secondary>
@@ -183,7 +187,11 @@ they can be reused.
       numbers — DX has no stat, so this strip stays numbers-first. */}
   <ReceiptsStrip
     stats={[
-      { value: "29–79×",   label: "faster than every tool doing the same job — same corpus", href: "/proof" },
+      {
+        value: "29–79×",
+        label: "faster than every tool doing the same job — same corpus",
+        href: "/proof",
+      },
       { value: "83.89 ms", label: "cold extract, realistic 1,500-file corpus", href: "/proof" },
       { value: `${smokeExampleCount}`, label: "smoke-verified example apps", href: "/frameworks" },
       { value: `${adrCount}`, label: "ADRs documenting every tradeoff", href: "/decisions" },
@@ -191,12 +199,14 @@ they can be reused.
   />
 
   {/* ============================== 01 — CLEAR: DEVELOPER EXPERIENCE */}
-  <Section num="01 — Developer experience"
+  <Section
+    num="01 — Developer experience"
     title="Write the message where the UI happens."
     lede="No message-ID bookkeeping, no parallel dictionary files. Messages
           are identified by message + context — stable across refactors and
           years of catalog history. getI18n() resolves the active instance in
-          server components, client islands, and backend handlers alike.">
+          server components, client islands, and backend handlers alike."
+  >
     {/* (CodeShowcase) before/after: ID-based ceremony vs <Trans> in place */}
     <CodeShowcase />
     {/* (LocaleBookingCards) interactive: switch locale, watch copy, plural
@@ -210,26 +220,30 @@ they can be reused.
   </Section>
 
   {/* ==================== 02 — COMPLETE: EVERYTHING INCLUDED */}
-  <Section num="02 — Everything included"
+  <Section
+    num="02 — Everything included"
     title="Stop assembling your i18n stack from parts."
     lede="Extraction, catalog updates, structured audits, ICU diagnostics,
           semantic Git merging, compilation, runtime — one native toolchain,
           not a plugin scavenger hunt. First-party adapters wire it into
-          your framework so host quirks never leak into catalog semantics.">
-
+          your framework so host quirks never leak into catalog semantics."
+  >
     {/* The spec-sheet ledger — the "Mitgift". Swiss grid loves this:
         a bill of materials, dense, mono labels, hairline rows. */}
     <ShipsWithLedger
       rows={[
-        ["EXTRACT + UPDATE",  "one command, cached per file (ADR-019)"],
-        ["CATALOG AUDITS",    "machine-readable completeness & drift checks for CI"],
-        ["ICU DIAGNOSTICS",   "plural/select mistakes caught at extract time, not in prod"],
-        ["SEMANTIC MERGE",    "Git merge driver resolves .po conflicts by meaning"],
-        ["COMPILATION",       "catalogs compile to runtime artifacts — no runtime parsing"],
-        ["FRAMEWORK ADAPTERS","Next.js · TanStack Start · SolidStart · Waku · React Router · Remix v3 · Vite"],
-        ["BACKEND SERVERS",   "request-local i18n for Hono & Express, same catalogs"],
+        ["EXTRACT + UPDATE", "one command, cached per file (ADR-019)"],
+        ["CATALOG AUDITS", "machine-readable completeness & drift checks for CI"],
+        ["ICU DIAGNOSTICS", "plural/select mistakes caught at extract time, not in prod"],
+        ["SEMANTIC MERGE", "Git merge driver resolves .po conflicts by meaning"],
+        ["COMPILATION", "catalogs compile to runtime artifacts — no runtime parsing"],
+        [
+          "FRAMEWORK ADAPTERS",
+          "Next.js · TanStack Start · SolidStart · Waku · React Router · Remix v3 · Vite",
+        ],
+        ["BACKEND SERVERS", "request-local i18n for Hono & Express, same catalogs"],
         ["LOCALE STRATEGIES", "cookie · route · subdomain · TLD — pick per product, not per tool"],
-        ["EDITOR & AI",       "ESLint/Oxlint preview plugin · llms.txt for coding assistants"],
+        ["EDITOR & AI", "ESLint/Oxlint preview plugin · llms.txt for coding assistants"],
       ]}
     />
 
@@ -237,13 +251,14 @@ they can be reused.
     <FrameworkMatrix />
 
     <OwnershipNote>
-      All of it MIT. No account, no cloud dependency — catalogs live in your
-      repository, and the toolchain stays useful on its own.
+      All of it MIT. No account, no cloud dependency — catalogs live in your repository, and the
+      toolchain stays useful on its own.
     </OwnershipNote>
   </Section>
 
   {/* ================================== 03 — FAST: PERFORMANCE (peak) */}
-  <Section num="03 — Performance"
+  <Section
+    num="03 — Performance"
     title="Every extract finishes faster than a blink."
     lede="A full extract and catalog update over 1,500 files takes 83.89 ms —
           29× to 79× faster than every tool we measured doing the same job,
@@ -251,7 +266,8 @@ they can be reused.
           entirely is still 5.7× slower.) And that is the slow lane: touch
           five files and re-run — 33.08 ms, because unchanged files are
           neither read nor parsed. The compared tools re-extract everything,
-          every time.">
+          every time."
+  >
     {/* (BenchmarkChart) cold bars anchor vs Lingui / React Intl /
         i18next-cli / General Translation; warm bar marked separately —
         capability, never a speedup claim (bench.ts rules hold). */}
@@ -264,29 +280,25 @@ they can be reused.
       all three." The tessellation figure from the hero returns here as the
       architecture diagram — pieces lock because they're cut from one model. */}
   <StatementBand num="04 — Why this holds" figure="trilock-as-architecture">
-    Speed, scope, and DX aren't three features we juggle — they fall out of
-    one decision. One semantic model (message + context), one catalog engine
-    (ferrocat, in Rust), one runtime contract (getI18n()), and adapters kept
-    deliberately thin. Nothing is duplicated, so nothing drifts, and the
-    native core does the careful work once. The full reasoning is public:
+    Speed, scope, and DX aren't three features we juggle — they fall out of one decision. One
+    semantic model (message + context), one catalog engine (ferrocat, in Rust), one runtime contract
+    (getI18n()), and adapters kept deliberately thin. Nothing is duplicated, so nothing drifts, and
+    the native core does the careful work once. The full reasoning is public:
     {adrCount} ADRs, including the ones about what Palamedes refuses to do.
   </StatementBand>
 
   {/* ==================================== 05 — TRUST: maintainer + honesty */}
-  <Section num="05 — Trust"
-    title="Built from repeat experience, not a weekend take.">
+  <Section num="05 — Trust" title="Built from repeat experience, not a weekend take.">
     <MaintainerNote>
-      Third generation of source-string-first i18n tooling from the same
-      author — gettext-style macros in qooxdoo, a full enterprise Lingui
-      migration at Regrello (acquired by Salesforce, 2025), now Palamedes.
-      Maintained by Sebastian Software GmbH.
+      Third generation of source-string-first i18n tooling from the same author — gettext-style
+      macros in qooxdoo, a full enterprise Lingui migration at Regrello (acquired by Salesforce,
+      2025), now Palamedes. Maintained by Sebastian Software GmbH.
     </MaintainerNote>
     {/* Pratfall, deliberately: scope honesty converts skeptics */}
     <HonestScope title="What Palamedes doesn't do">
-      No TMS, no machine translation, no hosted dashboard. Palamedes covers
-      the complete local workflow; Palamedes+ is a planned optional managed
-      layer — the open-source core needs no account and stays complete
-      without it.
+      No TMS, no machine translation, no hosted dashboard. Palamedes covers the complete local
+      workflow; Palamedes+ is a planned optional managed layer — the open-source core needs no
+      account and stays complete without it.
     </HonestScope>
     <FootLinks>
       <a href="/decisions">The decision trail →</a>
@@ -341,7 +353,7 @@ guarantees.
 
 **A′ (alternative): "EFFECTIVE. COMPLETE. FAST."**
 Same structure and ordering. "Effective" is safe and friendly, but generic —
-it names an outcome every tool claims, and it doesn't say *what* about the
+it names an outcome every tool claims, and it doesn't say _what_ about the
 experience is better. Fallback if "clear" feels too thin in the layout.
 
 **B: "I18N MADE YOU CHOOSE. / PALAMEDES DOESN'T."**
@@ -378,29 +390,29 @@ nothing to newcomers. Numbers therefore work in three layers:
    context (83.89 ms cold, 33.08 ms warm). Still no competitor names —
    except inside terminal output, which is program output, not copy.
 3. **Layer 3 — charts, /proof, /compare:** tool names, full tables, linked
-   reports. Lingui is first *named* in chart labels and the switching
+   reports. Lingui is first _named_ in chart labels and the switching
    section — the migration audience knows it; the awareness audience
    doesn't need it.
 
 Every number/claim in the mock, with its receipt — extend
 `verify-site-bench-data.mjs` coverage where prose quotes numbers:
 
-| Claim | Source |
-|---|---|
-| 83.89 ms cold / 33.08 ms warm (5 touched files), realistic corpus | `bench.ts` ← `benchmarks/e2e-workflow/results/latest.md` (guarded) |
-| "29–79× faster than every tool doing the same job", realistic corpus | guarded ratios of the same-scope lanes — floor Lingui 29.57×, ceiling i18next-cli 79.21×, GT 72.91× between; both ends rounded down. React Intl is excluded from the range **by the benchmark's own scope ruling**: `docs/benchmark-e2e-workflow.md` ("Reading The React Intl Row") states its lane "does less work than every other lane" and "must not be read as a catalog-update number". It stays in charts with its scope label; extend the verify script when the range is quoted in prose |
-| "Even the tool that skips catalog updates entirely is still 5.7× slower" | React Intl 5.67× (guarded ratio), scope caveat from the same benchmark doc — pratfall-honest supporting line, never the headline range |
-| "Every extract finishes faster than a blink" | 83.89 ms cold / 33.08 ms warm vs ~100 ms typical human blink; exact ms stays one layer down as the receipt |
-| **Superseded:** "at least 10× faster than all others" | first rejected against the all-tools floor (React Intl 5.67×); after checking the benchmark scope ruling, the same-job floor is 29.57× — so the honest claim "29–79×" is *stronger* than the requested 10× |
-| 29.57× vs Lingui, cold, realistic corpus | same report (guarded ratio) — layer 3 only (charts, /proof, /compare) |
-| Warm advantage excluded from speedup claims | README + bench.ts rules — keep verbatim |
-| 25 smoke-verified examples; 6 families × 4 strategies | `content-stats.json` (generated) |
-| ADR count | `content-stats.json` |
-| Per-file extraction cache, stat-validated | ADR-019 |
-| Semantic merge driver, ICU diagnostics, audits | shipped ferrocat features, docs |
-| Maintainer history (qooxdoo, Regrello→Salesforce) | README "Who Builds This" links |
-| "No account, MIT, repo-owned catalogs" | LICENSE + product scope |
-| Remix v3 smoke-only, previews labeled | keep the qualifier wherever Remix/preview packages appear |
+| Claim                                                                    | Source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 83.89 ms cold / 33.08 ms warm (5 touched files), realistic corpus        | `bench.ts` ← `benchmarks/e2e-workflow/results/latest.md` (guarded)                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| "29–79× faster than every tool doing the same job", realistic corpus     | guarded ratios of the same-scope lanes — floor Lingui 29.57×, ceiling i18next-cli 79.21×, GT 72.91× between; both ends rounded down. React Intl is excluded from the range **by the benchmark's own scope ruling**: `docs/benchmark-e2e-workflow.md` ("Reading The React Intl Row") states its lane "does less work than every other lane" and "must not be read as a catalog-update number". It stays in charts with its scope label; extend the verify script when the range is quoted in prose |
+| "Even the tool that skips catalog updates entirely is still 5.7× slower" | React Intl 5.67× (guarded ratio), scope caveat from the same benchmark doc — pratfall-honest supporting line, never the headline range                                                                                                                                                                                                                                                                                                                                                            |
+| "Every extract finishes faster than a blink"                             | 83.89 ms cold / 33.08 ms warm vs ~100 ms typical human blink; exact ms stays one layer down as the receipt                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Superseded:** "at least 10× faster than all others"                    | first rejected against the all-tools floor (React Intl 5.67×); after checking the benchmark scope ruling, the same-job floor is 29.57× — so the honest claim "29–79×" is _stronger_ than the requested 10×                                                                                                                                                                                                                                                                                        |
+| 29.57× vs Lingui, cold, realistic corpus                                 | same report (guarded ratio) — layer 3 only (charts, /proof, /compare)                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Warm advantage excluded from speedup claims                              | README + bench.ts rules — keep verbatim                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 25 smoke-verified examples; 6 families × 4 strategies                    | `content-stats.json` (generated)                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ADR count                                                                | `content-stats.json`                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Per-file extraction cache, stat-validated                                | ADR-019                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Semantic merge driver, ICU diagnostics, audits                           | shipped ferrocat features, docs                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Maintainer history (qooxdoo, Regrello→Salesforce)                        | README "Who Builds This" links                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| "No account, MIT, repo-owned catalogs"                                   | LICENSE + product scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Remix v3 smoke-only, previews labeled                                    | keep the qualifier wherever Remix/preview packages appear                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ---
 
@@ -414,7 +426,7 @@ TriLock is **rejected**: squeezed to the hero's edge it read as restless,
 Lego-like. The tri-construct must be set calmly — as a band, row, column,
 table, or stack — never as an interlocking block graphic. The four
 non-ledger concepts are archived below for reference; 04's
-terminal-as-hero *content* idea was carried into round 2.
+terminal-as-hero _content_ idea was carried into round 2.
 
 ### Round 3 — the synthesis (current direction)
 
@@ -467,20 +479,20 @@ Same tokens, same copy, five different layout languages. Each stretches the
 brand in one named direction; mock files `hero-mock/r2-*.html`, PNGs in
 `hero-mock/shots/`.
 
-| # | Variant | Stretch | Tri-construct treatment |
-|---|---------|---------|-------------------------|
-| V1 | **Monument** | Centered, monumental scale, museum whitespace | One full-width band of three equal cells |
-| V2 | **Datasheet** | Evidence density as design — the hero *is* a framed technical data sheet | Rows in the spec table (01/02/03 as section rows) |
-| V3 | **Terminal** | Proof-first: a live `pmds extract` session in an ink terminal panel (uses the reserved term-ok/term-warn tokens) | Quiet three-cell strip below the hero |
-| V4 | **Editorial** | Broadsheet front page: masthead, dateline, italic standfirst, three text columns with roman numerals | The three columns *are* the pieces |
-| V5 | **Panels** | Controlled color-block: full-height navy panel against paper | Vertical stacked ledger inside the panel |
+| #   | Variant       | Stretch                                                                                                          | Tri-construct treatment                           |
+| --- | ------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| V1  | **Monument**  | Centered, monumental scale, museum whitespace                                                                    | One full-width band of three equal cells          |
+| V2  | **Datasheet** | Evidence density as design — the hero _is_ a framed technical data sheet                                         | Rows in the spec table (01/02/03 as section rows) |
+| V3  | **Terminal**  | Proof-first: a live `pmds extract` session in an ink terminal panel (uses the reserved term-ok/term-warn tokens) | Quiet three-cell strip below the hero             |
+| V4  | **Editorial** | Broadsheet front page: masthead, dateline, italic standfirst, three text columns with roman numerals             | The three columns _are_ the pieces                |
+| V5  | **Panels**    | Controlled color-block: full-height navy panel against paper                                                     | Vertical stacked ledger inside the panel          |
 
 Reduction criteria unchanged (5-second clarity, proof-density
 compatibility, ARDO/docs theming feasibility, distance from generic SaaS).
 Note V2 and V3 are the most "Palamedes" (show the work); V1 and V4 are the
 most distinctive typographically; V5 is the safest modern read. Elements
 recombine freely — e.g. V3's terminal with V1's centered headline, or V2's
-sheet as the *second* viewport under any hero.
+sheet as the _second_ viewport under any hero.
 
 ### Round 1 archive — five directions
 
@@ -489,13 +501,13 @@ Greek theme could stretch (mocks: `hero-mock/01…05-*.html`). It closed with
 brand fidelity confirmed instead of a two-finalist shootout — kept here as
 the record of what was considered and why the extremes lost.
 
-| # | Concept | Language | Greek interpretation | Temperature |
-|---|---------|----------|----------------------|-------------|
-| 01 | **Spec Ledger** | Warm paper, navy ink, bronze accent, Cinzel Hellenic, hairlines — the current live trajectory, sharpened | Typographic (classical letterforms, restraint) | Calm-confident |
-| 02 | **Attic Poster** | Terracotta clay, black, cream; meander borders; poster composition | Literal-classical (black-figure pottery) | Loud |
-| 03 | **Marble Inscription** | Marble white, engraved letterspaced caps (Optima), lapis accent, monumental whitespace | Literal-classical (stele / museum) | Monumental-quiet |
-| 04 | **Phosphor Terminal** | Near-black, phosphor green/amber, all-mono; the hero *is* a terminal session; ΠΑΛΑΜΗΔΗΣ strip | Abstracted (Greek letters as texture) | Radical dev-native |
-| 05 | **Aegean Modern** | Flat color-block: Aegean blue, sun yellow, white; bold grotesk, sentence case | Abstracted (palette + wave line) | Contemporary-bright |
+| #   | Concept                | Language                                                                                                 | Greek interpretation                           | Temperature         |
+| --- | ---------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------- |
+| 01  | **Spec Ledger**        | Warm paper, navy ink, bronze accent, Cinzel Hellenic, hairlines — the current live trajectory, sharpened | Typographic (classical letterforms, restraint) | Calm-confident      |
+| 02  | **Attic Poster**       | Terracotta clay, black, cream; meander borders; poster composition                                       | Literal-classical (black-figure pottery)       | Loud                |
+| 03  | **Marble Inscription** | Marble white, engraved letterspaced caps (Optima), lapis accent, monumental whitespace                   | Literal-classical (stele / museum)             | Monumental-quiet    |
+| 04  | **Phosphor Terminal**  | Near-black, phosphor green/amber, all-mono; the hero _is_ a terminal session; ΠΑΛΑΜΗΔΗΣ strip            | Abstracted (Greek letters as texture)          | Radical dev-native  |
+| 05  | **Aegean Modern**      | Flat color-block: Aegean blue, sun yellow, white; bold grotesk, sentence case                            | Abstracted (palette + wave line)               | Contemporary-bright |
 
 Reduction process (proposed):
 
@@ -518,7 +530,7 @@ Honest constraints per concept: 02 fights the "calm, evidence-first" product
 temperament and is hard to sustain across docs; 03 is beautiful but risks
 low information density (the ledger/spec tables would carry the proof); 04
 contradicts the light-only site and reads hostile to non-developer visitors
-(translators, stakeholders) — but its terminal-as-hero *content* idea can be
+(translators, stakeholders) — but its terminal-as-hero _content_ idea can be
 lifted into any winner; 05 is the most conventional and the least ownable —
 closest to generic modern SaaS despite the palette.
 
@@ -526,16 +538,16 @@ closest to generic modern SaaS despite the palette.
 
 ### What the field does (homepages fetched 2026-08-12)
 
-| Site | Length | Above-fold artifact | Proof strategy | Closing CTA |
-|---|---|---|---|---|
-| lingui.dev | ~6 sections | none — text-only hero | logo wall late; **zero numbers anywhere** | "View Docs" |
-| i18next.com | no homepage — GitBook docs page | — | "1,500+ of top-100k websites" mid-page | none; ends on Locize/MCP promos |
-| formatjs (react-intl) | ~5 sections | live locale-switch demo | stats row under hero: 50M+/mo, 14k stars, 150+ languages | none — page just ends |
-| generaltranslation.com | ~14 sections | terminal ending in a result stat | hot logo wall directly after hero; compliance badges; 1 testimonial | "Deploy today" + Get a demo |
-| tolgee.io | ~9 | product demo | testimonials linked to case studies | soft "reach out" |
-| inlang.com | ~15 | code + enterprise logos | logos + stats early | vague "Explore tools" |
-| vite.dev | 6 | install snippet + 6 logos | logos, stars/downloads, testimonials | aspirational |
-| biomejs.dev | ~9 | **benchmark in hero** ("~35× faster", "97% compatibility") | awards, logos, contributors | dual path: install + editor |
+| Site                   | Length                          | Above-fold artifact                                        | Proof strategy                                                      | Closing CTA                     |
+| ---------------------- | ------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------- |
+| lingui.dev             | ~6 sections                     | none — text-only hero                                      | logo wall late; **zero numbers anywhere**                           | "View Docs"                     |
+| i18next.com            | no homepage — GitBook docs page | —                                                          | "1,500+ of top-100k websites" mid-page                              | none; ends on Locize/MCP promos |
+| formatjs (react-intl)  | ~5 sections                     | live locale-switch demo                                    | stats row under hero: 50M+/mo, 14k stars, 150+ languages            | none — page just ends           |
+| generaltranslation.com | ~14 sections                    | terminal ending in a result stat                           | hot logo wall directly after hero; compliance badges; 1 testimonial | "Deploy today" + Get a demo     |
+| tolgee.io              | ~9                              | product demo                                               | testimonials linked to case studies                                 | soft "reach out"                |
+| inlang.com             | ~15                             | code + enterprise logos                                    | logos + stats early                                                 | vague "Explore tools"           |
+| vite.dev               | 6                               | install snippet + 6 logos                                  | logos, stars/downloads, testimonials                                | aspirational                    |
+| biomejs.dev            | ~9                              | **benchmark in hero** ("~35× faster", "97% compatibility") | awards, logos, contributors                                         | dual path: install + editor     |
 
 ### Patterns adopted (source in parentheses)
 
@@ -572,20 +584,20 @@ quantified stats + above-fold live artifact. Palamedes runs all three.
 Supersedes the 7-block arc in section 4; the copy blocks there remain the
 copy source. Mock: `hero-mock/r4-full-page.html`.
 
-| # | Section | One message | Artifact | Existing component |
-|---|---------|-------------|----------|--------------------|
-| 1 | Masthead + Hero | Pick three. | headline + install snippet | R3 |
-| 2 | Framework logo band | Works with your stack — verified | 7+2 logos, each → live demo | new (real SVG logos: asset task + trademark check) |
-| 3 | Tri-band + receipts | The three pieces, each with a receipt | stats | R3 |
-| 4 | 01 · Clear — DX | Write where the UI happens | before/after code + live locale demo | CodeShowcase, LocaleBookingCards |
-| 5 | 02 · Complete — Everything included | The whole workflow ships in the box | ships-with ledger + 5-step pipeline | new ledger (V2), WorkflowFlow |
-| 6 | 03 · Fast — Performance | Faster than a blink | terminal + benchmark bars | TerminalCascade-style, BenchmarkChart |
-| 7 | Why this holds | One model, so no trade-off | mechanism diagram | StatementBand |
-| 8 | The verified matrix | 6 families × 4 strategies, all real apps | matrix grid + legend (browser vs smoke) | FrameworkMatrix |
-| 9 | Trust | Third-generation tooling, honest scope | maintainer + "what we don't do" | Maintainer section |
-| 10 | Switching | Coming from X? Safe path over | migration links + reuse claim | rivals/compare pages |
-| 11 | FAQ | Objections, answered honestly | 6 Q&A (account? production-ready? AI?) | new |
-| 12 | Final CTA | First translation in 5 minutes | dual path + myth line | CtaBand |
+| #   | Section                             | One message                              | Artifact                                | Existing component                                 |
+| --- | ----------------------------------- | ---------------------------------------- | --------------------------------------- | -------------------------------------------------- |
+| 1   | Masthead + Hero                     | Pick three.                              | headline + install snippet              | R3                                                 |
+| 2   | Framework logo band                 | Works with your stack — verified         | 7+2 logos, each → live demo             | new (real SVG logos: asset task + trademark check) |
+| 3   | Tri-band + receipts                 | The three pieces, each with a receipt    | stats                                   | R3                                                 |
+| 4   | 01 · Clear — DX                     | Write where the UI happens               | before/after code + live locale demo    | CodeShowcase, LocaleBookingCards                   |
+| 5   | 02 · Complete — Everything included | The whole workflow ships in the box      | ships-with ledger + 5-step pipeline     | new ledger (V2), WorkflowFlow                      |
+| 6   | 03 · Fast — Performance             | Faster than a blink                      | terminal + benchmark bars               | TerminalCascade-style, BenchmarkChart              |
+| 7   | Why this holds                      | One model, so no trade-off               | mechanism diagram                       | StatementBand                                      |
+| 8   | The verified matrix                 | 6 families × 4 strategies, all real apps | matrix grid + legend (browser vs smoke) | FrameworkMatrix                                    |
+| 9   | Trust                               | Third-generation tooling, honest scope   | maintainer + "what we don't do"         | Maintainer section                                 |
+| 10  | Switching                           | Coming from X? Safe path over            | migration links + reuse claim           | rivals/compare pages                               |
+| 11  | FAQ                                 | Objections, answered honestly            | 6 Q&A (account? production-ready? AI?)  | new                                                |
+| 12  | Final CTA                           | First translation in 5 minutes           | dual path + myth line                   | CtaBand                                            |
 
 ### Benchmark visualization: unit grid (decided 2026-08-12)
 
@@ -606,16 +618,16 @@ compact form for /proof and topic pages; a real-time race animation
 Full route inventory and per-page structure notes were collected from the
 live route files. Summary of what the revamp means for each surface:
 
-| Surface | Keep | Fix in revamp |
-|---|---|---|
-| /frameworks | The 6×4 matrix with per-cell hosting status — best asset on the site | Three overlapping nav layers for the same 7 frameworks (matrix → panels → subpages); strategies section interrupts the flow; backend section is a one-button orphan. Fold panels into the matrix as the single entry point; adopt masthead form language |
-| /proof | "Honest note" / "exact boundary" rails — a signature device, reuse site-wide | Energy decays into bare link lists; the ADR trail (most persuasive asset for senior readers) is the weakest-rendered block. Give it a ledger treatment; swap chart to unit grid |
-| /get-started | Tabbed stack picker, shortest page | Everything sits in one numbered section; the scoped-package caveat lands before the first command; final CTA is a support link, not momentum. Split steps, move caveat after install, end forward |
-| /blog | Simple scannable list, honest voice | Index is manually duplicated against content files (drift waiting to happen — generate it at prebuild); no dates on the index; only hero without CTAs |
-| /compare + 7 rival pages | The respect/flipside/honest spine; dated research; "not measured" rule | Verdict sits two-thirds down (move a compact verdict up under the thesis); NATIVE_SHIFT block is byte-identical on all 8 pages; `/guides` says "Eight comparisons" while RIVALS.length is 7 (real drift — fix + derive from data) |
-| 4 topic pages (+ /guides) | problem→approach→evidence→FAQ shape is right for search; FAQ rendered visibly | The likeliest cold-entry pages are invisible in the nav (/guides is footer-only); pages are structurally interchangeable. Surface them, differentiate eyebrows |
-| /docs + /decisions indexes | Prebuild pipeline, canonical sources | Both indexes are unstyled generated bullet lists — the least-designed pages sit behind top-nav items. Styled, grouped index pages via the token bridge; /decisions index as the "decision trail" ledger |
-| Nav | 5 items | /get-started only exists as header CTA, /guides only in the footer — align nav with the new structure |
+| Surface                    | Keep                                                                          | Fix in revamp                                                                                                                                                                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| /frameworks                | The 6×4 matrix with per-cell hosting status — best asset on the site          | Three overlapping nav layers for the same 7 frameworks (matrix → panels → subpages); strategies section interrupts the flow; backend section is a one-button orphan. Fold panels into the matrix as the single entry point; adopt masthead form language |
+| /proof                     | "Honest note" / "exact boundary" rails — a signature device, reuse site-wide  | Energy decays into bare link lists; the ADR trail (most persuasive asset for senior readers) is the weakest-rendered block. Give it a ledger treatment; swap chart to unit grid                                                                          |
+| /get-started               | Tabbed stack picker, shortest page                                            | Everything sits in one numbered section; the scoped-package caveat lands before the first command; final CTA is a support link, not momentum. Split steps, move caveat after install, end forward                                                        |
+| /blog                      | Simple scannable list, honest voice                                           | Index is manually duplicated against content files (drift waiting to happen — generate it at prebuild); no dates on the index; only hero without CTAs                                                                                                    |
+| /compare + 7 rival pages   | The respect/flipside/honest spine; dated research; "not measured" rule        | Verdict sits two-thirds down (move a compact verdict up under the thesis); NATIVE_SHIFT block is byte-identical on all 8 pages; `/guides` says "Eight comparisons" while RIVALS.length is 7 (real drift — fix + derive from data)                        |
+| 4 topic pages (+ /guides)  | problem→approach→evidence→FAQ shape is right for search; FAQ rendered visibly | The likeliest cold-entry pages are invisible in the nav (/guides is footer-only); pages are structurally interchangeable. Surface them, differentiate eyebrows                                                                                           |
+| /docs + /decisions indexes | Prebuild pipeline, canonical sources                                          | Both indexes are unstyled generated bullet lists — the least-designed pages sit behind top-nav items. Styled, grouped index pages via the token bridge; /decisions index as the "decision trail" ledger                                                  |
+| Nav                        | 5 items                                                                       | /get-started only exists as header CTA, /guides only in the footer — align nav with the new structure                                                                                                                                                    |
 
 Sequencing: homepage first (this concept), then /proof and /compare (both
 inherit decided elements: unit grid, number policy, masthead language), then
@@ -652,7 +664,7 @@ lives here, once — not repeated on every comparison page").
 
 **/engineering — the machine room (new page, mocked 2026-08-12,
 `r6-engineering.html`).** For the technical audience that wants the black
-magic named. Hero: *"«Written in Rust» is the boring half."* — Rust buys
+magic named. Hero: _"«Written in Rust» is the boring half."_ — Rust buys
 speed, not architecture; the page is about what Palamedes refuses to do at
 runtime. Opens with the **machine map** (five layers: app → toolchain →
 native core → artifacts → runtime, with the typed napi boundary as an ink
@@ -696,8 +708,8 @@ ten mechanisms, each with a real artifact and ADR chips:
 9. One runtime contract — AsyncLocalStorage request scope, RSC entry scope,
    locale fixed per document (ADR-005/025/020).
 10. The machine that checks the marketing — `verify-site-bench-data.mjs`
-   fails the site build when quoted numbers drift from the checked report;
-   "the marketing is downstream of CI."
+    fails the site build when quoted numbers drift from the checked report;
+    "the marketing is downstream of CI."
 
 Open point: placement — own top-nav item vs. linked from /proof and the
 homepage mechanism section. The ADR-chip device (mono chip linking each

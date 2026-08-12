@@ -10,6 +10,7 @@ target/
 coverage/
 docs/example-screenshots/
 benchmarks/*/results/
+site/homepage-revamp-mocks/
 packages/core-node/src/generated/
 examples/nextjs-*/next-env.d.ts
 examples/tanstack-*/src/routeTree.gen.ts
