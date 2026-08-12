@@ -1,28 +1,26 @@
-import { ButtonLink, Page, Reveal, Section } from "@palamedes/site-ui"
-import { pageMeta } from "~/lib/meta"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui"
 import { FrameworkMatrix } from "~/components/frameworks/FrameworkMatrix"
 import { CodeShowcase } from "~/components/home/CodeShowcase"
+import { CompleteProof } from "~/components/home/CompleteProof"
 import { CtaBand } from "~/components/home/CtaBand"
-import { FeatureGrid } from "~/components/home/FeatureGrid"
-import { PackageCards } from "~/components/home/PackageCards"
+import { HomeHero } from "~/components/home/HomeHero"
+import { PromiseBand } from "~/components/home/PromiseBand"
 import { ProofStrip } from "~/components/home/ProofStrip"
 import { QuickInstall } from "~/components/home/QuickInstall"
 import { StatementBand } from "~/components/home/StatementBand"
-import { TerminalCascade } from "~/components/home/TerminalCascade"
-import { WorkflowFlow } from "~/components/home/WorkflowFlow"
-import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
+import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
 import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
 import contentStats from "~/data/generated/content-stats.json"
-import { HOME_MODEL_CARDS } from "~/data/features"
 import { decisionHref, REPO } from "~/data/links"
+import { pageMeta } from "~/lib/meta"
 
 export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
-    title: "Palamedes — open-source i18n tooling for TypeScript",
+    title: "Palamedes — a durable i18n foundation for TypeScript",
     description:
-      "Open-source TypeScript i18n tooling with source-string-first authoring, repository-owned catalogs, a native toolchain, one runtime model, and first-party integrations across modern frontend and server frameworks.",
+      "A clear, complete, and fast TypeScript i18n foundation with source-local messages, repository-owned catalogs, native tooling, and first-party integrations for modern frameworks.",
     path: "/",
   })
 }
@@ -30,121 +28,103 @@ export function meta() {
 export default function Home() {
   return (
     <Page>
-      {/* ------------------------------------------------------------ hero */}
-      <section className="grid grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-12 px-8 pt-16 pb-16 max-grid:grid-cols-1 max-tight:px-5">
-        <div>
-          <img
-            src="/logo.svg"
-            alt="Palamedes"
-            width={104}
-            height={104}
-            className="mb-8 size-26 max-tight:size-20"
-          />
-          <p className="eyebrow">Open-source i18n tooling for TypeScript</p>
-          <h1 className="display-serif mt-6 text-display leading-[1.12] uppercase">
-            <span className="block">One translation model.</span>
-            <span className="block">From source to runtime.</span>
-          </h1>
-          <p className="mt-6 max-w-[38em] text-[16px]">
-            Write messages where your UI happens, keep source-string-first <code>.po</code> catalogs
-            in your repository, and run transformation, extraction, validation, merging, and
-            compilation through one native toolchain. First-party integrations cover Next.js,
-            TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite. Backend servers use
-            the same runtime model.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <ButtonLink href="/get-started">Get started in 5 minutes</ButtonLink>
-            <ButtonLink variant="outline" href="/frameworks">
-              Explore integrations
-            </ButtonLink>
-          </div>
-          <QuickInstall />
-        </div>
-        <Reveal delayMs={150}>
-          <TerminalCascade />
-        </Reveal>
-      </section>
-
+      <HomeHero />
       <ProofStrip />
+      <PromiseBand />
 
-      {/* ----------------------------------------------------- 01 — model */}
       <Section
-        num="01 — Model"
-        title="Your i18n setup should stay coherent as your application changes."
-        lede="New render environments and framework integrations should not reopen how your app identifies, extracts, and loads messages. Palamedes keeps authoring, catalogs, and runtime access coherent while each adapter handles its host-specific wiring."
+        num="01 — Clear"
+        eyebrow="Developer experience"
+        title="Write the message where the interface happens."
+        lede="Messages stay readable in TypeScript and JSX. Palamedes transforms them for extraction and runtime use without making developers manage parallel identifiers, generated wrappers, or a second authoring language."
       >
-        <FeatureGrid cards={HOME_MODEL_CARDS} />
+        <div className="grid grid-cols-[minmax(0,8fr)_minmax(16rem,4fr)] gap-8 max-grid:grid-cols-1">
+          <CodeShowcase />
+          <aside className="border border-hair px-6 py-6">
+            <p className="micro text-[9px] tracking-label text-gray-spec">
+              Start small, stay coherent
+            </p>
+            <h3 className="display-serif mt-3 text-[22px] leading-tight uppercase">
+              Quick to adopt is useful. Safe to keep is the point.
+            </h3>
+            <p className="mt-4 text-[13.5px] leading-relaxed text-ink/85">
+              The quickstart is one path into the system, not the product promise. The same message
+              model continues through catalogs, CI, server rendering, locale routing, and large
+              repositories.
+            </p>
+            <QuickInstall />
+          </aside>
+        </div>
       </Section>
 
-      {/* -------------------------------------------------- 02 — workflow */}
       <Section
-        num="02 — Workflow"
-        title="The whole workflow. One clear path."
-        lede="Author in TypeScript, extract and update catalogs with one native command, translate in standard .po files, then render through the same runtime model. Audits, semantic merges, and CI completeness gates use the same catalog engine."
+        num="02 — Complete"
+        eyebrow="Already wired"
+        title="Framework integrations and locale architectures are two different promises."
+        lede="The adapter layer supplies tested glue code for each supported host. Separately, the example matrix proves four application shapes for locale selection and URLs. You do not have to turn generic compatibility into an architecture yourself."
+      >
+        <CompleteProof />
+      </Section>
+
+      <Section
+        num="03 — Fast"
+        eyebrow="Checked performance"
+        title="The result should be obvious without fake precision."
+        lede="The public ledger uses calm, rounded numbers. Exact medians, fixtures, commands, machine details, and semantic output checks remain in the repository for anyone who wants to reproduce the run."
       >
         <div className="space-y-8">
-          <WorkflowFlow />
-          <CodeShowcase />
-        </div>
-      </Section>
-
-      {/* ----------------------------------------------------- 03 — proof */}
-      <Section
-        num="03 — Proof"
-        title="We don't ask you to trust a slogan. The repo shows the work."
-        lede={`Every combination in the verified framework matrix is a real app: all ${contentStats.smokeExampleCount} are smoke-checked on relevant PRs and main pushes, while ${contentStats.browserExampleCount} browser-capable examples run the Playwright flow weekly or on manual dispatch. Public demos are available where hosting is ready. Every benchmark number links to a checked-in, re-runnable report. Palamedes carries two bars: the cold run every tool performs, and the cached re-run you actually trigger all day.`}
-      >
-        <div className="space-y-10">
-          <FrameworkMatrix />
-          <BenchmarkChart corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
+          <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <ButtonLink variant="outline" href="/proof">
-            All benchmarks &amp; the verification story
+            Inspect benchmarks and verification
           </ButtonLink>
         </div>
       </Section>
 
-      {/* ------------------------------------------------ 04 — positioning */}
-      <StatementBand num="04 — Scope" diagram>
-        Palamedes covers the complete local workflow: authoring, transformation, extraction,
-        catalogs, validation, semantic merging, compilation, and runtime integration. First-party
-        adapters connect that model to each supported host. Palamedes+ is the planned optional
-        managed layer for translation automation and collaboration.
+      <StatementBand num="04 — Architecture" diagram>
+        One native core owns the work that should stay stable: extraction, catalog updates,
+        validation, semantic merging, and compilation. First-party adapters connect that model to
+        the routing, rendering, and locale conventions of each supported host.
       </StatementBand>
 
-      {/* ------------------------------------------------ 05 — maintainer */}
-      <Section num="05 — Maintainer" title="Built from repeat experience, not a weekend take.">
+      <Section
+        num="05 — Verification"
+        eyebrow="Executable evidence"
+        title="The matrix is made of applications, not logos."
+        lede={`Every cell represents implemented source. All ${contentStats.smokeExampleCount} examples are smoke-checked on relevant changes, while ${contentStats.browserExampleCount} browser-capable examples exercise SSR output, locale switching, and localized server actions on a schedule.`}
+      >
+        <FrameworkMatrix />
+      </Section>
+
+      <Section
+        num="06 — Trust"
+        eyebrow="Built for the long run"
+        title="The tradeoffs are documented before you depend on them."
+      >
         <div className="grid grid-cols-2 gap-12 max-grid:grid-cols-1">
           <p className="max-w-[44em] text-[15px] leading-relaxed">
             Palamedes is maintained by Sebastian Software GmbH. It is the third generation of
-            source-string-first i18n tooling from the same author — from gettext-style macro systems
-            in qooxdoo to a full enterprise Lingui migration at Regrello (acquired by Salesforce in
-            2025). The lessons are written down as {contentStats.adrCount} ADRs before you depend on
-            the tool.
+            source-string-first i18n tooling from the same author, shaped by framework changes and
+            enterprise migration work. The architecture, boundaries, and rejected alternatives are
+            recorded in {contentStats.adrCount} ADRs.
           </p>
           <div className="space-y-2">
             <a href={decisionHref()} className="mono-nums block text-[13px] text-accent">
-              The decision trail (ADRs) →
+              Read the decision trail →
             </a>
-            <a href="/blog" className="mono-nums block text-[13px] text-accent">
-              Why this exists →
+            <a href="/proof" className="mono-nums block text-[13px] text-accent">
+              Inspect the verification story →
+            </a>
+            <a href={REPO} className="mono-nums block text-[13px] text-accent">
+              Browse the source →
             </a>
           </div>
         </div>
       </Section>
 
-      {/* -------------------------------------------------- 06 — packages */}
-      <Section
-        num="06 — Packages"
-        title="Focused packages, one model."
-        lede="You own the code. You run the commands. Every piece is a scoped npm package your repo controls."
-      >
-        <PackageCards />
-      </Section>
-
       <CtaBand
-        headline="Your first working translation is 5 minutes away."
-        primary={{ label: "Get started", href: "/get-started" }}
-        secondary={{ label: "Star on GitHub", href: REPO }}
+        headline="Choose an i18n foundation you do not plan to replace."
+        primary={{ label: "Choose your framework", href: "/frameworks" }}
+        secondary={{ label: "Inspect the source", href: REPO }}
       />
     </Page>
   )

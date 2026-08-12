@@ -20,9 +20,10 @@ export interface BenchCorpus {
   corpus: string
   rows: BenchRow[]
   /*
-   * Speedup ratios. Not rendered in the chart (the bars carry the story), but
-   * asserted against the checked-in report by scripts/verify-site-bench-data.mjs
-   * so the numbers quoted in prose (hero, ProofStrip) can't silently drift.
+   * Speedup ratios. The public ledger derives deliberately rounded factors
+   * from the exact medians. These exact ratios are asserted against the
+   * checked-in report by scripts/verify-site-bench-data.mjs, so numbers quoted
+   * in prose can't silently drift.
    */
   ratios: { lingui: string; formatjs: string; i18nextCli: string; gt: string }
 }
@@ -121,11 +122,10 @@ export const BENCH_REALISTIC: BenchCorpus = {
 }
 
 /*
- * Only BENCH_REALISTIC_WARM is rendered — it is passed to BenchmarkChart on
- * home, proof, and the topic pages, where it becomes a second, marked
- * Palamedes bar. The two smaller corpora are kept for the same reason as their
- * cold counterparts: they back the doc tables and are guarded against the
- * report.
+ * Only BENCH_REALISTIC_WARM is rendered — it is passed to BenchmarkLedger on
+ * home, proof, and the topic pages, where it becomes a separate capability
+ * callout. The two smaller corpora are kept for the same reason as their cold
+ * counterparts: they back the doc tables and are guarded against the report.
  */
 export const BENCH_SMALL_WARM: BenchWarm = {
   id: "small",

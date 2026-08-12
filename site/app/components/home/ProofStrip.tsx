@@ -1,11 +1,9 @@
-import { useRef } from "react"
 import { Link } from "react-router"
 
 import { BENCH_REALISTIC } from "~/data/bench"
 import contentStats from "~/data/generated/content-stats.json"
 import { decisionHref } from "~/data/links"
-import { useCountUp } from "~/hooks/useCountUp"
-import { useInView } from "~/hooks/useInView"
+import { FRAMEWORKS, STRATEGIES } from "~/data/matrix"
 
 interface Stat {
   value: string
@@ -14,24 +12,37 @@ interface Stat {
 }
 
 /*
- * Counts come from content-stats.json (generated from the repo during
- * prebuild) and the ratio from bench.ts (guarded against the checked
- * benchmark report), so none of these numbers can silently drift.
+ * Counts come from the implemented matrix and generated repository stats.
+ * The range deliberately excludes React Intl because its benchmark has a
+ * narrower extraction-only scope. bench.ts is guarded against the checked
+ * benchmark report, so none of these numbers can silently drift.
  */
+const baseline = BENCH_REALISTIC.rows.find((row) => row.tool === "Palamedes")
+const sameScopeRows = BENCH_REALISTIC.rows.filter((row) =>
+  ["Lingui", "General Translation", "i18next-cli"].includes(row.tool)
+)
+
+if (!baseline || sameScopeRows.length !== 3) {
+  throw new Error("Realistic benchmark is missing the expected same-scope workflows")
+}
+
+const sameScopeFactors = sameScopeRows.map((row) => Math.floor(row.medianMs / baseline.medianMs))
+const factorRange = `${Math.min(...sameScopeFactors)}–${Math.max(...sameScopeFactors)}×`
+
 const STATS: Stat[] = [
   {
-    value: `${contentStats.smokeExampleCount}`,
-    label: "smoke-verified example apps",
+    value: `${FRAMEWORKS.length}`,
+    label: "first-party server-framework integrations",
     href: "/frameworks",
   },
   {
-    value: `${contentStats.serverFrameworkCount} × ${contentStats.localeStrategyCount}`,
-    label: "server frameworks × locale strategies",
+    value: `${STRATEGIES.length}`,
+    label: "implemented locale architectures",
     href: "/frameworks",
   },
   {
-    value: BENCH_REALISTIC.ratios.lingui,
-    label: "faster than Lingui — realistic 1,500-file extract/update benchmark, machine-local run",
+    value: factorRange,
+    label: "faster than the three same-scope workflows in the checked realistic run",
     href: "/proof",
   },
   {
@@ -41,12 +52,11 @@ const STATS: Stat[] = [
   },
 ]
 
-function StatCell({ stat, active }: { stat: Stat; active: boolean }) {
-  const display = useCountUp(stat.value, active)
+function StatCell({ stat }: { stat: Stat }) {
   const inner = (
     <>
       <span className="mono-nums block text-stat font-medium tracking-[-0.02em] text-accent">
-        {display}
+        {stat.value}
       </span>
       <span className="mt-2 block text-[12.5px] leading-snug text-gray-spec">{stat.label}</span>
     </>
@@ -67,13 +77,10 @@ function StatCell({ stat, active }: { stat: Stat; active: boolean }) {
 }
 
 export function ProofStrip() {
-  const ref = useRef<HTMLDivElement>(null)
-  const inView = useInView(ref)
-
   return (
-    <div ref={ref} className="hairline-grid grid-cols-4 border-x-0 max-grid:grid-cols-2">
+    <div className="hairline-grid grid-cols-4 border-x-0 max-grid:grid-cols-2">
       {STATS.map((stat) => (
-        <StatCell key={stat.label} stat={stat} active={inView} />
+        <StatCell key={stat.label} stat={stat} />
       ))}
     </div>
   )

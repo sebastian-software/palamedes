@@ -4,7 +4,7 @@ import { ButtonLink, Page, Section } from "@palamedes/site-ui"
 import { pageMeta } from "~/lib/meta"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
-import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
+import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
 import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
 import { CATALOG_QA_CARDS } from "~/data/features"
@@ -66,10 +66,10 @@ export default function Proof() {
       <Section
         num="01 — Benchmarks"
         title="The workflow you feel every day: extract & update."
-        lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; the React Intl extraction workflow writes one aggregated extraction artifact. Every run uses the same logical inventory and is validated semantically. Palamedes carries two bars: the cold run every tool performs, and the cached re-run after an edit — the run a developer actually triggers."
+        lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; the React Intl extraction workflow writes one aggregated extraction artifact and is marked as narrower scope. Every run uses the same logical inventory and is validated semantically. The cached Palamedes re-run is shown separately as a capability, not turned into a competitor speedup claim."
       >
         <div className="space-y-8">
-          <BenchmarkChart corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
+          <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <div className="max-w-[56em] border-l-4 border-accent pl-4">
             <p className="micro text-[10px] text-gray-spec">Honest note</p>
             <p className="mt-1 text-[13.5px]">
