@@ -1,23 +1,11 @@
-import { BENCH_META, type BenchCorpus, type BenchRow, type BenchWarm } from "~/data/bench"
-import { docsHref } from "~/data/links"
-
-const TOOL_ORDER = ["Palamedes", "React Intl", "Lingui", "General Translation", "i18next-cli"]
-
-function displayTime(ms: number): string {
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`
-}
-
-function displayFactor(row: BenchRow, baselineMs: number): string {
-  return row.tool === "Palamedes" ? "1×" : `${Math.floor(row.medianMs / baselineMs)}×`
-}
-
-function scopeFor(tool: string): string {
-  return tool === "React Intl" ? "extraction only · narrower scope" : "extract + catalog update"
-}
-
-function displayTool(tool: string): string {
-  return tool === "General Translation" ? "GT" : tool
-}
+import {
+  BENCH_META,
+  displayBenchmarkFactor,
+  displayBenchmarkTime,
+  type BenchCorpus,
+  type BenchWarm,
+} from "~/data/bench"
+import { decisionHref, docsHref } from "~/data/links"
 
 /*
  * The benchmark is a result ledger rather than a proportional chart. At the
@@ -32,15 +20,13 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
     throw new Error(`Benchmark corpus ${corpus.id} has no Palamedes baseline`)
   }
 
-  const rows = [...corpus.rows].sort(
-    (left, right) => TOOL_ORDER.indexOf(left.tool) - TOOL_ORDER.indexOf(right.tool)
-  )
+  const rows = [...corpus.rows].sort((left, right) => left.order - right.order)
 
   return (
     <div className="border border-hair">
       <div className="grid grid-cols-[1fr_auto] items-end gap-6 border-b border-hair px-6 py-5 max-tight:grid-cols-1">
         <div>
-          <p className="micro text-[9px] tracking-label text-gray-spec">Checked result ledger</p>
+          <p className="micro text-[10px] tracking-label text-ink/70">Checked result ledger</p>
           <h3 className="display-serif mt-2 text-[20px] uppercase">{corpus.title}</h3>
         </div>
         <a href={docsHref("benchmark-e2e-workflow")} className="mono-nums text-[11px] text-accent">
@@ -63,25 +49,25 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
             <tr className="border-b border-hair">
               <th
                 scope="col"
-                className="micro px-6 py-3 text-left text-[9px] tracking-th text-gray-spec"
+                className="micro px-6 py-3 text-left text-[10px] tracking-th text-ink/70"
               >
                 Workflow
               </th>
               <th
                 scope="col"
-                className="micro px-6 py-3 text-right text-[9px] tracking-th text-gray-spec"
+                className="micro px-6 py-3 text-right text-[10px] tracking-th text-ink/70"
               >
                 Result
               </th>
               <th
                 scope="col"
-                className="micro px-6 py-3 text-right text-[9px] tracking-th text-gray-spec"
+                className="micro px-6 py-3 text-right text-[10px] tracking-th text-ink/70"
               >
                 Relative time
               </th>
               <th
                 scope="col"
-                className="micro px-6 py-3 text-left text-[9px] tracking-th text-gray-spec"
+                className="micro px-6 py-3 text-left text-[10px] tracking-th text-ink/70"
               >
                 Scope
               </th>
@@ -89,24 +75,24 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
           </thead>
           <tbody>
             {rows.map((row) => {
-              const accent = row.tool === "Palamedes"
+              const accent = row.accent
               return (
                 <tr
                   key={row.tool}
                   className={`border-b border-hair last:border-b-0 ${accent ? "bg-hover-fill" : ""}`}
                 >
                   <th scope="row" className="px-6 py-5 text-left text-[14px] font-semibold">
-                    {displayTool(row.tool)}
+                    {row.displayName}
                   </th>
                   <td
                     className={`mono-nums px-6 py-5 text-right text-[clamp(1.65rem,3vw,2.4rem)] leading-none ${accent ? "text-accent" : "text-ink"}`}
                   >
-                    {displayTime(row.medianMs)}
+                    {displayBenchmarkTime(row.medianMs)}
                   </td>
                   <td className="mono-nums px-6 py-5 text-right text-[20px] text-ink">
-                    {displayFactor(row, baseline.medianMs)}
+                    {displayBenchmarkFactor(row, baseline.medianMs)}
                   </td>
-                  <td className="px-6 py-5 text-[12px] text-gray-spec">{scopeFor(row.tool)}</td>
+                  <td className="px-6 py-5 text-[12px] text-gray-spec">{row.scope}</td>
                 </tr>
               )
             })}
@@ -117,11 +103,17 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
       {warm ? (
         <div className="grid grid-cols-[auto_1fr] items-center gap-5 border-t border-hair bg-ink px-6 py-5 text-paper max-tight:grid-cols-1">
           <span className="mono-nums text-[32px] leading-none text-accent-soft">
-            {displayTime(warm.warmMs)}
+            {displayBenchmarkTime(warm.warmMs)}
           </span>
           <p className="text-[12.5px] leading-relaxed text-paper/80">
             Cached re-run after touching {warm.touchedFiles} source files. It is shown separately:
-            no public speedup factor is calculated from the warm lane.
+            no public speedup factor is calculated from the warm lane.{" "}
+            <a
+              href={decisionHref("019-extraction-cache")}
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              Why the cache matters →
+            </a>
           </p>
         </div>
       ) : null}

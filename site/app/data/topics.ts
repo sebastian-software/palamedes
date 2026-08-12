@@ -166,7 +166,7 @@ export default async function CheckoutHeading({ seats }) {
   },
   {
     slug: "i18n-performance",
-    metaTitle: `i18n extraction performance — ${BENCH_REALISTIC.ratios.lingui} faster on a checked benchmark`,
+    metaTitle: "i18n extraction performance — 29× faster on a checked benchmark",
     metaDescription:
       "Message extraction runs on every build and every pre-commit hook, and on a large codebase it is seconds each time. Palamedes runs extraction and catalog merging in a Rust core, with a benchmark you can re-run yourself.",
     eyebrow: "Topic · Performance",

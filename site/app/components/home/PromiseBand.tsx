@@ -1,3 +1,11 @@
+import { BENCH_REALISTIC, displayBenchmarkTime } from "~/data/bench"
+
+const baseline = BENCH_REALISTIC.rows.find((row) => row.accent)
+
+if (!baseline) {
+  throw new Error("Realistic benchmark is missing its baseline")
+}
+
 const PROMISES = [
   {
     number: "01",
@@ -15,7 +23,7 @@ const PROMISES = [
     number: "03",
     word: "Fast",
     label: "Native, cached tooling",
-    receipt: "84 ms realistic run · checked report",
+    receipt: `${displayBenchmarkTime(baseline.medianMs)} realistic run · checked report`,
   },
 ] as const
 
@@ -34,7 +42,7 @@ export function PromiseBand() {
             <span className="mono-nums text-[11px] text-accent">{promise.number}</span>
           </div>
           <p className="mt-5 text-[14px] font-semibold">{promise.label}</p>
-          <p className="micro mt-2 text-[9px] leading-relaxed tracking-label text-gray-spec">
+          <p className="micro mt-2 text-[10px] leading-relaxed tracking-label text-ink/70">
             {promise.receipt}
           </p>
         </div>

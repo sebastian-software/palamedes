@@ -95,7 +95,7 @@ const NO_BENCHMARK =
  */
 export const NATIVE_SHIFT = {
   title: "The toolchain already moved. i18n tooling mostly hasn't.",
-  body: `Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation, which is why the checked benchmark comes back between ${BENCH_REALISTIC.ratios.formatjs} and ${BENCH_REALISTIC.ratios.i18nextCli} faster depending on which tool you put next to it.`,
+  body: `Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation. In the checked benchmark it is 5× faster than the narrower extraction-only React Intl lane and 29× to 79× faster than the three same-scope catalog-update workflows.`,
 }
 
 export const RIVALS: Rival[] = [
@@ -115,7 +115,10 @@ export const RIVALS: Rival[] = [
       { label: "Licence", value: "MIT" },
       { label: "Identity", value: "Source-derived or explicit IDs" },
       { label: "Catalogs", value: ".po, native" },
-      { label: "Checked benchmark", value: `${BENCH_REALISTIC.ratios.lingui} slower` },
+      {
+        label: "Checked benchmark",
+        value: `${BENCH_REALISTIC.ratios.lingui} slower`,
+      },
     ],
     thesis:
       "If you already believe in macro-based authoring and .po catalogs, the argument is not about the model — you and Lingui and we all agree on it. The argument is about what runs it. Lingui's extraction is a JavaScript toolchain that has been extended, worker-threaded and now experimentally re-hosted on Rolldown to chase the performance the architecture makes hard. Palamedes started on a native core and never had to chase it.",
@@ -232,7 +235,10 @@ function checkoutLabel(seats) {
       { label: "Licence", value: "MIT" },
       { label: "Identity", value: "Explicit keys + namespaces" },
       { label: "Catalogs", value: "JSON, key-based" },
-      { label: "Checked benchmark", value: `up to ${BENCH_REALISTIC.ratios.i18nextCli} slower` },
+      {
+        label: "Checked benchmark",
+        value: `up to ${BENCH_REALISTIC.ratios.i18nextCli} slower`,
+      },
     ],
     thesis:
       "The key-based model, JSON namespaces, plugin stack and opt-in ICU plugin form a flexible runtime architecture, and together they are also a layer your team maintains. Palamedes removes the naming layer instead of optimizing it: the sentence is the identity, ICU is the format rather than an opt-in, and extraction is a compile step in a Rust core.",
@@ -463,7 +469,10 @@ function buyLabel(seats) {
       { label: "Licence", value: "BSD-3-Clause" },
       { label: "Runtime", value: "React Context" },
       { label: "Server components", value: "Not supported natively" },
-      { label: "Checked benchmark", value: `${BENCH_REALISTIC.ratios.formatjs} slower` },
+      {
+        label: "Checked benchmark",
+        value: `${BENCH_REALISTIC.ratios.formatjs} slower`,
+      },
     ],
     thesis:
       "This is the clearest architectural split on any of these pages. Context is a client-tree mechanism, and RSC removed the client tree from half your application. No amount of maintenance fixes that from inside — it is a design premise, and the open request to use React Intl without Context has been sitting there accordingly. Palamedes resolves through getI18n(), backed by request-local async context on the server, so there is no bypass to write because there is no boundary to cross.",

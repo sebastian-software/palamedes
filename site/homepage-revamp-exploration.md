@@ -198,9 +198,21 @@ they can be reused.
         label: "faster than every tool doing the same job — same corpus",
         href: "/proof",
       },
-      { value: "83.89 ms", label: "cold extract, realistic 1,500-file corpus", href: "/proof" },
-      { value: `${smokeExampleCount}`, label: "smoke-verified example apps", href: "/frameworks" },
-      { value: `${adrCount}`, label: "ADRs documenting every tradeoff", href: "/decisions" },
+      {
+        value: "83.89 ms",
+        label: "cold extract, realistic 1,500-file corpus",
+        href: "/proof",
+      },
+      {
+        value: `${smokeExampleCount}`,
+        label: "smoke-verified example apps",
+        href: "/frameworks",
+      },
+      {
+        value: `${adrCount}`,
+        label: "ADRs documenting every tradeoff",
+        href: "/decisions",
+      },
     ]}
   />
 
@@ -336,10 +348,12 @@ they can be reused.
 
 ### What leaves the homepage
 
-- **PackageCards / packages table** → get-started & docs. Reference material,
-  not persuasion; it also duplicated the "Everything included" story badly.
-- **TerminalCascade as hero visual** → candidate for the Performance section
-  or /proof. The hero slot now belongs to the tri-construct.
+- **PackageCards / packages table** → removed with the production spike.
+  Reference material, not persuasion; it also duplicated the "Everything
+  included" story badly.
+- **TerminalCascade as hero visual** → removed with the production spike. The
+  hero slot belongs to the tri-construct; a future performance artifact must
+  be designed around the checked ledger rather than retain unused terminal UI.
 - **Separate "Model" and "Workflow" sections** → absorbed: model → DX +
   Mechanism; workflow → Everything-included ledger. Page drops from 8 blocks
   to 7 with a clearer arc: claim → receipts → 3 pieces → mechanism → trust →
@@ -437,7 +451,7 @@ terminal-as-hero _content_ idea was carried into round 2.
 ### Round 3 — the synthesis (current direction)
 
 Decision 2026-08-11: **Monument core × Editorial masthead**
-(`hero-mock/r3-monument-masthead.html`). V1's centered, airy hero and calm
+([`homepage-revamp-mocks/r3-monument-masthead.html`](homepage-revamp-mocks/r3-monument-masthead.html)). V1's centered, airy hero and calm
 tri-band carry the page; V4's masthead (crest, Cinzel wordmark, double-rule
 dateline with nav) replaces the plain topbar — it reads more Greek without
 adding density. The separate eyebrow is dropped: the dateline's right slot
@@ -482,8 +496,9 @@ bar or hides on `/`.
 ### Round 2 — five brand-true stretches (closed)
 
 Same tokens, same copy, five different layout languages. Each stretches the
-brand in one named direction; mock files `hero-mock/r2-*.html`, PNGs in
-`hero-mock/shots/`.
+brand in one named direction. The round-2 files were exploratory working
+material and were not retained; the committed visual record starts with R3 in
+[`homepage-revamp-mocks/`](homepage-revamp-mocks/).
 
 | #   | Variant       | Stretch                                                                                                          | Tri-construct treatment                           |
 | --- | ------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
@@ -503,7 +518,8 @@ sheet as the _second_ viewport under any hero.
 ### Round 1 archive — five directions
 
 Round 1 explored five colossally different languages to test how far the
-Greek theme could stretch (mocks: `hero-mock/01…05-*.html`). It closed with
+Greek theme could stretch. Its working mocks were not retained; this written
+archive is the durable record of the alternatives. It closed with
 brand fidelity confirmed instead of a two-finalist shootout — kept here as
 the record of what was considered and why the extremes lost.
 
@@ -588,7 +604,7 @@ quantified stats + above-fold live artifact. Palamedes runs all three.
 ### Full-page structure v2 (12 sections)
 
 Supersedes the 7-block arc in section 4; the copy blocks there remain the
-copy source. Mock: `hero-mock/r4-full-page.html`.
+copy source. Mock: [`homepage-revamp-mocks/r4-full-page.html`](homepage-revamp-mocks/r4-full-page.html).
 
 | #   | Section                             | One message                              | Artifact                                | Existing component                                 |
 | --- | ----------------------------------- | ---------------------------------------- | --------------------------------------- | -------------------------------------------------- |

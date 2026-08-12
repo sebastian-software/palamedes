@@ -29,7 +29,7 @@ const linguiRatio = (() => {
   const realistic = benchTs.slice(benchTs.indexOf("export const BENCH_REALISTIC"))
   const match = realistic.match(/lingui: "([\d.]+×)"/u)
   if (!match) throw new Error("verify-site-routes: cannot read BENCH_REALISTIC lingui ratio")
-  return match[1]
+  return `${Math.floor(Number.parseFloat(match[1]))}×`
 })()
 
 const MIME = {
@@ -43,7 +43,7 @@ const MIME = {
 }
 
 const ROUTE_EXPECTATIONS = [
-  { path: "/", h1: "One translation model." },
+  { path: "/", h1: "Clear. Complete. Fast." },
   { path: "/frameworks", h1: "Six frameworks." },
   {
     path: "/frameworks/nextjs",
@@ -82,17 +82,29 @@ const ROUTE_EXPECTATIONS = [
   { path: "/compare/react-intl", h1: "Keep the ICU rigor. Lose the provider." },
   { path: "/compare/paraglide", h1: "Smaller bundles. Bigger constraints." },
   { path: "/compare/tolgee", h1: "A runtime key, or the sentence itself." },
-  { path: "/compare/intlayer", h1: "Write the dictionary, or write the sentence." },
+  {
+    path: "/compare/intlayer",
+    h1: "Write the dictionary, or write the sentence.",
+  },
   { path: "/guides", h1: "The decisions that actually cost you time." },
   {
     path: "/react-server-components-i18n",
     h1: "i18n for React Server Components, without the workaround.",
   },
-  { path: "/i18n-performance", h1: "Extraction should not be the slow part of your build." },
-  { path: "/icu-messageformat", h1: "'Supports ICU' is not a yes-or-no answer." },
+  {
+    path: "/i18n-performance",
+    h1: "Extraction should not be the slow part of your build.",
+  },
+  {
+    path: "/icu-messageformat",
+    h1: "'Supports ICU' is not a yes-or-no answer.",
+  },
   { path: "/locale-routing", h1: "Four ways to carry a locale." },
   { path: "/blog", h1: "Building i18n tooling in the" },
-  { path: "/blog/measuring-palamedes-honestly", h1: "Measuring Palamedes Honestly" },
+  {
+    path: "/blog/measuring-palamedes-honestly",
+    h1: "Measuring Palamedes Honestly",
+  },
   { path: "/docs", h1: "Documentation" },
   { path: "/docs/cli", h1: "CLI Reference" },
   { path: "/docs/example-screenshots", h1: "Example Screenshots" },
@@ -128,7 +140,9 @@ const server = createServer((req, res) => {
     res.end("not found")
     return
   }
-  res.writeHead(200, { "content-type": MIME[extname(filePath)] ?? "application/octet-stream" })
+  res.writeHead(200, {
+    "content-type": MIME[extname(filePath)] ?? "application/octet-stream",
+  })
   res.end(readFileSync(filePath))
 })
 
@@ -221,8 +235,8 @@ async function checkRoutes(context, label, { expectHydration }) {
   if (expectHydration) {
     currentPath = "/"
     await gotoAndSettle(page, "/", { settleMs: 1500 })
-    // Matrix renders all 24 cells.
-    const cells = await page.locator("table tbody td").count()
+    // The framework matrix (the second home table) renders all 24 cells.
+    const cells = await page.locator("table").nth(1).locator("tbody td").count()
     if (cells !== 24) {
       fail(`home matrix: expected 24 cells, got ${cells}`)
     }
@@ -256,17 +270,17 @@ async function checkRoutes(context, label, { expectHydration }) {
       fail("client-side navigation to /proof failed")
     }
   } else {
-    // No-JS completeness: stats and bars must be in the static HTML.
+    // No-JS completeness: the new proof strip and ledger must be static HTML.
     currentPath = "/"
     await gotoAndSettle(page, "/", { settleMs: 100 })
-    const statText = await page.getByText("verified example apps").isVisible()
+    const statText = await page.getByText("first-party server-framework integrations").isVisible()
     const stat = await page.getByText(linguiRatio, { exact: false }).first().isVisible()
     if (!statText || !stat) {
       fail("no-JS: proof-strip stats missing from prerendered HTML")
     }
-    const terminal = await page.getByText("Extracted 640 messages", { exact: false }).isVisible()
-    if (!terminal) {
-      fail("no-JS: terminal cascade lines missing from prerendered HTML")
+    const ledger = await page.getByText("Checked result ledger", { exact: false }).isVisible()
+    if (!ledger) {
+      fail("no-JS: benchmark ledger missing from prerendered HTML")
     }
   }
 
@@ -338,7 +352,9 @@ async function gotoAndSettle(page, path, { settleMs }) {
   return response
 }
 
-await checkRoutes(await browser.newContext(), "default", { expectHydration: true })
+await checkRoutes(await browser.newContext(), "default", {
+  expectHydration: true,
+})
 await checkRoutes(await browser.newContext({ reducedMotion: "reduce" }), "reduced-motion", {
   expectHydration: true,
 })

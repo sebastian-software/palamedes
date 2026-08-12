@@ -5,8 +5,11 @@ The exploration history moved to
 [`homepage-revamp-exploration.md`](homepage-revamp-exploration.md); the static
 HTML mocks remain unchanged in [`homepage-revamp-mocks/`](homepage-revamp-mocks/).
 
-Status: content direction approved after review on 2026-08-12. Homepage,
-supporting pages, and responsive behavior still need implementation.
+Status: content direction approved after review on 2026-08-12. The current PR
+is a production spike for the hero, receipts, proof ledger, matrix, and trust
+sections; the framework-logo band, question-routing section, and FAQ remain
+explicit follow-up work. Homepage, supporting pages, and responsive behavior
+still need implementation.
 
 ## 1. Authority and scope
 

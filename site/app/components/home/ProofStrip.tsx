@@ -1,9 +1,8 @@
 import { Link } from "react-router"
 
-import { BENCH_REALISTIC } from "~/data/bench"
+import { BENCH_REALISTIC, displayBenchmarkFactor } from "~/data/bench"
 import contentStats from "~/data/generated/content-stats.json"
 import { decisionHref } from "~/data/links"
-import { FRAMEWORKS, STRATEGIES } from "~/data/matrix"
 
 interface Stat {
   value: string
@@ -12,31 +11,31 @@ interface Stat {
 }
 
 /*
- * Counts come from the implemented matrix and generated repository stats.
+ * Counts come from generated repository stats.
  * The range deliberately excludes React Intl because its benchmark has a
  * narrower extraction-only scope. bench.ts is guarded against the checked
  * benchmark report, so none of these numbers can silently drift.
  */
 const baseline = BENCH_REALISTIC.rows.find((row) => row.tool === "Palamedes")
-const sameScopeRows = BENCH_REALISTIC.rows.filter((row) =>
-  ["Lingui", "General Translation", "i18next-cli"].includes(row.tool)
-)
+const sameScopeRows = BENCH_REALISTIC.rows.filter((row) => row.sameScope)
 
 if (!baseline || sameScopeRows.length !== 3) {
   throw new Error("Realistic benchmark is missing the expected same-scope workflows")
 }
 
-const sameScopeFactors = sameScopeRows.map((row) => Math.floor(row.medianMs / baseline.medianMs))
+const sameScopeFactors = sameScopeRows.map((row) =>
+  Number.parseInt(displayBenchmarkFactor(row, baseline.medianMs), 10)
+)
 const factorRange = `${Math.min(...sameScopeFactors)}–${Math.max(...sameScopeFactors)}×`
 
 const STATS: Stat[] = [
   {
-    value: `${FRAMEWORKS.length}`,
+    value: `${contentStats.serverFrameworkCount}`,
     label: "first-party server-framework integrations",
     href: "/frameworks",
   },
   {
-    value: `${STRATEGIES.length}`,
+    value: `${contentStats.localeStrategyCount}`,
     label: "implemented locale architectures",
     href: "/frameworks",
   },

@@ -5,7 +5,6 @@ import { pageMeta } from "~/lib/meta"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
 import contentStats from "~/data/generated/content-stats.json"
-import { BENCH_REALISTIC } from "~/data/bench"
 import { REPO, decisionHref, docsHref } from "~/data/links"
 import { NATIVE_SHIFT, RIVALS } from "~/data/rivals"
 
@@ -15,7 +14,8 @@ export function meta() {
   return pageMeta({
     title:
       "Palamedes compared — Lingui, i18next, next-intl, React Intl, Paraglide, Intlayer, Tolgee",
-    description: `Side-by-side comparisons of Palamedes with the major TypeScript i18n libraries: ${BENCH_REALISTIC.ratios.formatjs} to ${BENCH_REALISTIC.ratios.i18nextCli} faster on a checked benchmark, with what each of them does better and when to pick them instead.`,
+    description:
+      "Side-by-side comparisons of Palamedes with the major TypeScript i18n libraries: 5× to 79× faster on a checked benchmark, with what each of them does better and when to pick them instead.",
     path: "/compare",
   })
 }
@@ -53,11 +53,11 @@ export default function Compare() {
         </h1>
         <p className="mt-6 max-w-[42em]">
           Palamedes combines broad framework and workflow coverage with fewer competing concepts. It
-          is also measured faster than the four workflows covered by the checked benchmark —{" "}
-          {BENCH_REALISTIC.ratios.formatjs} to {BENCH_REALISTIC.ratios.i18nextCli}, depending on the
-          measured tool. Both the product boundary and the benchmark scope are explicit. Every page
-          below states what the other project earned, what that strength costs its users, and where
-          we would send you elsewhere.
+          is measured faster than the four workflows covered by the checked benchmark — 5× to 79×,
+          depending on the measured workflow. The 5× React Intl reference is extraction-only; the
+          three catalog-update workflows span 29× to 79×. Both the product boundary and the
+          benchmark scope are explicit. Every page below states what the other project earned, what
+          that strength costs its users, and where we would send you elsewhere.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href="/compare/lingui">Start with Lingui</ButtonLink>
@@ -200,7 +200,10 @@ export default function Compare() {
       <CtaBand
         headline="Judge it by the receipts, not the copy."
         primary={{ label: "See the proof", href: "/proof" }}
-        secondary={{ label: "Try the 5-minute quickstart", href: "/get-started" }}
+        secondary={{
+          label: "Try the 5-minute quickstart",
+          href: "/get-started",
+        }}
       />
     </Page>
   )

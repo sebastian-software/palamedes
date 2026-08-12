@@ -4,11 +4,11 @@ export function HomeHero() {
   return (
     <section className="border-b border-hair px-8 pt-8 pb-16 max-tight:px-5">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center border-y border-hair py-3 max-tight:grid-cols-[1fr_auto]">
-        <p className="micro text-[9px] tracking-label text-gray-spec">
+        <p className="micro text-[10px] tracking-label text-ink/70">
           Open-source i18n for TypeScript
         </p>
         <img src="/logo.svg" alt="" aria-hidden width={42} height={42} className="size-10" />
-        <p className="micro text-right text-[9px] tracking-label text-gray-spec max-tight:hidden">
+        <p className="micro text-right text-[10px] tracking-label text-ink/70 max-tight:hidden">
           Source to runtime · MIT
         </p>
       </div>

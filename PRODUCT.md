@@ -71,6 +71,8 @@ Non-brand marketing pictograms come exclusively from **Streamline Sharp Duo**
 under the project's existing Pro license, colored with the navy and bronze
 tokens. Do not mix it with Sharp Line, Ultimate, Core, Lucide, or another set.
 Real framework and vendor marks are the only intentional brand exception.
+Until the licensed exports in `site/streamline-asset-manifest.md` are committed,
+the existing Lucide icons remain the documented interim set.
 
 ## Anti-references
 

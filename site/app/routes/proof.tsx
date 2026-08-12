@@ -165,9 +165,12 @@ export default function Proof() {
       </Section>
 
       <CtaBand
-        headline="Convinced by the receipts? The quickstart takes 5 minutes."
+        headline="Convinced by the receipts? Start with the guided quickstart."
         primary={{ label: "Get started", href: "/get-started" }}
-        secondary={{ label: "Compare with your current tool", href: "/compare" }}
+        secondary={{
+          label: "Compare with your current tool",
+          href: "/compare",
+        }}
       />
     </Page>
   )
