@@ -64,9 +64,9 @@ branding point.
 
 Lingui is Palamedes' closest conceptual neighbor.
 
-It got an important instinct right early: authoring-facing syntax, extracted
-catalogs, and practical framework integration are better than ad hoc
-translation sprawl. That is the main reason Palamedes can feel familiar to
+It got an important instinct right early; [the detailed
+comparison](./comparison-with-lingui.md#the-real-positioning) spells out what
+that instinct consists of. It is the main reason Palamedes can feel familiar to
 Lingui users while still taking a stricter architectural position underneath.
 
 Lingui v6 exposes both a Babel macro path and an SWC plugin path. That matters
