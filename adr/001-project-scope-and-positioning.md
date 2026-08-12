@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-17
-**Last updated:** 2026-07-29
+**Last updated:** 2026-08-12
 
 ## Context
 
@@ -97,12 +97,19 @@ timing remain independent.
 
 Product communication follows the same architecture:
 
-- Lead with the coherent TypeScript workflow and the capabilities it gives
-  teams, not with “small”, “lightweight”, or “narrow”.
-- Present framework breadth as verified proof that the model survives different
-  application shapes; do not imply that one adopter must use several
+- Lead with Palamedes as a durable i18n foundation for TypeScript teams, not
+  with setup speed, “small”, “lightweight”, or “narrow”.
+- Address greenfield adopters and users of any existing i18n stack. Lingui
+  migration remains one focused acquisition path, not the primary audience.
+- Present first-party framework breadth as direct, tested integration rather
+  than generic compatibility; do not imply that one adopter must use several
   frameworks.
+- Present cookie, route, subdomain, and TLD locale architectures as a separate
+  proof axis. The verified applications show that common policy choices are
+  already engineered without making Palamedes own application routing.
 - Tie performance claims to checked benchmark workflows and exact reports.
+  Public summaries use honest rounded values and avoid decimal precision that
+  the benchmark does not warrant.
 - State boundaries and cases where another tool is stronger without promoting
   every question from one conversation into a product requirement.
 - Keep product and marketing reasoning open in the repository. “Internal”
@@ -158,6 +165,9 @@ review whether public claims match the implementation.
 - Framework adapters and tooling packages stay aligned with the core model
   instead of growing separate semantics.
 - Public copy targets TypeScript teams and describes the full local workflow.
+- The main site can route visitors into framework, locale-architecture,
+  performance, migration, and comparison landing pages without changing the
+  canonical audience or product identity.
 - “Small” and “narrow” remain available for exact technical comparisons, such
   as benchmark corpora or runtime bundle tradeoffs, but not as the general
   product identity.

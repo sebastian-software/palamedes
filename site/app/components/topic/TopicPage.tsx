@@ -2,7 +2,7 @@ import { Link } from "react-router"
 
 import { ButtonLink, Page, Section } from "@palamedes/site-ui"
 import { CtaBand } from "~/components/home/CtaBand"
-import { BenchmarkChart } from "~/components/proof/BenchmarkChart"
+import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
 import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
 import type { Topic } from "~/data/topics"
 
@@ -90,7 +90,7 @@ export function TopicPage({ topic }: { topic: Topic }) {
         lede={topic.evidence.lede}
       >
         {topic.evidence.chart ? (
-          <BenchmarkChart corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
+          <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
         ) : (
           <dl className="hairline-grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1">
             {topic.evidence.items.map((item) => (

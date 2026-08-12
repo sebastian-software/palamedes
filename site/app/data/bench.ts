@@ -12,6 +12,11 @@ export interface BenchRow {
   tool: string
   medianMs: number
   accent?: boolean
+  /** Public presentation metadata. Every measured tool must state its scope. */
+  displayName: string
+  scope: string
+  sameScope: boolean
+  order: number
 }
 
 export interface BenchCorpus {
@@ -20,9 +25,10 @@ export interface BenchCorpus {
   corpus: string
   rows: BenchRow[]
   /*
-   * Speedup ratios. Not rendered in the chart (the bars carry the story), but
-   * asserted against the checked-in report by scripts/verify-site-bench-data.mjs
-   * so the numbers quoted in prose (hero, ProofStrip) can't silently drift.
+   * Speedup ratios. The public ledger derives deliberately rounded factors
+   * from the exact medians. These exact ratios are asserted against the
+   * checked-in report by scripts/verify-site-bench-data.mjs, so numbers quoted
+   * in prose can't silently drift.
    */
   ratios: { lingui: string; formatjs: string; i18nextCli: string; gt: string }
 }
@@ -68,11 +74,47 @@ export const BENCH_SMALL: BenchCorpus = {
   title: "Small corpus — 80 files, 640 messages (median of 7 runs)",
   corpus: "80 files, 640 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 14.11, accent: true },
-    { tool: "Lingui", medianMs: 747.18 },
-    { tool: "React Intl", medianMs: 288.59 },
-    { tool: "i18next-cli", medianMs: 625.87 },
-    { tool: "General Translation", medianMs: 577.89 },
+    {
+      tool: "Palamedes",
+      medianMs: 14.11,
+      accent: true,
+      displayName: "Palamedes",
+      scope: "extract + catalog update",
+      sameScope: false,
+      order: 0,
+    },
+    {
+      tool: "Lingui",
+      medianMs: 747.18,
+      displayName: "Lingui",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 2,
+    },
+    {
+      tool: "React Intl",
+      medianMs: 288.59,
+      displayName: "React Intl",
+      scope: "extraction only · narrower scope",
+      sameScope: false,
+      order: 1,
+    },
+    {
+      tool: "i18next-cli",
+      medianMs: 625.87,
+      displayName: "i18next-cli",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 4,
+    },
+    {
+      tool: "General Translation",
+      medianMs: 577.89,
+      displayName: "GT",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 3,
+    },
   ],
   ratios: {
     lingui: "52.94×",
@@ -87,11 +129,47 @@ export const BENCH_MEDIUM: BenchCorpus = {
   title: "Medium corpus — 240 files, 1920 messages (median of 7 runs)",
   corpus: "240 files, 1920 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 23.8, accent: true },
-    { tool: "Lingui", medianMs: 836.69 },
-    { tool: "React Intl", medianMs: 344.09 },
-    { tool: "i18next-cli", medianMs: 658.4 },
-    { tool: "General Translation", medianMs: 669.27 },
+    {
+      tool: "Palamedes",
+      medianMs: 23.8,
+      accent: true,
+      displayName: "Palamedes",
+      scope: "extract + catalog update",
+      sameScope: false,
+      order: 0,
+    },
+    {
+      tool: "Lingui",
+      medianMs: 836.69,
+      displayName: "Lingui",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 2,
+    },
+    {
+      tool: "React Intl",
+      medianMs: 344.09,
+      displayName: "React Intl",
+      scope: "extraction only · narrower scope",
+      sameScope: false,
+      order: 1,
+    },
+    {
+      tool: "i18next-cli",
+      medianMs: 658.4,
+      displayName: "i18next-cli",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 4,
+    },
+    {
+      tool: "General Translation",
+      medianMs: 669.27,
+      displayName: "GT",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 3,
+    },
   ],
   ratios: {
     lingui: "35.15×",
@@ -106,11 +184,47 @@ export const BENCH_REALISTIC: BenchCorpus = {
   title: "Realistic corpus — 1,500 files across ~400k lines, 6,000 messages (median of 7 runs)",
   corpus: "1,500 files (750 with i18n), ~400k lines, 6,000 messages",
   rows: [
-    { tool: "Palamedes", medianMs: 83.89, accent: true },
-    { tool: "Lingui", medianMs: 2480.24 },
-    { tool: "React Intl", medianMs: 475.85 },
-    { tool: "i18next-cli", medianMs: 6644.63 },
-    { tool: "General Translation", medianMs: 6116.43 },
+    {
+      tool: "Palamedes",
+      medianMs: 83.89,
+      accent: true,
+      displayName: "Palamedes",
+      scope: "extract + catalog update",
+      sameScope: false,
+      order: 0,
+    },
+    {
+      tool: "Lingui",
+      medianMs: 2480.24,
+      displayName: "Lingui",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 2,
+    },
+    {
+      tool: "React Intl",
+      medianMs: 475.85,
+      displayName: "React Intl",
+      scope: "extraction only · narrower scope",
+      sameScope: false,
+      order: 1,
+    },
+    {
+      tool: "i18next-cli",
+      medianMs: 6644.63,
+      displayName: "i18next-cli",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 4,
+    },
+    {
+      tool: "General Translation",
+      medianMs: 6116.43,
+      displayName: "GT",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 3,
+    },
   ],
   ratios: {
     lingui: "29.57×",
@@ -121,11 +235,10 @@ export const BENCH_REALISTIC: BenchCorpus = {
 }
 
 /*
- * Only BENCH_REALISTIC_WARM is rendered — it is passed to BenchmarkChart on
- * home, proof, and the topic pages, where it becomes a second, marked
- * Palamedes bar. The two smaller corpora are kept for the same reason as their
- * cold counterparts: they back the doc tables and are guarded against the
- * report.
+ * Only BENCH_REALISTIC_WARM is rendered — it is passed to BenchmarkLedger on
+ * home, proof, and the topic pages, where it becomes a separate capability
+ * callout. The two smaller corpora are kept for the same reason as their cold
+ * counterparts: they back the doc tables and are guarded against the report.
  */
 export const BENCH_SMALL_WARM: BenchWarm = {
   id: "small",
@@ -149,4 +262,12 @@ export const BENCH_REALISTIC_WARM: BenchWarm = {
   touchedFiles: 5,
   coldMs: 83.89,
   warmMs: 33.08,
+}
+
+export function displayBenchmarkTime(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`
+}
+
+export function displayBenchmarkFactor(row: BenchRow, baselineMs: number): string {
+  return row.accent ? "1×" : `${Math.floor(row.medianMs / baselineMs)}×`
 }

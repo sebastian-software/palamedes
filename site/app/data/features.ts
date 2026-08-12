@@ -32,27 +32,6 @@ export interface StrategyCard extends FeatureCard {
   slug: StrategySlug
 }
 
-export const HOME_MODEL_CARDS: FeatureCard[] = [
-  {
-    icon: "pen",
-    title: "Write messages in place",
-    body: "Macro-style authoring next to your JSX. No message-ID bookkeeping, no separate dictionary files to keep in sync.",
-    href: "/get-started",
-  },
-  {
-    icon: "fingerprint",
-    title: "One identity model",
-    body: "Messages are identified by message + context — stable across refactors, supported hosts, and years of catalog history.",
-    href: decisionHref("003-source-string-first-message-identity.md"),
-  },
-  {
-    icon: "plug",
-    title: "One runtime call",
-    body: "getI18n() resolves the active instance across supported render environments: server components, client islands, and backend request handlers.",
-    href: decisionHref("005-universal-geti18n-runtime-model.md"),
-  },
-]
-
 export const STRATEGY_CARDS: StrategyCard[] = [
   {
     slug: "cookie",

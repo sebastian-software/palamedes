@@ -22,10 +22,12 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const reportPath = join(repoRoot, "benchmarks/e2e-workflow/results/latest.md")
 const benchTsPath = join(repoRoot, "site/app/data/bench.ts")
 const readmePath = join(repoRoot, "README.md")
+const promiseBandPath = join(repoRoot, "site/app/components/home/PromiseBand.tsx")
 
 const report = readFileSync(reportPath, "utf8")
 const benchTs = readFileSync(benchTsPath, "utf8")
 const readme = readFileSync(readmePath, "utf8")
+const promiseBand = readFileSync(promiseBandPath, "utf8")
 const tools = ["Palamedes", "Lingui", "React Intl", "i18next-cli", "General Translation"]
 const comparedTools = tools.filter((tool) => tool !== "Palamedes")
 const ratioFields = {
@@ -56,9 +58,7 @@ function parseSection(name) {
   const warmStart = afterCold.indexOf("### Warm")
   const body = warmStart === -1 ? afterCold : afterCold.slice(0, warmStart)
   const medians = {}
-  for (const match of body.matchAll(
-    new RegExp(String.raw`^\|\s+(${toolPattern})\s+\|\s+([\d.]+) ms\s+\|`, "gm")
-  )) {
+  for (const match of body.matchAll(/^\|\s+([^|]+?)\s+\|\s+([\d.]+) ms\s+\|/gm)) {
     medians[match[1]] = Number(match[2])
   }
   const speedups = {}
@@ -198,7 +198,7 @@ function parseBenchSection(name) {
   }
   const medians = {}
   for (const match of body.matchAll(
-    new RegExp(String.raw`\{ tool: "(${toolPattern})", medianMs: ([\d.]+)`, "g")
+    /\{[\s\S]*?tool: "([^"]+)"[\s\S]*?medianMs: ([\d.]+)[\s\S]*?\}/g
   )) {
     medians[match[1]] = Number(match[2])
   }
@@ -301,19 +301,23 @@ for (const [profile, section, constant] of [
 }
 
 /*
- * The README quotes the realistic warm pair in prose. It has no build step of
- * its own, so the tokens are checked literally here. Whitespace is collapsed
+ * README and homepage prose quote the realistic warm pair. Whitespace is collapsed
  * first because the README is hard-wrapped: a token may straddle a line break,
  * and reflowing a paragraph must not read as drift.
  */
 const realisticWarm = parseBenchWarm("REALISTIC")
 const readmeText = readme.replace(/\s+/gu, " ")
 for (const [label, token] of [
-  ["realistic cold median", `\`${realisticWarm.coldMs.toFixed(2)} ms\``],
-  ["realistic warm median", `\`${realisticWarm.warmMs.toFixed(2)} ms\``],
+  ["realistic cold median", `\`${Math.round(realisticWarm.coldMs)} ms\``],
+  ["realistic warm median", `\`${Math.round(realisticWarm.warmMs)} ms\``],
   ["touched files", `\`${realisticWarm.touchedFiles}\` source files`],
 ]) {
   expect(`README is missing the ${label} ${token} quoted by bench.ts`, readmeText.includes(token))
 }
+
+expect(
+  "PromiseBand derives its public benchmark figure from bench.ts",
+  promiseBand.includes("displayBenchmarkTime(baseline.medianMs)")
+)
 
 console.log("verify-site-bench-data: bench.ts and README match latest.md")
