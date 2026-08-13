@@ -1,27 +1,16 @@
-import { Link } from "react-router"
-
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
-import {
-  BENCH_FOOTNOTE,
-  NATIVE_SHIFT,
-  RIVALS,
-  type Rival,
-  type RivalCode,
-  type RivalRow,
-} from "~/data/rivals"
+import { BENCH_FOOTNOTE, type Rival, type RivalCode, type RivalRow } from "~/data/rivals"
 
 /*
  * One layout for every /compare/* page, driven by data/rivals.ts.
  *
  * The section order is the argument. The thesis lands immediately under the
  * hero, because a comparison page that buries its position is not selling
- * anything. Section 01 then does the thing that makes the rest credible: it
- * states what the other project earned, and what that strength costs the
- * people using it, side by side. Both columns are sourced; neither is a
- * courtesy. Everything after that — differences, code, table, pick-lists —
- * is downstream of those two columns.
+ * anything. Section 01 is the verdict: the reader gets an honest decision
+ * before any supporting detail. The sourced credit / cost pair, differences,
+ * code, and measured table then make that verdict inspectable.
  */
 
 function toLines(code: string): { no: number; text: string }[] {
@@ -203,7 +192,31 @@ export function RivalPage({ rival }: { rival: Rival }) {
       </section>
 
       <Section
-        num={`01 — ${rival.name}`}
+        num="01 — Decide"
+        id="decide"
+        title="Which one should you actually pick?"
+        lede={`We think most React and Solid teams are better off here, and the left column says why. The right column is not a disclaimer — if it describes your situation, use ${rival.name} and do not think twice about it.`}
+      >
+        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
+          <PickList title="Pick Palamedes when…" items={rival.pickPalamedes} accent />
+          <PickList title={`Pick ${rival.name} when…`} items={rival.pickRival} />
+        </div>
+        {rival.migration ? (
+          <EditorialRail tone="emphasis" className="mt-8">
+            <p className="micro text-[10px] text-gray-spec">Coming from {rival.name}?</p>
+            <p className="mt-1 text-[13.5px] leading-relaxed">{rival.migration.body}</p>
+            <a
+              href={rival.migration.href}
+              className="mono-nums mt-3 inline-block text-[13px] text-accent"
+            >
+              {rival.migration.label} →
+            </a>
+          </EditorialRail>
+        ) : null}
+      </Section>
+
+      <Section
+        num={`02 — ${rival.name}`}
         title="Credit where it is due, and what it costs."
         lede={`Every strength is a decision, and every decision has a price someone pays. Here is ${rival.name} at its strongest — and the bill that comes with it. Both columns are sourced from the research notes, not from our marketing department.`}
       >
@@ -216,12 +229,6 @@ export function RivalPage({ rival }: { rival: Rival }) {
             accent
           />
         </div>
-      </Section>
-
-      <Section num="02 — The shift" title={NATIVE_SHIFT.title}>
-        <p className="max-w-[52em] text-[14.5px] leading-relaxed text-ink/85">
-          {NATIVE_SHIFT.body}
-        </p>
       </Section>
 
       <Section
@@ -256,52 +263,7 @@ export function RivalPage({ rival }: { rival: Rival }) {
         ) : null}
       </Section>
 
-      <Section
-        num="06 — Decide"
-        id="decide"
-        title="Which one should you actually pick?"
-        lede={`We think most React and Solid teams are better off here, and the left column says why. The right column is not a disclaimer — if it describes your situation, use ${rival.name} and do not think twice about it.`}
-      >
-        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
-          <PickList title="Pick Palamedes when…" items={rival.pickPalamedes} accent />
-          <PickList title={`Pick ${rival.name} when…`} items={rival.pickRival} />
-        </div>
-        {rival.migration ? (
-          <EditorialRail tone="emphasis" className="mt-8">
-            <p className="micro text-[10px] text-gray-spec">Coming from {rival.name}?</p>
-            <p className="mt-1 text-[13.5px] leading-relaxed">{rival.migration.body}</p>
-            <a
-              href={rival.migration.href}
-              className="mono-nums mt-3 inline-block text-[13px] text-accent"
-            >
-              {rival.migration.label} →
-            </a>
-          </EditorialRail>
-        ) : null}
-      </Section>
-
-      <StatementBand num="07 — The honest bit">{rival.honest}</StatementBand>
-
-      <Section num="08 — Also weighing" title="Comparing something else?">
-        {/* Capped at six so the grid always fills exactly two rows of three;
-            the CTA below carries anyone who wants the full list. */}
-        <div className="hairline-grid grid-cols-3 max-grid:grid-cols-2 max-tight:grid-cols-1">
-          {RIVALS.filter((other) => other.slug !== rival.slug)
-            .slice(0, 6)
-            .map((other) => (
-              <Link
-                key={other.slug}
-                to={`/compare/${other.slug}`}
-                viewTransition
-                className="group bg-paper px-5 py-5 transition-colors hover:bg-hover-fill"
-              >
-                <p className="micro text-[10px] tracking-label text-gray-spec">Palamedes vs</p>
-                <p className="mt-2 text-[15px] font-bold group-hover:text-accent">{other.name}</p>
-                <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">{other.card}</p>
-              </Link>
-            ))}
-        </div>
-      </Section>
+      <StatementBand num="06 — The honest bit">{rival.honest}</StatementBand>
 
       <CtaBand
         headline="Check the receipts before you believe the page."

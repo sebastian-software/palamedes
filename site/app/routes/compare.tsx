@@ -43,6 +43,10 @@ const NOT_FOR_YOU = [
   },
 ]
 
+function measuredWorkflow(rival: (typeof RIVALS)[number]) {
+  return rival.rows.find((row) => row.palamedes.includes("¹"))
+}
+
 export default function Compare() {
   return (
     <Page>
@@ -76,34 +80,73 @@ export default function Compare() {
       </section>
 
       <Section
-        num="01 — Head to head"
-        title="Pick the one you are actually weighing."
-        lede={`${RIVALS.length} libraries, ${RIVALS.length} separate arguments. Each page runs the same structure: credit and cost side by side, the decisions that genuinely differ, a code comparison, a measured table, and an explicit 'pick them instead when…' list. None of it needs you to take our word for anything.`}
+        num="01 — Comparison ledger"
+        title="What we measured, what we researched, and where we made no claim."
+        lede={`${RIVALS.length} libraries, ${RIVALS.length} separate arguments. The ledger separates directly measured workflow results from dated research. An empty measurement is an explicit boundary, not a footnote — and each comparison starts with a verdict before the supporting detail.`}
       >
-        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
-          {RIVALS.map((rival) => (
-            <Link
-              key={rival.slug}
-              to={`/compare/${rival.slug}`}
-              viewTransition
-              className="group bg-paper px-6 py-6 transition-colors hover:bg-hover-fill"
-            >
-              <p className="micro text-[10px] tracking-label text-gray-spec">
-                Palamedes vs {rival.name}
-              </p>
-              <h3 className="mt-3 text-[17px] font-bold group-hover:text-accent">
-                {rival.headline}
-              </h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{rival.card}</p>
-              <span className="micro mt-4 inline-block text-[12px] text-accent">
-                Read the comparison →
-              </span>
-            </Link>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse border border-hair">
+            <caption className="sr-only">
+              Comparison ledger, separating direct workflow measurements from dated research.
+            </caption>
+            <thead>
+              <tr>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                  Comparison
+                </th>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-accent">
+                  Measured
+                </th>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                  Researched
+                </th>
+                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                  Detail
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {RIVALS.map((rival) => {
+                const measurement = measuredWorkflow(rival)
+                return (
+                  <tr key={rival.slug}>
+                    <th scope="row" className="border border-hair px-4 py-4 text-left align-top">
+                      <p className="text-[14px] font-bold">Palamedes vs {rival.name}</p>
+                      <p className="mt-1 text-[12.5px] leading-relaxed text-ink/75">{rival.card}</p>
+                    </th>
+                    <td className="border border-hair bg-hover-fill px-4 py-4 align-top text-[13px] leading-relaxed">
+                      {measurement ? (
+                        <>
+                          <p className="font-bold text-accent">{measurement.palamedes}</p>
+                          <p className="mt-1 text-[11.5px] text-gray-spec">
+                            Scope: {measurement.criterion}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="font-bold">Not measured — no claim implied.</p>
+                      )}
+                    </td>
+                    <td className="border border-hair px-4 py-4 align-top text-[13px] leading-relaxed">
+                      <p>Project and package research checked {rival.researched}.</p>
+                      <p className="mt-1 text-[11.5px] text-gray-spec">
+                        Observations, not a performance claim.
+                      </p>
+                    </td>
+                    <td className="border border-hair px-4 py-4 align-top">
+                      <Link
+                        to={`/compare/${rival.slug}`}
+                        viewTransition
+                        className="mono-nums text-[13px] text-accent hover:underline"
+                      >
+                        Read verdict →
+                      </Link>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
-        {/* Outside the grid on purpose: the rival count is even, so this would
-            otherwise leave a half-empty row. As a full-width strip it also
-            reads as an invitation rather than as one more comparison. */}
         <EditorialRail tone="emphasis" className="mt-8 bg-hover-fill py-5 pr-6">
           <h3 className="text-[15px] font-bold">Weighing something not listed here?</h3>
           <p className="mt-2 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">

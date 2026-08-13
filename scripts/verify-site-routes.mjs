@@ -299,6 +299,51 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!hierarchy.questionAfterProof || !hierarchy.questionBeforeIntegration) {
       fail("home hierarchy: question routing must follow the proof strip and precede deep evidence")
     }
+    // Comparison pages distinguish measured workflows from dated research.
+    // The rival template leads with a verdict; the native-toolchain argument
+    // belongs on the hub, not repeated on every rival page.
+    const comparePage = await context.newPage()
+    trackPageErrors(comparePage, () => "/compare", consoleErrors, knownHydrationWarnings)
+    await gotoAndSettle(comparePage, "/compare", { settleMs: 1500 })
+    const ledgerHeaders = await comparePage
+      .locator("table")
+      .first()
+      .locator("thead th")
+      .allTextContents()
+    if (!ledgerHeaders.includes("Measured") || !ledgerHeaders.includes("Researched")) {
+      fail("compare ledger: measured and researched columns missing")
+    }
+    const noClaim = await comparePage
+      .getByText("Not measured — no claim implied.", { exact: true })
+      .count()
+    if (noClaim === 0) {
+      fail("compare ledger: explicit no-claim cell missing")
+    }
+    const hubShift = await comparePage
+      .getByRole("heading", {
+        name: "The toolchain already moved. i18n tooling mostly hasn't.",
+      })
+      .count()
+    if (hubShift !== 1) {
+      fail("compare hub: native-toolchain explanation missing")
+    }
+    await gotoAndSettle(comparePage, "/compare/lingui", { settleMs: 1500 })
+    const sectionNumbers = await comparePage.locator(".pmds-section-number").allTextContents()
+    if (
+      sectionNumbers[0]?.trim() !== "01 — Decide" ||
+      sectionNumbers[1]?.trim() !== "02 — Lingui"
+    ) {
+      fail(`rival template: verdict must precede supporting detail (${sectionNumbers.join(", ")})`)
+    }
+    const repeatedShift = await comparePage
+      .getByRole("heading", {
+        name: "The toolchain already moved. i18n tooling mostly hasn't.",
+      })
+      .count()
+    if (repeatedShift > 0 || sectionNumbers.some((section) => section.includes("Also weighing"))) {
+      fail("rival template: repeated shift or obsolete section remains")
+    }
+    await comparePage.close()
     const benchmarkCommand = await page
       .getByText("$ pnpm benchmark:e2e-workflow", { exact: false })
       .isVisible()
@@ -387,7 +432,9 @@ async function checkRoutes(context, label, { expectHydration }) {
 }
 
 async function checkHomepageDecisionViewport(browser, width) {
-  const context = await browser.newContext({ viewport: { width, height: 844 } })
+  const context = await browser.newContext({
+    viewport: { width, height: 844 },
+  })
   const page = await context.newPage()
   const response = await gotoAndSettle(page, "/", { settleMs: 1500 })
   if (response?.status() !== 200) {
