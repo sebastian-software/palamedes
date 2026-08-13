@@ -36,7 +36,7 @@ export function ScreenshotStrip() {
               <span className="block size-1.5 border border-hair bg-track" />
               <span className="block size-1.5 border border-hair bg-track" />
               <span className="block size-1.5 border border-hair bg-track" />
-              <span className="mono-nums ml-1 truncate text-[9px] text-gray-spec">{shot.url}</span>
+              <span className="mono-nums ml-1 truncate text-[10px] text-gray-spec">{shot.url}</span>
             </div>
             <img
               src={shot.src}

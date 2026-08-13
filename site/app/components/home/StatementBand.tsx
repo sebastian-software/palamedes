@@ -9,10 +9,13 @@ import type { ReactNode } from "react"
 export function StatementBand({
   num,
   diagram = false,
+  href,
   children,
 }: {
   num: string
   diagram?: boolean
+  /** Optional route to the detailed evidence behind this positioning statement. */
+  href?: string
   children: ReactNode
 }) {
   return (
@@ -21,6 +24,14 @@ export function StatementBand({
       <p className="micro tracking-th text-accent-soft">{num}</p>
       <p className="display-serif mt-6 max-w-[32em] text-band leading-[1.4]">{children}</p>
       {diagram ? <ScopeDiagram /> : null}
+      {href ? (
+        <a
+          href={href}
+          className="micro mt-8 inline-block text-[10px] tracking-label text-accent-soft underline underline-offset-4 hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-soft"
+        >
+          Inspect the architecture →
+        </a>
+      ) : null}
     </section>
   )
 }

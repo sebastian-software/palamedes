@@ -240,6 +240,56 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (cells !== 24) {
       fail(`home matrix: expected 24 cells, got ${cells}`)
     }
+    // Homepage completion blocks: real routing destinations, a reproducible
+    // benchmark command, and the six FAQ entries must remain present together.
+    const integrationLinks = await page
+      .locator('section[aria-label="First-party framework integrations"] li a')
+      .count()
+    if (integrationLinks !== 9) {
+      fail(`home integration band: expected 9 linked entries, got ${integrationLinks}`)
+    }
+    const integrationLogos = page.locator(
+      'section[aria-label="First-party framework integrations"] li img'
+    )
+    const logoCount = await integrationLogos.count()
+    if (logoCount !== 9) {
+      fail(`home integration band: expected 9 marks, got ${logoCount}`)
+    } else {
+      const unloadedLogos = await integrationLogos.evaluateAll((images) =>
+        images.filter((image) => image.naturalWidth === 0).map((image) => image.getAttribute("src"))
+      )
+      if (unloadedLogos.length > 0) {
+        fail(`home integration band: marks did not load: ${unloadedLogos.join(", ")}`)
+      }
+    }
+    const questionRoutes = await page
+      .locator(
+        'a[href="/frameworks"], a[href="/locale-routing"], a[href="/proof"], a[href="/docs/migrate-from-lingui"], a[href="/compare"]'
+      )
+      .count()
+    if (questionRoutes < 5) {
+      fail(`home question routing: expected five decision routes, got ${questionRoutes}`)
+    }
+    const benchmarkCommand = await page
+      .getByText("$ pnpm benchmark:e2e-workflow", { exact: false })
+      .isVisible()
+    if (!benchmarkCommand) {
+      fail("home benchmark: reproducible command missing")
+    }
+    const faqEntries = await page.locator("details").count()
+    if (faqEntries !== 6) {
+      fail(`home FAQ: expected 6 entries, got ${faqEntries}`)
+    }
+    const faqSchemaCount = await page.locator('script[type="application/ld+json"]').evaluateAll(
+      (scripts) =>
+        scripts
+          .map((script) => JSON.parse(script.textContent ?? "{}"))
+          .filter((entry) => entry["@type"] === "FAQPage")
+          .flatMap((entry) => entry.mainEntity ?? []).length
+    )
+    if (faqSchemaCount !== 6) {
+      fail(`home FAQ schema: expected 6 answers, got ${faqSchemaCount}`)
+    }
     // Code showcase tabs toggle.
     await page.getByRole("tab", { name: "Translate" }).click()
     const poVisible = await page.getByText('msgid "Your trip to Lisbon"').isVisible()
@@ -281,6 +331,16 @@ async function checkRoutes(context, label, { expectHydration }) {
     const ledger = await page.getByText("Checked result ledger", { exact: false }).isVisible()
     if (!ledger) {
       fail("no-JS: benchmark ledger missing from prerendered HTML")
+    }
+    const integrationBand = await page
+      .getByRole("region", { name: "First-party framework integrations" })
+      .isVisible()
+    const questionRouting = await page
+      .getByText("Which framework are you building with?")
+      .isVisible()
+    const faq = await page.getByText("Is Palamedes ready for production use?").isVisible()
+    if (!integrationBand || !questionRouting || !faq) {
+      fail("no-JS: homepage completion blocks missing from prerendered HTML")
     }
   }
 

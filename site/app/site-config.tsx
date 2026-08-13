@@ -31,6 +31,7 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
   logoAlt: "Palamedes",
   navigation: [
     { label: "Frameworks", href: "/frameworks" },
+    { label: "Architecture", href: "/architecture" },
     { label: "Proof", href: "/proof" },
     { label: "Compare", href: "/compare" },
     { label: "Blog", href: "/blog" },

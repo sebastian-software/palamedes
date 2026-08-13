@@ -5,11 +5,15 @@ The exploration history moved to
 [`homepage-revamp-exploration.md`](homepage-revamp-exploration.md); the static
 HTML mocks remain unchanged in [`homepage-revamp-mocks/`](homepage-revamp-mocks/).
 
-Status: content direction approved after review on 2026-08-12. The current PR
-is a production spike for the hero, receipts, proof ledger, matrix, and trust
-sections; the framework-logo band, question-routing section, and FAQ remain
-explicit follow-up work. Homepage, supporting pages, and responsive behavior
-still need implementation.
+Status: content direction approved after review on 2026-08-12. The homepage
+now includes the hero, integration band, receipts, proof ledger, matrix,
+question routing, trust section, and FAQ. The integration band uses linked,
+unmodified framework marks with recorded sources, checksums, and attributions;
+see [`framework-brand-usage.md`](framework-brand-usage.md) and
+[`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md). The product owner
+accepted the remaining Next.js trademark-risk decision while Palamedes seeks
+confirmation from Vercel. Supporting pages and their responsive behavior
+remain separately tracked implementation work.
 
 ## 1. Authority and scope
 
