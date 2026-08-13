@@ -43,7 +43,7 @@ export function meta() {
 
 export default function Home() {
   return (
-    <Page>
+    <Page className="pmds-home">
       <HomeHero />
       <IntegrationBand />
       <ProofStrip />
