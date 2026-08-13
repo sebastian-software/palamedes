@@ -1,6 +1,6 @@
 import { Link } from "react-router"
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 import { CtaBand } from "~/components/home/CtaBand"
 import type { FrameworkLanding, FrameworkLandingFact } from "~/data/framework-landing"
 import { STRATEGY_CARDS } from "~/data/features"
@@ -74,7 +74,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
       </section>
 
       <Section num="01 — The framework problem" title={page.problem.title} lede={page.problem.lede}>
-        <div className="border-l-4 border-gray-spec pl-5">
+        <EditorialRail>
           <p className="micro text-[10px] tracking-label text-gray-spec">
             What the integration has to get right
           </p>
@@ -91,7 +91,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
               </li>
             ))}
           </ul>
-        </div>
+        </EditorialRail>
       </Section>
 
       <Section num="02 — The Palamedes model" title={page.approach.title} lede={page.approach.lede}>
@@ -136,7 +136,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
 
       <Section num="05 — Proof and boundaries" title={page.proof.title} lede={page.proof.lede}>
         <Facts facts={page.proof.facts} />
-        <div className="mt-8 border-l-4 border-accent pl-5">
+        <EditorialRail tone="emphasis" className="mt-8">
           <h3 className="text-[15px] font-bold">{page.boundary.title}</h3>
           <p className="mt-2 max-w-[56em] text-[13.5px] leading-relaxed text-ink/85">
             {page.boundary.body}
@@ -146,7 +146,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
               {page.boundary.link.label}
             </ButtonLink>
           ) : null}
-        </div>
+        </EditorialRail>
       </Section>
 
       <Section

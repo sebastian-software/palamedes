@@ -1,6 +1,6 @@
 import { Link } from "react-router"
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 import { pageMeta } from "~/lib/meta"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
@@ -70,7 +70,7 @@ export default function Proof() {
       >
         <div className="space-y-8">
           <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
-          <div className="max-w-[56em] border-l-4 border-accent pl-4">
+          <EditorialRail tone="emphasis">
             <p className="micro text-[10px] text-gray-spec">Honest note</p>
             <p className="mt-1 text-[13.5px]">
               These are machine-local numbers from the checked-in report, not a marketing average.
@@ -82,7 +82,7 @@ export default function Proof() {
               </Link>
               .
             </p>
-          </div>
+          </EditorialRail>
         </div>
       </Section>
 
@@ -115,14 +115,14 @@ export default function Proof() {
         title="ICU stays ICU from source to runtime."
         lede="A checked-in nested select + plural message runs through extraction, macro transformation, PO catalog update, catalog compilation, and six executions of the transformed runtime function. The proof compares exact messages and selector structure instead of treating ICU as a yes/no feature checkbox."
       >
-        <div className="max-w-[56em] border-l-4 border-accent pl-4">
+        <EditorialRail tone="emphasis">
           <p className="micro text-[10px] text-gray-spec">Exact boundary</p>
           <p className="mt-1 text-[13.5px]">
             This proves every stage Palamedes controls. A TMS remains an external boundary, so
             import and export fidelity depends on the selected product, format, and project
             configuration.
           </p>
-        </div>
+        </EditorialRail>
         <div className="mt-6 space-y-2">
           <Link
             to="/icu-messageformat"

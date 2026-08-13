@@ -1,3 +1,4 @@
+import { EditorialRail } from "@palamedes/site-ui"
 import type { Step } from "~/data/steps"
 
 /*
@@ -41,10 +42,10 @@ export function StepFlow({ steps }: { steps: Step[] }) {
               </pre>
             ) : null}
             {step.aside ? (
-              <aside className="mt-4 max-w-[52em] border-l-4 border-gray-spec pl-4">
+              <EditorialRail className="mt-4">
                 <p className="micro text-[10px] text-gray-spec">Aside</p>
                 <p className="mt-1 text-[12.5px] text-gray-spec">{step.aside}</p>
-              </aside>
+              </EditorialRail>
             ) : null}
           </div>
         </li>

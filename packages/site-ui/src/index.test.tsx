@@ -2,7 +2,14 @@ import { renderToStaticMarkup } from "react-dom/server"
 import type { ReactNode } from "react"
 import { describe, expect, it } from "vitest"
 
-import { ButtonLink, SiteFooter, SiteHeader, SiteUiProvider, defineSiteConfig } from "./index"
+import {
+  ButtonLink,
+  EditorialRail,
+  SiteFooter,
+  SiteHeader,
+  SiteUiProvider,
+  defineSiteConfig,
+} from "./index"
 
 const baseConfig = defineSiteConfig({
   name: "Palamedes",
@@ -71,5 +78,18 @@ describe("site chrome", () => {
 
     expect(markup).toContain('data-to="/get-started"')
     expect(markup).not.toContain("<a")
+  })
+
+  it("uses one-pixel editorial rails with an explicit semantic emphasis tone", () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <EditorialRail>Structural aside</EditorialRail>
+        <EditorialRail tone="emphasis">Qualified position</EditorialRail>
+      </>
+    )
+
+    expect(markup).toContain("pmds-editorial-rail--structural")
+    expect(markup).toContain("pmds-editorial-rail--emphasis")
+    expect(markup.match(/<aside/g)).toHaveLength(2)
   })
 })
