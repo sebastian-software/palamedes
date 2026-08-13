@@ -265,7 +265,7 @@ export const BENCH_REALISTIC_WARM: BenchWarm = {
 }
 
 export function displayBenchmarkTime(ms: number): string {
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`
+  return `${Math.round(ms).toLocaleString("en-US")} ms`
 }
 
 export function displayBenchmarkFactor(row: BenchRow, baselineMs: number): string {

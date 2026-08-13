@@ -15,19 +15,16 @@ function CellContent({ cell }: { cell: MatrixCell }) {
           ✓ verified
         </span>
       </div>
-      <div className="mono-nums mt-2 space-x-2 text-[12px]">
+      <div className="mono-nums mt-2 text-[12px]">
         {cell.demoLinks ? (
           cell.demoLinks.map((link) => (
-            <a key={link.href} href={link.href} className="text-accent hover:text-ink">
+            <a key={link.href} href={link.href} className="mr-2 text-accent hover:text-ink">
               {link.label}
             </a>
           ))
         ) : (
-          <span className="text-gray-spec italic">provisioning</span>
+          <span className="text-gray-spec">public host pending</span>
         )}
-        <a href={cell.sourceHref} className="text-gray-spec hover:text-accent">
-          source
-        </a>
       </div>
     </div>
   )
@@ -64,7 +61,6 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
                   <span className="micro block text-[10.5px] tracking-th text-ink">
                     {strategy.name}
                   </span>
-                  <span className="mono-nums text-[10px] text-gray-spec">{strategy.slug}</span>
                 </th>
               ))}
             </tr>
@@ -83,9 +79,6 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
                   >
                     {framework.name}
                   </Link>
-                  <span className="mono-nums mt-1 block text-[10px] font-normal text-gray-spec">
-                    {framework.slug}
-                  </span>
                 </th>
                 {STRATEGIES.map((strategy) => (
                   <td key={strategy.slug} className="border border-hair px-4 py-4 align-top">
@@ -98,8 +91,8 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
         </table>
       </div>
       <p className="mono-nums mt-3 text-[11px] text-gray-spec">
-        <span className="text-accent">●</span> live demo · ◌ local / provisioning · ✓ verified in CI
-        — browser flows for the five UI adapters, server smoke proofs for Remix v3
+        <span className="text-accent">●</span> public demo · ◌ public host pending · ✓ verified in
+        CI — Remix v3 is currently a local/CI proof surface.
       </p>
     </div>
   )

@@ -114,9 +114,7 @@ export default function App() {
           {renderSidebarSections()}
         </ArdoSidebar>
         <ArdoFooter>
-          <div className="frame border-t-0">
-            <SiteFooter config={OSS_SITE_CONFIG} />
-          </div>
+          <SiteFooter config={OSS_SITE_CONFIG} />
         </ArdoFooter>
       </ArdoRoot>
     </SiteUiProvider>

@@ -65,8 +65,8 @@ export function CompleteProof() {
           <div>
             <p className="micro text-[10px] tracking-label text-ink/70">The local workflow</p>
             <p className="mt-2 max-w-[42rem] text-[13.5px]">
-              One path from source to a runtime artifact, with catalog audits and semantic merging
-              using the same engine.
+              A single hand-off: write in the component, extract to a catalog, translate that
+              catalog, then render through the same runtime contract.
             </p>
           </div>
           <Link to="/frameworks" viewTransition className="mono-nums text-[12px] text-accent">
