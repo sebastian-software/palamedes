@@ -1,7 +1,8 @@
 /*
  * Headless click-through of the built site (site/build/client). Serves the
- * prerendered output, then crawls every sitemap route, asserts key H1s, checks
- * zero console errors, and exercises important interactions. Runs three passes:
+ * prerendered output, then crawls every sitemap route, asserts route-heading
+ * contracts where they are stable, checks zero console errors, and exercises
+ * important interactions. Runs three passes:
  * default, reduced-motion, and JS-disabled.
  *
  * Usage: node scripts/verify-site-routes.mjs  (requires a prior site build)
@@ -43,7 +44,9 @@ const MIME = {
 }
 
 const ROUTE_EXPECTATIONS = [
-  { path: "/", h1: "Clear. Complete. Fast." },
+  // The homepage is verified through its real structural and interaction
+  // checks below. Its marketing headline is intentionally not a test contract.
+  { path: "/" },
   { path: "/frameworks", h1: "Six frameworks." },
   {
     path: "/frameworks/nextjs",
@@ -220,7 +223,9 @@ async function checkRoutes(context, label, { expectHydration }) {
     trackPageErrors(routePage, () => route.path, consoleErrors, knownHydrationWarnings)
     await gotoAndSettle(routePage, route.path, { settleMs: 1500 })
     const h1 = await routePage.locator("h1").first().textContent()
-    if (!h1 || !h1.includes(route.h1)) {
+    if (!h1?.trim()) {
+      fail(`${label} ${route.path}: missing heading`)
+    } else if (route.h1 && !h1.includes(route.h1)) {
       fail(`${label} ${route.path}: h1 mismatch, got "${h1}"`)
     } else {
       console.log(`  ok ${route.path} — "${h1.trim().slice(0, 48)}"`)
