@@ -117,13 +117,80 @@ header a[href="/"] span {
   font-size: 12px;
 }
 
-/* Marketing pages should read as an open canvas, not as a fixed-width sheet. */
+/*
+ * Marketing pages stay open but deliberately bounded: horizontal rules and
+ * bands get room to breathe without turning the browser edge into the grid.
+ * The border belongs to content relationships, never to a page-sized card.
+ */
 #main-content:has(.pmds-page) > .pmds-page,
 footer.ardo-footer:has(.pmds-footer) > div {
-  max-width: none;
+  width: min(calc(100% - 4rem), 1440px) !important;
+  max-width: 1440px !important;
+  margin-inline: auto !important;
   border-inline: 0;
+}
+
+footer.ardo-footer:has(.pmds-footer) {
+  padding-inline: 0;
 }
 
 header.ardo-header {
   border-bottom: 1px solid var(--color-hair);
+}
+
+header.ardo-header > div {
+  width: min(100%, 1440px);
+  margin-inline: auto;
+  padding-inline: 2rem;
+}
+
+/*
+ * The section index and domain are context, not a competing stack of tiny
+ * headings. Present them as one readable line, then let the actual h2 carry
+ * the section's information hierarchy.
+ */
+.pmds-home .pmds-section-number,
+.pmds-home .pmds-section-eyebrow {
+  display: inline;
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+
+.pmds-home .pmds-section-number {
+  color: var(--color-ink);
+}
+
+.pmds-home .pmds-section-eyebrow {
+  color: var(--color-gray-spec);
+}
+
+.pmds-home .pmds-section-eyebrow::before {
+  content: " / ";
+  color: var(--color-accent);
+}
+
+.pmds-home .pmds-section-title {
+  max-width: 28em;
+  margin-top: 0.9rem;
+  font-size: clamp(2rem, 3.4vw, 3.25rem);
+  line-height: 1.12;
+}
+
+.pmds-home .pmds-section-lede {
+  max-width: 42rem;
+  margin-top: 1.25rem;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+@media (max-width: 42rem) {
+  #main-content:has(.pmds-page) > .pmds-page,
+  footer.ardo-footer:has(.pmds-footer) > div {
+    width: calc(100% - 2.5rem);
+  }
+
+  header.ardo-header > div {
+    padding-inline: 1.25rem;
+  }
 }
