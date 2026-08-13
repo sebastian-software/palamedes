@@ -92,7 +92,7 @@ export function IntegrationBand() {
             Brand-asset status →
           </a>
         </div>
-        <ul className="grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1" role="list">
+        <ul className="grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1">
           {INTEGRATIONS.map((framework) => (
             <li
               key={framework.name}
