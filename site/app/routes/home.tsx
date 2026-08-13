@@ -7,7 +7,6 @@ import { BenchmarkCommand } from "~/components/home/BenchmarkCommand"
 import { HomeHero } from "~/components/home/HomeHero"
 import { HomeFaq, HOME_FAQ } from "~/components/home/HomeFaq"
 import { IntegrationBand } from "~/components/home/IntegrationBand"
-import { PromiseBand } from "~/components/home/PromiseBand"
 import { ProofStrip } from "~/components/home/ProofStrip"
 import { QuickInstall } from "~/components/home/QuickInstall"
 import { QuestionRoutes } from "~/components/home/QuestionRoutes"
@@ -45,12 +44,21 @@ export default function Home() {
   return (
     <Page>
       <HomeHero />
-      <IntegrationBand />
       <ProofStrip />
-      <PromiseBand />
 
       <Section
-        num="01 — Clear"
+        num="01 — Start from your question"
+        eyebrow="Choose a path"
+        title="The right evidence depends on the decision in front of you."
+        lede="Begin with the question your team actually needs to answer. Every route returns to the same source-to-runtime model and its checked boundaries."
+      >
+        <QuestionRoutes />
+      </Section>
+
+      <IntegrationBand />
+
+      <Section
+        num="02 — Clear"
         eyebrow="Developer experience"
         title="Write the message where the interface happens."
         lede="Messages stay readable in TypeScript and JSX. Palamedes transforms them for extraction and runtime use without making developers manage parallel identifiers, generated wrappers, or a second authoring language."
@@ -75,7 +83,7 @@ export default function Home() {
       </Section>
 
       <Section
-        num="02 — Complete"
+        num="03 — Complete"
         eyebrow="Already wired"
         title="Framework integrations and locale architectures are two different promises."
         lede="The adapter layer supplies tested glue code for each supported host. Separately, the example matrix proves four application shapes for locale selection and URLs. You do not have to turn generic compatibility into an architecture yourself."
@@ -84,7 +92,7 @@ export default function Home() {
       </Section>
 
       <Section
-        num="03 — Fast"
+        num="04 — Fast"
         eyebrow="Checked performance"
         title="Fast enough to stay out of the way."
         lede="The realistic workflow measures extraction and catalog updates across 1,500 files. The exact command, fixtures, machine details, and semantic checks remain available for reproduction."
@@ -98,27 +106,18 @@ export default function Home() {
         </div>
       </Section>
 
-      <StatementBand num="04 — Architecture" diagram href="/architecture">
+      <StatementBand num="05 — Architecture" diagram href="/architecture">
         A native core handles extraction, catalogs, validation, merging, and compilation. Each
         framework adapter handles only its own routing, rendering, and locale conventions.
       </StatementBand>
 
       <Section
-        num="05 — Verification"
+        num="06 — Verification"
         eyebrow="Executable evidence"
         title="The matrix is made of applications, not logos."
         lede={`Every cell represents implemented source. All ${contentStats.smokeExampleCount} examples are smoke-checked on relevant changes, while ${contentStats.browserExampleCount} browser-capable examples exercise SSR output, locale switching, and localized server actions on a schedule.`}
       >
         <FrameworkMatrix />
-      </Section>
-
-      <Section
-        num="06 — Start from your question"
-        eyebrow="Choose a path"
-        title="The right evidence depends on the decision in front of you."
-        lede="Begin with the question your team actually needs to answer. Every route returns to the same source-to-runtime model and its checked boundaries."
-      >
-        <QuestionRoutes />
       </Section>
 
       <Section
@@ -167,9 +166,9 @@ export default function Home() {
       </Section>
 
       <CtaBand
-        headline="Choose an i18n foundation you do not plan to replace."
-        primary={{ label: "Choose your framework", href: "/frameworks" }}
-        secondary={{ label: "Review the architecture", href: "/architecture" }}
+        headline="Put a durable i18n model in your repository."
+        primary={{ label: "Start the guided setup", href: "/get-started" }}
+        secondary={{ label: "Read the migration guide", href: "/docs/migrate-from-lingui" }}
       />
     </Page>
   )

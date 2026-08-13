@@ -275,6 +275,30 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (questionRoutes < 5) {
       fail(`home question routing: expected five decision routes, got ${questionRoutes}`)
     }
+    const hierarchy = await page.evaluate(() => {
+      const question = [...document.querySelectorAll("section")].find((section) =>
+        section.textContent?.includes("Start from your question")
+      )
+      const proofStrip = document.querySelector(".hairline-grid")
+      const integration = document.querySelector(
+        'section[aria-label="First-party framework integrations"]'
+      )
+      return {
+        questionAfterProof: Boolean(
+          question &&
+          proofStrip &&
+          proofStrip.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+        questionBeforeIntegration: Boolean(
+          question &&
+          integration &&
+          question.compareDocumentPosition(integration) & Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+      }
+    })
+    if (!hierarchy.questionAfterProof || !hierarchy.questionBeforeIntegration) {
+      fail("home hierarchy: question routing must follow the proof strip and precede deep evidence")
+    }
     const benchmarkCommand = await page
       .getByText("$ pnpm benchmark:e2e-workflow", { exact: false })
       .isVisible()
@@ -362,6 +386,36 @@ async function checkRoutes(context, label, { expectHydration }) {
   await page.close()
 }
 
+async function checkHomepageDecisionViewport(browser, width) {
+  const context = await browser.newContext({ viewport: { width, height: 844 } })
+  const page = await context.newPage()
+  const response = await gotoAndSettle(page, "/", { settleMs: 1500 })
+  if (response?.status() !== 200) {
+    fail(`home ${width}px: expected HTTP 200, got ${response?.status() ?? "no response"}`)
+  } else {
+    const metrics = await page.evaluate(() => {
+      const question = [...document.querySelectorAll("section")].find((section) =>
+        section.textContent?.includes("Start from your question")
+      )
+      const firstDecision = question?.querySelector('a[href="/frameworks"]')
+      const absoluteTop = (element) =>
+        Math.round(element.getBoundingClientRect().top + window.scrollY)
+
+      return {
+        pageHeight: document.documentElement.scrollHeight,
+        firstDecisionTop: firstDecision ? absoluteTop(firstDecision) : null,
+      }
+    })
+    if (metrics.firstDecisionTop === null || metrics.firstDecisionTop >= metrics.pageHeight * 0.2) {
+      fail(`home ${width}px: first decision route is not within the first fifth of the page`)
+    }
+    console.log(
+      `  homepage ${width}px: first decision at ${metrics.firstDecisionTop}px of ${metrics.pageHeight}px`
+    )
+  }
+  await context.close()
+}
+
 function trackPageErrors(page, getPath, consoleErrors, knownHydrationWarnings) {
   page.on("pageerror", (error) => {
     const message = error.message
@@ -426,6 +480,8 @@ await checkRoutes(await browser.newContext({ reducedMotion: "reduce" }), "reduce
 await checkRoutes(await browser.newContext({ javaScriptEnabled: false }), "no-js", {
   expectHydration: false,
 })
+await checkHomepageDecisionViewport(browser, 320)
+await checkHomepageDecisionViewport(browser, 390)
 
 await browser.close()
 server.close()
