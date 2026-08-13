@@ -6,7 +6,13 @@ import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
-import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
+import {
+  BENCH_MEDIUM,
+  BENCH_META,
+  BENCH_REALISTIC,
+  BENCH_REALISTIC_WARM,
+  BENCH_SMALL,
+} from "~/data/bench"
 import { CATALOG_QA_CARDS } from "~/data/features"
 import contentStats from "~/data/generated/content-stats.json"
 import { decisionHref, docsHref, repoHref } from "~/data/links"
@@ -36,10 +42,48 @@ const VERIFICATION_STEPS = [
   },
 ]
 
+const DECISION_LEDGER = [
+  {
+    no: "003",
+    title: "Source-string-first message identity",
+    status: "Accepted",
+    href: "003-source-string-first-message-identity",
+  },
+  {
+    no: "005",
+    title: "Universal getI18n() runtime model",
+    status: "Accepted",
+    href: "005-universal-geti18n-runtime-model",
+  },
+  {
+    no: "006",
+    title: "ferrocat as catalog and ICU foundation",
+    status: "Accepted",
+    href: "006-ferrocat-as-catalog-and-icu-foundation",
+  },
+  {
+    no: "008",
+    title: "Framework adapter architecture",
+    status: "Accepted",
+    href: "008-framework-adapter-architecture",
+  },
+  { no: "019", title: "Extraction cache", status: "Accepted", href: "019-extraction-cache" },
+  {
+    no: "020",
+    title: "Locale is fixed for a browser document",
+    status: "Accepted",
+    href: "020-locale-is-fixed-for-a-browser-document",
+  },
+] as const
+
 export default function Proof() {
   return (
     <Page>
-      <section className="relative overflow-hidden px-8 pt-16 pb-14 max-tight:px-5">
+      <section className="relative overflow-hidden px-8 pt-7 pb-14 max-tight:px-5">
+        <div className="mono-nums -mx-8 mb-14 flex items-center justify-between border-y border-hair px-8 py-3 text-[10px] tracking-label text-gray-spec max-tight:-mx-5 max-tight:px-5">
+          <span>PALAMEDES / PROOF / REPRODUCIBLE RECEIPTS</span>
+          <span>{BENCH_META.generated}</span>
+        </div>
         {/* Style break: oversized ghosted section digit behind the hero. */}
         <span
           aria-hidden
@@ -61,6 +105,12 @@ export default function Proof() {
             Browse checked-in reports
           </ButtonLink>
         </div>
+        <div className="mt-8 max-w-[42em] border border-ink bg-ink px-5 py-4 text-paper">
+          <p className="micro text-[10px] tracking-label text-accent-soft">
+            Copyable re-run command
+          </p>
+          <code className="mono-nums mt-2 block text-[13px]">$ pnpm benchmark:e2e-workflow</code>
+        </div>
       </section>
 
       <Section
@@ -69,6 +119,13 @@ export default function Proof() {
         lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; the React Intl extraction workflow writes one aggregated extraction artifact and is marked as narrower scope. Every run uses the same logical inventory and is validated semantically. The cached Palamedes re-run is shown separately as a capability, not turned into a competitor speedup claim."
       >
         <div className="space-y-8">
+          <div className="border-y border-hair py-4 text-[11px] leading-relaxed text-gray-spec">
+            Environment: {BENCH_META.platform} · Node {BENCH_META.node} · {BENCH_META.runs} runs ·
+            report generated {BENCH_META.generated}. Cold and warm results are kept separate;
+            relative factors only compare the same workflow scope.
+          </div>
+          <BenchmarkLedger corpus={BENCH_SMALL} />
+          <BenchmarkLedger corpus={BENCH_MEDIUM} />
           <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <EditorialRail tone="emphasis">
             <p className="micro text-[10px] text-gray-spec">Honest note</p>
@@ -151,9 +208,44 @@ export default function Proof() {
         title={`${contentStats.adrCount} decisions, written down before you depend on them.`}
         lede="The ADRs cover message identity, the native boundary, adapter architecture — and, just as deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if our tradeoffs match yours."
       >
-        <div className="space-y-2">
+        <div className="overflow-x-auto border border-hair">
+          <table className="w-full min-w-[620px] border-collapse">
+            <thead>
+              <tr className="border-b border-hair">
+                <th className="micro px-5 py-3 text-left text-[10px] tracking-th text-gray-spec">
+                  No.
+                </th>
+                <th className="micro px-5 py-3 text-left text-[10px] tracking-th text-gray-spec">
+                  Decision
+                </th>
+                <th className="micro px-5 py-3 text-left text-[10px] tracking-th text-gray-spec">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {DECISION_LEDGER.map((decision) => (
+                <tr key={decision.no} className="border-b border-hair last:border-0">
+                  <td className="mono-nums px-5 py-4 text-[13px] text-accent">ADR-{decision.no}</td>
+                  <td className="px-5 py-4 text-[13.5px] font-semibold">
+                    <a
+                      className="hover:text-accent hover:underline"
+                      href={decisionHref(decision.href)}
+                    >
+                      {decision.title}
+                    </a>
+                  </td>
+                  <td className="mono-nums px-5 py-4 text-[12px] text-gray-spec">
+                    {decision.status}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-6 space-y-2">
           <a href={decisionHref()} className="mono-nums block text-[13px] text-accent">
-            ADR index →
+            Full ADR index →
           </a>
           <a href={docsHref("stability")} className="mono-nums block text-[13px] text-accent">
             Stability &amp; versioning policy →
@@ -165,7 +257,7 @@ export default function Proof() {
       </Section>
 
       <CtaBand
-        headline="Convinced by the receipts? Start with the guided quickstart."
+        headline="Convinced by the receipts? Inspect the integration that fits."
         primary={{ label: "Get started", href: "/get-started" }}
         secondary={{
           label: "Compare with your current tool",
