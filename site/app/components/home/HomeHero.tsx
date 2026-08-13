@@ -30,8 +30,8 @@ export function HomeHero() {
         </p>
         <div className="mt-9 flex flex-wrap justify-center gap-3">
           <ButtonLink href="/frameworks">Choose your framework</ButtonLink>
-          <ButtonLink variant="outline" href="/proof">
-            Inspect the evidence
+          <ButtonLink variant="outline" href="/architecture">
+            Review the architecture
           </ButtonLink>
         </div>
       </div>

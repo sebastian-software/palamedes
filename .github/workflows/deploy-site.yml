@@ -138,7 +138,7 @@ jobs:
             echo "ok $path ($status)"
           }
 
-          check "/" 200 "One translation model."
+          check "/" 200 "Clear. Complete. Fast."
           check "/frameworks" 200 "Six frameworks."
           check "/proof" 200 "Claims you can re-run."
           check "/get-started" 200 "First working translation"
