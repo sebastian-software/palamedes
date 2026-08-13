@@ -12,12 +12,11 @@ interface FlowStage {
   label: string
   artifact: string
   note: string
-  accent?: boolean
 }
 
 const STAGES: FlowStage[] = [
   { label: "Write", artifact: "src/*.tsx", note: "t`…` macro in the component" },
-  { label: "Extract", artifact: "pmds", note: "one native command", accent: true },
+  { label: "Extract", artifact: "pmds", note: "finds messages and updates the catalog" },
   { label: "Translate", artifact: ".po catalog", note: "source-string-first" },
   { label: "Render", artifact: "supported hosts", note: "same runtime model" },
 ]
@@ -40,19 +39,11 @@ export function WorkflowFlow() {
               <span className="hidden max-grid:inline">↓</span>
             </span>
           ) : null}
-          <div
-            className={`border px-4 py-4 ${
-              stage.accent ? "border-accent bg-hover-fill" : "border-hair"
-            }`}
-          >
+          <div className="border border-hair px-4 py-4">
             <p className="micro text-[10px] tracking-label text-gray-spec">
               {String(index + 1).padStart(2, "0")}
             </p>
-            <p
-              className={`display-serif mt-1 text-[17px] ${stage.accent ? "text-accent" : "text-ink"}`}
-            >
-              {stage.label}
-            </p>
+            <p className="display-serif mt-1 text-[17px] text-ink">{stage.label}</p>
             <p className="mono-nums mt-2 text-[11px] text-ink">{stage.artifact}</p>
             <p className="mt-0.5 text-[11px] text-gray-spec">{stage.note}</p>
           </div>

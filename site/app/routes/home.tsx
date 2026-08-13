@@ -86,8 +86,8 @@ export default function Home() {
       <Section
         num="03 — Fast"
         eyebrow="Checked performance"
-        title="The result should be obvious without fake precision."
-        lede="The public ledger uses calm, rounded numbers. Exact medians, fixtures, commands, machine details, and semantic output checks remain in the repository for anyone who wants to reproduce the run."
+        title="Fast enough to stay out of the way."
+        lede="The realistic workflow measures extraction and catalog updates across 1,500 files. The exact command, fixtures, machine details, and semantic checks remain available for reproduction."
       >
         <div className="space-y-8">
           <BenchmarkCommand />
@@ -99,9 +99,8 @@ export default function Home() {
       </Section>
 
       <StatementBand num="04 — Architecture" diagram href="/architecture">
-        One native core owns the work that should stay stable: extraction, catalog updates,
-        validation, semantic merging, and compilation. First-party adapters connect that model to
-        the routing, rendering, and locale conventions of each supported host.
+        A native core handles extraction, catalogs, validation, merging, and compilation. Each
+        framework adapter handles only its own routing, rendering, and locale conventions.
       </StatementBand>
 
       <Section

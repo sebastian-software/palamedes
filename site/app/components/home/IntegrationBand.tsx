@@ -34,7 +34,7 @@ const INTEGRATIONS: readonly Integration[] = [
     name: "Waku",
     href: frameworkLandingHref("waku"),
     logo: "/framework-logos/waku.svg",
-    logoClass: "h-5 w-auto max-w-[5rem]",
+    logoClass: "h-5 w-auto max-w-[5rem] brightness-0",
   },
   {
     name: "React Router",
@@ -78,7 +78,7 @@ const INTEGRATIONS: readonly Integration[] = [
 export function IntegrationBand() {
   return (
     <section aria-label="First-party framework integrations" className="border-b border-hair">
-      <div className="frame grid grid-cols-[minmax(13rem,1fr)_3fr] border-x-0 max-grid:grid-cols-1">
+      <div className="grid grid-cols-[minmax(13rem,1fr)_3fr] max-grid:grid-cols-1">
         <div className="border-r border-hair px-7 py-6 max-grid:border-r-0 max-grid:border-b">
           <p className="eyebrow">First-party integration</p>
           <p className="mt-3 max-w-[17rem] text-[13px] leading-relaxed text-ink/80">

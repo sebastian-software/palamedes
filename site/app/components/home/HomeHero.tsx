@@ -16,8 +16,10 @@ export function HomeHero() {
       <div className="mx-auto max-w-[64rem] pt-14 text-center">
         <p className="eyebrow">A foundation you can keep</p>
         <h1 className="display-serif mt-7 uppercase">
-          <span className="block text-[clamp(2.2rem,6.5vw,5.8rem)] leading-[0.92] tracking-[-0.025em]">
-            Clear. Complete. Fast.
+          <span className="flex flex-wrap justify-center gap-x-[0.22em] text-[clamp(2.15rem,6.1vw,5.8rem)] leading-[0.92] tracking-[-0.025em] max-tight:gap-x-[0.14em]">
+            <span>Clear.</span>
+            <span>Complete.</span>
+            <span>Fast.</span>
           </span>
           <span className="mt-3 block text-[clamp(2.6rem,8.3vw,7.5rem)] leading-[0.9] tracking-[-0.035em] text-accent">
             Pick three.

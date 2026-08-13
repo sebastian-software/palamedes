@@ -65,12 +65,6 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
               >
                 Relative time
               </th>
-              <th
-                scope="col"
-                className="micro px-6 py-3 text-left text-[10px] tracking-th text-ink/70"
-              >
-                Scope
-              </th>
             </tr>
           </thead>
           <tbody>
@@ -83,16 +77,22 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
                 >
                   <th scope="row" className="px-6 py-5 text-left text-[14px] font-semibold">
                     {row.displayName}
+                    {!row.sameScope && !accent ? (
+                      <span className="mt-1 block text-[10px] font-normal text-gray-spec">
+                        * extraction only; narrower scope
+                      </span>
+                    ) : null}
                   </th>
                   <td
                     className={`mono-nums px-6 py-5 text-right text-[clamp(1.65rem,3vw,2.4rem)] leading-none ${accent ? "text-accent" : "text-ink"}`}
                   >
-                    {displayBenchmarkTime(row.medianMs)}
+                    {accent && warm
+                      ? `${displayBenchmarkTime(warm.warmMs).replace(" ms", "")}–${displayBenchmarkTime(row.medianMs)}*`
+                      : displayBenchmarkTime(row.medianMs)}
                   </td>
                   <td className="mono-nums px-6 py-5 text-right text-[20px] text-ink">
                     {displayBenchmarkFactor(row, baseline.medianMs)}
                   </td>
-                  <td className="px-6 py-5 text-[12px] text-gray-spec">{row.scope}</td>
                 </tr>
               )
             })}
@@ -101,21 +101,15 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
       </div>
 
       {warm ? (
-        <div className="grid grid-cols-[auto_1fr] items-center gap-5 border-t border-hair bg-ink px-6 py-5 text-paper max-tight:grid-cols-1">
-          <span className="mono-nums text-[32px] leading-none text-accent-soft">
-            {displayBenchmarkTime(warm.warmMs)}
-          </span>
-          <p className="text-[12.5px] leading-relaxed text-paper/80">
-            Cached re-run after touching {warm.touchedFiles} source files. It is shown separately:
-            no public speedup factor is calculated from the warm lane.{" "}
-            <a
-              href={decisionHref("019-extraction-cache")}
-              className="text-accent underline-offset-2 hover:underline"
-            >
-              Why the cache matters →
-            </a>
-          </p>
-        </div>
+        <p className="border-t border-hair px-6 py-4 text-[11px] leading-relaxed text-gray-spec">
+          * {displayBenchmarkTime(warm.warmMs)} is Palamedes on a cached re-run after{" "}
+          {warm.touchedFiles}
+          changed source files; {displayBenchmarkTime(baseline.medianMs)} is the cold workflow
+          result. No speedup factor is calculated for the non-comparable cached run.{" "}
+          <a href={decisionHref("019-extraction-cache")} className="text-accent hover:underline">
+            Cache details →
+          </a>
+        </p>
       ) : null}
 
       <p className="border-t border-hair px-6 py-4 text-[11px] leading-relaxed text-gray-spec">

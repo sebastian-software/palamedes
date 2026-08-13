@@ -22,7 +22,9 @@ export function StatementBand({
     <section className="border-t border-hair bg-ink px-8 pt-0 pb-16 text-paper max-tight:px-5">
       <div className="meander -mx-8 mb-14 max-tight:-mx-5" aria-hidden />
       <p className="micro tracking-th text-accent-soft">{num}</p>
-      <p className="display-serif mt-6 max-w-[32em] text-band leading-[1.4]">{children}</p>
+      <p className="mt-6 max-w-[46rem] text-[clamp(1.1rem,2vw,1.45rem)] leading-[1.55] text-paper/90">
+        {children}
+      </p>
       {diagram ? <ScopeDiagram /> : null}
       {href ? (
         <a
