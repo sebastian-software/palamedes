@@ -22,12 +22,12 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const reportPath = join(repoRoot, "benchmarks/e2e-workflow/results/latest.md")
 const benchTsPath = join(repoRoot, "site/app/data/bench.ts")
 const readmePath = join(repoRoot, "README.md")
-const promiseBandPath = join(repoRoot, "site/app/components/home/PromiseBand.tsx")
+const benchmarkLedgerPath = join(repoRoot, "site/app/components/proof/BenchmarkLedger.tsx")
 
 const report = readFileSync(reportPath, "utf8")
 const benchTs = readFileSync(benchTsPath, "utf8")
 const readme = readFileSync(readmePath, "utf8")
-const promiseBand = readFileSync(promiseBandPath, "utf8")
+const benchmarkLedger = readFileSync(benchmarkLedgerPath, "utf8")
 const tools = ["Palamedes", "Lingui", "React Intl", "i18next-cli", "General Translation"]
 const comparedTools = tools.filter((tool) => tool !== "Palamedes")
 const ratioFields = {
@@ -316,8 +316,8 @@ for (const [label, token] of [
 }
 
 expect(
-  "PromiseBand derives its public benchmark figure from bench.ts",
-  promiseBand.includes("displayBenchmarkTime(baseline.medianMs)")
+  "BenchmarkLedger derives its public benchmark figures from bench.ts",
+  benchmarkLedger.includes("displayBenchmarkTime(row.medianMs)")
 )
 
 console.log("verify-site-bench-data: bench.ts and README match latest.md")
