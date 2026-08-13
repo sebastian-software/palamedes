@@ -84,6 +84,15 @@ function speedup(tool: string): string {
   return `${Math.round(row.medianMs)} ms vs ${Math.round(palamedes.medianMs)} ms`
 }
 
+/*
+ * Exact ratios belong in the checked, scoped comparison rows below. Public
+ * copy uses a deliberately floored factor, so a single local benchmark run is
+ * never presented with false precision in a headline or decision prompt.
+ */
+function publicFactor(key: keyof typeof BENCH_REALISTIC.ratios): string {
+  return `${Math.floor(Number.parseFloat(BENCH_REALISTIC.ratios[key]))}×`
+}
+
 const NO_BENCHMARK =
   "Not measured. The checked harness covers Lingui, React Intl, i18next-cli, and General Translation; anything else would be a guess."
 
@@ -104,20 +113,20 @@ export const RIVALS: Rival[] = [
     name: "Lingui",
     subject: "@lingui/core 6.5.0",
     researched: "July 2026",
-    metaTitle: `Palamedes vs Lingui — the same authoring model, ${BENCH_REALISTIC.ratios.lingui} faster`,
+    metaTitle: `Palamedes vs Lingui — the same authoring model, ${publicFactor("lingui")} faster`,
     metaDescription:
       "Lingui and Palamedes share the same authoring instinct: macros in your components, source strings as identity, .po catalogs. Palamedes rebuilds the machinery underneath in Rust — and runs the checked benchmark an order of magnitude faster.",
     eyebrow: "Compare · Lingui",
-    headline: `The same idea, on an engine ${BENCH_REALISTIC.ratios.lingui} faster.`,
+    headline: `The same idea, on an engine ${publicFactor("lingui")} faster.`,
     lede: "Lingui got the authoring model right, and we are not going to pretend otherwise — write the message where the UI happens, let the source string be the identity, keep catalogs translators already know. Palamedes agrees with every part of that, then replaces the machinery underneath: one Rust core instead of a JS plugin stack, one runtime access model instead of several.",
-    card: `The closest relative — and the checked benchmark says ${BENCH_REALISTIC.ratios.lingui} faster on the same corpus.`,
+    card: `The closest relative — and the checked benchmark says ${publicFactor("lingui")} faster on the same workflow.`,
     facts: [
       { label: "Licence", value: "MIT" },
       { label: "Identity", value: "Source-derived or explicit IDs" },
       { label: "Catalogs", value: ".po, native" },
       {
         label: "Checked benchmark",
-        value: `${BENCH_REALISTIC.ratios.lingui} slower`,
+        value: `${publicFactor("lingui")} slower`,
       },
     ],
     thesis:
@@ -172,7 +181,7 @@ export const RIVALS: Rival[] = [
       {
         criterion: "Extract + update, realistic corpus",
         rival: speedup("Lingui"),
-        palamedes: `${BENCH_REALISTIC.ratios.lingui} faster on the checked run¹`,
+        palamedes: `${BENCH_REALISTIC.ratios.lingui} faster on realistic extract + catalog update¹`,
       },
       {
         criterion: "Framework coverage",
@@ -207,7 +216,7 @@ function checkoutLabel(seats) {
       "You want the option of explicit message IDs for part of your catalog.",
     ],
     pickPalamedes: [
-      `Extraction has become a real cost in CI or your pre-commit hook — ${BENCH_REALISTIC.ratios.lingui} on the checked corpus is the difference between a pause and a coffee break.`,
+      `Extraction has become a real cost in CI or your pre-commit hook — ${publicFactor("lingui")} on the checked realistic extract + catalog-update workflow is the difference between a pause and a coffee break.`,
       "You want exactly one runtime access model across server components, client islands and backend code.",
       "You want catalog semantics, audits and ICU diagnostics from one engine instead of several layers that can disagree.",
       "You are on React or Solid and expect to change meta-framework at some point.",
@@ -226,7 +235,7 @@ function checkoutLabel(seats) {
     subject: "i18next 26.3.4 / react-i18next 17.0.8",
     researched: "July 2026",
     metaTitle: "Palamedes vs i18next — stop maintaining a naming layer",
-    metaDescription: `i18next asks every developer to invent and maintain keys. Palamedes uses the sentence you already wrote — and extracts it up to ${BENCH_REALISTIC.ratios.i18nextCli} faster on the checked benchmark.`,
+    metaDescription: `i18next asks every developer to invent and maintain keys. Palamedes uses the sentence you already wrote — and extracts it up to ${publicFactor("i18nextCli")} faster on the checked workflow.`,
     eyebrow: "Compare · i18next",
     headline: "You already know what the string says.",
     lede: "i18next identifies messages by keys you invent, namespace, remember and keep in sync with a JSON tree. Palamedes identifies them by the source text you already typed. That single decision deletes a whole category of weekly work, changes what a missing translation looks like in production, and changes what lands in your translators' inbox.",
@@ -237,7 +246,7 @@ function checkoutLabel(seats) {
       { label: "Catalogs", value: "JSON, key-based" },
       {
         label: "Checked benchmark",
-        value: `up to ${BENCH_REALISTIC.ratios.i18nextCli} slower`,
+        value: `up to ${publicFactor("i18nextCli")} slower`,
       },
     ],
     thesis:
@@ -296,7 +305,7 @@ function checkoutLabel(seats) {
       {
         criterion: "Extract + update, realistic corpus",
         rival: speedup("i18next-cli"),
-        palamedes: `${BENCH_REALISTIC.ratios.i18nextCli} faster on the checked run¹`,
+        palamedes: `${BENCH_REALISTIC.ratios.i18nextCli} faster on realistic extract + catalog update¹`,
       },
       {
         criterion: "Framework reach",
@@ -335,7 +344,7 @@ plural(seats, {
       "Key maintenance has become a chore, or raw keys have already leaked into production UI.",
       "Your translators would rather receive .po files than nested JSON — most professional tooling would.",
       "You want ICU semantics guaranteed end to end rather than swapped in via plugin.",
-      `Extraction time matters in CI: ${BENCH_REALISTIC.ratios.i18nextCli} against i18next-cli on the checked corpus.`,
+      `Extraction time matters in CI: ${publicFactor("i18nextCli")} on the checked realistic extract + catalog-update workflow against i18next-cli.`,
     ],
     honest:
       "i18next reaches frameworks Palamedes does not support, its plugin ecosystem has no equivalent here, and there is no migration playbook from i18next yet — moving a key-based catalog to source-string identity is technical migration work you would be doing largely by hand today.",
@@ -471,7 +480,7 @@ function buyLabel(seats) {
       { label: "Server components", value: "Not supported natively" },
       {
         label: "Checked benchmark",
-        value: `${BENCH_REALISTIC.ratios.formatjs} slower`,
+        value: `${publicFactor("formatjs")} slower`,
       },
     ],
     thesis:
@@ -531,7 +540,7 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update, realistic corpus",
         rival: speedup("React Intl"),
-        palamedes: `${BENCH_REALISTIC.ratios.formatjs} faster on the checked run¹`,
+        palamedes: `${BENCH_REALISTIC.ratios.formatjs} faster on realistic extraction-only¹`,
       },
       {
         criterion: "Intl polyfills",
