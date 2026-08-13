@@ -1,6 +1,6 @@
 import { Link } from "react-router"
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 import { CtaBand } from "~/components/home/CtaBand"
 import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
 import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
@@ -33,7 +33,7 @@ export function TopicPage({ topic }: { topic: Topic }) {
       </section>
 
       <Section num="01 — The problem" title={topic.problem.title} lede={topic.problem.body}>
-        <div className="border-l-4 border-gray-spec pl-5">
+        <EditorialRail>
           <p className="micro text-[10px] tracking-label text-gray-spec">
             You are probably here because
           </p>
@@ -50,7 +50,7 @@ export function TopicPage({ topic }: { topic: Topic }) {
               </li>
             ))}
           </ul>
-        </div>
+        </EditorialRail>
       </Section>
 
       <Section num="02 — The approach" title={topic.answer.title} lede={topic.answer.lede}>

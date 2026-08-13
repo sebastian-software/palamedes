@@ -1,6 +1,6 @@
 import { Link } from "react-router"
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
 import {
@@ -196,10 +196,10 @@ export function RivalPage({ rival }: { rival: Rival }) {
             Which should you pick?
           </ButtonLink>
         </div>
-        <div className="mt-12 border-l-4 border-accent bg-hover-fill py-6 pr-6 pl-6">
+        <EditorialRail tone="emphasis" className="mt-12 bg-hover-fill py-6 pr-6">
           <p className="micro text-[10px] tracking-label text-gray-spec">Our position</p>
           <p className="mt-3 max-w-[46em] text-[16px] leading-relaxed">{rival.thesis}</p>
-        </div>
+        </EditorialRail>
       </section>
 
       <Section
@@ -267,7 +267,7 @@ export function RivalPage({ rival }: { rival: Rival }) {
           <PickList title={`Pick ${rival.name} when…`} items={rival.pickRival} />
         </div>
         {rival.migration ? (
-          <div className="mt-8 max-w-[56em] border-l-4 border-accent pl-4">
+          <EditorialRail tone="emphasis" className="mt-8">
             <p className="micro text-[10px] text-gray-spec">Coming from {rival.name}?</p>
             <p className="mt-1 text-[13.5px] leading-relaxed">{rival.migration.body}</p>
             <a
@@ -276,7 +276,7 @@ export function RivalPage({ rival }: { rival: Rival }) {
             >
               {rival.migration.label} →
             </a>
-          </div>
+          </EditorialRail>
         ) : null}
       </Section>
 

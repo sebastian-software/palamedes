@@ -1,4 +1,4 @@
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 import { pageMeta } from "~/lib/meta"
 import { PipelineDiagram } from "~/components/get-started/PipelineDiagram"
 import { StackPicker } from "~/components/get-started/StackPicker"
@@ -42,14 +42,14 @@ export default function GetStarted() {
         <div className="mb-6 flex justify-end">
           <PipelineDiagram />
         </div>
-        <div className="mb-8 max-w-[56em] border-l-4 border-accent pl-4">
+        <EditorialRail tone="emphasis" className="mb-8">
           <p className="micro text-[10px] text-gray-spec">Honest note</p>
           <p className="mt-1 text-[13.5px]">
             Install the scoped <code>@palamedes/*</code> packages. The top-level{" "}
             <code>palamedes</code> and <code>create-palamedes</code> names are reserved for a future
             one-command setup and are not the entry point today.
           </p>
-        </div>
+        </EditorialRail>
         <StackPicker />
       </Section>
 

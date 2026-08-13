@@ -1,6 +1,6 @@
 import { Link } from "react-router"
 
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 import { pageMeta } from "~/lib/meta"
 import { CtaBand } from "~/components/home/CtaBand"
 import { StatementBand } from "~/components/home/StatementBand"
@@ -66,13 +66,13 @@ export default function Compare() {
           </ButtonLink>
         </div>
 
-        <div className="mt-12 border-l-4 border-accent bg-hover-fill px-6 py-6">
+        <EditorialRail tone="emphasis" className="mt-12 bg-hover-fill py-6 pr-6">
           <p className="micro text-[10px] tracking-label text-gray-spec">Why now</p>
           <h2 className="mt-2 max-w-[24em] text-[19px] font-bold">{NATIVE_SHIFT.title}</h2>
           <p className="mt-3 max-w-[46em] text-[15px] leading-relaxed text-ink/85">
             {NATIVE_SHIFT.body}
           </p>
-        </div>
+        </EditorialRail>
       </section>
 
       <Section
@@ -104,7 +104,7 @@ export default function Compare() {
         {/* Outside the grid on purpose: the rival count is even, so this would
             otherwise leave a half-empty row. As a full-width strip it also
             reads as an invitation rather than as one more comparison. */}
-        <div className="mt-8 border-l-4 border-accent bg-hover-fill px-6 py-5">
+        <EditorialRail tone="emphasis" className="mt-8 bg-hover-fill py-5 pr-6">
           <h3 className="text-[15px] font-bold">Weighing something not listed here?</h3>
           <p className="mt-2 max-w-[52em] text-[13.5px] leading-relaxed text-ink/85">
             These cover the libraries most teams actually shortlist. If yours is missing, open an
@@ -114,7 +114,7 @@ export default function Compare() {
           <a href={`${REPO}/issues`} className="micro mt-3 inline-block text-[12px] text-accent">
             Ask on GitHub →
           </a>
-        </div>
+        </EditorialRail>
       </Section>
 
       <Section
@@ -162,7 +162,7 @@ export default function Compare() {
           Re-run the proof and inspect the sources →
         </a>
 
-        <div className="mt-10 max-w-[60em] border-l-4 border-gray-spec pl-5">
+        <EditorialRail className="mt-10">
           <p className="micro text-[10px] tracking-label text-gray-spec">
             The best argument against us
           </p>
@@ -186,7 +186,7 @@ export default function Compare() {
             target languages require translation-authored selectors, read Fluent&apos;s technical
             case rather than ours.
           </p>
-        </div>
+        </EditorialRail>
       </Section>
 
       <StatementBand num="04 — The honest bit">

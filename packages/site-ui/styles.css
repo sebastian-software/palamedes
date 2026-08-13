@@ -239,6 +239,16 @@
     margin-top: 2.5rem;
   }
 
+  .pmds-editorial-rail {
+    max-width: 56em;
+    border-inline-start: 1px solid var(--color-gray-spec);
+    padding-inline-start: 1.25rem;
+  }
+
+  .pmds-editorial-rail--emphasis {
+    border-inline-start-color: var(--color-accent);
+  }
+
   .pmds-footer {
     border-top: 1px solid var(--color-hair);
   }
