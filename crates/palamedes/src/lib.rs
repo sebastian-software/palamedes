@@ -38,6 +38,7 @@ mod mdx;
 mod message_metadata;
 mod placeholder_name;
 mod runtime_message;
+mod semantic_facts;
 mod source;
 mod source_macros;
 mod source_message;
@@ -109,6 +110,7 @@ pub use runtime_message::{
     compile_runtime_catalog_messages, RuntimeCompiledMessage, RuntimeCompiledMessages,
     RuntimeMessageChoiceKind, RuntimeMessageFormat, RuntimeMessageNode,
 };
+pub use semantic_facts::*;
 pub use source::{
     SourceAnalysisOptions, SourceAnalysisResult, SourceComment, SourceCommentKind,
     SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceRange,

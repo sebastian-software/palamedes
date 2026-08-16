@@ -57,6 +57,7 @@ Then read the remaining cross-cutting decisions:
 23. [ADR-023: Generated Production Runtime Is Parser-Free](./adr/023-generated-production-runtime-is-parser-free.md)
 24. [ADR-024: The npm Launcher Is A Packaging Bridge With A Node-Free Escape Hatch](./adr/024-npm-launcher-is-a-packaging-bridge.md)
 25. [ADR-025: React Router RSC Entry Request Scope](./adr/025-react-router-rsc-entry-request-scope.md)
+26. [ADR-026: TypeScript Semantics over a Versioned Process Boundary](./adr/026-typescript-semantics-over-a-versioned-process-boundary.md)
 
 ## ADR Policy
 

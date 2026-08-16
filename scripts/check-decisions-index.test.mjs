@@ -30,12 +30,12 @@ test("rejects an ADR missing from the index", () => {
       checkDecisionsIndex({
         read: withMutation("DECISIONS.md", (text) =>
           text.replace(
-            "25. [ADR-025: React Router RSC Entry Request Scope](./adr/025-react-router-rsc-entry-request-scope.md)\n",
+            "26. [ADR-026: TypeScript Semantics over a Versioned Process Boundary](./adr/026-typescript-semantics-over-a-versioned-process-boundary.md)\n",
             ""
           )
         ),
       }),
-    /DECISIONS\.md indexes 24 ADRs, but adr\/ contains 25/
+    /DECISIONS\.md indexes 25 ADRs, but adr\/ contains 26/
   )
 })
 
