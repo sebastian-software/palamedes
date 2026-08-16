@@ -577,19 +577,19 @@ function buyLabel(seats) {
   {
     slug: "paraglide",
     name: "Paraglide (inlang)",
-    subject: "@inlang/paraglide-js 2.20.2",
-    researched: "July 2026",
+    subject: "@inlang/paraglide-js 2.23.2",
+    researched: "August 2026",
     metaTitle: "Palamedes vs Paraglide — smaller bundles, bigger constraints",
     metaDescription:
       "Paraglide compiles messages into tree-shakable functions with no runtime library and wins on bundle size. Palamedes keeps a hook-free runtime lookup, .po catalogs, and source-string identity.",
     eyebrow: "Compare · Paraglide",
     headline: "Smaller bundles. Bigger constraints.",
-    lede: "Paraglide compiles each message into its own tree-shakable function and ships no i18n runtime at all. The bundle-size win is real and we will not argue with it. The tradeoffs are a catalog format tied to its toolchain and a key namespace you still have to design; both libraries deliberately load a new document when the locale changes.",
+    lede: "Paraglide compiles each message into its own tree-shakable function and ships no i18n runtime at all. The bundle-size win is real and we will not argue with it. The tradeoffs are adopting the inlang project and plugin model and a key namespace you still have to design; both libraries deliberately load a new document when the locale changes.",
     card: "Zero runtime and smaller bundles, against source-string authoring and standard .po catalogs.",
     facts: [
-      { label: "Licence", value: "Apache-2.0" },
+      { label: "Licence", value: "MIT" },
       { label: "Architecture", value: "Compile-time codegen" },
-      { label: "Catalogs", value: ".inlang project format" },
+      { label: "Catalogs", value: "Inlang project + plugin-backed files" },
       { label: "Locale switch", value: "Full page reload" },
     ],
     thesis:
@@ -604,7 +604,7 @@ function buyLabel(seats) {
     flipside: [
       "Generated function names remain part of the application API, so teams still design and maintain a key namespace even though the calls are fully typed.",
       "The tree-shaking promise has documented gaps: a maintainer confirmed that re-exporting messages from a shared file — an ordinary pattern — defeats it, and per-locale build splitting is still an open feature request years in.",
-      "The .inlang project format requires inlang-aware tooling or a conversion step when the rest of the localization pipeline expects PO.",
+      "Paraglide requires an inlang project and plugin layer even when external JSON, YAML or i18next files remain the translation source; the checked first-party plugin catalog does not list PO.",
     ],
     differences: [
       {
@@ -613,7 +613,7 @@ function buyLabel(seats) {
       },
       {
         title: "Standard PO catalogs as the handover",
-        body: "Paraglide stores messages in the .inlang project format. Palamedes writes gettext .po with the source string as msgid, so CAT and TMS tooling can consume the catalog directly and a human can inspect it without a project-specific editor.",
+        body: "Paraglide compiles an inlang project and connects external translation resources through plugins. Palamedes writes gettext .po directly with the source string as msgid, so CAT and TMS tooling can consume the catalog without a project-specific plugin layer.",
       },
       {
         title: "Source strings instead of keys",
@@ -643,7 +643,7 @@ function buyLabel(seats) {
       },
       {
         criterion: "Catalog format",
-        rival: ".inlang project format",
+        rival: "Inlang project + plugin-backed resources",
         palamedes: ".po (gettext), FCL opt-in",
       },
       {
@@ -681,7 +681,7 @@ function buyLabel(seats) {
       "You need framework coverage beyond React and Solid from a single plugin.",
     ],
     pickPalamedes: [
-      "Your localization workflow consumes .po and you would rather not convert on every round trip.",
+      "Your localization workflow consumes .po and you want first-class catalogs without a custom plugin or conversion step.",
       "You want source strings as identity instead of a key namespace to design and defend.",
       "You want catalog audits and ICU diagnostics as part of the toolchain, not as a separate product.",
       "You want one hook-free runtime contract across client code, RSC, SSR, and backend handlers.",
