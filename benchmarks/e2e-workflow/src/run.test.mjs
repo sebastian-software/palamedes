@@ -81,9 +81,9 @@ test("React Intl baseline catalog uses the @formatjs/cli content-hash ID convent
 
 test("General Translation lane authors every message exactly once", () => {
   /*
-   * GT keys `<T>` children and `t()` strings separately, so a message authored
-   * both ways would reach the catalog under two keys and inflate the extracted
-   * inventory past the generated one.
+   * General Translation keys `<T>` children and `t()` strings separately, so a
+   * message authored both ways would reach the catalog under two keys and
+   * inflate the extracted inventory past the generated one.
    */
   const source = renderGtSource(1, SAMPLE_MESSAGES, "tsx", 0)
 
@@ -97,10 +97,11 @@ test("General Translation lane authors every message exactly once", () => {
 
 test("General Translation lane skips <T> when every message is interpolated", () => {
   /*
-   * GT rejects a `{name}` placeholder in JSX children — it reads as a runtime
-   * expression — so an all-interpolated file must keep its JSX but author the
-   * messages through t() only. Message index 0-14 of the generated inventory
-   * are all interpolated, which puts whole files in this state.
+   * General Translation rejects a `{name}` placeholder in JSX children — it
+   * reads as a runtime expression — so an all-interpolated file must keep its
+   * JSX but author the messages through t() only. Message index 0-14 of the
+   * generated inventory are all interpolated, which puts whole files in this
+   * state.
    */
   const interpolated = SAMPLE_MESSAGES.filter((entry) => entry.current.includes("{name}"))
   const source = renderGtSource(1, interpolated, "tsx", 0)
@@ -117,7 +118,11 @@ test("General Translation baseline reuses real keys and synthesizes stale ones",
   assert.equal(catalog.aaaabbbbccccdddd, "Unchanged message")
 
   const staleKey = Object.keys(catalog).find((key) => key !== "aaaabbbbccccdddd")
-  assert.match(staleKey, /^[0-9a-f]{16}$/u, "a stale entry must look like a GT content hash")
+  assert.match(
+    staleKey,
+    /^[0-9a-f]{16}$/u,
+    "a stale entry must look like a General Translation content hash"
+  )
   assert.equal(catalog[staleKey], "Previous message")
 })
 

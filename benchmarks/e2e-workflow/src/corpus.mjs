@@ -328,14 +328,14 @@ async function writeI18nextCliWorkspace(rootDir, inventory, profile) {
  * from `<T>` and from `t()` lands under different keys. Reimplementing that
  * here would couple the corpus to a private hashing detail, so the baseline is
  * derived from a real `gtx-cli generate` run against the finished source tree
- * instead: whatever keys GT produces for the unchanged messages are the keys
- * its own merge will later recognize.
+ * instead: whatever keys General Translation produces for the unchanged
+ * messages are the keys its own merge will later recognize.
  *
  * Entries that must disappear during the measured run (the previous text of a
- * changed message, and removed messages) get a synthetic key. GT drops stale
- * entries by key lookup alone, so a synthetic key exercises that path exactly
- * like a real one would, and the values stay real message text so the baseline
- * keeps a realistic size.
+ * changed message, and removed messages) get a synthetic key. General
+ * Translation drops stale entries by key lookup alone, so a synthetic key
+ * exercises that path exactly like a real one would, and the values stay real
+ * message text so the baseline keeps a realistic size.
  */
 async function writeGtWorkspace(rootDir, inventory, profile, gtxCliPath) {
   if (!gtxCliPath) {
@@ -439,8 +439,8 @@ export function toGtBaselineCatalog(baselineMessages, currentKeysByMessage) {
 }
 
 /* Stale entries are only ever looked up by key, so any stable 16-hex key models
- * one. Hashing the raw text keeps it deterministic; GT hashes a structured
- * source descriptor instead, so the two cannot coincide. */
+ * one. Hashing the raw text keeps it deterministic; General Translation hashes
+ * a structured source descriptor instead, so the two cannot coincide. */
 function syntheticGtKey(message) {
   return createHash("sha256").update(`stale:${message}`).digest("hex").slice(0, 16)
 }
@@ -754,13 +754,14 @@ export function renderGtSource(fileIndex, messages, extension, targetLines) {
   const suffix = String(fileIndex).padStart(4, "0")
 
   /*
-   * <T> only wraps a plain message. GT rejects a `{name}` placeholder in JSX
-   * children outright — it reads as a runtime expression and the CLI fails with
-   * "use a variable component like <Var>" — so a file whose messages are all
-   * interpolated keeps its JSX but skips the <T>. The chosen message is then
-   * left out of the t() list: GT keys JSX and string content separately, so
-   * authoring the same text both ways would put one logical message into the
-   * catalog under two keys and break the inventory comparison.
+   * <T> only wraps a plain message. General Translation rejects a `{name}`
+   * placeholder in JSX children outright — it reads as a runtime expression
+   * and the CLI fails with "use a variable component like <Var>" — so a file
+   * whose messages are all interpolated keeps its JSX but skips the <T>. The
+   * chosen message is then left out of the t() list: General Translation keys
+   * JSX and string content separately, so authoring the same text both ways
+   * would put one logical message into the catalog under two keys and break the
+   * inventory comparison.
    */
   const transMessage =
     extension === "tsx"

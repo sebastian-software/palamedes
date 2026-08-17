@@ -115,9 +115,10 @@ sub-steps may eventually deserve isolated micro-benchmarks. But treating it
 like a clean end-to-end benchmark peer to Palamedes would overstate how much of
 the stack is actually shared.
 
-## General Translation (GT)
+## General Translation
 
-GT is interesting precisely because it is broader than an i18n library.
+General Translation is interesting precisely because it is broader than an i18n
+library.
 
 It includes a Rust-based SWC compiler for analysis and optional compile-time
 hashes, but that is only one part of the picture. Its bigger idea is build-time
@@ -125,30 +126,32 @@ translation for content that is known before deploy, plus a wider product
 surface around template generation, local files, hosted translation, and
 dynamic translation paths for content that cannot be fixed ahead of time.
 
-That makes GT broader in product scope than Palamedes. It does not, however,
-make GT unmeasurable: `gtx-cli generate` extracts from source and merges the
-configured locale catalogs entirely locally, with no API key and no network
-access, which is why it has its own lane in the
-[end-to-end workflow benchmark](./benchmark-e2e-workflow.md). GT documents that
-command for teams handling their own translations; its default path
-(`gtx-cli translate`) sends content to the GT API and is a different category of
-operation that the benchmark deliberately leaves alone.
+That makes General Translation broader in product scope than Palamedes. It does
+not, however, make General Translation unmeasurable: `gtx-cli generate`
+extracts from source and merges the configured locale catalogs entirely
+locally, with no API key and no network access, which is why it has its own lane
+in the [end-to-end workflow benchmark](./benchmark-e2e-workflow.md). General
+Translation documents that command for teams handling their own translations;
+its default path (`gtx-cli translate`) sends content to the General Translation
+API and is a different category of operation that the benchmark deliberately
+leaves alone.
 
-So the comparison has to name which GT you mean. Comparing GT's compiler to
-Palamedes covers one slice of what GT is trying to do. Comparing GT's hosted
+So the comparison has to name which part of General Translation you mean.
+Comparing General Translation's compiler to Palamedes covers one slice of what
+General Translation is trying to do. Comparing General Translation's hosted
 translation workflow to Palamedes compares two different products. Comparing
 `gtx-cli generate` to `pmds extract` is a fair like-for-like on the local
-extract-and-update step, and that is the only GT comparison this repository
-makes numerically. Beyond that step GT remains much closer to an integrated
-translation system with local-library escape hatches than to a narrowly scoped
-compile-and-runtime architecture.
+extract-and-update step, and that is the only General Translation comparison
+this repository makes numerically. Beyond that step General Translation
+remains much closer to an integrated translation system with local-library
+escape hatches than to a narrowly scoped compile-and-runtime architecture.
 
-Still, GT is worth studying because it points at adjacent product opportunities.
-Its local template generation for inline-authored strings, richer translator
-context, and explicit separation between local runtime behavior and optional
-translation services are all useful signals. They do not invalidate Palamedes'
-current design. They suggest where Palamedes could expand later without
-abandoning its core discipline.
+Still, General Translation is worth studying because it points at adjacent
+product opportunities. Its local template generation for inline-authored
+strings, richer translator context, and explicit separation between local
+runtime behavior and optional translation services are all useful signals. They
+do not invalidate Palamedes' current design. They suggest where Palamedes could
+expand later without abandoning its core discipline.
 
 ## The Honest Comparison
 
@@ -159,7 +162,8 @@ If a team wants a Next.js-native message-file workflow with newer compile-time
 conveniences layered in, `next-intl` is a better mental model.
 
 If a team wants i18n runtime behavior plus a broader translation-generation
-workflow, GT is solving a bigger and more service-oriented problem.
+workflow, General Translation is solving a bigger and more service-oriented
+problem.
 
 Palamedes combines broad local workflow coverage with a specific, opinionated
 model:
@@ -192,11 +196,12 @@ React Intl, i18next, Crowdin, Phrase, and Weblate documentation.
 That is the right way to read the benchmark story as well. The Lingui benchmark
 is not meant to imply that every i18n library should be forced into the same
 race. It exists because Lingui and Palamedes actually run on comparable
-operations, and the same test decides every other lane: GT earns a measured row
-because `gtx-cli generate` is a comparable local operation, while `next-intl`
-does not, because its extraction only exists inside a bundler build. Where the
-operations do not line up, the comparison belongs in product shape, semantic
-choices, and architectural tradeoffs instead of in a number.
+operations, and the same test decides every other lane: General Translation
+earns a measured row because `gtx-cli generate` is a comparable local
+operation, while `next-intl` does not, because its extraction only exists
+inside a bundler build. Where the operations do not line up, the comparison
+belongs in product shape, semantic choices, and architectural tradeoffs instead
+of in a number.
 
 ## Further Reading
 
