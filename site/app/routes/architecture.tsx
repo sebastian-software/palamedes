@@ -2,6 +2,7 @@ import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 
 import { AdrChip } from "~/components/architecture/AdrChip"
 import { CtaBand } from "~/components/home/CtaBand"
+import { StreamlineIcon } from "~/components/icons/StreamlineIcon"
 import { decisionHref, repoHref } from "~/data/links"
 import { pageMeta } from "~/lib/meta"
 
@@ -102,26 +103,31 @@ const MECHANISMS = [
 const MACHINE_LAYERS = [
   {
     number: "01",
+    icon: "app-widgets-plugin-extension",
     title: "Application",
     body: "Routes, documents, locale policy, rendering",
   },
   {
     number: "02",
+    icon: "deployment-workflow-collaboration",
     title: "Toolchain",
     body: "Author, transform, extract, validate",
   },
   {
     number: "03",
+    icon: "code-analysis",
     title: "Native core",
     body: "Catalog semantics, audit, merge, compile",
   },
   {
     number: "04",
+    icon: "programming-book",
     title: "Artifacts",
     body: "Generated modules, types, locale catalogs",
   },
   {
     number: "05",
+    icon: "browser-check",
     title: "Runtime",
     body: "Request-scoped lookup and formatting",
   },
@@ -176,7 +182,10 @@ export default function Architecture() {
                 key={layer.number}
                 className={`min-h-40 px-5 py-5 ${index > 0 ? "border-l border-hair max-grid:border-t max-grid:border-l-0" : ""} ${index === 2 ? "bg-track" : ""}`}
               >
-                <span className="mono-nums text-[10px] text-gray-spec">{layer.number}</span>
+                <div className="flex items-start justify-between gap-4">
+                  <span className="mono-nums text-[10px] text-gray-spec">{layer.number}</span>
+                  <StreamlineIcon name={layer.icon} />
+                </div>
                 <h2 className="mt-7 text-[15px] font-semibold">{layer.title}</h2>
                 <p className="mt-2 text-[13px] leading-relaxed text-ink/70">{layer.body}</p>
               </li>
