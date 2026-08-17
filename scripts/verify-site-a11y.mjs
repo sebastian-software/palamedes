@@ -1,9 +1,18 @@
 import assert from "node:assert/strict"
+import { existsSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { chromium } from "@playwright/test"
 import axe from "axe-core"
+import { startSiteStaticServer } from "./site-static-server.mjs"
 
-const baseUrl = process.env.PALAMEDES_SITE_URL ?? "http://localhost:4100"
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
+const PORT = 4104
+const staticServer = process.env.PALAMEDES_SITE_URL
+  ? null
+  : await startSiteStaticServer({ clientDir: join(repoRoot, "site/build/client"), port: PORT })
+const baseUrl = process.env.PALAMEDES_SITE_URL ?? staticServer.baseUrl
 const paths = [
   "/",
   "/proof",
@@ -20,10 +29,21 @@ const viewports = [
   { name: "mobile", width: 390, height: 844 },
 ]
 
-const browser = await chromium.launch({ headless: true })
+const chromiumExecutable = [
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+  "/opt/pw-browsers/chromium",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+].find((path) => path && existsSync(path))
+
 const failures = []
+let browser
 
 try {
+  browser = await chromium.launch({
+    headless: true,
+    ...(chromiumExecutable ? { executablePath: chromiumExecutable } : {}),
+  })
   for (const viewport of viewports) {
     const context = await browser.newContext({ viewport })
     const page = await context.newPage()
@@ -112,7 +132,8 @@ try {
   assert.ok((await matrix.evaluate((element) => element.scrollLeft)) > initialScroll)
   await context.close()
 } finally {
-  await browser.close()
+  await browser?.close()
+  await staticServer?.close()
 }
 
 if (failures.length > 0) {

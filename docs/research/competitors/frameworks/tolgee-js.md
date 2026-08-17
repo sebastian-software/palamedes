@@ -4,8 +4,8 @@ category: frontend-framework
 scope: oss-client-framework
 subject: tolgee-js-client-runtime-and-framework-bindings
 license: MIT
-analyzed: 2026-07-06
-analyzed_versions: "@tolgee/core 7.1.1; @tolgee/react 7.1.1"
+analyzed: 2026-08-17
+analyzed_versions: "@tolgee/core 7.1.3; @tolgee/react 7.1.3"
 homepage: https://docs.tolgee.io/js-sdk
 repository: https://github.com/tolgee/tolgee-js
 ---
@@ -15,6 +15,13 @@ repository: https://github.com/tolgee/tolgee-js
 This dossier covers only the MIT-licensed JavaScript client SDK. The associated
 hosted/self-hosted platform, company, pricing, AI service, and enterprise
 features are commercial research and deliberately excluded.
+
+That boundary matters more after Tolgee's August 2026 AI-translation refresh:
+prompt customization, model comparison, bring-your-own and self-hosted LLMs,
+MCP integrations, translation memory, content delivery, and collaborative
+review are platform capabilities. They make Tolgee a direct buying alternative
+to Palamedes+, but they are not capabilities of the MIT client SDK compared
+here.
 
 ## Fact sheet
 
@@ -67,6 +74,8 @@ features are commercial research and deliberately excluded.
   compilation, and repo-owned workflow.
 - Several differentiating workflows depend on a service and are therefore
   outside this public comparison.
+- Tolgee's contextual AI and MCP marketing describes the connected platform,
+  not a standalone capability of `@tolgee/core` or its framework bindings.
 
 ## What it does differently
 
@@ -78,6 +87,8 @@ treats framework runtime adapters as a thinner delivery layer.
 
 - https://github.com/tolgee/tolgee-js — accessed 2026-07-06
 - https://github.com/tolgee/tolgee-js/blob/main/LICENSE — accessed 2026-07-06
-- https://docs.tolgee.io/js-sdk — accessed 2026-07-06
-- https://registry.npmjs.org/@tolgee/core/7.1.1 — accessed 2026-07-06
-- https://registry.npmjs.org/@tolgee/react/7.1.1 — accessed 2026-07-06
+- https://docs.tolgee.io/js-sdk — re-accessed 2026-08-17
+- https://registry.npmjs.org/@tolgee/core/7.1.3 — accessed 2026-08-17
+- https://registry.npmjs.org/@tolgee/react/7.1.3 — accessed 2026-08-17
+- https://github.com/tolgee/tolgee-js/releases/tag/v7.1.3 — accessed 2026-08-17
+- https://tolgee.io/features/ai-translation — accessed 2026-08-17 (used only to document the SDK/platform scope boundary)

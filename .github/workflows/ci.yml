@@ -116,6 +116,14 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm build:site
 
+      - name: Verify site accessibility
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm verify:site-a11y
+
+      - name: Verify cold-cache docs navigation
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm verify:site-docs-dev
+
       - name: Typecheck site
         if: ${{ matrix.full }}
         run: pnpm --filter @palamedes/site typecheck
