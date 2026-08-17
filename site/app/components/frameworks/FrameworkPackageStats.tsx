@@ -20,6 +20,13 @@ export function FrameworkPackageStats({ path }: { path: string }) {
   const packageName = PACKAGE_BY_PATH[path]
   const stats = npmStats.packages.find((entry) => entry.name === packageName)
   if (!packageName || !stats) return null
+  const hasNpmVersion = stats.source !== "unavailable" && stats.version
+  const snapshotLabel =
+    stats.source === "npm"
+      ? "npm package"
+      : stats.source === "npm-partial"
+        ? "npm package · partial snapshot"
+        : "npm package · snapshot unavailable"
 
   return (
     <a
@@ -28,11 +35,13 @@ export function FrameworkPackageStats({ path }: { path: string }) {
       aria-label={`${packageName} on npm`}
     >
       <span>
-        <span className="micro block text-[10px] tracking-label text-gray-spec">npm package</span>
+        <span className="micro block text-[10px] tracking-label text-gray-spec">
+          {snapshotLabel}
+        </span>
         <code className="mt-1 block text-[12px] text-ink">{packageName}</code>
       </span>
       <span className="mono-nums text-[12px] text-accent">
-        {stats.version ? `v${stats.version}` : "version unavailable"}
+        {hasNpmVersion ? `v${stats.version}` : "npm version unavailable"}
       </span>
       <span className="mono-nums text-[12px] text-ink/75">
         {stats.monthlyDownloads == null

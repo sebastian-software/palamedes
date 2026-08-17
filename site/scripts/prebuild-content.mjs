@@ -13,6 +13,7 @@ import {
   selectBrowserExamples,
   selectScreenshotExamples,
 } from "../../scripts/example-matrix.mjs"
+import { fetchNpmPackageStats } from "./npm-stats.mjs"
 
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const repoRoot = resolve(siteRoot, "..")
@@ -194,65 +195,13 @@ async function writeContentStats(adrEntries) {
 }
 
 async function writeNpmStats() {
-  const localVersions = await readLocalPackageVersions()
   const fetchedAt = new Date().toISOString()
-  const packages = await Promise.all(
-    NPM_PACKAGES.map(async (name) => {
-      const encodedName = encodeURIComponent(name)
-      try {
-        const [registryResponse, downloadsResponse] = await Promise.all([
-          fetch(`https://registry.npmjs.org/${encodedName}/latest`, {
-            signal: AbortSignal.timeout(5_000),
-          }),
-          fetch(`https://api.npmjs.org/downloads/point/last-month/${encodedName}`, {
-            signal: AbortSignal.timeout(5_000),
-          }),
-        ])
-        if (!registryResponse.ok || !downloadsResponse.ok) {
-          throw new Error(`${registryResponse.status}/${downloadsResponse.status}`)
-        }
-        const registry = await registryResponse.json()
-        const downloads = await downloadsResponse.json()
-        return {
-          name,
-          version: registry.version ?? localVersions.get(name) ?? null,
-          monthlyDownloads: Number.isFinite(downloads.downloads) ? downloads.downloads : null,
-          period: downloads.start && downloads.end ? `${downloads.start}/${downloads.end}` : null,
-          source: "npm",
-        }
-      } catch (error) {
-        console.warn(`prebuild-content: npm snapshot unavailable for ${name}: ${error.message}`)
-        return {
-          name,
-          version: localVersions.get(name) ?? null,
-          monthlyDownloads: null,
-          period: null,
-          source: "workspace-fallback",
-        }
-      }
-    })
-  )
+  const packages = await Promise.all(NPM_PACKAGES.map((name) => fetchNpmPackageStats(name)))
   await mkdir(generatedDataRoot, { recursive: true })
   await writeFile(
     join(generatedDataRoot, "npm-stats.json"),
     `${JSON.stringify({ fetchedAt, packages }, null, 2)}\n`
   )
-}
-
-async function readLocalPackageVersions() {
-  const versions = new Map()
-  const packageDirs = await readdir(join(repoRoot, "packages"), { withFileTypes: true })
-  await Promise.all(
-    packageDirs
-      .filter((entry) => entry.isDirectory())
-      .map(async (entry) => {
-        const manifestPath = join(repoRoot, "packages", entry.name, "package.json")
-        if (!existsSync(manifestPath)) return
-        const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
-        if (manifest.name && manifest.version) versions.set(manifest.name, manifest.version)
-      })
-  )
-  return versions
 }
 
 async function collectDocs() {
