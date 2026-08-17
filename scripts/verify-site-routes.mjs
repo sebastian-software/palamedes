@@ -8,12 +8,12 @@
  * Usage: node scripts/verify-site-routes.mjs  (requires a prior site build)
  */
 
-import { createServer } from "node:http"
-import { existsSync, readFileSync, statSync } from "node:fs"
-import { dirname, extname, join } from "node:path"
+import { existsSync, readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { chromium } from "@playwright/test"
+import { startSiteStaticServer } from "./site-static-server.mjs"
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
@@ -32,16 +32,6 @@ const linguiRatio = (() => {
   if (!match) throw new Error("verify-site-routes: cannot read BENCH_REALISTIC lingui ratio")
   return `${Math.floor(Number.parseFloat(match[1]))}×`
 })()
-
-const MIME = {
-  ".css": "text/css",
-  ".html": "text/html",
-  ".js": "text/javascript",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".txt": "text/plain",
-  ".xml": "application/xml",
-}
 
 const ROUTE_EXPECTATIONS = [
   // The homepage is verified through its real structural and interaction
@@ -129,31 +119,7 @@ const ROUTE_EXPECTATIONS = [
 
 const sitemapPaths = readSitemapPaths()
 
-const server = createServer((req, res) => {
-  const url = new URL(req.url, `http://localhost:${PORT}`)
-  const hasExtension = extname(url.pathname) !== ""
-  let filePath = join(clientDir, url.pathname)
-  if (!extname(filePath)) {
-    filePath = join(filePath, "index.html")
-  }
-  if (existsSync(filePath) && statSync(filePath).isDirectory()) {
-    filePath = join(filePath, "index.html")
-  }
-  if (!existsSync(filePath) && !hasExtension) {
-    filePath = join(clientDir, "__spa-fallback.html")
-  }
-  if (!existsSync(filePath)) {
-    res.writeHead(404)
-    res.end("not found")
-    return
-  }
-  res.writeHead(200, {
-    "content-type": MIME[extname(filePath)] ?? "application/octet-stream",
-  })
-  res.end(readFileSync(filePath))
-})
-
-await new Promise((resolve) => server.listen(PORT, resolve))
+const staticServer = await startSiteStaticServer({ clientDir, port: PORT })
 
 if (
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE &&
@@ -544,7 +510,7 @@ function isArdoGeneratedContentRoute(path) {
 }
 
 async function gotoAndSettle(page, path, { settleMs }) {
-  const response = await page.goto(`http://localhost:${PORT}${path}`)
+  const response = await page.goto(`${staticServer.baseUrl}${path}`)
   await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {})
   await page.waitForTimeout(settleMs)
   return response
@@ -563,7 +529,7 @@ await checkHomepageDecisionViewport(browser, 320)
 await checkHomepageDecisionViewport(browser, 390)
 
 await browser.close()
-server.close()
+await staticServer.close()
 
 if (failures > 0) {
   console.error(`verify-site-routes: ${failures} failure(s)`)
