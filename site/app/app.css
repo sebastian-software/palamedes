@@ -111,10 +111,18 @@ header a[href="/"] span {
 }
 
 [role="dialog"][aria-modal="true"] .pmds-nav-link {
-  display: block;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
   padding: 0.65rem 0;
   border-bottom: none;
   font-size: 12px;
+}
+
+header button[aria-label="Toggle menu"],
+[role="dialog"][aria-modal="true"] button[aria-label="Close menu"] {
+  min-width: 44px;
+  min-height: 44px;
 }
 
 /*

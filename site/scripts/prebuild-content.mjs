@@ -18,8 +18,48 @@ const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const repoRoot = resolve(siteRoot, "..")
 const routesRoot = join(siteRoot, "app/routes")
 const publicRoot = join(siteRoot, "public")
+const generatedDataRoot = join(siteRoot, "app/data/generated")
 const repoUrl = "https://github.com/sebastian-software/palamedes"
 const pendingAssetCopies = []
+
+const NPM_PACKAGES = [
+  "palamedes",
+  "@palamedes/cli",
+  "create-palamedes",
+  "@palamedes/next-plugin",
+  "@palamedes/vite-plugin",
+  "@palamedes/remix",
+  "@palamedes/react-router-rsc",
+  "@palamedes/tanstack",
+  "@palamedes/solid",
+  "@palamedes/waku",
+  "@palamedes/react",
+]
+
+const DOC_GROUPS = [
+  {
+    title: "Start and configure",
+    description: "Reach a first translation, then configure the local catalog workflow.",
+    match: /\/(first-working-translation|configuration|cli|catalog-formats|mdx)$/u,
+  },
+  {
+    title: "Integrate and operate",
+    description: "Connect a host, choose locale behavior, and keep day-to-day work predictable.",
+    match:
+      /\/(locale-strategies|framework-example-notes|demo-deployments|backend-servers|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
+  },
+  {
+    title: "Evaluate and migrate",
+    description: "Inspect evidence, comparisons, compatibility boundaries, and migration paths.",
+    match:
+      /\/(migrate-from-lingui|comparison-with-lingui|approach-comparison|proof-and-benchmarks|icu-semantics-proof|benchmark-e2e-workflow|benchmark-lingui-v6-preview|migrations\/)/u,
+  },
+  {
+    title: "Reference and policy",
+    description: "Use the detailed API notes and review the project's stability and principles.",
+    match: /.*/u,
+  },
+]
 
 buildTypedocPackages()
 
@@ -46,6 +86,7 @@ for (const adr of adrs) hostedRoutes.set(adr.source, adr.route)
 hostedRoutes.set("DECISIONS.md", "/decisions")
 
 await writeDocsIndex(docs)
+await writeDocsNavigation(docs)
 for (const doc of docs) {
   await writeRouteFromSource(doc)
 }
@@ -58,6 +99,7 @@ for (const adr of adrs) {
 for (const post of posts) {
   await writeRouteFromSource(post)
 }
+await writeBlogIndexData(posts)
 
 await writeApiReferenceIndex()
 await generateTypedocReference()
@@ -66,6 +108,7 @@ await dedupeTypedocLedes()
 await ensureDirectoryIndexes(join(routesRoot, "api-reference"))
 
 await writeContentStats(adrs)
+await writeNpmStats()
 
 console.log(
   `prebuild-content: generated ${docs.length} docs, ${adrs.length} ADRs, ${posts.length} posts, and TypeDoc API routes`
@@ -132,9 +175,84 @@ async function writeContentStats(adrEntries) {
     serverFrameworkCount: SERVER_FRAMEWORKS.length,
     localeStrategyCount: LOCALE_STRATEGIES.length,
   }
-  const generatedDir = join(siteRoot, "app/data/generated")
-  await mkdir(generatedDir, { recursive: true })
-  await writeFile(join(generatedDir, "content-stats.json"), `${JSON.stringify(stats, null, 2)}\n`)
+  await mkdir(generatedDataRoot, { recursive: true })
+  await writeFile(
+    join(generatedDataRoot, "content-stats.json"),
+    `${JSON.stringify(stats, null, 2)}\n`
+  )
+  const decisionLedger = adrEntries.map((entry) => ({
+    number: entry.source.match(/adr\/(\d{3})-/u)?.[1],
+    title: entry.title?.replace(/^ADR-\d{3}:\s*/u, ""),
+    status: entry.status,
+    date: entry.date,
+    href: entry.route,
+  }))
+  await writeFile(
+    join(generatedDataRoot, "decision-ledger.json"),
+    `${JSON.stringify(decisionLedger, null, 2)}\n`
+  )
+}
+
+async function writeNpmStats() {
+  const localVersions = await readLocalPackageVersions()
+  const fetchedAt = new Date().toISOString()
+  const packages = await Promise.all(
+    NPM_PACKAGES.map(async (name) => {
+      const encodedName = encodeURIComponent(name)
+      try {
+        const [registryResponse, downloadsResponse] = await Promise.all([
+          fetch(`https://registry.npmjs.org/${encodedName}/latest`, {
+            signal: AbortSignal.timeout(5_000),
+          }),
+          fetch(`https://api.npmjs.org/downloads/point/last-month/${encodedName}`, {
+            signal: AbortSignal.timeout(5_000),
+          }),
+        ])
+        if (!registryResponse.ok || !downloadsResponse.ok) {
+          throw new Error(`${registryResponse.status}/${downloadsResponse.status}`)
+        }
+        const registry = await registryResponse.json()
+        const downloads = await downloadsResponse.json()
+        return {
+          name,
+          version: registry.version ?? localVersions.get(name) ?? null,
+          monthlyDownloads: Number.isFinite(downloads.downloads) ? downloads.downloads : null,
+          period: downloads.start && downloads.end ? `${downloads.start}/${downloads.end}` : null,
+          source: "npm",
+        }
+      } catch (error) {
+        console.warn(`prebuild-content: npm snapshot unavailable for ${name}: ${error.message}`)
+        return {
+          name,
+          version: localVersions.get(name) ?? null,
+          monthlyDownloads: null,
+          period: null,
+          source: "workspace-fallback",
+        }
+      }
+    })
+  )
+  await mkdir(generatedDataRoot, { recursive: true })
+  await writeFile(
+    join(generatedDataRoot, "npm-stats.json"),
+    `${JSON.stringify({ fetchedAt, packages }, null, 2)}\n`
+  )
+}
+
+async function readLocalPackageVersions() {
+  const versions = new Map()
+  const packageDirs = await readdir(join(repoRoot, "packages"), { withFileTypes: true })
+  await Promise.all(
+    packageDirs
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const manifestPath = join(repoRoot, "packages", entry.name, "package.json")
+        if (!existsSync(manifestPath)) return
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
+        if (manifest.name && manifest.version) versions.set(manifest.name, manifest.version)
+      })
+  )
+  return versions
 }
 
 async function collectDocs() {
@@ -201,23 +319,37 @@ async function collectPosts() {
   const files = (await readMarkdownFiles(sourceDir)).filter((fileName) => fileName !== "README.md")
   const posts = []
 
-  for (const [index, fileName] of files.entries()) {
+  for (const fileName of files) {
     const source = `${sourceDir}/${fileName}`
     const parsed = stripExistingFrontmatter(await readRepoFile(source))
     const date = extractFrontmatterMeta(parsed.data, "date")
     if (!date) {
       throw new Error(`Blog post ${source} is missing required date frontmatter`)
     }
+    const title = extractFrontmatterMeta(parsed.data, "title")
+    const excerpt = extractFrontmatterMeta(parsed.data, "excerpt")
+    const readMinutes = Number(extractFrontmatterMeta(parsed.data, "readMinutes"))
+    const order = Number(extractFrontmatterMeta(parsed.data, "order"))
+    if (!title || !excerpt || !Number.isInteger(readMinutes) || !Number.isFinite(order)) {
+      throw new Error(
+        `Blog post ${source} requires title, excerpt, readMinutes, and order frontmatter`
+      )
+    }
     posts.push({
       source,
       route: `/blog/${stripMarkdownExtension(fileName)}`,
       out: join(routesRoot, "blog", fileName),
-      order: (index + 1) * 10,
+      order,
       date,
+      title,
+      excerpt,
+      readMinutes,
     })
   }
 
-  return posts
+  return posts.sort(
+    (left, right) => right.date.localeCompare(left.date) || left.order - right.order
+  )
 }
 
 async function collectAdrs() {
@@ -243,6 +375,7 @@ async function writeDocsIndex(docs) {
   const guides = docs.filter(
     (doc) => doc.source.startsWith("docs/") && !doc.source.startsWith("docs/api/")
   )
+  const summaries = await Promise.all(guides.map(readEntrySummary))
   const lines = [
     "---",
     'title: "Documentation"',
@@ -252,16 +385,40 @@ async function writeDocsIndex(docs) {
     "",
     "# Documentation",
     "",
-    "Canonical source files still live under `docs/`; this site renders them as searchable ARDO routes.",
+    "Canonical source files still live under `docs/`; this page groups the generated routes by the task in front of you.",
     "",
   ]
-  for (const doc of guides) {
-    const parsed = stripExistingFrontmatter(await readRepoFile(doc.source))
-    const title = extractTitle(parsed.content) ?? titleFromPath(doc.source)
-    lines.push(`- [${title}](${doc.route})`)
+  for (const group of DOC_GROUPS) {
+    const entries = summaries.filter((entry) => docGroupFor(entry.route) === group)
+    if (entries.length === 0) continue
+    lines.push(`## ${group.title}`, "", group.description, "", "<CardGroup cols={2}>")
+    for (const entry of entries) {
+      lines.push(
+        `<Card title=${JSON.stringify(entry.title)} href=${JSON.stringify(entry.route)}>`,
+        entry.description ?? "Open the generated documentation page.",
+        "</Card>"
+      )
+    }
+    lines.push("</CardGroup>", "")
   }
-  lines.push("")
   await writeGeneratedFile(join(routesRoot, "docs/index.md"), lines.join("\n"))
+}
+
+async function writeDocsNavigation(docs) {
+  const sidebarDocs = docs.filter((doc) => !doc.source.startsWith("docs/api/"))
+  const summaries = await Promise.all(sidebarDocs.map(readEntrySummary))
+  const groups = DOC_GROUPS.map((group, index) => ({
+    title: group.title,
+    collapsed: index > 0,
+    items: summaries
+      .filter((entry) => docGroupFor(entry.route) === group)
+      .map(({ title, route }) => ({ title, route })),
+  })).filter((group) => group.items.length > 0)
+  await mkdir(generatedDataRoot, { recursive: true })
+  await writeFile(
+    join(generatedDataRoot, "docs-navigation.json"),
+    `${JSON.stringify(groups, null, 2)}\n`
+  )
 }
 
 async function writeDecisionsIndex(adrs) {
@@ -274,17 +431,49 @@ async function writeDecisionsIndex(adrs) {
     "",
     "# Decision Records",
     "",
-    "The ADR files remain canonical in `adr/`. This index is generated from the current filenames during the site prebuild.",
+    "The ADR files remain canonical in `adr/`. This decision trail is generated from their current title, status, and date during the site prebuild.",
     "",
+    "| No. | Decision | Status | Date |",
+    "| ---: | --- | --- | --- |",
   ]
 
   for (const adr of adrs) {
     const content = await readRepoFile(adr.source)
     const title = extractTitle(content) ?? titleFromPath(adr.source)
-    lines.push(`- [${title}](${adr.route})`)
+    const number = adr.source.match(/adr\/(\d{3})-/u)?.[1] ?? "—"
+    const status = extractAdrMeta(content, "Status") ?? "—"
+    const date = extractAdrMeta(content, "Date") ?? "—"
+    const shortTitle = title.replace(/^ADR-\d{3}:\s*/u, "")
+    lines.push(`| ${number} | [${shortTitle}](${adr.route}) | ${status} | ${date} |`)
   }
   lines.push("")
   await writeGeneratedFile(join(routesRoot, "decisions/index.md"), lines.join("\n"))
+}
+
+async function writeBlogIndexData(posts) {
+  const data = posts.map(({ title, excerpt, route, readMinutes, date }) => ({
+    title,
+    excerpt,
+    href: route,
+    readMinutes,
+    date,
+  }))
+  await mkdir(generatedDataRoot, { recursive: true })
+  await writeFile(join(generatedDataRoot, "blog-posts.json"), `${JSON.stringify(data, null, 2)}\n`)
+}
+
+async function readEntrySummary(entry) {
+  const parsed = stripExistingFrontmatter(await readRepoFile(entry.source))
+  const lede = extractLede(parsed.content)
+  return {
+    title: extractTitle(parsed.content) ?? titleFromPath(entry.source),
+    description: lede?.text,
+    route: entry.route,
+  }
+}
+
+function docGroupFor(route) {
+  return DOC_GROUPS.find((group) => group.match.test(route))
 }
 
 async function writeApiReferenceIndex() {
@@ -323,7 +512,9 @@ async function writeRouteFromSource(entry) {
     ...(date ? { date } : {}),
     ...(status ? { status } : {}),
   }
-  entry.title = title
+  entry.title ??= title
+  entry.status = status
+  entry.date = date
   await writeGeneratedFile(entry.out, `${toFrontmatter(frontmatter)}\n${content.trim()}\n`)
 }
 
@@ -624,7 +815,7 @@ function extractTitle(content) {
 }
 
 function extractAdrMeta(content, label) {
-  const match = new RegExp(`^\\*\\*${label}:\\*\\*\\s+(.+)$`, "mu").exec(content)
+  const match = new RegExp(`^(?:\\*\\*${label}:\\*\\*|- ${label}:)\\s+(.+)$`, "mu").exec(content)
   return match?.[1]?.trim()
 }
 

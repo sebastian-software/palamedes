@@ -1,5 +1,9 @@
 ---
 date: "2026-07-05"
+excerpt: "Why calm is a feature: one runtime model, one identity model, and a catalog workflow that stays coherent as the application changes."
+readMinutes: 6
+order: 20
+title: "A calmer path for JavaScript i18n"
 ---
 
 # A Calmer Path For JavaScript i18n

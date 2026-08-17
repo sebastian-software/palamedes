@@ -59,6 +59,9 @@ the reader may be starting greenfield or from any established i18n stack:
 
 ## Brand Personality
 
+The durable visual and editorial contract is recorded in
+[ADR-026](./adr/026-editorial-visual-brand-system.md).
+
 Precise, verifiable, calm. The visual voice is **Monument core × Editorial
 masthead**: a technical ledger with a classical Palamedes accent. Warm paper
 ground (`#faf9f4`), navy ink (`#0e2a4d`), one bronze accent (`#8e6628`),
@@ -71,8 +74,10 @@ Non-brand marketing pictograms come exclusively from **Streamline Sharp Duo**
 under the project's existing Pro license, colored with the navy and bronze
 tokens. Do not mix it with Sharp Line, Ultimate, Core, Lucide, or another set.
 Real framework and vendor marks are the only intentional brand exception.
-Until the licensed exports in `site/streamline-asset-manifest.md` are committed,
-the existing Lucide icons remain the documented interim set.
+The licensed exports, provenance, and hashes are recorded in
+`site/streamline-asset-manifest.md`; the former Lucide mapping in the
+first-party `FeatureIcon` component has been removed. ARDO may retain Lucide as
+an implementation dependency for its own documentation chrome.
 
 ## Anti-references
 

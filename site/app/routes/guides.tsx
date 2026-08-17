@@ -36,7 +36,7 @@ export default function Guides() {
           re-run from the repository rather than to an opinion.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href="/get-started">Try the 5-minute quickstart</ButtonLink>
+          <ButtonLink href="/get-started">Follow the guided quickstart</ButtonLink>
           <ButtonLink variant="outline" href={docsHref()}>
             Browse the documentation
           </ButtonLink>

@@ -1,5 +1,9 @@
 ---
 date: "2026-07-05"
+excerpt: "A migration story for teams that want familiar macro-shaped authoring while moving the machinery underneath to a stricter source-string-first foundation."
+readMinutes: 7
+order: 60
+title: "From Lingui to Palamedes without changing how authoring feels"
 ---
 
 # From Lingui to Palamedes without changing how authoring feels

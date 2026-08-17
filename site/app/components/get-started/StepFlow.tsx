@@ -37,9 +37,22 @@ export function StepFlow({ steps }: { steps: Step[] }) {
               {step.body}
             </p>
             {step.code ? (
-              <pre className="mt-4 overflow-x-auto bg-ink px-4 py-3 font-mono text-[12px] leading-[1.7] text-paper/90">
+              <pre
+                className="mt-4 overflow-x-auto bg-ink px-4 py-3 font-mono text-[12px] leading-[1.7] text-paper/90 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+                tabIndex={0}
+              >
                 {step.code}
               </pre>
+            ) : null}
+            {index === 0 ? (
+              <EditorialRail tone="emphasis" className="mt-4">
+                <p className="micro text-[10px] text-gray-spec">Package boundary</p>
+                <p className="mt-1 text-[12.5px] leading-relaxed">
+                  Install the scoped <code>@palamedes/*</code> packages shown above. The top-level{" "}
+                  <code>palamedes</code> and <code>create-palamedes</code> names are reserved for a
+                  future one-command setup and are not the entry point today.
+                </p>
+              </EditorialRail>
             ) : null}
             {step.aside ? (
               <EditorialRail className="mt-4">

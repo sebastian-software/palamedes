@@ -77,7 +77,7 @@ const ROUTE_EXPECTATIONS = [
     h1: "Vite i18n for React and Solid, in one plugin.",
   },
   { path: "/proof", h1: "Claims you can re-run." },
-  { path: "/get-started", h1: "First working translation" },
+  { path: "/get-started", h1: "The guided first-translation path." },
   { path: "/compare", h1: "Compare it properly." },
   { path: "/compare/lingui", h1: "The same idea, on an engine" },
   { path: "/compare/i18next", h1: "You already know what the string says." },
@@ -109,6 +109,10 @@ const ROUTE_EXPECTATIONS = [
     h1: "Measuring Palamedes Honestly",
   },
   { path: "/docs", h1: "Documentation" },
+  {
+    path: "/docs/first-working-translation",
+    h1: "First Working Translation",
+  },
   { path: "/docs/cli", h1: "CLI Reference" },
   { path: "/docs/example-screenshots", h1: "Example Screenshots" },
   { path: "/decisions", h1: "Decision Records" },
@@ -350,6 +354,13 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!benchmarkCommand) {
       fail("home benchmark: reproducible command missing")
     }
+    const warmLaneCopy = await page
+      .getByText(/cached re-run after 5 changed source files/u)
+      .first()
+      .isVisible()
+    if (!warmLaneCopy) {
+      fail("home benchmark: changed-source-files copy collapsed or missing")
+    }
     const faqEntries = await page.locator("details").count()
     if (faqEntries !== 6) {
       fail(`home FAQ: expected 6 entries, got ${faqEntries}`)
@@ -385,14 +396,35 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     // Client-side nav via the top navigation. With viewTransition the URL
     // updates before the render commits, so wait for the target heading.
-    await page.getByRole("banner").getByRole("link", { name: "Proof", exact: true }).click()
+    await page.getByRole("banner").getByRole("link", { name: "Architecture", exact: true }).click()
     try {
       await page
-        .getByRole("heading", { level: 1, name: "Claims you can re-run." })
+        .getByRole("heading", { level: 1, name: "“Written in Rust” is the boring half." })
         .waitFor({ timeout: 5000 })
     } catch {
-      fail("client-side navigation to /proof failed")
+      fail("client-side navigation to /architecture failed")
     }
+
+    // Regression for #863: generated docs must survive a marketing-to-docs
+    // client transition as well as history navigation and reload. The issue
+    // presented as a failed dynamic import followed by an invalid hook call in
+    // ArdoPageDataProvider, both of which are captured by trackPageErrors.
+    currentPath = "/"
+    await gotoAndSettle(page, "/", { settleMs: 500 })
+    await page.getByRole("banner").getByRole("link", { name: "Docs", exact: true }).click()
+    currentPath = "/docs"
+    await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor()
+    await page.getByRole("link", { name: "First Working Translation" }).first().click()
+    currentPath = "/docs/first-working-translation"
+    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor()
+    await page.goBack({ waitUntil: "networkidle" })
+    currentPath = "/docs"
+    await page.getByRole("heading", { level: 1, name: "Documentation" }).waitFor()
+    await page.goForward({ waitUntil: "networkidle" })
+    currentPath = "/docs/first-working-translation"
+    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor()
+    await page.reload({ waitUntil: "networkidle" })
+    await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor()
   } else {
     // No-JS completeness: the new proof strip and ledger must be static HTML.
     currentPath = "/"

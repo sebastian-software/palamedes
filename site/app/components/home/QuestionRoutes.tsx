@@ -33,6 +33,13 @@ const QUESTIONS = [
     href: "/compare",
     label: "Compare architectures",
   },
+  {
+    question: "Which implementation decision is blocking you?",
+    answer:
+      "Use the guide hub for server components, ICU MessageFormat, locale routing, and repository-scale performance.",
+    href: "/guides",
+    label: "Browse technical guides",
+  },
 ] as const
 
 export function QuestionRoutes() {

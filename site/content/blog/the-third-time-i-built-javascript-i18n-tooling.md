@@ -1,5 +1,9 @@
 ---
 date: "2026-07-05"
+excerpt: "From qooxdoo's gettext macros to an enterprise Lingui migration to Palamedes — what repeats, what finally changed, and why the third design is source-string-first all the way down."
+readMinutes: 8
+order: 10
+title: "The third time I built JavaScript i18n tooling"
 ---
 
 # The Third Time I Built JavaScript i18n Tooling

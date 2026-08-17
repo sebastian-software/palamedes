@@ -1,6 +1,11 @@
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
 import {
   EXAMPLE_MATRIX,
   LOCALE_STRATEGIES,
+  ROOT,
   SERVER_EXAMPLES,
   SERVER_FRAMEWORKS,
   selectBrowserExamples,
@@ -9,7 +14,29 @@ import {
 } from "./example-matrix.mjs"
 import { assertExampleMatrix } from "./example-matrix-guard.mjs"
 
+function axisSlugs(source, name) {
+  const body = source.match(
+    new RegExp(`export const ${name}:[\\s\\S]+?= \\[([\\s\\S]+?)\\n\\]`, "u")
+  )?.[1]
+  assert.ok(body, `site matrix must export ${name}`)
+  return [...body.matchAll(/slug: "([^"]+)"/gu)].map((match) => match[1]).sort()
+}
+
+export function assertSiteMatrixAxes(source) {
+  assert.deepEqual(
+    axisSlugs(source, "FRAMEWORKS"),
+    [...SERVER_FRAMEWORKS].sort(),
+    "site framework axes must match the canonical example matrix"
+  )
+  assert.deepEqual(
+    axisSlugs(source, "STRATEGIES"),
+    [...LOCALE_STRATEGIES].sort(),
+    "site strategy axes must match the canonical example matrix"
+  )
+}
+
 assertExampleMatrix(EXAMPLE_MATRIX)
+assertSiteMatrixAxes(readFileSync(path.join(ROOT, "site/app/data/matrix.ts"), "utf8"))
 
 if (
   SERVER_EXAMPLES.length !== 24 ||

@@ -8,6 +8,7 @@ interface Stat {
   value: string
   label: string
   href: string
+  icon: string
 }
 
 /*
@@ -33,21 +34,25 @@ const STATS: Stat[] = [
     value: `${contentStats.serverFrameworkCount}`,
     label: "first-party server-framework integrations",
     href: "/frameworks",
+    icon: "app-widgets-plugin-extension",
   },
   {
     value: `${contentStats.localeStrategyCount}`,
     label: "implemented locale architectures",
     href: "/frameworks",
+    icon: "globe-app-network",
   },
   {
     value: factorRange,
     label: "faster than the three same-scope workflows in the checked realistic run",
     href: "/proof",
+    icon: "browser-flash",
   },
   {
     value: `${contentStats.adrCount}`,
     label: "ADRs documenting every tradeoff",
     href: decisionHref(),
+    icon: "programming-book",
   },
 ]
 
@@ -57,6 +62,14 @@ function StatCell({ stat }: { stat: Stat }) {
       <span className="mono-nums block text-stat font-medium tracking-[-0.02em] text-accent">
         {stat.value}
       </span>
+      <img
+        src={`/icons/streamline/sharp-duo/${stat.icon}.svg`}
+        width={24}
+        height={24}
+        alt=""
+        aria-hidden
+        className="mt-3"
+      />
       <span className="mt-2 block text-[12.5px] leading-snug text-gray-spec">{stat.label}</span>
     </>
   )

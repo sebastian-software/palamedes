@@ -70,14 +70,14 @@ function ScopeDiagram() {
         └─── one Rust core, everywhere ───┘
       </p>
       <div className="mx-auto my-3 h-6 w-px bg-accent-soft/40" aria-hidden />
-      <p className="micro text-[10px] tracking-label text-gray-spec">
+      <p className="micro text-[10px] tracking-label text-paper/75">
         Each host owns it — specific to that stack
       </p>
       <div className="mt-2 grid grid-cols-4 gap-px border border-paper/20 bg-paper/20 max-tight:grid-cols-2">
         {HOST.map((label) => (
           <span
             key={label}
-            className="mono-nums bg-ink px-3 py-2.5 text-center text-[11px] text-gray-spec"
+            className="mono-nums bg-ink px-3 py-2.5 text-center text-[11px] text-paper/75"
           >
             {label}
           </span>

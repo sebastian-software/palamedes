@@ -1,4 +1,4 @@
-import { ButtonLink, Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 
 import { AdrChip } from "~/components/architecture/AdrChip"
 import { CtaBand } from "~/components/home/CtaBand"
@@ -19,83 +19,111 @@ export function meta() {
 const MECHANISMS = [
   {
     number: "01",
-    title: "One source-to-runtime model",
-    body: "Messages begin beside UI source, preserve their authoring meaning through extraction and catalogs, and arrive at one runtime contract. A framework never gets a separate message identity system.",
-    artifact: "Source message model",
-    href: repoHref("crates/palamedes/src/source_message.rs"),
-    adr: ["003", "022"],
+    title: "Compiled, not interpreted",
+    body: "Generated catalogs compile into message functions. The production entrypoints keep the ICU parser out of that module graph while compatibility entrypoints retain deliberate support for authored string catalogs.",
+    artifact: "Native catalog renderer",
+    href: repoHref("crates/palamedes-node/src/catalog.rs"),
+    adr: ["011", "022", "023"],
   },
   {
     number: "02",
-    title: "A parser-free production path",
-    body: "Generated catalogs compile into message functions. The production entrypoints keep the ICU parser out of that module graph while compatibility entrypoints retain deliberate support for authored string catalogs.",
-    artifact: "Compiled runtime entrypoints",
-    href: repoHref("adr/023-generated-production-runtime-is-parser-free.md"),
-    adr: ["023"],
-  },
-  {
-    number: "03",
-    title: "Changed files, not repeated work",
+    title: "The cache trusts the file system, conservatively",
     body: "Extraction caches source analysis behind conservative file stamps. A cache miss is normal; a result that cannot be trusted is discarded instead of being treated as an optimization win.",
     artifact: "Extraction cache",
     href: repoHref("crates/palamedes/src/extract_cache.rs"),
     adr: ["019"],
   },
   {
+    number: "03",
+    title: "Arenas are reused, not allocated per file",
+    body: "Each extraction worker owns a thread-local Oxc arena and resets it between files. On the 1,500-file corpus, replacing per-file allocation removed the allocator pressure that had obscured useful parallel work.",
+    artifact: "Thread-local extraction arena",
+    href: repoHref("crates/palamedes/src/extract.rs"),
+    adr: ["002", "013"],
+  },
+  {
     number: "04",
-    title: "Native data structures where the work is native",
-    body: "The Rust core owns the high-volume parsing, catalog, validation, merge, and compilation work. That keeps semantic operations together instead of distributing them across JavaScript plugin layers.",
-    artifact: "Rust core",
-    href: repoHref("crates/palamedes/src/lib.rs"),
-    adr: ["002"],
+    title: "SIMD is used where it pays",
+    body: "Ferrocat's PO scanner uses vectorized byte search—including a NEON path—then falls back to portable search. The optimization lives below the catalog contract, so host adapters do not need to know it exists.",
+    artifact: "Ferrocat PO scanner",
+    href: "https://github.com/sebastian-software/ferrocat/blob/main/crates/ferrocat-po/src/scan.rs",
+    adr: ["006"],
   },
   {
     number: "05",
-    title: "Measured parallelism",
-    body: "Source extraction uses bounded parallel work rather than unbounded concurrency. The limit is part of the contract: it keeps a large repository responsive without turning a build into a resource contest.",
-    artifact: "Bounded extraction",
-    href: repoHref("crates/palamedes/src/extract.rs"),
+    title: "Parallelism is earned by measurement",
+    body: "The 1,500-file fixture measured 119 ms serial, reached 45 ms at four workers, then regressed to 197 ms at twenty. Profiling attributed 92.8% of twenty-worker samples to mach_vm_protect, so the default is bounded rather than maximal.",
+    artifact: "Worker-count evidence",
+    href: decisionHref("013-bounded-parallel-extraction"),
     adr: ["013"],
   },
   {
     number: "06",
-    title: "Catalog semantics in one engine",
+    title: "Ferrocat is one catalog engine",
     body: "Ferrocat performs catalog parsing, merging, auditing, and compilation as one semantic surface. It exists so catalog correctness does not depend on a set of loosely coordinated scripts.",
     artifact: "Catalog artifact pipeline",
     href: repoHref("crates/palamedes/src/catalog_artifact", "tree"),
-    adr: ["022"],
+    adr: ["006", "015", "022"],
   },
   {
     number: "07",
-    title: "A typed, workflow-shaped boundary",
+    title: "The host boundary is typed and workflow-shaped",
     body: "The Node binding passes typed values across N-API and exposes meaningful workflow operations. It avoids JSON transport and avoids pushing catalog semantics back into TypeScript orchestration.",
     artifact: "Node binding surface",
     href: repoHref("crates/palamedes-node/src/lib.rs"),
-    adr: ["009"],
+    adr: ["007", "009", "010"],
   },
   {
     number: "08",
-    title: "Thin adapters, host-specific only where needed",
+    title: "Adapters stay thin",
     body: "Framework integrations own host concerns such as module hooks, routing conventions, and rendering. They do not become alternate implementations of extraction, catalog behavior, or runtime meaning.",
     artifact: "Adapter architecture",
     href: decisionHref("008-framework-adapter-architecture"),
-    adr: ["008"],
+    adr: ["002", "008", "014"],
   },
   {
     number: "09",
-    title: "Locale is a document boundary",
-    body: "Locale selection is resolved for a browser document rather than patched into a partially live application. This keeps server output, hydration, caches, and formatters inside one coherent request scope.",
-    artifact: "Locale boundary decision",
-    href: decisionHref("020-locale-is-fixed-for-a-browser-document"),
-    adr: ["020"],
+    title: "Hosts converge on one runtime contract",
+    body: "Each request receives one getI18n-shaped runtime and one document locale. Server rendering, hydration, formatters, and React Router RSC stay inside that request scope instead of accumulating framework-specific semantics.",
+    artifact: "Request-scope contract",
+    href: decisionHref("025-react-router-rsc-entry-request-scope"),
+    adr: ["005", "020", "025"],
   },
   {
     number: "10",
-    title: "Public numbers are derived evidence",
-    body: "The site derives its rounded benchmark display from checked exact reports. Its public claims keep scope alongside the factor, so a changed fixture cannot silently become a stronger marketing statement.",
-    artifact: "Benchmark drift guard",
+    title: "Machine checks guard the marketing",
+    body: "The site derives benchmark display, corpus scope, matrix axes, and decision indexes from checked repository data. A changed fixture or missing decision cannot silently become a stronger public claim.",
+    artifact: "Public-evidence guards",
     href: repoHref("scripts/verify-site-bench-data.mjs"),
-    adr: ["019"],
+    adr: ["019", "026"],
+  },
+] as const
+
+const MACHINE_LAYERS = [
+  {
+    number: "01",
+    title: "Application",
+    body: "Routes, documents, locale policy, rendering",
+  },
+  {
+    number: "02",
+    title: "Toolchain",
+    body: "Author, transform, extract, validate",
+  },
+  {
+    number: "03",
+    title: "Native core",
+    body: "Catalog semantics, audit, merge, compile",
+  },
+  {
+    number: "04",
+    title: "Artifacts",
+    body: "Generated modules, types, locale catalogs",
+  },
+  {
+    number: "05",
+    title: "Runtime",
+    body: "Request-scoped lookup and formatting",
   },
 ] as const
 
@@ -132,19 +160,34 @@ export default function Architecture() {
         title="Adapters connect the application; they do not redefine the product."
         lede="An application owns its routing, locale policy, rendering, and hosting. Palamedes owns the work that must stay consistent when any of those choices changes: authoring, transforms, catalogs, validation, compilation, and the runtime contract."
       >
-        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch border-y border-hair max-grid:grid-cols-1">
-          <div className="px-6 py-6">
-            <p className="micro text-[10px] tracking-label text-gray-spec">Application host</p>
-            <p className="mt-3 text-[15px] leading-relaxed">
-              Routing · URLs · locale detection · rendering · hosting
-            </p>
-          </div>
-          <div aria-hidden className="w-px bg-hair max-grid:h-px max-grid:w-full" />
-          <div className="bg-track px-6 py-6">
-            <p className="micro text-[10px] tracking-label text-accent">Palamedes core</p>
-            <p className="mt-3 text-[15px] leading-relaxed">
-              Authoring · transform · extract · catalogs · audit · merge · compile · runtime
-            </p>
+        <EditorialRail tone="emphasis" className="mb-8 bg-hover-fill py-5 pr-6">
+          <p className="micro text-[10px] tracking-label text-[#79521a]">The answer</p>
+          <p className="mt-2 max-w-[52rem] text-[15px] leading-relaxed">
+            Palamedes is not a native wrapper around five JavaScript implementations. It is one
+            model that crosses a typed host boundary, produces inspectable artifacts, and leaves
+            each framework adapter responsible only for its host.
+          </p>
+        </EditorialRail>
+
+        <div className="border-y border-hair">
+          <ol className="grid grid-cols-5 max-grid:grid-cols-1">
+            {MACHINE_LAYERS.map((layer, index) => (
+              <li
+                key={layer.number}
+                className={`min-h-40 px-5 py-5 ${index > 0 ? "border-l border-hair max-grid:border-t max-grid:border-l-0" : ""} ${index === 2 ? "bg-track" : ""}`}
+              >
+                <span className="mono-nums text-[10px] text-gray-spec">{layer.number}</span>
+                <h2 className="mt-7 text-[15px] font-semibold">{layer.title}</h2>
+                <p className="mt-2 text-[13px] leading-relaxed text-ink/70">{layer.body}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="grid grid-cols-5 border-t border-hair max-grid:grid-cols-1">
+            <div className="col-start-2 col-span-2 border-x border-hair bg-ink px-5 py-3 text-paper max-grid:col-span-1 max-grid:col-start-1 max-grid:border-x-0">
+              <p className="micro text-[10px] tracking-label text-paper/65">
+                Typed N-API boundary · between orchestration and native semantics
+              </p>
+            </div>
           </div>
         </div>
       </Section>
@@ -167,7 +210,10 @@ export default function Architecture() {
               Inspect native renderer →
             </a>
           </div>
-          <pre className="overflow-x-auto text-[12px] leading-relaxed text-paper/90">
+          <pre
+            className="overflow-x-auto text-[12px] leading-relaxed text-paper/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-paper"
+            tabIndex={0}
+          >
             <code>{COMPILED_CATALOG_ARTIFACT}</code>
           </pre>
         </div>

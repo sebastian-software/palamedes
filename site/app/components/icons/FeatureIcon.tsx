@@ -1,42 +1,22 @@
-import {
-  ArrowLeftRight,
-  BookOpen,
-  Bot,
-  Braces,
-  Compass,
-  Cookie,
-  Fingerprint,
-  Flag,
-  GitMerge,
-  Globe,
-  PenLine,
-  Plug,
-  Route,
-  Server,
-  ShieldCheck,
-  Wrench,
-  type LucideIcon,
-} from "lucide-react"
-
 import type { FeatureIconName } from "~/data/features"
 
-const ICONS: Record<FeatureIconName, LucideIcon> = {
-  pen: PenLine,
-  fingerprint: Fingerprint,
-  plug: Plug,
-  cookie: Cookie,
-  route: Route,
-  globe: Globe,
-  flag: Flag,
-  book: BookOpen,
-  compass: Compass,
-  server: Server,
-  arrows: ArrowLeftRight,
-  wrench: Wrench,
-  robot: Bot,
-  shield: ShieldCheck,
-  brackets: Braces,
-  merge: GitMerge,
+const ICONS: Record<FeatureIconName, string> = {
+  pen: "code-analysis",
+  fingerprint: "code-analysis",
+  plug: "deployment-workflow-collaboration",
+  cookie: "globe-app-network",
+  route: "web-hierarchy",
+  globe: "globe-app-network",
+  flag: "globe-app-network",
+  book: "programming-book",
+  compass: "globe-app-network",
+  server: "web-hierarchy",
+  arrows: "deployment-workflow-collaboration",
+  wrench: "code-analysis",
+  robot: "app-widgets-plugin-extension",
+  shield: "browser-check",
+  brackets: "code-analysis",
+  merge: "deployment-workflow-collaboration",
 }
 
 export function FeatureIcon({
@@ -46,6 +26,14 @@ export function FeatureIcon({
   name: FeatureIconName
   className?: string
 }) {
-  const Icon = ICONS[name]
-  return <Icon size={20} strokeWidth={1.25} className={className} aria-hidden />
+  return (
+    <img
+      src={`/icons/streamline/sharp-duo/${ICONS[name]}.svg`}
+      width={24}
+      height={24}
+      alt=""
+      className={className}
+      aria-hidden
+    />
+  )
 }

@@ -25,9 +25,8 @@ export function LocaleBookingCards() {
           return (
             <div
               key={card.locale}
-              className="bg-paper px-5 py-4 transition-opacity duration-300"
+              className="bg-paper px-5 py-4"
               style={{
-                opacity: active ? 1 : 0.55,
                 outline:
                   cycling && index === activeIndex ? "1px solid var(--color-accent)" : "none",
                 outlineOffset: "-1px",

@@ -71,10 +71,13 @@ export function TopicPage({ topic }: { topic: Topic }) {
       {topic.code ? (
         <Section num="03 — In code" title={topic.code.caption}>
           <div className="bg-paper">
-            <p className="micro border-b border-hair px-5 py-3 text-[10.5px] tracking-label text-gray-spec">
+            <p className="micro border-b border-hair px-5 py-3 text-[10px] tracking-label text-gray-spec">
               {topic.code.label}
             </p>
-            <pre className="overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7] text-paper/85">
+            <pre
+              className="overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7] text-paper/85 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+              tabIndex={0}
+            >
               {topic.code.code}
             </pre>
           </div>

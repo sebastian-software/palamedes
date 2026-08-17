@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+  <desc>Globe App Network icon by Streamline</desc>
+  <path fill="#d9ba7c" d="M12 5.5002a6.4999 6.4999 0 1 1 0 12.9998 6.4999 6.4999 0 0 1 0-12.9998" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M11.625 1h.75v.75h-.75z" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M0 0h.75v.75H0z" transform="matrix(1 0 0 -1 11.625 23)" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M1 12.375h.75v.75H1z" transform="rotate(-90 1 12.375)" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M0 0h.75v.75H0z" transform="matrix(0 -1 -1 0 23 12.375)" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M3.957 4.487h.75v.75h-.75z" transform="rotate(-45 3.957 4.487)" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M0 0h.75v.75H0z" transform="scale(1 -1)rotate(45 33.95 13.533)" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M4.487 20.043h.75v.75h-.75z" transform="rotate(-135 4.487 20.043)" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M0 0h.75v.75H0z" transform="scale(-1 1)rotate(-45 -4.605 26.438)" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M12 18.4998c3.5899 0 6.5-2.9102 6.5-6.5 0-3.5899-2.9101-6.50004-6.5-6.50004-3.58985 0-6.5 2.91014-6.5 6.50004 0 3.5898 2.91015 6.5 6.5 6.5ZM18.5 11.999h-13M11.2093 5.54736 9.15625 12l2.05295 6.4521M12.7907 5.54736 14.8438 12l-2.053 6.4521" />
+</svg>

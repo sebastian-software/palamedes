@@ -91,16 +91,16 @@ export default function Compare() {
             </caption>
             <thead>
               <tr>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                <th className="micro border border-hair px-4 py-3 text-left text-[10px] tracking-th text-gray-spec">
                   Comparison
                 </th>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-accent">
+                <th className="micro border border-hair px-4 py-3 text-left text-[10px] tracking-th text-accent">
                   Measured
                 </th>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                <th className="micro border border-hair px-4 py-3 text-left text-[10px] tracking-th text-gray-spec">
                   Researched
                 </th>
-                <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+                <th className="micro border border-hair px-4 py-3 text-left text-[10px] tracking-th text-gray-spec">
                   Detail
                 </th>
               </tr>

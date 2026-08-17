@@ -16,7 +16,10 @@ export function BenchmarkCommand() {
         </span>
         <span className="mono-nums text-[10px] text-paper/65">{BENCH_META.generated}</span>
       </figcaption>
-      <pre className="overflow-x-auto px-5 py-5 font-mono text-[12px] leading-[1.8] text-paper/85">
+      <pre
+        className="overflow-x-auto px-5 py-5 font-mono text-[12px] leading-[1.8] text-paper/85 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+        tabIndex={0}
+      >
         <code>{`$ pnpm benchmark:e2e-workflow
 
 realistic corpus  ${BENCH_REALISTIC.corpus}

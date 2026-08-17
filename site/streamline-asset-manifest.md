@@ -20,26 +20,25 @@ or grant rights under the repository's MIT license.
 - Private evidence: retain the account screenshot, invoice, and applicable
   license text outside the public repository
 
-Before committing the first SVG, add `THIRD_PARTY_NOTICES.md`, exclude the
-assets from the Palamedes MIT grant, and add the required Streamline attribution
-to a suitable public credits/about surface.
+`THIRD_PARTY_NOTICES.md` excludes these assets from the Palamedes MIT grant,
+and the public site footer carries the required Streamline OSS attribution.
 
 ## Selected icons
 
-All entries are selected for the first implementation and pending licensed
-export. The target path is
+All entries were exported from the licensed account, optimized into the
+Palamedes navy/bronze palette, and integrated on 2026-08-17. The target path is
 `site/public/icons/streamline/sharp-duo/<filename>.svg`.
 
-| Role                         | Asset                             | Source                                                                                             | Target filename                         | Export date | SHA-256 |
-| ---------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------- | ----------- | ------- |
-| Clear / source inspection    | Code Analysis                     | [Streamline](https://www.streamlinehq.com/icons/download/code-analysis--25116)                     | `code-analysis.svg`                     | pending     | pending |
-| Complete / pipeline          | Deployment Workflow Collaboration | [Streamline](https://www.streamlinehq.com/icons/download/deployment-workflow-collaboration--25115) | `deployment-workflow-collaboration.svg` | pending     | pending |
-| Fast / benchmark             | Browser Flash                     | [Streamline](https://www.streamlinehq.com/icons/download/browser-flash--25121)                     | `browser-flash.svg`                     | pending     | pending |
-| Architecture                 | Web Hierarchy                     | [Streamline](https://www.streamlinehq.com/icons/download/web-hierarchy--25115)                     | `web-hierarchy.svg`                     | pending     | pending |
-| First-party adapter breadth  | App Widgets Plugin Extension      | [Streamline](https://www.streamlinehq.com/icons/download/app-widgets-plugin-extension--25122)      | `app-widgets-plugin-extension.svg`      | pending     | pending |
-| Locale architecture          | Globe App Network                 | [Streamline](https://www.streamlinehq.com/icons/download/globe-app-network--25115)                 | `globe-app-network.svg`                 | pending     | pending |
-| Documentation / maintenance  | Programming Book                  | [Streamline](https://www.streamlinehq.com/icons/download/programming-book--25116)                  | `programming-book.svg`                  | pending     | pending |
-| Proof / verified application | Browser Check                     | [Streamline](https://www.streamlinehq.com/icons/download/browser-check--25121)                     | `browser-check.svg`                     | pending     | pending |
+| Role                         | Asset                             | Source                                                                                             | Target filename                         | Export date | SHA-256                                                            |
+| ---------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------- | ----------- | ------------------------------------------------------------------ |
+| Clear / source inspection    | Code Analysis                     | [Streamline](https://www.streamlinehq.com/icons/download/code-analysis--25116)                     | `code-analysis.svg`                     | 2026-08-17  | `f2d0d19f3d36c5b4d09e54b42446c9414d0fd4be470c4d7f181ae908fbaf587c` |
+| Complete / pipeline          | Deployment Workflow Collaboration | [Streamline](https://www.streamlinehq.com/icons/download/deployment-workflow-collaboration--25115) | `deployment-workflow-collaboration.svg` | 2026-08-17  | `131e0114fa04fe2aa145227fca364301499bb8cf8ae9bbbe5582d01bc58d7e16` |
+| Fast / benchmark             | Browser Flash                     | [Streamline](https://www.streamlinehq.com/icons/download/browser-flash--25121)                     | `browser-flash.svg`                     | 2026-08-17  | `17755430c2d2737aa044c941af298eaed1092e588e7ea21db28109f1cdd23e98` |
+| Architecture                 | Web Hierarchy                     | [Streamline](https://www.streamlinehq.com/icons/download/web-hierarchy--25115)                     | `web-hierarchy.svg`                     | 2026-08-17  | `908ad7f7f3f7c9c63cc99521af65ba7768edb0ff1579825f58af72602bf546a2` |
+| First-party adapter breadth  | App Widgets Plugin Extension      | [Streamline](https://www.streamlinehq.com/icons/download/app-widgets-plugin-extension--25122)      | `app-widgets-plugin-extension.svg`      | 2026-08-17  | `3562983d757759eccc4c59cd9e80722ef8b53a656b2dd97d6780eec5011bc60e` |
+| Locale architecture          | Globe App Network                 | [Streamline](https://www.streamlinehq.com/icons/download/globe-app-network--25115)                 | `globe-app-network.svg`                 | 2026-08-17  | `e47ebb5e2cf164e023cd63da6b4874a55ec091a45d5c173b4410f7117a895db0` |
+| Documentation / maintenance  | Programming Book                  | [Streamline](https://www.streamlinehq.com/icons/download/programming-book--25116)                  | `programming-book.svg`                  | 2026-08-17  | `b541b2243355232d4d9ef4a31ba7e4865e6515897257d263d169d1d4e44df9ff` |
+| Proof / verified application | Browser Check                     | [Streamline](https://www.streamlinehq.com/icons/download/browser-check--25121)                     | `browser-check.svg`                     | 2026-08-17  | `29d6cc990989702594576d3e7b2c66e1bc3b7b1703827b999ec94b314a7d434b` |
 
 ## Selected illustrations
 
