@@ -21,3 +21,22 @@ Next.js is a trademark of Vercel, Inc. or its affiliates in the United States
 and other countries. React Router and Remix are trademarks of Shopify Inc.
 Express is a project of the OpenJS Foundation. All other marks are trademarks
 of their respective owners.
+
+## Streamline visual assets
+
+Selected icons used by the Palamedes website are from the **Streamline Sharp
+Duo** collection and selected illustrations are from the **Streamline UX
+Duotone** collection.
+
+Copyright © Streamline Design Inc. All rights reserved.
+
+These assets are used under a paid Streamline Premium license. They remain the
+property of Streamline Design Inc., are not licensed under the Palamedes MIT
+License, and may be used only in the context of the Palamedes open-source
+project. They may not be extracted, redistributed, sold, or offered as a
+standalone asset collection.
+
+[Icons and illustrations by Streamline](https://www.streamlinehq.com/)
+
+The exact assets, source pages, export dates, and file hashes are recorded in
+`site/streamline-asset-manifest.md`.

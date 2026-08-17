@@ -4,8 +4,23 @@
 [![Node >=22.22](https://img.shields.io/badge/node-%3E%3D22.22-0f172a.svg?logo=node.js)](https://github.com/sebastian-software/palamedes/blob/main/package.json)
 [![Sponsored by Sebastian Software](https://img.shields.io/badge/Sponsored%20by-Sebastian%20Software-0f172a.svg)](https://oss.sebastian-software.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0f172a.svg)](https://github.com/sebastian-software/palamedes/blob/main/LICENSE)
+[![palamedes version](https://img.shields.io/npm/v/palamedes?label=palamedes)](https://www.npmjs.com/package/palamedes)
+[![palamedes downloads](https://img.shields.io/npm/dm/palamedes?label=downloads)](https://www.npmjs.com/package/palamedes)
+[![@palamedes/cli version](https://img.shields.io/npm/v/%40palamedes%2Fcli?label=pmds)](https://www.npmjs.com/package/@palamedes/cli)
+[![create-palamedes version](https://img.shields.io/npm/v/create-palamedes?label=create-palamedes)](https://www.npmjs.com/package/create-palamedes)
 
 **Website: [palamedes.dev](https://palamedes.dev)**
+
+| Integration      | Version                                                                                                                                   | Monthly downloads                                                                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Next.js          | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fnext-plugin)](https://www.npmjs.com/package/@palamedes/next-plugin)           | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fnext-plugin)](https://www.npmjs.com/package/@palamedes/next-plugin)           |
+| Vite             | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fvite-plugin)](https://www.npmjs.com/package/@palamedes/vite-plugin)           | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fvite-plugin)](https://www.npmjs.com/package/@palamedes/vite-plugin)           |
+| Remix v3         | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fremix)](https://www.npmjs.com/package/@palamedes/remix)                       | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fremix)](https://www.npmjs.com/package/@palamedes/remix)                       |
+| React Router RSC | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Freact-router-rsc)](https://www.npmjs.com/package/@palamedes/react-router-rsc) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Freact-router-rsc)](https://www.npmjs.com/package/@palamedes/react-router-rsc) |
+| TanStack Start   | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Ftanstack)](https://www.npmjs.com/package/@palamedes/tanstack)                 | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Ftanstack)](https://www.npmjs.com/package/@palamedes/tanstack)                 |
+| SolidStart       | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fsolid)](https://www.npmjs.com/package/@palamedes/solid)                       | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fsolid)](https://www.npmjs.com/package/@palamedes/solid)                       |
+| Waku             | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fwaku)](https://www.npmjs.com/package/@palamedes/waku)                         | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fwaku)](https://www.npmjs.com/package/@palamedes/waku)                         |
+| React runtime    | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Freact)](https://www.npmjs.com/package/@palamedes/react)                       | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Freact)](https://www.npmjs.com/package/@palamedes/react)                       |
 
 Palamedes is open-source i18n tooling for TypeScript applications. It combines
 macro-style authoring close to the code, repository-owned source-string-first
@@ -365,3 +380,7 @@ pnpm check-types
 [![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
 
 MIT © 2026 Sebastian Software
+
+The MIT license does not cover third-party marks or Streamline visual assets.
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for their separate terms
+and required attribution.

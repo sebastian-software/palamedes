@@ -32,6 +32,8 @@
     "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
     "verify:react-router-rsc": "node ./scripts/verify-react-router-rsc.mjs",
     "verify:site-routes": "node ./scripts/verify-site-routes.mjs",
+    "verify:site-a11y": "node ./scripts/verify-site-a11y.mjs",
+    "verify:site-streamline": "node ./scripts/verify-site-streamline-assets.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
     "benchmark:proof:large": "pnpm build && node ./scripts/benchmark-proof.mjs --large-messages 10000",
     "benchmark:e2e-workflow": "cargo build --release -p palamedes-cli && pnpm --filter @palamedes/benchmark-e2e-workflow benchmark",
@@ -65,6 +67,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "axe-core": "^4.12.1",
     "@typescript/typescript6": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^10.0.4",

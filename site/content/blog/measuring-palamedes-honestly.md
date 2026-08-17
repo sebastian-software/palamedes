@@ -1,5 +1,9 @@
 ---
 date: "2026-07-05"
+excerpt: "Benchmarks are easy to game and easy to distrust. Here is the methodology: same corpus, semantic validation after every run, checked-in reports anyone can re-run."
+readMinutes: 7
+order: 30
+title: "Measuring Palamedes honestly"
 ---
 
 # Measuring Palamedes Honestly

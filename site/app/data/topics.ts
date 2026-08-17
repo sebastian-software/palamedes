@@ -15,6 +15,7 @@
 import { BENCH_REALISTIC } from "./bench"
 import contentStats from "./generated/content-stats.json"
 import { docsHref } from "./links"
+import type { StreamlineIconName } from "~/components/icons/StreamlineIcon"
 
 export interface TopicFaq {
   q: string
@@ -34,6 +35,7 @@ export interface TopicEvidence {
 
 export interface Topic {
   slug: string
+  icon: StreamlineIconName
   metaTitle: string
   metaDescription: string
   eyebrow: string
@@ -59,6 +61,7 @@ export interface Topic {
 export const TOPICS: Topic[] = [
   {
     slug: "react-server-components-i18n",
+    icon: "web-hierarchy",
     metaTitle: "i18n for React Server Components — without a provider or a bypass",
     metaDescription:
       "React Context cannot cross the server-component boundary, which is why most i18n libraries need a workaround in the App Router. Palamedes resolves translations through request-local scope instead, so the same code runs in an RSC, a client island and a Node handler.",
@@ -166,6 +169,7 @@ export default async function CheckoutHeading({ seats }) {
   },
   {
     slug: "i18n-performance",
+    icon: "browser-flash",
     metaTitle: "i18n extraction performance — 30× faster on a checked benchmark",
     metaDescription:
       "Message extraction runs on every build and every pre-commit hook, and on a large codebase it is seconds each time. Palamedes runs extraction and catalog merging in a Rust core, with a benchmark you can re-run yourself.",
@@ -238,6 +242,7 @@ export default async function CheckoutHeading({ seats }) {
   },
   {
     slug: "icu-messageformat",
+    icon: "programming-book",
     metaTitle: "ICU MessageFormat in JavaScript — proven from source to runtime",
     metaDescription:
       "Plenty of libraries say they support ICU MessageFormat. Palamedes ships an executable proof that nested plural and select selectors survive extraction, PO catalogs, compilation and rendering unchanged.",
@@ -351,6 +356,7 @@ select(gender, {
   },
   {
     slug: "locale-routing",
+    icon: "globe-app-network",
     metaTitle: "Locale routing strategies — cookie, path, subdomain and domain compared",
     metaDescription:
       "Cookie, route prefix, subdomain or country domain: four ways to put a locale in a URL, with different consequences for SEO, caching and infrastructure. Each one is verified in a browser across six meta-frameworks.",

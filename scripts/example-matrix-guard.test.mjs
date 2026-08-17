@@ -8,12 +8,39 @@ import {
   selectScreenshotExamples,
 } from "./example-matrix.mjs"
 import { assertExampleMatrix } from "./example-matrix-guard.mjs"
+import { assertSiteMatrixAxes } from "./check-example-matrix.mjs"
 
 function cloneMatrix() {
   return EXAMPLE_MATRIX.map((example) => ({ ...example }))
 }
 
 describe("example matrix guard", () => {
+  it("rejects drift between the public site axes and the verified examples", () => {
+    const canonical = `
+export const FRAMEWORKS: MatrixAxis[] = [
+  { name: "Next.js", slug: "nextjs" },
+  { name: "TanStack Start", slug: "tanstack" },
+  { name: "SolidStart", slug: "solidstart" },
+  { name: "Waku", slug: "waku" },
+  { name: "React Router", slug: "react-router" },
+  { name: "Remix v3", slug: "remix" },
+]
+export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
+  { name: "Cookie", slug: "cookie" },
+  { name: "Route", slug: "route" },
+  { name: "Subdomain", slug: "subdomain" },
+  { name: "TLD", slug: "tld" },
+]
+`
+    expect(() => assertSiteMatrixAxes(canonical)).not.toThrow()
+    expect(() =>
+      assertSiteMatrixAxes(canonical.replace('slug: "nextjs"', 'slug: "next-js"'))
+    ).toThrow(/site framework axes/)
+    expect(() =>
+      assertSiteMatrixAxes(canonical.replace('slug: "subdomain"', 'slug: "path"'))
+    ).toThrow(/site strategy axes/)
+  })
+
   it("accepts the canonical matrix", () => {
     expect(() => assertExampleMatrix(EXAMPLE_MATRIX)).not.toThrow()
   })

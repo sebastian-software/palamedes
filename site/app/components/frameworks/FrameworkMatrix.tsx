@@ -18,7 +18,11 @@ function CellContent({ cell }: { cell: MatrixCell }) {
       <div className="mono-nums mt-2 text-[12px]">
         {cell.demoLinks ? (
           cell.demoLinks.map((link) => (
-            <a key={link.href} href={link.href} className="mr-2 text-accent hover:text-ink">
+            <a
+              key={link.href}
+              href={link.href}
+              className="mr-1 inline-flex min-h-6 min-w-6 items-center justify-center text-accent underline decoration-transparent underline-offset-2 hover:text-ink hover:decoration-current"
+            >
               {link.label}
             </a>
           ))
@@ -39,7 +43,11 @@ function CellContent({ cell }: { cell: MatrixCell }) {
 export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
   return (
     <div>
-      <div className="relative overflow-x-auto">
+      <div
+        className="relative overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+        tabIndex={0}
+        aria-label="Verified framework and locale strategy matrix"
+      >
         {scan ? (
           <div
             aria-hidden
@@ -50,7 +58,7 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
         <table className="w-full min-w-[720px] border-collapse border border-hair">
           <thead>
             <tr>
-              <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+              <th className="micro border border-hair px-4 py-3 text-left text-[10px] tracking-th text-gray-spec">
                 Framework
               </th>
               {STRATEGIES.map((strategy) => (
@@ -58,7 +66,7 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
                   key={strategy.slug}
                   className="border border-hair px-4 py-3 text-left align-top"
                 >
-                  <span className="micro block text-[10.5px] tracking-th text-ink">
+                  <span className="micro block text-[10px] tracking-th text-ink">
                     {strategy.name}
                   </span>
                 </th>

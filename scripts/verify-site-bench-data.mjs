@@ -31,8 +31,6 @@ const benchTs = readFileSync(benchTsPath, "utf8")
 const readme = readFileSync(readmePath, "utf8")
 const benchmarkLedger = readFileSync(benchmarkLedgerPath, "utf8")
 const fbteeDossier = readFileSync(fbteeDossierPath, "utf8")
-const tools = ["Palamedes", "Lingui", "React Intl", "fbtee", "i18next-cli", "General Translation"]
-const comparedTools = tools.filter((tool) => tool !== "Palamedes")
 const ratioFields = {
   Lingui: "lingui",
   "React Intl": "formatjs",
@@ -40,7 +38,10 @@ const ratioFields = {
   "i18next-cli": "i18nextCli",
   "General Translation": "gt",
 }
-const toolPattern = tools.join("|")
+
+function sameValues(left, right) {
+  return [...left].sort().join("\n") === [...right].sort().join("\n")
+}
 
 function parseSection(name) {
   const section = report.split(new RegExp(`^## ${name}$`, "m"))[1]
@@ -67,20 +68,16 @@ function parseSection(name) {
   }
   const speedups = {}
   for (const match of body.matchAll(
-    new RegExp(
-      String.raw`^\|\s+Palamedes vs (${toolPattern})\s+\|\s+Palamedes\s+\|\s+([\d.]+)x\s+\|`,
-      "gm"
-    )
+    /^\|\s+Palamedes vs ([^|]+?)\s+\|\s+Palamedes\s+\|\s+([\d.]+)x\s+\|/gmu
   )) {
     speedups[match[1]] = match[2]
   }
-  if (
-    Object.keys(medians).length !== tools.length ||
-    Object.keys(speedups).length !== comparedTools.length
-  ) {
+  const tools = Object.keys(medians)
+  const comparedTools = tools.filter((tool) => tool !== "Palamedes")
+  if (!medians.Palamedes || !sameValues(Object.keys(speedups), comparedTools)) {
     fail(`could not parse medians/speedups from section "${name}" of ${reportPath}`)
   }
-  return { medians, speedups }
+  return { medians, speedups, tools }
 }
 
 /*
@@ -201,23 +198,54 @@ function parseBenchSection(name) {
     fail(`could not find BENCH_${name} in ${benchTsPath}`)
   }
   const medians = {}
+  const scopes = {}
   for (const match of body.matchAll(
-    /\{[\s\S]*?tool: "([^"]+)"[\s\S]*?medianMs: ([\d.]+)[\s\S]*?\}/g
+    /\{[\s\S]*?tool: "([^"]+)"[\s\S]*?medianMs: ([\d.]+)[\s\S]*?scope: "([^"]+)"[\s\S]*?\}/gu
   )) {
     medians[match[1]] = Number(match[2])
+    scopes[match[1]] = match[3]
   }
   const speedups = {}
   for (const [tool, field] of Object.entries(ratioFields)) {
     const match = body.match(new RegExp(`${field}: "([\\d.]+)×"`))
     if (match) speedups[tool] = match[1]
   }
+  const tools = Object.keys(medians)
+  const comparedTools = tools.filter((tool) => tool !== "Palamedes")
   if (
-    Object.keys(medians).length !== tools.length ||
-    Object.keys(speedups).length !== comparedTools.length
+    !medians.Palamedes ||
+    !sameValues(Object.keys(scopes), tools) ||
+    !sameValues(Object.keys(speedups), comparedTools)
   ) {
     fail(`could not parse medians/ratios from BENCH_${name} in ${benchTsPath}`)
   }
-  return { medians, speedups }
+  return { medians, speedups, scopes, tools }
+}
+
+function parseReportMeta() {
+  const value = (label) => report.match(new RegExp(`^${label}: (.+)$`, "mu"))?.[1]
+  const generated = value("Generated")
+  const node = value("Node")
+  const platform = value("Platform")
+  const runs = value("Runs")
+  if (!generated || !node || !platform || !runs) {
+    fail(`could not parse benchmark metadata from ${reportPath}`)
+  }
+  return { generated: generated.slice(0, 10), node, platform, runs: Number(runs) }
+}
+
+function parseBenchMeta() {
+  const body = extractAssignedObjectBody(benchTs, "export const BENCH_META =")
+  if (!body) fail(`could not find BENCH_META in ${benchTsPath}`)
+  const stringValue = (field) => body.match(new RegExp(`${field}: "([^"]+)"`))?.[1]
+  const runs = Number(body.match(/runs: (\d+)/u)?.[1])
+  const generated = stringValue("generated")
+  const node = stringValue("node")
+  const platform = stringValue("platform")
+  if (!generated || !node || !platform || !runs) {
+    fail(`could not parse BENCH_META in ${benchTsPath}`)
+  }
+  return { generated, node, platform, runs }
 }
 
 function parseBenchWarm(name) {
@@ -263,6 +291,27 @@ const realistic = parseSection("Realistic")
 const benchSmall = parseBenchSection("SMALL")
 const benchMedium = parseBenchSection("MEDIUM")
 const benchRealistic = parseBenchSection("REALISTIC")
+const tools = benchRealistic.tools
+const comparedTools = tools.filter((tool) => tool !== "Palamedes")
+
+for (const [label, parsed] of [
+  ["report small", small],
+  ["report medium", medium],
+  ["report realistic", realistic],
+  ["bench small", benchSmall],
+  ["bench medium", benchMedium],
+]) {
+  expect(`${label} tool set differs from BENCH_REALISTIC`, sameValues(parsed.tools, tools))
+}
+
+const reportMeta = parseReportMeta()
+const benchMeta = parseBenchMeta()
+for (const field of ["generated", "node", "platform", "runs"]) {
+  expect(
+    `BENCH_META.${field}: report says ${reportMeta[field]}, bench.ts says ${benchMeta[field]}`,
+    reportMeta[field] === benchMeta[field]
+  )
+}
 const fbteeDossierClaim = parseFbteeDossierClaim()
 
 const checks = []
@@ -353,6 +402,10 @@ for (const [label, token] of [
 expect(
   "BenchmarkLedger derives its public benchmark figures from bench.ts",
   benchmarkLedger.includes("displayBenchmarkTime(row.medianMs)")
+)
+expect(
+  "BenchmarkLedger renders each row scope from bench.ts",
+  benchmarkLedger.includes("row.scope")
 )
 
 console.log("verify-site-bench-data: guarded benchmark surfaces match latest.md")

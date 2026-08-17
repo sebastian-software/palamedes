@@ -1,10 +1,17 @@
-import { Page, Section } from "@palamedes/site-ui"
+import { ButtonLink, Page, Section } from "@palamedes/site-ui"
 import { pageMeta } from "~/lib/meta"
 import { CtaBand } from "~/components/home/CtaBand"
 import { REPO } from "~/data/links"
-import { POSTS } from "~/data/posts"
+import posts from "~/data/generated/blog-posts.json"
 
 export const handle = { layout: "bare" }
+
+const formatDate = new Intl.DateTimeFormat("en", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+})
 
 export function meta() {
   return pageMeta({
@@ -34,15 +41,21 @@ export default function Blog() {
           Design notes, honest benchmarks, and lessons from the third time around — written by the
           maintainer, not a content team.
         </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <ButtonLink href={posts[0]?.href ?? "/blog"}>Read the latest note</ButtonLink>
+          <ButtonLink variant="outline" href="/proof">
+            Inspect the evidence
+          </ButtonLink>
+        </div>
       </section>
 
       <Section num="01 — Posts">
         <div className="border border-hair">
-          {POSTS.map((post, index) => (
+          {posts.map((post, index) => (
             <a
               key={post.title}
               href={post.href}
-              className={`group grid grid-cols-[64px_1fr_auto] items-baseline gap-6 px-6 py-6 transition-colors hover:bg-hover-fill max-tight:grid-cols-[44px_1fr] ${
+              className={`group grid grid-cols-[64px_minmax(0,1fr)_auto] items-baseline gap-6 px-6 py-6 transition-colors hover:bg-hover-fill max-tight:grid-cols-[44px_minmax(0,1fr)] ${
                 index > 0 ? "border-t border-hair" : ""
               }`}
             >
@@ -57,8 +70,11 @@ export default function Blog() {
                   {post.excerpt}
                 </p>
               </span>
-              <span className="mono-nums text-[11px] whitespace-nowrap text-gray-spec max-tight:hidden">
-                ~{post.readMinutes} min
+              <span className="mono-nums text-right text-[11px] whitespace-nowrap text-gray-spec max-tight:col-start-2 max-tight:mt-2 max-tight:text-left">
+                <time dateTime={post.date}>
+                  {formatDate.format(new Date(`${post.date}T00:00:00Z`))}
+                </time>
+                <span aria-hidden> · </span>~{post.readMinutes} min
               </span>
             </a>
           ))}

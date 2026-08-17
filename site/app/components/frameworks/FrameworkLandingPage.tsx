@@ -2,6 +2,7 @@ import { Link } from "react-router"
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
 import { CtaBand } from "~/components/home/CtaBand"
+import { FrameworkPackageStats } from "~/components/frameworks/FrameworkPackageStats"
 import type { FrameworkLanding, FrameworkLandingFact } from "~/data/framework-landing"
 import { STRATEGY_CARDS } from "~/data/features"
 import { docsHref } from "~/data/links"
@@ -70,6 +71,7 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
         </div>
         <div className="mt-12">
           <Facts facts={page.facts} />
+          <FrameworkPackageStats path={page.path} />
         </div>
       </section>
 
@@ -107,10 +109,13 @@ export function FrameworkLandingPage({ page }: { page: FrameworkLanding }) {
 
       <Section num="03 — In TypeScript" title={page.code.caption}>
         <div className="border border-hair bg-paper">
-          <p className="micro border-b border-hair px-5 py-3 text-[10.5px] tracking-label text-gray-spec">
+          <p className="micro border-b border-hair px-5 py-3 text-[10px] tracking-label text-gray-spec">
             {page.code.label}
           </p>
-          <pre className="overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7] text-paper/85">
+          <pre
+            className="overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7] text-paper/85 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+            tabIndex={0}
+          >
             <code>{page.code.source}</code>
           </pre>
         </div>

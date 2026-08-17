@@ -94,7 +94,10 @@ export function CodeShowcase() {
         </Tabs.List>
         {TABS.map((tab) => (
           <Tabs.Panel key={tab.id} value={tab.id}>
-            <pre className="overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7]">
+            <pre
+              className="overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+              tabIndex={0}
+            >
               {toLines(tab.code).map((line) => (
                 <div key={line.no} className={toneFor(line.text)}>
                   {line.text || " "}

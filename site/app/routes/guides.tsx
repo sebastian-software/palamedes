@@ -2,6 +2,7 @@ import { Link } from "react-router"
 
 import { ButtonLink, Page, Section } from "@palamedes/site-ui"
 import { CtaBand } from "~/components/home/CtaBand"
+import { StreamlineIcon } from "~/components/icons/StreamlineIcon"
 import { docsHref } from "~/data/links"
 import { TOPICS } from "~/data/topics"
 import { pageMeta } from "~/lib/meta"
@@ -36,7 +37,7 @@ export default function Guides() {
           re-run from the repository rather than to an opinion.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href="/get-started">Try the 5-minute quickstart</ButtonLink>
+          <ButtonLink href="/get-started">Follow the guided quickstart</ButtonLink>
           <ButtonLink variant="outline" href={docsHref()}>
             Browse the documentation
           </ButtonLink>
@@ -56,7 +57,10 @@ export default function Guides() {
               viewTransition
               className="group bg-paper px-6 py-6 transition-colors hover:bg-hover-fill"
             >
-              <p className="micro text-[10px] tracking-label text-gray-spec">{topic.eyebrow}</p>
+              <div className="flex items-start justify-between gap-4">
+                <p className="micro text-[10px] tracking-label text-gray-spec">{topic.eyebrow}</p>
+                <StreamlineIcon name={topic.icon} />
+              </div>
               <h2 className="mt-3 text-[17px] font-bold group-hover:text-accent">
                 {topic.headline}
               </h2>

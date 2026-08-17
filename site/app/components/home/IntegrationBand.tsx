@@ -87,7 +87,7 @@ export function IntegrationBand() {
           </p>
           <a
             href="https://github.com/sebastian-software/palamedes/blob/main/site/framework-brand-usage.md"
-            className="micro mt-4 inline-block text-[10px] tracking-label text-accent underline-offset-4 hover:underline"
+            className="micro mt-4 inline-block text-[10px] tracking-label text-accent underline underline-offset-4"
           >
             Brand-asset status →
           </a>

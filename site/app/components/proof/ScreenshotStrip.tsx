@@ -29,7 +29,11 @@ const SHOTS: Shot[] = [
 export function ScreenshotStrip() {
   return (
     <div>
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      <div
+        className="flex gap-4 overflow-x-auto pb-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        tabIndex={0}
+        aria-label="Framework verification screenshots"
+      >
         {SHOTS.map((shot) => (
           <figure key={shot.caption} className="w-72 shrink-0 border border-hair">
             <div className="flex items-center gap-1.5 border-b border-hair px-3 py-2">

@@ -1,5 +1,9 @@
 ---
 date: "2026-07-05"
+excerpt: "Why Palamedes keeps catalog parsing, ICU diagnostics, merge behavior, and storage semantics in Ferrocat instead of spreading them across every adapter."
+readMinutes: 7
+order: 50
+title: "What we delegated to Ferrocat and why"
 ---
 
 # What we delegated to Ferrocat and why

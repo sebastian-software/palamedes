@@ -47,6 +47,19 @@ function markdownRouteMeta(): Plugin {
 }
 
 export default defineConfig({
+  optimizeDeps: {
+    // Ardo exposes these entry points lazily. Pre-bundle them together so Vite
+    // does not invalidate the browser graph mid-navigation and temporarily
+    // leave Ardo rendering against a stale React instance.
+    include: [
+      "@base-ui/react/accordion",
+      "@base-ui/react/tabs",
+      "ardo/mdx-provider",
+      "ardo/runtime",
+      "ardo/ui",
+      "lucide-react",
+    ],
+  },
   plugins: [
     tailwindcss(),
     markdownRouteMeta(),
@@ -79,9 +92,13 @@ export default defineConfig({
         ogType: "website",
         twitterCard: "summary_large_image",
       },
+      markdown: {
+        toc: { level: [2, 2] },
+      },
     }),
   ],
   resolve: {
+    dedupe: ["react", "react-dom"],
     tsconfigPaths: true,
   },
 })

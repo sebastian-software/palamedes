@@ -1,5 +1,9 @@
 ---
 date: "2026-07-05"
+excerpt: "Short proof-led posts for the first Palamedes content round, each tied to one concrete repository-backed evidence point."
+readMinutes: 4
+order: 70
+title: "Round 1 micro-content"
 ---
 
 # Round 1 Micro-Content

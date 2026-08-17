@@ -31,10 +31,13 @@ function CodePane({ label, code }: { label: string; code: string }) {
      * code block instead of matching its neighbour.
      */
     <div className="flex h-full flex-col bg-paper">
-      <p className="micro border-b border-hair px-5 py-3 text-[10.5px] tracking-label text-gray-spec">
+      <p className="micro border-b border-hair px-5 py-3 text-[10px] tracking-label text-gray-spec">
         {label}
       </p>
-      <pre className="grow overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7]">
+      <pre
+        className="grow overflow-x-auto bg-ink px-5 py-4 font-mono text-[12.5px] leading-[1.7] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-paper"
+        tabIndex={0}
+      >
         {toLines(code).map((line) => (
           <div key={line.no} className={toneFor(line.text)}>
             {line.text || " "}
@@ -61,17 +64,21 @@ function CodeCompare({ code }: { code: RivalCode }) {
 
 function RivalMatrix({ rival, rows }: { rival: string; rows: RivalRow[] }) {
   return (
-    <div className="overflow-x-auto">
+    <div
+      className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+      tabIndex={0}
+      aria-label="Comparison table"
+    >
       <table className="w-full min-w-[720px] border-collapse border border-hair">
         <thead>
           <tr>
-            <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-gray-spec">
+            <th className="micro border border-hair px-4 py-3 text-left text-[10px] tracking-th text-gray-spec">
               Criteria
             </th>
-            <th className="micro border border-hair px-4 py-3 text-left text-[10.5px] tracking-th text-ink">
+            <th className="micro border border-hair px-4 py-3 text-left text-[10px] tracking-th text-ink">
               {rival}
             </th>
-            <th className="micro border border-hair border-l-2 border-l-accent bg-hover-fill px-4 py-3 text-left text-[10.5px] tracking-th text-accent">
+            <th className="micro border border-hair border-l-2 border-l-accent bg-hover-fill px-4 py-3 text-left text-[10px] tracking-th text-accent">
               Palamedes
             </th>
           </tr>

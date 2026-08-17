@@ -35,7 +35,7 @@ test("rejects an ADR missing from the index", () => {
           )
         ),
       }),
-    /DECISIONS\.md indexes 24 ADRs, but adr\/ contains 25/
+    /DECISIONS\.md indexes \d+ ADRs, but adr\/ contains \d+/
   )
 })
 

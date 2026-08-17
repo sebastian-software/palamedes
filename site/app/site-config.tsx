@@ -32,9 +32,7 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
   navigation: [
     { label: "Frameworks", href: "/frameworks" },
     { label: "Architecture", href: "/architecture" },
-    { label: "Proof", href: "/proof" },
-    { label: "Compare", href: "/compare" },
-    { label: "Blog", href: "/blog" },
+    { label: "Guides", href: "/guides" },
     { label: "Docs", href: "/docs" },
   ],
   primaryAction: { label: "Get started", href: "/get-started" },
@@ -61,7 +59,7 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
     {
       title: "Documentation",
       links: [
-        { label: "5-minute quickstart", href: docsHref("first-working-translation") },
+        { label: "Guided quickstart", href: docsHref("first-working-translation") },
         { label: "API reference", href: apiHref() },
         { label: "Configuration", href: docsHref("configuration") },
         { label: "CLI", href: docsHref("cli") },
@@ -84,6 +82,7 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
       links: [
         { label: "Sebastian Software", href: "https://oss.sebastian-software.com/" },
         { label: "Sebastian Werner", href: "https://sebastian-software.de/werner" },
+        { label: "Icons by Streamline", href: "https://www.streamlinehq.com/" },
         { label: "Blog", href: "/blog" },
       ],
     },

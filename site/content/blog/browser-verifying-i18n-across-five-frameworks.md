@@ -1,5 +1,9 @@
 ---
 date: "2026-07-05"
+excerpt: "How 20 UI-adapter apps share a browser verification flow and versioned screenshots, within a 25-app smoke matrix."
+readMinutes: 6
+order: 40
+title: "Browser-verifying i18n across five frameworks"
 ---
 
 # How We Browser-Verify i18n Across Five Frameworks

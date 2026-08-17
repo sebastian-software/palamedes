@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+  <desc>Programming Book icon by Streamline</desc>
+  <path fill="#faf9f4" d="M19 23H5.5a2.5 2.5 0 0 1 0-5H19z" />
+  <path fill="#d9ba7c" d="M21 1H6a3 3 0 0 0-3 3v16.5A2.5 2.5 0 0 1 5.5 18H21z" />
+  <path stroke="#0e2a4d" stroke-width="2" d="M3 20.5V4a3 3 0 0 1 3-3h15v17H5.5a2.5 2.5 0 0 0 0 5H22M18 9.5h-5M19 18v5M6.5 6 10 9.5 6.5 13" />
+</svg>

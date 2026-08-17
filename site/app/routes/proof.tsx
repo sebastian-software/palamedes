@@ -1,14 +1,28 @@
 import { Link } from "react-router"
 
 import { ButtonLink, EditorialRail, Page, Section } from "@palamedes/site-ui"
+import { CopyCommand } from "~/components/CopyCommand"
 import { pageMeta } from "~/lib/meta"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
+import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon"
 import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
-import { BENCH_REALISTIC, BENCH_REALISTIC_WARM } from "~/data/bench"
+import {
+  BENCH_MEDIUM,
+  BENCH_MEDIUM_WARM,
+  BENCH_META,
+  BENCH_REALISTIC,
+  BENCH_REALISTIC_WARM,
+  BENCH_SMALL,
+  BENCH_SMALL_WARM,
+  displayBenchmarkTime,
+  type BenchCorpus,
+  type BenchWarm,
+} from "~/data/bench"
 import { CATALOG_QA_CARDS } from "~/data/features"
 import contentStats from "~/data/generated/content-stats.json"
+import decisionLedger from "~/data/generated/decision-ledger.json"
 import { decisionHref, docsHref, repoHref } from "~/data/links"
 
 export const handle = { layout: "bare" }
@@ -23,18 +37,98 @@ export function meta() {
 
 const VERIFICATION_STEPS = [
   {
+    icon: "code-analysis",
     title: "Build",
     body: `All ${contentStats.smokeExampleCount} example apps build and smoke-test against the workspace packages on relevant PRs and main pushes — no mocked integrations.`,
   },
   {
+    icon: "deployment-workflow-collaboration",
     title: "Drive",
     body: `${contentStats.browserExampleCount} browser-capable examples run the Playwright flow weekly or on manual dispatch: load, SSR output, locale switch, and localized server actions.`,
   },
   {
+    icon: "browser-check",
     title: "Capture",
     body: "Screenshots are versioned in the repo, so 'works across frameworks' is a diffable artifact, not a slide.",
   },
+] satisfies ReadonlyArray<{ icon: StreamlineIconName; title: string; body: string }>
+
+const CORPORA: { corpus: BenchCorpus; warm: BenchWarm }[] = [
+  { corpus: BENCH_SMALL, warm: BENCH_SMALL_WARM },
+  { corpus: BENCH_MEDIUM, warm: BENCH_MEDIUM_WARM },
+  { corpus: BENCH_REALISTIC, warm: BENCH_REALISTIC_WARM },
 ]
+
+function sameScopeRange(corpus: BenchCorpus) {
+  const baseline = corpus.rows.find((row) => row.tool === "Palamedes")
+  if (!baseline) throw new Error(`Benchmark corpus ${corpus.id} has no Palamedes baseline`)
+  const factors = corpus.rows
+    .filter((row) => row.sameScope)
+    .map((row) => Math.floor(row.medianMs / baseline.medianMs))
+  return `${Math.min(...factors)}–${Math.max(...factors)}× slower`
+}
+
+function CorpusLedger() {
+  return (
+    <div className="border border-hair">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-hair px-6 py-5">
+        <div>
+          <p className="micro text-[10px] tracking-label text-ink/70">
+            End-to-end extract + catalog update
+          </p>
+          <h3 className="display-serif mt-2 text-[20px] uppercase">Three checked corpora</h3>
+        </div>
+        <p className="mono-nums text-[10px] text-gray-spec">
+          {BENCH_META.generated} · Node {BENCH_META.node} · {BENCH_META.platform} · median of{" "}
+          {BENCH_META.runs}
+        </p>
+      </div>
+      <div
+        className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+        role="region"
+        aria-label="Cold, warm, and same-scope benchmark summary"
+        tabIndex={0}
+      >
+        <table className="w-full min-w-[760px] border-collapse">
+          <thead>
+            <tr className="border-b border-hair">
+              {[
+                "Corpus",
+                "Palamedes cold",
+                `Palamedes warm · ${BENCH_REALISTIC_WARM.touchedFiles} files touched`,
+                "Same-scope tools",
+              ].map((heading) => (
+                <th
+                  key={heading}
+                  scope="col"
+                  className="micro px-5 py-3 text-left text-[10px] tracking-th text-ink/70"
+                >
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {CORPORA.map(({ corpus, warm }) => (
+              <tr key={corpus.id} className="border-b border-hair last:border-b-0">
+                <th scope="row" className="px-5 py-5 text-left text-[13px] font-semibold">
+                  {corpus.corpus}
+                </th>
+                <td className="mono-nums px-5 py-5 text-[22px] text-accent">
+                  {displayBenchmarkTime(warm.coldMs)}
+                </td>
+                <td className="mono-nums px-5 py-5 text-[22px]">
+                  {displayBenchmarkTime(warm.warmMs)}
+                </td>
+                <td className="mono-nums px-5 py-5 text-[15px]">{sameScopeRange(corpus)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
 
 export default function Proof() {
   return (
@@ -47,7 +141,7 @@ export default function Proof() {
         >
           01
         </span>
-        <p className="eyebrow">Proof</p>
+        <p className="eyebrow">Benchmarks · verification · decisions</p>
         <h1 className="mt-6 text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
           Claims you can re-run.
         </h1>
@@ -61,14 +155,20 @@ export default function Proof() {
             Browse checked-in reports
           </ButtonLink>
         </div>
+        <CopyCommand
+          command="pnpm benchmark:e2e-workflow"
+          label="Re-run from the repository root"
+          className="mt-7 max-w-[30rem]"
+        />
       </section>
 
       <Section
         num="01 — Benchmarks"
-        title="The workflow you feel every day: extract & update."
+        title="Three corpora, two lanes, one rule: every number re-runs."
         lede="The end-to-end benchmark measures source scanning, extraction, and output writes. The catalog-aware tools also update existing catalogs; the React Intl extraction workflow writes one aggregated extraction artifact and is marked as narrower scope. Every run uses the same logical inventory and is validated semantically. The cached Palamedes re-run is shown separately as a capability, not turned into a competitor speedup claim."
       >
         <div className="space-y-8">
+          <CorpusLedger />
           <BenchmarkLedger corpus={BENCH_REALISTIC} warm={BENCH_REALISTIC_WARM} />
           <EditorialRail tone="emphasis">
             <p className="micro text-[10px] text-gray-spec">Honest note</p>
@@ -77,7 +177,11 @@ export default function Proof() {
               Your hardware will differ; the ratios are the signal. Commands to reproduce:{" "}
               <code>pnpm benchmark:e2e-workflow</code>. For why extraction is slow in the first
               place, see{" "}
-              <Link to="/i18n-performance" viewTransition className="text-accent">
+              <Link
+                to="/i18n-performance"
+                viewTransition
+                className="text-accent underline underline-offset-2"
+              >
                 i18n performance
               </Link>
               .
@@ -93,7 +197,10 @@ export default function Proof() {
         <div className="hairline-grid mb-10 grid-cols-3 max-tight:grid-cols-1">
           {VERIFICATION_STEPS.map((step, index) => (
             <div key={step.title} className="bg-paper px-6 py-6">
-              <p className="mono-nums text-[11px] text-accent">0{index + 1}</p>
+              <div className="flex items-start justify-between gap-4">
+                <p className="mono-nums text-[11px] text-accent">0{index + 1}</p>
+                <StreamlineIcon name={step.icon} />
+              </div>
               <h3 className="mt-3 text-[15px] font-bold">{step.title}</h3>
               <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{step.body}</p>
             </div>
@@ -151,16 +258,38 @@ export default function Proof() {
         title={`${contentStats.adrCount} decisions, written down before you depend on them.`}
         lede="The ADRs cover message identity, the native boundary, adapter architecture — and, just as deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if our tradeoffs match yours."
       >
-        <div className="space-y-2">
-          <a href={decisionHref()} className="mono-nums block text-[13px] text-accent">
-            ADR index →
-          </a>
-          <a href={docsHref("stability")} className="mono-nums block text-[13px] text-accent">
-            Stability &amp; versioning policy →
-          </a>
-          <a href={docsHref("principles")} className="mono-nums block text-[13px] text-accent">
-            Palamedes principles →
-          </a>
+        <div className="border border-hair">
+          <div className="grid grid-cols-[4rem_1fr_7rem] border-b border-hair px-5 py-3 max-tight:grid-cols-[3rem_1fr]">
+            <span className="micro text-[10px] tracking-th text-gray-spec">No.</span>
+            <span className="micro text-[10px] tracking-th text-gray-spec">Decision</span>
+            <span className="micro text-[10px] tracking-th text-gray-spec max-tight:hidden">
+              Status
+            </span>
+          </div>
+          <ol>
+            {decisionLedger.map((decision) => (
+              <li
+                key={decision.number}
+                className="grid grid-cols-[4rem_1fr_7rem] items-center border-b border-hair px-5 py-3 last:border-b-0 max-tight:grid-cols-[3rem_1fr]"
+              >
+                <span className="mono-nums text-[11px] text-accent">{decision.number}</span>
+                <a href={decision.href} className="text-[13px] font-medium hover:text-accent">
+                  {decision.title}
+                </a>
+                <span className="micro text-[10px] text-gray-spec max-tight:hidden">
+                  {decision.status}
+                </span>
+              </li>
+            ))}
+          </ol>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-hair px-5 py-4">
+            <a href={decisionHref()} className="mono-nums text-[12px] text-accent">
+              Open the full decision trail →
+            </a>
+            <a href={docsHref("stability")} className="mono-nums text-[12px] text-accent">
+              Stability &amp; versioning →
+            </a>
+          </div>
         </div>
       </Section>
 

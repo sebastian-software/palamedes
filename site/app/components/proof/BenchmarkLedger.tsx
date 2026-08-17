@@ -91,11 +91,9 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
                     ) : (
                       row.displayName
                     )}
-                    {!row.sameScope && !accent ? (
-                      <span className="mt-1 block text-[10px] font-normal text-gray-spec">
-                        * extraction only; narrower scope
-                      </span>
-                    ) : null}
+                    <span className="mt-1 block text-[10px] font-normal text-gray-spec">
+                      {row.scope}
+                    </span>
                   </th>
                   <td
                     className={`mono-nums px-6 py-5 text-right text-[clamp(1.65rem,3vw,2.4rem)] leading-none ${accent ? "text-accent" : "text-ink"}`}
@@ -117,10 +115,12 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
       {warm ? (
         <p className="border-t border-hair px-6 py-4 text-[11px] leading-relaxed text-gray-spec">
           * {displayBenchmarkTime(warm.warmMs)} is Palamedes on a cached re-run after{" "}
-          {warm.touchedFiles}
-          changed source files; {displayBenchmarkTime(baseline.medianMs)} is the cold workflow
-          result. No speedup factor is calculated for the non-comparable cached run.{" "}
-          <a href={decisionHref("019-extraction-cache")} className="text-accent hover:underline">
+          {warm.touchedFiles} changed source files; {displayBenchmarkTime(baseline.medianMs)} is the
+          cold workflow result. No speedup factor is calculated for the non-comparable cached run.{" "}
+          <a
+            href={decisionHref("019-extraction-cache")}
+            className="text-accent underline underline-offset-2"
+          >
             Cache details →
           </a>
         </p>
