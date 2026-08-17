@@ -7,6 +7,13 @@ import {
 } from "~/data/bench"
 import { decisionHref, docsHref } from "~/data/links"
 
+const COMPARISON_HREFS: Readonly<Partial<Record<string, string>>> = {
+  Lingui: "/compare/lingui",
+  "React Intl": "/compare/react-intl",
+  fbtee: "/compare/fbtee",
+  "i18next-cli": "/compare/i18next",
+}
+
 /*
  * The benchmark is a result ledger rather than a proportional chart. At the
  * realistic ratios a linear bar makes the winner unreadable, while a unit grid
@@ -70,13 +77,20 @@ export function BenchmarkLedger({ corpus, warm }: { corpus: BenchCorpus; warm?: 
           <tbody>
             {rows.map((row) => {
               const accent = row.accent
+              const comparisonHref = COMPARISON_HREFS[row.tool]
               return (
                 <tr
                   key={row.tool}
                   className={`border-b border-hair last:border-b-0 ${accent ? "bg-hover-fill" : ""}`}
                 >
                   <th scope="row" className="px-6 py-5 text-left text-[14px] font-semibold">
-                    {row.displayName}
+                    {comparisonHref ? (
+                      <a className="hover:text-accent hover:underline" href={comparisonHref}>
+                        {row.displayName}
+                      </a>
+                    ) : (
+                      row.displayName
+                    )}
                     <span className="mt-1 block text-[10px] font-normal text-gray-spec">
                       {row.scope}
                     </span>

@@ -1,7 +1,7 @@
 # End-to-End Extraction Workflow Benchmark
 
-Generated: 2026-08-05T09:07:39.077Z
-Node: v24.18.0
+Generated: 2026-08-14T20:48:35.906Z
+Node: v24.19.0
 Platform: darwin/arm64
 Seed: 20260703
 Warmup: 3
@@ -10,11 +10,12 @@ Machine-local: yes
 
 ## Versions
 
-- Palamedes CLI: pmds (Palamedes) v1.12.0
+- Palamedes CLI: pmds (Palamedes) v1.17.3
 - Lingui CLI: 6.6.0
 - React Intl extraction CLI (@formatjs/cli): 6.16.16
-- i18next-cli: 1.67.3
-- General Translation CLI (gtx-cli): 2.16.0 (corpus authored against gt-react 11.1.4)
+- fbtee CLI (@nkzw/fbtee-cli): 3.0.1 (corpus authored against fbtee 3.0.1)
+- i18next-cli: 1.69.0
+- General Translation CLI (gtx-cli): 2.16.4 (corpus authored against gt-react 11.1.6)
 
 ## Methodology
 
@@ -23,6 +24,7 @@ Machine-local: yes
 - Reset: catalog files and tool caches are reset to the same baseline state before every cold warmup and measured run
 - Semantic check: active catalog messages are normalized after each tool run and compared with the generated current inventory
 - React Intl scope: source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; the React Intl extraction workflow does not update locale translation catalogs, so this lane covers less work than every other lane in the table
+- fbtee scope: two-command local workflow: fbtee collect scans sources and writes source_strings.json, then fbtee prepare-translations merges/updates existing en/de JSON catalogs; both Node process startups are inside the timed boundary
 - General Translation scope: source scan, extraction, content-hash keying, and merge/update of existing en/de catalogs; gtx-cli generate runs fully locally, seeds new entries with the source text, and drops removed entries immediately instead of marking them obsolete
 - Other tool scope: source scan, extraction, merge/update of existing en/de catalogs, and catalog writes
 
@@ -36,18 +38,20 @@ Machine-local: yes
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 14.11 ms | 13.61 ms, 13.89 ms, 13.97 ms, 14.11 ms, 14.24 ms, 14.33 ms, 14.85 ms |
-| Lingui | 747.18 ms | 732.13 ms, 734.16 ms, 742.39 ms, 747.18 ms, 759.62 ms, 793.19 ms, 795.97 ms |
-| React Intl | 288.59 ms | 280.05 ms, 282.14 ms, 286.90 ms, 288.59 ms, 291.94 ms, 294.56 ms, 304.48 ms |
-| i18next-cli | 625.87 ms | 454.76 ms, 483.26 ms, 594.90 ms, 625.87 ms, 980.50 ms, 980.89 ms, 1032.25 ms |
-| General Translation | 577.89 ms | 554.21 ms, 564.58 ms, 571.48 ms, 577.89 ms, 630.93 ms, 652.02 ms, 813.98 ms |
+| Palamedes | 11.93 ms | 10.73 ms, 11.54 ms, 11.87 ms, 11.93 ms, 12.09 ms, 12.17 ms, 12.31 ms |
+| Lingui | 618.10 ms | 616.68 ms, 616.70 ms, 616.96 ms, 618.10 ms, 625.04 ms, 625.73 ms, 628.91 ms |
+| React Intl | 229.11 ms | 222.15 ms, 224.09 ms, 227.90 ms, 229.11 ms, 237.99 ms, 238.97 ms, 240.41 ms |
+| fbtee | 537.28 ms | 529.33 ms, 531.77 ms, 537.18 ms, 537.28 ms, 538.20 ms, 540.65 ms, 556.36 ms |
+| i18next-cli | 326.62 ms | 321.85 ms, 325.21 ms, 325.49 ms, 326.62 ms, 326.99 ms, 327.54 ms, 328.98 ms |
+| General Translation | 443.86 ms | 437.66 ms, 437.83 ms, 439.88 ms, 443.86 ms, 443.89 ms, 445.26 ms, 458.12 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 52.94x |
-| Palamedes vs React Intl | Palamedes | 20.45x |
-| Palamedes vs i18next-cli | Palamedes | 44.35x |
-| Palamedes vs General Translation | Palamedes | 40.95x |
+| Palamedes vs Lingui | Palamedes | 51.83x |
+| Palamedes vs React Intl | Palamedes | 19.21x |
+| Palamedes vs fbtee | Palamedes | 45.05x |
+| Palamedes vs i18next-cli | Palamedes | 27.39x |
+| Palamedes vs General Translation | Palamedes | 37.22x |
 
 ### Warm
 
@@ -57,11 +61,12 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 10.76 ms | 10.12 ms, 10.21 ms, 10.58 ms, 10.76 ms, 10.97 ms, 10.98 ms, 11.47 ms |
-| Lingui | 944.16 ms | 689.07 ms, 716.49 ms, 937.28 ms, 944.16 ms, 1027.13 ms, 1173.49 ms, 1383.13 ms |
-| React Intl | 290.94 ms | 282.95 ms, 284.66 ms, 287.56 ms, 290.94 ms, 292.84 ms, 294.13 ms, 296.33 ms |
-| i18next-cli | 436.59 ms | 430.96 ms, 434.61 ms, 435.70 ms, 436.59 ms, 439.63 ms, 446.25 ms, 452.35 ms |
-| General Translation | 593.57 ms | 569.96 ms, 591.97 ms, 593.22 ms, 593.57 ms, 605.73 ms, 607.05 ms, 623.82 ms |
+| Palamedes | 9.09 ms | 8.74 ms, 8.80 ms, 9.05 ms, 9.09 ms, 9.10 ms, 9.11 ms, 9.34 ms |
+| Lingui | 617.45 ms | 612.22 ms, 612.68 ms, 616.34 ms, 617.45 ms, 620.63 ms, 626.59 ms, 626.96 ms |
+| React Intl | 222.29 ms | 219.99 ms, 220.76 ms, 222.16 ms, 222.29 ms, 222.83 ms, 222.86 ms, 226.28 ms |
+| fbtee | 538.80 ms | 535.19 ms, 535.20 ms, 538.31 ms, 538.80 ms, 540.19 ms, 542.72 ms, 566.94 ms |
+| i18next-cli | 322.12 ms | 319.16 ms, 321.46 ms, 321.82 ms, 322.12 ms, 322.44 ms, 322.82 ms, 324.01 ms |
+| General Translation | 446.95 ms | 441.95 ms, 444.66 ms, 445.98 ms, 446.95 ms, 448.23 ms, 451.42 ms, 457.54 ms |
 
 ## Medium
 
@@ -73,18 +78,20 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 23.80 ms | 22.10 ms, 22.54 ms, 23.66 ms, 23.80 ms, 24.25 ms, 24.63 ms, 25.56 ms |
-| Lingui | 836.69 ms | 780.12 ms, 780.14 ms, 794.75 ms, 836.69 ms, 906.33 ms, 962.97 ms, 1360.12 ms |
-| React Intl | 344.09 ms | 312.58 ms, 316.73 ms, 318.45 ms, 344.09 ms, 366.44 ms, 387.45 ms, 406.69 ms |
-| i18next-cli | 658.40 ms | 644.07 ms, 653.17 ms, 657.99 ms, 658.40 ms, 659.38 ms, 668.03 ms, 671.15 ms |
-| General Translation | 669.27 ms | 649.28 ms, 655.84 ms, 667.24 ms, 669.27 ms, 670.92 ms, 727.25 ms, 732.79 ms |
+| Palamedes | 21.12 ms | 17.26 ms, 19.77 ms, 20.99 ms, 21.12 ms, 21.22 ms, 21.50 ms, 21.75 ms |
+| Lingui | 691.20 ms | 680.59 ms, 684.20 ms, 686.67 ms, 691.20 ms, 692.26 ms, 693.95 ms, 699.74 ms |
+| React Intl | 246.85 ms | 244.15 ms, 246.15 ms, 246.44 ms, 246.85 ms, 246.89 ms, 246.94 ms, 247.49 ms |
+| fbtee | 1058.43 ms | 1054.77 ms, 1057.61 ms, 1058.24 ms, 1058.43 ms, 1058.91 ms, 1061.71 ms, 1070.37 ms |
+| i18next-cli | 518.95 ms | 511.84 ms, 514.43 ms, 517.36 ms, 518.95 ms, 523.54 ms, 539.47 ms, 565.90 ms |
+| General Translation | 510.98 ms | 506.93 ms, 506.98 ms, 510.12 ms, 510.98 ms, 511.56 ms, 512.95 ms, 533.51 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 35.15x |
-| Palamedes vs React Intl | Palamedes | 14.46x |
-| Palamedes vs i18next-cli | Palamedes | 27.66x |
-| Palamedes vs General Translation | Palamedes | 28.12x |
+| Palamedes vs Lingui | Palamedes | 32.72x |
+| Palamedes vs React Intl | Palamedes | 11.69x |
+| Palamedes vs fbtee | Palamedes | 50.11x |
+| Palamedes vs i18next-cli | Palamedes | 24.57x |
+| Palamedes vs General Translation | Palamedes | 24.19x |
 
 ### Warm
 
@@ -94,11 +101,12 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 15.16 ms | 14.62 ms, 14.69 ms, 14.87 ms, 15.16 ms, 15.32 ms, 15.60 ms, 15.87 ms |
-| Lingui | 791.67 ms | 783.12 ms, 788.94 ms, 790.53 ms, 791.67 ms, 810.85 ms, 817.33 ms, 828.66 ms |
-| React Intl | 318.12 ms | 310.95 ms, 312.10 ms, 315.64 ms, 318.12 ms, 319.38 ms, 319.51 ms, 326.24 ms |
-| i18next-cli | 663.52 ms | 647.23 ms, 648.37 ms, 653.62 ms, 663.52 ms, 683.44 ms, 684.36 ms, 687.23 ms |
-| General Translation | 654.03 ms | 636.80 ms, 638.08 ms, 645.57 ms, 654.03 ms, 655.65 ms, 656.18 ms, 682.19 ms |
+| Palamedes | 12.87 ms | 12.69 ms, 12.70 ms, 12.76 ms, 12.87 ms, 12.90 ms, 13.49 ms, 13.50 ms |
+| Lingui | 695.54 ms | 685.46 ms, 687.47 ms, 692.26 ms, 695.54 ms, 697.96 ms, 698.40 ms, 706.22 ms |
+| React Intl | 244.07 ms | 242.62 ms, 243.32 ms, 243.79 ms, 244.07 ms, 244.76 ms, 245.15 ms, 248.27 ms |
+| fbtee | 1063.72 ms | 1059.21 ms, 1061.18 ms, 1061.34 ms, 1063.72 ms, 1071.59 ms, 1073.35 ms, 1075.50 ms |
+| i18next-cli | 518.14 ms | 510.87 ms, 517.24 ms, 517.49 ms, 518.14 ms, 518.19 ms, 518.93 ms, 526.05 ms |
+| General Translation | 508.55 ms | 502.95 ms, 504.05 ms, 506.67 ms, 508.55 ms, 510.88 ms, 518.81 ms, 519.07 ms |
 
 ## Realistic
 
@@ -110,18 +118,20 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 83.89 ms | 79.00 ms, 80.99 ms, 81.17 ms, 83.89 ms, 84.54 ms, 90.73 ms, 93.56 ms |
-| Lingui | 2480.24 ms | 2368.23 ms, 2398.63 ms, 2446.92 ms, 2480.24 ms, 2484.40 ms, 2513.98 ms, 2676.59 ms |
-| React Intl | 475.85 ms | 470.60 ms, 474.34 ms, 474.89 ms, 475.85 ms, 478.50 ms, 479.73 ms, 485.53 ms |
-| i18next-cli | 6644.63 ms | 6533.40 ms, 6550.07 ms, 6567.71 ms, 6644.63 ms, 6650.12 ms, 6653.46 ms, 6665.60 ms |
-| General Translation | 6116.43 ms | 5837.31 ms, 5947.81 ms, 6069.10 ms, 6116.43 ms, 6182.59 ms, 6403.36 ms, 6897.72 ms |
+| Palamedes | 72.55 ms | 68.75 ms, 68.82 ms, 69.76 ms, 72.55 ms, 72.90 ms, 73.84 ms, 77.65 ms |
+| Lingui | 2199.62 ms | 2181.54 ms, 2195.02 ms, 2195.67 ms, 2199.62 ms, 2200.50 ms, 2200.93 ms, 2213.02 ms |
+| React Intl | 424.33 ms | 422.66 ms, 422.70 ms, 423.75 ms, 424.33 ms, 425.07 ms, 426.89 ms, 428.28 ms |
+| fbtee | 7262.88 ms | 7205.74 ms, 7244.47 ms, 7260.51 ms, 7262.88 ms, 7267.77 ms, 7277.53 ms, 7496.21 ms |
+| i18next-cli | 5817.65 ms | 5604.73 ms, 5614.93 ms, 5689.12 ms, 5817.65 ms, 5824.37 ms, 5914.40 ms, 5927.59 ms |
+| General Translation | 5107.94 ms | 4995.85 ms, 5070.69 ms, 5094.49 ms, 5107.94 ms, 5112.99 ms, 5145.49 ms, 5223.12 ms |
 
 | Comparison | Faster | Speedup |
 | --- | --- | ---: |
-| Palamedes vs Lingui | Palamedes | 29.57x |
-| Palamedes vs React Intl | Palamedes | 5.67x |
-| Palamedes vs i18next-cli | Palamedes | 79.21x |
-| Palamedes vs General Translation | Palamedes | 72.91x |
+| Palamedes vs Lingui | Palamedes | 30.32x |
+| Palamedes vs React Intl | Palamedes | 5.85x |
+| Palamedes vs fbtee | Palamedes | 100.12x |
+| Palamedes vs i18next-cli | Palamedes | 80.19x |
+| Palamedes vs General Translation | Palamedes | 70.41x |
 
 ### Warm
 
@@ -131,11 +141,12 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 
 | Tool | Median | Samples |
 | --- | ---: | --- |
-| Palamedes | 33.08 ms | 32.16 ms, 32.22 ms, 33.04 ms, 33.08 ms, 33.34 ms, 33.54 ms, 34.10 ms |
-| Lingui | 2459.89 ms | 2374.14 ms, 2390.50 ms, 2430.44 ms, 2459.89 ms, 2474.55 ms, 2509.84 ms, 2527.67 ms |
-| React Intl | 481.17 ms | 473.74 ms, 476.06 ms, 479.11 ms, 481.17 ms, 484.29 ms, 486.01 ms, 486.35 ms |
-| i18next-cli | 6708.17 ms | 6583.16 ms, 6615.68 ms, 6632.90 ms, 6708.17 ms, 6709.30 ms, 6854.99 ms, 7118.94 ms |
-| General Translation | 5877.81 ms | 5692.91 ms, 5749.60 ms, 5844.95 ms, 5877.81 ms, 5969.79 ms, 6100.26 ms, 7004.54 ms |
+| Palamedes | 46.72 ms | 42.37 ms, 45.08 ms, 45.64 ms, 46.72 ms, 48.76 ms, 49.32 ms, 49.35 ms |
+| Lingui | 2221.88 ms | 2162.47 ms, 2171.67 ms, 2202.95 ms, 2221.88 ms, 2258.80 ms, 2292.91 ms, 2371.13 ms |
+| React Intl | 422.57 ms | 420.60 ms, 420.91 ms, 422.50 ms, 422.57 ms, 430.79 ms, 434.07 ms, 441.81 ms |
+| fbtee | 7246.06 ms | 7206.95 ms, 7231.17 ms, 7244.83 ms, 7246.06 ms, 7276.14 ms, 7292.60 ms, 7322.71 ms |
+| i18next-cli | 5909.26 ms | 5812.96 ms, 5825.22 ms, 5853.52 ms, 5909.26 ms, 6015.62 ms, 6042.08 ms, 6115.17 ms |
+| General Translation | 4953.04 ms | 4798.36 ms, 4862.73 ms, 4943.19 ms, 4953.04 ms, 4985.14 ms, 5013.96 ms, 5127.44 ms |
 
 ## Notes
 
@@ -143,6 +154,7 @@ This lane is **not** a like-for-like speed comparison and is deliberately exclud
 - Cold runs clear every tool cache alongside the catalogs. The source corpus is generated once per profile and never changes, so a retained cache would be hit by every run after the first and would silently turn the cold medians into warm ones.
 - The i18next-cli corpus uses natural-language keys so semantic comparison can normalize active messages; key-based application architectures may have different catalog shapes.
 - **React Intl covers less work than every other lane.** `formatjs extract` writes one aggregated extracted-message JSON artifact and never reads or merges a locale catalog, so its median is not comparable to the catalog-update medians around it and must not be read as one.
+- The fbtee lane times its official two-command local workflow: `fbtee collect` followed by `fbtee prepare-translations`. It updates en/de JSON catalogs like the full lanes, but pays two Node process startups and drops removed hash entries instead of retaining obsolete catalog history.
 - The General Translation lane runs `gtx-cli generate`, which extracts and merges en/de catalogs entirely locally with no API key and no network access. It is GT's path for teams handling their own translations; GT's default workflow (`gtx-cli translate`) sends content to the GT API and is deliberately out of scope here.
 - The harness reports source-message equivalence after each run instead of assuming every parser extracts the same result.
 - Raw samples and Palamedes timing breakdowns are stored in the accompanying JSON output.

@@ -2,7 +2,7 @@
   "name": "@palamedes/benchmark-e2e-workflow",
   "private": true,
   "type": "module",
-  "description": "End-to-end extraction workflow benchmark for Palamedes, Lingui, React Intl, i18next-cli, and General Translation",
+  "description": "End-to-end extraction workflow benchmark for Palamedes, Lingui, React Intl, fbtee, i18next-cli, and General Translation",
   "engines": {
     "node": ">=22.22.0"
   },
@@ -17,6 +17,8 @@
     "@lingui/cli": "6.6.0",
     "@lingui/conf": "6.6.0",
     "@lingui/format-po": "6.6.0",
+    "@nkzw/fbtee-cli": "3.0.1",
+    "fbtee": "3.0.1",
     "gt-react": "11.1.6",
     "gtx-cli": "2.16.4",
     "i18next-cli": "1.69.0"

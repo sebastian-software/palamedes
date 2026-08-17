@@ -170,7 +170,7 @@ export default async function CheckoutHeading({ seats }) {
   {
     slug: "i18n-performance",
     icon: "browser-flash",
-    metaTitle: "i18n extraction performance — 29× faster on a checked benchmark",
+    metaTitle: "i18n extraction performance — 30× faster on a checked benchmark",
     metaDescription:
       "Message extraction runs on every build and every pre-commit hook, and on a large codebase it is seconds each time. Palamedes runs extraction and catalog merging in a Rust core, with a benchmark you can re-run yourself.",
     eyebrow: "Topic · Performance",
@@ -227,7 +227,7 @@ export default async function CheckoutHeading({ seats }) {
       },
       {
         q: "Which tools are covered?",
-        a: "Lingui, React Intl, i18next-cli and General Translation. Tools the harness has not measured are not given a speed claim anywhere on this site, because a guess dressed as a benchmark is worse than no number.",
+        a: "Lingui, React Intl, fbtee, i18next-cli and General Translation. Tools the harness has not measured are not given a speed claim anywhere on this site, because a guess dressed as a benchmark is worse than no number.",
       },
       {
         q: "Does faster extraction mean a smaller bundle?",
