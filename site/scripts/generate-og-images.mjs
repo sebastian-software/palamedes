@@ -29,7 +29,9 @@ const outDir = join(siteRoot, "public/og")
 function readTopics() {
   const source = readFileSync(join(siteRoot, "app/data/topics.ts"), "utf8")
   const topics = []
-  for (const match of source.matchAll(/slug: "([^"]+)",\n\s*metaTitle:\s*(?:`|")([^`"]+)/gu)) {
+  for (const match of source.matchAll(
+    /slug: "([^"]+)",\n(?:\s*icon: "[^"]+",\n)?\s*metaTitle:\s*(?:`|")([^`"]+)/gu
+  )) {
     const [, slug, metaTitle] = match
     // The part before the em dash is the claim; the rest is supporting detail.
     const headline = metaTitle.split(" — ")[0].trim()
