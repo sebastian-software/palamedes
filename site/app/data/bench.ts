@@ -30,7 +30,7 @@ export interface BenchCorpus {
    * checked-in report by scripts/verify-site-bench-data.mjs, so numbers quoted
    * in prose can't silently drift.
    */
-  ratios: { lingui: string; formatjs: string; i18nextCli: string; gt: string }
+  ratios: { lingui: string; formatjs: string; fbtee: string; i18nextCli: string; gt: string }
 }
 
 /*
@@ -55,8 +55,8 @@ export interface BenchWarm {
 }
 
 export const BENCH_META = {
-  generated: "2026-08-05",
-  node: "v24.18.0",
+  generated: "2026-08-14",
+  node: "v24.19.0",
   platform: "darwin/arm64",
   runs: 7,
   reportPath: "benchmarks/e2e-workflow/results/latest.md",
@@ -76,7 +76,7 @@ export const BENCH_SMALL: BenchCorpus = {
   rows: [
     {
       tool: "Palamedes",
-      medianMs: 14.11,
+      medianMs: 11.93,
       accent: true,
       displayName: "Palamedes",
       scope: "extract + catalog update",
@@ -85,7 +85,7 @@ export const BENCH_SMALL: BenchCorpus = {
     },
     {
       tool: "Lingui",
-      medianMs: 747.18,
+      medianMs: 618.1,
       displayName: "Lingui",
       scope: "extract + catalog update",
       sameScope: true,
@@ -93,34 +93,43 @@ export const BENCH_SMALL: BenchCorpus = {
     },
     {
       tool: "React Intl",
-      medianMs: 288.59,
+      medianMs: 229.11,
       displayName: "React Intl",
       scope: "extraction only · narrower scope",
       sameScope: false,
       order: 1,
     },
     {
+      tool: "fbtee",
+      medianMs: 537.28,
+      displayName: "fbtee",
+      scope: "collect + two-catalog update · two CLI commands",
+      sameScope: true,
+      order: 3,
+    },
+    {
       tool: "i18next-cli",
-      medianMs: 625.87,
+      medianMs: 326.62,
       displayName: "i18next-cli",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 5,
+    },
+    {
+      tool: "General Translation",
+      medianMs: 443.86,
+      displayName: "GT",
       scope: "extract + catalog update",
       sameScope: true,
       order: 4,
     },
-    {
-      tool: "General Translation",
-      medianMs: 577.89,
-      displayName: "GT",
-      scope: "extract + catalog update",
-      sameScope: true,
-      order: 3,
-    },
   ],
   ratios: {
-    lingui: "52.94×",
-    formatjs: "20.45×",
-    i18nextCli: "44.35×",
-    gt: "40.95×",
+    lingui: "51.83×",
+    formatjs: "19.21×",
+    fbtee: "45.05×",
+    i18nextCli: "27.39×",
+    gt: "37.22×",
   },
 }
 
@@ -131,7 +140,7 @@ export const BENCH_MEDIUM: BenchCorpus = {
   rows: [
     {
       tool: "Palamedes",
-      medianMs: 23.8,
+      medianMs: 21.12,
       accent: true,
       displayName: "Palamedes",
       scope: "extract + catalog update",
@@ -140,7 +149,7 @@ export const BENCH_MEDIUM: BenchCorpus = {
     },
     {
       tool: "Lingui",
-      medianMs: 836.69,
+      medianMs: 691.2,
       displayName: "Lingui",
       scope: "extract + catalog update",
       sameScope: true,
@@ -148,34 +157,43 @@ export const BENCH_MEDIUM: BenchCorpus = {
     },
     {
       tool: "React Intl",
-      medianMs: 344.09,
+      medianMs: 246.85,
       displayName: "React Intl",
       scope: "extraction only · narrower scope",
       sameScope: false,
       order: 1,
     },
     {
+      tool: "fbtee",
+      medianMs: 1058.43,
+      displayName: "fbtee",
+      scope: "collect + two-catalog update · two CLI commands",
+      sameScope: true,
+      order: 3,
+    },
+    {
       tool: "i18next-cli",
-      medianMs: 658.4,
+      medianMs: 518.95,
       displayName: "i18next-cli",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 5,
+    },
+    {
+      tool: "General Translation",
+      medianMs: 510.98,
+      displayName: "GT",
       scope: "extract + catalog update",
       sameScope: true,
       order: 4,
     },
-    {
-      tool: "General Translation",
-      medianMs: 669.27,
-      displayName: "GT",
-      scope: "extract + catalog update",
-      sameScope: true,
-      order: 3,
-    },
   ],
   ratios: {
-    lingui: "35.15×",
-    formatjs: "14.46×",
-    i18nextCli: "27.66×",
-    gt: "28.12×",
+    lingui: "32.72×",
+    formatjs: "11.69×",
+    fbtee: "50.11×",
+    i18nextCli: "24.57×",
+    gt: "24.19×",
   },
 }
 
@@ -186,7 +204,7 @@ export const BENCH_REALISTIC: BenchCorpus = {
   rows: [
     {
       tool: "Palamedes",
-      medianMs: 83.89,
+      medianMs: 72.55,
       accent: true,
       displayName: "Palamedes",
       scope: "extract + catalog update",
@@ -195,7 +213,7 @@ export const BENCH_REALISTIC: BenchCorpus = {
     },
     {
       tool: "Lingui",
-      medianMs: 2480.24,
+      medianMs: 2199.62,
       displayName: "Lingui",
       scope: "extract + catalog update",
       sameScope: true,
@@ -203,34 +221,43 @@ export const BENCH_REALISTIC: BenchCorpus = {
     },
     {
       tool: "React Intl",
-      medianMs: 475.85,
+      medianMs: 424.33,
       displayName: "React Intl",
       scope: "extraction only · narrower scope",
       sameScope: false,
       order: 1,
     },
     {
+      tool: "fbtee",
+      medianMs: 7262.88,
+      displayName: "fbtee",
+      scope: "collect + two-catalog update · two CLI commands",
+      sameScope: true,
+      order: 3,
+    },
+    {
       tool: "i18next-cli",
-      medianMs: 6644.63,
+      medianMs: 5817.65,
       displayName: "i18next-cli",
+      scope: "extract + catalog update",
+      sameScope: true,
+      order: 5,
+    },
+    {
+      tool: "General Translation",
+      medianMs: 5107.94,
+      displayName: "GT",
       scope: "extract + catalog update",
       sameScope: true,
       order: 4,
     },
-    {
-      tool: "General Translation",
-      medianMs: 6116.43,
-      displayName: "GT",
-      scope: "extract + catalog update",
-      sameScope: true,
-      order: 3,
-    },
   ],
   ratios: {
-    lingui: "29.57×",
-    formatjs: "5.67×",
-    i18nextCli: "79.21×",
-    gt: "72.91×",
+    lingui: "30.32×",
+    formatjs: "5.85×",
+    fbtee: "100.12×",
+    i18nextCli: "80.19×",
+    gt: "70.41×",
   },
 }
 
@@ -244,24 +271,24 @@ export const BENCH_SMALL_WARM: BenchWarm = {
   id: "small",
   corpus: "80 files, 640 messages",
   touchedFiles: 5,
-  coldMs: 14.11,
-  warmMs: 10.76,
+  coldMs: 11.93,
+  warmMs: 9.09,
 }
 
 export const BENCH_MEDIUM_WARM: BenchWarm = {
   id: "medium",
   corpus: "240 files, 1920 messages",
   touchedFiles: 5,
-  coldMs: 23.8,
-  warmMs: 15.16,
+  coldMs: 21.12,
+  warmMs: 12.87,
 }
 
 export const BENCH_REALISTIC_WARM: BenchWarm = {
   id: "realistic",
   corpus: "1,500 files (750 with i18n), ~400k lines, 6,000 messages",
   touchedFiles: 5,
-  coldMs: 83.89,
-  warmMs: 33.08,
+  coldMs: 72.55,
+  warmMs: 46.72,
 }
 
 export function displayBenchmarkTime(ms: number): string {

@@ -1,9 +1,10 @@
 /*
- * Guards site/app/data/bench.ts against silent drift from the checked-in
- * benchmark report. Parses the cold median tables, the warm lane, and the
- * speedup tables in benchmarks/e2e-workflow/results/latest.md and fails the
- * site build when the hardcoded constants no longer match, so updating the
- * report forces a conscious copy edit on the site.
+ * Guards site/app/data/bench.ts and prose quoting exact benchmark figures
+ * against silent drift from the checked-in benchmark report. Parses the cold
+ * median tables, the warm lane, and the speedup tables in
+ * benchmarks/e2e-workflow/results/latest.md and fails the site build when the
+ * hardcoded values no longer match, so updating the report forces a conscious
+ * copy edit on every guarded surface.
  *
  * Speedup ratios come from the cold lane only. Warm numbers describe a
  * capability the compared tools do not have and must never reach a ratio, so
@@ -23,16 +24,19 @@ const reportPath = join(repoRoot, "benchmarks/e2e-workflow/results/latest.md")
 const benchTsPath = join(repoRoot, "site/app/data/bench.ts")
 const readmePath = join(repoRoot, "README.md")
 const benchmarkLedgerPath = join(repoRoot, "site/app/components/proof/BenchmarkLedger.tsx")
+const fbteeDossierPath = join(repoRoot, "docs/research/competitors/frameworks/fbtee.md")
 
 const report = readFileSync(reportPath, "utf8")
 const benchTs = readFileSync(benchTsPath, "utf8")
 const readme = readFileSync(readmePath, "utf8")
 const benchmarkLedger = readFileSync(benchmarkLedgerPath, "utf8")
-const tools = ["Palamedes", "Lingui", "React Intl", "i18next-cli", "General Translation"]
+const fbteeDossier = readFileSync(fbteeDossierPath, "utf8")
+const tools = ["Palamedes", "Lingui", "React Intl", "fbtee", "i18next-cli", "General Translation"]
 const comparedTools = tools.filter((tool) => tool !== "Palamedes")
 const ratioFields = {
   Lingui: "lingui",
   "React Intl": "formatjs",
+  fbtee: "fbtee",
   "i18next-cli": "i18nextCli",
   "General Translation": "gt",
 }
@@ -107,8 +111,8 @@ function parseWarmLane(name) {
 function fail(message) {
   console.error(`verify-site-bench-data: ${message}`)
   console.error(
-    "The benchmark report and site/app/data/bench.ts have diverged. " +
-      "Update the constants in bench.ts (and any prose quoting them) to match the report."
+    "The benchmark report and a guarded publication surface have diverged. " +
+      "Update the constants in bench.ts and any prose quoting them to match the report."
   )
   process.exit(1)
 }
@@ -232,6 +236,21 @@ function parseBenchWarm(name) {
   return values
 }
 
+function parseFbteeDossierClaim() {
+  const text = fbteeDossier.replace(/\s+/gu, " ")
+  const match = text.match(
+    /seven-run cold median was ([\d,.]+) ms for fbtee and ([\d,.]+) ms for Palamedes, a ([\d.]+)x result/u
+  )
+  if (!match) {
+    fail(`could not parse the realistic benchmark claim from ${fbteeDossierPath}`)
+  }
+  return {
+    fbteeMedianMs: Number(match[1].replaceAll(",", "")),
+    palamedesMedianMs: Number(match[2].replaceAll(",", "")),
+    speedup: match[3],
+  }
+}
+
 function expect(label, condition) {
   if (!condition) {
     fail(`mismatch: ${label}`)
@@ -244,6 +263,7 @@ const realistic = parseSection("Realistic")
 const benchSmall = parseBenchSection("SMALL")
 const benchMedium = parseBenchSection("MEDIUM")
 const benchRealistic = parseBenchSection("REALISTIC")
+const fbteeDossierClaim = parseFbteeDossierClaim()
 
 const checks = []
 for (const [profile, reported, hardcoded] of [
@@ -255,6 +275,21 @@ for (const [profile, reported, hardcoded] of [
     checks.push([`${profile} ${tool} median`, reported.medians[tool], hardcoded.medians[tool]])
   }
 }
+
+for (const [label, reported, quoted] of [
+  [
+    "fbtee dossier Palamedes median",
+    realistic.medians.Palamedes,
+    fbteeDossierClaim.palamedesMedianMs,
+  ],
+  ["fbtee dossier fbtee median", realistic.medians.fbtee, fbteeDossierClaim.fbteeMedianMs],
+]) {
+  expect(`${label}: report says ${reported}, dossier says ${quoted}`, reported === quoted)
+}
+expect(
+  `fbtee dossier speedup: report says ${realistic.speedups.fbtee}x, dossier says ${fbteeDossierClaim.speedup}x`,
+  realistic.speedups.fbtee === fbteeDossierClaim.speedup
+)
 
 for (const [label, reported, hardcoded] of checks) {
   expect(`${label}: report says ${reported}, bench.ts says ${hardcoded}`, reported === hardcoded)
@@ -320,4 +355,4 @@ expect(
   benchmarkLedger.includes("displayBenchmarkTime(row.medianMs)")
 )
 
-console.log("verify-site-bench-data: bench.ts and README match latest.md")
+console.log("verify-site-bench-data: guarded benchmark surfaces match latest.md")

@@ -13,9 +13,9 @@ export const handle = { layout: "bare" }
 export function meta() {
   return pageMeta({
     title:
-      "Palamedes compared — Lingui, i18next, next-intl, React Intl, Paraglide, Intlayer, Tolgee",
+      "Palamedes compared — Lingui, fbtee, i18next, next-intl, React Intl, Paraglide, Intlayer, Tolgee",
     description:
-      "Side-by-side comparisons of Palamedes with the major TypeScript i18n libraries: 5× to 79× faster on a checked benchmark, with what each of them does better and when to pick them instead.",
+      "Side-by-side comparisons of Palamedes with the major TypeScript i18n libraries: 5× to 100× faster on a checked benchmark, with what each of them does better and when to pick them instead.",
     path: "/compare",
   })
 }
@@ -29,7 +29,8 @@ const NOT_FOR_YOU = [
   },
   {
     case: "You ship React Native",
-    answer: "There is no React Native adapter here. Lingui and i18next both support it today.",
+    answer:
+      "There is no React Native adapter here. fbtee has an explicit Expo path, while Lingui and i18next also support React Native today.",
   },
   {
     case: "Kilobytes are your hard constraint",
@@ -57,9 +58,9 @@ export default function Compare() {
         </h1>
         <p className="mt-6 max-w-[42em]">
           Palamedes combines broad framework and workflow coverage with fewer competing concepts. It
-          is measured faster than the four workflows covered by the checked benchmark — 5× to 79×,
+          is measured faster than the five workflows covered by the checked benchmark — 5× to 100×,
           depending on the measured workflow. The 5× React Intl reference is extraction-only; the
-          three catalog-update workflows span 29× to 79×. Both the product boundary and the
+          four catalog-update workflows span 30× to 100×. Both the product boundary and the
           benchmark scope are explicit. Every page below states what the other project earned, what
           that strength costs its users, and where we would send you elsewhere.
         </p>

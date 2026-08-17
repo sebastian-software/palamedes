@@ -94,7 +94,7 @@ function publicFactor(key: keyof typeof BENCH_REALISTIC.ratios): string {
 }
 
 const NO_BENCHMARK =
-  "Not measured. The checked harness covers Lingui, React Intl, i18next-cli, and General Translation; anything else would be a guess."
+  "Not measured. The checked harness covers Lingui, React Intl, fbtee, i18next-cli, and General Translation; anything else would be a guess."
 
 /*
  * The argument that applies to every page: extraction and catalog work is
@@ -104,7 +104,7 @@ const NO_BENCHMARK =
  */
 export const NATIVE_SHIFT = {
   title: "The toolchain already moved. i18n tooling mostly hasn't.",
-  body: `Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation. In the checked benchmark it is 5× faster than the narrower extraction-only React Intl lane and 29× to 79× faster than the three same-scope catalog-update workflows.`,
+  body: `Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation. In the checked benchmark it is 5× faster than the narrower extraction-only React Intl lane and 30× to 100× faster than the four catalog-update workflows.`,
 }
 
 export const RIVALS: Rival[] = [
@@ -228,6 +228,137 @@ function checkoutLabel(seats) {
       label: "Migration playbook",
       href: "/docs/migrate-from-lingui",
     },
+  },
+  {
+    slug: "fbtee",
+    name: "fbtee",
+    subject:
+      "fbtee 3.0.1 / @nkzw/fbtee-cli 3.0.1 / @nkzw/babel-preset-fbtee 3.0.1 / @nkzw/swc-plugin-fbtee 3.0.1",
+    researched: "August 2026",
+    metaTitle: "Palamedes vs fbtee — FBT grammar or a PO/ICU workflow?",
+    metaDescription:
+      "fbtee modernizes Facebook FBT with React, Expo and grammar-specific primitives. Palamedes favors standard PO/ICU catalogs and one native workflow. Compare the code, tradeoffs and checked benchmark.",
+    eyebrow: "Compare · fbtee",
+    headline: "Grammar in JSX, or standards through the pipeline.",
+    lede: "fbtee and Palamedes start from the same useful instinct: keep the sentence beside the interface and let a compiler do the bookkeeping. They disagree about where localization grammar should live. fbtee puts a purpose-built FBT language into JSX and compiles it into hashed JSON tables. Palamedes uses ICU messages, source-readable catalogs and one native engine from extraction through compilation.",
+    card: "The modern FBT continuation — explicit grammar primitives and Expo support against standard PO/ICU catalogs and one native workflow.",
+    facts: [
+      { label: "Licence", value: "MIT" },
+      { label: "Grammar model", value: "FBT primitives and IR" },
+      { label: "Catalogs", value: "Hash-keyed JSON" },
+      {
+        label: "Checked benchmark",
+        value: `${publicFactor("fbtee")} slower`,
+      },
+    ],
+    thesis:
+      "fbtee is the strongest current argument that source-local authoring needs more grammar, not less. Its plural, pronoun, enum, list and rich-text primitives encode translation intent explicitly and inherit a model proven at Facebook scale. Palamedes makes the opposite portability bet: keep the compiler-specific surface small, keep durable catalogs legible as PO or FCL, and carry ICU semantics through one engine that also owns merges, audits, diagnostics and compilation. The right choice is which layer you want to own your localization model.",
+    respectTitle: "What fbtee earned",
+    respect: [
+      "A grammar-first message model with dedicated plurals, gendered pronouns, enums, lists and nested React elements — not conventions layered onto a string lookup.",
+      "A credible modern continuation of Facebook FBT, with React 19, TypeScript, Vite, Next.js, Babel, SWC and an explicit Expo path rather than an archival compatibility fork.",
+      "A practical repository-local translation flow: missing work is added to locale JSON with a status marker that coding agents can complete and reviewers can inspect in a normal diff.",
+    ],
+    flipsideTitle: "What that model asks you to adopt",
+    flipside: [
+      "The grammar is an FBT-specific JSX and function vocabulary. It is expressive, but the authoring model and compiled IR are tied to this toolchain rather than shared with ICU implementations outside JavaScript.",
+      "Editable locale files are keyed by hashes of source text and required descriptions. The source remains available in each record, but the durable catalog interface is not a source-readable gettext catalog.",
+      "The local catalog path is still a JavaScript CLI pipeline: collect writes an intermediate source file, prepare-translations updates locale files, and translate compiles runtime payloads. The optional Rust/Wasm component handles source transformation, not the full catalog lifecycle.",
+    ],
+    differences: [
+      {
+        title: "Two different homes for grammar",
+        body: "fbtee makes grammatical intent visible through dedicated source primitives. That is excellent when developers should model gender, pronouns and enums explicitly. Palamedes writes plural and select semantics as ICU, so the same message grammar survives in a standard catalog vocabulary translators and non-JavaScript systems already understand.",
+      },
+      {
+        title: "Readable catalogs versus opaque identity",
+        body: "fbtee derives identity from source text plus a required description, then stores the entry under a hash. Palamedes keeps the source message itself as the PO msgid, with optional context. Both avoid invented application keys; only one leaves the durable catalog readable without knowing the compiler's hash scheme.",
+      },
+      {
+        title: "A transform is not the whole workflow",
+        body: "fbtee offers both Babel and a Rust/Wasm SWC transform, which is a real integration advantage. Palamedes puts extraction, semantic catalog merging, audits, ICU diagnostics and artifact compilation in the same Rust core, then keeps framework adapters focused on request scope, routing boundaries and rendering.",
+      },
+    ],
+    rows: [
+      {
+        criterion: "Source authoring",
+        rival: "Inline <fbt>, fbt() and fbs() with required descriptions",
+        palamedes: "Inline macros and JSX; context is optional",
+      },
+      {
+        criterion: "Grammar model",
+        rival: "FBT IR: plural, pronoun, enum, list and rich-text primitives",
+        palamedes: "ICU MessageFormat plural, select and formatter semantics",
+      },
+      {
+        criterion: "Durable catalog",
+        rival: "Hash-keyed source and locale JSON",
+        palamedes: "Source-readable PO or opt-in FCL",
+      },
+      {
+        criterion: "Toolchain",
+        rival: "Babel or Rust/Wasm SWC transform plus JavaScript CLI",
+        palamedes: "Native extraction, catalog operations, validation and compilation",
+      },
+      {
+        criterion: "React Native",
+        rival: "Documented Expo setup and template",
+        palamedes: "Not supported",
+      },
+      {
+        criterion: "Server integration",
+        rival: "React locale context plus explicit server setup",
+        palamedes: `Request-local runtime across ${contentStats.serverFrameworkCount} verified server frameworks`,
+      },
+      {
+        criterion: "Agent translation",
+        rival: "Status-marked JSON workflow documented for coding agents",
+        palamedes: "Repository-owned catalogs with source-readable context and audits",
+      },
+      {
+        criterion: "Collect + catalog update, realistic corpus",
+        rival: speedup("fbtee"),
+        palamedes: `${BENCH_REALISTIC.ratios.fbtee} faster on the checked same-inventory workflow¹`,
+      },
+    ],
+    code: {
+      caption: "Both make the plural explicit. They standardize different languages.",
+      rivalLabel: "fbtee",
+      rivalCode: `<fbt desc="Seat purchase button">
+  Buy{' '}
+  <fbt:plural
+    count={seats}
+    many="seats"
+    name="seatCount"
+    showCount="yes"
+  >
+    a seat
+  </fbt:plural>
+</fbt>`,
+      palamedesLabel: "Palamedes",
+      palamedesCode: `import { plural } from "@palamedes/core/macro"
+
+plural(seats, {
+  one: "Buy one seat",
+  other: "Buy # seats",
+})`,
+      note: "fbtee's source is more prescriptive and gives translators mandatory context; that is a strength when the team wants the FBT grammar discipline. Palamedes uses an ICU plural that remains visible in a standard catalog, with context available when the source sentence alone is insufficient.",
+    },
+    pickRival: [
+      "You ship React Native or Expo. Palamedes has no adapter there and fbtee documents the path.",
+      "FBT's dedicated gender, pronoun, enum and list primitives fit how your team wants developers to express grammar.",
+      "You are migrating an existing Facebook FBT codebase and want a modern continuation rather than an authoring-model change.",
+      "Required descriptions at every callsite are a discipline you actively want to enforce.",
+    ],
+    pickPalamedes: [
+      "Your durable translation interface should be source-readable PO or FCL rather than hash-keyed JSON.",
+      "ICU interoperability matters across languages, tools or systems outside this JavaScript application.",
+      "You want extraction, merging, audits, diagnostics and compilation to share one native catalog engine.",
+      `You need one request-local runtime model across the ${contentStats.serverFrameworkCount} verified server frameworks Palamedes supports.`,
+      `The checked local collect-and-update path matters: ${publicFactor("fbtee")} on the realistic fixture separates the two workflows on the measured machine.`,
+    ],
+    honest:
+      "fbtee supports Expo and gives developers a richer dedicated grammar vocabulary than Palamedes. If React Native or FBT's explicit pronoun and gender model is central to the product, fbtee is the better fit. Palamedes instead chooses ICU portability, source-readable catalogs and a native end-to-end catalog engine; the checked speed result applies to that local workflow only, not runtime rendering or bundle size.",
   },
   {
     slug: "i18next",
@@ -424,7 +555,8 @@ plural(seats, {
       {
         criterion: "Extract + update speed",
         rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, React Intl, i18next and General Translation",
+        palamedes:
+          "Checked report covers Lingui, React Intl, fbtee, i18next and General Translation",
       },
       {
         criterion: "Host boundary",
@@ -654,7 +786,8 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update speed",
         rival: NO_BENCHMARK,
-        palamedes: "Checked report covers Lingui, React Intl, i18next and General Translation",
+        palamedes:
+          "Checked report covers Lingui, React Intl, fbtee, i18next and General Translation",
       },
     ],
     code: {
@@ -765,7 +898,8 @@ function buyLabel(seats) {
         criterion: "Extract + update speed",
         rival:
           "Not measurable locally. `tolgee extract print` reports to the console and writes no files; catalogs arrive through `tolgee pull` from the platform.",
-        palamedes: "Checked report covers Lingui, React Intl, i18next and General Translation",
+        palamedes:
+          "Checked report covers Lingui, React Intl, fbtee, i18next and General Translation",
       },
     ],
     code: {
@@ -882,7 +1016,8 @@ function buyLabel(seats) {
       {
         criterion: "Extract + update speed",
         rival: "Not applicable — there is nothing to extract",
-        palamedes: "Checked report covers Lingui, React Intl, i18next and General Translation",
+        palamedes:
+          "Checked report covers Lingui, React Intl, fbtee, i18next and General Translation",
       },
     ],
     code: {

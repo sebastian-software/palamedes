@@ -27,17 +27,25 @@ const TOOL_LABELS = {
   palamedes: "Palamedes",
   lingui: "Lingui",
   formatjs: "React Intl",
+  fbtee: "fbtee",
   i18nextCli: "i18next-cli",
   gt: "General Translation",
 }
 
-const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "i18nextCli", "gt"]
+const TOOL_ORDER = ["palamedes", "lingui", "formatjs", "fbtee", "i18nextCli", "gt"]
 /*
- * Directories any measured tool may leave behind as reusable state. Only
- * Palamedes writes one today; the others are listed so a future cache in one of
- * them cannot quietly turn cold runs warm.
+ * Paths any measured tool may leave behind as reusable or generated state.
+ * Only Palamedes writes a reusable cache today. fbtee's collector artifacts
+ * are overwritten rather than read, but removing them pins cold runs to the
+ * same empty pre-command state instead of leaving an incidental file behind.
  */
-const TOOL_CACHE_DIRS = [".palamedes", ".lingui", "node_modules/.cache"]
+const TOOL_STATE_PATHS = [
+  ".palamedes",
+  ".lingui",
+  "node_modules/.cache",
+  ".enum_manifest.json",
+  "source_strings.json",
+]
 // Files touched before each warm run, modelling a small edit.
 const WARM_TOUCHED_FILES = 5
 
@@ -130,6 +138,8 @@ async function main() {
         toolScopes: {
           formatjs:
             "source scan, extraction, content-hash ID generation, and one aggregated extracted-message JSON write; the React Intl extraction workflow does not update locale translation catalogs, so this lane covers less work than every other lane in the table",
+          fbtee:
+            "two-command local workflow: fbtee collect scans sources and writes source_strings.json, then fbtee prepare-translations merges/updates existing en/de JSON catalogs; both Node process startups are inside the timed boundary",
           gt: "source scan, extraction, content-hash keying, and merge/update of existing en/de catalogs; gtx-cli generate runs fully locally, seeds new entries with the source text, and drops removed entries immediately instead of marking them obsolete",
           otherTools:
             "source scan, extraction, merge/update of existing en/de catalogs, and catalog writes",
@@ -198,6 +208,7 @@ async function resolveToolPaths(args) {
     palamedes: args.pmdsBin ?? path.join(repoRoot, "target", "release", `pmds${binarySuffix}`),
     lingui: path.join(benchmarkRoot, "node_modules", ".bin", `lingui${commandSuffix}`),
     formatjs: path.join(benchmarkRoot, "node_modules", ".bin", `formatjs${commandSuffix}`),
+    fbtee: path.join(benchmarkRoot, "node_modules", ".bin", `fbtee${commandSuffix}`),
     i18nextCli: path.join(benchmarkRoot, "node_modules", ".bin", `i18next-cli${commandSuffix}`),
     gt: path.join(benchmarkRoot, "node_modules", ".bin", `gtx-cli${commandSuffix}`),
   }
@@ -220,16 +231,27 @@ async function assertExecutable(tool, filename) {
 }
 
 async function readVersions(toolPaths) {
-  const [formatjsCli, linguiCli, i18nextCli, gtxCli, gtReact, benchmarkPackage, palamedesVersion] =
-    await Promise.all([
-      readJson(path.join(benchmarkRoot, "node_modules", "@formatjs", "cli", "package.json")),
-      readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "cli", "package.json")),
-      readJson(path.join(benchmarkRoot, "node_modules", "i18next-cli", "package.json")),
-      readJson(path.join(benchmarkRoot, "node_modules", "gtx-cli", "package.json")),
-      readJson(path.join(benchmarkRoot, "node_modules", "gt-react", "package.json")),
-      readJson(path.join(benchmarkRoot, "package.json")),
-      readCommandVersion(toolPaths.palamedes, ["version"]),
-    ])
+  const [
+    formatjsCli,
+    linguiCli,
+    fbteeCli,
+    fbteeRuntime,
+    i18nextCli,
+    gtxCli,
+    gtReact,
+    benchmarkPackage,
+    palamedesVersion,
+  ] = await Promise.all([
+    readJson(path.join(benchmarkRoot, "node_modules", "@formatjs", "cli", "package.json")),
+    readJson(path.join(benchmarkRoot, "node_modules", "@lingui", "cli", "package.json")),
+    readJson(path.join(benchmarkRoot, "node_modules", "@nkzw", "fbtee-cli", "package.json")),
+    readJson(path.join(benchmarkRoot, "node_modules", "fbtee", "package.json")),
+    readJson(path.join(benchmarkRoot, "node_modules", "i18next-cli", "package.json")),
+    readJson(path.join(benchmarkRoot, "node_modules", "gtx-cli", "package.json")),
+    readJson(path.join(benchmarkRoot, "node_modules", "gt-react", "package.json")),
+    readJson(path.join(benchmarkRoot, "package.json")),
+    readCommandVersion(toolPaths.palamedes, ["version"]),
+  ])
 
   return {
     benchmarkPackage: benchmarkPackage.name,
@@ -241,6 +263,10 @@ async function readVersions(toolPaths) {
     },
     formatjs: {
       cli: formatjsCli.version,
+    },
+    fbtee: {
+      cli: fbteeCli.version,
+      runtime: fbteeRuntime.version,
     },
     i18nextCli: {
       cli: i18nextCli.version,
@@ -269,6 +295,9 @@ async function validateCorpus(corpus, toolPaths) {
     }
     tools[tool] = {
       activeMessagesByTarget,
+      ...(tool === "fbtee"
+        ? { preservedTranslations: await readFbteePreservedTranslations(corpus) }
+        : {}),
       ...(tool === "gt"
         ? { preservedTranslations: await readGtPreservedTranslations(corpus) }
         : {}),
@@ -279,6 +308,22 @@ async function validateCorpus(corpus, toolPaths) {
     expectedActiveMessages: corpus.currentMessages.length,
     tools,
   }
+}
+
+async function readFbteePreservedTranslations(corpus) {
+  const catalog = await readJson(path.join(corpus.roots.fbtee, "src", "locales", "de.json"))
+  const preserved = Object.values(catalog.translations).filter((entry) =>
+    entry.translations.some((variation) => variation.translation.startsWith("[de] "))
+  ).length
+  const expected = corpus.sourceMessageCount - corpus.changedCount - corpus.newCount
+
+  if (preserved !== expected) {
+    throw new Error(
+      `${corpus.profileName}/fbtee: expected the merge to preserve ${expected} existing translations, found ${preserved}`
+    )
+  }
+
+  return preserved
 }
 
 /*
@@ -398,8 +443,8 @@ async function resetCatalogs(rootDir) {
  */
 async function resetWorkspace(rootDir) {
   await resetCatalogs(rootDir)
-  for (const cacheDir of TOOL_CACHE_DIRS) {
-    await rm(path.join(rootDir, cacheDir), { recursive: true, force: true })
+  for (const statePath of TOOL_STATE_PATHS) {
+    await rm(path.join(rootDir, statePath), { recursive: true, force: true })
   }
 }
 
@@ -456,6 +501,39 @@ async function runTool(tool, cwd, toolPaths) {
         { cwd }
       )
     }
+    case "fbtee": {
+      const collected = await runCommand(
+        toolPaths.fbtee,
+        [
+          "collect",
+          "--src",
+          "src/generated",
+          "--out",
+          "source_strings.json",
+          "--include-default-strings=false",
+          "--disable-babel-config",
+        ],
+        { cwd }
+      )
+      const prepared = await runCommand(
+        toolPaths.fbtee,
+        [
+          "prepare-translations",
+          "--source-strings",
+          "source_strings.json",
+          "--output-dir",
+          "src/locales",
+          "--locales",
+          "en",
+          "de",
+        ],
+        { cwd }
+      )
+      return {
+        stdout: `${collected.stdout}${prepared.stdout}`,
+        stderr: `${collected.stderr}${prepared.stderr}`,
+      }
+    }
     case "i18nextCli": {
       return runCommand(
         toolPaths.i18nextCli,
@@ -492,6 +570,20 @@ async function readActiveMessages(tool, rootDir, locale) {
   if (tool === "i18nextCli") {
     const catalog = await readJson(path.join(rootDir, "src", "locales", locale, "translation.json"))
     return Object.keys(catalog).sort()
+  }
+
+  if (tool === "fbtee") {
+    const sourceStrings = await readJson(path.join(rootDir, "source_strings.json"))
+    const messagesByKey = new Map()
+    for (const phrase of sourceStrings.phrases ?? []) {
+      for (const [key, leaf] of Object.entries(phrase.hashToLeaf ?? {})) {
+        messagesByKey.set(key, leaf.text)
+      }
+    }
+    const catalog = await readJson(path.join(rootDir, "src", "locales", `${locale}.json`))
+    return Object.keys(catalog.translations)
+      .map((key) => messagesByKey.get(key) ?? `<key ${key} missing from source_strings.json>`)
+      .sort()
   }
 
   /*
@@ -567,6 +659,7 @@ function toolVersion(tool, versions) {
   if (tool === "palamedes") return versions.palamedes.cli
   if (tool === "lingui") return versions.lingui.cli
   if (tool === "formatjs") return versions.formatjs.cli
+  if (tool === "fbtee") return versions.fbtee.cli
   if (tool === "gt") return versions.gt.cli
   return versions.i18nextCli.cli
 }
@@ -666,6 +759,7 @@ function renderMarkdown(report) {
     `- Palamedes CLI: ${report.versions.palamedes.cli}`,
     `- Lingui CLI: ${report.versions.lingui.cli}`,
     `- React Intl extraction CLI (@formatjs/cli): ${report.versions.formatjs.cli}`,
+    `- fbtee CLI (@nkzw/fbtee-cli): ${report.versions.fbtee.cli} (corpus authored against fbtee ${report.versions.fbtee.runtime})`,
     `- i18next-cli: ${report.versions.i18nextCli.cli}`,
     `- General Translation CLI (gtx-cli): ${report.versions.gt.cli} (corpus authored against gt-react ${report.versions.gt.react})`,
     "",
@@ -676,6 +770,7 @@ function renderMarkdown(report) {
     `- Reset: ${report.methodology.reset}`,
     `- Semantic check: ${report.methodology.semanticCheck}`,
     `- React Intl scope: ${report.methodology.toolScopes.formatjs}`,
+    `- fbtee scope: ${report.methodology.toolScopes.fbtee}`,
     `- General Translation scope: ${report.methodology.toolScopes.gt}`,
     `- Other tool scope: ${report.methodology.toolScopes.otherTools}`,
   ]
@@ -762,6 +857,9 @@ function renderMarkdown(report) {
   )
   lines.push(
     "- **React Intl covers less work than every other lane.** `formatjs extract` writes one aggregated extracted-message JSON artifact and never reads or merges a locale catalog, so its median is not comparable to the catalog-update medians around it and must not be read as one."
+  )
+  lines.push(
+    "- The fbtee lane times its official two-command local workflow: `fbtee collect` followed by `fbtee prepare-translations`. It updates en/de JSON catalogs like the full lanes, but pays two Node process startups and drops removed hash entries instead of retaining obsolete catalog history."
   )
   lines.push(
     "- The General Translation lane runs `gtx-cli generate`, which extracts and merges en/de catalogs entirely locally with no API key and no network access. It is GT's path for teams handling their own translations; GT's default workflow (`gtx-cli translate`) sends content to the GT API and is deliberately out of scope here."
