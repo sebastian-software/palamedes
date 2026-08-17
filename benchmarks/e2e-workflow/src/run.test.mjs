@@ -2,10 +2,13 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  fbteeTextHash,
   formatJsId,
+  renderFbteeSource,
   renderGtSource,
   renderLinguiSource,
   renderPalamedesSource,
+  toFbteeBaselineTranslations,
   toFormatJsCatalog,
   toGtBaselineCatalog,
 } from "./corpus.mjs"
@@ -116,6 +119,42 @@ test("General Translation baseline reuses real keys and synthesizes stale ones",
   const staleKey = Object.keys(catalog).find((key) => key !== "aaaabbbbccccdddd")
   assert.match(staleKey, /^[0-9a-f]{16}$/u, "a stale entry must look like a GT content hash")
   assert.equal(catalog[staleKey], "Previous message")
+})
+
+test("fbtee lane authors every message exactly once with required descriptions", () => {
+  const source = renderFbteeSource(1, SAMPLE_MESSAGES, "tsx", 0)
+
+  for (const message of SAMPLE_MESSAGES) {
+    const occurrences = source.split(message.current).length - 1
+    assert.equal(occurrences, 1, `${message.current} must be authored exactly once`)
+  }
+  assert.match(source, /import \{ fbs \} from "fbtee"/u)
+  assert.ok(source.includes('<fbt desc="Workflow benchmark message">Plain toolbar message</fbt>'))
+  assert.ok(source.includes('fbs("Hello {name}, welcome back", "Workflow benchmark message")'))
+})
+
+test("fbtee lane skips <fbt> when every message carries a literal placeholder", () => {
+  const interpolated = SAMPLE_MESSAGES.filter((entry) => entry.current.includes("{name}"))
+  const source = renderFbteeSource(1, interpolated, "tsx", 0)
+
+  assert.ok(!source.includes("<fbt"), "no <fbt> may duplicate an fbs-authored message")
+  assert.equal(source.match(/fbs\(/gu)?.length, interpolated.length)
+})
+
+test("fbtee baseline reuses collected keys and hashes stale source identities", () => {
+  const currentKeys = new Map([["Unchanged message", "real-current-key"]])
+  const catalog = toFbteeBaselineTranslations(
+    ["Unchanged message", "Previous message"],
+    currentKeys,
+    "de"
+  )
+
+  assert.equal(catalog["real-current-key"].translations[0].translation, "[de] Unchanged message")
+
+  const staleKey = fbteeTextHash("Previous message")
+  assert.equal(catalog[staleKey].description, "Workflow benchmark message")
+  assert.equal(catalog[staleKey].status, "translated")
+  assert.equal(catalog[staleKey].translations[0].translation, "[de] Previous message")
 })
 
 test("parsePoMsgids reads multiline ICU msgids", () => {

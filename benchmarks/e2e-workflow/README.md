@@ -6,15 +6,22 @@ would run to update catalogs:
 - Palamedes: `pmds extract`
 - Lingui: `lingui extract`
 - React Intl: `formatjs extract`
+- fbtee: `fbtee collect` + `fbtee prepare-translations`
 - i18next-cli: `i18next-cli extract`
 - General Translation: `gtx-cli generate`
 
 The harness generates the same logical source inventory for each tool, renders
 it into each tool's idiomatic source shape, resets catalogs before every timed
 run, then measures scan, extract, and output writes together. Palamedes, Lingui,
-i18next-cli, and General Translation update `en` and `de` catalogs. The React
-Intl lane uses `@formatjs/cli` to write one aggregated extracted-message JSON
-artifact instead; the generated report records that narrower scope explicitly.
+fbtee, i18next-cli, and General Translation update `en` and `de` catalogs. The
+React Intl lane uses `@formatjs/cli` to write one aggregated extracted-message
+JSON artifact instead; the generated report records that narrower scope
+explicitly.
+
+The fbtee lane measures its official two-command local workflow. `fbtee collect`
+scans the sources and writes `source_strings.json`; `fbtee
+prepare-translations` then merges the `en` and `de` JSON catalogs. Both Node
+process startups remain inside the timed boundary.
 
 The General Translation lane runs `gtx-cli generate`, GT's path for teams
 handling their own translations: it extracts and merges catalogs entirely

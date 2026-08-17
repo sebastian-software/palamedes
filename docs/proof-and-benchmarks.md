@@ -122,8 +122,8 @@ Translation's measured lane ends, see:
 That separate harness measures Lingui macro rewrite through distinct Babel and
 SWC lanes instead of folding them into one number.
 
-For the end-to-end workflow comparison against Lingui, React Intl, i18next-cli,
-and General Translation:
+For the end-to-end workflow comparison against Lingui, React Intl, fbtee,
+i18next-cli, and General Translation:
 
 ```bash
 pnpm benchmark:e2e-workflow
@@ -141,8 +141,10 @@ See the methodology and latest checked report here:
 
 That workflow benchmark times source discovery, source parsing needed for
 message extraction, extraction, catalog update/merge, and catalog writes in one
-CLI command per tool. It does not time runtime catalog/artifact compilation,
-type-checking, linting, bundling, or the post-run semantic validation step.
+local workflow per tool. fbtee's documented workflow uses two commands, and
+both process startups are included. The benchmark does not time runtime
+catalog/artifact compilation, type-checking, linting, bundling, or the post-run
+semantic validation step.
 
 For the checked ICU semantics proof:
 

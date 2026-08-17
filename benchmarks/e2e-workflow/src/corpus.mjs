@@ -52,6 +52,7 @@ const AREAS = ["queue", "billing", "review", "reporting", "settings", "timeline"
 const ACTIONS = ["approve", "publish", "archive", "sync", "route", "stage", "assign", "close"]
 const SURFACES = ["toolbar", "panel", "modal", "summary", "sidebar", "header", "detail", "overview"]
 const linguiFormatPoImport = JSON.stringify(import.meta.resolve("@lingui/format-po"))
+const FBTEE_DESCRIPTION = "Workflow benchmark message"
 
 export async function createWorkflowCorpus({
   profileName,
@@ -72,6 +73,7 @@ export async function createWorkflowCorpus({
     palamedes: path.join(profileRoot, "palamedes"),
     lingui: path.join(profileRoot, "lingui"),
     formatjs: path.join(profileRoot, "formatjs"),
+    fbtee: path.join(profileRoot, "fbtee"),
     i18nextCli: path.join(profileRoot, "i18next-cli"),
     gt: path.join(profileRoot, "gt"),
   }
@@ -86,6 +88,7 @@ export async function createWorkflowCorpus({
     writePalamedesWorkspace(toolRoots.palamedes, generated, profile),
     writeLinguiWorkspace(toolRoots.lingui, generated, profile),
     writeFormatJsWorkspace(toolRoots.formatjs, generated, profile),
+    writeFbteeWorkspace(toolRoots.fbtee, generated, profile, toolPaths?.fbtee),
     writeI18nextCliWorkspace(toolRoots.i18nextCli, generated, profile),
     writeGtWorkspace(toolRoots.gt, generated, profile, toolPaths?.gt),
   ])
@@ -190,6 +193,108 @@ async function writeLinguiWorkspace(rootDir, inventory, profile) {
 async function writeFormatJsWorkspace(rootDir, inventory, profile) {
   await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderFormatJsSource)
   await writeFormatJsCatalog(rootDir, inventory.baselineMessages)
+}
+
+/*
+ * fbtee splits the local catalog-update workflow across two commands. A real
+ * collect run supplies the current text hashes so the baseline cannot silently
+ * drift from fbtee's identity implementation. Previous and removed messages
+ * use the documented text+description hash because they do not exist in the
+ * current source tree from which keys can be collected.
+ */
+async function writeFbteeWorkspace(rootDir, inventory, profile, fbteeCliPath) {
+  if (!fbteeCliPath) {
+    throw new Error("The fbtee lane needs a resolved @nkzw/fbtee-cli path")
+  }
+
+  await writeToolSourceFiles(rootDir, inventory.sourceMessages, profile, renderFbteeSource)
+  await runCommand(
+    fbteeCliPath,
+    [
+      "collect",
+      "--src",
+      "src/generated",
+      "--out",
+      "source_strings.json",
+      "--include-default-strings=false",
+      "--disable-babel-config",
+    ],
+    { cwd: rootDir }
+  )
+
+  const sourceStrings = JSON.parse(
+    await readFile(path.join(rootDir, "source_strings.json"), "utf8")
+  )
+  const currentKeysByMessage = invertFbteeSourceStrings(sourceStrings)
+  await Promise.all([
+    rm(path.join(rootDir, "source_strings.json"), { force: true }),
+    rm(path.join(rootDir, ".enum_manifest.json"), { force: true }),
+  ])
+
+  const localeRoot = path.join(rootDir, "src", "locales")
+  await mkdir(localeRoot, { recursive: true })
+  await Promise.all(
+    ["en", "de"].map((locale) =>
+      writeFile(
+        path.join(localeRoot, `${locale}.json`),
+        `${JSON.stringify(
+          {
+            "fb-locale": locale,
+            translations: toFbteeBaselineTranslations(
+              inventory.baselineMessages,
+              currentKeysByMessage,
+              locale
+            ),
+          },
+          null,
+          2
+        )}\n`,
+        "utf8"
+      )
+    )
+  )
+  await cp(localeRoot, path.join(rootDir, ".baseline-locales"), { recursive: true })
+}
+
+function invertFbteeSourceStrings(sourceStrings) {
+  const keysByMessage = new Map()
+
+  for (const phrase of sourceStrings.phrases ?? []) {
+    for (const [key, leaf] of Object.entries(phrase.hashToLeaf ?? {})) {
+      if (keysByMessage.has(leaf.text)) {
+        throw new Error(`fbtee extracted ${JSON.stringify(leaf.text)} under two keys`)
+      }
+      keysByMessage.set(leaf.text, key)
+    }
+  }
+
+  return keysByMessage
+}
+
+export function fbteeTextHash(message) {
+  return createHash("md5")
+    .update(message + FBTEE_DESCRIPTION)
+    .digest("base64")
+}
+
+export function toFbteeBaselineTranslations(baselineMessages, currentKeysByMessage, locale) {
+  const translations = {}
+
+  for (const message of baselineMessages) {
+    const key = currentKeysByMessage.get(message) ?? fbteeTextHash(message)
+    if (translations[key]) {
+      throw new Error(`fbtee baseline key collision at ${key}`)
+    }
+    translations[key] = {
+      description: FBTEE_DESCRIPTION,
+      status: "translated",
+      tokens: [],
+      translations: [{ translation: translate(locale, message), variations: {} }],
+      types: [],
+    }
+  }
+
+  return translations
 }
 
 async function writeI18nextCliWorkspace(rootDir, inventory, profile) {
@@ -582,6 +687,43 @@ function renderFormatJsSource(fileIndex, messages, extension, targetLines) {
     )
   }
 
+  return withFiller(imports, body, fileIndex, targetLines)
+}
+
+export function renderFbteeSource(fileIndex, messages, extension, targetLines) {
+  const suffix = String(fileIndex).padStart(4, "0")
+  const fbtMessage =
+    extension === "tsx"
+      ? (messages.find((entry) => !entry.current.includes("{name}")) ?? null)
+      : null
+  const imports = ['import { fbs } from "fbtee"']
+  const body = [`export function fbteeFixture${suffix}() {`, "  const values = ["]
+
+  for (const entry of messages) {
+    if (entry === fbtMessage) continue
+    body.push(`    fbs(${JSON.stringify(entry.current)}, ${JSON.stringify(FBTEE_DESCRIPTION)}),`)
+  }
+
+  body.push("  ]")
+
+  if (extension === "tsx") {
+    body.push(
+      "  return (",
+      "    <section>",
+      ...(fbtMessage
+        ? [
+            `      <fbt desc=${JSON.stringify(FBTEE_DESCRIPTION)}>${escapeJsxText(fbtMessage.current)}</fbt>`,
+          ]
+        : []),
+      "      <span>{values.length}</span>",
+      "    </section>",
+      "  )"
+    )
+  } else {
+    body.push('  return values.join("\\n")')
+  }
+
+  body.push("}", "")
   return withFiller(imports, body, fileIndex, targetLines)
 }
 

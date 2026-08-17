@@ -19,7 +19,7 @@ interface Stat {
 const baseline = BENCH_REALISTIC.rows.find((row) => row.tool === "Palamedes")
 const sameScopeRows = BENCH_REALISTIC.rows.filter((row) => row.sameScope)
 
-if (!baseline || sameScopeRows.length !== 3) {
+if (!baseline || sameScopeRows.length !== 4) {
   throw new Error("Realistic benchmark is missing the expected same-scope workflows")
 }
 
@@ -41,7 +41,7 @@ const STATS: Stat[] = [
   },
   {
     value: factorRange,
-    label: "faster than the three same-scope workflows in the checked realistic run",
+    label: "faster than the four same-scope workflows in the checked realistic run",
     href: "/proof",
   },
   {

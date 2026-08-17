@@ -37,8 +37,11 @@ maintains an open-source SDK.
 - [fluent.md](fluent.md) — the case against ICU itself; asymmetric localization, Mozilla-proven, effectively stalled on npm
 - [typesafe-i18n.md](typesafe-i18n.md) — types as the product; ~1 kB, zero dependencies, no ICU or .po. **Dormant, and excluded from comparison pages** — see the handling note in the dossier
 - [tolgee-js.md](tolgee-js.md) — MIT-licensed client runtime and framework bindings only; the associated TMS/platform is researched privately in Palamedes+
+- [fbtee.md](fbtee.md) — Facebook FBT's modern continuation: inline source authoring, grammar-specific JSX primitives, hashed JSON catalogs, and Babel/SWC compilation
 
-Note: the `intlayer`, `fluent` and `typesafe-i18n` dossiers were added 2026-07-26,
-and Paraglide was refreshed 2026-08-16, so their `analyzed` dates differ from
-the 2026-07-06 snapshot shared by the others. The comparison table above has
-not been re-run against the added dossiers or Tolgee JS.
+Note: the `intlayer`, `fluent` and `typesafe-i18n` dossiers were added
+2026-07-26, `fbtee` was added 2026-08-14, and Paraglide was refreshed
+2026-08-16, so their `analyzed` dates differ from the 2026-07-06 snapshot
+shared by the others. The broad framework table above has not been re-run
+against the added dossiers, Tolgee JS, or fbtee. fbtee is included separately
+in the checked end-to-end workflow benchmark.

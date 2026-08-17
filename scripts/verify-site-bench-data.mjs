@@ -28,11 +28,12 @@ const report = readFileSync(reportPath, "utf8")
 const benchTs = readFileSync(benchTsPath, "utf8")
 const readme = readFileSync(readmePath, "utf8")
 const benchmarkLedger = readFileSync(benchmarkLedgerPath, "utf8")
-const tools = ["Palamedes", "Lingui", "React Intl", "i18next-cli", "General Translation"]
+const tools = ["Palamedes", "Lingui", "React Intl", "fbtee", "i18next-cli", "General Translation"]
 const comparedTools = tools.filter((tool) => tool !== "Palamedes")
 const ratioFields = {
   Lingui: "lingui",
   "React Intl": "formatjs",
+  fbtee: "fbtee",
   "i18next-cli": "i18nextCli",
   "General Translation": "gt",
 }

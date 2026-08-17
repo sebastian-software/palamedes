@@ -6,24 +6,26 @@ run after source changes:
 - Palamedes: `pmds extract`
 - Lingui: `lingui extract`
 - React Intl: `formatjs extract`
+- fbtee: `fbtee collect` + `fbtee prepare-translations`
 - i18next-cli: `i18next-cli extract`
 - General Translation: `gtx-cli generate`
 
 It is separate from the Lingui v6 hot-path benchmark. This harness
-includes source scanning, extraction, and output writes in one timed command.
-Palamedes, Lingui, i18next-cli, and General Translation also update existing
-`en` and `de` catalogs. The React Intl lane instead uses `@formatjs/cli` to
-write one aggregated extracted-message JSON artifact; it does not provide a
-locale-catalog merge in this command, so its narrower scope is called out
-throughout the report.
+includes source scanning, extraction, and output writes in one timed workflow.
+Palamedes, Lingui, fbtee, i18next-cli, and General Translation also update
+existing `en` and `de` catalogs. The React Intl lane instead uses
+`@formatjs/cli` to write one aggregated extracted-message JSON artifact; it
+does not provide a locale-catalog merge in this command, so its narrower scope
+is called out throughout the report.
 
 ## What This Benchmark Times
 
-The reported medians time one CLI command per tool:
+The reported medians time each tool's documented local workflow:
 
 - Palamedes: `pmds extract --config palamedes.yaml`
 - Lingui: `lingui extract --config lingui.config.mjs`
 - React Intl: `formatjs extract "src/generated/**/*.{ts,tsx}" --out-file src/locales/extracted.json --id-interpolation-pattern "[sha512:contenthash:base64:6]"`
+- fbtee: `fbtee collect --src src/generated --out source_strings.json --include-default-strings=false --disable-babel-config` followed by `fbtee prepare-translations --source-strings source_strings.json --output-dir src/locales --locales en de`
 - i18next-cli: `i18next-cli extract --config i18next.config.mjs --sync-all --trust-derived --quiet`
 - General Translation: `gtx-cli generate --quiet`
 
@@ -35,7 +37,7 @@ That means the measured time includes:
 | Source parsing / code inspection            | Yes                           | This is the parser work needed to find messages. It is not a separate type-check or lint pass.                                                                                                                                    |
 | Message extraction                          | Yes                           | The command has to read the authored source syntax and produce the current message set.                                                                                                                                           |
 | Catalog update / merge                      | Except React Intl             | Existing catalogs start with unchanged, changed, and removed messages; the source tree also contains new messages. React Intl's extraction workflow overwrites one extracted-message artifact instead of merging locale catalogs. |
-| Catalog file writes                         | Yes                           | Four tools write updated `en` and `de` catalogs. React Intl's extraction workflow writes one aggregated JSON artifact with content-hash IDs.                                                                                      |
+| Catalog file writes                         | Yes                           | Five tools write updated `en` and `de` catalogs. React Intl's extraction workflow writes one aggregated JSON artifact with content-hash IDs.                                                                                      |
 | Semantic result validation                  | No                            | The harness checks the written catalogs after the command so bad extraction cannot publish timings, but that check is outside the measured median.                                                                                |
 | Runtime catalog/artifact compile            | No                            | Compiling catalogs into runtime artifacts is a separate benchmark surface.                                                                                                                                                        |
 | Type-checking, linting, bundling, app build | No                            | This benchmark is about catalog extraction/update workflows, not app validation.                                                                                                                                                  |
@@ -102,12 +104,19 @@ asserts that the run preserved every existing translation — if GT's hashing ev
 changed shape, the merge would silently reseed each entry and the lane would
 stop doing the catalog work it is timed for.
 
+fbtee source uses idiomatic `fbs()` calls plus a checked `<fbt>` JSX message.
+Its official local update path has two CLI commands: `collect` creates the
+hash-keyed source inventory, then `prepare-translations` merges the existing
+locale records. Validation maps those hash keys through `source_strings.json`,
+compares the active source messages with the shared inventory, and separately
+asserts that existing German translations survived the merge.
+
 ## Reading The React Intl Row
 
 The React Intl lane does less work than every other lane in the table.
 `formatjs extract` scans sources and writes one aggregated extracted-message
 artifact; it never reads an existing catalog, never merges, and never writes a
-per-locale file. Its median therefore answers a narrower question than the four
+per-locale file. Its median therefore answers a narrower question than the five
 catalog-update medians next to it and must not be read as a catalog-update
 number.
 
@@ -116,6 +125,20 @@ i18n libraries, and dropping the second-largest tool in the field while keeping
 smaller ones would say more about lane selection than about performance. The
 honest handling is to keep the row and label its scope, which is what the
 generated report does on every run.
+
+## Reading The fbtee Row
+
+The fbtee row is a full two-catalog update lane, but its workflow shape differs
+from the single-command lanes. The timed boundary includes both documented CLI
+commands and therefore two Node process startups. It also includes the
+intermediate `source_strings.json` write and read.
+
+The resulting work is close enough to compare as an end-to-end developer
+workflow: scan authored sources, extract the current message set, merge existing
+`en` and `de` translations, and write the updated catalogs. It is not internally
+identical. fbtee uses hash-keyed JSON rather than PO and drops removed entries
+instead of retaining obsolete catalog history. The row therefore supports a
+scoped workflow comparison, not a universal claim about either implementation.
 
 ## Tools Not In The Matrix
 
