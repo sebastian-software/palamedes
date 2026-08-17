@@ -1,5 +1,8 @@
+import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon"
+
 const QUESTIONS = [
   {
+    icon: "app-widgets-plugin-extension",
     question: "Which framework are you building with?",
     answer:
       "See the supported hosts, adapters, example applications, and their verification state.",
@@ -7,12 +10,14 @@ const QUESTIONS = [
     label: "Choose a framework",
   },
   {
+    icon: "globe-app-network",
     question: "How should locale selection live in the URL?",
     answer: "Compare cookie, route-prefix, subdomain, and top-level-domain application shapes.",
     href: "/locale-routing",
     label: "Explore locale architecture",
   },
   {
+    icon: "browser-flash",
     question: "Will catalog work stay fast in a large repository?",
     answer:
       "Inspect the measured extract-and-update workflow, corpus, commands, and exact results.",
@@ -20,6 +25,7 @@ const QUESTIONS = [
     label: "Review the evidence",
   },
   {
+    icon: "deployment-workflow-collaboration",
     question: "Are you moving from an existing i18n stack?",
     answer:
       "Start with the migration guide, then use a comparison page when the incumbent matters.",
@@ -27,6 +33,7 @@ const QUESTIONS = [
     label: "Read the migration guide",
   },
   {
+    icon: "code-analysis",
     question: "How does Palamedes compare with another tool?",
     answer:
       "Read bounded, source-specific comparisons that keep measured and researched claims separate.",
@@ -34,24 +41,33 @@ const QUESTIONS = [
     label: "Compare architectures",
   },
   {
+    icon: "programming-book",
     question: "Which implementation decision is blocking you?",
     answer:
       "Use the guide hub for server components, ICU MessageFormat, locale routing, and repository-scale performance.",
     href: "/guides",
     label: "Browse technical guides",
   },
-] as const
+] as const satisfies ReadonlyArray<{
+  icon: StreamlineIconName
+  question: string
+  answer: string
+  href: string
+  label: string
+}>
 
 export function QuestionRoutes() {
   return (
     <div className="border-y border-hair">
-      {QUESTIONS.map((entry, index) => (
+      {QUESTIONS.map((entry) => (
         <a
           key={entry.href}
           href={entry.href}
           className="group grid grid-cols-[3.25rem_minmax(0,1fr)_minmax(12rem,0.72fr)_auto] gap-5 border-b border-hair px-5 py-5 last:border-b-0 hover:bg-track focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent max-grid:grid-cols-[2.5rem_1fr_auto] max-tight:grid-cols-[2rem_1fr]"
         >
-          <span className="mono-nums text-[11px] text-gray-spec">0{index + 1}</span>
+          <span className="pt-0.5">
+            <StreamlineIcon name={entry.icon} />
+          </span>
           <span>
             <span className="block text-[15px] font-semibold leading-snug">{entry.question}</span>
             <span className="mt-1.5 block text-[13px] leading-relaxed text-ink/75 max-grid:hidden">
