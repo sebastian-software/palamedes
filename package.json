@@ -33,6 +33,7 @@
     "verify:react-router-rsc": "node ./scripts/verify-react-router-rsc.mjs",
     "verify:site-routes": "node ./scripts/verify-site-routes.mjs",
     "verify:site-a11y": "node ./scripts/verify-site-a11y.mjs",
+    "verify:site-docs-dev": "node ./site/scripts/verify-docs-development.mjs",
     "verify:site-streamline": "node ./scripts/verify-site-streamline-assets.mjs",
     "benchmark:proof": "pnpm build && node ./scripts/benchmark-proof.mjs",
     "benchmark:proof:large": "pnpm build && node ./scripts/benchmark-proof.mjs --large-messages 10000",

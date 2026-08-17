@@ -299,12 +299,33 @@ describe("workflow contracts", () => {
     const build = job(deploySite, "build", "deploy")
 
     expect(packageJson.scripts["verify:site-routes"]).toBe("node ./scripts/verify-site-routes.mjs")
+    expect(packageJson.scripts["verify:site-a11y"]).toBe("node ./scripts/verify-site-a11y.mjs")
     expect(build).toContain("run: pnpm verify:site-routes")
+    expect(build).toContain("run: pnpm verify:site-a11y")
     // In the build job, so a dead route blocks the deploy rather than being
     // reported by the post-deploy curl checks after it is already live.
     expect(build.indexOf("run: pnpm build:site")).toBeLessThan(
       build.indexOf("run: pnpm verify:site-routes")
     )
+    expect(build.indexOf("run: pnpm build:site")).toBeLessThan(
+      build.indexOf("run: pnpm verify:site-a11y")
+    )
     expect(build).toContain("run: pnpm exec playwright install --with-deps chromium")
+  })
+
+  it("checks cold-cache docs navigation on the full pull-request job", async () => {
+    const [ci, packageJson] = await Promise.all([
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile("package.json").then(JSON.parse),
+    ])
+    const validate = job(ci, "validate", "validate-rust")
+
+    expect(packageJson.scripts["verify:site-docs-dev"]).toBe(
+      "node ./site/scripts/verify-docs-development.mjs"
+    )
+    expect(validate).toContain("run: pnpm verify:site-docs-dev")
+    expect(validate.indexOf("run: pnpm build:site")).toBeLessThan(
+      validate.indexOf("run: pnpm verify:site-docs-dev")
+    )
   })
 })

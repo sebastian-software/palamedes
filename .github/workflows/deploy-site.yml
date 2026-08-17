@@ -76,6 +76,9 @@ jobs:
       - name: Verify built site routes
         run: pnpm verify:site-routes
 
+      - name: Verify built site accessibility
+        run: pnpm verify:site-a11y
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
         with:
