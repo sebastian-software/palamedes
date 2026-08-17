@@ -2,9 +2,9 @@
 
 Pure technology: i18n libraries, frameworks, and compile-time tooling that
 compete with the open-source core of Palamedes. Base snapshot date:
-**2026-07-06**; the Paraglide column was refreshed **2026-08-16** (see each
-dossier's frontmatter for exact analyzed versions; every fact below is sourced
-in the linked dossier).
+**2026-07-06**; the Paraglide column was refreshed **2026-08-16** and the
+Tolgee JS dossier was refreshed **2026-08-17** (see each dossier's frontmatter
+for exact analyzed versions; every fact below is sourced in the linked dossier).
 
 Only the OSI-licensed client/framework surface is in scope. Commercial services
 and platform behavior are intentionally excluded even when the same vendor
@@ -40,8 +40,8 @@ maintains an open-source SDK.
 - [fbtee.md](fbtee.md) — Facebook FBT's modern continuation: inline source authoring, grammar-specific JSX primitives, hashed JSON catalogs, and Babel/SWC compilation
 
 Note: the `intlayer`, `fluent` and `typesafe-i18n` dossiers were added
-2026-07-26, `fbtee` was added 2026-08-14, and Paraglide was refreshed
-2026-08-16, so their `analyzed` dates differ from the 2026-07-06 snapshot
-shared by the others. The broad framework table above has not been re-run
-against the added dossiers, Tolgee JS, or fbtee. fbtee is included separately
-in the checked end-to-end workflow benchmark.
+2026-07-26, `fbtee` was added 2026-08-14, Paraglide was refreshed 2026-08-16,
+and Tolgee JS was refreshed 2026-08-17, so their `analyzed` dates differ from
+the 2026-07-06 snapshot shared by the others. The broad framework table above
+has not been re-run against the added dossiers, Tolgee JS, or fbtee. fbtee is
+included separately in the checked end-to-end workflow benchmark.
