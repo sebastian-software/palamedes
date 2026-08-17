@@ -1,6 +1,7 @@
 import type { FeatureIconName } from "~/data/features"
+import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon"
 
-const ICONS: Record<FeatureIconName, string> = {
+const ICONS: Record<FeatureIconName, StreamlineIconName> = {
   pen: "code-analysis",
   fingerprint: "code-analysis",
   plug: "deployment-workflow-collaboration",
@@ -26,14 +27,5 @@ export function FeatureIcon({
   name: FeatureIconName
   className?: string
 }) {
-  return (
-    <img
-      src={`/icons/streamline/sharp-duo/${ICONS[name]}.svg`}
-      width={24}
-      height={24}
-      alt=""
-      className={className}
-      aria-hidden
-    />
-  )
+  return <StreamlineIcon name={ICONS[name]} className={className} />
 }

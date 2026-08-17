@@ -5,6 +5,7 @@ import { CopyCommand } from "~/components/CopyCommand"
 import { pageMeta } from "~/lib/meta"
 import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
+import { StreamlineIcon, type StreamlineIconName } from "~/components/icons/StreamlineIcon"
 import { BenchmarkLedger } from "~/components/proof/BenchmarkLedger"
 import { ScreenshotStrip } from "~/components/proof/ScreenshotStrip"
 import {
@@ -36,18 +37,21 @@ export function meta() {
 
 const VERIFICATION_STEPS = [
   {
+    icon: "code-analysis",
     title: "Build",
     body: `All ${contentStats.smokeExampleCount} example apps build and smoke-test against the workspace packages on relevant PRs and main pushes — no mocked integrations.`,
   },
   {
+    icon: "deployment-workflow-collaboration",
     title: "Drive",
     body: `${contentStats.browserExampleCount} browser-capable examples run the Playwright flow weekly or on manual dispatch: load, SSR output, locale switch, and localized server actions.`,
   },
   {
+    icon: "browser-check",
     title: "Capture",
     body: "Screenshots are versioned in the repo, so 'works across frameworks' is a diffable artifact, not a slide.",
   },
-]
+] satisfies ReadonlyArray<{ icon: StreamlineIconName; title: string; body: string }>
 
 const CORPORA: { corpus: BenchCorpus; warm: BenchWarm }[] = [
   { corpus: BENCH_SMALL, warm: BENCH_SMALL_WARM },
@@ -193,7 +197,10 @@ export default function Proof() {
         <div className="hairline-grid mb-10 grid-cols-3 max-tight:grid-cols-1">
           {VERIFICATION_STEPS.map((step, index) => (
             <div key={step.title} className="bg-paper px-6 py-6">
-              <p className="mono-nums text-[11px] text-accent">0{index + 1}</p>
+              <div className="flex items-start justify-between gap-4">
+                <p className="mono-nums text-[11px] text-accent">0{index + 1}</p>
+                <StreamlineIcon name={step.icon} />
+              </div>
               <h3 className="mt-3 text-[15px] font-bold">{step.title}</h3>
               <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{step.body}</p>
             </div>
