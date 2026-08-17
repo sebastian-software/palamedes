@@ -825,8 +825,8 @@ function buyLabel(seats) {
   {
     slug: "tolgee",
     name: "Tolgee JS SDK",
-    subject: "@tolgee/core 7.1.1 / @tolgee/react 7.1.1",
-    researched: "July 2026",
+    subject: "@tolgee/core 7.1.3 / @tolgee/react 7.1.3",
+    researched: "August 2026",
     metaTitle: "Palamedes vs the Tolgee JS SDK — source strings or explicit keys",
     metaDescription:
       "A technical comparison of the MIT-licensed Tolgee JavaScript SDK and Palamedes: runtime keys and framework bindings versus source-string extraction and compiled catalogs.",
@@ -930,7 +930,7 @@ function buyLabel(seats) {
       "You need checked React and Solid integrations across supported server and meta-framework hosts.",
     ],
     honest:
-      "The Tolgee JS SDK covers more client frameworks than Palamedes today: there are first-party Vue, Angular and Svelte bindings, while Palamedes supports React and Solid. If client-framework breadth is the deciding constraint, that difference matters. This comparison is deliberately limited to the MIT client SDK.",
+      "The Tolgee JS SDK covers more client frameworks than Palamedes today: there are first-party Vue, Angular and Svelte bindings, while Palamedes supports React and Solid. If client-framework breadth is the deciding constraint, that difference matters. Tolgee's connected platform also offers contextual AI translation, prompt and model controls, MCP, in-context collaboration, content delivery and self-hosting. Those are meaningful product advantages, but they are deliberately outside this technical comparison of the MIT client SDK.",
   },
   {
     slug: "intlayer",
