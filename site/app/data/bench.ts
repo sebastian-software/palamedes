@@ -118,7 +118,7 @@ export const BENCH_SMALL: BenchCorpus = {
     {
       tool: "General Translation",
       medianMs: 443.86,
-      displayName: "GT",
+      displayName: "General Translation",
       scope: "extract + catalog update",
       sameScope: true,
       order: 4,
@@ -182,7 +182,7 @@ export const BENCH_MEDIUM: BenchCorpus = {
     {
       tool: "General Translation",
       medianMs: 510.98,
-      displayName: "GT",
+      displayName: "General Translation",
       scope: "extract + catalog update",
       sameScope: true,
       order: 4,
@@ -246,7 +246,7 @@ export const BENCH_REALISTIC: BenchCorpus = {
     {
       tool: "General Translation",
       medianMs: 5107.94,
-      displayName: "GT",
+      displayName: "General Translation",
       scope: "extract + catalog update",
       sameScope: true,
       order: 4,

@@ -862,7 +862,7 @@ function renderMarkdown(report) {
     "- The fbtee lane times its official two-command local workflow: `fbtee collect` followed by `fbtee prepare-translations`. It updates en/de JSON catalogs like the full lanes, but pays two Node process startups and drops removed hash entries instead of retaining obsolete catalog history."
   )
   lines.push(
-    "- The General Translation lane runs `gtx-cli generate`, which extracts and merges en/de catalogs entirely locally with no API key and no network access. It is GT's path for teams handling their own translations; GT's default workflow (`gtx-cli translate`) sends content to the GT API and is deliberately out of scope here."
+    "- The General Translation lane runs `gtx-cli generate`, which extracts and merges en/de catalogs entirely locally with no API key and no network access. It is General Translation's path for teams handling their own translations; General Translation's default workflow (`gtx-cli translate`) sends content to the General Translation API and is deliberately out of scope here."
   )
   lines.push(
     "- The harness reports source-message equivalence after each run instead of assuming every parser extracts the same result."

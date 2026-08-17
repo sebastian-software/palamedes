@@ -96,13 +96,14 @@ message semantics.
 General Translation source uses `useGT()` strings and `<T>` components. Its
 catalogs are keyed by a content hash the CLI computes itself, so validation maps
 the target catalog's keys back through the source catalog instead of reading the
-keys as message text. Two GT specifics are worth knowing when reading its
-median: new entries are seeded with the source text rather than left empty, and
-removed entries are dropped immediately instead of being marked obsolete, so GT
-does slightly less bookkeeping than the PO lanes. The harness additionally
-asserts that the run preserved every existing translation — if GT's hashing ever
-changed shape, the merge would silently reseed each entry and the lane would
-stop doing the catalog work it is timed for.
+keys as message text. Two General Translation specifics are worth knowing when
+reading its median: new entries are seeded with the source text rather than left
+empty, and removed entries are dropped immediately instead of being marked
+obsolete, so General Translation does slightly less bookkeeping than the PO
+lanes. The harness additionally asserts that the run preserved every existing
+translation — if General Translation's hashing ever changed shape, the merge
+would silently reseed each entry and the lane would stop doing the catalog work
+it is timed for.
 
 fbtee source uses idiomatic `fbs()` calls plus a checked `<fbt>` JSX message.
 Its official local update path has two CLI commands: `collect` creates the
