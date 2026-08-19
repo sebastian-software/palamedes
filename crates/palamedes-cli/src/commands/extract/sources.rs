@@ -4,8 +4,8 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use ferralk::{ErrorPolicy, Walker};
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use ignore::WalkBuilder;
 
 use crate::config::{ConfigCatalog, LoadedConfig};
 use crate::error::CliError;
@@ -20,14 +20,20 @@ pub(crate) fn collect_source_files(
     let mut files = Vec::new();
 
     for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
-        for entry in WalkBuilder::new(root)
-            .standard_filters(false)
-            .hidden(false)
-            .build()
-        {
-            let Ok(entry) = entry else {
-                continue;
-            };
+        let Ok(walk) = Walker::new(root)
+            // Source collection was serial before this replacement. Keep that
+            // scheduling contract; extraction itself owns its worker pool.
+            .threads(1)
+            // Match ignore::WalkBuilder's best-effort iteration: retain
+            // recoverable traversal errors without turning them into an
+            // extraction failure.
+            .error_policy(ErrorPolicy::Collect)
+            .collect()
+        else {
+            continue;
+        };
+
+        for entry in walk.entries() {
             let path = entry.path();
             if !path.is_file() {
                 continue;
@@ -168,9 +174,11 @@ pub(super) fn build_exclude_set(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{fs, path::PathBuf};
 
-    use super::sort_and_dedupe_paths;
+    use super::{collect_source_files, sort_and_dedupe_paths};
+    use crate::commands::test_support::{temp_dir, write_config};
+    use crate::config::load_config;
 
     /*
      * The byte-key sort must reproduce Path::cmp's component order exactly,
@@ -195,5 +203,29 @@ mod tests {
         sort_and_dedupe_paths(&mut paths);
 
         assert_eq!(paths, expected);
+    }
+
+    #[test]
+    fn collects_nested_sources_with_the_ferralk_walker() {
+        let app = temp_dir("ferralk-source-walker");
+        fs::create_dir_all(app.join("app/nested")).expect("create source tree");
+        fs::create_dir_all(app.join("node_modules/package")).expect("create dependency tree");
+        write_config(&app, None);
+        fs::write(app.join("app/page.tsx"), "export const page = 1;").expect("write source");
+        fs::write(app.join("app/nested/view.tsx"), "export const view = 1;")
+            .expect("write nested source");
+        fs::write(
+            app.join("node_modules/package/index.tsx"),
+            "export const dep = 1;",
+        )
+        .expect("write excluded dependency source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let files = collect_source_files(&config.catalogs[0], &config).expect("collect sources");
+
+        assert_eq!(
+            files,
+            vec![app.join("app/nested/view.tsx"), app.join("app/page.tsx")]
+        );
     }
 }
