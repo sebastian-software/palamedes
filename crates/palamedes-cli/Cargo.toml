@@ -14,8 +14,8 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 config = { version = "0.15.25", default-features = false, features = ["json", "toml", "yaml"] }
+ferralk = { git = "https://github.com/sebastian-software/ferralk", rev = "0063ffbd0c7d7cd25d31135d2295bdf08f7cc4c2" }
 globset = "0.4.20"
-ignore = "0.4.33"
 notify = "8.2.0"
 palamedes = { path = "../palamedes" }
 palamedes-plugin = { path = "../palamedes-plugin" }
