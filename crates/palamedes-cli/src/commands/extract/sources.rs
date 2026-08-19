@@ -16,10 +16,40 @@ pub(crate) fn collect_source_files(
 ) -> Result<Vec<PathBuf>, CliError> {
     let include_patterns = normalized_include_patterns(catalog, config);
     let include = build_glob_set(&include_patterns, "include")?;
-    let exclude = build_exclude_set(catalog, config)?;
-    let mut files = Vec::new();
+    let exclude_patterns = resolved_exclude_patterns(catalog, config);
+    let exclude = build_glob_set(&exclude_patterns, "exclude")?;
+    let roots = walk_roots_for_patterns(&include_patterns, &config.root_dir);
 
-    for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
+    #[cfg(feature = "ferralk-discovery")]
+    if let Some(engine) = super::ferralk_discovery::selected_alternative() {
+        return Ok(super::ferralk_discovery::collect_source_files(
+            engine,
+            super::ferralk_discovery::Request {
+                roots: &roots,
+                include_patterns: &include_patterns,
+                exclude_patterns: &exclude_patterns,
+                include: &include,
+                exclude: &exclude,
+                threads: super::ferralk_discovery::threads(config),
+            },
+        ));
+    }
+
+    let mut files = collect_with_ignore(&roots, &include, &exclude);
+    sort_and_dedupe_paths(&mut files);
+    Ok(files)
+}
+
+/// The `ignore`-backed traversal. Unchanged by the ferralk trial: it is both
+/// the default engine and the reference the trial's parity check compares
+/// against.
+pub(crate) fn collect_with_ignore(
+    roots: &[PathBuf],
+    include: &GlobSet,
+    exclude: &GlobSet,
+) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for root in roots {
         for entry in WalkBuilder::new(root)
             .standard_filters(false)
             .hidden(false)
@@ -40,9 +70,7 @@ pub(crate) fn collect_source_files(
             }
         }
     }
-
-    sort_and_dedupe_paths(&mut files);
-    Ok(files)
+    files
 }
 
 /*
@@ -144,26 +172,30 @@ pub(super) fn build_exclude_set(
     catalog: &ConfigCatalog,
     config: &LoadedConfig,
 ) -> Result<GlobSet, CliError> {
-    let mut builder = GlobSetBuilder::new();
+    build_glob_set(&resolved_exclude_patterns(catalog, config), "exclude")
+}
+
+/// The exclude patterns as absolute path globs, in catalog order. Split out of
+/// `build_exclude_set` because a walker that prunes during traversal needs the
+/// patterns themselves, not only the compiled `GlobSet`.
+pub(super) fn resolved_exclude_patterns(
+    catalog: &ConfigCatalog,
+    config: &LoadedConfig,
+) -> Vec<String> {
     let excludes = if catalog.exclude.is_empty() {
         vec!["**/node_modules/**".to_owned()]
     } else {
         catalog.exclude.clone()
     };
-    for pattern in excludes {
-        let resolved = config.resolve_pattern(&pattern);
-        let normalized = resolved.to_string_lossy().into_owned();
-        builder.add(
-            Glob::new(&normalized).map_err(|source| CliError::GlobPattern {
-                pattern: normalized,
-                source,
-            })?,
-        );
-    }
-    builder.build().map_err(|source| CliError::GlobPattern {
-        pattern: "exclude".to_owned(),
-        source,
-    })
+    excludes
+        .iter()
+        .map(|pattern| {
+            config
+                .resolve_pattern(pattern)
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect()
 }
 
 #[cfg(test)]

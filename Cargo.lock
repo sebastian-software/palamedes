@@ -338,6 +338,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
+name = "ferralk"
+version = "0.1.2"
+source = "git+https://github.com/sebastian-software/ferralk?branch=main#8e570deaf28550fb17a9ed9d8a25073dca3d32f7"
+dependencies = [
+ "crossbeam-deque",
+ "ferralk-glob",
+ "ignore",
+]
+
+[[package]]
+name = "ferralk-glob"
+version = "0.1.2"
+source = "git+https://github.com/sebastian-software/ferralk?branch=main#8e570deaf28550fb17a9ed9d8a25073dca3d32f7"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "ferrocat"
 version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1218,6 +1236,7 @@ version = "1.17.3"
 dependencies = [
  "clap",
  "config",
+ "ferralk",
  "globset",
  "ignore",
  "libc",
