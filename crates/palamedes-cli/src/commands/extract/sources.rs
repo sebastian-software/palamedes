@@ -14,6 +14,7 @@
 //!
 //! [ferralk]: https://github.com/sebastian-software/ferralk
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -67,10 +68,14 @@ pub(crate) fn collect_source_files(
         move |source| CliError::DiscoveryPattern { pattern, source }
     };
     for pattern in &include_patterns {
-        walker = walker.include(pattern).map_err(rejected(pattern))?;
+        walker = walker
+            .include(walker_pattern(pattern).as_ref())
+            .map_err(rejected(pattern))?;
     }
     for pattern in &exclude_patterns {
-        walker = walker.exclude(pattern).map_err(rejected(pattern))?;
+        walker = walker
+            .exclude(walker_pattern(pattern).as_ref())
+            .map_err(rejected(pattern))?;
     }
 
     /*
@@ -120,6 +125,24 @@ fn discovery_roots(include_patterns: &[String], root_dir: &Path) -> Vec<PathBuf>
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()
+}
+
+/// Respells a resolved catalog pattern for the walker.
+///
+/// These patterns are built by joining `PathBuf`s, so on Windows they carry
+/// `\` separators. Walker patterns use `/` on every platform and read `\` as an
+/// escape, which turns `C:\repo\app\**` into the literal `C:repoapp**` and
+/// silently selects nothing. `globset` normalised this away internally, so the
+/// need for it only appeared once the walker started doing the matching.
+///
+/// Unix is left alone deliberately: a backslash is a legal character in a path
+/// there, and treating it as an escape is what the previous matcher did too.
+fn walker_pattern(pattern: &str) -> Cow<'_, str> {
+    if cfg!(windows) && pattern.contains('\\') {
+        Cow::Owned(pattern.replace('\\', "/"))
+    } else {
+        Cow::Borrowed(pattern)
+    }
 }
 
 /// Worker count for discovery: the configured extraction threads, else the
@@ -333,6 +356,26 @@ mod tests {
      * include like this one can, which is why the case is a fixture rather than
      * something the real trees would have caught.
      */
+    /*
+     * Windows spells a resolved catalog pattern with `\\`, which the walker
+     * reads as an escape rather than a separator. The respelling has to happen
+     * there and must not happen on Unix, where a backslash is a legal
+     * character in a filename.
+     */
+    #[test]
+    fn respells_walker_patterns_only_where_the_separator_is_a_backslash() {
+        let windows_shape = r"C:\repo\app\**\*.tsx";
+        assert_eq!(
+            super::walker_pattern(windows_shape),
+            if cfg!(windows) {
+                "C:/repo/app/**/*.tsx"
+            } else {
+                windows_shape
+            }
+        );
+        assert_eq!(super::walker_pattern("/repo/app/**"), "/repo/app/**");
+    }
+
     #[test]
     fn a_single_star_include_reaches_nested_files() {
         let root = temp_dir("crossing-wildcard");
