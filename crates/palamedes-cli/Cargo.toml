@@ -11,24 +11,13 @@ description = "Native command-line interface for Palamedes."
 name = "pmds"
 path = "src/main.rs"
 
-[features]
-# Trial for palamedes#875: compiles a second source-discovery engine built on
-# the ferralk walker next to the `ignore` one and lets
-# `PALAMEDES_SOURCE_DISCOVERY` pick between them at runtime. Off by default, in
-# which case not a line of ferralk is compiled and discovery is exactly the
-# `ignore` path it is today.
-ferralk-discovery = ["dep:ferralk"]
-
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 config = { version = "0.15.25", default-features = false, features = ["json", "toml", "yaml"] }
-# Trial dependency, pinned to the revision the second trial round measured.
-# A release is still the right shape for anything past a draft: ferralk 0.2.0
-# was not on crates.io when this was written, and the two APIs this arm needs
-# (`Walker::visit` and `Walker::match_hidden`) landed after 0.1.2.
-ferralk = { git = "https://github.com/sebastian-software/ferralk", rev = "8afa35d", optional = true }
+# Source discovery. 0.3.0 is the first release carrying `Walker::visit` and
+# `Walker::match_hidden`, both of which discovery depends on.
+ferralk = "0.3.0"
 globset = "0.4.20"
-ignore = "0.4.33"
 notify = "8.2.0"
 palamedes = { path = "../palamedes" }
 palamedes-plugin = { path = "../palamedes-plugin" }

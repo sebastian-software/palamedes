@@ -1,8 +1,6 @@
 //! `pmds extract` — read source files, update catalogs.
 
 pub(crate) mod cache;
-#[cfg(feature = "ferralk-discovery")]
-pub(crate) mod ferralk_discovery;
 pub(crate) mod sources;
 #[cfg(test)]
 mod test_support;
