@@ -339,18 +339,18 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferralk"
-version = "0.1.2"
-source = "git+https://github.com/sebastian-software/ferralk?branch=main#8e570deaf28550fb17a9ed9d8a25073dca3d32f7"
+version = "0.2.0"
+source = "git+https://github.com/sebastian-software/ferralk?rev=8afa35d#8afa35d15870b545e978012033ccf2791535473b"
 dependencies = [
  "crossbeam-deque",
  "ferralk-glob",
- "ignore",
+ "memchr",
 ]
 
 [[package]]
 name = "ferralk-glob"
-version = "0.1.2"
-source = "git+https://github.com/sebastian-software/ferralk?branch=main#8e570deaf28550fb17a9ed9d8a25073dca3d32f7"
+version = "0.2.0"
+source = "git+https://github.com/sebastian-software/ferralk?rev=8afa35d#8afa35d15870b545e978012033ccf2791535473b"
 dependencies = [
  "memchr",
 ]

@@ -30,23 +30,24 @@
 //! two matchers do not agree on all of them:
 //!
 //! - `globset` with palamedes' options lets `*` cross `/`; ferralk's `*` is
-//!   component-scoped.
-//! - `globset` wildcards match a leading `.`; ferralk's do not, and
-//!   `ferralk_glob::PatternOptions::match_hidden` is not reachable through
-//!   `Walker`. palamedes deliberately walks hidden files
-//!   (`WalkBuilder::hidden(false)`), so under `ferralk-native` hidden sources
-//!   disappear.
+//!   component-scoped. No switch reconciles this, so it stays a reason to keep
+//!   the backstop.
+//! - `globset` wildcards match a leading `.` and ferralk's do not by default.
+//!   `Walker::match_hidden(true)` settles it, and the native engine sets it;
+//!   before that switch existed this cost 179 of this repository's own files.
 //!
-//! The `ferralk` engine is unaffected by both, because it only ever hands
+//! The `ferralk` engine is unaffected by either, because it only ever hands
 //! ferralk patterns whose translation can be shown to be equal-or-narrower, and
 //! narrower is free: the `GlobSet` backstop rejects whatever the walker did not
-//! prune.
+//! prune. Since `Walker::visit` exists, that backstop runs on the workers
+//! rather than over the returned list, so being backstopped no longer means
+//! being serial.
 //!
 //! [ferralk]: https://github.com/sebastian-software/ferralk
 
 use std::path::{Path, PathBuf};
 
-use ferralk::{ErrorPolicy, WalkOptions, Walker};
+use ferralk::{ErrorPolicy, Verdict, WalkEntry, WalkOptions, Walker};
 use globset::GlobSet;
 
 use super::sources::sort_and_dedupe_paths;
@@ -120,6 +121,19 @@ pub(crate) fn collect_source_files(engine: Engine, request: Request<'_>) -> Vec<
             .options(WalkOptions::default().files_only(true));
 
         /*
+         * `globset` as palamedes configures it lets a wildcard cover a leading
+         * period, and palamedes walks hidden files on purpose
+         * (`WalkBuilder::hidden(false)`). Without this the native engine drops
+         * every source under a dot directory -- 179 of this repository's own
+         * files, all under `site/.react-router/`. `skip_hidden` stays at its
+         * `false` default: that one governs traversal, this one governs what a
+         * wildcard is allowed to cover.
+         */
+        if engine == Engine::Native {
+            walker = walker.match_hidden(true);
+        }
+
+        /*
          * Excludes are handed over for pruning only. A translation that is
          * narrower than the catalog's own exclude costs a subtree that could
          * have been skipped; it can never drop a file, because the GlobSet
@@ -157,11 +171,17 @@ pub(crate) fn collect_source_files(engine: Engine, request: Request<'_>) -> Vec<
             }
         }
 
-        let Ok(result) = walker.collect() else {
-            continue;
-        };
-
-        for entry in result.entries() {
+        /*
+         * `visit` runs this on the worker that produced the entry, so the
+         * backstopped engine's GlobSet check is as parallel as the traversal.
+         * Under `collect` the same check ran single-threaded over the returned
+         * `Vec`, which cost the parallel arms more than the extra workers won.
+         *
+         * `Verdict::Skip` does not prune: a rejected directory is still
+         * descended into. That is what `exclude` is for, and it is why the
+         * exclude rewrite above still matters even though the GlobSet decides.
+         */
+        let verdict = |entry: &WalkEntry| {
             let path = entry.path();
             /*
              * Deliberately `is_file()` and not ferralk's own entry kind. The
@@ -170,23 +190,27 @@ pub(crate) fn collect_source_files(engine: Engine, request: Request<'_>) -> Vec<
              * itself. Keeping the same call keeps the same answer.
              */
             if !path.is_file() {
-                continue;
+                return Verdict::Skip;
             }
-            match engine {
-                Engine::Native => {
-                    if include_is_complete || request.include.is_match(path) {
-                        files.push(path.to_path_buf());
-                    }
-                }
+            let kept = match engine {
+                Engine::Native => include_is_complete || request.include.is_match(path),
                 Engine::Backstopped => {
-                    if request.exclude.is_match(path) {
-                        continue;
-                    }
-                    if request.include.is_match(path) {
-                        files.push(path.to_path_buf());
-                    }
+                    !request.exclude.is_match(path) && request.include.is_match(path)
                 }
+            };
+            if kept {
+                Verdict::Keep
+            } else {
+                Verdict::Skip
             }
+        };
+
+        let Ok(result) = walker.visit(verdict) else {
+            continue;
+        };
+
+        for entry in result.entries() {
+            files.push(entry.path().to_path_buf());
         }
     }
 

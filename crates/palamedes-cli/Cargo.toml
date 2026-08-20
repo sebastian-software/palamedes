@@ -22,10 +22,11 @@ ferralk-discovery = ["dep:ferralk"]
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 config = { version = "0.15.25", default-features = false, features = ["json", "toml", "yaml"] }
-# Trial dependency. Tracks the branch rather than a release so the trial can
-# follow API changes while palamedes#875 is being decided; pin to a crates.io
-# version before this stops being a draft.
-ferralk = { git = "https://github.com/sebastian-software/ferralk", branch = "main", optional = true }
+# Trial dependency, pinned to the revision the second trial round measured.
+# A release is still the right shape for anything past a draft: ferralk 0.2.0
+# was not on crates.io when this was written, and the two APIs this arm needs
+# (`Walker::visit` and `Walker::match_hidden`) landed after 0.1.2.
+ferralk = { git = "https://github.com/sebastian-software/ferralk", rev = "8afa35d", optional = true }
 globset = "0.4.20"
 ignore = "0.4.33"
 notify = "8.2.0"
