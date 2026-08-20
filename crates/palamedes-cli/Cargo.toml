@@ -14,9 +14,9 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 config = { version = "0.15.25", default-features = false, features = ["json", "toml", "yaml"] }
-# Source discovery. 0.4.0 is the first release taking absolute patterns and
-# several roots, which is what lets discovery hand a catalog straight over.
-ferralk = "0.4.0"
+# Source discovery. 0.5.0 is the first release with `resolve_symlink_kind`,
+# which is what makes the walk's idea of a file match palamedes'.
+ferralk = "0.5.0"
 globset = "0.4.20"
 notify = "8.2.0"
 palamedes = { path = "../palamedes" }

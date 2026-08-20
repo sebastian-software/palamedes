@@ -18,7 +18,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use ferralk::{ErrorPolicy, Verdict, WalkOptions, Walker, WildcardMode};
+use ferralk::{ErrorPolicy, WalkOptions, Walker, WildcardMode};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 
 use crate::config::{ConfigCatalog, LoadedConfig};
@@ -54,7 +54,20 @@ pub(crate) fn collect_source_files(
         // Recoverable traversal errors are dropped rather than reported, as the
         // `ignore` walk this replaced dropped its `Err` items.
         .error_policy(ErrorPolicy::Skip)
-        .options(WalkOptions::default().files_only(true))
+        .options(
+            WalkOptions::default()
+                .files_only(true)
+                /*
+                 * `files_only` classifies an entry by what the listing said it
+                 * is, and an unfollowed symlink is not a directory, so a broken
+                 * link and a link to a directory would both count as sources.
+                 * This resolves a symlink entry by its target instead, which is
+                 * the POSIX reading `Path::is_file` gave the walker this
+                 * replaced. ferralk's default is the zlob reading; the stat is
+                 * paid only for symlink entries.
+                 */
+                .resolve_symlink_kind(true),
+        )
         // `add_root` only compiles the patterns already on the builder, and
         // there are none yet, so this cannot reject anything.
         .add_roots(rest.iter())
@@ -78,20 +91,9 @@ pub(crate) fn collect_source_files(
             .map_err(rejected(pattern))?;
     }
 
-    /*
-     * The one thing the walker cannot answer: `is_file` follows a symlink, so a
-     * link to a file counts as a source and a broken one does not, while an
-     * entry kind describes the link itself. Running it as a visitor keeps the
-     * `stat` on the worker that produced the entry rather than on one thread
-     * afterwards.
-     */
-    let result = walker.visit(|entry| {
-        if entry.path().is_file() {
-            Verdict::Keep
-        } else {
-            Verdict::Skip
-        }
-    })?;
+    // No visitor and no caller-side filter of any kind: the walker decides what
+    // a catalog pattern selects, start to finish.
+    let result = walker.collect()?;
 
     let mut files: Vec<PathBuf> = result
         .entries()
@@ -390,6 +392,63 @@ mod tests {
                 .expect("create source directory");
             fs::write(path, "export const message = 1;").expect("write source");
         }
+
+        assert_eq!(
+            discovered(&root),
+            vec![root.join("app/nested/deep.tsx"), root.join("app/page.tsx")]
+        );
+    }
+
+    /*
+     * The three symlink cases. `WalkOptions::files_only` drops entries reported
+     * as directories, and an unfollowed symlink reports `is_dir = false`, so all
+     * three survive it, and only following the link tells them apart.
+     *
+     * All three hold through `resolve_symlink_kind`, which is why that option
+     * is set rather than a filter written here. The two negative cases were
+     * `#[ignore]`d while ferralk#89 was open and went green unchanged when it
+     * landed.
+     *
+     * Unix-only: creating a symlink on Windows needs a privilege CI does not
+     * grant.
+     */
+    #[cfg(unix)]
+    #[test]
+    fn includes_a_symlink_that_points_at_a_source_file() {
+        let root = project_with_sources("symlink-to-file", &["app/page.tsx"]);
+        std::os::unix::fs::symlink(root.join("app/page.tsx"), root.join("app/linked.tsx"))
+            .expect("create symlink");
+
+        assert_eq!(
+            discovered(&root),
+            vec![root.join("app/linked.tsx"), root.join("app/page.tsx")]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn excludes_a_symlink_whose_target_is_missing() {
+        let root = project_with_sources("broken-symlink", &["app/page.tsx"]);
+        std::os::unix::fs::symlink(root.join("app/gone.tsx"), root.join("app/broken.tsx"))
+            .expect("create symlink");
+
+        assert_eq!(discovered(&root), vec![root.join("app/page.tsx")]);
+    }
+
+    /*
+     * The link is named like a source and points at a directory. It is not a
+     * source, and the directory behind it is not descended either -- the files
+     * below are found through the real path instead, exactly once.
+     */
+    #[cfg(unix)]
+    #[test]
+    fn excludes_a_symlink_that_points_at_a_directory() {
+        let root = project_with_sources(
+            "symlink-to-directory",
+            &["app/page.tsx", "app/nested/deep.tsx"],
+        );
+        std::os::unix::fs::symlink(root.join("app/nested"), root.join("app/linked.tsx"))
+            .expect("create symlink");
 
         assert_eq!(
             discovered(&root),

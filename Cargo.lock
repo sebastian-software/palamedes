@@ -339,9 +339,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferralk"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e76e18c47ef8bc500115158bae1780d86e1a749871e6ca2ce302e724322c7ea5"
+checksum = "bfcb2f7e4aa17e289c5a7fd2a522408276f237e2c32d78691fcad650350f702e"
 dependencies = [
  "crossbeam-deque",
  "ferralk-glob",
@@ -350,9 +350,9 @@ dependencies = [
 
 [[package]]
 name = "ferralk-glob"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2718946e83dd22ffaa8f1bc97e85ff688fd313e4af225e80d01e9023a5b246d3"
+checksum = "d003bd32b9a7f8a8ad04f76ffbfdfde6e32d7aa57acc28c648f73ebc8cd6a9bd"
 dependencies = [
  "memchr",
 ]
