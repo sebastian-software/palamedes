@@ -71,6 +71,17 @@ pub enum CliError {
         #[source]
         source: globset::Error,
     },
+    /// A catalog pattern the source walker refuses, which is a config problem
+    /// and not a walk failure: an exclude anchored above the walk root, or a
+    /// pattern containing `..`.
+    #[error("Could not use {pattern} for source discovery: {source}")]
+    DiscoveryPattern {
+        pattern: String,
+        #[source]
+        source: ferralk::ferralk_glob::PatternError,
+    },
+    #[error("Could not discover source files: {0}")]
+    Discovery(#[from] ferralk::WalkError),
     #[error("Could not watch source files: {0}")]
     Watch(#[from] notify::Error),
 }

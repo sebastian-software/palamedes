@@ -1,24 +1,23 @@
 //! Turning a catalog's include/exclude patterns into the set of source files
 //! to extract from.
 //!
-//! Discovery walks on [ferralk]. Excluded subtrees are pruned during traversal
-//! rather than filtered afterwards, and the walk is parallel, which is what
-//! palamedes#875 asked for; on this repository that is 30x the previous serial
-//! `ignore` walk and 1.07x a hand-pruned parallel `ignore` one.
+//! Discovery is one [ferralk] walk. The catalog's patterns go to the walker as
+//! they are: absolute, `globset`-flavoured, one list of includes and one of
+//! excludes across every root. Excluded subtrees are pruned during traversal
+//! instead of filtered afterwards and the walk is parallel, which is what
+//! palamedes#875 asked for.
 //!
-//! The catalog's `GlobSet`s still make the final include/exclude call, inside
-//! the visitor so the check runs on the worker that produced the entry. They
-//! are kept for one reason: `globset` as palamedes configures it lets `*` cross
-//! `/`, so `src/*.ts` matches `src/a/b/c.ts` today, while ferralk's `*` is
-//! component-scoped. ferralk#79 would make that mode reachable from the walker
-//! and let the `GlobSet` go.
+//! Two switches make the walker read a palamedes catalog the way `globset`
+//! read it, and both are load-bearing rather than decorative -- see
+//! [`WildcardMode::SeparatorCrossing`] and [`Walker::match_hidden`] at the call
+//! site.
 //!
 //! [ferralk]: https://github.com/sebastian-software/ferralk
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use ferralk::{ErrorPolicy, Verdict, WalkEntry, WalkOptions, Walker};
+use ferralk::{ErrorPolicy, Verdict, WalkOptions, Walker, WildcardMode};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 
 use crate::config::{ConfigCatalog, LoadedConfig};
@@ -29,144 +28,126 @@ pub(crate) fn collect_source_files(
     config: &LoadedConfig,
 ) -> Result<Vec<PathBuf>, CliError> {
     let include_patterns = normalized_include_patterns(catalog, config);
-    let include = build_glob_set(&include_patterns, "include")?;
     let exclude_patterns = resolved_exclude_patterns(catalog, config);
-    let exclude = build_glob_set(&exclude_patterns, "exclude")?;
-    let roots = walk_roots_for_patterns(&include_patterns, &config.root_dir);
-    let threads = discovery_threads(config);
+    let roots = discovery_roots(&include_patterns, &config.root_dir);
+    let (first, rest) = roots.split_first().expect("discovery always has one root");
 
-    let mut files = Vec::new();
-    for root in &roots {
-        let mut walker = Walker::new(root)
-            .threads(threads)
-            // Recoverable traversal errors are dropped rather than reported, as
-            // the `ignore` walk this replaced dropped its `Err` items. Collect
-            // would allocate error records nothing reads.
-            .error_policy(ErrorPolicy::Skip)
-            // Directories are never candidates. The `is_file` call below still
-            // has to happen for symlinks, but not for every directory.
-            .options(WalkOptions::default().files_only(true))
-            /*
-             * Aligns ferralk's wildcards with `globset`'s, which cover a
-             * leading period. Here that affects pruning only: without it a
-             * `node_modules` nested under a dot directory is walked and then
-             * rejected per file instead of being skipped whole. The discovered
-             * set is the same either way, because the `GlobSet` in the visitor
-             * decides -- but the two matchers should agree about what an
-             * exclude covers, and they must agree once ferralk#79 lets the
-             * includes move over too.
-             *
-             * `skip_hidden` stays at its `false` default: that one governs
-             * traversal, this one governs what a wildcard may cover. Hidden
-             * *sources* stay discoverable because of the former.
-             */
-            .match_hidden(true);
-
+    let mut walker = Walker::new(first)
+        // A catalog pattern is a `globset` pattern, and `globset` as palamedes
+        // builds it lets an ordinary wildcard cross a separator: a single-star
+        // segment selects `src/a/b/c.ts` today. Reading the same pattern under
+        // filesystem-glob semantics would quietly select less.
+        //
+        // Unlike `match_hidden`, this one does not recompile patterns already
+        // added, so it has to come before them.
+        .wildcard_mode(WildcardMode::SeparatorCrossing)
         /*
-         * Excludes are handed over for pruning. A rewrite that is narrower than
-         * the catalog's own exclude costs a subtree that could have been
-         * skipped; it can never drop a file, because the `GlobSet` in the
-         * visitor still rejects it. A rewrite that were *broader* could drop a
-         * file, which is why `traversal_pattern` refuses everything it cannot
-         * show to be equivalent.
-         *
-         * The `walker.clone()` is not an oversight. `Walker::exclude` takes
-         * `self` by value and returns `Result<Self, PatternError>`, so a
-         * rejected pattern consumes the builder without handing it back; a
-         * caller that wants to skip one bad pattern and keep the rest has no
-         * other way to hold on to it. ferralk#78 would remove the rewrite
-         * entirely by taking absolute patterns.
+         * `globset` lets a wildcard cover a leading period, and palamedes
+         * discovers hidden sources on purpose: 179 of this repository's own
+         * catalog files live under `site/.react-router/`. `skip_hidden` stays at
+         * its `false` default -- that governs traversal, this governs what a
+         * wildcard may cover.
          */
-        for pattern in &exclude_patterns {
-            if let Some(relative) = traversal_pattern(root, pattern) {
-                if let Ok(next) = walker.clone().exclude(&relative) {
-                    walker = next;
-                }
-            }
-        }
+        .match_hidden(true)
+        .threads(discovery_threads(config))
+        // Recoverable traversal errors are dropped rather than reported, as the
+        // `ignore` walk this replaced dropped its `Err` items.
+        .error_policy(ErrorPolicy::Skip)
+        .options(WalkOptions::default().files_only(true))
+        .add_roots(rest.iter())
+        .map_err(|source| discovery_pattern_error(&roots, source))?;
 
-        /*
-         * `visit` runs this on the worker that produced the entry, so the
-         * `GlobSet` check is as parallel as the traversal. Collecting first and
-         * filtering afterwards made the walk slower than a hand-pruned parallel
-         * `ignore` one, because the filter was single-threaded.
-         *
-         * `Verdict::Skip` does not prune: a rejected directory is still
-         * descended into. Pruning is what `exclude` above expresses.
-         */
-        let verdict = |entry: &WalkEntry| {
-            let path = entry.path();
-            /*
-             * Deliberately `is_file()` and not ferralk's own entry kind, which
-             * describes the link rather than its target: a symlink to a file
-             * counts as a source and a broken one does not.
-             */
-            if !path.is_file() {
-                return Verdict::Skip;
-            }
-            if !exclude.is_match(path) && include.is_match(path) {
-                Verdict::Keep
-            } else {
-                Verdict::Skip
-            }
-        };
-
-        // A walk that cannot start contributes no files, the way the previous
-        // walker's unreadable-root `Err` item did.
-        let Ok(result) = walker.visit(verdict) else {
-            continue;
-        };
-        files.extend(result.entries().iter().map(|entry| entry.path().to_owned()));
+    for pattern in &include_patterns {
+        walker = walker
+            .include(pattern)
+            .map_err(|source| CliError::DiscoveryPattern {
+                pattern: pattern.clone(),
+                source,
+            })?;
+    }
+    for pattern in &exclude_patterns {
+        walker = walker
+            .exclude(pattern)
+            .map_err(|source| CliError::DiscoveryPattern {
+                pattern: pattern.clone(),
+                source,
+            })?;
     }
 
+    /*
+     * The one thing the walker cannot answer: `is_file` follows a symlink, so a
+     * link to a file counts as a source and a broken one does not, while an
+     * entry kind describes the link itself. Running it as a visitor keeps the
+     * `stat` on the worker that produced the entry rather than on one thread
+     * afterwards.
+     */
+    let result = walker.visit(|entry| {
+        if entry.path().is_file() {
+            Verdict::Keep
+        } else {
+            Verdict::Skip
+        }
+    })?;
+
+    let mut files: Vec<PathBuf> = result
+        .entries()
+        .iter()
+        .map(|entry| entry.path().to_owned())
+        .collect();
     sort_and_dedupe_paths(&mut files);
     Ok(files)
 }
 
+/// Where the walk starts.
+///
+/// Every catalog pattern is resolved against the config root, so that is the
+/// shallowest anchor any of them can have, and an exclude like
+/// `<root>/**/node_modules/**` can only be expressed relative to a root at or
+/// above it. Starting there costs nothing: the includes name their own
+/// subtrees, so the walker prunes back down to `app/` on its own.
+///
+/// A pattern resolving outside the config root -- an absolute `include` -- keeps
+/// the root [`walk_roots_for_patterns`] derived for it.
+fn discovery_roots(include_patterns: &[String], root_dir: &Path) -> Vec<PathBuf> {
+    walk_roots_for_patterns(include_patterns, root_dir)
+        .into_iter()
+        .map(|root| {
+            if root.starts_with(root_dir) {
+                root_dir.to_path_buf()
+            } else {
+                root
+            }
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// `add_roots` reports which pattern it could not compile but not which root it
+/// was compiling against, so name the roots rather than guess.
+fn discovery_pattern_error(
+    roots: &[PathBuf],
+    source: ferralk::ferralk_glob::PatternError,
+) -> CliError {
+    CliError::DiscoveryPattern {
+        pattern: roots
+            .iter()
+            .map(|root| root.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(", "),
+        source,
+    }
+}
+
 /// Worker count for discovery: the configured extraction threads, else the
-/// machine's parallelism. ferralk keeps small walks serial on its own, so this
-/// does not need a size floor of its own.
+/// machine's parallelism. ferralk keeps small walks serial below its own size
+/// floor, so this does not need a threshold of its own.
 fn discovery_threads(config: &LoadedConfig) -> usize {
     config
         .extract_threads
         .or_else(|| std::thread::available_parallelism().ok().map(Into::into))
         .unwrap_or(1)
         .max(1)
-}
-
-/// Rewrites an absolute catalog pattern into one ferralk can match against
-/// paths relative to `root`, or `None` when no rewrite is provably equivalent.
-///
-/// Two shapes are accepted:
-///
-/// 1. The pattern starts at this root — `/repo/src` + `/repo/src/**/*.ts`
-///    becomes `**/*.ts`. Every candidate under the root has the prefix
-///    stripped in exactly the same way, so the two forms accept the same set.
-/// 2. The pattern is position-independent below a directory that contains this
-///    root — `/repo/src` + `/repo/**/node_modules/**` becomes
-///    `**/node_modules/**`. A leading `**/` matches zero or more components in
-///    both matchers, so re-anchoring it deeper does not change which
-///    descendants match.
-///
-/// Anything else — `/repo/*/node_modules/**` against a nested root, a pattern
-/// under a sibling root — returns `None` rather than a guess. ferralk#78 would
-/// retire this function by accepting absolute patterns directly.
-fn traversal_pattern(root: &Path, pattern: &str) -> Option<String> {
-    let root = root.to_string_lossy();
-    let root = root.strip_suffix('/').unwrap_or(&root);
-
-    if let Some(relative) = pattern
-        .strip_prefix(root)
-        .and_then(|rest| rest.strip_prefix('/'))
-    {
-        return Some(relative.to_owned());
-    }
-
-    let literal_end = pattern.find(['*', '?', '[', ']', '{', '}', '!', '@', '+', '('])?;
-    let literal = pattern[..literal_end].strip_suffix('/')?;
-    let rest = &pattern[literal_end..];
-    let contains_root = root == literal || root.starts_with(&format!("{literal}/"));
-    (rest.starts_with("**/") && contains_root).then(|| rest.to_owned())
 }
 
 /*
@@ -299,7 +280,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use super::{collect_source_files, sort_and_dedupe_paths, traversal_pattern};
+    use super::{collect_source_files, sort_and_dedupe_paths};
     use crate::commands::test_support::temp_dir;
     use crate::config::load_config;
 
@@ -334,11 +315,9 @@ mod tests {
      * had no test that would have noticed -- which is the reason this one
      * exists and asserts the discovered list rather than a count.
      *
-     * Today the contract holds because discovery hands ferralk no include
-     * patterns and the `GlobSet` decides, so the test passes even with
-     * `Walker::match_hidden` off. That is precisely why it is worth keeping:
-     * when ferralk#79 lets the includes move onto the walker, this is the test
-     * that stops them moving over with hidden matching disabled.
+     * Since the includes moved onto the walker this test is load-bearing:
+     * turning `Walker::match_hidden` off drops three of the four files below
+     * and fails here, which is the whole reason it was written.
      */
     #[test]
     fn discovers_sources_under_hidden_directories() {
@@ -363,6 +342,35 @@ mod tests {
         );
     }
 
+    /*
+     * A catalog pattern is a `globset` pattern, and `globset` as palamedes
+     * builds it lets an ordinary wildcard cross a separator, so a single-star
+     * include reaches a nested file. palamedes' own generated patterns are all
+     * `**`-rooted and cannot tell the two readings apart -- only a hand-written
+     * include like this one can, which is why the case is a fixture rather than
+     * something the real trees would have caught.
+     */
+    #[test]
+    fn a_single_star_include_reaches_nested_files() {
+        let root = temp_dir("crossing-wildcard");
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: ['app/*.tsx']\n",
+        )
+        .expect("write config");
+        for relative in ["app/page.tsx", "app/nested/deep.tsx", "app/skipped.ts"] {
+            let path = root.join(relative);
+            fs::create_dir_all(path.parent().expect("source has a parent"))
+                .expect("create source directory");
+            fs::write(path, "export const message = 1;").expect("write source");
+        }
+
+        assert_eq!(
+            discovered(&root),
+            vec![root.join("app/nested/deep.tsx"), root.join("app/page.tsx")]
+        );
+    }
+
     // The counterpart: a hidden directory is not special to the *exclude*
     // either. A `node_modules` nested under a dot directory stays excluded,
     // whether the walker prunes it or the GlobSet rejects it per file.
@@ -378,53 +386,6 @@ mod tests {
         );
 
         assert_eq!(discovered(&root), vec![root.join("app/page.tsx")]);
-    }
-
-    #[test]
-    fn strips_the_root_a_pattern_already_starts_at() {
-        assert_eq!(
-            traversal_pattern(Path::new("/repo/src"), "/repo/src/**/*.{ts,tsx}").as_deref(),
-            Some("**/*.{ts,tsx}")
-        );
-    }
-
-    #[test]
-    fn reanchors_a_position_independent_pattern_below_the_root() {
-        assert_eq!(
-            traversal_pattern(Path::new("/repo/src"), "/repo/**/node_modules/**").as_deref(),
-            Some("**/node_modules/**")
-        );
-    }
-
-    // A single-star segment names exactly one component; re-anchoring it under
-    // `/repo/src` would make it name a component one level deeper, which is a
-    // different set.
-    #[test]
-    fn refuses_a_pattern_that_is_anchored_to_a_depth() {
-        assert_eq!(
-            traversal_pattern(Path::new("/repo/src"), "/repo/*/node_modules/**"),
-            None
-        );
-    }
-
-    #[test]
-    fn refuses_a_pattern_rooted_in_a_sibling_directory() {
-        assert_eq!(
-            traversal_pattern(Path::new("/repo/src"), "/repo/docs/**/*.mdx"),
-            None
-        );
-    }
-
-    /*
-     * A root whose name merely begins with the literal prefix is not below it:
-     * `/repo-vendor` must not pick up `/repo`'s patterns.
-     */
-    #[test]
-    fn refuses_a_root_that_only_shares_a_name_prefix() {
-        assert_eq!(
-            traversal_pattern(Path::new("/repo-vendor"), "/repo/**/node_modules/**"),
-            None
-        );
     }
 
     /*
@@ -450,5 +411,225 @@ mod tests {
         sort_and_dedupe_paths(&mut paths);
 
         assert_eq!(paths, expected);
+    }
+}
+
+/// TEMPORARY parity scaffold: compares the ferralk walk against the `ignore` +
+/// `globset` implementation it replaced, on a real tree named by
+/// `PALAMEDES_TRIAL_TREE`. Removed before this branch is proposed; it exists to
+/// prove the caller-matcher-free path on trees no fixture can imitate.
+#[cfg(test)]
+mod parity_scaffold {
+    use std::path::{Path, PathBuf};
+
+    use ignore::WalkBuilder;
+
+    use super::{
+        build_include_set, collect_source_files, normalized_include_patterns,
+        resolved_exclude_patterns, sort_and_dedupe_paths, walk_roots_for_patterns,
+    };
+    use crate::config::{load_config, LoadedConfig};
+
+    fn config_over(tree: &Path) -> LoadedConfig {
+        let root = std::env::temp_dir().join(format!(
+            "palamedes-parity-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).expect("create config dir");
+        std::fs::write(
+            root.join("palamedes.yaml"),
+            format!(
+                "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{{locale}}/messages\n    include: ['{tree}']\n    exclude: ['{tree}/**/node_modules/**']\n",
+                tree = tree.display()
+            ),
+        )
+        .expect("write config");
+        load_config(&root, Some(&root.join("palamedes.yaml"))).expect("load config")
+    }
+
+    /// Source discovery exactly as it stood before the ferralk work started.
+    fn reference(config: &LoadedConfig) -> Vec<PathBuf> {
+        let catalog = &config.catalogs[0];
+        let include_patterns = normalized_include_patterns(catalog, config);
+        let include = build_include_set(catalog, config).expect("include set");
+        let exclude = super::build_glob_set(&resolved_exclude_patterns(catalog, config), "exclude")
+            .expect("exclude set");
+        let mut files = Vec::new();
+        for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
+            for entry in WalkBuilder::new(root)
+                .standard_filters(false)
+                .hidden(false)
+                .build()
+            {
+                let Ok(entry) = entry else { continue };
+                let path = entry.path();
+                if path.is_file() && !exclude.is_match(path) && include.is_match(path) {
+                    files.push(path.to_path_buf());
+                }
+            }
+        }
+        sort_and_dedupe_paths(&mut files);
+        files
+    }
+
+    /// `ignore` in parallel with excluded subtrees pruned through
+    /// `filter_entry` and per-worker shards: what palamedes#875 proposed
+    /// building on the stack that was already here. The arm this branch has to
+    /// beat to be worth a dependency.
+    fn pruned_ignore(config: &LoadedConfig, threads: usize) -> Vec<PathBuf> {
+        use std::sync::Mutex;
+
+        use globset::{Glob, GlobSetBuilder};
+        use ignore::WalkState;
+
+        let catalog = &config.catalogs[0];
+        let include_patterns = normalized_include_patterns(catalog, config);
+        let include = build_include_set(catalog, config).expect("include set");
+        let exclude_patterns = resolved_exclude_patterns(catalog, config);
+        let exclude = super::build_glob_set(&exclude_patterns, "exclude").expect("exclude set");
+        let mut prune = GlobSetBuilder::new();
+        for pattern in &exclude_patterns {
+            if let Some(directory) = pattern.strip_suffix("/**") {
+                if let Ok(glob) = Glob::new(directory) {
+                    prune.add(glob);
+                }
+            }
+        }
+        let prune = prune.build().expect("prune set");
+
+        struct Shard<'a> {
+            paths: Vec<PathBuf>,
+            sink: &'a Mutex<Vec<PathBuf>>,
+        }
+        impl Drop for Shard<'_> {
+            fn drop(&mut self) {
+                self.sink.lock().expect("merge").append(&mut self.paths);
+            }
+        }
+
+        // The visitor closure is `move`, so hand it shared references rather
+        // than the matchers themselves.
+        let (include, exclude) = (&include, &exclude);
+        let files = Mutex::new(Vec::new());
+        for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
+            let prune = prune.clone();
+            WalkBuilder::new(root)
+                .standard_filters(false)
+                .hidden(false)
+                .threads(threads)
+                .filter_entry(move |entry| {
+                    !entry.file_type().is_some_and(|kind| kind.is_dir())
+                        || !prune.is_match(entry.path())
+                })
+                .build_parallel()
+                .run(|| {
+                    let mut shard = Shard {
+                        paths: Vec::new(),
+                        sink: &files,
+                    };
+                    Box::new(move |entry| {
+                        if let Ok(entry) = entry {
+                            let path = entry.path();
+                            if path.is_file() && !exclude.is_match(path) && include.is_match(path) {
+                                shard.paths.push(path.to_path_buf());
+                            }
+                        }
+                        WalkState::Continue
+                    })
+                });
+        }
+        let mut files = files.into_inner().expect("collected");
+        sort_and_dedupe_paths(&mut files);
+        files
+    }
+
+    #[test]
+    #[ignore = "needs PALAMEDES_TRIAL_TREE"]
+    fn timing() {
+        let Ok(tree) = std::env::var("PALAMEDES_TRIAL_TREE") else {
+            return;
+        };
+        let tree = PathBuf::from(tree);
+        let rounds = 9usize;
+        let mut config = config_over(&tree);
+
+        // Warm the cache before anyone is timed.
+        let files = reference(&config).len();
+        println!(
+            "tree {} -- {files} files, median of {rounds} warm rounds",
+            tree.display()
+        );
+
+        let mut medians: Vec<(&str, std::time::Duration)> = Vec::new();
+        for (label, threads) in [
+            ("ignore serial (previous)", Some(1usize)),
+            ("ignore pruned x4 (#875)", Some(4)),
+            ("ferralk serial", None),
+            ("ferralk x4", None),
+        ] {
+            let ferralk_threads = match label {
+                "ferralk serial" => Some(1),
+                "ferralk x4" => Some(4),
+                _ => None,
+            };
+            config.extract_threads = ferralk_threads;
+            let mut samples = Vec::with_capacity(rounds);
+            for _ in 0..rounds {
+                let started = std::time::Instant::now();
+                let found = match (label, threads) {
+                    ("ignore serial (previous)", _) => reference(&config),
+                    ("ignore pruned x4 (#875)", Some(n)) => pruned_ignore(&config, n),
+                    _ => collect_source_files(&config.catalogs[0], &config).expect("discover"),
+                };
+                samples.push(started.elapsed());
+                assert_eq!(found.len(), files, "{label} found a different file count");
+                std::hint::black_box(found);
+            }
+            samples.sort_unstable();
+            medians.push((label, samples[samples.len() / 2]));
+        }
+        let baseline = medians[0].1;
+        let target = medians[1].1;
+        for (label, median) in &medians {
+            println!(
+                "  {label}: {median:?} ({:.2}x vs previous, {:.2}x vs #875 x4)",
+                baseline.as_secs_f64() / median.as_secs_f64(),
+                target.as_secs_f64() / median.as_secs_f64()
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "needs PALAMEDES_TRIAL_TREE"]
+    fn matches_the_previous_implementation() {
+        let Ok(tree) = std::env::var("PALAMEDES_TRIAL_TREE") else {
+            return;
+        };
+        let tree = PathBuf::from(tree);
+        let config = config_over(&tree);
+        let expected = reference(&config);
+        let actual = collect_source_files(&config.catalogs[0], &config).expect("discover");
+
+        let missing: Vec<_> = expected.iter().filter(|p| !actual.contains(p)).collect();
+        let extra: Vec<_> = actual.iter().filter(|p| !expected.contains(p)).collect();
+        println!(
+            "tree {} -- reference {} files, ferralk {} files, {} missing, {} extra",
+            tree.display(),
+            expected.len(),
+            actual.len(),
+            missing.len(),
+            extra.len()
+        );
+        for path in missing.iter().take(25) {
+            println!("    only in reference: {}", path.display());
+        }
+        for path in extra.iter().take(25) {
+            println!("    only in ferralk:   {}", path.display());
+        }
+        assert_eq!(actual, expected, "discovered sets differ");
     }
 }
