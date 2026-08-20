@@ -1240,7 +1240,6 @@ dependencies = [
  "config",
  "ferralk",
  "globset",
- "ignore",
  "libc",
  "notify",
  "palamedes",

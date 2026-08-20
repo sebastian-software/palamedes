@@ -54,24 +54,23 @@ pub(crate) fn collect_source_files(
         // `ignore` walk this replaced dropped its `Err` items.
         .error_policy(ErrorPolicy::Skip)
         .options(WalkOptions::default().files_only(true))
+        // `add_root` only compiles the patterns already on the builder, and
+        // there are none yet, so this cannot reject anything.
         .add_roots(rest.iter())
-        .map_err(|source| discovery_pattern_error(&roots, source))?;
+        .expect("adding a root before any pattern always succeeds");
 
+    // A catalog pattern the walker refuses is a config problem, so it is named
+    // in the failure rather than dropped: unlike the `GlobSet` arrangement this
+    // replaced, there is no second matcher to fall back on.
+    let rejected = |pattern: &String| {
+        let pattern = pattern.clone();
+        move |source| CliError::DiscoveryPattern { pattern, source }
+    };
     for pattern in &include_patterns {
-        walker = walker
-            .include(pattern)
-            .map_err(|source| CliError::DiscoveryPattern {
-                pattern: pattern.clone(),
-                source,
-            })?;
+        walker = walker.include(pattern).map_err(rejected(pattern))?;
     }
     for pattern in &exclude_patterns {
-        walker = walker
-            .exclude(pattern)
-            .map_err(|source| CliError::DiscoveryPattern {
-                pattern: pattern.clone(),
-                source,
-            })?;
+        walker = walker.exclude(pattern).map_err(rejected(pattern))?;
     }
 
     /*
@@ -121,22 +120,6 @@ fn discovery_roots(include_patterns: &[String], root_dir: &Path) -> Vec<PathBuf>
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()
-}
-
-/// `add_roots` reports which pattern it could not compile but not which root it
-/// was compiling against, so name the roots rather than guess.
-fn discovery_pattern_error(
-    roots: &[PathBuf],
-    source: ferralk::ferralk_glob::PatternError,
-) -> CliError {
-    CliError::DiscoveryPattern {
-        pattern: roots
-            .iter()
-            .map(|root| root.to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join(", "),
-        source,
-    }
 }
 
 /// Worker count for discovery: the configured extraction threads, else the
@@ -411,225 +394,5 @@ mod tests {
         sort_and_dedupe_paths(&mut paths);
 
         assert_eq!(paths, expected);
-    }
-}
-
-/// TEMPORARY parity scaffold: compares the ferralk walk against the `ignore` +
-/// `globset` implementation it replaced, on a real tree named by
-/// `PALAMEDES_TRIAL_TREE`. Removed before this branch is proposed; it exists to
-/// prove the caller-matcher-free path on trees no fixture can imitate.
-#[cfg(test)]
-mod parity_scaffold {
-    use std::path::{Path, PathBuf};
-
-    use ignore::WalkBuilder;
-
-    use super::{
-        build_include_set, collect_source_files, normalized_include_patterns,
-        resolved_exclude_patterns, sort_and_dedupe_paths, walk_roots_for_patterns,
-    };
-    use crate::config::{load_config, LoadedConfig};
-
-    fn config_over(tree: &Path) -> LoadedConfig {
-        let root = std::env::temp_dir().join(format!(
-            "palamedes-parity-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("clock")
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&root).expect("create config dir");
-        std::fs::write(
-            root.join("palamedes.yaml"),
-            format!(
-                "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{{locale}}/messages\n    include: ['{tree}']\n    exclude: ['{tree}/**/node_modules/**']\n",
-                tree = tree.display()
-            ),
-        )
-        .expect("write config");
-        load_config(&root, Some(&root.join("palamedes.yaml"))).expect("load config")
-    }
-
-    /// Source discovery exactly as it stood before the ferralk work started.
-    fn reference(config: &LoadedConfig) -> Vec<PathBuf> {
-        let catalog = &config.catalogs[0];
-        let include_patterns = normalized_include_patterns(catalog, config);
-        let include = build_include_set(catalog, config).expect("include set");
-        let exclude = super::build_glob_set(&resolved_exclude_patterns(catalog, config), "exclude")
-            .expect("exclude set");
-        let mut files = Vec::new();
-        for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
-            for entry in WalkBuilder::new(root)
-                .standard_filters(false)
-                .hidden(false)
-                .build()
-            {
-                let Ok(entry) = entry else { continue };
-                let path = entry.path();
-                if path.is_file() && !exclude.is_match(path) && include.is_match(path) {
-                    files.push(path.to_path_buf());
-                }
-            }
-        }
-        sort_and_dedupe_paths(&mut files);
-        files
-    }
-
-    /// `ignore` in parallel with excluded subtrees pruned through
-    /// `filter_entry` and per-worker shards: what palamedes#875 proposed
-    /// building on the stack that was already here. The arm this branch has to
-    /// beat to be worth a dependency.
-    fn pruned_ignore(config: &LoadedConfig, threads: usize) -> Vec<PathBuf> {
-        use std::sync::Mutex;
-
-        use globset::{Glob, GlobSetBuilder};
-        use ignore::WalkState;
-
-        let catalog = &config.catalogs[0];
-        let include_patterns = normalized_include_patterns(catalog, config);
-        let include = build_include_set(catalog, config).expect("include set");
-        let exclude_patterns = resolved_exclude_patterns(catalog, config);
-        let exclude = super::build_glob_set(&exclude_patterns, "exclude").expect("exclude set");
-        let mut prune = GlobSetBuilder::new();
-        for pattern in &exclude_patterns {
-            if let Some(directory) = pattern.strip_suffix("/**") {
-                if let Ok(glob) = Glob::new(directory) {
-                    prune.add(glob);
-                }
-            }
-        }
-        let prune = prune.build().expect("prune set");
-
-        struct Shard<'a> {
-            paths: Vec<PathBuf>,
-            sink: &'a Mutex<Vec<PathBuf>>,
-        }
-        impl Drop for Shard<'_> {
-            fn drop(&mut self) {
-                self.sink.lock().expect("merge").append(&mut self.paths);
-            }
-        }
-
-        // The visitor closure is `move`, so hand it shared references rather
-        // than the matchers themselves.
-        let (include, exclude) = (&include, &exclude);
-        let files = Mutex::new(Vec::new());
-        for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
-            let prune = prune.clone();
-            WalkBuilder::new(root)
-                .standard_filters(false)
-                .hidden(false)
-                .threads(threads)
-                .filter_entry(move |entry| {
-                    !entry.file_type().is_some_and(|kind| kind.is_dir())
-                        || !prune.is_match(entry.path())
-                })
-                .build_parallel()
-                .run(|| {
-                    let mut shard = Shard {
-                        paths: Vec::new(),
-                        sink: &files,
-                    };
-                    Box::new(move |entry| {
-                        if let Ok(entry) = entry {
-                            let path = entry.path();
-                            if path.is_file() && !exclude.is_match(path) && include.is_match(path) {
-                                shard.paths.push(path.to_path_buf());
-                            }
-                        }
-                        WalkState::Continue
-                    })
-                });
-        }
-        let mut files = files.into_inner().expect("collected");
-        sort_and_dedupe_paths(&mut files);
-        files
-    }
-
-    #[test]
-    #[ignore = "needs PALAMEDES_TRIAL_TREE"]
-    fn timing() {
-        let Ok(tree) = std::env::var("PALAMEDES_TRIAL_TREE") else {
-            return;
-        };
-        let tree = PathBuf::from(tree);
-        let rounds = 9usize;
-        let mut config = config_over(&tree);
-
-        // Warm the cache before anyone is timed.
-        let files = reference(&config).len();
-        println!(
-            "tree {} -- {files} files, median of {rounds} warm rounds",
-            tree.display()
-        );
-
-        let mut medians: Vec<(&str, std::time::Duration)> = Vec::new();
-        for (label, threads) in [
-            ("ignore serial (previous)", Some(1usize)),
-            ("ignore pruned x4 (#875)", Some(4)),
-            ("ferralk serial", None),
-            ("ferralk x4", None),
-        ] {
-            let ferralk_threads = match label {
-                "ferralk serial" => Some(1),
-                "ferralk x4" => Some(4),
-                _ => None,
-            };
-            config.extract_threads = ferralk_threads;
-            let mut samples = Vec::with_capacity(rounds);
-            for _ in 0..rounds {
-                let started = std::time::Instant::now();
-                let found = match (label, threads) {
-                    ("ignore serial (previous)", _) => reference(&config),
-                    ("ignore pruned x4 (#875)", Some(n)) => pruned_ignore(&config, n),
-                    _ => collect_source_files(&config.catalogs[0], &config).expect("discover"),
-                };
-                samples.push(started.elapsed());
-                assert_eq!(found.len(), files, "{label} found a different file count");
-                std::hint::black_box(found);
-            }
-            samples.sort_unstable();
-            medians.push((label, samples[samples.len() / 2]));
-        }
-        let baseline = medians[0].1;
-        let target = medians[1].1;
-        for (label, median) in &medians {
-            println!(
-                "  {label}: {median:?} ({:.2}x vs previous, {:.2}x vs #875 x4)",
-                baseline.as_secs_f64() / median.as_secs_f64(),
-                target.as_secs_f64() / median.as_secs_f64()
-            );
-        }
-    }
-
-    #[test]
-    #[ignore = "needs PALAMEDES_TRIAL_TREE"]
-    fn matches_the_previous_implementation() {
-        let Ok(tree) = std::env::var("PALAMEDES_TRIAL_TREE") else {
-            return;
-        };
-        let tree = PathBuf::from(tree);
-        let config = config_over(&tree);
-        let expected = reference(&config);
-        let actual = collect_source_files(&config.catalogs[0], &config).expect("discover");
-
-        let missing: Vec<_> = expected.iter().filter(|p| !actual.contains(p)).collect();
-        let extra: Vec<_> = actual.iter().filter(|p| !expected.contains(p)).collect();
-        println!(
-            "tree {} -- reference {} files, ferralk {} files, {} missing, {} extra",
-            tree.display(),
-            expected.len(),
-            actual.len(),
-            missing.len(),
-            extra.len()
-        );
-        for path in missing.iter().take(25) {
-            println!("    only in reference: {}", path.display());
-        }
-        for path in extra.iter().take(25) {
-            println!("    only in ferralk:   {}", path.display());
-        }
-        assert_eq!(actual, expected, "discovered sets differ");
     }
 }
