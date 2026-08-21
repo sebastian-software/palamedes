@@ -8,6 +8,7 @@ use oxc_span::GetSpan;
 use crate::error::PalamedesResult;
 use crate::icu_text::escape_icu_literal;
 use crate::placeholder_name::expression_name;
+use crate::source::DiagnosticLocation;
 use crate::source_message::{
     build_icu_message as shared_build_icu_message, expression_source as shared_expression_source,
     jsx_attributes as shared_jsx_attributes,
@@ -45,7 +46,7 @@ pub(super) fn extract_choice_options(
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<ExtractedChoiceOptions> {
     let lowered = lower_choice_options_from_object(
         object,
@@ -92,7 +93,7 @@ pub(super) fn extract_choice_options_from_jsx(
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<ExtractedChoiceOptions> {
     let lowered = shared_lower_choice_options_from_jsx(
         opening_element,

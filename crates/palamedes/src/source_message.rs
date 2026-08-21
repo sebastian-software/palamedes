@@ -19,6 +19,7 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::jsx_entities::decode_jsx_entities;
 use crate::jsx_message::{clean_jsx_text, join_jsx_message_parts, JsxMessagePart};
 use crate::placeholder_name::{expression_name, jsx_expression_name};
+use crate::source::DiagnosticLocation;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceValue {
@@ -181,7 +182,7 @@ pub(crate) fn lower_choice_options_from_object(
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
     escape_literal: impl Fn(&str) -> String + Copy,
 ) -> PalamedesResult<LoweredChoiceOptions> {
     let mut options = Vec::new();
@@ -264,7 +265,7 @@ pub(crate) fn lower_choice_options_from_jsx(
     used_value_names: &mut HashMap<String, String>,
     format: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
     escape_literal: impl Fn(&str) -> String + Copy,
 ) -> PalamedesResult<LoweredChoiceOptions> {
     let mut options = Vec::new();
