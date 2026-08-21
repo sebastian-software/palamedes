@@ -11,9 +11,9 @@ export const handle = { layout: "bare" }
 
 export function meta() {
   return pageMeta({
-    title: "Get started with Palamedes — guided first translation",
+    title: "Get started with Palamedes — the guided 5-minute path",
     description:
-      "Follow the guided first-translation path: install the scoped @palamedes packages, configure palamedes.yaml, extract with pmds, translate the .po catalog, and see it render.",
+      "Follow the guided 5-minute path from scoped @palamedes packages to a rendered translation. The name describes the route, not a completion-time guarantee.",
     path: "/get-started",
   })
 }
@@ -24,12 +24,12 @@ export default function GetStarted() {
       <section className="px-8 pt-16 pb-14 max-tight:px-5">
         <p className="eyebrow">Quickstart</p>
         <h1 className="mt-6 max-w-[12em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          The guided first-translation path.
+          The guided 5-minute path.
         </h1>
         <p className="mt-6 max-w-[38em]">
           One translated component, one extraction run, one <code>.po</code> file, one runtime
-          instance. It is a compact route through the real moving parts, not a completion-time
-          guarantee.
+          instance. “5-minute path” names this compact route through the real moving parts; it is
+          not a completion-time guarantee.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <ButtonLink href="#loop">See the local loop</ButtonLink>
