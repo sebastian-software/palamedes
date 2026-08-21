@@ -1,26 +1,28 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { spawnNative } from "./native.mjs"
 
 test(
-  "one Unix launcher group signal reaches the native child exactly once",
+  "Unix launcher signals reach the native child exactly once",
   { skip: process.platform === "win32" },
   async (context) => {
-    const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-signal-"))
-    const marker = path.join(fixture, "ready")
-    const receiver = path.join(fixture, "receiver.mjs")
-    const launcher = path.join(fixture, "launcher.mjs")
-    const nativeModule = new URL("native.mjs", import.meta.url).href
-    writeFileSync(
-      receiver,
-      `import { writeFileSync } from "node:fs"
+    for (const signal of ["SIGINT", "SIGTERM"]) {
+      const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-signal-"))
+      const marker = path.join(fixture, "ready")
+      const receiver = path.join(fixture, "receiver.mjs")
+      const launcher = path.join(fixture, "launcher.mjs")
+      const nativeModule = new URL("native.mjs", import.meta.url).href
+      writeFileSync(
+        receiver,
+        `import { writeFileSync } from "node:fs"
 writeFileSync(${JSON.stringify(marker)}, "ready")
 let signals = 0
 let finish
-process.on("SIGINT", () => {
+process.on(${JSON.stringify(signal)}, () => {
   signals += 1
   clearTimeout(finish)
   finish = setTimeout(() => {
@@ -28,6 +30,90 @@ process.on("SIGINT", () => {
     process.exit(0)
   }, 150)
 })
+setInterval(() => {}, 1000)
+`
+      )
+      writeFileSync(
+        launcher,
+        `import { spawnNative } from ${JSON.stringify(nativeModule)}
+const result = await spawnNative([${JSON.stringify(receiver)}], {
+  nativeExecutable: process.execPath,
+  captureOutput: true,
+})
+process.stdout.write(result.stdout)
+process.exitCode = result.exitCode
+`
+      )
+
+      const child = spawn(process.execPath, [launcher], {
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+      let stdout = ""
+      let stderr = ""
+      child.stdout.setEncoding("utf8")
+      child.stderr.setEncoding("utf8")
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk
+      })
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk
+      })
+
+      context.after(() => {
+        try {
+          process.kill(-child.pid, "SIGKILL")
+        } catch (error) {
+          if (error?.code !== "ESRCH") throw error
+        }
+        rmSync(fixture, { recursive: true, force: true })
+      })
+
+      await waitFor(() => existsSync(marker), 5000)
+      process.kill(-child.pid, signal)
+      const { code, signal: exitSignal } = await waitForExit(child, 5000)
+      assert.equal(exitSignal, null)
+      assert.equal(code, 0, stderr)
+      assert.equal(stdout, "1")
+    }
+  }
+)
+
+test(
+  "Unix launcher forwards SIGHUP to the complete native process group and then exits",
+  { skip: process.platform === "win32" },
+  async (context) => {
+    const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-hangup-"))
+    const launcherReady = path.join(fixture, "launcher-ready")
+    const workerReady = path.join(fixture, "worker-ready")
+    const workerSignals = path.join(fixture, "worker-signals")
+    const worker = path.join(fixture, "worker.mjs")
+    const receiver = path.join(fixture, "receiver.mjs")
+    const launcher = path.join(fixture, "launcher.mjs")
+    const nativeModule = new URL("native.mjs", import.meta.url).href
+    writeFileSync(
+      worker,
+      `import { writeFileSync } from "node:fs"
+writeFileSync(${JSON.stringify(workerReady)}, "ready")
+let signals = 0
+let finish
+process.on("SIGHUP", () => {
+  signals += 1
+  clearTimeout(finish)
+  finish = setTimeout(() => {
+    writeFileSync(${JSON.stringify(workerSignals)}, String(signals))
+    process.exit(0)
+  }, 150)
+})
+setInterval(() => {}, 1000)
+`
+    )
+    writeFileSync(
+      receiver,
+      `import { spawn } from "node:child_process"
+import { writeFileSync } from "node:fs"
+spawn(process.execPath, [${JSON.stringify(worker)}], { stdio: "ignore" })
+writeFileSync(${JSON.stringify(launcherReady)}, "ready")
 setInterval(() => {}, 1000)
 `
     )
@@ -67,14 +153,82 @@ process.exitCode = result.exitCode
       rmSync(fixture, { recursive: true, force: true })
     })
 
-    await waitFor(() => existsSync(marker), 5000)
-    process.kill(-child.pid, "SIGINT")
+    await waitFor(() => existsSync(launcherReady) && existsSync(workerReady), 5000)
+    process.kill(-child.pid, "SIGHUP")
     const { code, signal } = await waitForExit(child, 5000)
+    await waitFor(() => existsSync(workerSignals), 5000)
     assert.equal(signal, null)
-    assert.equal(code, 0, stderr)
-    assert.equal(stdout, "1")
+    assert.equal(code, 129, stderr)
+    assert.equal(stdout, "")
+    assert.equal(readFileSync(workerSignals, "utf8"), "1")
   }
 )
+
+test(
+  "Unix launcher termination forwards SIGTERM to the native process group",
+  { skip: process.platform === "win32" },
+  async (context) => {
+    const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-parent-exit-"))
+    const marker = path.join(fixture, "native-terminated")
+    const receiver = path.join(fixture, "receiver.mjs")
+    const launcher = path.join(fixture, "launcher.mjs")
+    const nativeModule = new URL("native.mjs", import.meta.url).href
+    writeFileSync(
+      receiver,
+      `import { writeFileSync } from "node:fs"
+process.on("SIGTERM", () => {
+  writeFileSync(${JSON.stringify(marker)}, "terminated")
+  process.exit(0)
+})
+setInterval(() => {}, 1000)
+`
+    )
+    writeFileSync(
+      launcher,
+      `import { spawnNative } from ${JSON.stringify(nativeModule)}
+void spawnNative([${JSON.stringify(receiver)}], { nativeExecutable: process.execPath })
+setTimeout(() => process.exit(75), 100)
+`
+    )
+
+    const child = spawn(process.execPath, [launcher], {
+      detached: true,
+      stdio: ["ignore", "ignore", "pipe"],
+    })
+    let stderr = ""
+    child.stderr.setEncoding("utf8")
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk
+    })
+
+    context.after(() => {
+      try {
+        process.kill(-child.pid, "SIGKILL")
+      } catch (error) {
+        if (error?.code !== "ESRCH") throw error
+      }
+      rmSync(fixture, { recursive: true, force: true })
+    })
+
+    const { code, signal } = await waitForExit(child, 5000)
+    await waitFor(() => existsSync(marker), 5000)
+    assert.equal(signal, null)
+    assert.equal(code, 75, stderr)
+    assert.equal(readFileSync(marker, "utf8"), "terminated")
+  }
+)
+
+test("native signal listeners are removed after the child exits or fails", async () => {
+  const before = signalListenerCounts()
+  const exitCode = await spawnNative(["-e", ""], { nativeExecutable: process.execPath })
+  assert.equal(exitCode, 0)
+  assert.deepEqual(signalListenerCounts(), before)
+
+  await assert.rejects(
+    spawnNative([], { nativeExecutable: path.join(os.tmpdir(), "missing-palamedes-native") })
+  )
+  assert.deepEqual(signalListenerCounts(), before)
+})
 
 async function waitFor(predicate, timeout) {
   const deadline = Date.now() + timeout
@@ -99,4 +253,10 @@ function waitForExit(child, timeout) {
       resolve({ code, signal })
     })
   })
+}
+
+function signalListenerCounts() {
+  return Object.fromEntries(
+    ["SIGINT", "SIGTERM", "SIGHUP", "exit"].map((signal) => [signal, process.listenerCount(signal)])
+  )
 }
