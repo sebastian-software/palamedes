@@ -524,7 +524,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       resolvedKeepSourceFallbacks = keepSourceFallbacks ?? env.command === "serve"
       stripNonEssentialProps = env.command === "build"
       isBuildCommand = env.command === "build"
-      resolvedBase = typeof viteConfig.base === "string" ? viteConfig.base : "/"
       const ids = new Set(PALAMEDES_MACRO_PACKAGES)
       macroIds = ids
 
@@ -538,6 +537,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       for (const macroId of ids) {
         viteConfig.optimizeDeps.exclude.push(macroId)
       }
+    },
+
+    // Vite normalizes `base` and applies every plugin's config hook before
+    // this lifecycle point. Import maps need that final base so asset URLs
+    // retain their separator for non-root and relative deployments.
+    configResolved(viteConfig) {
+      resolvedBase = viteConfig.base
     },
 
     transform(code, id) {

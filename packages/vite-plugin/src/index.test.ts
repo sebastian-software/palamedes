@@ -690,19 +690,7 @@ describe("experimental graph splitting", () => {
       {},
       { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
     )
-    const emitted: { fileName: string; source: string }[] = []
-    await sidecarPlugin.generateBundle.call(
-      {
-        environment: { name: "client" },
-        emitFile: (file: { fileName: string; source: string }) => emitted.push(file),
-      } as never,
-      {},
-      {
-        "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
-        "assets/vendor.js": { type: "chunk", imports: [] },
-        "assets/style.css": { type: "asset" },
-      }
-    )
+    const emitted = await emitImportMap(sidecarPlugin, key)
 
     // One dependency-free asset per (sidecar x locale), pseudo included.
     const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"))
@@ -726,6 +714,39 @@ describe("experimental graph splitting", () => {
     // the mapped assets of the chunks they serve.
     expect(parsed.chunkImports).toEqual({ "assets/home-abc.js": [`#pmds/${key}`] })
   })
+
+  it.each([
+    ["/app", "/app/"],
+    ["/app/", "/app/"],
+    ["./", "./"],
+    ["/app", "/configured-by-another-plugin/"],
+  ] as const)(
+    "uses Vite's final base %s when generating import-map assets as %s",
+    async (rawBase, finalBase) => {
+      mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+        nativeModuleShape(JSON.stringify(messages))
+      )
+      const { key, sidecarPlugin } = await runSidecarLoad(
+        ["id-a"],
+        {},
+        {
+          pluginOptions: IMPORT_MAP_OPTIONS,
+          command: "build",
+          rawBase,
+          finalBase,
+        }
+      )
+
+      const emitted = await emitImportMap(sidecarPlugin, key)
+      const asset = emitted.find((file) => file.fileName.startsWith("assets/palamedes-m-"))
+      const importMap = emitted.find((file) => file.fileName.includes("palamedes-importmap.en-"))
+      const assetUrl = JSON.parse(importMap!.source).imports[`#pmds/${key}`]
+
+      expect(assetUrl).toBe(`${finalBase}${asset!.fileName}`)
+      expect(assetUrl).not.toContain("/appassets/")
+      expect(assetUrl).not.toContain(".assets/")
+    }
+  )
 
   it("fails the import-map build on missing translations when configured", async () => {
     // The emitted assets are the only client-visible artifact of this binding,
@@ -811,6 +832,8 @@ async function runSidecarLoad(
   setup: {
     pluginOptions?: Parameters<typeof palamedes>[0]
     command?: "build" | "serve"
+    rawBase?: string
+    finalBase?: string
   } = {}
 ): Promise<{
   load: (id: string, loadOptions?: { ssr?: boolean }) => Promise<any>
@@ -839,11 +862,19 @@ async function runSidecarLoad(
   if (setup.command && typeof macroPlugin?.config === "function") {
     macroPlugin.config.call(
       {} as any,
-      {} as any,
+      setup.rawBase === undefined ? ({} as any) : ({ base: setup.rawBase } as any),
       {
         command: setup.command,
         mode: setup.command === "serve" ? "development" : "production",
       } as any
+    )
+
+    if (typeof macroPlugin.configResolved !== "function") {
+      throw new TypeError("Expected transform configResolved hook")
+    }
+    macroPlugin.configResolved.call(
+      {} as any,
+      { base: setup.finalBase ?? setup.rawBase ?? "/" } as any
     )
   }
 
@@ -875,6 +906,23 @@ async function runSidecarLoad(
     )
 
   return { load: boundLoad, key, addWatchFile, sidecarPlugin }
+}
+
+async function emitImportMap(sidecarPlugin: any, key: string) {
+  const emitted: { fileName: string; source: string }[] = []
+  await sidecarPlugin.generateBundle.call(
+    {
+      environment: { name: "client" },
+      emitFile: (file: { fileName: string; source: string }) => emitted.push(file),
+    } as never,
+    {},
+    {
+      "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
+      "assets/vendor.js": { type: "chunk", imports: [] },
+      "assets/style.css": { type: "asset" },
+    }
+  )
+  return emitted
 }
 
 function runMacroTransform(
