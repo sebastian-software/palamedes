@@ -66,6 +66,33 @@ const SOURCE_FALLBACK_DOC_TARGETS = [
 const SOURCE_FALLBACK_TSDOC_PATTERN =
   /Defaults to `true` in every environment\.[\s\S]*Set to `false` for compact,[\s\S]*bundle size or embedding authored source text/u
 
+const SOURCE_FALLBACK_POLICY_TARGETS = [
+  {
+    file: "adr/004-internal-compiled-lookup-keys.md",
+    snippets: [
+      "Low-level transforms generate compact runtime calls without embedding the authored source message by default.",
+      "First-party host adapters override that low-level default and preserve source fallbacks in both development and production",
+      "Set `keepSourceFallbacks: false` for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+    ],
+  },
+  {
+    file: "CHANGELOG.md",
+    snippets: [
+      "First-party host adapters preserve inline source-message fallbacks in macro and MDX output by default in both development and production.",
+      "Set `keepSourceFallbacks: false` for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+      "The low-level transform retains its stripped default (`keepSourceFallbacks: false`)",
+    ],
+  },
+  {
+    file: "crates/palamedes/src/transform/mod.rs",
+    snippets: [
+      "The native transform itself strips source fallbacks by default (`None` resolves to `false`).",
+      "First-party host adapters set this to `true` in every environment unless explicitly configured with `keepSourceFallbacks: false`",
+      "for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+    ],
+  },
+]
+
 function typedSubpaths({ manifest }) {
   const skipped = UNTYPED_SUBPATHS.get(manifest.name) ?? new Set()
   return Object.entries(manifest.exports ?? { ".": {} })
@@ -296,6 +323,18 @@ function assertSourceFallbackDefaultDocumentation() {
     }
     if (!docsText.includes("`keepSourceFallbacks: false`")) {
       problems.push(`${docs} does not document the explicit compact/hash-only opt-out.`)
+    }
+  }
+
+  for (const { file, snippets } of SOURCE_FALLBACK_POLICY_TARGETS) {
+    const policyText = readFileSync(path.join(root, file), "utf8")
+      .replace(/^\s*\/\/\/\s?/gmu, "")
+      .replace(/\s+/gu, " ")
+      .trim()
+    for (const snippet of snippets) {
+      if (!policyText.includes(snippet)) {
+        problems.push(`${file} has drifted from the source-fallback policy: missing ${snippet}`)
+      }
     }
   }
 

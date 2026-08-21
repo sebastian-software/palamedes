@@ -47,8 +47,11 @@ pub struct NativeTransformOptions {
     pub strip_non_essential_props: Option<bool>,
     /// Keeps source messages in generated runtime calls and rich-text props.
     ///
-    /// Source fallbacks are stripped by default. Development host adapters set
-    /// this to `true`; production adapters only do so when explicitly asked.
+    /// The native transform itself strips source fallbacks by default (`None`
+    /// resolves to `false`). First-party host adapters set this to `true` in
+    /// every environment unless explicitly configured with
+    /// `keepSourceFallbacks: false` for compact, hash-only output when bundle
+    /// size or embedding authored source text is a concern.
     #[serde(rename = "keepSourceFallbacks")]
     pub keep_source_fallbacks: Option<bool>,
     /// Legacy inverse of `keep_source_fallbacks`.

@@ -16,11 +16,11 @@ landed in.
 
 ### Compatibility Notes
 
-- Production integrations now strip inline source-message fallbacks from macro
-  and MDX output by default. Vite preserves them during `vite serve`; Vite
-  builds, Next production, and Remix production emit compact lookup calls.
-  Set `keepSourceFallbacks: true` on the host adapter to preserve the earlier
-  behavior. The low-level transform uses the same stripped default;
+- First-party host adapters preserve inline source-message fallbacks in macro
+  and MDX output by default in both development and production. Set
+  `keepSourceFallbacks: false` for compact, hash-only output when bundle size or
+  embedding authored source text is a concern. The low-level transform retains
+  its stripped default (`keepSourceFallbacks: false`);
   `stripMessageField` remains as a deprecated inverse compatibility option.
   Production host adapters also remove translator comments and context metadata
   from generated runtime descriptors; development keeps them for diagnostics.
