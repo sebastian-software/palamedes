@@ -18,7 +18,20 @@ import { startSiteStaticServer } from "./site-static-server.mjs"
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
 const generatedDocsDir = join(repoRoot, "site/app/routes/docs")
-const PORT = 4102
+
+function portFromEnv(name, fallback) {
+  const configured = process.env[name]
+  if (configured === undefined) return fallback
+  const port = Number(configured)
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(
+      `${name} must be an integer between 1 and 65_535, got ${JSON.stringify(configured)}`
+    )
+  }
+  return port
+}
+
+const PORT = portFromEnv("SITE_VERIFY_PORT", 4102)
 
 /*
  * The ProofStrip speedup figure is read out of bench.ts rather than repeated
@@ -69,8 +82,9 @@ const ROUTE_EXPECTATIONS = [
   },
   { path: "/proof", h1: "Claims you can re-run." },
   { path: "/get-started", h1: "The guided 5-minute path." },
-  { path: "/compare", h1: "Compare it properly." },
+  { path: "/compare", h1: "Choose the i18n model you can keep." },
   { path: "/compare/lingui", h1: "The same idea, on an engine" },
+  { path: "/compare/fbtee", h1: "Grammar in JSX, or standards" },
   { path: "/compare/i18next", h1: "You already know what the string says." },
   { path: "/compare/next-intl", h1: "frameworks wide." },
   { path: "/compare/react-intl", h1: "Keep the ICU rigor. Lose the provider." },
@@ -362,20 +376,54 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (hubShift !== 1) {
       fail("compare hub: native-toolchain explanation missing")
     }
-    await gotoAndSettle(comparePage, "/compare/lingui", { settleMs: 1500 })
-    const sectionNumbers = await comparePage.locator(".pmds-section-number").allTextContents()
-    if (
-      sectionNumbers[0]?.trim() !== "01 — Decide" ||
-      sectionNumbers[1]?.trim() !== "02 — Lingui"
-    ) {
-      fail(`rival template: verdict must precede supporting detail (${sectionNumbers.join(", ")})`)
+    const rivalPaths = [
+      "/compare/lingui",
+      "/compare/fbtee",
+      "/compare/i18next",
+      "/compare/next-intl",
+      "/compare/react-intl",
+      "/compare/paraglide",
+      "/compare/tolgee",
+      "/compare/intlayer",
+    ]
+    for (const path of rivalPaths) {
+      await gotoAndSettle(comparePage, path, { settleMs: 1500 })
+      const sectionNumbers = await comparePage.locator(".pmds-section-number").allTextContents()
+      if (
+        sectionNumbers[0]?.trim() !== "01 — Decide" ||
+        sectionNumbers[1]?.trim() !== "02 — Daily work"
+      ) {
+        fail(
+          `${path}: decision and workflow outcomes must precede supporting detail (${sectionNumbers.join(", ")})`
+        )
+      }
+      if (
+        (await comparePage.getByRole("heading", { name: /Pick Palamedes when/u }).count()) !== 1
+      ) {
+        fail(`${path}: missing Palamedes decision path`)
+      }
+      if ((await comparePage.locator("details").count()) !== 5) {
+        fail(`${path}: expected five comparison-specific FAQs`)
+      }
+      const faqSchemaCount = await comparePage
+        .locator('script[type="application/ld+json"]')
+        .evaluateAll(
+          (scripts) =>
+            scripts
+              .map((script) => JSON.parse(script.textContent ?? "{}"))
+              .filter((entry) => entry["@type"] === "FAQPage")
+              .flatMap((entry) => entry.mainEntity ?? []).length
+        )
+      if (faqSchemaCount !== 5) {
+        fail(`${path}: FAQ schema must match the five visible questions`)
+      }
     }
     const repeatedShift = await comparePage
       .getByRole("heading", {
         name: "The toolchain already moved. i18n tooling mostly hasn't.",
       })
       .count()
-    if (repeatedShift > 0 || sectionNumbers.some((section) => section.includes("Also weighing"))) {
+    if (repeatedShift > 0) {
       fail("rival template: repeated shift or obsolete section remains")
     }
     await comparePage.close()

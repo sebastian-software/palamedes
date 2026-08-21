@@ -10,15 +10,18 @@ export function pageMeta({
   description,
   path,
   image = "/og-image.png",
+  faq,
 }: {
   title: string
   description: string
   path: string
   /** Site-relative path to a 1200×630 image. Defaults to the shared card. */
   image?: string
+  /** Visible FAQ entries can opt into matching, prerendered FAQPage schema. */
+  faq?: { q: string; a: string }[]
 }) {
   const url = path === "/" ? `${SITE_ORIGIN}/` : `${SITE_ORIGIN}${path}`
-  return [
+  const metadata = [
     { title },
     { name: "description", content: description },
     { tagName: "link", rel: "canonical", href: url },
@@ -32,6 +35,23 @@ export function pageMeta({
     { property: "og:image:height", content: "630" },
     { name: "twitter:card", content: "summary_large_image" },
   ]
+
+  return faq
+    ? [
+        ...metadata,
+        {
+          "script:ld+json": {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: faq.map((entry) => ({
+              "@type": "Question",
+              name: entry.q,
+              acceptedAnswer: { "@type": "Answer", text: entry.a },
+            })),
+          },
+        },
+      ]
+    : metadata
 }
 
 /*
