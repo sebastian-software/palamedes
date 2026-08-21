@@ -32,6 +32,17 @@ fn transform_macros(
     Ok(result)
 }
 
+#[test]
+fn parser_errors_include_filename_line_and_column() {
+    let source = "const first = ;\n";
+    let error = transform_macros_raw(source, "src/view.ts", None).expect_err("parse error");
+    let message = error.to_string();
+
+    assert!(message.starts_with("Parse error in src/view.ts:"));
+    assert!(message.contains("src/view.ts:1:15:"));
+    assert!(message.contains("Unexpected token"), "{message}");
+}
+
 fn server_function_options() -> NativeTransformOptions {
     NativeTransformOptions {
         server_functions: Some(ServerFunctionTransformOptions {

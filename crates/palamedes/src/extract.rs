@@ -13,9 +13,10 @@ use crate::jsx_message::clean_jsx_text;
 use crate::mdx::{analyze_mdx, MdxOptions};
 use crate::placeholder_name::expression_name;
 use crate::source::{
-    SourceAnalysisOptions, SourceAnalysisResult, SourceComment, SourceCommentKind,
-    SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceLocator,
-    SourceRange, SourceRuleOptions, SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
+    display_filename, format_parser_diagnostics, SourceAnalysisOptions, SourceAnalysisResult,
+    SourceComment, SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity,
+    SourceFileAnalysisResult, SourceLocator, SourceRange, SourceRuleOptions,
+    SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX,
 };
 use crate::source_macros::{record_macro_import_declaration, ImportedMacro};
@@ -1862,13 +1863,11 @@ fn analyze_source_in(
     let parsed = Parser::new(allocator, source, source_type).parse();
 
     if !parsed.diagnostics.is_empty() {
-        let messages = parsed
-            .diagnostics
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ");
-        return Err(PalamedesError::ParseSource { messages });
+        let filename = display_filename(filename).to_owned();
+        return Err(PalamedesError::ParseModuleSource {
+            messages: format_parser_diagnostics(source, &filename, &parsed.diagnostics),
+            filename,
+        });
     }
 
     let source_locator = SourceLocator::new(source);
@@ -2516,6 +2515,31 @@ function Greeting({ name }: { name: string }) {
         assert_eq!(result.messages.len(), 1);
         assert_eq!(result.messages[0].message, "Hello {name}");
         assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn extraction_and_analysis_parser_errors_include_source_locations() {
+        let source = "const ready = true;\nconst broken = ;\n";
+        let filename = "src/components/Greeting.ts";
+
+        let extraction_error = extract_messages_raw(source, filename).expect_err("parse error");
+        let analysis_error = analyze_source(source, filename).expect_err("parse error");
+
+        for error in [extraction_error, analysis_error] {
+            let message = error.to_string();
+            assert!(message.starts_with("Parse error in src/components/Greeting.ts:"));
+            assert!(message.contains("src/components/Greeting.ts:2:16:"));
+            assert!(message.contains("Unexpected token"), "{message}");
+        }
+    }
+
+    #[test]
+    fn parser_errors_use_an_honest_fallback_for_an_unknown_filename() {
+        let error = analyze_source("const broken = ;", "").expect_err("parse error");
+
+        assert!(error
+            .to_string()
+            .contains("<unknown source>:1:16: Unexpected token"));
     }
 
     #[test]

@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use string_wizard::{Hires, MagicString, SourceMapOptions};
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::source::{display_filename, format_parser_diagnostics};
 use crate::translation_scope::{source_location, validate_translation_macro_scopes};
 
 use self::imports::ImportCollector;
@@ -170,15 +171,10 @@ pub fn transform_macros(
     let parsed = Parser::new(&allocator, source, source_type).parse();
 
     if !parsed.diagnostics.is_empty() {
-        let messages = parsed
-            .diagnostics
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let filename = display_filename(filename).to_owned();
         return Err(PalamedesError::ParseModuleSource {
-            filename: filename.to_owned(),
-            messages,
+            messages: format_parser_diagnostics(source, &filename, &parsed.diagnostics),
+            filename,
         });
     }
 
