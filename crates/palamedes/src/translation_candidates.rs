@@ -1605,13 +1605,25 @@ where
     // `PreparedCatalog::content` has already been rendered into its target format. Writing it
     // directly avoids asking `convert_catalog_file` to parse and render the same catalog again.
     // Keep the replacement atomic and fully durable when the filesystem permits it: sync the
-    // temporary content, rename beside the target, then sync the containing directory. `persist`
-    // is the visible commit point, so a later directory-sync failure is a successful replacement
-    // with an explicit durability warning rather than a false "not applied" error.
+    // temporary content and inherited target permissions, rename beside the target, then sync the
+    // containing directory. `persist` is the visible commit point, so a later directory-sync
+    // failure is a successful replacement with an explicit durability warning rather than a false
+    // "not applied" error. A new target keeps `NamedTempFile`'s secure platform default instead of
+    // inventing permissions that may conflict with the caller's policy.
     let directory = catalog
         .path
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
+    let target_permissions = match fs::metadata(&catalog.path) {
+        Ok(metadata) => Some(metadata.permissions()),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => None,
+        Err(source) => {
+            return Err(PalamedesError::WriteFile {
+                path: catalog.path.clone(),
+                source,
+            })
+        }
+    };
     fs::create_dir_all(directory).map_err(|source| PalamedesError::WriteFile {
         path: catalog.path.clone(),
         source,
@@ -1627,6 +1639,15 @@ where
             path: catalog.path.clone(),
             source,
         })?;
+    if let Some(permissions) = target_permissions {
+        temporary
+            .as_file()
+            .set_permissions(permissions)
+            .map_err(|source| PalamedesError::WriteFile {
+                path: catalog.path.clone(),
+                source,
+            })?;
+    }
     temporary
         .as_file()
         .sync_all()
@@ -1823,7 +1844,7 @@ mod tests {
         atomic_replace_catalog, atomic_replace_catalog_with_directory_sync, build_candidate,
         find_po_item, list_translation_candidates, load_catalog, parse_catalog_as_po,
         po_item_indexes, reset_source_catalog_parse_count, source_catalog_parse_count,
-        TranslationCandidate, TranslationCandidateId, TranslationCandidateRequest,
+        PreparedCatalog, TranslationCandidate, TranslationCandidateId, TranslationCandidateRequest,
         TranslationMachineProvenance, TranslationPatch, TranslationPatchOutcomeStatus,
         TranslationPatchRequest, TranslationPluralKind, TranslationValue,
     };
@@ -3192,6 +3213,73 @@ msgstr "placeholder"
         assert!(fs::read_to_string(path)
             .expect("read visibly committed catalog")
             .contains("msgstr \"Hallo\""));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_fcl_patch_preserves_existing_unix_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        for mode in [0o644, 0o755] {
+            let fixture = tempfile::tempdir().expect("fixture directory");
+            let path = fixture.path().join("features/de.fcl");
+            write_fcl_fixture(&path, "de");
+            fs::set_permissions(&path, fs::Permissions::from_mode(mode))
+                .expect("set catalog mode before patch");
+            let listed = list_translation_candidates(&TranslationCandidateRequest {
+                config: fcl_config(fixture.path()),
+                locales: vec!["de".to_owned()],
+                targets: vec![id("features/{locale}", "de", "Hello", None)],
+                max_origins: 8,
+            })
+            .expect("list FCL candidate");
+            let hello = candidate(&listed.candidates, "Hello");
+
+            let result = apply_translation_patches(TranslationPatchRequest {
+                config: fcl_config(fixture.path()),
+                po: None,
+                patches: vec![singular_patch(hello, "Hallo")],
+            })
+            .expect("apply FCL patch through the public API");
+
+            assert!(result.updated);
+            assert_eq!(
+                fs::metadata(&path)
+                    .expect("read patched catalog metadata")
+                    .permissions()
+                    .mode()
+                    & 0o7777,
+                mode,
+                "replacement changed mode {mode:o}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn new_direct_replacement_keeps_secure_tempfile_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("new/messages.po");
+        let prepared = PreparedCatalog {
+            path: path.clone(),
+            locale: "de".to_owned(),
+            patch_indexes: Vec::new(),
+            content: "msgid \"Hello\"\nmsgstr \"Hallo\"\n".to_owned(),
+            changed: true,
+        };
+
+        atomic_replace_catalog(&prepared, "en", None).expect("create new catalog atomically");
+
+        assert_eq!(
+            fs::metadata(path)
+                .expect("read new catalog metadata")
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o600
+        );
     }
 
     #[test]
