@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
@@ -39,6 +47,51 @@ const UNTYPED_PACKAGES = new Map([
 const UNTYPED_SUBPATHS = new Map([
   ["@palamedes/next-plugin", new Set(["./palamedes-loader", "./palamedes-po-loader"])],
 ])
+
+const SOURCE_FALLBACK_DOC_TARGETS = [
+  {
+    packageDirectory: "packages/vite-plugin",
+    docs: "docs/api/vite-plugin.md",
+  },
+  {
+    packageDirectory: "packages/next-plugin",
+    docs: "docs/api/next-plugin.md",
+  },
+  {
+    packageDirectory: "packages/remix",
+    docs: "docs/api/remix.md",
+  },
+]
+
+const SOURCE_FALLBACK_TSDOC_PATTERN =
+  /Defaults to `true` in every environment\.[\s\S]*Set to `false` for compact,[\s\S]*bundle size or embedding authored source text/u
+
+const SOURCE_FALLBACK_POLICY_TARGETS = [
+  {
+    file: "adr/004-internal-compiled-lookup-keys.md",
+    snippets: [
+      "Low-level transforms generate compact runtime calls without embedding the authored source message by default.",
+      "First-party host adapters override that low-level default and preserve source fallbacks in both development and production",
+      "Set `keepSourceFallbacks: false` for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+    ],
+  },
+  {
+    file: "CHANGELOG.md",
+    snippets: [
+      "First-party host adapters preserve inline source-message fallbacks in macro and MDX output by default in both development and production.",
+      "Set `keepSourceFallbacks: false` for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+      "The low-level transform retains its stripped default (`keepSourceFallbacks: false`)",
+    ],
+  },
+  {
+    file: "crates/palamedes/src/transform/mod.rs",
+    snippets: [
+      "The native transform itself strips source fallbacks by default (`None` resolves to `false`).",
+      "First-party host adapters set this to `true` in every environment unless explicitly configured with `keepSourceFallbacks: false`",
+      "for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+    ],
+  },
+]
 
 function typedSubpaths({ manifest }) {
   const skipped = UNTYPED_SUBPATHS.get(manifest.name) ?? new Set()
@@ -225,6 +278,71 @@ function assertDeclarationTargetsArePacked(packages) {
   }
 }
 
+/**
+ * Adapter defaults are user-facing behavior, including the comments copied to
+ * published declarations. Pin both declaration formats and the canonical API
+ * docs so a runtime-default change cannot leave editor help behind again.
+ */
+function assertSourceFallbackDefaultDocumentation() {
+  const problems = []
+
+  for (const { packageDirectory, docs } of SOURCE_FALLBACK_DOC_TARGETS) {
+    const declarationFiles = ["index.d.ts", "index.d.mts", "index.d.cts"].map((file) =>
+      path.join(root, packageDirectory, "dist", file)
+    )
+
+    for (const file of [
+      path.join(root, packageDirectory, "src", "index.ts"),
+      ...declarationFiles,
+    ]) {
+      if (!existsSync(file)) {
+        problems.push(`${path.relative(root, file)} is missing after a build.`)
+        continue
+      }
+      const text = readFileSync(file, "utf8")
+      const optionIndex = text.indexOf("keepSourceFallbacks?: boolean")
+      const docStart = text.lastIndexOf("/**", optionIndex)
+      const docEnd = text.indexOf("*/", docStart)
+      if (optionIndex === -1 || docStart === -1 || docEnd < docStart || docEnd > optionIndex) {
+        problems.push(
+          `${path.relative(root, file)} has no public TSDoc immediately before keepSourceFallbacks.`
+        )
+        continue
+      }
+      const optionDocs = text.slice(docStart, docEnd)
+      if (!SOURCE_FALLBACK_TSDOC_PATTERN.test(optionDocs)) {
+        problems.push(
+          `${path.relative(root, file)} does not document the all-environments default and compact/source-exposure opt-out.`
+        )
+      }
+    }
+
+    const docsText = readFileSync(path.join(root, docs), "utf8")
+    if (!docsText.includes("- `keepSourceFallbacks`: `true`")) {
+      problems.push(`${docs} does not document the default as true.`)
+    }
+    if (!docsText.includes("`keepSourceFallbacks: false`")) {
+      problems.push(`${docs} does not document the explicit compact/hash-only opt-out.`)
+    }
+  }
+
+  for (const { file, snippets } of SOURCE_FALLBACK_POLICY_TARGETS) {
+    const policyText = readFileSync(path.join(root, file), "utf8")
+      .replace(/^\s*\/\/\/\s?/gmu, "")
+      .replace(/\s+/gu, " ")
+      .trim()
+    for (const snippet of snippets) {
+      if (!policyText.includes(snippet)) {
+        problems.push(`${file} has drifted from the source-fallback policy: missing ${snippet}`)
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(problems.join("\n"))
+  }
+}
+
 function packedFilePaths(packageDirectory) {
   const result = spawnSync(npmCommand, ["pack", "--dry-run", "--json", "--ignore-scripts"], {
     cwd: packageDirectory,
@@ -279,6 +397,7 @@ try {
   assertDualExportsUseFormatSpecificDeclarations(typedPackages)
   assertExportTargetsExist(typedPackages)
   assertDeclarationTargetsArePacked(typedPackages)
+  assertSourceFallbackDefaultDocumentation()
   for (const { directory } of typedPackages) {
     linkPackage(directory)
   }

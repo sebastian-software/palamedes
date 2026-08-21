@@ -211,7 +211,9 @@ export type PalamedesPluginOptions = {
 
   /**
    * Preserve authored source messages as browser/runtime fallbacks.
-   * Defaults to `true` during `vite serve` and `false` during `vite build`.
+   * Defaults to `true` in every environment. Set to `false` for compact,
+   * hash-only output when bundle size or embedding authored source text is a
+   * concern.
    */
   keepSourceFallbacks?: boolean
 
@@ -271,7 +273,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   const importMapBinding =
     typeof experimentalGraphSplitting === "object" &&
     experimentalGraphSplitting.localeBinding === "import-map"
-  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false
+  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true
   let stripNonEssentialProps = true
   let isBuildCommand = false
   let resolvedBase = "/"
@@ -574,7 +576,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre" as const,
 
     config(viteConfig, env) {
-      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? env.command === "serve"
+      // A catalog chunk can be unavailable briefly during a staggered deploy or
+      // while an import-map fragment is still loading. Keep the authored
+      // message in first-party output by default so that case remains readable
+      // instead of exposing the opaque compiled id. Consumers that cannot ship
+      // source text can opt out explicitly.
+      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true
       stripNonEssentialProps = env.command === "build"
       isBuildCommand = env.command === "build"
       const ids = new Set(PALAMEDES_MACRO_PACKAGES)

@@ -164,7 +164,7 @@ describe("withPalamedes turbopack config", () => {
 
   it.each([
     ["development", true, false],
-    ["production", false, true],
+    ["production", true, true],
   ] as const)(
     "sets runtime fallback metadata for the %s Turbopack mode",
     (mode, expectedFallbacks, expectedMetadataStrip) => {
@@ -179,12 +179,12 @@ describe("withPalamedes turbopack config", () => {
     }
   )
 
-  it("lets keepSourceFallbacks override the Next mode default", () => {
+  it("lets keepSourceFallbacks opt out of the Next default", () => {
     vi.stubEnv("NODE_ENV", "production")
-    const config = withPalamedes({}, { keepSourceFallbacks: true })
+    const config = withPalamedes({}, { keepSourceFallbacks: false })
 
     const rule = getRules(config)["*"] as RuleItem
-    expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: true })
+    expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: false })
   })
 
   it("translates include/exclude options into the turbopack rule condition", () => {

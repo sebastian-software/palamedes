@@ -129,12 +129,13 @@ compiled MDX; `mdx.framework` overrides it per config. Runtime access remains
 hook-free. The plugin's `runtimeModule` option applies to macros only — use
 `mdx.runtime-module` to point MDX at a different custom runtime explicitly.
 
-The Vite plugin preserves inline source-message fallbacks in development and
-strips them from generated MDX during production builds. Configure
-`keepSourceFallbacks` on `palamedes()` when a production module must retain
-those readable fallbacks. `MdxOptions` accepts the same key in data config, but
-the Vite plugin overwrites it with its own build-output setting, so configure
-the plugin option when using Vite.
+The Vite plugin preserves inline source-message fallbacks in both development
+and production builds. This makes a missing production catalog chunk readable
+during deploy skew. Configure `keepSourceFallbacks: false` on `palamedes()` to
+opt into the smaller, hash-only output when source text cannot be shipped.
+`MdxOptions` accepts the same key in data config, but the Vite plugin overwrites
+it with its own build-output setting, so configure the plugin option when using
+Vite.
 
 The Vite plugin's top-level `framework: "none"` option drops the plugin's own
 MDX framework selection; it does not disable MDX compilation. The compiler then

@@ -57,6 +57,7 @@ describe("parser-free compiled runtime", () => {
     const i18n = createI18n({ onError })
 
     expect(i18n._("missing", { name: "Ada" }, { message: "Hello {name}" })).toBe("Hello {name}")
+    expect(i18n._("missing", { name: "Ada" })).toBe("missing")
     expect(onError).not.toHaveBeenCalled()
   })
 })

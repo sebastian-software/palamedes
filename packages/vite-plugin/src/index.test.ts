@@ -397,7 +397,7 @@ describe("palamedes vite plugin", () => {
   })
 
   it.each([
-    ["build", false, true],
+    ["build", true, true],
     ["serve", true, false],
   ] as const)(
     "sets runtime fallback metadata for Vite %s",
@@ -415,18 +415,18 @@ describe("palamedes vite plugin", () => {
     }
   )
 
-  it("lets keepSourceFallbacks override the Vite command default", () => {
-    runMacroTransform({ keepSourceFallbacks: true }, "build")
+  it("lets keepSourceFallbacks opt out of the Vite default", () => {
+    runMacroTransform({ keepSourceFallbacks: false }, "build")
 
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      expect.objectContaining({ keepSourceFallbacks: true })
+      expect.objectContaining({ keepSourceFallbacks: false })
     )
   })
 
   it("applies the source fallback mode to compiled MDX", async () => {
-    await runMdxTransform({}, {}, "serve")
+    await runMdxTransform({}, {}, "build")
 
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",

@@ -105,10 +105,12 @@ In practice:
   runtime calls against compiled catalogs — the same code shape the build-time
   integrations (`@palamedes/vite-plugin`, `@palamedes/next-plugin`) produce.
 
-The register hook preserves source-message fallbacks in development and strips
-them in production. Create a custom hook with
-`createPalamedesRemixLoadHook({ keepSourceFallbacks: true })` when production
-server code must retain readable source fallbacks.
+The register hook preserves source-message fallbacks in both development and
+production, so deploy skew renders readable source text rather than a compiled
+hash. Create a custom hook with
+`createPalamedesRemixLoadHook({ keepSourceFallbacks: false })` to opt into
+smaller hash-only output when source text must not ship. Parser-free runtimes
+leave retained ICU fallbacks raw; use `@palamedes/core` when they must format.
 
 The transform cost moves from build time to process start, stays proportional
 to the number of macro-containing modules, and recurs per cold start. That is
