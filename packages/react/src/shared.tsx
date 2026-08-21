@@ -15,6 +15,9 @@ import { createReactMessageRuntime, createTrans, renderI18nMessage } from "./tra
 export { Fragment, type TransProps } from "./transShared"
 export type { PluralProps, SelectOrdinalProps, SelectProps } from "@palamedes/core"
 
+type StrictSelectProps<Props extends SelectProps> = Props &
+  Record<Exclude<keyof Props, "value">, string>
+
 export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
   const Trans = createTrans(useI18n, parseMessagePattern)
 
@@ -50,10 +53,10 @@ export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
     return renderChoice(useI18n(), "selectordinal", value, choices, offset)
   }
 
-  function Select<const Props extends { value: string | number; other: string }>({
+  function Select<const Props extends SelectProps>({
     value,
     ...choices
-  }: SelectProps<Props>): ReactNode {
+  }: StrictSelectProps<Props>): ReactNode {
     return renderChoice(useI18n(), "select", value, choices)
   }
 

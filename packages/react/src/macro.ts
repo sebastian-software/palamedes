@@ -6,6 +6,8 @@ import type { TransProps } from "./transShared"
 type MacroTransProps = TransProps & {
   children?: ReactNode
 }
+type MacroSelectProps<Props extends SelectProps> = Props &
+  Record<Exclude<keyof Props, "value">, string>
 
 function throwMacroError(): never {
   throw new Error(
@@ -21,8 +23,8 @@ export function Plural(_props: PluralProps): ReactNode {
   return throwMacroError()
 }
 
-export function Select<const Props extends { value: string | number; other: string }>(
-  _props: SelectProps<Props>
+export function Select<const Props extends SelectProps>(
+  _props: MacroSelectProps<Props>
 ): ReactNode {
   return throwMacroError()
 }

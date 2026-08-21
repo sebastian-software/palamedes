@@ -324,6 +324,7 @@ try {
   writeFileSync(
     esmFixture,
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
+import { Select as RuntimeSelect } from "@palamedes/react"
 import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/react/macro"
 import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
@@ -344,6 +345,8 @@ export const lengths = [
 select("a", { a: 1, other: "Other" })
 // @ts-expect-error Core Select macro branches cannot be undefined.
 select("a", { a: undefined, other: "Other" })
+// @ts-expect-error Core Select macro requires its fallback branch.
+select("a", { a: "A" })
 
 export const macroProps = [
   { message: "Hello", values: { name: "Ada" }, children: "Hello" } satisfies Parameters<
@@ -355,10 +358,15 @@ export const macroProps = [
 
 Select({ value: "a", a: "A", other: "Other" })
 Select({ value: 2, two: "Two", other: "Other" })
+RuntimeSelect({ value: "female", female: "She", other: "They" })
 // @ts-expect-error React Select macro branches must be strings.
 Select({ value: "a", a: 1, other: "Other" })
 // @ts-expect-error React Select macro branches cannot be undefined.
 Select({ value: "a", a: undefined, other: "Other" })
+// @ts-expect-error React runtime Select branches must be strings.
+RuntimeSelect({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error React runtime Select branches cannot be undefined.
+RuntimeSelect({ value: "a", a: undefined, other: "Other" })
 
 // @ts-expect-error Choice macros require their fallback branch.
 const missingPluralFallback: Parameters<typeof Plural>[0] = { value: 2, one: "one" }
@@ -391,18 +399,30 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
     commonJsFixture,
     `// @palamedes/tanstack is intentionally ESM-only and belongs in consumer.mts.
 import coreMacro = require("@palamedes/core/macro")
+import reactRuntime = require("@palamedes/react")
 import reactMacro = require("@palamedes/react/macro")
 import nextPlugin = require("@palamedes/next-plugin")
 import vitePlugin = require("@palamedes/vite-plugin")
 
 export const selectLengths = [
   coreMacro.select("a", { a: "A", other: "Other" }).length,
+  reactRuntime.Select({ value: "female", female: "She", other: "They" }),
   reactMacro.Select({ value: "a", a: "A", other: "Other" }),
 ]
 // @ts-expect-error Core Select macro branches must be strings in CommonJS too.
 coreMacro.select("a", { a: 1, other: "Other" })
+// @ts-expect-error Core Select macro branches cannot be undefined in CommonJS either.
+coreMacro.select("a", { a: undefined, other: "Other" })
+// @ts-expect-error Core Select macro requires its fallback branch in CommonJS too.
+coreMacro.select("a", { a: "A" })
 // @ts-expect-error React Select macro branches must be strings in CommonJS too.
 reactMacro.Select({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error React Select macro branches cannot be undefined in CommonJS either.
+reactMacro.Select({ value: "a", a: undefined, other: "Other" })
+// @ts-expect-error React runtime Select branches must be strings in CommonJS too.
+reactRuntime.Select({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error React runtime Select branches cannot be undefined in CommonJS either.
+reactRuntime.Select({ value: "a", a: undefined, other: "Other" })
 
 export const config = nextPlugin.withPalamedes({})
 export const vitePlugins = vitePlugin.palamedes()

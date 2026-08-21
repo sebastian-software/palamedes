@@ -23,15 +23,11 @@ export type SelectOrdinalProps = ChoiceComponentProps & {
   offset?: number
 }
 
-export type SelectProps<
-  Props extends { value: string | number; other: string } = {
-    value: string | number
-    other: string
-  },
-> = Props & {
+export type SelectProps = {
   value: string | number
   other: string
-} & Record<Exclude<keyof Props, "value">, string>
+  [key: string]: string | number | undefined
+}
 
 const PLURAL_CATEGORIES = new Set(["zero", "one", "two", "few", "many", "other"])
 

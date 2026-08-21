@@ -684,6 +684,21 @@ const literal = plural(21, { one: "# month", other: "# months" });
     expect(result.code).toContain("{ value: 21 }")
   })
 
+  it("preserves arbitrary string-valued select branches across call and JSX macros", () => {
+    const code = `
+import { select } from "@palamedes/core/macro";
+import { Select } from "@palamedes/react/macro"; function messages() {
+const call = select(kind, { female: "She", nonbinary: "They", other: "Someone" });
+const jsx = <Select value={kind} female="She" nonbinary="They" other="Someone" />;
+}
+`
+    const result = transformPalamedesMacros(code, "test.tsx")
+    const expected = "{kind, select, female {She} nonbinary {They} other {Someone}}"
+
+    expect(result.code.split(`message: "${expected}"`)).toHaveLength(3)
+    expect(result.code.split("{ kind }")).toHaveLength(3)
+  })
+
   it("transforms interpolated plural branches and forwards their values", () => {
     const code = `
 import { plural } from "@palamedes/core/macro";
