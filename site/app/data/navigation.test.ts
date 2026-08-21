@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs"
-
 import { describe, expect, test } from "vitest"
 
 import {
@@ -8,6 +6,7 @@ import {
   PRIMARY_NAVIGATION_LINKS,
   isPrimaryNavigationLinkActive,
 } from "./navigation"
+import { TOPICS } from "./topics"
 
 describe("primary site navigation", () => {
   test("keeps four first-level destinations split by reader task", () => {
@@ -21,10 +20,7 @@ describe("primary site navigation", () => {
   })
 
   test("keeps the guide hub current on all four topic routes", () => {
-    const topicSource = readFileSync(new URL("topics.ts", import.meta.url), "utf8")
-    const topicPaths = [...topicSource.matchAll(/^ {4}slug: "([^"]+)",$/gmu)].map(
-      ([, slug]) => `/${slug}`
-    )
+    const topicPaths = TOPICS.map(({ slug }) => `/${slug}`)
     const guides = PRIMARY_NAVIGATION_LINKS.find((link) => link.href === "/guides")
 
     expect(topicPaths).toEqual(GUIDE_TOPIC_PATHS)
