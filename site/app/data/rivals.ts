@@ -20,7 +20,14 @@
  */
 
 import { BENCH_REALISTIC } from "./bench"
-import contentStats from "./generated/content-stats.json"
+
+/*
+ * Keep comparison data importable by its contract test without a site
+ * prebuild. The generated content statistics are for page-level proof
+ * surfaces; these named, supported hosts are the durable comparison fact.
+ */
+const SUPPORTED_SERVER_FRAMEWORKS =
+  "Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3"
 
 export interface RivalFact {
   label: string
@@ -208,12 +215,12 @@ const RIVAL_SOURCE: RivalSource[] = [
       {
         criterion: "Framework coverage",
         rival: "React, React Native, Vue, Solid, vanilla",
-        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} server frameworks; no Vue, no React Native`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}; no Vue, no React Native`,
       },
       {
         criterion: "Verified host coverage",
         rival: "Broad UI-framework packages",
-        palamedes: `${contentStats.smokeExampleCount} smoke-verified examples; ${contentStats.browserExampleCount} browser-checked weekly`,
+        palamedes: "Smoke-verified examples; browser-capable examples checked weekly",
       },
     ],
     code: {
@@ -330,7 +337,7 @@ function checkoutLabel(seats) {
       {
         criterion: "Server integration",
         rival: "React locale context plus explicit server setup",
-        palamedes: `Request-local runtime across ${contentStats.serverFrameworkCount} verified server frameworks`,
+        palamedes: "Request-local runtime across the supported server frameworks",
       },
       {
         criterion: "Agent translation",
@@ -376,7 +383,7 @@ plural(seats, {
       "Your durable translation interface should be source-readable PO or FCL rather than hash-keyed JSON.",
       "ICU interoperability matters across languages, tools or systems outside this JavaScript application.",
       "You want extraction, merging, audits, diagnostics and compilation to share one native catalog engine.",
-      `You need one request-local runtime model across the ${contentStats.serverFrameworkCount} verified server frameworks Palamedes supports.`,
+      "You need one request-local runtime model across every supported server framework.",
       `The checked local collect-and-update path matters: ${publicFactor("fbtee")} on the realistic fixture separates the two workflows on the measured machine.`,
     ],
     honest:
@@ -511,7 +518,7 @@ plural(seats, {
     metaDescription:
       "next-intl is the most Next.js-idiomatic i18n library there is, routing included. Palamedes trades that depth for one runtime and message model across supported hosts — and ships source-string extraction as the stable path, not an experiment.",
     eyebrow: "Compare · next-intl",
-    headline: `One framework deep, or ${contentStats.serverFrameworkCount} server frameworks wide.`,
+    headline: "One framework deep, or shared server-framework coverage.",
     lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes draws the boundary differently: your framework keeps routing, while Palamedes carries the same authoring, catalog, validation, and runtime model across supported hosts.",
     card: "Next-native depth including routing, against one shared model across supported hosts.",
     facts: [
@@ -541,7 +548,7 @@ plural(seats, {
       },
       {
         title: "The model outlives the framework choice",
-        body: `Palamedes runs the same runtime and identity model across Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3, with ${contentStats.smokeExampleCount} examples smoke-checked on relevant PRs and main pushes across four locale strategies. ${contentStats.browserExampleCount} browser-capable examples run the Playwright contract weekly or on manual dispatch. That is not a compatibility table — it is a test suite. Changing meta-framework changes your routing layer and nothing about your messages.`,
+        body: `Palamedes runs the same runtime and identity model across ${SUPPORTED_SERVER_FRAMEWORKS}. Its examples are smoke-checked on relevant PRs and main pushes across four locale strategies; browser-capable examples run the Playwright contract weekly or on manual dispatch. That is not a compatibility table — it is a test suite. Changing meta-framework changes your routing layer and nothing about your messages.`,
       },
       {
         title: "Source strings as the stable path, not the experiment",
@@ -803,7 +810,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework coverage",
         rival: "Broad, via one Vite plugin",
-        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} verified server frameworks`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}`,
       },
       {
         criterion: "Extract + update speed",
@@ -914,7 +921,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework bindings",
         rival: "React, Vue, Angular and Svelte",
-        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} verified server frameworks`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}`,
       },
       {
         criterion: "Extract + update speed",
@@ -1033,7 +1040,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework coverage",
         rival: "The widest here — ~19 first-party adapters",
-        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} server frameworks, ${contentStats.smokeExampleCount} apps smoke-checked in CI`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}, with examples smoke-checked in CI`,
       },
       {
         criterion: "Extract + update speed",
