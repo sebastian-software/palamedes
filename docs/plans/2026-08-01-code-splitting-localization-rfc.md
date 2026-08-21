@@ -96,9 +96,10 @@ There is no async activation path, no "ensure locale loaded" primitive, no
 suspense integration, and no re-render signal when messages arrive after
 render. The eager static import in every example is the only hydration-safe
 option — the Next client comment says it outright: without it, hydration
-throws `"No active client i18n instance"`. Production output strips source
-fallbacks by default (ADR-004), so messages that miss their loading window fail
-visibly. **Every variant below depends on fixing this layer first.**
+throws `"No active client i18n instance"`. At the time of this investigation,
+production output stripped source fallbacks by default (ADR-004), so messages
+that missed their loading window failed visibly. **Every variant below depends
+on fixing this layer first.**
 
 ### Building blocks that already exist
 
@@ -456,9 +457,10 @@ but not graph splitting; not worth its own machinery beyond that.
   build into each emitted artifact (the primitive already resolves chains —
   `resolved_locale_chain` in `CatalogArtifactResult`), so the runtime never
   needs a second request to satisfy a fallback.
-- **Missing translations.** Production strips source fallbacks by default, so
-  split artifacts inherit the existing `failOnMissing` gate; nothing new, but
-  the gate must run per emitted artifact, not only per whole catalog.
+- **Missing translations.** The production default at the time stripped source
+  fallbacks, so split artifacts inherited the existing `failOnMissing` gate;
+  nothing new, but the gate must run per emitted artifact, not only per whole
+  catalog.
 - **Dev mode.** Dev keeps source fallbacks and tiny latencies; serving eager
   full catalogs in dev and splitting only in build is a legitimate and much
   simpler default, provided a `build --debug`-style path exists to debug the

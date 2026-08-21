@@ -31,7 +31,9 @@ export type PalamedesRemixRegisterOptions = {
 
   /**
    * Preserve authored source messages as runtime fallbacks.
-   * Defaults to `true` in development and `false` in production.
+   * Defaults to `true` in every environment. Set to `false` for compact,
+   * hash-only output when bundle size or embedding authored source text is a
+   * concern.
    */
   keepSourceFallbacks?: boolean
 
