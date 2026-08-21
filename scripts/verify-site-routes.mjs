@@ -103,6 +103,7 @@ const ROUTE_EXPECTATIONS = [
     path: "/docs/first-working-translation",
     h1: "First Working Translation",
   },
+  { path: "/docs/platform-support", h1: "Platform Support" },
   { path: "/docs/cli", h1: "CLI Reference" },
   { path: "/docs/example-screenshots", h1: "Example Screenshots" },
   { path: "/decisions", h1: "Decision Records" },

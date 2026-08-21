@@ -36,17 +36,9 @@ If you are integrating Palamedes into an app, you usually want one of these inst
 pnpm add @palamedes/core-node
 ```
 
-The package loads one of these platform packages behind the scenes:
-
-- `@palamedes/core-node-darwin-arm64`
-- `@palamedes/core-node-linux-x64-gnu`
-- `@palamedes/core-node-linux-x64-musl`
-- `@palamedes/core-node-linux-arm64-gnu`
-- `@palamedes/core-node-linux-arm64-musl`
-- `@palamedes/core-node-win32-x64-msvc`
-
-Linux packages are split by libc on both architectures, so Alpine and other musl
-environments use the musl package while glibc distributions use the GNU package.
+See [Platform support](https://github.com/sebastian-software/palamedes/blob/main/docs/platform-support.md)
+before installing the native binding. It is the authoritative list of published
+targets, Linux libc variants, unsupported Node processes, and recovery steps.
 
 ## Example
 

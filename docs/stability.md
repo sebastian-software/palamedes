@@ -118,7 +118,7 @@ The 1.0 release means:
 
 - app-facing packages follow standard SemVer
 - config, CLI, macro syntax, catalog identity, and runtime APIs are stable
-- platform support is documented in one place
+- [platform support is documented in one place](./platform-support.md)
 - preview/internal surfaces are clearly labeled or promoted with tests and docs
 
 See [Migrating to Palamedes 1.0](./migrations/1.0.0.md) for the breaking

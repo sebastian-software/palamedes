@@ -178,8 +178,8 @@ Fix:
 - Confirm the install used a package manager mode that installs optional
   dependencies.
 - Reinstall from a clean lockfile if the optional package was pruned.
-- Confirm the current platform is supported by the published native package
-  list.
+- Check [Platform support](./platform-support.md) for the published native
+  targets, unsupported Node processes, and the matching recovery path.
 - If running in Alpine or another musl Linux environment, confirm the package
   manager kept the `linux-x64-musl` optional dependency instead of pruning
   optional packages.
