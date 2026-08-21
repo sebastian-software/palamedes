@@ -105,7 +105,6 @@ function command(name) {
 }
 
 function publishAllJavaScriptPackages() {
-  const failures = []
   const script = process.argv[1]
   const childArgs = dryRun ? ["--dry-run"] : []
 
@@ -116,18 +115,15 @@ function publishAllJavaScriptPackages() {
     })
     if (result.error) {
       console.error(result.error)
-      failures.push(packageInfo.name)
+      console.error(`JavaScript package publishing failed at ${packageInfo.name}; aborting.`)
+      return 1
     } else if (result.status !== 0) {
-      failures.push(packageInfo.name)
+      console.error(`JavaScript package publishing failed at ${packageInfo.name}; aborting.`)
+      return result.status ?? 1
     }
   }
 
-  if (failures.length === 0) {
-    return 0
-  }
-
-  console.error(`JavaScript package publishing failed: ${failures.join(", ")}`)
-  return 1
+  return 0
 }
 
 function npmPublishTagArgs(version) {
