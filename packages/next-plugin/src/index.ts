@@ -503,9 +503,25 @@ export function withPalamedes(
         serverFunctionOptions,
         webpackProjectRoot
       )
+      const webpackServerFunctions = webpackServerFunctionEntry
+        ? {
+            initializerModule: SERVER_FUNCTION_INITIALIZER_MODULE,
+            initializerExport: SERVER_FUNCTION_INITIALIZER_EXPORT,
+          }
+        : undefined
       const webpackTransformLoaderOptions = {
-        ...transformLoaderOptions,
+        runtimeModule,
+        keepSourceFallbacks,
+        stripNonEssentialProps,
         cwd: webpackProjectRoot,
+        ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
+        ...(webpackServerFunctions ? { serverFunctions: webpackServerFunctions } : {}),
+      }
+      const webpackPoLoaderOptions = {
+        failOnMissing,
+        failOnCompileError,
+        cwd: webpackProjectRoot,
+        ...(configPath ? { configPath: path.resolve(webpackProjectRoot, configPath) } : {}),
       }
 
       if (messageSplitting && !context.isServer) {
@@ -541,7 +557,9 @@ export function withPalamedes(
             loader: oxcLoaderPath,
             options: {
               ...webpackTransformLoaderOptions,
-              ...(serverFunctions && context.isServer ? { serverMessageSplitting: true } : {}),
+              ...(webpackServerFunctions && context.isServer
+                ? { serverMessageSplitting: true }
+                : {}),
               ...(messageSplitting && !context.isServer
                 ? { clientMessageSplitting: true, clientFragmentFailureMode }
                 : {}),
@@ -562,7 +580,7 @@ export function withPalamedes(
           use: [
             {
               loader: poLoaderPath,
-              options: { ...poLoaderOptions, cwd: webpackProjectRoot },
+              options: webpackPoLoaderOptions,
             },
           ],
         })

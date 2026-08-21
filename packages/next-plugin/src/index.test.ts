@@ -352,6 +352,67 @@ function collectWebpackRules(
 }
 
 describe("withPalamedes webpack config", () => {
+  it("re-resolves config and Server Function modules from Next's webpack project directory", async () => {
+    const monorepoRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-webpack-project-root-"))
+    tempDirs.push(monorepoRoot)
+    const appRoot = path.join(monorepoRoot, "apps", "web")
+    await mkdir(path.join(appRoot, "src"), { recursive: true })
+    await Promise.all([
+      writeFile(
+        path.join(monorepoRoot, "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+      writeFile(
+        path.join(appRoot, "src", "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+    ])
+    vi.spyOn(process, "cwd").mockReturnValue(monorepoRoot)
+    originalArgv = process.argv
+    process.argv = ["node", "vitest"]
+
+    const configured = withPalamedes(
+      {},
+      {
+        configPath: "config/palamedes.yaml",
+        serverFunctions: true,
+      }
+    )
+    const webpack = configured.webpack as unknown as (
+      config: {
+        module: { rules: WebpackRule[] }
+        resolve: { alias: Record<string, string> }
+      },
+      context: Record<string, unknown>
+    ) => unknown
+    const webpackConfig = { module: { rules: [] as WebpackRule[] }, resolve: { alias: {} } }
+
+    webpack(webpackConfig, { dir: appRoot, isServer: true })
+
+    const transformRule = webpackConfig.module.rules.find((rule) =>
+      rule.use?.[0]?.loader.includes("palamedes-loader")
+    )
+    const poRule = webpackConfig.module.rules.find((rule) =>
+      rule.use?.[0]?.loader.includes("palamedes-po-loader")
+    )
+    expect(transformRule?.use?.[0]?.options).toMatchObject({
+      configPath: path.join(appRoot, "config", "palamedes.yaml"),
+      cwd: appRoot,
+      serverFunctions: {
+        initializerModule: serverInitializerModule,
+        initializerExport: "initializeServerFunctionI18n",
+      },
+      serverMessageSplitting: true,
+    })
+    expect(poRule?.use?.[0]?.options).toMatchObject({
+      configPath: path.join(appRoot, "config", "palamedes.yaml"),
+      cwd: appRoot,
+    })
+    expect(webpackConfig.resolve.alias).toMatchObject({
+      [serverEntryModule]: path.join(appRoot, "src", "palamedes.server.ts"),
+    })
+  })
+
   it("uses Next's project directory for webpack loader options", () => {
     const projectRoot = path.join(nextExampleRoot, "webpack-context-root")
     const rules = collectWebpackRules(withPalamedes(), { dir: projectRoot })
