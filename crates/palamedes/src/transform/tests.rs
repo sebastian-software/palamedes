@@ -981,6 +981,63 @@ const message = t({
 }
 
 #[test]
+fn escapes_carriage_returns_in_generated_runtime_strings() {
+    assert_eq!(
+        super::messages::escape_string("quote\" slash\\ line\nreturn\r"),
+        "quote\\\" slash\\\\ line\\nreturn\\r"
+    );
+
+    let descriptor = transform_macros(
+        r#"import { t } from "@palamedes/core/macro";
+const message = t({
+  message: "Line1\rLine2",
+  context: "dialog\rtitle",
+  comment: "Translator\rnote",
+});
+"#,
+        "test.ts",
+        None,
+    )
+    .expect("descriptor with carriage returns should transform");
+
+    assert!(descriptor.code.contains(r#"message: "Line1\rLine2""#));
+    assert!(descriptor.code.contains(r#"context: "dialog\rtitle""#));
+    assert!(descriptor.code.contains(r#"comment: "Translator\rnote""#));
+    assert!(!descriptor.code.contains('\r'));
+
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &descriptor.code, SourceType::ts()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "descriptor output should remain valid TypeScript: {:?}",
+        parsed.diagnostics
+    );
+
+    let jsx = transform_macros(
+        r#"import { Plural, Trans } from "@palamedes/react/macro";
+const rich = <Trans message={"Line1\rLine2"} context={"dialog\rtitle"} />;
+const choice = <Plural value={count} one="item" other="items" comment={"Translator\rnote"} context={"count\rlabel"} />;
+"#,
+        "test.tsx",
+        None,
+    )
+    .expect("JSX attributes with carriage returns should transform");
+
+    assert!(jsx.code.contains(r#"message={"Line1\rLine2"}"#));
+    assert!(jsx.code.contains(r#"context: "count\rlabel""#));
+    assert!(jsx.code.contains(r#"comment: "Translator\rnote""#));
+    assert!(!jsx.code.contains('\r'));
+
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &jsx.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "JSX output should remain valid TSX: {:?}",
+        parsed.diagnostics
+    );
+}
+
+#[test]
 fn merges_interpolated_descriptor_values_with_explicit_values() {
     let result = transform_macros(
         r#"import { t } from "@palamedes/core/macro";
