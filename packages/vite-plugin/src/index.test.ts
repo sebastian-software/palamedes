@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto"
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -467,6 +470,156 @@ describe("experimental graph splitting", () => {
     )
   })
 
+  it("derives reproducible sidecar output from the Palamedes-root-relative path", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages))
+    )
+
+    async function sidecarOutput(rootDir: string) {
+      const sourceId = `${rootDir}/src/label.ts`
+      mocks.loadPalamedesConfig.mockResolvedValue({
+        configPath: `${rootDir}/palamedes.yaml`,
+        rootDir,
+        locales: ["en", "de", "pseudo"],
+        sourceLocale: "en",
+        pseudoLocale: "pseudo",
+        fallbackLocales: undefined,
+        catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
+      })
+      const result = await runSidecarLoad(
+        ["id-a"],
+        {},
+        { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", sourceId }
+      )
+      return {
+        transformedCode: result.transformedCode,
+        registration: await result.load(`\0palamedes:messages/${result.key}`, { ssr: false }),
+        emitted: await emitImportMap(result.sidecarPlugin, result.key),
+      }
+    }
+
+    const first = await sidecarOutput("/builds/runner-one/project")
+    const second = await sidecarOutput("/builds/runner-two/project")
+
+    expect(second).toStrictEqual(first)
+  })
+
+  it("normalizes Windows separators before hashing the root-relative path", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "C:\\checkout\\project\\palamedes.yaml",
+      rootDir: "C:\\checkout\\project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    const result = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      ["id-a"],
+      "C:\\checkout\\project\\src\\label.ts"
+    )) as { code?: string } | null
+    const expectedKey = createHash("sha256").update("src/label.ts").digest("hex").slice(0, 12)
+
+    expect(result?.code).toContain(`virtual:palamedes-messages/${expectedKey}`)
+  })
+
+  it("uses a portable relative identity for sources outside the Palamedes root", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/checkout/project/palamedes.yaml",
+      rootDir: "/checkout/project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    const sourceId = "/checkout/shared/label.ts"
+    const result = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      ["id-a"],
+      sourceId
+    )) as { code?: string } | null
+    const expectedKey = createHash("sha256").update("../shared/label.ts").digest("hex").slice(0, 12)
+
+    expect(result?.code).toContain(`virtual:palamedes-messages/${expectedKey}`)
+    expect(result?.code).not.toContain("checkout")
+  })
+
+  it("rejects a cross-volume Windows source instead of hashing its absolute path", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "D:\\checkout\\project\\palamedes.yaml",
+      rootDir: "D:\\checkout\\project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    await expect(
+      runMacroTransform(
+        { experimentalGraphSplitting: true },
+        undefined,
+        ["id-a"],
+        "C:\\shared\\label.ts"
+      )
+    ).rejects.toThrow(/different filesystem volume/)
+  })
+
+  it.skipIf(process.platform === "win32")(
+    "canonicalizes symlinked module ids before deriving the sidecar key",
+    async () => {
+      const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-vite-sidecar-"))
+      const sourceId = path.join(rootDir, "src", "label.ts")
+      const symlinkId = path.join(rootDir, "linked-label.ts")
+      mkdirSync(path.dirname(sourceId), { recursive: true })
+      writeFileSync(sourceId, "export const label = 'Hello'\n")
+      symlinkSync(sourceId, symlinkId)
+      mocks.loadPalamedesConfig.mockResolvedValue({
+        configPath: path.join(rootDir, "palamedes.yaml"),
+        rootDir,
+        locales: ["en"],
+        sourceLocale: "en",
+        catalogs: [],
+      })
+
+      try {
+        const source = (await runMacroTransform(
+          { experimentalGraphSplitting: true },
+          undefined,
+          ["id-a"],
+          sourceId
+        )) as { code?: string } | null
+        const symlink = (await runMacroTransform(
+          { experimentalGraphSplitting: true },
+          undefined,
+          ["id-a"],
+          symlinkId
+        )) as { code?: string } | null
+
+        expect(symlink?.code).toBe(source?.code)
+      } finally {
+        rmSync(rootDir, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it("keeps distinct in-root modules in distinct sidecars", async () => {
+    const first = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      ["id-a"],
+      "/repo/src/first.ts"
+    )) as { code?: string } | null
+    const second = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      ["id-a"],
+      "/repo/src/second.ts"
+    )) as { code?: string } | null
+
+    expect(first?.code).not.toBe(second?.code)
+  })
+
   it("leaves modules without message references untouched", async () => {
     const result = (await runMacroTransform(
       { experimentalGraphSplitting: true },
@@ -834,10 +987,12 @@ async function runSidecarLoad(
     command?: "build" | "serve"
     rawBase?: string
     finalBase?: string
+    sourceId?: string
   } = {}
 ): Promise<{
   load: (id: string, loadOptions?: { ssr?: boolean }) => Promise<any>
   key: string
+  transformedCode: string
   addWatchFile: ReturnType<typeof vi.fn>
   sidecarPlugin: any
 }> {
@@ -881,7 +1036,7 @@ async function runSidecarLoad(
   const transformed = (await transform.call(
     { error: vi.fn() } as never,
     'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
-    "/repo/src/label.ts"
+    setup.sourceId ?? "/repo/src/label.ts"
   )) as { code?: string } | null
   const key = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(transformed?.code ?? "")?.[1]
   if (!key) {
@@ -905,7 +1060,13 @@ async function runSidecarLoad(
       )
     )
 
-  return { load: boundLoad, key, addWatchFile, sidecarPlugin }
+  return {
+    load: boundLoad,
+    key,
+    transformedCode: transformed?.code ?? "",
+    addWatchFile,
+    sidecarPlugin,
+  }
 }
 
 async function emitImportMap(sidecarPlugin: any, key: string) {
@@ -928,7 +1089,8 @@ async function emitImportMap(sidecarPlugin: any, key: string) {
 function runMacroTransform(
   options: Parameters<typeof palamedes>[0] = {},
   command?: "build" | "serve",
-  compiledIds: string[] = []
+  compiledIds: string[] = [],
+  sourceId = "/repo/src/label.ts"
 ) {
   mocks.transformPalamedesMacros.mockClear()
   mocks.transformPalamedesMacros.mockReturnValue({
@@ -955,7 +1117,7 @@ function runMacroTransform(
   return transform.call(
     { error: vi.fn() } as never,
     'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
-    "/repo/src/label.ts"
+    sourceId
   )
 }
 
