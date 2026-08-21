@@ -66,6 +66,7 @@ describe("native platform package contracts", () => {
       coreNodeManifest,
       publishWorkflow,
       navigation,
+      contributorGuide,
       ...manifests
     ] = await Promise.all([
       readFile(resolve(repositoryRoot, "docs/platform-support.md"), "utf8"),
@@ -74,6 +75,7 @@ describe("native platform package contracts", () => {
       readFile(resolve(repositoryRoot, "packages/core-node/package.json"), "utf8"),
       readFile(resolve(repositoryRoot, ".github/workflows/publish.yml"), "utf8"),
       readFile(resolve(repositoryRoot, "site/scripts/prebuild-content.mjs"), "utf8"),
+      readFile(resolve(repositoryRoot, "CONTRIBUTING.md"), "utf8"),
       ...targets.flatMap(({ suffix }) => [
         readFile(resolve(repositoryRoot, `packages/cli-${suffix}/package.json`), "utf8"),
         readFile(resolve(repositoryRoot, `packages/core-node-${suffix}/package.json`), "utf8"),
@@ -92,6 +94,7 @@ describe("native platform package contracts", () => {
     expect(page).toContain("An x64 Node process on an Intel Mac or under Rosetta")
     expect(page).toContain("Windows on ARM is supported")
     expect(navigation).toContain('["platform-support.md", 15]')
+    expect(contributorGuide).toContain("ships prebuilt binaries for eight platforms")
     const coreNodeOptionalDependencies = JSON.parse(coreNodeManifest).optionalDependencies
     expect(new Set(Object.keys(coreNodeOptionalDependencies))).toEqual(
       new Set(targets.map(({ suffix }) => `@palamedes/core-node-${suffix}`))
