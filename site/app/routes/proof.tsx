@@ -156,7 +156,7 @@ export default function Proof() {
           </ButtonLink>
         </div>
         <CopyCommand
-          command="pnpm benchmark:e2e-workflow"
+          command="pnpm bench:e2e"
           label="Re-run from the repository root"
           className="mt-7 max-w-[30rem]"
         />
@@ -175,8 +175,7 @@ export default function Proof() {
             <p className="mt-1 text-[13.5px]">
               These are machine-local numbers from the checked-in report, not a marketing average.
               Your hardware will differ; the ratios are the signal. Commands to reproduce:{" "}
-              <code>pnpm benchmark:e2e-workflow</code>. For why extraction is slow in the first
-              place, see{" "}
+              <code>pnpm bench:e2e</code>. For why extraction is slow in the first place, see{" "}
               <Link
                 to="/i18n-performance"
                 viewTransition
@@ -258,7 +257,7 @@ export default function Proof() {
         title={`${contentStats.adrCount} decisions, written down before you depend on them.`}
         lede="The ADRs cover message identity, the native boundary, adapter architecture — and, just as deliberately, what Palamedes refuses to own. Reading them is the fastest way to know if our tradeoffs match yours."
       >
-        <div className="border border-hair">
+        <div className="border border-hair" role="region" aria-label="Architecture decision ledger">
           <div className="grid grid-cols-[4rem_1fr_7rem] border-b border-hair px-5 py-3 max-tight:grid-cols-[3rem_1fr]">
             <span className="micro text-[10px] tracking-th text-gray-spec">No.</span>
             <span className="micro text-[10px] tracking-th text-gray-spec">Decision</span>

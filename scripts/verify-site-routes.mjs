@@ -18,7 +18,6 @@ import { startSiteStaticServer } from "./site-static-server.mjs"
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
 const generatedDocsDir = join(repoRoot, "site/app/routes/docs")
-
 function portFromEnv(name, fallback) {
   const configured = process.env[name]
   if (configured === undefined) return fallback
@@ -32,6 +31,11 @@ function portFromEnv(name, fallback) {
 }
 
 const PORT = portFromEnv("SITE_VERIFY_PORT", 4102)
+const packageScripts = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).scripts
+
+if (packageScripts["bench:e2e"] !== "pnpm benchmark:e2e-workflow") {
+  throw new Error("verify-site-routes: pnpm bench:e2e must run the checked end-to-end workflow")
+}
 
 /*
  * The ProofStrip speedup figure is read out of bench.ts rather than repeated
@@ -235,7 +239,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     } else {
       console.log(`  ok ${route.path} — "${h1.trim().slice(0, 48)}"`)
     }
-    if (IA_DISCOVERY_PATHS.includes(route.path)) {
+    if (route.path === "/proof" || IA_DISCOVERY_PATHS.includes(route.path)) {
       const expectedUrl = `https://palamedes.dev${route.path}`
       const metadata = await routePage.evaluate(() => ({
         canonical: document.querySelector('link[rel="canonical"]')?.getAttribute("href"),
@@ -252,6 +256,31 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     await routePage.close()
   }
+
+  const proofPage = await context.newPage()
+  trackPageErrors(proofPage, () => "/proof", consoleErrors, knownHydrationWarnings)
+  await gotoAndSettle(proofPage, "/proof", { settleMs: expectHydration ? 500 : 100 })
+  await checkProofStructure(proofPage, label)
+  if (expectHydration) {
+    const performanceHref = await proofPage
+      .getByRole("link", { name: "i18n performance", exact: true })
+      .getAttribute("href")
+    if (performanceHref !== "/i18n-performance") {
+      fail(`proof ${label}: performance evidence link drifted (${performanceHref ?? "missing"})`)
+    }
+    await gotoAndSettle(proofPage, "/i18n-performance", { settleMs: 100 })
+    await proofPage.goBack({ waitUntil: "networkidle" })
+    await proofPage.getByRole("heading", { level: 1, name: "Claims you can re-run." }).waitFor()
+    await checkProofStructure(proofPage, `${label} history return`)
+    await proofPage.goForward({ waitUntil: "networkidle" })
+    await proofPage
+      .getByRole("heading", {
+        level: 1,
+        name: "Extraction should not be the slow part of your build.",
+      })
+      .waitFor()
+  }
+  await proofPage.close()
 
   const page = await context.newPage()
   let currentPath = "(startup)"
@@ -606,6 +635,59 @@ async function checkRoutes(context, label, { expectHydration }) {
   await page.close()
 }
 
+async function checkProofStructure(page, label) {
+  const command = page.getByText("pnpm bench:e2e", { exact: true })
+  if ((await command.count()) !== 2) {
+    fail(`proof ${label}: expected the short re-run command in the hero and honest note`)
+  }
+
+  const corpusLedger = page.getByRole("region", {
+    name: "Cold, warm, and same-scope benchmark summary",
+  })
+  const headers = (await corpusLedger.getByRole("columnheader").allTextContents()).map((text) =>
+    text.trim()
+  )
+  const expectedHeaders = ["Corpus", "Palamedes cold", "Palamedes warm", "Same-scope tools"]
+  if (!expectedHeaders.every((header, index) => headers[index]?.startsWith(header))) {
+    fail(`proof ${label}: corpus ledger columns drifted (${headers.join(", ")})`)
+  }
+  if ((await corpusLedger.getByRole("row").count()) !== 4) {
+    fail(`proof ${label}: expected one header and three corpus rows`)
+  }
+  const environmentHeader = await page
+    .getByText(/Node v\d+\.\d+\.\d+ · \S+\/\S+ · median of \d+/u)
+    .count()
+  if (environmentHeader !== 1) {
+    fail(`proof ${label}: BENCH_META environment header missing or duplicated`)
+  }
+
+  const decisionLedger = page.getByRole("region", { name: "Architecture decision ledger" })
+  const decisionHeadings = (
+    await decisionLedger.locator(":scope > div").first().locator("span").allTextContents()
+  )
+    .join(" ")
+    .replaceAll(/\s+/gu, " ")
+    .trim()
+  if (decisionHeadings !== "No. Decision Status") {
+    fail(`proof ${label}: decision ledger headings drifted (${decisionHeadings})`)
+  }
+  if ((await decisionLedger.locator("ol > li").count()) === 0) {
+    fail(`proof ${label}: decision ledger has no numbered records`)
+  }
+
+  const emphasisRails = page.locator(".pmds-editorial-rail--emphasis")
+  if (
+    (await emphasisRails.count()) !== 2 ||
+    (await emphasisRails.getByText("Honest note", { exact: true }).count()) !== 1 ||
+    (await emphasisRails.getByText("Exact boundary", { exact: true }).count()) !== 1
+  ) {
+    fail(`proof ${label}: honest-note or exact-boundary editorial rail drifted`)
+  }
+  if ((await page.getByText(/5[- ]minute/u).count()) > 0) {
+    fail(`proof ${label}: completion-time promise returned`)
+  }
+}
+
 async function checkGetStartedStructure(page, label) {
   const sectionNumbers = (await page.locator(".pmds-section-number").allTextContents()).map(
     (text) => text.trim()
@@ -750,6 +832,60 @@ async function checkGetStartedTextResize(browser) {
   console.log(
     `  get-started 390px/200% text: ${metrics.contentWidth}px content, all tabs keyboard-reachable`
   )
+  await context.close()
+}
+
+async function checkProofViewport(browser, width, { textScale = 1 } = {}) {
+  const label = `proof ${width}px${textScale === 2 ? "/200% text" : ""}`
+  const context = await browser.newContext({ viewport: { width, height: 844 } })
+  const page = await context.newPage()
+  const response = await gotoAndSettle(page, "/proof", { settleMs: 500 })
+  if (response?.status() !== 200) {
+    fail(`${label}: expected HTTP 200, got ${response?.status() ?? "no response"}`)
+    await context.close()
+    return
+  }
+  if (textScale === 2) {
+    await page.addStyleTag({ content: ":root { font-size: 200% !important; }" })
+    await page.waitForTimeout(100)
+  }
+
+  const copyButton = page.getByRole("button", { name: "Copy command: pnpm bench:e2e" })
+  const corpusLedger = page.getByRole("region", {
+    name: "Cold, warm, and same-scope benchmark summary",
+  })
+  const metrics = await page.evaluate(() => ({
+    contentWidth: document.documentElement.scrollWidth,
+    rootFontSize: Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
+    viewportWidth: document.documentElement.clientWidth,
+  }))
+  if (metrics.contentWidth > metrics.viewportWidth + 1) {
+    fail(`${label}: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`)
+  }
+  if (textScale === 2 && metrics.rootFontSize !== 32) {
+    fail(`${label}: expected 32px root font, got ${metrics.rootFontSize}px`)
+  }
+
+  const copyBox = await copyButton.boundingBox()
+  if (!copyBox || copyBox.height < 44 || copyBox.x < -1 || copyBox.x + copyBox.width > width + 1) {
+    fail(`${label}: copy control is not viewport-contained and at least 44px tall`)
+  }
+  const ledgerMetrics = await corpusLedger.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }))
+  if (ledgerMetrics.scrollWidth <= ledgerMetrics.clientWidth) {
+    fail(`${label}: wide corpus ledger is not exposed as a local scroll region`)
+  }
+  await corpusLedger.focus()
+  const initialScroll = await corpusLedger.evaluate((element) => element.scrollLeft)
+  await page.keyboard.press("ArrowRight")
+  await page.waitForTimeout(100)
+  if ((await corpusLedger.evaluate((element) => element.scrollLeft)) <= initialScroll) {
+    fail(`${label}: keyboard did not scroll the focused corpus ledger`)
+  }
+
+  console.log(`  ${label}: responsive ledger and copy control passed`)
   await context.close()
 }
 
@@ -931,6 +1067,10 @@ await checkRoutes(await browser.newContext({ javaScriptEnabled: false }), "no-js
   expectHydration: false,
 })
 await checkGetStartedTextResize(browser)
+await checkProofViewport(browser, 320)
+await checkProofViewport(browser, 390)
+await checkProofViewport(browser, 430)
+await checkProofViewport(browser, 390, { textScale: 2 })
 await checkHomepageDecisionViewport(browser, 320)
 await checkHomepageDecisionViewport(browser, 390)
 await checkProgressiveDocsOutline(browser)

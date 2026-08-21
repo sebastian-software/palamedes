@@ -227,10 +227,12 @@ try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl })
   const page = await context.newPage()
-  await page.goto(baseUrl, { waitUntil: "networkidle" })
-  const copyButton = page.getByRole("button", { name: /copy command/i }).first()
-  await copyButton.click()
-  await page.getByRole("status").filter({ hasText: "Copied" }).waitFor()
+  await page.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
+  const copyButton = page.getByRole("button", { name: "Copy command: pnpm bench:e2e" })
+  await copyButton.focus()
+  await page.keyboard.press("Enter")
+  await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "pnpm bench:e2e")
 
   await page.goto(`${baseUrl}/frameworks`, { waitUntil: "networkidle" })
   const matrix = page.getByLabel("Verified framework and locale strategy matrix")
@@ -240,6 +242,34 @@ try {
   await page.waitForTimeout(250)
   assert.ok((await matrix.evaluate((element) => element.scrollLeft)) > initialScroll)
   await context.close()
+
+  const fallbackContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  await fallbackContext.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () => Promise.reject(new Error("clipboard permission denied")),
+      },
+    })
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value(command) {
+        globalThis.__proofCopyFallback = command
+        return command === "copy"
+      },
+    })
+  })
+  const fallbackPage = await fallbackContext.newPage()
+  await fallbackPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
+  const fallbackButton = fallbackPage.getByRole("button", {
+    name: "Copy command: pnpm bench:e2e",
+  })
+  await fallbackButton.focus()
+  await fallbackPage.keyboard.press("Space")
+  await fallbackPage.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
+  assert.equal(await fallbackPage.evaluate(() => globalThis.__proofCopyFallback), "copy")
+  assert.equal(await fallbackButton.evaluate((element) => element === document.activeElement), true)
+  await fallbackContext.close()
 } finally {
   await browser?.close()
   await staticServer?.close()
