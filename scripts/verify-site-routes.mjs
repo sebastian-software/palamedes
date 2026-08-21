@@ -506,6 +506,93 @@ async function checkGetStartedStructure(page, label) {
   }
 }
 
+async function checkGetStartedTextResize(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+  })
+  const page = await context.newPage()
+  const response = await gotoAndSettle(page, "/get-started", { settleMs: 1500 })
+  if (response?.status() !== 200) {
+    fail(
+      `get-started 390px/200% text: expected HTTP 200, got ${response?.status() ?? "no response"}`
+    )
+    await context.close()
+    return
+  }
+
+  await page.addStyleTag({ content: ":root { font-size: 200% !important; }" })
+  await page.waitForTimeout(100)
+
+  const metrics = await page.evaluate(() => ({
+    contentWidth: document.documentElement.scrollWidth,
+    rootFontSize: Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
+    tabLabels: [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent?.trim()),
+    tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => {
+      const rect = tab.getBoundingClientRect()
+      return { height: rect.height, left: rect.left, right: rect.right, width: rect.width }
+    }),
+    viewportWidth: document.documentElement.clientWidth,
+  }))
+
+  if (metrics.rootFontSize !== 32) {
+    fail(`get-started 390px/200% text: expected 32px root font, got ${metrics.rootFontSize}px`)
+  }
+  if (metrics.contentWidth > metrics.viewportWidth + 1) {
+    fail(
+      `get-started 390px/200% text: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`
+    )
+  }
+  const expectedLabels = ["Vite + React", "Vite + Solid", "Next.js"]
+  if (metrics.tabLabels.join("|") !== expectedLabels.join("|")) {
+    fail(`get-started 390px/200% text: tab source order drifted (${metrics.tabLabels.join(", ")})`)
+  }
+  for (const [index, box] of metrics.tabs.entries()) {
+    if (
+      box.left < -1 ||
+      box.right > metrics.viewportWidth + 1 ||
+      box.width < 44 ||
+      box.height < 44
+    ) {
+      fail(
+        `get-started 390px/200% text: tab ${index + 1} is not viewport-contained and 44px reachable (${JSON.stringify(box)})`
+      )
+    }
+  }
+
+  const reactTab = page.getByRole("tab", { name: "Vite + React" })
+  const solidTab = page.getByRole("tab", { name: "Vite + Solid" })
+  const nextTab = page.getByRole("tab", { name: "Next.js" })
+  await reactTab.focus()
+  await page.keyboard.press("ArrowRight")
+  if (!(await solidTab.evaluate((element) => element === document.activeElement))) {
+    fail("get-started 390px/200% text: ArrowRight did not reach the Solid tab")
+  }
+  await page.keyboard.press("Enter")
+  await page.keyboard.press("ArrowRight")
+  if (!(await nextTab.evaluate((element) => element === document.activeElement))) {
+    fail("get-started 390px/200% text: ArrowRight did not reach the wrapped Next.js tab")
+  }
+  const focusStyle = await nextTab.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth }
+  })
+  if (focusStyle.outlineStyle === "none" || focusStyle.outlineWidth === "0px") {
+    fail("get-started 390px/200% text: wrapped Next.js tab has no visible keyboard focus")
+  }
+  await page.keyboard.press("Enter")
+  if ((await nextTab.getAttribute("aria-selected")) !== "true") {
+    fail("get-started 390px/200% text: Enter did not select the wrapped Next.js tab")
+  }
+  if (!(await page.getByText("@palamedes/next-plugin").first().isVisible())) {
+    fail("get-started 390px/200% text: wrapped Next.js tab did not reveal its panel")
+  }
+
+  console.log(
+    `  get-started 390px/200% text: ${metrics.contentWidth}px content, all tabs keyboard-reachable`
+  )
+  await context.close()
+}
+
 async function checkHomepageDecisionViewport(browser, width) {
   const context = await browser.newContext({
     viewport: { width, height: 844 },
@@ -602,6 +689,7 @@ await checkRoutes(await browser.newContext({ reducedMotion: "reduce" }), "reduce
 await checkRoutes(await browser.newContext({ javaScriptEnabled: false }), "no-js", {
   expectHydration: false,
 })
+await checkGetStartedTextResize(browser)
 await checkHomepageDecisionViewport(browser, 320)
 await checkHomepageDecisionViewport(browser, 390)
 
