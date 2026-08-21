@@ -13,21 +13,6 @@ import {
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
 
-function readmeTargetForPackage(packageName) {
-  const target = packageName.replace("@palamedes/cli-", "")
-  const targetNames = {
-    "darwin-arm64": "macOS arm64",
-    "linux-x64-gnu": "Linux x64 glibc",
-    "linux-x64-musl": "Linux x64 musl",
-    "linux-arm64-gnu": "Linux arm64 glibc",
-    "linux-arm64-musl": "Linux arm64 musl",
-    "win32-x64-msvc": "Windows x64 MSVC",
-  }
-  const readmeTarget = targetNames[target]
-  assert.ok(readmeTarget, `add a README target name for ${packageName}`)
-  return readmeTarget
-}
-
 test("runtime target selection covers every published CLI package", () => {
   const targets = [
     [{ platform: "darwin", arch: "arm64" }, "@palamedes/cli-darwin-arm64"],
@@ -48,20 +33,11 @@ test("runtime target selection covers every published CLI package", () => {
   )
 })
 
-test("the README lists every published CLI platform package", () => {
-  const match = readme.match(
-    /The npm package currently publishes native binaries for:\n\n((?:- .+\n)+)/u
+test("the README points users to the canonical platform-support page", () => {
+  assert.match(
+    readme,
+    /\[Platform support\]\(https:\/\/github\.com\/sebastian-software\/palamedes\/blob\/main\/docs\/platform-support\.md\)/u
   )
-  assert.ok(match, "README must include a native platform list")
-
-  const documentedTargets = match[1]
-    .trim()
-    .split("\n")
-    .map((line) => line.replace(/^- /u, ""))
-  const publishedTargets = Object.keys(packageJson.optionalDependencies).map(readmeTargetForPackage)
-
-  assert.equal(documentedTargets.length, publishedTargets.length)
-  assert.deepEqual(new Set(documentedTargets), new Set(publishedTargets))
 })
 
 test("Linux libc selection uses the runtime report", () => {

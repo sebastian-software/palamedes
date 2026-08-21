@@ -41,7 +41,7 @@ const DOC_GROUPS = [
   {
     title: "Start and configure",
     description: "Reach a first translation, then configure the local catalog workflow.",
-    match: /\/(first-working-translation|configuration|cli|catalog-formats|mdx)$/u,
+    match: /\/(first-working-translation|platform-support|configuration|cli|catalog-formats|mdx)$/u,
   },
   {
     title: "Integrate and operate",
@@ -209,6 +209,7 @@ async function collectDocs() {
   const topLevel = await readMarkdownFiles("docs")
   const order = new Map([
     ["first-working-translation.md", 10],
+    ["platform-support.md", 15],
     ["configuration.md", 20],
     ["cli.md", 30],
     ["catalog-formats.md", 40],

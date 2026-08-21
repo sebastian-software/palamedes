@@ -36,14 +36,9 @@ Or run it without adding it to your project first:
 pnpm dlx @palamedes/cli extract
 ```
 
-The npm package currently publishes native binaries for:
-
-- macOS arm64
-- Linux x64 glibc
-- Linux x64 musl
-- Linux arm64 glibc
-- Linux arm64 musl
-- Windows x64 MSVC
+See [Platform support](https://github.com/sebastian-software/palamedes/blob/main/docs/platform-support.md)
+before installing the native CLI. It is the authoritative list of published
+targets, Linux libc variants, unsupported Node processes, and recovery steps.
 
 The `pmds` launcher selects the matching optional native package when the
 command runs. Installation does not require npm lifecycle scripts, so package
