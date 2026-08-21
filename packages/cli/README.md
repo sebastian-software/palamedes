@@ -38,7 +38,7 @@ pnpm dlx @palamedes/cli extract
 
 See [Platform support](https://github.com/sebastian-software/palamedes/blob/main/docs/platform-support.md)
 before installing the native CLI. It is the authoritative list of published
-targets, Linux libc variants, unsupported Node processes, and recovery steps.
+targets, Linux libc variants, Node process selection, and recovery steps.
 
 The `pmds` launcher selects the matching optional native package when the
 command runs. Installation does not require npm lifecycle scripts, so package

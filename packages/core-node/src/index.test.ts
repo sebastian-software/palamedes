@@ -34,6 +34,7 @@ import {
   assertNativeBindingVersion,
   assertWellFormedNativeArguments,
   loadNativeBindings,
+  resolveNativePackageName,
   snapshotNativeArguments,
 } from "./native-loader"
 
@@ -56,6 +57,32 @@ afterEach(async () => {
 })
 
 describe("@palamedes/core-node", () => {
+  it("resolves every published native platform package", () => {
+    const targets = [
+      [{ platform: "darwin", arch: "arm64" }, "@palamedes/core-node-darwin-arm64"],
+      [{ platform: "darwin", arch: "x64" }, "@palamedes/core-node-darwin-x64"],
+      [{ platform: "linux", arch: "x64", linuxLibc: "gnu" }, "@palamedes/core-node-linux-x64-gnu"],
+      [
+        { platform: "linux", arch: "x64", linuxLibc: "musl" },
+        "@palamedes/core-node-linux-x64-musl",
+      ],
+      [
+        { platform: "linux", arch: "arm64", linuxLibc: "gnu" },
+        "@palamedes/core-node-linux-arm64-gnu",
+      ],
+      [
+        { platform: "linux", arch: "arm64", linuxLibc: "musl" },
+        "@palamedes/core-node-linux-arm64-musl",
+      ],
+      [{ platform: "win32", arch: "x64" }, "@palamedes/core-node-win32-x64-msvc"],
+      [{ platform: "win32", arch: "arm64" }, "@palamedes/core-node-win32-arm64-msvc"],
+    ] as const
+
+    for (const [target, expectedPackage] of targets) {
+      expect(resolveNativePackageName(target)).toBe(expectedPackage)
+    }
+  })
+
   it("rejects a mismatched platform binding before exposing the native surface", () => {
     expect(() =>
       assertNativeBindingVersion("1.14.0", "@palamedes/core-node-linux-x64-gnu", {

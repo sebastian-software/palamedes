@@ -47,16 +47,20 @@ export const platformPackageParents = ["@palamedes/cli", "@palamedes/core-node"]
 
 export const platformPackageInventory = [
   "@palamedes/cli-darwin-arm64",
+  "@palamedes/cli-darwin-x64",
   "@palamedes/cli-linux-arm64-gnu",
   "@palamedes/cli-linux-arm64-musl",
   "@palamedes/cli-linux-x64-gnu",
   "@palamedes/cli-linux-x64-musl",
+  "@palamedes/cli-win32-arm64-msvc",
   "@palamedes/cli-win32-x64-msvc",
   "@palamedes/core-node-darwin-arm64",
+  "@palamedes/core-node-darwin-x64",
   "@palamedes/core-node-linux-arm64-gnu",
   "@palamedes/core-node-linux-arm64-musl",
   "@palamedes/core-node-linux-x64-gnu",
   "@palamedes/core-node-linux-x64-musl",
+  "@palamedes/core-node-win32-arm64-msvc",
   "@palamedes/core-node-win32-x64-msvc",
 ]
 

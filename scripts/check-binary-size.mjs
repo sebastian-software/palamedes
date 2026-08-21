@@ -2,7 +2,7 @@
 /*
  * Guards the size of the shipped CLI binary.
  *
- * Palamedes ships prebuilt binaries for six platforms, so a dependency that
+ * Palamedes ships prebuilt binaries for eight platforms, so a dependency that
  * bakes data into the executable multiplies across all of them. That is easy to
  * add without noticing: linking a full Unicode collator once cost 1.3 MB and
  * only came to light because someone measured by hand.

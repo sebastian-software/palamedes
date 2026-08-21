@@ -1420,6 +1420,9 @@ importers:
       '@palamedes/cli-darwin-arm64':
         specifier: workspace:*
         version: link:../cli-darwin-arm64
+      '@palamedes/cli-darwin-x64':
+        specifier: workspace:*
+        version: link:../cli-darwin-x64
       '@palamedes/cli-linux-arm64-gnu':
         specifier: workspace:*
         version: link:../cli-linux-arm64-gnu
@@ -1432,11 +1435,16 @@ importers:
       '@palamedes/cli-linux-x64-musl':
         specifier: workspace:*
         version: link:../cli-linux-x64-musl
+      '@palamedes/cli-win32-arm64-msvc':
+        specifier: workspace:*
+        version: link:../cli-win32-arm64-msvc
       '@palamedes/cli-win32-x64-msvc':
         specifier: workspace:*
         version: link:../cli-win32-x64-msvc
 
   packages/cli-darwin-arm64: {}
+
+  packages/cli-darwin-x64: {}
 
   packages/cli-linux-arm64-gnu: {}
 
@@ -1445,6 +1453,8 @@ importers:
   packages/cli-linux-x64-gnu: {}
 
   packages/cli-linux-x64-musl: {}
+
+  packages/cli-win32-arm64-msvc: {}
 
   packages/cli-win32-x64-msvc: {}
 
@@ -1506,6 +1516,9 @@ importers:
       '@palamedes/core-node-darwin-arm64':
         specifier: workspace:*
         version: link:../core-node-darwin-arm64
+      '@palamedes/core-node-darwin-x64':
+        specifier: workspace:*
+        version: link:../core-node-darwin-x64
       '@palamedes/core-node-linux-arm64-gnu':
         specifier: workspace:*
         version: link:../core-node-linux-arm64-gnu
@@ -1518,11 +1531,16 @@ importers:
       '@palamedes/core-node-linux-x64-musl':
         specifier: workspace:*
         version: link:../core-node-linux-x64-musl
+      '@palamedes/core-node-win32-arm64-msvc':
+        specifier: workspace:*
+        version: link:../core-node-win32-arm64-msvc
       '@palamedes/core-node-win32-x64-msvc':
         specifier: workspace:*
         version: link:../core-node-win32-x64-msvc
 
   packages/core-node-darwin-arm64: {}
+
+  packages/core-node-darwin-x64: {}
 
   packages/core-node-linux-arm64-gnu: {}
 
@@ -1531,6 +1549,8 @@ importers:
   packages/core-node-linux-x64-gnu: {}
 
   packages/core-node-linux-x64-musl: {}
+
+  packages/core-node-win32-arm64-msvc: {}
 
   packages/core-node-win32-x64-msvc: {}
 
@@ -11958,7 +11978,7 @@ snapshots:
   '@babel/generator@8.0.0':
     dependencies:
       '@babel/parser': 8.0.0
-      '@babel/types': 8.0.0
+      '@babel/types': 8.0.4
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31
       '@types/jsesc': 2.5.1
@@ -11970,7 +11990,7 @@ snapshots:
 
   '@babel/helper-annotate-as-pure@8.0.0':
     dependencies:
-      '@babel/types': 8.0.0
+      '@babel/types': 8.0.4
 
   '@babel/helper-compilation-targets@7.29.7':
     dependencies:
@@ -12026,7 +12046,7 @@ snapshots:
   '@babel/helper-member-expression-to-functions@8.0.0':
     dependencies:
       '@babel/traverse': 8.0.0
-      '@babel/types': 8.0.0
+      '@babel/types': 8.0.4
 
   '@babel/helper-module-imports@7.18.6':
     dependencies:
@@ -12042,7 +12062,7 @@ snapshots:
   '@babel/helper-module-imports@8.0.0':
     dependencies:
       '@babel/traverse': 8.0.0
-      '@babel/types': 8.0.0
+      '@babel/types': 8.0.4
 
   '@babel/helper-module-transforms@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
@@ -12057,7 +12077,7 @@ snapshots:
     dependencies:
       '@babel/core': 8.0.1
       '@babel/helper-module-imports': 8.0.0
-      '@babel/helper-validator-identifier': 8.0.2
+      '@babel/helper-validator-identifier': 8.0.4
       '@babel/traverse': 8.0.0
 
   '@babel/helper-optimise-call-expression@7.29.7':
@@ -12066,7 +12086,7 @@ snapshots:
 
   '@babel/helper-optimise-call-expression@8.0.0':
     dependencies:
-      '@babel/types': 8.0.0
+      '@babel/types': 8.0.4
 
   '@babel/helper-plugin-utils@7.29.7': {}
 
@@ -12100,7 +12120,7 @@ snapshots:
   '@babel/helper-skip-transparent-expression-wrappers@8.0.0':
     dependencies:
       '@babel/traverse': 8.0.0
-      '@babel/types': 8.0.0
+      '@babel/types': 8.0.4
 
   '@babel/helper-string-parser@7.29.7': {}
 
@@ -12205,7 +12225,7 @@ snapshots:
       '@babel/helper-module-imports': 8.0.0
       '@babel/helper-plugin-utils': 8.0.1(@babel/core@8.0.1)
       '@babel/plugin-syntax-jsx': 8.0.1(@babel/core@8.0.1)
-      '@babel/types': 8.0.0
+      '@babel/types': 8.0.4
 
   '@babel/plugin-transform-react-pure-annotations@8.0.1(@babel/core@8.0.1)':
     dependencies:
@@ -15620,7 +15640,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 4.1.10(@edge-runtime/vm@3.2.0)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.10(@edge-runtime/vm@3.2.0)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
 
   '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
@@ -16111,11 +16131,6 @@ snapshots:
       '@rolldown/pluginutils': 1.0.1
       vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
 
-  '@vitejs/plugin-react@6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))':
-    dependencies:
-      '@rolldown/pluginutils': 1.0.1
-      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0)
-
   '@vitejs/plugin-rsc@0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
@@ -16147,6 +16162,7 @@ snapshots:
       vitefu: 1.1.3(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
     optionalDependencies:
       react-server-dom-webpack: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
+    optional: true
 
   '@vitest/coverage-v8@4.1.10(vitest@4.1.10)':
     dependencies:
@@ -22370,8 +22386,8 @@ snapshots:
   waku@1.0.0-beta.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0):
     dependencies:
       '@hono/node-server': 2.1.0(hono@4.13.1)
-      '@vitejs/plugin-react': 6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
-      '@vitejs/plugin-rsc': 0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+      '@vitejs/plugin-react': 6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
+      '@vitejs/plugin-rsc': 0.5.34(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.105.4(@swc/core@1.15.47(@swc/helpers@0.5.23))(cssnano@7.1.3(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       dotenv: 17.4.2
       hono: 4.13.1
       magic-string: 1.1.0
