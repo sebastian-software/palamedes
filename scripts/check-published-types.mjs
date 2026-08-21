@@ -108,7 +108,7 @@ function visitCondition(condition, conditionPath, hasTypesAncestor, packageName,
   if (hasDualRuntimeConditions) {
     if (hasTypesCondition) {
       problems.push(
-        `${packageName} ${conditionPath} has a \"types\" condition that masks its import and require declarations.`
+        `${packageName} ${conditionPath} has a "types" condition that masks its import and require declarations.`
       )
     }
     assertFormatSpecificDeclaration(
@@ -215,7 +215,7 @@ function assertDeclarationTargetsArePacked(packages) {
   for (const { directory, manifest } of packages) {
     const packedFiles = packedFilePaths(path.join(root, directory))
     for (const target of advertisedTargets(manifest)) {
-      if (!target.match(/\.d\.(?:cts|mts|ts)$/u)) continue
+      if (!/\.d\.(?:cts|mts|ts)$/u.test(target)) continue
       if (packedFiles.has(target.slice(2))) continue
       problems.push(`${manifest.name} advertises ${target}, but npm pack excludes it.`)
     }
