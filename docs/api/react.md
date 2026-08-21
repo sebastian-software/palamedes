@@ -107,11 +107,13 @@ For the recommended document-reload model, create a boundary once in a
 `"use client"` module:
 
 ```tsx
+import { createI18n } from "@palamedes/core/compiled"
 import { createClientCatalogBoundary } from "@palamedes/react/client"
 
 type Locale = "en" | "de"
 
 export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
+  createI18n: () => createI18n({ timeZone: "Europe/Berlin" }),
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
   resolveClientLocale: () => {
     const locale = document.documentElement.lang
@@ -120,6 +122,10 @@ export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
   },
 })
 ```
+
+The optional `createI18n` factory is used for both server rendering and client
+hydration. Give the server's application-owned factory the same options,
+especially `timeZone`, whenever translated markup includes ICU dates or times.
 
 The active locale starts loading when the browser module evaluates. The
 boundary suspends until it can initialize the shared parser-free i18n instance,

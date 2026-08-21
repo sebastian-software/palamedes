@@ -19,6 +19,11 @@ export type ClientCatalogBoundaryProps<TLocale extends string> = {
 
 export type CreateClientCatalogBoundaryOptions<TLocale extends string> = {
   /**
+   * Create the parser-free instance used on both the server and client. Supply
+   * one factory when shared options such as `timeZone` must match for hydration.
+   */
+  createI18n?: () => CompiledPalamedesI18n
+  /**
    * Keep each locale behind its own dynamic import so the bundler can emit a
    * separate catalog chunk. The returned generated module is never serialized
    * through React Server Components.
@@ -33,9 +38,10 @@ export type CreateClientCatalogBoundaryOptions<TLocale extends string> = {
 
 function createCatalogI18n<TLocale extends string>(
   locale: TLocale,
-  catalog: ClientCatalogModule
+  catalog: ClientCatalogModule,
+  createI18nInstance: () => CompiledPalamedesI18n
 ): CompiledPalamedesI18n {
-  const i18n = createI18n()
+  const i18n = createI18nInstance()
   i18n.load(locale, catalog.messages)
   i18n.activate(locale)
   return i18n
@@ -51,6 +57,7 @@ function createCatalogI18n<TLocale extends string>(
  * Locale changes must perform a document navigation.
  */
 export function createClientCatalogBoundary<TLocale extends string>({
+  createI18n: createI18nInstance = createI18n,
   loadCatalog,
   resolveClientLocale,
 }: CreateClientCatalogBoundaryOptions<TLocale>) {
@@ -62,7 +69,7 @@ export function createClientCatalogBoundary<TLocale extends string>({
 
   function createClientI18nResource(locale: TLocale): Promise<CompiledPalamedesI18n> {
     const resource = loadCatalog(locale).then((catalog) =>
-      setClientI18n(createCatalogI18n(locale, catalog))
+      setClientI18n(createCatalogI18n(locale, catalog, createI18nInstance))
     )
     clientI18nResource = resource
     clientI18nResourceRejected = false
@@ -167,7 +174,7 @@ export function createClientCatalogBoundary<TLocale extends string>({
       if (isClient) {
         return catalogOrI18n as CompiledPalamedesI18n
       }
-      return createCatalogI18n(locale, catalogOrI18n as ClientCatalogModule)
+      return createCatalogI18n(locale, catalogOrI18n as ClientCatalogModule, createI18nInstance)
     }, [catalogOrI18n, isClient, locale])
 
     if (!isClient) {

@@ -12,7 +12,8 @@ export function formatMessageArgument(
   format: MessageFormat,
   value: unknown,
   style?: string,
-  locale?: string
+  locale?: string,
+  timeZone?: string
 ): string {
   if (format === "number") {
     const numericValue = normalizeFormattedNumberValue(value)
@@ -28,7 +29,7 @@ export function formatMessageArgument(
     return stringifyValue(value)
   }
 
-  return getDateTimeFormatter(locale, format, style).format(dateValue)
+  return getDateTimeFormatter(locale, format, style, timeZone).format(dateValue)
 }
 
 function getNumberFormatter(
@@ -96,17 +97,20 @@ function normalizeDateValue(value: unknown): Date | undefined {
 function getDateTimeFormatter(
   locale: string | undefined,
   format: "date" | "time",
-  style: string | undefined
+  style: string | undefined,
+  timeZone: string | undefined
 ): Intl.DateTimeFormat {
   const normalizedStyle = normalizeDateTimeStyle(style, format)
-  const cacheKey = `${locale ?? ""}\0${format}\0${normalizedStyle ?? ""}`
+  const cacheKey = `${locale ?? ""}\0${format}\0${normalizedStyle ?? ""}\0${timeZone ?? ""}`
   const cached = dateTimeFormatCache.get(cacheKey)
   if (cached) {
     return cached
   }
 
   const options: Intl.DateTimeFormatOptions =
-    format === "date" ? { dateStyle: normalizedStyle } : { timeStyle: normalizedStyle }
+    format === "date"
+      ? { dateStyle: normalizedStyle, timeZone }
+      : { timeStyle: normalizedStyle, timeZone }
   const formatter = new Intl.DateTimeFormat(locale, options)
   return rememberFormatter(dateTimeFormatCache, cacheKey, formatter)
 }

@@ -106,11 +106,13 @@ first hydration render. Define the boundary once in a `"use client"` module:
 ```tsx
 "use client"
 
+import { createI18n } from "@palamedes/core/compiled"
 import { createClientCatalogBoundary } from "@palamedes/react/client"
 
 type Locale = "en" | "de"
 
 export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
+  createI18n: () => createI18n({ timeZone: "Europe/Berlin" }),
   loadCatalog: (locale) => import(`../locales/${locale}.po`),
   resolveClientLocale: () => {
     const locale = document.documentElement.lang
@@ -119,6 +121,9 @@ export const ClientCatalogBoundary = createClientCatalogBoundary<Locale>({
   },
 })
 ```
+
+Use the same `createI18n` options in the server factory. In particular, a
+shared `timeZone` keeps ICU date/time markup identical during hydration.
 
 Then render it from the Server Component after activating the same request
 locale. In Next.js, use the render-lifetime scope from

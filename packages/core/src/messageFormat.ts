@@ -86,9 +86,10 @@ export function parseMessagePattern(pattern: string): MessageNode[] {
 export function formatMessagePattern(
   pattern: string,
   values: Record<string, unknown> = {},
-  locale?: string
+  locale?: string,
+  timeZone?: string
 ): string {
-  return renderNodesToString(parseMessagePattern(pattern), values, locale)
+  return renderNodesToString(parseMessagePattern(pattern), values, locale, timeZone)
 }
 
 function parseNodes(
@@ -458,15 +459,19 @@ function renderNodesToString(
   nodes: MessageNode[],
   values: Record<string, unknown>,
   locale?: string,
+  timeZone?: string,
   pluralValue?: number
 ): string {
-  return nodes.map((node) => renderNodeToString(node, values, locale, pluralValue)).join("")
+  return nodes
+    .map((node) => renderNodeToString(node, values, locale, timeZone, pluralValue))
+    .join("")
 }
 
 function renderNodeToString(
   node: MessageNode,
   values: Record<string, unknown>,
   locale?: string,
+  timeZone?: string,
   pluralValue?: number
 ): string {
   switch (node.type) {
@@ -482,15 +487,15 @@ function renderNodeToString(
       return stringifyValue(values[node.name])
     }
     case "formatted": {
-      return formatMessageArgument(node.format, values[node.variable], node.style, locale)
+      return formatMessageArgument(node.format, values[node.variable], node.style, locale, timeZone)
     }
     case "tag": {
-      return renderNodesToString(node.children, values, locale, pluralValue)
+      return renderNodesToString(node.children, values, locale, timeZone, pluralValue)
     }
     case "choice": {
       const resolved = resolveChoice(node, values[node.variable], locale)
       const nextPluralValue = node.kind === "select" ? pluralValue : resolved.pluralValue
-      return renderNodesToString(resolved.nodes, values, locale, nextPluralValue)
+      return renderNodesToString(resolved.nodes, values, locale, timeZone, nextPluralValue)
     }
   }
 }

@@ -95,6 +95,26 @@ describe("@palamedes/react", () => {
     )
   })
 
+  it("uses the configured i18n time zone for SSR Trans date and time output", () => {
+    const when = new Date(Date.UTC(2026, 4, 8, 1, 30, 0))
+    const i18n = createI18n({ locale: "en-US", timeZone: "America/Los_Angeles" })
+    setClientI18n(i18n)
+
+    const html = renderToStaticMarkup(
+      <Trans id="when" message="{when, date, full} {when, time, short}" values={{ when }} />
+    )
+
+    expect(html).toBe(
+      `${new Intl.DateTimeFormat("en-US", {
+        dateStyle: "full",
+        timeZone: "America/Los_Angeles",
+      }).format(when)} ${new Intl.DateTimeFormat("en-US", {
+        timeStyle: "short",
+        timeZone: "America/Los_Angeles",
+      }).format(when)}`
+    )
+  })
+
   it("keeps root compat components on generated parser-free catalog entries", () => {
     const greeting: ParserFreeMessage = (values, runtime) =>
       runtime.join("Hallo ", runtime.value(values, "name"))

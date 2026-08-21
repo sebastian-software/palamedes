@@ -3,7 +3,7 @@ import { Component, Suspense, type ReactNode } from "react"
 import { act, render, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { defineCompiledCatalog } from "@palamedes/core/compiled"
+import { createI18n, defineCompiledCatalog } from "@palamedes/core/compiled"
 import { getI18n, resetI18nRuntime } from "@palamedes/runtime"
 
 import { createClientCatalogBoundary } from "./client"
@@ -148,6 +148,44 @@ describe("createClientCatalogBoundary", () => {
         `Hello Ada${new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(when)}3 itemsShe3rd`
       )
     )
+  })
+
+  it("uses the configured instance factory for hydration-safe date/time formatting", async () => {
+    document.documentElement.lang = "en"
+    const createConfiguredI18n = vi.fn(() =>
+      createI18n({ locale: "en", timeZone: "Europe/Berlin" })
+    )
+    const Boundary = createClientCatalogBoundary<Locale>({
+      createI18n: createConfiguredI18n,
+      loadCatalog: () => fulfilled({ messages: defineCompiledCatalog({}) }),
+      resolveClientLocale: () => document.documentElement.lang as Locale,
+    })
+    const when = new Date("2026-09-18T17:30:00Z")
+
+    let view!: ReturnType<typeof render>
+    await act(async () => {
+      view = render(
+        <Suspense fallback={<span>Loading</span>}>
+          <Boundary locale="en">
+            <Trans id="when" message="{when, date, full} {when, time, short}" values={{ when }} />
+          </Boundary>
+        </Suspense>
+      )
+    })
+
+    await waitFor(() =>
+      expect(view.container.textContent).toBe(
+        `${new Intl.DateTimeFormat("en", {
+          dateStyle: "full",
+          timeZone: "Europe/Berlin",
+        }).format(when)} ${new Intl.DateTimeFormat("en", {
+          timeStyle: "short",
+          timeZone: "Europe/Berlin",
+        }).format(when)}`
+      )
+    )
+    expect(createConfiguredI18n).toHaveBeenCalledOnce()
+    expect(getI18n<ReturnType<typeof createI18n>>().timeZone).toBe("Europe/Berlin")
   })
 
   it("fails fast when a render tries to change the document locale", async () => {

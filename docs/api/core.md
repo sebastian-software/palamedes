@@ -9,8 +9,8 @@ The package root is the compatibility entrypoint. It exports:
 
 - `createI18n(options?)`
 - `DEFAULT_LOCALE`
-- `formatMessagePattern(pattern, values, locale?)`
-- `formatMessageArgument(format, value, style?, locale?)`
+- `formatMessagePattern(pattern, values?, locale?, timeZone?)`
+- `formatMessageArgument(format, value, style?, locale?, timeZone?)`
 - `parseMessagePattern(pattern)`
 - `defineCompiledCatalog(messages)` for generated catalog-loader output
 - `createCompiledMessageRuntime(locale, renderer)` for host adapters
@@ -62,14 +62,28 @@ factory below when runtime ICU strings are intentional.
 
 Creates an in-memory i18n instance. It starts with `DEFAULT_LOCALE` (`"en"`).
 The optional `locale` setting overrides that initial locale for catalog lookup,
-message formatting, and telemetry before any later `activate()` call. Optional
+message formatting, and telemetry before any later `activate()` call. Set the
+optional `timeZone` to an IANA identifier (for example `"Europe/Berlin"`) to
+format ICU `date` and `time` arguments consistently during server rendering and
+client hydration. Invalid or empty identifiers throw `RangeError` during
+creation. Without it, the host's default time zone remains in effect. Optional
 telemetry hooks receive missing-message and runtime formatting failures without
 changing the source-message fallback behavior.
+
+```ts
+interface CreateI18nOptions {
+  locale?: string
+  timeZone?: string
+  onMissing?: (info: MissingMessageInfo) => void
+  onError?: (info: MessageFormatErrorInfo) => void
+}
+```
 
 ```ts
 import { createI18n } from "@palamedes/core"
 
 const i18n = createI18n({
+  timeZone: "Europe/Berlin",
   onMissing(info) {
     reportMetric("palamedes.missing", info)
   },
@@ -85,11 +99,17 @@ i18n.activate("de")
 const label = i18n._("Hello {name}", { name: "Ada" })
 ```
 
+`Date` values and timestamps are instants. Date-only ISO strings such as
+`"2026-06-12"` are parsed by JavaScript as UTC before Palamedes renders them in
+`timeZone`, so they can display as the prior or following calendar day in some
+zones. Pass an explicit local-time value when the input is a calendar date.
+
 ## `PalamedesI18n`
 
 ```ts
 interface PalamedesI18n {
   readonly locale: string
+  readonly timeZone?: string
   _(id: string, values?, metadata?): string
   load(locale: string, messages: CatalogMessages | CompiledCatalogMessages): void
   activate(locale: string): void
@@ -241,6 +261,12 @@ the formatter subset implemented by the Palamedes runtime:
 - `{value, date}` and `{value, time}`
 - `{value, date, short|medium|long|full}`
 - `{value, time, short|medium|long|full}`
+
+The standalone helpers accept the same optional final time-zone argument as the
+instance runtime: `formatMessagePattern(pattern, values?, locale?, timeZone?)`
+and `formatMessageArgument(format, value, style?, locale?, timeZone?)`. Include
+the zone in both server and client calls when these helpers contribute to
+hydrated output.
 
 Currency formatting must use the `::currency/ISO` skeleton form; bare
 `currency/ISO` is outside the supported runtime subset.

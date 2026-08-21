@@ -14,7 +14,7 @@ export interface EventContent {
   eventTitle: string
   /** Venue name (a proper noun, intentionally not translated). */
   venueName: string
-  /** ISO-8601 start timestamp, formatted per-locale at render time. */
+  /** ISO-8601 start instant with an explicit offset, formatted per-locale at render time. */
   startsAt: string
   /** A fixed "now" so the relative-time output is stable across runs. */
   referenceNow: string
@@ -34,7 +34,7 @@ export const EVENT: EventContent = {
   attendeeName: "Sebastian",
   eventTitle: "Frontend Stage 2026",
   venueName: "Kraftwerk",
-  startsAt: "2026-09-18T19:30:00",
+  startsAt: "2026-09-18T17:30:00Z",
   referenceNow: "2026-06-18T12:00:00",
   ticketPrice: 149,
   currency: "EUR",

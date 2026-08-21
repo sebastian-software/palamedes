@@ -55,6 +55,21 @@ Pass `locale` when the instance should start in another locale:
 const i18n = createI18n({ locale: "de" })
 ```
 
+For server-rendered applications, set `timeZone` to the same IANA identifier on
+the server and client. ICU `{when, date}` and `{when, time}` arguments then use
+that zone instead of the host process or browser zone, preventing hydration
+output from drifting across environments.
+
+```ts
+const i18n = createI18n({ locale: "en-US", timeZone: "Europe/Berlin" })
+```
+
+Date objects and timestamps represent instants. Date-only ISO strings such as
+`"2026-06-12"` follow JavaScript's UTC parsing semantics before they are rendered
+in `timeZone`; use an explicit local-time representation when a calendar date
+must never shift across zones. Invalid or empty zone identifiers throw a
+`RangeError` while creating the instance.
+
 Use `pmds audit --fail-on error` in CI for checked-in catalogs, then wire these
 hooks to observe runtime-loaded catalogs or fast-moving translation changes.
 `getMessage(id, metadata)` uses the same missing-catalog lookup path as `_()`,
