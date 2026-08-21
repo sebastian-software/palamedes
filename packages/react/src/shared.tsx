@@ -33,7 +33,11 @@ export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
     offset?: number
   ): ReactNode {
     const message = buildChoiceMessage("value", kind, choices, offset)
-    const metadata: MessageMetadata = { message, reportMissing: false }
+    const metadata: MessageMetadata = {
+      message,
+      reportMissing: false,
+      renderUncompiledPattern: true,
+    }
     const runtime = createReactMessageRuntime(i18n, {}, parseMessagePattern)
     return <>{renderI18nMessage(i18n, message, { value }, runtime, metadata)}</>
   }

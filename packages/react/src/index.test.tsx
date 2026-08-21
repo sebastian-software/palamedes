@@ -75,6 +75,38 @@ describe("@palamedes/react", () => {
     ).toBe("Hallo Ada")
   })
 
+  it("formats uncompiled compat messages with the parser-free runtime", () => {
+    const i18n = createCompiledI18n({ locale: "en-US" })
+    setClientI18n(i18n)
+    const when = new Date(Date.UTC(2026, 4, 8, 12, 0, 0))
+
+    const html = renderToStaticMarkup(
+      <>
+        <Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />
+        <Trans id="date" message="{when, date, full}" values={{ when }} />
+        <Plural value={3} one="# item" other="# items" />
+        <Select value="female" female="She" other="They" />
+        <SelectOrdinal value={3} one="#st" two="#nd" few="#rd" other="#th" />
+      </>
+    )
+
+    expect(html).toBe(
+      `Hello Ada${new Intl.DateTimeFormat("en-US", { dateStyle: "full" }).format(when)}3 itemsShe3rd`
+    )
+  })
+
+  it("keeps root compat components on generated parser-free catalog entries", () => {
+    const greeting: ParserFreeMessage = (values, runtime) =>
+      runtime.join("Hallo ", runtime.value(values, "name"))
+    const i18n = createCompiledI18n({ locale: "de" })
+    i18n.load("de", defineParserFreeCatalog({ greeting }))
+    setClientI18n(i18n)
+
+    expect(
+      renderToStaticMarkup(<Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />)
+    ).toBe("Hallo Ada")
+  })
+
   it("parses lazy patterns without re-entering catalog lookup", () => {
     const greeting: CompiledMessage = (values, runtime) => runtime.pattern("Hello {name}", values)
     const i18n = createI18n({ locale: "de" })

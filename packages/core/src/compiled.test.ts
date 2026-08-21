@@ -51,4 +51,12 @@ describe("parser-free compiled runtime", () => {
     expect(i18n._("lazy", { name: "Ada" }, { message: "Hello {name}" })).toBe("Hello {name}")
     expect(onError).toHaveBeenCalledOnce()
   })
+
+  it("does not parse unresolved fallbacks with the parser-free string renderer", () => {
+    const onError = vi.fn()
+    const i18n = createI18n({ onError })
+
+    expect(i18n._("missing", { name: "Ada" }, { message: "Hello {name}" })).toBe("Hello {name}")
+    expect(onError).not.toHaveBeenCalled()
+  })
 })
