@@ -30,8 +30,14 @@ describe("@palamedes/runtime/server fallback", () => {
       }
     }
     const fallback = {
-      import: "./dist/server-unavailable.mjs",
-      require: "./dist/server-unavailable.cjs",
+      import: {
+        types: "./dist/server-unavailable.d.mts",
+        default: "./dist/server-unavailable.mjs",
+      },
+      require: {
+        types: "./dist/server-unavailable.d.cts",
+        default: "./dist/server-unavailable.cjs",
+      },
     }
 
     expect(packageJson.exports["./server"].browser).toStrictEqual(fallback)
