@@ -71,6 +71,13 @@ function bareMessageAsset(rendered: string, locale: string): string {
 }
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config."
 const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
+// `moduleType` and Rollup's `moduleTypes` bridge were added with Vite's
+// Rolldown-based pipeline. Rollup-based Vite 7 ignores both, leaving React
+// MDX's generated JSX for import analysis (or the browser) to parse as .mdx.
+const VITE_SUPPORTS_REACT_MDX_MODULE_TYPE = VITE_MAJOR >= 8
+
+const REACT_MDX_VITE_REQUIREMENT =
+  'Palamedes React MDX compilation requires Vite 8 or newer because Vite 7\'s Rollup pipeline cannot parse generated JSX from .mdx files. Upgrade Vite, set `mdx: { framework: "solid" }` for Solid, or disable first-class MDX with `mdx: false`.'
 function stripQuery(id: string): string {
   return id.split("?")[0] ?? id
 }
@@ -460,7 +467,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           ...resolveMdxOptions(cfg),
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
         }
-        if ((mdx.framework ?? "react") === "solid") {
+        if ((mdx.framework ?? "react") !== "react" || !VITE_SUPPORTS_REACT_MDX_MODULE_TYPE) {
           return
         }
         return {
@@ -499,11 +506,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             "Palamedes MDX compilation requires Vite 7 or newer. Disable it with `mdx: false` when using an older Vite release."
           )
         }
-
         const cfg = await getConfigLazy()
         const mdx = {
           ...resolveMdxOptions(cfg),
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
+        }
+        if ((mdx.framework ?? "react") === "react" && !VITE_SUPPORTS_REACT_MDX_MODULE_TYPE) {
+          this.error(REACT_MDX_VITE_REQUIREMENT)
         }
         const result = analyzeMdxNative(source, cleanId, mdx)
         mdxModuleIds.add(cleanId)
