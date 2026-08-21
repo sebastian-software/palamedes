@@ -518,7 +518,7 @@ plural(seats, {
     metaDescription:
       "next-intl is the most Next.js-idiomatic i18n library there is, routing included. Palamedes trades that depth for one runtime and message model across supported hosts — and ships source-string extraction as the stable path, not an experiment.",
     eyebrow: "Compare · next-intl",
-    headline: "One framework deep, or shared server-framework coverage.",
+    headline: "One framework deep, or six frameworks wide.",
     lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes draws the boundary differently: your framework keeps routing, while Palamedes carries the same authoring, catalog, validation, and runtime model across supported hosts.",
     card: "Next-native depth including routing, against one shared model across supported hosts.",
     facts: [
