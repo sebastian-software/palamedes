@@ -10,11 +10,11 @@ const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 const SELECTED_MESSAGES_QUERY = "palamedes-selected"
 
 function resolveLoaderCwd(context, options) {
-  if (typeof context.rootContext === "string" && context.rootContext.length > 0) {
-    return path.resolve(context.rootContext)
-  }
   if (typeof options.cwd === "string" && options.cwd.length > 0) {
     return path.resolve(options.cwd)
+  }
+  if (typeof context.rootContext === "string" && context.rootContext.length > 0) {
+    return path.resolve(context.rootContext)
   }
 }
 

@@ -89,8 +89,17 @@ describe("palamedes-po-loader.cjs", () => {
     )
   })
 
-  it("uses the loader root context for config discovery", async () => {
-    await runLoader({ cwd: "/wrong-root" }, { rootContext: "/next-app" })
+  it("prefers the plugin project root over a divergent loader root context", async () => {
+    await runLoader({ cwd: "/next-app" }, { rootContext: "/monorepo-root" })
+
+    expect(loadPalamedesConfig).toHaveBeenCalledWith({
+      configPath: undefined,
+      cwd: path.resolve("/next-app"),
+    })
+  })
+
+  it("falls back to the loader root context when no project root is propagated", async () => {
+    await runLoader({}, { rootContext: "/next-app" })
 
     expect(loadPalamedesConfig).toHaveBeenCalledWith({
       configPath: undefined,

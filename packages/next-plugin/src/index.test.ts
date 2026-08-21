@@ -78,6 +78,46 @@ describe("withPalamedes turbopack config", () => {
     expect(config.outputFileTracingRoot).toBe(monorepoRoot)
   })
 
+  it("derives the app root from the config evaluation stack after Next consumes its CLI directory", async () => {
+    const monorepoRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-config-stack-"))
+    tempDirs.push(monorepoRoot)
+    const appRoot = path.join(monorepoRoot, "apps", "web")
+    await mkdir(path.join(appRoot, "src"), { recursive: true })
+    await Promise.all([
+      writeFile(path.join(monorepoRoot, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n"),
+      writeFile(path.join(monorepoRoot, "palamedes.yaml"), "locales: [en]\n"),
+      writeFile(path.join(appRoot, "palamedes.yaml"), "locales: [de]\n"),
+      writeFile(
+        path.join(monorepoRoot, "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+      writeFile(
+        path.join(appRoot, "src", "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+    ])
+    vi.spyOn(process, "cwd").mockReturnValue(monorepoRoot)
+    originalArgv = process.argv
+    process.argv = ["node", "next"]
+
+    // Simulate the loaded config module's stack frame after Next consumes the CLI directory.
+    // eslint-disable-next-line no-new-func
+    const loadNextConfig = new Function(
+      "withPalamedes",
+      `return () => withPalamedes({}, { serverFunctions: true })\n//# sourceURL=${path.join(appRoot, "next.config.mjs")}`
+    ) as (configure: typeof withPalamedes) => () => ReturnType<typeof withPalamedes>
+    const config = loadNextConfig(withPalamedes)()
+    const transformRule = getRules(config)["*"] as RuleItem[]
+    const poRule = getRules(config)["*.po"] as RuleItem
+
+    expect(config.turbopack?.resolveAlias).toMatchObject({
+      [serverEntryModule]: "./src/palamedes.server.ts",
+    })
+    expect(transformRule[0]?.loaders?.[0]?.options).toMatchObject({ cwd: appRoot })
+    expect(poRule.loaders?.[0]?.options).toMatchObject({ cwd: appRoot })
+    expect(config.turbopack?.root).toBe(monorepoRoot)
+  })
+
   it("normalizes projectRoot once for config paths, loaders, and workspace detection", async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-project-option-"))
     tempDirs.push(projectRoot)

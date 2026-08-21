@@ -108,7 +108,7 @@ describe("palamedes-loader.cjs", () => {
     expect(dependencies).toEqual(["/repo/palamedes.yaml"])
   })
 
-  it("uses the loader root context for split catalog config discovery", async () => {
+  it("prefers the plugin project root over a divergent loader root context", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "export const translated = true",
       map: null,
@@ -116,9 +116,18 @@ describe("palamedes-loader.cjs", () => {
     })
 
     await runLoader(
-      { serverMessageSplitting: true, cwd: "/wrong-root" },
-      { rootContext: "/next-app" }
+      { serverMessageSplitting: true, cwd: "/next-app" },
+      { rootContext: "/monorepo-root" }
     )
+
+    expect(loadPalamedesConfigSync).toHaveBeenCalledWith({
+      configPath: undefined,
+      cwd: path.resolve("/next-app"),
+    })
+  })
+
+  it("falls back to the loader root context when no project root is propagated", async () => {
+    await runLoader({ serverMessageSplitting: true }, { rootContext: "/next-app" })
 
     expect(loadPalamedesConfigSync).toHaveBeenCalledWith({
       configPath: undefined,

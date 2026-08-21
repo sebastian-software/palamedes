@@ -8,6 +8,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { createRequire } from "node:module"
+import { fileURLToPath } from "node:url"
 import type { NextConfig } from "next"
 
 import { PALAMEDES_MACRO_PACKAGES, resolveMacroRuntimeModule } from "@palamedes/transform"
@@ -273,12 +274,52 @@ function resolveProjectRoot(
     return path.dirname(path.resolve(configFile))
   }
 
+  const configProjectRoot = resolveNextConfigProjectRoot()
+  if (configProjectRoot) {
+    return configProjectRoot
+  }
+
   const cliProjectRoot = resolveNextCliProjectRoot()
   if (cliProjectRoot) {
     return cliProjectRoot
   }
 
   return process.cwd()
+}
+
+function resolveNextConfigProjectRoot(): string | undefined {
+  const stack = new Error().stack
+  if (!stack) {
+    return
+  }
+
+  for (const frame of stack.split("\n")) {
+    const configFile = nextConfigFileFromStackFrame(frame)
+    if (configFile) {
+      return path.dirname(configFile)
+    }
+  }
+}
+
+function nextConfigFileFromStackFrame(frame: string): string | undefined {
+  const configFileName = frame.match(/next\.config\.(?:[cm]?[jt]s)/u)?.[0]
+  if (!configFileName) {
+    return
+  }
+
+  const configFileEnd = frame.indexOf(configFileName) + configFileName.length
+  const prefix = frame.slice(0, configFileEnd)
+  const openingParenthesis = prefix.lastIndexOf("(")
+  const rawPath = prefix
+    .slice(openingParenthesis === -1 ? 0 : openingParenthesis + 1)
+    .trim()
+    .replace(/^at\s+(?:async\s+)?/u, "")
+
+  if (!rawPath) {
+    return
+  }
+
+  return rawPath.startsWith("file:") ? fileURLToPath(rawPath) : path.resolve(rawPath)
 }
 
 function resolveNextCliProjectRoot(): string | undefined {
