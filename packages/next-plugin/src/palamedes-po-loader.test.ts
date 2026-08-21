@@ -30,12 +30,12 @@ beforeEach(() => {
     fallbackLocales: undefined,
     catalogs: [{ path: "src/locales/{locale}", include: ["src"] }],
   })
-  compileCatalogModule.mockReturnValue({
+  compileCatalogModule.mockResolvedValue({
     code: 'export const messages={"greeting":"Hallo"};export default { messages };',
     warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
-  compileCatalogArtifactSelected.mockReturnValue({
+  compileCatalogArtifactSelected.mockResolvedValue({
     messages: { greeting: "Hallo" },
     missing: [],
     diagnostics: [],
@@ -54,7 +54,10 @@ beforeEach(() => {
       return { loadPalamedesConfig }
     }
     if (request === "@palamedes/core-node") {
-      return { compileCatalogArtifactSelected, compileCatalogModule }
+      return {
+        compileCatalogArtifactSelectedAsync: compileCatalogArtifactSelected,
+        compileCatalogModuleAsync: compileCatalogModule,
+      }
     }
     if (request === "@palamedes/transform") {
       return { createCatalogLoaderResult, createMissingErrorMessage }
@@ -108,15 +111,13 @@ describe("palamedes-po-loader.cjs", () => {
   })
 
   it("fails missing translations when configured", async () => {
-    compileCatalogModule.mockImplementation(() => {
-      throw new Error("Missing 1 translation")
-    })
+    compileCatalogModule.mockRejectedValue(new Error("Missing 1 translation"))
 
     await expect(runLoader({ failOnMissing: true })).rejects.toThrow(/Missing 1 translation/)
   })
 
   it("routes diagnostics through webpack's emitWarning when not fatal", async () => {
-    compileCatalogModule.mockReturnValue({
+    compileCatalogModule.mockResolvedValue({
       code: "export const messages={};export default { messages };",
       warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
@@ -134,9 +135,7 @@ describe("palamedes-po-loader.cjs", () => {
   })
 
   it("fails compile diagnostics when configured", async () => {
-    compileCatalogModule.mockImplementation(() => {
-      throw new Error("Compilation error for 1 translation")
-    })
+    compileCatalogModule.mockRejectedValue(new Error("Compilation error for 1 translation"))
 
     await expect(runLoader({ failOnCompileError: true })).rejects.toThrow(
       /Compilation error for 1 translation/
@@ -185,7 +184,7 @@ describe("palamedes-po-loader.cjs", () => {
   })
 
   it("warns about selected messages missing from a non-pseudo locale", async () => {
-    compileCatalogArtifactSelected.mockReturnValue({
+    compileCatalogArtifactSelected.mockResolvedValue({
       messages: {},
       missing: [{ sourceKey: { message: "Missing" } }],
       diagnostics: [],

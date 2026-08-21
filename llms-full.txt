@@ -285,7 +285,7 @@ Important consequences:
 
 ### Translation candidate and patch APIs
 
-Custom translation tooling can use the synchronous typed APIs from
+Custom translation tooling can use the typed APIs from
 `@palamedes/core-node`:
 
 ```ts
@@ -307,6 +307,17 @@ The candidate/patch type surface is `TranslationCandidateId`,
 reports `applied`, `unchanged`, `rejected`, or `notApplied` outcomes and
 diagnostics. A failed catalog replacement throws an error with a partial report;
 do not treat a thrown write error as proof that no earlier catalog patch completed.
+
+File-touching operations also have additive promise-returning variants:
+`updateCatalogFileAsync`, `applyTranslationPatchesAsync`,
+`compileCatalogArtifactAsync`, `compileCatalogArtifactSelectedAsync`,
+`compileCatalogModuleAsync`, and `extractCatalogMessagesFromFilesAsync`.
+They preserve the synchronous result and error shapes while scheduling one
+owned operation on Node's shared libuv worker pool. The Vite and Next plugin
+hooks await them; the Remix synchronous module hook keeps
+`compileCatalogModule`. These promises do not cancel queued native work, so
+custom bulk callers must bound their own concurrency rather than launch an
+unbounded promise fan-out.
 
 ## CLI model
 

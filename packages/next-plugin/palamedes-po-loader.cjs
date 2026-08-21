@@ -2,7 +2,10 @@
 
 const path = require("node:path")
 const { loadPalamedesConfig } = require("@palamedes/config")
-const { compileCatalogArtifactSelected, compileCatalogModule } = require("@palamedes/core-node")
+const {
+  compileCatalogArtifactSelectedAsync,
+  compileCatalogModuleAsync,
+} = require("@palamedes/core-node")
 const { createCatalogLoaderResult, createMissingErrorMessage } = require("@palamedes/transform")
 const { loadConfigCached } = require("./palamedes-config-cache.cjs")
 const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
@@ -58,7 +61,7 @@ module.exports = function palamedesPoLoader() {
       if (!Array.isArray(compiledIds) || !compiledIds.every((id) => typeof id === "string")) {
         throw new TypeError("Invalid Palamedes selected-message query.")
       }
-      const artifact = compileCatalogArtifactSelected(
+      const artifact = await compileCatalogArtifactSelectedAsync(
         artifactConfig,
         this.resourcePath,
         compiledIds
@@ -72,7 +75,7 @@ module.exports = function palamedesPoLoader() {
         result.warnings.push(createMissingErrorMessage(resolvedLocale, artifact.missing))
       }
     } else {
-      result = compileCatalogModule(artifactConfig, this.resourcePath, loaderOptions)
+      result = await compileCatalogModuleAsync(artifactConfig, this.resourcePath, loaderOptions)
     }
     if (typeof this.addDependency === "function") {
       if (cfg.configPath) {

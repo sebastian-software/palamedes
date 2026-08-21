@@ -20,8 +20,8 @@ import {
 } from "@palamedes/config"
 import {
   analyzeMdxNative,
-  compileCatalogArtifactSelected,
-  compileCatalogModule,
+  compileCatalogArtifactSelectedAsync,
+  compileCatalogModuleAsync,
   renderCatalogModule,
   type CatalogArtifactConfig,
 } from "@palamedes/core-node"
@@ -375,12 +375,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     )
   }
 
-  function validateMdxTranslations(
+  async function validateMdxTranslations(
     cfg: LoadedPalamedesConfig,
     id: string,
     compiledIds: string[],
     addWatchFile: (file: string) => void
-  ): void {
+  ): Promise<void> {
     if (!failOnMissing || compiledIds.length === 0) {
       return
     }
@@ -399,7 +399,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           continue
         }
         const resourcePath = catalogResourcePath(cfg, catalog, locale)
-        const result = compileCatalogArtifactSelected(artifactConfig, resourcePath, compiledIds)
+        const result = await compileCatalogArtifactSelectedAsync(
+          artifactConfig,
+          resourcePath,
+          compiledIds
+        )
         result.watchFiles.forEach(addWatchFile)
         if (result.missing.length > 0) {
           throw new Error(
@@ -519,7 +523,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const result = analyzeMdxNative(source, cleanId, mdx)
         mdxModuleIds.add(cleanId)
         this.addWatchFile(cfg.configPath)
-        validateMdxTranslations(cfg, cleanId, result.compiledIds, (file) => this.addWatchFile(file))
+        await validateMdxTranslations(cfg, cleanId, result.compiledIds, (file) =>
+          this.addWatchFile(file)
+        )
 
         if (result.diagnostics.length > 0 || !result.code) {
           const details = result.diagnostics
@@ -662,12 +668,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     // `warn` is required rather than optional: an omitted channel would
     // silently disable the `failOnMissing` gate below along with the warning,
     // and every caller has a plugin context that provides one.
-    function compileSidecarLocale(
+    async function compileSidecarLocale(
       cfg: LoadedPalamedesConfig,
       entry: SidecarEntry,
       locale: string,
       context: { addWatchFile?: (file: string) => void; warn: (message: string) => void }
-    ): Record<string, string> | null {
+    ): Promise<Record<string, string> | null> {
       const catalogs = cfg.catalogs.filter((catalog) =>
         catalogMatchesSource(cfg, catalog, entry.sourceId)
       )
@@ -682,7 +688,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       for (const catalog of catalogs) {
         const artifactConfig = catalogArtifactConfig(cfg, [catalog])
         const resourcePath = catalogResourcePath(cfg, catalog, locale)
-        const result = compileCatalogArtifactSelected(
+        const result = await compileCatalogArtifactSelectedAsync(
           artifactConfig,
           resourcePath,
           entry.compiledIds
@@ -803,7 +809,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         let selected: Record<string, string> | null = null
         try {
-          selected = compileSidecarLocale(cfg, entry, locale, {
+          selected = await compileSidecarLocale(cfg, entry, locale, {
             addWatchFile: (file) => this.addWatchFile(file),
             warn: (message) => this.warn(message),
           })
@@ -832,7 +838,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const sortedSidecars = [...sidecarModules.entries()].sort(([a], [b]) => a.localeCompare(b))
         for (const [key, entry] of sortedSidecars) {
           for (const locale of locales) {
-            const selected = compileSidecarLocale(cfg, entry, locale, {
+            const selected = await compileSidecarLocale(cfg, entry, locale, {
               warn: (message) => this.warn(message),
             })
             const asset = bareMessageAsset(renderCatalogModule(selected ?? {}), locale)
@@ -914,7 +920,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         this.addWatchFile(cfg.configPath)
         const cleanId = stripQuery(id)
         const locale = path.basename(cleanId, ".po")
-        const result = compileCatalogModule(catalogArtifactConfig(cfg), cleanId, {
+        const result = await compileCatalogModuleAsync(catalogArtifactConfig(cfg), cleanId, {
           locale,
           pseudoLocale: cfg.pseudoLocale,
           failOnMissing,

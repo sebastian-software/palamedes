@@ -32,8 +32,8 @@ vi.mock("@palamedes/config", async (importOriginal) => {
 
 vi.mock("@palamedes/core-node", () => ({
   analyzeMdxNative: mocks.analyzeMdxNative,
-  compileCatalogArtifactSelected: mocks.compileCatalogArtifactSelected,
-  compileCatalogModule: mocks.compileCatalogModule,
+  compileCatalogArtifactSelectedAsync: mocks.compileCatalogArtifactSelected,
+  compileCatalogModuleAsync: mocks.compileCatalogModule,
   renderCatalogModule: mocks.renderCatalogModule,
 }))
 
@@ -79,12 +79,12 @@ beforeEach(() => {
       mappings: "AAAA",
     },
   })
-  mocks.compileCatalogModule.mockReturnValue({
+  mocks.compileCatalogModule.mockResolvedValue({
     code: 'export const messages={"greeting":"Hallo"};export default { messages };',
     warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
-  mocks.compileCatalogArtifactSelected.mockReturnValue({
+  mocks.compileCatalogArtifactSelected.mockResolvedValue({
     messages: {},
     missing: [],
     diagnostics: [],
@@ -124,9 +124,7 @@ describe("palamedes vite plugin", () => {
   })
 
   it("fails missing translations when configured", async () => {
-    mocks.compileCatalogModule.mockImplementation(() => {
-      throw new Error("Missing 1 translation")
-    })
+    mocks.compileCatalogModule.mockRejectedValue(new Error("Missing 1 translation"))
 
     await expect(runPoTransform({}, { failOnMissing: true })).rejects.toThrow(
       /Missing 1 translation/
@@ -134,7 +132,7 @@ describe("palamedes vite plugin", () => {
   })
 
   it("routes diagnostics through the plugin warning channel when not fatal", async () => {
-    mocks.compileCatalogModule.mockReturnValue({
+    mocks.compileCatalogModule.mockResolvedValue({
       code: "export const messages={};export default { messages };",
       warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
