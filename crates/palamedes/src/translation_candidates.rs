@@ -4,13 +4,18 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use ferrocat::{
-    convert_catalog, machine_translation_hash, parse_catalog, CatalogMessage, CatalogMessageKey,
-    CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, MsgStr, ParseCatalogOptions,
-    PoFile, PoItem, SerializeOptions, TranslationShape,
+    convert_catalog, machine_translation_hash, CatalogMessageKey, CatalogMode,
+    ConvertCatalogOptions, EffectiveTranslationRef, Header, MsgStr, PoFile, PoItem,
+    SerializeOptions,
 };
 use ferrocat_icu::{parse_icu, stringify_icu, IcuMessage, IcuNode, IcuOption, IcuPluralKind};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+#[cfg(test)]
+thread_local! {
+    static SOURCE_CATALOG_PARSE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 use crate::catalog_artifact::resolve_catalog_path;
 use crate::catalog_update::{po_serialize_options, AiProvenance, MachineMetadata};
@@ -268,7 +273,7 @@ struct LoadedCatalog {
     original: String,
     po: PoFile,
     po_item_indexes: HashMap<CatalogMessageKey, PoItemIndexes>,
-    messages: BTreeMap<CatalogMessageKey, CatalogMessage>,
+    messages: BTreeMap<CatalogMessageKey, usize>,
     ambiguous_messages: BTreeSet<CatalogMessageKey>,
 }
 
@@ -286,9 +291,16 @@ struct PoItemIndexes {
 #[derive(Debug)]
 struct PreparedCatalog {
     path: PathBuf,
+    locale: String,
     patch_indexes: Vec<usize>,
     content: String,
     changed: bool,
+}
+
+#[derive(Debug)]
+enum CatalogReplacement {
+    Durable,
+    CommittedWithDurabilityWarning(std::io::Error),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -341,7 +353,8 @@ pub fn list_translation_candidates(
                 }
                 Err(error) => return Err(error),
             };
-            for (key, message) in &loaded.messages {
+            for (key, item_index) in &loaded.messages {
+                let item = &loaded.po.items[*item_index];
                 let id = TranslationCandidateId {
                     catalog: loaded.scope.clone(),
                     locale: locale.clone(),
@@ -362,12 +375,12 @@ pub fn list_translation_candidates(
                 let selected = if explicit {
                     requested.contains_key(&id)
                 } else {
-                    message.obsolete.is_none() && !is_translated(message)
+                    !item.obsolete && !po_item_is_translated(item)
                 };
                 if !selected {
                     continue;
                 }
-                let candidate = build_candidate(&loaded, key, message, request.max_origins);
+                let candidate = build_candidate(&loaded, key, item, request.max_origins)?;
                 seen.insert(id);
                 candidates.push(candidate);
             }
@@ -412,7 +425,11 @@ fn apply_translation_patches_with_replacement<F>(
     mut replace_catalog: F,
 ) -> PalamedesResult<TranslationPatchResult>
 where
-    F: FnMut(&PreparedCatalog, &str, Option<&PoOutputOptions>) -> PalamedesResult<()>,
+    F: FnMut(
+        &PreparedCatalog,
+        &str,
+        Option<&PoOutputOptions>,
+    ) -> PalamedesResult<CatalogReplacement>,
 {
     let requested_count = request.patches.len();
     if request.patches.is_empty() {
@@ -535,7 +552,7 @@ where
                 ));
                 continue;
             }
-            let Some(message) = loaded.messages.get(&key) else {
+            let Some(item_index) = loaded.messages.get(&key) else {
                 rejected.insert(patch_index);
                 diagnostics.push(workflow_diagnostic(
                     "translation.unknown_message",
@@ -544,7 +561,8 @@ where
                 ));
                 continue;
             };
-            let current = build_candidate(&loaded, &key, message, usize::MAX);
+            let current =
+                build_candidate(&loaded, &key, &loaded.po.items[*item_index], usize::MAX)?;
             if current.fingerprint != patch.fingerprint {
                 rejected.insert(patch_index);
                 diagnostics.push(workflow_diagnostic(
@@ -598,6 +616,7 @@ where
             )?;
             prepared.push(PreparedCatalog {
                 path: loaded.path,
+                locale: batch.locale,
                 patch_indexes,
                 changed: content != loaded.original,
                 content,
@@ -616,20 +635,34 @@ where
 
     let mut completed_patches = BTreeSet::new();
     let mut catalogs_updated = 0;
+    let mut replacement_diagnostics = Vec::new();
     for catalog in &prepared {
         if catalog.changed {
-            if let Err(source) =
-                replace_catalog(catalog, &request.config.source_locale, request.po.as_ref())
-            {
-                return Err(PalamedesError::TranslationPatchWrite {
-                    result: completed_translation_patch_result(
-                        &request.patches,
-                        &changed_patches,
-                        &completed_patches,
-                        catalogs_updated,
-                    ),
-                    source: Box::new(source),
-                });
+            match replace_catalog(catalog, &request.config.source_locale, request.po.as_ref()) {
+                Ok(CatalogReplacement::Durable) => {}
+                Ok(CatalogReplacement::CommittedWithDurabilityWarning(source)) => {
+                    replacement_diagnostics.push(TranslationWorkflowDiagnostic {
+                        code: "translation.catalog_durability".to_owned(),
+                        message: format!(
+                            "Catalog replacement committed, but synchronizing its directory failed: {source}"
+                        ),
+                        id: None,
+                        catalog_path: Some(catalog.path.to_string_lossy().into_owned()),
+                        locale: Some(catalog.locale.clone()),
+                    });
+                }
+                Err(source) => {
+                    return Err(PalamedesError::TranslationPatchWrite {
+                        result: completed_translation_patch_result(
+                            &request.patches,
+                            &changed_patches,
+                            &completed_patches,
+                            catalogs_updated,
+                            replacement_diagnostics,
+                        ),
+                        source: Box::new(source),
+                    });
+                }
             }
             catalogs_updated += 1;
         }
@@ -641,6 +674,7 @@ where
         &changed_patches,
         &completed_patches,
         catalogs_updated,
+        replacement_diagnostics,
     ))
 }
 
@@ -717,20 +751,17 @@ fn load_catalog(
         path: path.clone(),
         source,
     })?;
-    let parsed = parse_catalog(
-        ParseCatalogOptions::new(&original, &config.source_locale)
-            .with_locale(locale)
-            .with_mode(catalog.format.ferrocat_mode()),
-    )?;
+    let po = parse_catalog_as_po(&original, &config.source_locale, locale, catalog.format)?;
     let mut messages = BTreeMap::new();
     let mut ambiguous_messages = BTreeSet::new();
-    for message in parsed.messages {
-        let key = message.key();
-        if messages.insert(key.clone(), message).is_some() {
+    for (index, item) in po.items.iter().enumerate() {
+        validate_icu_native_po_item(item)?;
+        parse_machine_metadata(item)?;
+        let key = CatalogMessageKey::new(item.msgid.clone(), item.msgctxt.clone());
+        if messages.insert(key.clone(), index).is_some() {
             ambiguous_messages.insert(key);
         }
     }
-    let po = catalog_as_po(&original, &config.source_locale, locale, catalog.format)?;
     let po_item_indexes = po_item_indexes(&po);
     Ok(LoadedCatalog {
         scope: catalog.path.clone(),
@@ -745,55 +776,361 @@ fn load_catalog(
     })
 }
 
-fn catalog_as_po(
+fn parse_catalog_as_po(
     content: &str,
     source_locale: &str,
     locale: &str,
     format: PalamedesCatalogFormat,
 ) -> PalamedesResult<PoFile> {
-    let po = match format {
-        PalamedesCatalogFormat::Po => content.to_owned(),
-        PalamedesCatalogFormat::Fcl => {
-            convert_catalog(
-                ConvertCatalogOptions::new(
-                    content,
-                    source_locale,
-                    CatalogMode::IcuFcl,
-                    CatalogMode::IcuPo,
+    #[cfg(test)]
+    SOURCE_CATALOG_PARSE_COUNT.with(|count| count.set(count.get() + 1));
+    match format {
+        PalamedesCatalogFormat::Po => Ok(ferrocat::parse_po(content)?),
+        PalamedesCatalogFormat::Fcl => parse_fcl_as_po(content, source_locale, locale),
+    }
+}
+
+#[cfg(test)]
+fn reset_source_catalog_parse_count() {
+    SOURCE_CATALOG_PARSE_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn source_catalog_parse_count() -> usize {
+    SOURCE_CATALOG_PARSE_COUNT.with(std::cell::Cell::get)
+}
+
+fn validate_icu_native_po_item(item: &PoItem) -> PalamedesResult<()> {
+    if item.msgid_plural.is_some() || matches!(item.msgstr, MsgStr::Plural(_)) {
+        return Err(ferrocat::ApiError::Unsupported(
+            "classic gettext plural requires compat mode".to_owned(),
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> PalamedesResult<PoFile> {
+    let mut lines = content.lines().enumerate();
+    let (_, header) = lines.next().ok_or_else(|| {
+        ferrocat::ApiError::InvalidArguments(
+            "FCL catalog must start with the `%FCL1` header".to_owned(),
+        )
+    })?;
+    let mut fields = header.split('\t');
+    if fields.next() != Some("%FCL1") {
+        return Err(ferrocat::ApiError::InvalidArguments(
+            "FCL catalog must start with the `%FCL1` header".to_owned(),
+        )
+        .into());
+    }
+    let mut declared_source = None;
+    let mut declared_order = false;
+    for tag in fields {
+        let (key, raw_value) = tag.split_once('=').ok_or_else(|| {
+            ferrocat::ApiError::InvalidArguments(format!("invalid FCL header tag {tag:?}"))
+        })?;
+        let value = unescape_fcl(raw_value)?;
+        match key {
+            "source" => declared_source = Some(value),
+            "locale" => {}
+            "order" if declared_order => {
+                return Err(ferrocat::ApiError::InvalidArguments(
+                    "duplicate FCL header key `order`".to_owned(),
                 )
-                .with_locale(locale),
-            )?
-            .content
+                .into())
+            }
+            "order" if value == "collated" => declared_order = true,
+            "order" => {
+                return Err(ferrocat::ApiError::InvalidArguments(format!(
+                    "unknown FCL order {value:?}"
+                ))
+                .into())
+            }
+            _ => {
+                return Err(ferrocat::ApiError::InvalidArguments(format!(
+                    "unknown FCL header key {key:?}"
+                ))
+                .into())
+            }
         }
+    }
+    if declared_source
+        .as_deref()
+        .is_some_and(|value| value != source_locale)
+    {
+        return Err(ferrocat::ApiError::InvalidArguments(format!(
+            "FCL source {:?} did not match requested source_locale {source_locale:?}",
+            declared_source.as_deref().unwrap_or_default()
+        ))
+        .into());
+    }
+    let mut po = PoFile {
+        headers: vec![Header {
+            key: "Language".to_owned(),
+            value: locale.to_owned(),
+        }],
+        ..PoFile::default()
     };
-    Ok(ferrocat::parse_po(&po)?)
+    let mut identities = BTreeSet::new();
+    for (line_index, line) in lines {
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with("<<<<<<<") || line.starts_with("=======") || line.starts_with(">>>>>>>")
+        {
+            return Err(ferrocat::ApiError::InvalidArguments(format!(
+                "git conflict marker in FCL catalog on line {}",
+                line_index + 1
+            ))
+            .into());
+        }
+        let item = parse_fcl_item(line).map_err(|error| {
+            ferrocat::ApiError::InvalidArguments(format!(
+                "invalid FCL entry on line {}: {error}",
+                line_index + 1
+            ))
+        })?;
+        if !identities.insert((item.msgid.clone(), item.msgctxt.clone())) {
+            return Err(ferrocat::ApiError::Conflict(format!(
+                "duplicate FCL entry for id {:?} and context {:?}",
+                item.msgid, item.msgctxt
+            ))
+            .into());
+        }
+        po.items.push(item);
+    }
+    Ok(po)
+}
+
+fn parse_fcl_item(line: &str) -> Result<PoItem, ferrocat::ApiError> {
+    let mut fields = line.split('\t');
+    let msgid = unescape_fcl(fields.next().ok_or_else(|| {
+        ferrocat::ApiError::InvalidArguments("FCL entry is missing the id field".to_owned())
+    })?)?;
+    let context = unescape_fcl(fields.next().ok_or_else(|| {
+        ferrocat::ApiError::InvalidArguments("FCL entry is missing the ctxt field".to_owned())
+    })?)?;
+    let target = unescape_fcl(fields.next().ok_or_else(|| {
+        ferrocat::ApiError::InvalidArguments("FCL entry is missing the target field".to_owned())
+    })?)?;
+    let mut item = PoItem {
+        msgid,
+        msgctxt: (!context.is_empty()).then_some(context),
+        msgstr: MsgStr::Singular(target),
+        ..PoItem::default()
+    };
+    let mut last_rank = 0_u8;
+    let mut obsolete = false;
+    let mut lock = false;
+    let mut ai = false;
+    for tag in fields {
+        if tag == "o" {
+            validate_fcl_tag_order(&mut last_rank, 4, "o")?;
+            if std::mem::replace(&mut obsolete, true) {
+                return Err(ferrocat::ApiError::InvalidArguments(
+                    "duplicate FCL tag `o`".to_owned(),
+                ));
+            }
+            item.obsolete = true;
+            continue;
+        }
+        let (key, raw_value) = tag.split_once('=').ok_or_else(|| {
+            ferrocat::ApiError::InvalidArguments(format!("invalid FCL tag {tag:?}"))
+        })?;
+        let value = unescape_fcl(raw_value)?;
+        let rank = match key {
+            "r" => 0,
+            "c" => 1,
+            "tc" => 2,
+            "f" => 3,
+            "o" => 4,
+            "lock" => 5,
+            "ai" => 6,
+            _ => {
+                return Err(ferrocat::ApiError::InvalidArguments(format!(
+                    "unknown FCL tag key {key:?}"
+                )))
+            }
+        };
+        validate_fcl_tag_order(&mut last_rank, rank, key)?;
+        match key {
+            "r" => item.references.push(value),
+            "c" => item.extracted_comments.push(value),
+            "tc" => item.comments.push(value),
+            "f" => item.flags.push(value),
+            "o" => {
+                if std::mem::replace(&mut obsolete, true) {
+                    return Err(ferrocat::ApiError::InvalidArguments(
+                        "duplicate FCL tag `o`".to_owned(),
+                    ));
+                }
+                item.obsolete = true;
+                item.metadata.push(("obsolete-since".to_owned(), value));
+            }
+            "lock" => {
+                if std::mem::replace(&mut lock, true) {
+                    return Err(ferrocat::ApiError::InvalidArguments(
+                        "duplicate FCL tag `lock`".to_owned(),
+                    ));
+                }
+                item.metadata.push(("lock".to_owned(), value));
+            }
+            "ai" => {
+                if std::mem::replace(&mut ai, true) {
+                    return Err(ferrocat::ApiError::InvalidArguments(
+                        "duplicate FCL tag `ai`".to_owned(),
+                    ));
+                }
+                item.metadata.push(("ai".to_owned(), value));
+            }
+            _ => unreachable!("known FCL tag"),
+        }
+    }
+    Ok(item)
+}
+
+fn validate_fcl_tag_order(
+    last_rank: &mut u8,
+    rank: u8,
+    key: &str,
+) -> Result<(), ferrocat::ApiError> {
+    if rank < *last_rank {
+        return Err(ferrocat::ApiError::InvalidArguments(format!(
+            "FCL tag `{key}` is out of canonical order"
+        )));
+    }
+    *last_rank = rank;
+    Ok(())
+}
+
+fn unescape_fcl(value: &str) -> Result<String, ferrocat::ApiError> {
+    let mut output = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(character) = chars.next() {
+        if character != '\\' {
+            output.push(character);
+            continue;
+        }
+        match chars.next() {
+            Some('\\') => output.push('\\'),
+            Some('t') => output.push('\t'),
+            Some('n') => output.push('\n'),
+            Some(other) => {
+                return Err(ferrocat::ApiError::InvalidArguments(format!(
+                    "invalid FCL escape `\\{other}`"
+                )))
+            }
+            None => {
+                return Err(ferrocat::ApiError::InvalidArguments(
+                    "dangling `\\` at end of FCL value".to_owned(),
+                ))
+            }
+        }
+    }
+    Ok(output)
+}
+
+fn parse_machine_metadata(item: &PoItem) -> PalamedesResult<Option<MachineMetadata>> {
+    let mut lock = None;
+    let mut ai = None;
+    for (key, value) in &item.metadata {
+        if key == "lock" {
+            if lock.replace(value).is_some() {
+                return Err(ferrocat::ApiError::InvalidArguments(
+                    "duplicate `lock` metadata for PO item".to_owned(),
+                )
+                .into());
+            }
+        } else if key == "ai" && ai.replace(value).is_some() {
+            return Err(ferrocat::ApiError::InvalidArguments(
+                "duplicate `ai` metadata for PO item".to_owned(),
+            )
+            .into());
+        }
+    }
+    let Some(lock) = lock else {
+        if ai.is_some() {
+            return Err(ferrocat::ApiError::InvalidArguments(
+                "PO `ai` metadata requires a `lock`".to_owned(),
+            )
+            .into());
+        }
+        return Ok(None);
+    };
+    if lock.trim().is_empty() {
+        return Err(ferrocat::ApiError::InvalidArguments(
+            "machine-managed lock must not be empty".to_owned(),
+        )
+        .into());
+    }
+    let ai = ai.map(|descriptor| {
+        let (model, confidence) = descriptor
+            .rsplit_once(':')
+            .and_then(|(model, suffix)| {
+                suffix
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|value| (0.0..=1.0).contains(value))
+                    .map(|confidence| (model, Some(confidence)))
+            })
+            .unwrap_or((descriptor.as_str(), None));
+        AiProvenance {
+            model: model.to_owned(),
+            confidence,
+        }
+    });
+    if ai.as_ref().is_some_and(|ai| ai.model.trim().is_empty()) {
+        return Err(
+            ferrocat::ApiError::InvalidArguments("ai model must not be empty".to_owned()).into(),
+        );
+    }
+    Ok(Some(MachineMetadata {
+        lock: lock.clone(),
+        ai,
+    }))
+}
+
+fn parse_workflow_origin(reference: &str) -> TranslationWorkflowOrigin {
+    let (file, scope) = match reference.rsplit_once('#') {
+        Some((file, scope)) if !scope.is_empty() => (file, Some(scope)),
+        _ => (reference, None),
+    };
+    let file = match file.rsplit_once(':') {
+        Some((trimmed, line))
+            if !line.is_empty() && line.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            trimmed
+        }
+        _ => file,
+    };
+    TranslationWorkflowOrigin {
+        file: file.to_owned(),
+        scope: scope.map(str::to_owned),
+    }
 }
 
 fn build_candidate(
     loaded: &LoadedCatalog,
     key: &CatalogMessageKey,
-    message: &CatalogMessage,
+    item: &PoItem,
     max_origins: usize,
-) -> TranslationCandidate {
+) -> PalamedesResult<TranslationCandidate> {
     let raw = find_po_item(&loaded.po, &loaded.po_item_indexes, key);
-    let source = project_source(&message.msgid);
-    let translation = project_translation(message, &source);
+    let source = project_source(&item.msgid);
+    let translation = project_po_translation(item, &source);
     let review = TranslationReviewState {
         translated: value_is_translated(&translation),
         fuzzy: raw.is_some_and(|item| item.flags.iter().any(|flag| flag == "fuzzy")),
-        obsolete: message.obsolete.is_some(),
+        obsolete: item.obsolete,
     };
-    let comments = raw.map_or_else(
-        || message.comments.clone(),
-        |item| item.extracted_comments.iter().cloned().collect(),
-    );
-    let mut all_origins = message
-        .origin
+    let comments = raw.map_or_else(Vec::new, |item| {
+        item.extracted_comments.iter().cloned().collect()
+    });
+    let mut all_origins = item
+        .references
         .iter()
-        .map(|origin| TranslationWorkflowOrigin {
-            file: origin.file.clone(),
-            scope: origin.scope.clone(),
-        })
+        .map(|origin| parse_workflow_origin(origin))
         .collect::<Vec<_>>();
     all_origins.sort();
     all_origins.dedup();
@@ -812,11 +1149,11 @@ fn build_candidate(
         comments,
         origins: all_origins.iter().take(max_origins).cloned().collect(),
         review,
-        machine: message.machine.clone().map(MachineMetadata::from),
+        machine: parse_machine_metadata(item)?,
         fingerprint: String::new(),
     };
     candidate.fingerprint = candidate_fingerprint(&candidate, &all_origins);
-    candidate
+    Ok(candidate)
 }
 
 fn project_source(message: &str) -> TranslationValue {
@@ -825,32 +1162,18 @@ fn project_source(message: &str) -> TranslationValue {
     })
 }
 
-fn project_translation(message: &CatalogMessage, source: &TranslationValue) -> TranslationValue {
-    match message.effective_translation() {
-        EffectiveTranslationRef::Singular(value) => {
-            if matches!(source, TranslationValue::Plural { .. }) {
-                if value.is_empty() {
-                    return empty_plural_like(source);
-                }
-                if let Some(projected) = project_icu_plural(value) {
-                    return projected;
-                }
-            }
-            TranslationValue::Singular {
-                value: value.to_owned(),
-            }
+fn project_po_translation(item: &PoItem, source: &TranslationValue) -> TranslationValue {
+    let value = item.msgstr.first().unwrap_or_default();
+    if matches!(source, TranslationValue::Plural { .. }) {
+        if value.is_empty() {
+            return empty_plural_like(source);
         }
-        EffectiveTranslationRef::Plural(values) => match &message.translation {
-            TranslationShape::Plural { variable, .. } => TranslationValue::Plural {
-                variable: variable.clone(),
-                plural_kind: TranslationPluralKind::Cardinal,
-                offset: 0,
-                values: values.clone(),
-            },
-            TranslationShape::Singular { .. } => TranslationValue::Singular {
-                value: String::new(),
-            },
-        },
+        if let Some(projected) = project_icu_plural(value) {
+            return projected;
+        }
+    }
+    TranslationValue::Singular {
+        value: value.to_owned(),
     }
 }
 
@@ -909,13 +1232,8 @@ fn empty_plural_like(source: &TranslationValue) -> TranslationValue {
     }
 }
 
-fn is_translated(message: &CatalogMessage) -> bool {
-    match message.effective_translation() {
-        EffectiveTranslationRef::Singular(value) => !value.is_empty(),
-        EffectiveTranslationRef::Plural(values) => {
-            !values.is_empty() && values.values().all(|value| !value.is_empty())
-        }
-    }
+fn po_item_is_translated(item: &PoItem) -> bool {
+    item.msgstr.first().is_some_and(|value| !value.is_empty())
 }
 
 fn value_is_translated(value: &TranslationValue) -> bool {
@@ -1196,13 +1514,23 @@ fn atomic_replace_catalog(
     catalog: &PreparedCatalog,
     _source_locale: &str,
     _po: Option<&PoOutputOptions>,
-) -> PalamedesResult<()> {
+) -> PalamedesResult<CatalogReplacement> {
+    atomic_replace_catalog_with_directory_sync(catalog, sync_catalog_directory)
+}
+
+fn atomic_replace_catalog_with_directory_sync<F>(
+    catalog: &PreparedCatalog,
+    sync_directory: F,
+) -> PalamedesResult<CatalogReplacement>
+where
+    F: FnOnce(&std::path::Path) -> std::io::Result<()>,
+{
     // `PreparedCatalog::content` has already been rendered into its target format. Writing it
     // directly avoids asking `convert_catalog_file` to parse and render the same catalog again.
-    // Keep the replacement atomic: create the temporary file beside the target, sync its
-    // content, then rename it into place. Do not perform another fallible operation after the
-    // rename: `persist` is the commit point, and reporting a later durability failure as a
-    // rejected patch would contradict the catalog state already visible to callers.
+    // Keep the replacement atomic and fully durable when the filesystem permits it: sync the
+    // temporary content, rename beside the target, then sync the containing directory. `persist`
+    // is the visible commit point, so a later directory-sync failure is a successful replacement
+    // with an explicit durability warning rather than a false "not applied" error.
     let directory = catalog
         .path
         .parent()
@@ -1235,6 +1563,19 @@ fn atomic_replace_catalog(
             path: catalog.path.clone(),
             source: source.error,
         })?;
+    Ok(match sync_directory(directory) {
+        Ok(()) => CatalogReplacement::Durable,
+        Err(source) => CatalogReplacement::CommittedWithDurabilityWarning(source),
+    })
+}
+
+#[cfg(unix)]
+fn sync_catalog_directory(directory: &std::path::Path) -> std::io::Result<()> {
+    fs::File::open(directory).and_then(|file| file.sync_all())
+}
+
+#[cfg(not(unix))]
+fn sync_catalog_directory(_directory: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
@@ -1268,7 +1609,9 @@ fn completed_translation_patch_result(
     changed_patches: &BTreeSet<usize>,
     completed_patches: &BTreeSet<usize>,
     catalogs_updated: usize,
+    mut diagnostics: Vec<TranslationWorkflowDiagnostic>,
 ) -> TranslationPatchResult {
+    diagnostics.sort_by(|left, right| diagnostic_sort_key(left).cmp(&diagnostic_sort_key(right)));
     let applied = changed_patches
         .iter()
         .filter(|index| completed_patches.contains(index))
@@ -1298,7 +1641,7 @@ fn completed_translation_patch_result(
             catalogs_updated,
         },
         outcomes,
-        diagnostics: Vec::new(),
+        diagnostics,
     }
 }
 
@@ -1400,14 +1743,58 @@ mod tests {
 
     use super::{
         apply_translation_patches, apply_translation_patches_with_replacement,
-        atomic_replace_catalog, find_po_item, list_translation_candidates, po_item_indexes,
-        TranslationCandidate, TranslationCandidateId, TranslationCandidateRequest,
-        TranslationMachineProvenance, TranslationPatch, TranslationPatchOutcomeStatus,
-        TranslationPatchRequest, TranslationPluralKind, TranslationValue,
+        atomic_replace_catalog, atomic_replace_catalog_with_directory_sync, build_candidate,
+        find_po_item, list_translation_candidates, load_catalog, po_item_indexes,
+        reset_source_catalog_parse_count, source_catalog_parse_count, TranslationCandidate,
+        TranslationCandidateId, TranslationCandidateRequest, TranslationMachineProvenance,
+        TranslationPatch, TranslationPatchOutcomeStatus, TranslationPatchRequest,
+        TranslationPluralKind, TranslationValue,
     };
     use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError};
 
     const FIXTURE: &str = include_str!("../fixtures/translation-workflow.de.po");
+
+    #[test]
+    fn loads_po_and_fcl_once_with_equivalent_candidate_projection() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("messages/de.po"), "de");
+        write_fcl_fixture(&fixture.path().join("features/de.fcl"), "de");
+        let po_catalog = CatalogConfig {
+            path: "messages/{locale}".to_owned(),
+            format: PalamedesCatalogFormat::Po,
+        };
+        let fcl_catalog = CatalogConfig {
+            path: "features/{locale}".to_owned(),
+            format: PalamedesCatalogFormat::Fcl,
+        };
+
+        reset_source_catalog_parse_count();
+        let po = load_catalog(&po_config(fixture.path()), &po_catalog, "de").expect("load PO once");
+        assert_eq!(source_catalog_parse_count(), 1);
+        reset_source_catalog_parse_count();
+        let fcl =
+            load_catalog(&fcl_config(fixture.path()), &fcl_catalog, "de").expect("load FCL once");
+        assert_eq!(source_catalog_parse_count(), 1);
+        assert_eq!(
+            po.messages.keys().collect::<Vec<_>>(),
+            fcl.messages.keys().collect::<Vec<_>>()
+        );
+
+        for key in po.messages.keys() {
+            let po_candidate =
+                build_candidate(&po, key, &po.po.items[po.messages[key]], usize::MAX)
+                    .expect("project PO candidate");
+            let fcl_candidate =
+                build_candidate(&fcl, key, &fcl.po.items[fcl.messages[key]], usize::MAX)
+                    .expect("project FCL candidate");
+            assert_eq!(po_candidate.source, fcl_candidate.source);
+            assert_eq!(po_candidate.translation, fcl_candidate.translation);
+            assert_eq!(po_candidate.comments, fcl_candidate.comments);
+            assert_eq!(po_candidate.origins, fcl_candidate.origins);
+            assert_eq!(po_candidate.review, fcl_candidate.review);
+            assert_eq!(po_candidate.machine, fcl_candidate.machine);
+        }
+    }
 
     #[test]
     fn indexes_large_po_catalogs_once_for_constant_time_candidate_lookups() {
@@ -2520,6 +2907,51 @@ mod tests {
         assert!(fs::read_to_string(&second_path)
             .expect("read second catalog")
             .contains("msgstr \"\""));
+    }
+
+    #[test]
+    fn reports_post_commit_directory_sync_failure_as_applied_with_durability_warning() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+
+        let result = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config: po_config(fixture.path()),
+                po: None,
+                patches: vec![singular_patch(hello, "Hallo")],
+            },
+            |catalog, _, _| {
+                atomic_replace_catalog_with_directory_sync(catalog, |_| {
+                    Err(std::io::Error::other("injected directory sync failure"))
+                })
+            },
+        )
+        .expect("visible commit remains a successful patch result");
+
+        assert!(result.updated);
+        assert_eq!(result.stats.applied, 1);
+        assert_eq!(result.stats.catalogs_updated, 1);
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Applied
+        );
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "translation.catalog_durability");
+        assert!(result.diagnostics[0]
+            .message
+            .contains("injected directory sync failure"));
+        assert!(fs::read_to_string(path)
+            .expect("read visibly committed catalog")
+            .contains("msgstr \"Hallo\""));
     }
 
     #[test]
