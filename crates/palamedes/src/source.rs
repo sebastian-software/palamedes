@@ -1,3 +1,4 @@
+use oxc_diagnostics::OxcDiagnostic;
 use serde::{Deserialize, Serialize};
 
 use crate::extract::ExtractedMessageRecord;
@@ -182,6 +183,44 @@ pub(crate) struct SourceLocator<'a> {
     line_starts: Vec<usize>,
 }
 
+/// Formats parser diagnostics with the source locations carried by their labels.
+///
+/// The parser may emit more than one diagnostic, so each entry keeps its own
+/// location and message on a separate line. Diagnostics without a label retain
+/// the supplied filename without inventing a position.
+pub(crate) fn format_parser_diagnostics(
+    source: &str,
+    filename: &str,
+    diagnostics: &[OxcDiagnostic],
+) -> String {
+    let filename = display_filename(filename);
+    let source_locator = SourceLocator::new(source);
+
+    diagnostics
+        .iter()
+        .map(|diagnostic| {
+            let location = diagnostic.labels.first().map_or_else(
+                || filename.to_owned(),
+                |label| {
+                    let (line, column) = source_locator.location(label.offset() as usize);
+                    format!("{filename}:{line}:{column}")
+                },
+            );
+            format!("{location}: {}", diagnostic.message)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Returns a displayable source identity without treating an empty path as a real filename.
+pub(crate) fn display_filename(filename: &str) -> &str {
+    if filename.is_empty() {
+        "<unknown source>"
+    } else {
+        filename
+    }
+}
+
 impl<'a> SourceLocator<'a> {
     pub(crate) fn new(source: &'a str) -> Self {
         let mut line_starts = vec![0];
@@ -224,12 +263,27 @@ impl<'a> SourceLocator<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::SourceLocator;
+    use super::{format_parser_diagnostics, SourceLocator};
+    use oxc_diagnostics::OxcDiagnostic;
+    use oxc_span::Span;
 
     #[test]
     fn source_locations_use_unicode_scalar_columns() {
         let locator = SourceLocator::new("a😀b\nc");
         assert_eq!(locator.location("a😀".len()), (1, 3));
         assert_eq!(locator.location("a😀b\n".len()), (2, 1));
+    }
+
+    #[test]
+    fn parser_diagnostics_keep_each_message_on_its_own_located_line() {
+        let diagnostics = vec![
+            OxcDiagnostic::error("first parser error").with_label(Span::new(0, 1)),
+            OxcDiagnostic::error("second parser error").with_label(Span::new(4, 5)),
+        ];
+
+        assert_eq!(
+            format_parser_diagnostics("bad\ncode", "view.ts", &diagnostics),
+            "view.ts:1:1: first parser error\nview.ts:2:1: second parser error"
+        );
     }
 }

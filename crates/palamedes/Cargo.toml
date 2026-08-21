@@ -18,6 +18,7 @@ ferromark = { version = "=0.7.0", features = ["mdx"] }
 oxc_allocator = "0.144.0"
 oxc_ast = "0.144.0"
 oxc_ast_visit = "0.144.0"
+oxc_diagnostics = "0.144.0"
 oxc_parser = "0.144.0"
 oxc_semantic = "0.144.0"
 oxc_span = "0.144.0"
