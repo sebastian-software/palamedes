@@ -6,13 +6,23 @@ const packageJson = JSON.parse(await readFile(new URL("../package.json", import.
 
 test("uses hook-free component entries in React Server Components", () => {
   assert.deepEqual(packageJson.exports["."]["react-server"], {
-    types: "./dist/index-server.d.ts",
-    import: "./dist/index-server.mjs",
-    require: "./dist/index-server.cjs",
+    import: {
+      types: "./dist/index-server.d.mts",
+      default: "./dist/index-server.mjs",
+    },
+    require: {
+      types: "./dist/index-server.d.cts",
+      default: "./dist/index-server.cjs",
+    },
   })
   assert.deepEqual(packageJson.exports["./compiled"]["react-server"], {
-    types: "./dist/compiled-server.d.ts",
-    import: "./dist/compiled-server.mjs",
-    require: "./dist/compiled-server.cjs",
+    import: {
+      types: "./dist/compiled-server.d.mts",
+      default: "./dist/compiled-server.mjs",
+    },
+    require: {
+      types: "./dist/compiled-server.d.cts",
+      default: "./dist/compiled-server.cjs",
+    },
   })
 })
