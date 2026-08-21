@@ -48,12 +48,20 @@ export type ReportedMessageError = {
 
 export type CreateI18nOptions = {
   locale?: string
+  /**
+   * IANA time zone used for ICU `{value, date}` and `{value, time}` arguments.
+   * Set this to the same value while rendering on the server and client to
+   * avoid hydration differences caused by their ambient host time zones.
+   */
+  timeZone?: string
   onMissing?: (info: MissingMessageInfo) => void
   onError?: (info: MessageFormatErrorInfo) => void
 }
 
 export type PalamedesI18n = {
   readonly locale: string
+  /** The optional IANA time zone configured when this instance was created. */
+  readonly timeZone?: string
   _: (id: string, values?: MessageValues, metadata?: MessageMetadata) => string
   load: (locale: string, messages: CatalogMessages | CompiledCatalogMessages) => void
   activate: (locale: string) => void
@@ -98,6 +106,7 @@ export function createI18nRuntime(
   const catalogs = new Map<string, LoadedCatalog>()
   const stringRuntimes = new Map<string, CompiledMessageRuntime<string>>()
   let activeLocale = options.locale ?? DEFAULT_LOCALE
+  const timeZone = validateTimeZone(options.timeZone)
 
   function notifyMissing(info: MissingMessageInfo): void {
     try {
@@ -185,12 +194,17 @@ export function createI18nRuntime(
   }
 
   function getStringRuntime(locale: string): CompiledMessageRuntime<string> {
-    const cached = stringRuntimes.get(locale)
+    const cacheKey = `${locale}\0${timeZone ?? ""}`
+    const cached = stringRuntimes.get(cacheKey)
     if (cached) {
       return cached
     }
-    const runtime = createStringMessageRuntime(locale, patternSupport?.formatPattern ?? noParser)
-    stringRuntimes.set(locale, runtime)
+    const runtime = createStringMessageRuntime(
+      locale,
+      patternSupport?.formatPattern ?? noParser,
+      timeZone
+    )
+    stringRuntimes.set(cacheKey, runtime)
     return runtime
   }
 
@@ -233,6 +247,10 @@ export function createI18nRuntime(
   return {
     get locale() {
       return activeLocale
+    },
+
+    get timeZone() {
+      return timeZone
     },
 
     load(locale, messages) {
@@ -313,4 +331,22 @@ function noParser(pattern: string): never {
 
 function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
+}
+
+function validateTimeZone(timeZone: string | undefined): string | undefined {
+  if (timeZone === undefined) {
+    return undefined
+  }
+
+  if (typeof timeZone !== "string" || timeZone.trim().length === 0) {
+    throw new RangeError("timeZone must be a non-empty IANA time-zone identifier.")
+  }
+
+  try {
+    Intl.DateTimeFormat("en", { timeZone }).resolvedOptions()
+  } catch {
+    throw new RangeError(`Invalid IANA time zone: ${JSON.stringify(timeZone)}.`)
+  }
+
+  return timeZone
 }

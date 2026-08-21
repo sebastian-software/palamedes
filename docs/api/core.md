@@ -62,7 +62,11 @@ factory below when runtime ICU strings are intentional.
 
 Creates an in-memory i18n instance. It starts with `DEFAULT_LOCALE` (`"en"`).
 The optional `locale` setting overrides that initial locale for catalog lookup,
-message formatting, and telemetry before any later `activate()` call. Optional
+message formatting, and telemetry before any later `activate()` call. Set the
+optional `timeZone` to an IANA identifier (for example `"Europe/Berlin"`) to
+format ICU `date` and `time` arguments consistently during server rendering and
+client hydration. Invalid or empty identifiers throw `RangeError` during
+creation. Without it, the host's default time zone remains in effect. Optional
 telemetry hooks receive missing-message and runtime formatting failures without
 changing the source-message fallback behavior.
 
@@ -70,6 +74,7 @@ changing the source-message fallback behavior.
 import { createI18n } from "@palamedes/core"
 
 const i18n = createI18n({
+  timeZone: "Europe/Berlin",
   onMissing(info) {
     reportMetric("palamedes.missing", info)
   },
@@ -85,11 +90,17 @@ i18n.activate("de")
 const label = i18n._("Hello {name}", { name: "Ada" })
 ```
 
+`Date` values and timestamps are instants. Date-only ISO strings such as
+`"2026-06-12"` are parsed by JavaScript as UTC before Palamedes renders them in
+`timeZone`, so they can display as the prior or following calendar day in some
+zones. Pass an explicit local-time value when the input is a calendar date.
+
 ## `PalamedesI18n`
 
 ```ts
 interface PalamedesI18n {
   readonly locale: string
+  readonly timeZone?: string
   _(id: string, values?, metadata?): string
   load(locale: string, messages: CatalogMessages | CompiledCatalogMessages): void
   activate(locale: string): void

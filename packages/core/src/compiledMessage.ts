@@ -138,15 +138,21 @@ export function createCompiledMessageRuntime<TResult>(
   return runtime
 }
 
-export type PatternFormatter = (pattern: string, values: MessageValues, locale: string) => string
+export type PatternFormatter = (
+  pattern: string,
+  values: MessageValues,
+  locale: string,
+  timeZone?: string
+) => string
 
 export function createStringMessageRuntime(
   locale: string,
-  formatPattern: PatternFormatter
+  formatPattern: PatternFormatter,
+  timeZone?: string
 ): CompiledMessageRuntime<string> {
   return createCompiledMessageRuntime(locale, {
     pattern(pattern, values) {
-      return formatPattern(pattern, values, locale)
+      return formatPattern(pattern, values, locale, timeZone)
     },
     join(...parts) {
       return parts.join("")
@@ -156,10 +162,10 @@ export function createStringMessageRuntime(
       return formatMessageArgument("number", value, style, locale)
     },
     date(value, style) {
-      return formatMessageArgument("date", value, style, locale)
+      return formatMessageArgument("date", value, style, locale, timeZone)
     },
     time(value, style) {
-      return formatMessageArgument("time", value, style, locale)
+      return formatMessageArgument("time", value, style, locale, timeZone)
     },
     pound(value) {
       return replacePoundPlaceholders("#", value, locale)

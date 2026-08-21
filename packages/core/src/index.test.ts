@@ -15,6 +15,38 @@ describe("createI18n", () => {
     expect(DEFAULT_LOCALE).toBe("en")
     expect(i18n.locale).toBe(DEFAULT_LOCALE)
     expectTypeOf(i18n.locale).toEqualTypeOf<string>()
+    expectTypeOf(i18n.timeZone).toEqualTypeOf<string | undefined>()
+  })
+
+  it("uses the configured time zone for ICU date/time output without sharing formatters", () => {
+    const when = new Date(Date.UTC(2026, 5, 12, 1, 45, 0))
+    const losAngeles = createI18n({ locale: "en-US", timeZone: "America/Los_Angeles" })
+    const tokyo = createI18n({ locale: "en-US", timeZone: "Asia/Tokyo" })
+
+    expect(losAngeles.timeZone).toBe("America/Los_Angeles")
+    expect(losAngeles._("Due {when, date, full}; {when, time, short}", { when })).toBe(
+      `Due ${new Intl.DateTimeFormat("en-US", {
+        dateStyle: "full",
+        timeZone: "America/Los_Angeles",
+      }).format(when)}; ${new Intl.DateTimeFormat("en-US", {
+        timeStyle: "short",
+        timeZone: "America/Los_Angeles",
+      }).format(when)}`
+    )
+    expect(tokyo._("Due {when, date, full}; {when, time, short}", { when })).toBe(
+      `Due ${new Intl.DateTimeFormat("en-US", {
+        dateStyle: "full",
+        timeZone: "Asia/Tokyo",
+      }).format(when)}; ${new Intl.DateTimeFormat("en-US", {
+        timeStyle: "short",
+        timeZone: "Asia/Tokyo",
+      }).format(when)}`
+    )
+  })
+
+  it("rejects invalid configured time zones before rendering", () => {
+    expect(() => createI18n({ timeZone: "Mars/Olympus_Mons" })).toThrow(RangeError)
+    expect(() => createI18n({ timeZone: "" })).toThrow(RangeError)
   })
 
   it("reports missing messages with the default locale before catalogs load", () => {
