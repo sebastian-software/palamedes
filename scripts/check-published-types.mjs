@@ -325,7 +325,6 @@ try {
     esmFixture,
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
 import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/react/macro"
-import { createElement } from "react"
 import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
@@ -341,17 +340,19 @@ export const lengths = [
   selectOrdinal(2, { one: "first", other: "other" }).length,
 ]
 
-export const macroElements = [
-  createElement(Trans, { message: "Hello", values: { name: "Ada" }, children: "Hello" }),
-  createElement(Plural, { value: 2, one: "one", other: "other" }),
-  createElement(Select, { value: "a", a: "A", other: "Other" }),
-  createElement(SelectOrdinal, { value: 2, one: "first", other: "other" }),
+export const macroProps = [
+  { message: "Hello", values: { name: "Ada" }, children: "Hello" } satisfies Parameters<
+    typeof Trans
+  >[0],
+  { value: 2, one: "one", other: "other" } satisfies Parameters<typeof Plural>[0],
+  { value: "a", a: "A", other: "Other" } satisfies Parameters<typeof Select>[0],
+  { value: 2, one: "first", other: "other" } satisfies Parameters<typeof SelectOrdinal>[0],
 ]
 
 // @ts-expect-error Choice macros require their fallback branch.
-createElement(Plural, { value: 2, one: "one" })
+const missingPluralFallback: Parameters<typeof Plural>[0] = { value: 2, one: "one" }
 // @ts-expect-error Trans values must retain the documented record shape.
-createElement(Trans, { message: "Hello", values: "Ada" })
+const invalidTransValues: Parameters<typeof Trans>[0] = { message: "Hello", values: "Ada" }
 // @ts-expect-error t only accepts a tagged template or message descriptor.
 t("Hello")
 
