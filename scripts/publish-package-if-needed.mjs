@@ -117,7 +117,9 @@ function publishAllJavaScriptPackages() {
       console.error(result.error)
       console.error(`JavaScript package publishing failed at ${packageInfo.name}; aborting.`)
       return 1
-    } else if (result.status !== 0) {
+    }
+
+    if (result.status !== 0) {
       console.error(`JavaScript package publishing failed at ${packageInfo.name}; aborting.`)
       return result.status ?? 1
     }
