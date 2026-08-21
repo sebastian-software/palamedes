@@ -50,6 +50,14 @@ The native CLI and JS config loader both accept snake_case aliases for these
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
 `source_reference_root`, and `reference_scopes`.
 
+`@palamedes/config` treats config objects as strict. Data configs use the
+documented kebab-case keys (or their supported snake_case aliases), while
+`palamedes.config.*` files use the camelCase JavaScript API names. An unknown
+key at the top level or in `mdx`, `lint`, a catalog entry, or catalog `po`
+options stops loading; close misspellings include a replacement hint. This
+catches errors such as `fallbck-locales` before they silently change extraction
+or runtime behavior.
+
 `extract-threads` and `extract-cache` (and their `extract_threads` /
 `extract_cache` aliases) are read by the native `pmds` CLI only. They tune
 extraction and lint source analysis, which the CLI owns; the JS config loader

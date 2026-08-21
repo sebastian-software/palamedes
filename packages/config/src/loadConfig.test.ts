@@ -303,6 +303,167 @@ describe("loadPalamedesConfig", () => {
     })
   })
 
+  it("rejects unknown keys at every schema-defined level in data and JavaScript configs", async () => {
+    const cases = [
+      {
+        name: "top level",
+        data: () => ({ ...baseDataConfig(), "fallbck-locales": ["en"] }),
+        javascript: () => ({ ...baseJavaScriptConfig(), fallbackLocale: ["en"] }),
+        dataExpected: /unknown key "fallbck-locales"\. Did you mean "fallback-locales"\?/,
+        javascriptExpected: /unknown key "fallbackLocale"\. Did you mean "fallbackLocales"\?/,
+      },
+      {
+        name: "mdx",
+        data: () => ({ ...baseDataConfig(), mdx: { framework: "react", framwork: "solid" } }),
+        javascript: () => ({
+          ...baseJavaScriptConfig(),
+          mdx: { framework: "react", framwork: "solid" },
+        }),
+        dataExpected: /unknown key "mdx\.framwork"\. Did you mean "framework"\?/,
+        javascriptExpected: /unknown key "mdx\.framwork"\. Did you mean "framework"\?/,
+      },
+      {
+        name: "lint",
+        data: () => ({ ...baseDataConfig(), lint: { rule: {} } }),
+        javascript: () => ({ ...baseJavaScriptConfig(), lint: { rule: {} } }),
+        dataExpected: /unknown key "lint\.rule"\. Did you mean "rules"\?/,
+        javascriptExpected: /unknown key "lint\.rule"\. Did you mean "rules"\?/,
+      },
+      {
+        name: "lint rules",
+        data: () => ({ ...baseDataConfig(), lint: { rules: { "placeholder-onyl": "error" } } }),
+        javascript: () => ({
+          ...baseJavaScriptConfig(),
+          lint: { rules: { placeholderOnyl: "error" } },
+        }),
+        dataExpected:
+          /unknown key "lint\.rules\.placeholder-onyl"\. Did you mean "placeholder-only"\?/,
+        javascriptExpected:
+          /unknown key "lint\.rules\.placeholderOnyl"\. Did you mean "placeholderOnly"\?/,
+      },
+      {
+        name: "catalog entry",
+        data: () => ({
+          ...baseDataConfig(),
+          catalogs: [baseDataCatalog(), { ...baseDataCatalog(), fomrat: "po" }],
+        }),
+        javascript: () => ({
+          ...baseJavaScriptConfig(),
+          catalogs: [baseJavaScriptCatalog(), { ...baseJavaScriptCatalog(), fomrat: "po" }],
+        }),
+        dataExpected: /unknown key "catalogs\[1\]\.fomrat"\. Did you mean "format"\?/,
+        javascriptExpected: /unknown key "catalogs\[1\]\.fomrat"\. Did you mean "format"\?/,
+      },
+      {
+        name: "catalog PO options",
+        data: () => ({
+          ...baseDataConfig(),
+          catalogs: [{ ...baseDataCatalog(), po: { "line-break": "off" } }],
+        }),
+        javascript: () => ({
+          ...baseJavaScriptConfig(),
+          catalogs: [{ ...baseJavaScriptCatalog(), po: { lineBreak: "off" } }],
+        }),
+        dataExpected: /unknown key "catalogs\[0\]\.po\.line-break"\. Did you mean "line-breaks"\?/,
+        javascriptExpected:
+          /unknown key "catalogs\[0\]\.po\.lineBreak"\. Did you mean "lineBreaks"\?/,
+      },
+    ] as const
+
+    for (const testCase of cases) {
+      const dataDir = await createTempDir()
+      await writeFile(path.join(dataDir, "palamedes.json"), JSON.stringify(testCase.data()))
+      expect(() => loadPalamedesConfigSync({ cwd: dataDir })).toThrow(testCase.dataExpected)
+
+      const javascriptDir = await createTempDir()
+      await writeFile(
+        path.join(javascriptDir, "palamedes.config.ts"),
+        `export default ${JSON.stringify(testCase.javascript())}`
+      )
+      await expect(loadPalamedesConfig({ cwd: javascriptDir })).rejects.toThrow(
+        testCase.javascriptExpected
+      )
+    }
+  })
+
+  it("rejects unknown keys without a suggestion when no known key is close", async () => {
+    const dataDir = await createTempDir()
+    await writeFile(
+      path.join(dataDir, "palamedes.yaml"),
+      `
+        locales: [en]
+        source-locale: en
+        mystery: true
+        catalogs:
+          - path: locales/{locale}
+            include: [src]
+      `
+    )
+
+    expect(() => loadPalamedesConfigSync({ cwd: dataDir })).toThrow(/unknown key "mystery"\./)
+    expect(() => loadPalamedesConfigSync({ cwd: dataDir })).toThrow(
+      /unknown key "mystery"\.(?! Did you mean)/
+    )
+
+    const javascriptDir = await createTempDir()
+    await writeFile(
+      path.join(javascriptDir, "palamedes.config.ts"),
+      `export default { ...${JSON.stringify(baseJavaScriptConfig())}, mystery: true }`
+    )
+    await expect(loadPalamedesConfig({ cwd: javascriptDir })).rejects.toThrow(
+      /unknown key "mystery"\.(?! Did you mean)/
+    )
+  })
+
+  it("keeps data-config spelling diagnostics and shared native options valid", async () => {
+    const fixtureDir = await createTempDir()
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        locales: [en, de]
+        source-locale: en
+        extract-threads: 2
+        extract_cache: false
+        fallback-locales:
+          de: [en]
+        plugins:
+          - ["@acme/palamedes-workflows", { custom-option: enabled }]
+        catalogs:
+          - path: locales/{locale}
+            include: [src]
+      `
+    )
+
+    const config = loadPalamedesConfigSync({ cwd: fixtureDir })
+    expect(config.fallbackLocales).toStrictEqual({ de: ["en"] })
+    expect(config.plugins).toStrictEqual([
+      ["@acme/palamedes-workflows", { "custom-option": "enabled" }],
+    ])
+
+    await writeFile(
+      path.join(fixtureDir, "palamedes.config.ts"),
+      `export default { ...${JSON.stringify(baseJavaScriptConfig())}, fallbackLocale: ["en"] }`
+    )
+    await expect(
+      loadPalamedesConfig({ cwd: fixtureDir, configPath: "palamedes.config.ts" })
+    ).rejects.toThrow(/unknown key "fallbackLocale"\. Did you mean "fallbackLocales"\?/)
+
+    await writeFile(
+      path.join(fixtureDir, "camel.yaml"),
+      `
+        locales: [en]
+        source-locale: en
+        pseudoLocale: pseudo
+        catalogs:
+          - path: locales/{locale}
+            include: [src]
+      `
+    )
+    expect(() => loadPalamedesConfigSync({ cwd: fixtureDir, configPath: "camel.yaml" })).toThrow(
+      /unknown key "pseudoLocale"\. Data configs use kebab-case: "pseudo-locale"\./
+    )
+  })
+
   it("loads a palamedes.yaml file synchronously with the same normalization", async () => {
     const fixtureDir = await createTempDir()
 
@@ -612,4 +773,28 @@ async function createTempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "palamedes-config-"))
   tempDirs.push(dir)
   return dir
+}
+
+function baseDataCatalog(): Record<string, unknown> {
+  return { path: "locales/{locale}", include: ["src"] }
+}
+
+function baseDataConfig(): Record<string, unknown> {
+  return {
+    locales: ["en"],
+    "source-locale": "en",
+    catalogs: [baseDataCatalog()],
+  }
+}
+
+function baseJavaScriptCatalog(): Record<string, unknown> {
+  return { path: "locales/{locale}", include: ["src"] }
+}
+
+function baseJavaScriptConfig(): Record<string, unknown> {
+  return {
+    locales: ["en"],
+    sourceLocale: "en",
+    catalogs: [baseJavaScriptCatalog()],
+  }
 }
