@@ -17,7 +17,7 @@
     "check:llms": "node ./scripts/check-llms-surface.mjs && pnpm test:llms",
     "test:decisions": "node --test ./scripts/check-decisions-index.test.mjs",
     "check:decisions": "node ./scripts/check-decisions-index.mjs && pnpm test:decisions",
-    "test:release-packages": "node --test ./scripts/release-packages.test.mjs",
+    "test:release-packages": "node --test ./scripts/release-packages.test.mjs ./scripts/publish-package-if-needed.test.mjs",
     "test:backend-guide": "pnpm --filter @palamedes/core --filter @palamedes/runtime build && node --test ./scripts/backend-guide-contract.test.mjs",
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",
