@@ -783,17 +783,25 @@ async function checkProgressiveDocsOutline(browser) {
 
 async function checkProgressiveOutlineAnchors(browser) {
   const docs = readdirSync(generatedDocsDir, { recursive: true })
-    .filter((entry) => entry.endsWith(".mdx"))
+    .filter((entry) => /\.mdx?$/u.test(entry))
     .map((entry) => ({
       entry,
       source: readFileSync(join(generatedDocsDir, entry), "utf8"),
     }))
     .filter(({ source }) => source.includes('className="pmds-progressive-outline"'))
 
+  if (docs.length !== 21) {
+    fail(`progressive docs outline: expected 21 generated long docs, got ${docs.length}`)
+  }
+
   const context = await browser.newContext()
   const page = await context.newPage()
   for (const { entry, source } of docs) {
-    const path = `/docs/${entry.replace(/\.mdx$/u, "")}`
+    const routeEntry = entry
+      .replaceAll("\\", "/")
+      .replace(/\.mdx?$/u, "")
+      .replace(/\/index$/u, "")
+    const path = `/docs/${routeEntry}`
     const expectedIds = [...source.matchAll(/<a href="#([^"#]+)"/gu)].map((match) => match[1])
     await gotoAndSettle(page, path, { settleMs: 200 })
     const missingIds = await page.evaluate(
