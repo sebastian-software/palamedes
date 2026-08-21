@@ -45,7 +45,12 @@ export function createTrans(useI18n: () => RendererI18n, fallbackParser?: Patter
   }: TransProps): ReactNode {
     const i18n = useI18n()
     const resolvedId = id ?? message ?? ""
-    const metadata: MessageMetadata = { message, context, comment }
+    const metadata: MessageMetadata = {
+      message,
+      context,
+      comment,
+      renderUncompiledPattern: fallbackParser !== undefined,
+    }
     const runtime = createReactMessageRuntime(i18n, components ?? {}, fallbackParser)
     return <>{renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)}</>
   }

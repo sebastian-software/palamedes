@@ -17,6 +17,8 @@ export type MessageMetadata = {
   comment?: string
   /** Suppress `onMissing` for a lookup whose source fallback is expected to miss. */
   reportMissing?: boolean
+  /** The host renderer can parse an uncompiled ICU source fallback. */
+  renderUncompiledPattern?: boolean
 }
 
 export const DEFAULT_LOCALE = "en"
@@ -150,7 +152,10 @@ export function createI18nRuntime(
       if (typeof message.value === "function") {
         return message.value<TResult>(values, runtime)
       }
-      if (message.compiled || patternSupport === undefined) {
+      if (
+        message.compiled ||
+        (patternSupport === undefined && !metadata?.renderUncompiledPattern)
+      ) {
         return runtime.join(message.value)
       }
       return runtime.pattern(message.value, values)
