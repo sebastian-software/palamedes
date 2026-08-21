@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -8,6 +9,7 @@ import { publicWorkspacePackages } from "./release-packages.mjs"
 const root = process.cwd()
 const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-published-types-"))
 const scopeDirectory = path.join(fixtureRoot, "node_modules", "@palamedes")
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm"
 
 /*
  * Published packages that carry no `types` field, with the reason each one is
@@ -75,6 +77,93 @@ function assertEveryPublishedPackageIsCovered(packages) {
   }
 }
 
+/*
+ * A top-level `types` condition wins before TypeScript can select a nested
+ * `require` condition. Keep declarations beside their runtime format so CJS
+ * consumers resolve `.d.cts` even on TypeScript versions that reject requiring
+ * an ESM declaration file. This is checked structurally rather than relying on
+ * the workspace TypeScript version, which changed that diagnostic in 5.8.
+ */
+function assertDualExportsUseFormatSpecificDeclarations(packages) {
+  const problems = []
+
+  for (const { manifest } of packages) {
+    for (const [subpath, condition] of Object.entries(manifest.exports ?? {})) {
+      visitCondition(condition, subpath, false, manifest.name, problems)
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(problems.join("\n"))
+  }
+}
+
+function visitCondition(condition, conditionPath, hasTypesAncestor, packageName, problems) {
+  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return
+
+  const hasTypesCondition = hasTypesAncestor || Object.hasOwn(condition, "types")
+  const hasDualRuntimeConditions =
+    Object.hasOwn(condition, "import") && Object.hasOwn(condition, "require")
+
+  if (hasDualRuntimeConditions) {
+    if (hasTypesCondition) {
+      problems.push(
+        `${packageName} ${conditionPath} has a \"types\" condition that masks its import and require declarations.`
+      )
+    }
+    assertFormatSpecificDeclaration(
+      condition.import,
+      "import",
+      ".d.mts",
+      packageName,
+      conditionPath,
+      problems
+    )
+    assertFormatSpecificDeclaration(
+      condition.require,
+      "require",
+      ".d.cts",
+      packageName,
+      conditionPath,
+      problems
+    )
+  }
+
+  for (const [name, nestedCondition] of Object.entries(condition)) {
+    if (name !== "types") {
+      visitCondition(
+        nestedCondition,
+        `${conditionPath}.${name}`,
+        hasTypesCondition,
+        packageName,
+        problems
+      )
+    }
+  }
+}
+
+function assertFormatSpecificDeclaration(
+  condition,
+  mode,
+  extension,
+  packageName,
+  conditionPath,
+  problems
+) {
+  if (!condition || typeof condition !== "object" || Array.isArray(condition)) {
+    problems.push(
+      `${packageName} ${conditionPath}.${mode} must nest a ${extension} declaration beside its runtime target.`
+    )
+    return
+  }
+
+  if (typeof condition.types !== "string" || !condition.types.endsWith(extension)) {
+    problems.push(
+      `${packageName} ${conditionPath}.${mode}.types must reference a ${extension} declaration.`
+    )
+  }
+}
+
 function exportTargets(condition, targets) {
   if (typeof condition === "string") {
     if (condition.startsWith("./")) targets.add(condition)
@@ -90,6 +179,14 @@ function exportTargets(condition, targets) {
   return targets
 }
 
+function advertisedTargets(manifest) {
+  const targets = exportTargets(manifest.exports ?? {}, new Set())
+  for (const field of ["main", "module", "types"]) {
+    if (typeof manifest[field] === "string") targets.add(manifest[field])
+  }
+  return [...targets].sort()
+}
+
 /*
  * Type resolution stops at the first matching `types` condition, so it cannot
  * see that a `require` condition points at a build output that is never
@@ -101,11 +198,7 @@ function exportTargets(condition, targets) {
 function assertExportTargetsExist(packages) {
   const problems = []
   for (const { directory, manifest } of packages) {
-    const targets = exportTargets(manifest.exports ?? {}, new Set())
-    for (const field of ["main", "module", "types"]) {
-      if (typeof manifest[field] === "string") targets.add(manifest[field])
-    }
-    for (const target of [...targets].sort()) {
+    for (const target of advertisedTargets(manifest)) {
       if (existsSync(path.join(root, directory, target))) continue
       problems.push(
         `${manifest.name} advertises ${target}, which is missing after a build; drop the condition or emit the file.`
@@ -115,6 +208,37 @@ function assertExportTargetsExist(packages) {
   if (problems.length > 0) {
     throw new Error(problems.join("\n"))
   }
+}
+
+function assertDeclarationTargetsArePacked(packages) {
+  const problems = []
+  for (const { directory, manifest } of packages) {
+    const packedFiles = packedFilePaths(path.join(root, directory))
+    for (const target of advertisedTargets(manifest)) {
+      if (!target.match(/\.d\.(?:cts|mts|ts)$/u)) continue
+      if (packedFiles.has(target.slice(2))) continue
+      problems.push(`${manifest.name} advertises ${target}, but npm pack excludes it.`)
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(problems.join("\n"))
+  }
+}
+
+function packedFilePaths(packageDirectory) {
+  const result = spawnSync(npmCommand, ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+    cwd: packageDirectory,
+    encoding: "utf8",
+    env: { ...process.env, npm_config_cache: path.join(fixtureRoot, "npm-cache") },
+    shell: process.platform === "win32",
+  })
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    throw new Error(`npm pack failed in ${packageDirectory}:\n${result.stderr}`)
+  }
+
+  const [{ files }] = JSON.parse(result.stdout)
+  return new Set(files.map(({ path: filePath }) => filePath))
 }
 
 function linkPackage(name) {
@@ -152,7 +276,9 @@ try {
   assertEveryPublishedPackageIsCovered(packages)
 
   const typedPackages = packages.filter(({ manifest }) => manifest.types)
+  assertDualExportsUseFormatSpecificDeclarations(typedPackages)
   assertExportTargetsExist(typedPackages)
+  assertDeclarationTargetsArePacked(typedPackages)
   for (const { directory } of typedPackages) {
     linkPackage(directory)
   }
