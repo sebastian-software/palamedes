@@ -105,7 +105,7 @@ Register runtime:
 import { createI18n } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
-const i18n = createI18n()
+const i18n = createI18n({ timeZone: "Europe/Berlin" })
 setClientI18n(i18n)
 
 export { i18n }
@@ -114,6 +114,13 @@ export { i18n }
 Generated `.po` catalogs use the parser-free `/compiled` entrypoint and its
 `CompiledCatalogMessages` type. Use the package root only when runtime ICU
 strings are intentional; see `/docs/api/core.md`.
+
+For SSR and hydrated client components, configure the same IANA `timeZone` on
+every `createI18n()` path. ICU `date` and `time` formatting otherwise uses the
+host process or browser zone. Invalid or empty zone identifiers throw
+`RangeError` at instance creation. Timestamp strings should include `Z` or an
+explicit offset so both hosts parse the same instant; date-only ISO strings use
+JavaScript's UTC parsing semantics before formatting in the configured zone.
 
 ```ts
 // src/po.d.ts

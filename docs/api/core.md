@@ -9,8 +9,8 @@ The package root is the compatibility entrypoint. It exports:
 
 - `createI18n(options?)`
 - `DEFAULT_LOCALE`
-- `formatMessagePattern(pattern, values, locale?)`
-- `formatMessageArgument(format, value, style?, locale?)`
+- `formatMessagePattern(pattern, values?, locale?, timeZone?)`
+- `formatMessageArgument(format, value, style?, locale?, timeZone?)`
 - `parseMessagePattern(pattern)`
 - `defineCompiledCatalog(messages)` for generated catalog-loader output
 - `createCompiledMessageRuntime(locale, renderer)` for host adapters
@@ -69,6 +69,15 @@ client hydration. Invalid or empty identifiers throw `RangeError` during
 creation. Without it, the host's default time zone remains in effect. Optional
 telemetry hooks receive missing-message and runtime formatting failures without
 changing the source-message fallback behavior.
+
+```ts
+interface CreateI18nOptions {
+  locale?: string
+  timeZone?: string
+  onMissing?: (info: MissingMessageInfo) => void
+  onError?: (info: MessageFormatErrorInfo) => void
+}
+```
 
 ```ts
 import { createI18n } from "@palamedes/core"
@@ -252,6 +261,12 @@ the formatter subset implemented by the Palamedes runtime:
 - `{value, date}` and `{value, time}`
 - `{value, date, short|medium|long|full}`
 - `{value, time, short|medium|long|full}`
+
+The standalone helpers accept the same optional final time-zone argument as the
+instance runtime: `formatMessagePattern(pattern, values?, locale?, timeZone?)`
+and `formatMessageArgument(format, value, style?, locale?, timeZone?)`. Include
+the zone in both server and client calls when these helpers contribute to
+hydrated output.
 
 Currency formatting must use the `::currency/ISO` skeleton form; bare
 `currency/ISO` is outside the supported runtime subset.

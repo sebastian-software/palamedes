@@ -38,6 +38,35 @@ function rejected<T>(reason: unknown): Promise<T> {
 describe("createClientCatalogBoundary on the server", () => {
   afterEach(() => resetI18nRuntime())
 
+  it("uses the configured i18n factory during server rendering", () => {
+    const createConfiguredI18n = vi.fn(() =>
+      createI18n({ locale: "en", timeZone: "Europe/Berlin" })
+    )
+    const Boundary = createClientCatalogBoundary<Locale>({
+      createI18n: createConfiguredI18n,
+      loadCatalog: () => fulfilled({ messages: defineCompiledCatalog({}) }),
+      resolveClientLocale() {
+        throw new Error("resolveClientLocale must not run on the server")
+      },
+    })
+
+    function ActiveTimeZone() {
+      return getI18n<ReturnType<typeof createI18n>>().timeZone
+    }
+
+    const scope = createServerI18nScope<ReturnType<typeof createI18n>>()
+    const html = scope.run(createI18n(), () =>
+      renderToStaticMarkup(
+        <Boundary locale="en">
+          <ActiveTimeZone />
+        </Boundary>
+      )
+    )
+
+    expect(html).toBe("Europe/Berlin")
+    expect(createConfiguredI18n).toHaveBeenCalledTimes(1)
+  })
+
   it("keeps hook-free Client Component SSR activation request-local", async () => {
     const catalogs: Record<Locale, CompiledCatalogMessages> = {
       de: defineCompiledCatalog({ greeting: "Hallo" }),

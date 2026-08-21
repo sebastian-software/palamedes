@@ -27,7 +27,7 @@
     "capture:example-screenshots": "node ./scripts/capture-example-screenshots.mjs",
     "verify:examples": "pnpm build && node ./scripts/verify-examples-all.mjs",
     "check:example-matrix": "node ./scripts/check-example-matrix.mjs",
-    "check:example-contracts": "vitest run scripts/example-matrix-guard.test.mjs scripts/example-sibling-parity.test.mjs scripts/container/start-plan.test.mjs",
+    "check:example-contracts": "vitest run scripts/example-matrix-guard.test.mjs scripts/example-sibling-parity.test.mjs scripts/example-time-zone-contract.test.mjs scripts/container/start-plan.test.mjs",
     "verify:examples:smoke": "node ./scripts/verify-examples.mjs",
     "verify:examples:browser": "node ./scripts/verify-examples-browser.mjs",
     "verify:react-router-rsc": "node ./scripts/verify-react-router-rsc.mjs",
