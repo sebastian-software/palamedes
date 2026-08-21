@@ -1,13 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
 use ferrocat::{
-    convert_catalog, convert_catalog_file, machine_translation_hash, parse_catalog, CatalogMessage,
-    CatalogMessageKey, CatalogMode, ConvertCatalogFileOptions, ConvertCatalogOptions,
-    EffectiveTranslationRef, MsgStr, ParseCatalogOptions, PoFile, PoItem, SerializeOptions,
-    TranslationShape,
+    convert_catalog, machine_translation_hash, parse_catalog, CatalogMessage, CatalogMessageKey,
+    CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, MsgStr, ParseCatalogOptions,
+    PoFile, PoItem, SerializeOptions, TranslationShape,
 };
 use ferrocat_icu::{parse_icu, stringify_icu, IcuMessage, IcuNode, IcuOption, IcuPluralKind};
 use serde::{Deserialize, Serialize};
@@ -268,15 +267,25 @@ struct LoadedCatalog {
     format: PalamedesCatalogFormat,
     original: String,
     po: PoFile,
+    po_item_indexes: HashMap<CatalogMessageKey, PoItemIndexes>,
     messages: BTreeMap<CatalogMessageKey, CatalogMessage>,
     ambiguous_messages: BTreeSet<CatalogMessageKey>,
+}
+
+/// Positions of raw PO entries sharing one source-string-first identity.
+///
+/// Candidate reads historically use the first item in source order, while mutations reject
+/// duplicate identities. Keep both facts in the index so lookup preserves those contracts
+/// without scanning the catalog once per candidate or patch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PoItemIndexes {
+    first: usize,
+    unique: bool,
 }
 
 #[derive(Debug)]
 struct PreparedCatalog {
     path: PathBuf,
-    format: PalamedesCatalogFormat,
-    locale: String,
     patch_indexes: Vec<usize>,
     content: String,
     changed: bool,
@@ -573,7 +582,11 @@ where
             .all(|patch_index| !rejected.contains(patch_index))
         {
             for &patch_index in &patch_indexes {
-                apply_patch_to_po(&mut loaded.po, &request.patches[patch_index])?;
+                apply_patch_to_po(
+                    &mut loaded.po,
+                    &loaded.po_item_indexes,
+                    &request.patches[patch_index],
+                )?;
             }
             let po = ferrocat::stringify_po(&loaded.po, &SerializeOptions::default());
             let content = render_target_catalog(
@@ -585,8 +598,6 @@ where
             )?;
             prepared.push(PreparedCatalog {
                 path: loaded.path,
-                format: loaded.format,
-                locale: batch.locale,
                 patch_indexes,
                 changed: content != loaded.original,
                 content,
@@ -720,6 +731,7 @@ fn load_catalog(
         }
     }
     let po = catalog_as_po(&original, &config.source_locale, locale, catalog.format)?;
+    let po_item_indexes = po_item_indexes(&po);
     Ok(LoadedCatalog {
         scope: catalog.path.clone(),
         locale: locale.to_owned(),
@@ -727,6 +739,7 @@ fn load_catalog(
         format: catalog.format,
         original,
         po,
+        po_item_indexes,
         messages,
         ambiguous_messages,
     })
@@ -762,7 +775,7 @@ fn build_candidate(
     message: &CatalogMessage,
     max_origins: usize,
 ) -> TranslationCandidate {
-    let raw = find_po_item(&loaded.po, key);
+    let raw = find_po_item(&loaded.po, &loaded.po_item_indexes, key);
     let source = project_source(&message.msgid);
     let translation = project_translation(message, &source);
     let review = TranslationReviewState {
@@ -1050,22 +1063,20 @@ fn patch_changes_candidate(
     Ok(candidate.machine != expected_machine)
 }
 
-fn apply_patch_to_po(po: &mut PoFile, patch: &TranslationPatch) -> PalamedesResult<()> {
-    let matches = po
-        .items
-        .iter()
-        .enumerate()
-        .filter(|(_, item)| item.msgid == patch.id.message && item.msgctxt == patch.id.context)
-        .map(|(index, _)| index)
-        .collect::<Vec<_>>();
-    let [index] = matches.as_slice() else {
+fn apply_patch_to_po(
+    po: &mut PoFile,
+    po_item_indexes: &HashMap<CatalogMessageKey, PoItemIndexes>,
+    patch: &TranslationPatch,
+) -> PalamedesResult<()> {
+    let key = CatalogMessageKey::new(patch.id.message.clone(), patch.id.context.clone());
+    let Some(indexes) = po_item_indexes.get(&key).filter(|indexes| indexes.unique) else {
         return Err(ferrocat::ApiError::Conflict(format!(
             "catalog mutation identity {:?} with context {:?} is missing or ambiguous",
             patch.id.message, patch.id.context
         ))
         .into());
     };
-    let item = &mut po.items[*index];
+    let item = &mut po.items[indexes.first];
     let rendered = render_translation_value(&patch.translation)?;
     item.msgstr = MsgStr::Singular(rendered.clone());
     item.msgid_plural = None;
@@ -1183,11 +1194,23 @@ fn render_target_catalog(
 
 fn atomic_replace_catalog(
     catalog: &PreparedCatalog,
-    source_locale: &str,
-    po: Option<&PoOutputOptions>,
+    _source_locale: &str,
+    _po: Option<&PoOutputOptions>,
 ) -> PalamedesResult<()> {
+    // `PreparedCatalog::content` has already been rendered into its target format. Writing it
+    // directly avoids asking `convert_catalog_file` to parse and render the same catalog again.
+    // Keep its atomic-replacement durability contract: create the temporary file beside the
+    // target, sync it, rename it into place, then sync the containing directory on Unix.
+    let directory = catalog
+        .path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    fs::create_dir_all(directory).map_err(|source| PalamedesError::WriteFile {
+        path: catalog.path.clone(),
+        source,
+    })?;
     let mut temporary =
-        tempfile::NamedTempFile::new().map_err(|source| PalamedesError::WriteFile {
+        tempfile::NamedTempFile::new_in(directory).map_err(|source| PalamedesError::WriteFile {
             path: catalog.path.clone(),
             source,
         })?;
@@ -1198,26 +1221,61 @@ fn atomic_replace_catalog(
             source,
         })?;
     temporary
-        .flush()
+        .as_file()
+        .sync_all()
         .map_err(|source| PalamedesError::WriteFile {
             path: catalog.path.clone(),
             source,
         })?;
-    let format = catalog.format.into();
-    convert_catalog_file(
-        ConvertCatalogFileOptions::new(temporary.path(), &catalog.path, source_locale)
-            .with_source_format(format)
-            .with_target_format(format)
-            .with_locale(&catalog.locale)
-            .with_po_serialize_options(po_serialize_options(po)),
-    )?;
+    temporary
+        .persist(&catalog.path)
+        .map_err(|source| PalamedesError::WriteFile {
+            path: catalog.path.clone(),
+            source: source.error,
+        })?;
+    sync_catalog_directory(directory, &catalog.path)?;
     Ok(())
 }
 
-fn find_po_item<'a>(po: &'a PoFile, key: &CatalogMessageKey) -> Option<&'a PoItem> {
-    po.items
-        .iter()
-        .find(|item| item.msgid == key.msgid && item.msgctxt == key.msgctxt)
+fn sync_catalog_directory(
+    directory: &std::path::Path,
+    path: &std::path::Path,
+) -> PalamedesResult<()> {
+    #[cfg(unix)]
+    fs::File::open(directory)
+        .and_then(|file| file.sync_all())
+        .map_err(|source| PalamedesError::WriteFile {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    #[cfg(not(unix))]
+    let _ = (directory, path);
+    Ok(())
+}
+
+fn po_item_indexes(po: &PoFile) -> HashMap<CatalogMessageKey, PoItemIndexes> {
+    let mut indexes = HashMap::with_capacity(po.items.len());
+    for (index, item) in po.items.iter().enumerate() {
+        let key = CatalogMessageKey::new(item.msgid.clone(), item.msgctxt.clone());
+        indexes
+            .entry(key)
+            .and_modify(|indexes: &mut PoItemIndexes| indexes.unique = false)
+            .or_insert(PoItemIndexes {
+                first: index,
+                unique: true,
+            });
+    }
+    indexes
+}
+
+fn find_po_item<'a>(
+    po: &'a PoFile,
+    po_item_indexes: &HashMap<CatalogMessageKey, PoItemIndexes>,
+    key: &CatalogMessageKey,
+) -> Option<&'a PoItem> {
+    po_item_indexes
+        .get(key)
+        .map(|indexes| &po.items[indexes.first])
 }
 
 fn completed_translation_patch_result(
@@ -1351,20 +1409,61 @@ mod tests {
     use std::path::Path;
 
     use ferrocat::{
-        convert_catalog, machine_translation_hash, parse_catalog, parse_po, CatalogMode,
-        ConvertCatalogOptions, EffectiveTranslationRef, ParseCatalogOptions,
+        convert_catalog, machine_translation_hash, parse_catalog, parse_po, CatalogMessageKey,
+        CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, ParseCatalogOptions,
     };
 
     use super::{
         apply_translation_patches, apply_translation_patches_with_replacement,
-        atomic_replace_catalog, list_translation_candidates, TranslationCandidate,
-        TranslationCandidateId, TranslationCandidateRequest, TranslationMachineProvenance,
-        TranslationPatch, TranslationPatchOutcomeStatus, TranslationPatchRequest,
-        TranslationPluralKind, TranslationValue,
+        atomic_replace_catalog, find_po_item, list_translation_candidates, po_item_indexes,
+        TranslationCandidate, TranslationCandidateId, TranslationCandidateRequest,
+        TranslationMachineProvenance, TranslationPatch, TranslationPatchOutcomeStatus,
+        TranslationPatchRequest, TranslationPluralKind, TranslationValue,
     };
     use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError};
 
     const FIXTURE: &str = include_str!("../fixtures/translation-workflow.de.po");
+
+    #[test]
+    fn indexes_large_po_catalogs_once_for_constant_time_candidate_lookups() {
+        let content = (0..10_000)
+            .map(|index| format!("msgid \"message-{index}\"\nmsgstr \"\"\n\n"))
+            .collect::<String>();
+        let po = parse_po(&content).expect("parse large PO catalog");
+        let indexes = po_item_indexes(&po);
+
+        // The catalog makes one O(N) index build; each candidate lookup below is keyed, rather
+        // than repeating an item scan. Check several positions, including the old linear worst
+        // case, so a regression cannot silently replace the index with a partial map.
+        assert_eq!(indexes.len(), 10_000);
+        for index in [0, 4_999, 9_999] {
+            let key = CatalogMessageKey::new(format!("message-{index}"), None);
+            assert_eq!(
+                find_po_item(&po, &indexes, &key).map(|item| item.msgid.as_str()),
+                Some(key.msgid.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn po_item_index_keeps_first_candidate_metadata_and_marks_duplicate_mutations_ambiguous() {
+        let po = parse_po(
+            "#. First metadata\nmsgctxt \"menu\"\nmsgid \"Open\"\nmsgstr \"\"\n\n#. Second metadata\nmsgctxt \"menu\"\nmsgid \"Open\"\nmsgstr \"\"\n",
+        )
+        .expect("parse duplicate contextual items");
+        let indexes = po_item_indexes(&po);
+        let key = CatalogMessageKey::with_context("Open", "menu");
+        let indexed = indexes.get(&key).expect("index duplicate identity");
+
+        assert_eq!(indexed.first, 0);
+        assert!(!indexed.unique);
+        assert_eq!(
+            find_po_item(&po, &indexes, &key)
+                .and_then(|item| item.extracted_comments.first())
+                .map(String::as_str),
+            Some("First metadata")
+        );
+    }
 
     #[test]
     fn enumerates_missing_and_explicit_candidates_across_catalogs_and_locales() {
