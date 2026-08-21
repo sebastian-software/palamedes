@@ -517,7 +517,7 @@ describe("experimental graph splitting", () => {
       { experimentalGraphSplitting: true },
       undefined,
       ["id-a"],
-      "C:\\checkout\\project\\src\\label.ts"
+      "c:\\checkout\\project\\src\\label.ts"
     )) as { code?: string } | null
     const expectedKey = createHash("sha256").update("src/label.ts").digest("hex").slice(0, 12)
 
@@ -561,6 +561,25 @@ describe("experimental graph splitting", () => {
         undefined,
         ["id-a"],
         "C:\\shared\\label.ts"
+      )
+    ).rejects.toThrow(/different filesystem volume/)
+  })
+
+  it("rejects Windows UNC sources on a different share before deriving a relative key", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "\\\\checkout-server\\project\\palamedes.yaml",
+      rootDir: "\\\\checkout-server\\project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    await expect(
+      runMacroTransform(
+        { experimentalGraphSplitting: true },
+        undefined,
+        ["id-a"],
+        "\\\\checkout-server\\shared\\label.ts"
       )
     ).rejects.toThrow(/different filesystem volume/)
   })

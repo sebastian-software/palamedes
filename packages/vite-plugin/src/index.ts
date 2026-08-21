@@ -91,13 +91,25 @@ function isWindowsPath(value: string): boolean {
 function canonicalRelativePath(rootDir: string, sourceId: string): string {
   const canonicalRootDir = canonicalPath(rootDir)
   const canonicalSourceId = canonicalPath(sourceId)
-  const pathImplementation =
-    isWindowsPath(canonicalRootDir) || isWindowsPath(canonicalSourceId) ? path.win32 : path
+  const usesWindowsPaths = isWindowsPath(canonicalRootDir) || isWindowsPath(canonicalSourceId)
+  const pathImplementation = usesWindowsPaths ? path.win32 : path
+
+  // Windows returns a traversal path for UNC locations on the same server but
+  // different shares. Compare roots before deriving a relative identity so a
+  // share boundary cannot make the sidecar key depend on checkout depth.
+  if (
+    usesWindowsPaths &&
+    path.win32.parse(canonicalRootDir).root.toLowerCase() !==
+      path.win32.parse(canonicalSourceId).root.toLowerCase()
+  ) {
+    throw new Error(
+      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`
+    )
+  }
   const relativePath = pathImplementation.relative(canonicalRootDir, canonicalSourceId)
 
-  // `path.relative()` returns an absolute path when Windows paths are on
-  // different volumes. There is no checkout-independent relative identity in
-  // that case, so refusing graph splitting is safer than baking a machine path
+  // There is no checkout-independent relative identity across filesystem
+  // volumes, so refusing graph splitting is safer than baking a machine path
   // into sidecar keys and emitted chunk content.
   if (pathImplementation.isAbsolute(relativePath)) {
     throw new Error(
