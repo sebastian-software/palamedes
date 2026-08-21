@@ -8,7 +8,7 @@ import { CtaBand } from "~/components/home/CtaBand"
 import { FeatureGrid } from "~/components/home/FeatureGrid"
 import { STRATEGY_CARDS } from "~/data/features"
 import contentStats from "~/data/generated/content-stats.json"
-import { DEMO_NEXTJS_COOKIE, docsHref, repoHref } from "~/data/links"
+import { DEMO_NEXTJS_COOKIE, docsHref } from "~/data/links"
 
 export const handle = { layout: "bare" }
 
@@ -16,7 +16,7 @@ export function meta() {
   return pageMeta({
     title: "Framework i18n guides for TypeScript | Palamedes",
     description:
-      "Framework-specific i18n guides and verified examples for Next.js, TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite.",
+      "Verified frontend and full-stack i18n adapters for Next.js, TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite, plus request-local backend integration guidance for Hono and Express.",
     path: "/frameworks",
   })
 }
@@ -27,19 +27,18 @@ export default function Frameworks() {
       <section className="px-8 pt-16 pb-14 max-tight:px-5">
         <p className="eyebrow">Framework matrix</p>
         <h1 className="mt-6 max-w-[14em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          Six frameworks. Four locale strategies. One mental model.
+          Six server frameworks. Vite. Two backend runtimes. One mental model.
         </h1>
         <p className="mt-6 max-w-[38em]">
-          Every cell below is a real application verified in CI. The five established UI adapters
-          run browser flows against the same booking UI, catalogs, and runtime calls; Remix v3 runs
-          server smoke proofs against its new non-React stack. Where public hosting is ready, open
-          the demo and switch the language. Then open the framework guide for its exact server
-          boundary, TypeScript setup, and current limitations.
+          Frontend and full-stack hosts use first-party adapters and verified example applications.
+          Hono and Express are a separate backend path: they use the shared runtime directly with
+          request-local locale resolution. Start with the integration boundary you own, then inspect
+          its exact setup and verification evidence.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href={DEMO_NEXTJS_COOKIE}>Open a live demo</ButtonLink>
-          <ButtonLink variant="outline" href={repoHref("examples", "tree")}>
-            Browse the example source
+          <ButtonLink href="#frontend-frameworks">Frontend and full-stack adapters</ButtonLink>
+          <ButtonLink variant="outline" href="#backend-integrations">
+            Backend integrations
           </ButtonLink>
         </div>
       </section>
@@ -47,6 +46,7 @@ export default function Frameworks() {
       <Section
         num="01 — Matrix"
         title={`The ${contentStats.serverFrameworkCount} × ${contentStats.localeStrategyCount} server matrix, plus Vite.`}
+        id="frontend-frameworks"
       >
         <FrameworkMatrix scan />
         <p className="mt-4 max-w-[52em] text-[12.5px] text-gray-spec">
@@ -91,8 +91,9 @@ export default function Frameworks() {
 
       <Section
         num="04 — Backend"
-        title="And it doesn't stop at the frontend."
-        lede="The same getI18n() model runs in Hono and Express with request-local locale resolution — transactional emails, API error messages, and PDF generation speak the user's language from the same catalogs."
+        id="backend-integrations"
+        title="Backend services are a separate integration path."
+        lede="Hono and Express do not use a frontend adapter. They call the shared runtime with request-local locale resolution, so transactional emails, API errors, and PDF generation use the same catalogs without pretending to be framework UI."
       >
         <ButtonLink variant="outline" href={docsHref("backend-servers")}>
           Backend servers guide

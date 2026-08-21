@@ -9,7 +9,7 @@ type Integration = {
   note?: string
 }
 
-const INTEGRATIONS: readonly Integration[] = [
+const FRONTEND_INTEGRATIONS: readonly Integration[] = [
   {
     name: "Next.js",
     href: frameworkLandingHref("nextjs"),
@@ -55,6 +55,9 @@ const INTEGRATIONS: readonly Integration[] = [
     logo: "/framework-logos/vite.svg",
     logoClass: "h-4 w-auto max-w-[5rem]",
   },
+]
+
+const BACKEND_INTEGRATIONS: readonly Integration[] = [
   {
     name: "Hono",
     href: "/docs/backend-servers",
@@ -72,18 +75,74 @@ const INTEGRATIONS: readonly Integration[] = [
   },
 ]
 
+function IntegrationList({
+  integrations,
+  label,
+}: {
+  integrations: readonly Integration[]
+  label: string
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(10rem,0.7fr)_3fr] max-tight:grid-cols-1">
+      <p className="micro border-r border-hair px-5 py-5 text-[10px] tracking-label text-gray-spec max-tight:border-r-0 max-tight:border-b">
+        {label}
+      </p>
+      <ul
+        aria-label={label}
+        className={`grid ${integrations.length > 2 ? "grid-cols-4 max-grid:grid-cols-2" : "grid-cols-2"} max-tight:grid-cols-1`}
+      >
+        {integrations.map((integration) => (
+          <li
+            key={integration.name}
+            className="border-r border-b border-hair last:border-r-0 even:max-grid:border-r-0 max-tight:border-r-0"
+          >
+            <a
+              href={integration.href}
+              aria-label={integration.name}
+              className="group flex min-h-20 items-center justify-between gap-3 px-5 py-4 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+            >
+              <span className="flex min-w-0 items-center gap-2.5">
+                <img
+                  src={integration.logo}
+                  alt={integration.suffix ? "" : integration.name}
+                  aria-hidden={integration.suffix ? true : undefined}
+                  className={`${integration.logoClass} shrink-0 object-contain`}
+                />
+                {integration.suffix ? (
+                  <span className="text-[14px] font-semibold tracking-[-0.01em] group-hover:text-accent">
+                    {integration.suffix}
+                  </span>
+                ) : null}
+              </span>
+              {integration.note ? (
+                <span className="micro text-[10px] tracking-label text-gray-spec">
+                  {integration.note}
+                </span>
+              ) : (
+                <span aria-hidden className="text-accent">
+                  →
+                </span>
+              )}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 // Assets are downloaded unmodified from the project-controlled sources recorded
 // in framework-brand-usage.md and THIRD_PARTY_NOTICES.md. The label beside an
 // icon covers projects that publish an emblem but no separate wordmark asset.
 export function IntegrationBand() {
   return (
-    <section aria-label="First-party framework integrations" className="border-b border-hair">
+    <section aria-label="First-party integrations" className="border-b border-hair">
       <div className="grid grid-cols-[minmax(13rem,1fr)_3fr] max-grid:grid-cols-1">
         <div className="border-r border-hair px-7 py-6 max-grid:border-r-0 max-grid:border-b">
-          <p className="eyebrow">First-party integration</p>
+          <p className="eyebrow">First-party integrations</p>
           <p className="mt-3 max-w-[17rem] text-[13px] leading-relaxed text-ink/80">
-            Each supported host has adapter code, examples, and verification—not a compatibility
-            claim.
+            Frontend and full-stack adapters are verified as applications. Backend integrations use
+            the same request-local runtime in Hono and Express.
           </p>
           <a
             href="https://github.com/sebastian-software/palamedes/blob/main/site/framework-brand-usage.md"
@@ -92,43 +151,13 @@ export function IntegrationBand() {
             Brand-asset status →
           </a>
         </div>
-        <ul className="grid grid-cols-4 max-grid:grid-cols-2 max-tight:grid-cols-1">
-          {INTEGRATIONS.map((framework) => (
-            <li
-              key={framework.name}
-              className="border-r border-b border-hair last:border-r-0 even:max-grid:border-r-0 max-tight:border-r-0"
-            >
-              <a
-                href={framework.href}
-                aria-label={framework.name}
-                className="group flex min-h-20 items-center justify-between gap-3 px-5 py-4 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <img
-                    src={framework.logo}
-                    alt={framework.suffix ? "" : framework.name}
-                    aria-hidden={framework.suffix ? true : undefined}
-                    className={`${framework.logoClass} shrink-0 object-contain`}
-                  />
-                  {framework.suffix ? (
-                    <span className="text-[14px] font-semibold tracking-[-0.01em] group-hover:text-accent">
-                      {framework.suffix}
-                    </span>
-                  ) : null}
-                </span>
-                {framework.note ? (
-                  <span className="micro text-[10px] tracking-label text-gray-spec">
-                    {framework.note}
-                  </span>
-                ) : (
-                  <span aria-hidden className="text-accent">
-                    →
-                  </span>
-                )}
-              </a>
-            </li>
-          ))}
-        </ul>
+        <div>
+          <IntegrationList
+            integrations={FRONTEND_INTEGRATIONS}
+            label="Frontend and full-stack adapters"
+          />
+          <IntegrationList integrations={BACKEND_INTEGRATIONS} label="Backend integrations" />
+        </div>
       </div>
     </section>
   )
