@@ -25,7 +25,8 @@
     "bin/"
   ],
   "scripts": {
-    "build": "node -e \"process.exit(0)\""
+    "build": "node -e \"process.exit(0)\"",
+    "test": "node --test ./test/create-palamedes.test.mjs"
   },
   "engines": {
     "node": ">=22.0.0"

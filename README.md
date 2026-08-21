@@ -118,7 +118,7 @@ easier to review, and easier to carry from one framework to the next.
   React Router, and Vite run Playwright weekly or manually. Server-first Remix
   v3 is smoke-only and requires Node.js `>=24.3`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
-- Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
+- Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet; their bins link to the quickstart and exit non-zero rather than silently succeeding
 - 1.0 stability tiers and public API expectations are documented in [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
 
 ## What Exists Today
@@ -377,7 +377,9 @@ install story.
 - [`create-palamedes`](https://www.npmjs.com/package/create-palamedes)
 
 These names are reserved for future top-level entry points. They are not the
-recommended starting point today.
+recommended starting point today: their placeholder bins print the supported
+quickstart to stderr and exit non-zero without creating a project or running a
+command.
 
 ## Development
 
