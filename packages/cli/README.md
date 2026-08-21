@@ -123,15 +123,15 @@ pnpm exec pmds extract --check --json
 CI can distinguish a completed policy verdict from a command that could not
 run:
 
-| Code | Meaning |
-| ---- | ------- |
-| `0` | The command completed and its configured policy passed. |
-| `1` | Configuration, I/O, serialization, or another operational failure prevented completion. |
-| `2` | Invalid command-line usage rejected by Clap. |
-| `3` | `extract --check` completed and found catalog drift. |
-| `4` | `lint` completed and its `--fail-on` policy failed, or source analysis failed for one or more files. |
-| `5` | `audit` completed and its `--fail-on` policy failed. |
-| `6` | `report` completed and one or more locales were below `--fail-if-below`. |
+| Code | Meaning                                                                                              |
+| ---- | ---------------------------------------------------------------------------------------------------- |
+| `0`  | The command completed and its configured policy passed.                                              |
+| `1`  | Configuration, I/O, serialization, or another operational failure prevented completion.              |
+| `2`  | Invalid command-line usage rejected by Clap.                                                         |
+| `3`  | `extract --check` completed and found catalog drift.                                                 |
+| `4`  | `lint` completed and its `--fail-on` policy failed, or source analysis failed for one or more files. |
+| `5`  | `audit` completed and its `--fail-on` policy failed.                                                 |
+| `6`  | `report` completed and one or more locales were below `--fail-if-below`.                             |
 
 `pmds catalog convert` preserves translator comments, obsolete state, and
 review markers such as `fuzzy` when converting PO catalogs to FCL.

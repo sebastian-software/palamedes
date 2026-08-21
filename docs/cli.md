@@ -246,15 +246,15 @@ below `--fail-if-below`.
 The CI-facing commands use stable, distinct exit codes so a policy verdict is
 not confused with an operational failure:
 
-| Code | Meaning |
-| ---- | ------- |
-| `0` | The command completed and its configured policy passed. |
-| `1` | The command could not complete because of configuration, I/O, serialization, or another operational failure. |
-| `2` | Clap rejected invalid command-line usage. |
-| `3` | `extract --check` completed and found catalog drift. |
-| `4` | `lint` completed and its `--fail-on` policy failed, or source analysis could not complete for one or more files. |
-| `5` | `audit` completed and its `--fail-on` policy failed. |
-| `6` | `report` completed and one or more locales were below `--fail-if-below`. |
+| Code | Meaning                                                                                                          |
+| ---- | ---------------------------------------------------------------------------------------------------------------- |
+| `0`  | The command completed and its configured policy passed.                                                          |
+| `1`  | The command could not complete because of configuration, I/O, serialization, or another operational failure.     |
+| `2`  | Clap rejected invalid command-line usage.                                                                        |
+| `3`  | `extract --check` completed and found catalog drift.                                                             |
+| `4`  | `lint` completed and its `--fail-on` policy failed, or source analysis could not complete for one or more files. |
+| `5`  | `audit` completed and its `--fail-on` policy failed.                                                             |
+| `6`  | `report` completed and one or more locales were below `--fail-if-below`.                                         |
 
 ## `pmds catalog merge`
 
