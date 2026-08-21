@@ -36,7 +36,101 @@ export function publicWorkspacePackages(root = process.cwd()) {
 }
 
 export function javascriptWorkspacePackages(root = process.cwd()) {
-  return publicWorkspacePackages(root).filter((packageInfo) => !packageInfo.nativeArtifact)
+  return dependencyOrderedWorkspacePackages(
+    publicWorkspacePackages(root).filter((packageInfo) => !packageInfo.nativeArtifact)
+  )
+}
+
+// Publish order matters because pnpm turns workspace references into registry
+// ranges in the packed manifest. Keep independent packages deterministic while
+// ensuring each workspace dependency reaches npm before its dependents.
+export function dependencyOrderedWorkspacePackages(packages) {
+  const packagesByName = new Map()
+
+  for (const packageInfo of packages) {
+    if (typeof packageInfo.name !== "string" || packageInfo.name.length === 0) {
+      throw new Error("Cannot order workspace packages without a package name.")
+    }
+
+    if (packagesByName.has(packageInfo.name)) {
+      throw new Error(`Cannot order workspace packages with duplicate name ${packageInfo.name}.`)
+    }
+
+    packagesByName.set(packageInfo.name, packageInfo)
+  }
+
+  const dependents = new Map([...packagesByName.keys()].map((name) => [name, []]))
+  const dependencyCounts = new Map([...packagesByName.keys()].map((name) => [name, 0]))
+
+  for (const packageInfo of packagesByName.values()) {
+    for (const dependencyName of workspacePublishDependencies(
+      packageInfo.manifest,
+      packagesByName
+    )) {
+      dependents.get(dependencyName).push(packageInfo.name)
+      dependencyCounts.set(packageInfo.name, dependencyCounts.get(packageInfo.name) + 1)
+    }
+  }
+
+  for (const names of dependents.values()) {
+    names.sort((a, b) => a.localeCompare(b))
+  }
+
+  const ready = [...packagesByName.keys()]
+    .filter((name) => dependencyCounts.get(name) === 0)
+    .sort((a, b) => a.localeCompare(b))
+  const ordered = []
+
+  while (ready.length > 0) {
+    const name = ready.shift()
+    ordered.push(packagesByName.get(name))
+
+    for (const dependent of dependents.get(name)) {
+      const remainingDependencies = dependencyCounts.get(dependent) - 1
+      dependencyCounts.set(dependent, remainingDependencies)
+
+      if (remainingDependencies === 0) {
+        ready.push(dependent)
+        ready.sort((a, b) => a.localeCompare(b))
+      }
+    }
+  }
+
+  if (ordered.length !== packagesByName.size) {
+    const cycle = [...dependencyCounts]
+      .filter(([, count]) => count > 0)
+      .map(([name]) => name)
+      .sort((a, b) => a.localeCompare(b))
+
+    throw new Error(
+      `Cannot publish workspace packages in dependency order: dependency cycle detected among ${cycle.join(", ")}.`
+    )
+  }
+
+  return ordered
+}
+
+function workspacePublishDependencies(packageJson, packagesByName) {
+  const dependencies = new Set()
+
+  for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+    const declaredDependencies = packageJson?.[field]
+    if (declaredDependencies === null || typeof declaredDependencies !== "object") {
+      continue
+    }
+
+    for (const [name, version] of Object.entries(declaredDependencies)) {
+      if (
+        typeof version === "string" &&
+        version.startsWith("workspace:") &&
+        packagesByName.has(name)
+      ) {
+        dependencies.add(name)
+      }
+    }
+  }
+
+  return dependencies
 }
 
 function nativeArtifact(packageJson) {
