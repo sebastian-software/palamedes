@@ -296,6 +296,9 @@ export function displayBenchmarkTime(ms: number): string {
   if (roundedMs < 1000) {
     return `${roundedMs.toLocaleString("en-US")} ms`
   }
+  // Pick the unit from the whole-millisecond public value so 999.5 ms does
+  // not surface as "1000 ms". Once in seconds, keep the source precision for
+  // the one-decimal display instead of introducing a second rounding step.
   return `${(ms / 1000).toFixed(1)} s`
 }
 
