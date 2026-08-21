@@ -150,7 +150,7 @@ export function createI18nRuntime(
       if (typeof message.value === "function") {
         return message.value<TResult>(values, runtime)
       }
-      if (message.compiled || patternSupport === undefined) {
+      if (message.compiled) {
         return runtime.join(message.value)
       }
       return runtime.pattern(message.value, values)

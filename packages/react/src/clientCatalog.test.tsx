@@ -7,6 +7,7 @@ import { defineCompiledCatalog } from "@palamedes/core/compiled"
 import { getI18n, resetI18nRuntime } from "@palamedes/runtime"
 
 import { createClientCatalogBoundary } from "./client"
+import { Plural, Select, SelectOrdinal, Trans } from "./index"
 
 type Locale = "de" | "en"
 
@@ -115,6 +116,38 @@ describe("createClientCatalogBoundary", () => {
 
     expect(resolveClientLocale).toHaveBeenCalledOnce()
     expect(loadCatalog).toHaveBeenCalledOnce()
+  })
+
+  it("formats compat ICU fallbacks after initializing a parser-free client catalog", async () => {
+    document.documentElement.lang = "en"
+    const Boundary = createClientCatalogBoundary<Locale>({
+      loadCatalog: () => fulfilled({ messages: defineCompiledCatalog({}) }),
+      resolveClientLocale: () => document.documentElement.lang as Locale,
+    })
+    const when = new Date(Date.UTC(2026, 4, 8, 12, 0, 0))
+
+    let view!: ReturnType<typeof render>
+    await act(async () => {
+      view = render(
+        <Suspense fallback={<span>Loading</span>}>
+          <Boundary locale="en">
+            <>
+              <Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />
+              <Trans id="date" message="{when, date, full}" values={{ when }} />
+              <Plural value={3} one="# item" other="# items" />
+              <Select value="female" female="She" other="They" />
+              <SelectOrdinal value={3} one="#st" two="#nd" few="#rd" other="#th" />
+            </>
+          </Boundary>
+        </Suspense>
+      )
+    })
+
+    await waitFor(() =>
+      expect(view.container.textContent).toBe(
+        `Hello Ada${new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(when)}3 itemsShe3rd`
+      )
+    )
   })
 
   it("fails fast when a render tries to change the document locale", async () => {
