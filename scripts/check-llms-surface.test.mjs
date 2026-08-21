@@ -77,6 +77,15 @@ test("rejects a renamed published package outside the compact inventory", () => 
   )
 })
 
+test("requires reserved-bin failure semantics in both assistant surfaces", () => {
+  for (const file of ["llms.txt", "llms-full.txt"])
+    expectRejected(
+      file,
+      (text) => text.replace("exit 2 when arguments are supplied", "accept arguments"),
+      new RegExp(`${file.replace(".", "\\.")} reserved-bin contract`, "u")
+    )
+})
+
 test("rejects a removed translation patch type", () => {
   expectRejected(
     "packages/core-node/src/index.ts",
