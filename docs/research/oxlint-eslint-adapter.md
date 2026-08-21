@@ -160,8 +160,8 @@ verifies editor transport and rendering.
   relative to itself. This works with hoisted installs and pnpm's isolated
   layout and has been tested inside Oxlint's worker process.
 - Supported native targets currently match `@palamedes/core-node`: macOS arm64,
-  Linux x64 glibc/musl, Linux arm64 glibc, and Windows x64 MSVC. Missing or
-  pruned optional dependencies produce the core binding's actionable load
+  Linux x64 glibc/musl, Linux arm64 glibc/musl, and Windows x64 MSVC. Missing
+  or pruned optional dependencies produce the core binding's actionable load
   error.
 - All Palamedes packages publish in lockstep. A mixed older `core-node` version
   may lack the source-analysis binding, so lockfiles should resolve one

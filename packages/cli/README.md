@@ -42,6 +42,7 @@ The npm package currently publishes native binaries for:
 - Linux x64 glibc
 - Linux x64 musl
 - Linux arm64 glibc
+- Linux arm64 musl
 - Windows x64 MSVC
 
 The `pmds` launcher selects the matching optional native package when the
