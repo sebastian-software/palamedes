@@ -76,11 +76,48 @@ function stripQuery(id: string): string {
 }
 
 function canonicalPath(value: string): string {
+  const pathImplementation = isWindowsPath(value) ? path.win32 : path
   try {
     return realpathSync.native(value)
   } catch {
-    return path.resolve(value)
+    return pathImplementation.resolve(value)
   }
+}
+
+function isWindowsPath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\")
+}
+
+function canonicalRelativePath(rootDir: string, sourceId: string): string {
+  const canonicalRootDir = canonicalPath(rootDir)
+  const canonicalSourceId = canonicalPath(sourceId)
+  const usesWindowsPaths = isWindowsPath(canonicalRootDir) || isWindowsPath(canonicalSourceId)
+  const pathImplementation = usesWindowsPaths ? path.win32 : path
+
+  // Windows returns a traversal path for UNC locations on the same server but
+  // different shares. Compare roots before deriving a relative identity so a
+  // share boundary cannot make the sidecar key depend on checkout depth.
+  if (
+    usesWindowsPaths &&
+    path.win32.parse(canonicalRootDir).root.toLowerCase() !==
+      path.win32.parse(canonicalSourceId).root.toLowerCase()
+  ) {
+    throw new Error(
+      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`
+    )
+  }
+  const relativePath = pathImplementation.relative(canonicalRootDir, canonicalSourceId)
+
+  // There is no checkout-independent relative identity across filesystem
+  // volumes, so refusing graph splitting is safer than baking a machine path
+  // into sidecar keys and emitted chunk content.
+  if (pathImplementation.isAbsolute(relativePath)) {
+    throw new Error(
+      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`
+    )
+  }
+
+  return (relativePath || ".").replaceAll("\\", "/")
 }
 
 function catalogArtifactConfig(
@@ -241,17 +278,19 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   /*
    * Message sidecar registry for experimental graph splitting, keyed by a
-   * short hash of the source module id. Entries are written when a module is
-   * transformed and read when the bundler loads the sidecar it imports, so
-   * population always precedes the read within one build. Entries are
-   * overwritten on re-transform and deliberately never cleared: a stale entry
-   * for an untouched module keeps dev-server requests working across config
-   * reloads.
+   * short hash of the canonical source path relative to the Palamedes root.
+   * Entries are written when a module is transformed and read when the bundler
+   * loads the sidecar it imports, so population always precedes the read
+   * within one build. Entries are overwritten on re-transform and deliberately
+   * never cleared: a stale entry for an untouched module keeps dev-server
+   * requests working across config reloads.
    */
   const sidecarModules = new Map<string, { sourceId: string; compiledIds: string[] }>()
 
-  function sidecarKey(sourceId: string): string {
-    return createHash("sha256").update(sourceId).digest("hex").slice(0, 12)
+  async function sidecarKey(sourceId: string): Promise<string> {
+    const cfg = await getConfigLazy()
+    const modulePath = canonicalRelativePath(cfg.rootDir, sourceId)
+    return createHash("sha256").update(modulePath).digest("hex").slice(0, 12)
   }
 
   /*
@@ -260,13 +299,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
    * Both the macro transform and MDX compilation route through here, so MDX
    * content splits exactly like `t`/`Trans` call sites do.
    */
-  function withSidecarImport(code: string, sourceId: string, compiledIds: string[]): string {
+  function withSidecarImport(
+    code: string,
+    sourceId: string,
+    compiledIds: string[]
+  ): string | Promise<string> {
     if (!graphSplitting || compiledIds.length === 0) {
       return code
     }
-    const key = sidecarKey(sourceId)
-    sidecarModules.set(key, { sourceId, compiledIds })
-    return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`
+    return sidecarKey(sourceId).then((key) => {
+      sidecarModules.set(key, { sourceId, compiledIds })
+      return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`
+    })
   }
 
   async function getConfigLazy() {
@@ -492,7 +536,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         return {
-          code: withSidecarImport(result.code, cleanId, result.compiledIds),
+          code: await withSidecarImport(result.code, cleanId, result.compiledIds),
           map: result.map,
           ...((mdx.framework ?? "react") === "react" ? { moduleType: "jsx" as const } : {}),
         }
@@ -572,10 +616,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return null
         }
 
-        return {
-          code: withSidecarImport(result.code, cleanId, result.compiledIds),
-          map: result.map as any,
+        const sidecarCode = withSidecarImport(result.code, cleanId, result.compiledIds)
+        if (typeof sidecarCode === "string") {
+          return {
+            code: sidecarCode,
+            map: result.map as any,
+          }
         }
+        return sidecarCode.then((transformedCode) => ({
+          code: transformedCode,
+          map: result.map as any,
+        }))
       } catch (error) {
         const err = error as Error
         this.error(`Palamedes transform error in ${cleanId}: ${err.message}`)
