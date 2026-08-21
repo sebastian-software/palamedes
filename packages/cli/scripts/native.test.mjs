@@ -80,6 +80,84 @@ process.exitCode = result.exitCode
 )
 
 test(
+  "Unix launcher forwards repeated and escalating termination signals",
+  { skip: process.platform === "win32" },
+  async (context) => {
+    const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-escalation-"))
+    const ready = path.join(fixture, "ready")
+    const received = path.join(fixture, "received")
+    const receiver = path.join(fixture, "receiver.mjs")
+    const launcher = path.join(fixture, "launcher.mjs")
+    const nativeModule = new URL("native.mjs", import.meta.url).href
+    writeFileSync(
+      receiver,
+      `import { writeFileSync } from "node:fs"
+const received = []
+const record = (signal) => {
+  received.push(signal)
+  writeFileSync(${JSON.stringify(received)}, received.join(","))
+  if (signal === "SIGTERM") {
+    process.stdout.write(received.join(","))
+    process.exit(0)
+  }
+}
+process.on("SIGINT", () => record("SIGINT"))
+process.on("SIGTERM", () => record("SIGTERM"))
+writeFileSync(${JSON.stringify(ready)}, "ready")
+setInterval(() => {}, 1000)
+`
+    )
+    writeFileSync(
+      launcher,
+      `import { spawnNative } from ${JSON.stringify(nativeModule)}
+const result = await spawnNative([${JSON.stringify(receiver)}], {
+  nativeExecutable: process.execPath,
+  captureOutput: true,
+})
+process.stdout.write(result.stdout)
+process.exitCode = result.exitCode
+`
+    )
+
+    const child = spawn(process.execPath, [launcher], {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    let stdout = ""
+    let stderr = ""
+    child.stdout.setEncoding("utf8")
+    child.stderr.setEncoding("utf8")
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk
+    })
+
+    context.after(() => {
+      try {
+        process.kill(-child.pid, "SIGKILL")
+      } catch (error) {
+        if (error?.code !== "ESRCH") throw error
+      }
+      rmSync(fixture, { recursive: true, force: true })
+    })
+
+    await waitFor(() => existsSync(ready), 5000)
+    process.kill(-child.pid, "SIGINT")
+    await waitFor(() => readIfExists(received) === "SIGINT", 5000)
+    process.kill(-child.pid, "SIGINT")
+    await waitFor(() => readIfExists(received) === "SIGINT,SIGINT", 5000)
+    process.kill(-child.pid, "SIGTERM")
+
+    const { code, signal } = await waitForExit(child, 5000)
+    assert.equal(signal, null)
+    assert.equal(code, 0, stderr)
+    assert.equal(stdout, "SIGINT,SIGINT,SIGTERM")
+  }
+)
+
+test(
   "Unix launcher forwards SIGHUP to the complete native process group and then exits",
   { skip: process.platform === "win32" },
   async (context) => {
@@ -259,4 +337,8 @@ function signalListenerCounts() {
   return Object.fromEntries(
     ["SIGINT", "SIGTERM", "SIGHUP", "exit"].map((signal) => [signal, process.listenerCount(signal)])
   )
+}
+
+function readIfExists(file) {
+  return existsSync(file) ? readFileSync(file, "utf8") : undefined
 }

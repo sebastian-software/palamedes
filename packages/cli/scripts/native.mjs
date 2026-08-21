@@ -24,7 +24,6 @@ export async function spawnNative(args, options = {}) {
     let stdout = ""
     let stderr = ""
     let settled = false
-    let terminationForwarded = false
     child.stdout?.setEncoding("utf8")
     child.stderr?.setEncoding("utf8")
     child.stdout?.on("data", (chunk) => {
@@ -34,8 +33,7 @@ export async function spawnNative(args, options = {}) {
       stderr += chunk
     })
     const forwardSignal = (signal) => {
-      if (settled || terminationForwarded) return false
-      terminationForwarded = true
+      if (settled) return false
       try {
         if (isolatedSignalGroup && child.pid) {
           process.kill(-child.pid, signal)
