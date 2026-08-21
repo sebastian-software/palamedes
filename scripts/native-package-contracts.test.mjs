@@ -38,7 +38,7 @@ describe("native platform package contracts", () => {
     }
   })
 
-  it("keeps the platform-support page aligned with published packages, resolvers, and navigation", async () => {
+  it("keeps the platform-support page aligned with published packages, resolvers, wrapper dependencies, and navigation", async () => {
     const targets = [
       { suffix: "darwin-arm64", os: "darwin", host: "macOS", cpu: "arm64", libc: null },
       { suffix: "linux-x64-gnu", os: "linux", host: "Linux", cpu: "x64", libc: "glibc" },
@@ -47,18 +47,26 @@ describe("native platform package contracts", () => {
       { suffix: "linux-arm64-musl", os: "linux", host: "Linux", cpu: "arm64", libc: "musl" },
       { suffix: "win32-x64-msvc", os: "win32", host: "Windows", cpu: "x64", libc: null },
     ]
-    const [page, cliResolver, bindingResolver, publishWorkflow, navigation, ...manifests] =
-      await Promise.all([
-        readFile(resolve(repositoryRoot, "docs/platform-support.md"), "utf8"),
-        readFile(resolve(repositoryRoot, "packages/cli/scripts/platform.mjs"), "utf8"),
-        readFile(resolve(repositoryRoot, "packages/core-node/src/native-loader.ts"), "utf8"),
-        readFile(resolve(repositoryRoot, ".github/workflows/publish.yml"), "utf8"),
-        readFile(resolve(repositoryRoot, "site/scripts/prebuild-content.mjs"), "utf8"),
-        ...targets.flatMap(({ suffix }) => [
-          readFile(resolve(repositoryRoot, `packages/cli-${suffix}/package.json`), "utf8"),
-          readFile(resolve(repositoryRoot, `packages/core-node-${suffix}/package.json`), "utf8"),
-        ]),
-      ])
+    const [
+      page,
+      cliResolver,
+      bindingResolver,
+      coreNodeManifest,
+      publishWorkflow,
+      navigation,
+      ...manifests
+    ] = await Promise.all([
+      readFile(resolve(repositoryRoot, "docs/platform-support.md"), "utf8"),
+      readFile(resolve(repositoryRoot, "packages/cli/scripts/platform.mjs"), "utf8"),
+      readFile(resolve(repositoryRoot, "packages/core-node/src/native-loader.ts"), "utf8"),
+      readFile(resolve(repositoryRoot, "packages/core-node/package.json"), "utf8"),
+      readFile(resolve(repositoryRoot, ".github/workflows/publish.yml"), "utf8"),
+      readFile(resolve(repositoryRoot, "site/scripts/prebuild-content.mjs"), "utf8"),
+      ...targets.flatMap(({ suffix }) => [
+        readFile(resolve(repositoryRoot, `packages/cli-${suffix}/package.json`), "utf8"),
+        readFile(resolve(repositoryRoot, `packages/core-node-${suffix}/package.json`), "utf8"),
+      ]),
+    ])
 
     const rows = page
       .split("\n")
@@ -72,6 +80,10 @@ describe("native platform package contracts", () => {
     expect(page).toContain("`darwin/x64`")
     expect(page).toContain("`win32/arm64`")
     expect(navigation).toContain('["platform-support.md", 15]')
+    const coreNodeOptionalDependencies = JSON.parse(coreNodeManifest).optionalDependencies
+    expect(new Set(Object.keys(coreNodeOptionalDependencies))).toEqual(
+      new Set(targets.map(({ suffix }) => `@palamedes/core-node-${suffix}`))
+    )
 
     for (const [index, target] of targets.entries()) {
       const cliPackage = `@palamedes/cli-${target.suffix}`
@@ -94,6 +106,7 @@ describe("native platform package contracts", () => {
       expect(page).toMatch(new RegExp(rowPattern, "mu"))
       expect(cliResolver).toContain(cliPackage)
       expect(bindingResolver).toContain(bindingPackage)
+      expect(coreNodeOptionalDependencies).toHaveProperty(bindingPackage)
       expect(publishWorkflow).toContain(`package_name: "${cliPackage}"`)
       expect(publishWorkflow).toContain(`package_name: "${bindingPackage}"`)
 
