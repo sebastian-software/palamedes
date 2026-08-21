@@ -1,4 +1,5 @@
 import { createRequire } from "node:module"
+import path from "node:path"
 import Module from "node:module"
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -93,7 +94,7 @@ describe("palamedes-po-loader.cjs", () => {
 
     expect(loadPalamedesConfig).toHaveBeenCalledWith({
       configPath: undefined,
-      cwd: "/next-app",
+      cwd: path.resolve("/next-app"),
     })
   })
 
