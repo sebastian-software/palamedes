@@ -43,7 +43,7 @@ Defaults:
 - `include`: `/\.(tsx?|jsx?|mjs)$/`
 - `exclude`: `/[/\\]node_modules[/\\]/`
 - `runtimeModule`: `"@palamedes/runtime"`
-- `keepSourceFallbacks`: `true` in development, `false` in production
+- `keepSourceFallbacks`: `true`
 - `configPath`: unset — `.po` imports discover the Palamedes config from the
   imported catalog file's directory; relative paths resolve from there
 - `failOnMissing` / `failOnCompileError`: `false` — missing translations and
@@ -56,10 +56,13 @@ CommonJS-compatible runtime binding.
 Macro calls use the plain, framework-neutral getter; locale changes require
 document navigation.
 
-Production register hooks strip authored messages from generated runtime calls
-and omit translator comments and context metadata by default. Set
-`keepSourceFallbacks: true` when server production code must render readable
-source text without a loaded catalog.
+Production register hooks retain authored messages by default and still omit
+translator comments and context metadata. This keeps a missing catalog entry
+readable during deploy skew. Set `keepSourceFallbacks: false` when generated
+source text cannot be shipped; a missing entry then renders its compiled id.
+The parser-free runtime returns a retained ICU fallback as raw text rather than
+adding a parser dependency, so use `@palamedes/core` when it must interpolate
+and configure `onMissing` to observe misses.
 
 `.po` imports are claimed by the hook before Node's default loader runs. They
 compile through the same catalog module path used by the Vite/Next integrations

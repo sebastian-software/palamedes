@@ -400,7 +400,11 @@ export function withPalamedes(
   } = options
 
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule)
-  const keepSourceFallbacks = explicitKeepSourceFallbacks ?? process.env.NODE_ENV !== "production"
+  // Production catalog chunks can lag code during a deploy or be loaded
+  // independently when message splitting is enabled. Preserve source text by
+  // default so a miss is readable rather than a compiled hash; applications
+  // with stricter source-text or bundle-size constraints can opt out.
+  const keepSourceFallbacks = explicitKeepSourceFallbacks ?? true
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
   const projectRoot = resolveProjectRoot(
     { projectRoot: explicitProjectRoot, cwd: explicitCwd },

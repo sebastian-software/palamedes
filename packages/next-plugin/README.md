@@ -157,10 +157,10 @@ continues hydrating the client graph (including any other fragments that did
 load). It deliberately avoids an immediate, unbacked-off retry: deterministic
 CDN, ad-blocker, and stale-deploy failures are unlikely to improve in the same
 turn, while a retry can add a request without restoring the graph. Development
-remains fail-fast so catalog wiring failures stay visible while editing. In a
-production build, set `keepSourceFallbacks: true`
-if readable source text is required when a skipped fragment has no loaded
-translation; the compact default does not retain source messages.
+remains fail-fast so catalog wiring failures stay visible while editing.
+Production retains readable source text by default when a skipped fragment has
+no loaded translation. Set `keepSourceFallbacks: false` when the smaller
+hash-only output is required because authored source text cannot ship.
 
 `messageSplitting` currently supports PO catalogs and defaults to `false` for
 compatibility. Keep using `createClientCatalogBoundary()` from
@@ -314,10 +314,11 @@ module.exports = withPalamedes(
 )
 ```
 
-`keepSourceFallbacks` defaults to `true` in development and `false` in
-production. Production output therefore relies on loaded compiled catalogs and
-does not duplicate authored source messages in transformed modules. Set the
-option explicitly when readable runtime fallbacks are required in production.
+`keepSourceFallbacks` defaults to `true` in both development and production,
+so a missing catalog fragment renders readable source text rather than a
+compiled hash. Set it to `false` to opt into smaller output or prevent source
+text from shipping. The parser-free runtime leaves ICU source fallbacks raw;
+use `@palamedes/core` when such a fallback must interpolate values.
 
 `include` and `exclude` select which sources are macro-transformed, and apply
 under both bundlers: webpack uses them as the loader's `test`/`exclude`, and

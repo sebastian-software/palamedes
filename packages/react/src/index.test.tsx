@@ -75,6 +75,22 @@ describe("@palamedes/react", () => {
     ).toBe("Hallo Ada")
   })
 
+  it("keeps compiled Trans misses readable without adding the ICU parser", () => {
+    const i18n = createCompiledI18n({ locale: "de" })
+    setClientI18n(i18n)
+
+    expect(
+      renderToStaticMarkup(
+        <CompiledTrans
+          id="missing"
+          message="Hello {name}"
+          values={{ name: "Ada" }}
+          components={{}}
+        />
+      )
+    ).toBe("Hello {name}")
+  })
+
   it("formats uncompiled compat messages with the parser-free runtime", () => {
     const i18n = createCompiledI18n({ locale: "en-US" })
     setClientI18n(i18n)

@@ -106,10 +106,11 @@ palamedes({
 })
 ```
 
-`keepSourceFallbacks` defaults to `true` during `vite serve` and `false` during
-`vite build`. Production builds therefore emit compact catalog lookups instead
-of duplicating authored messages in macro and generated MDX output. Set it
-explicitly to override the command-based default.
+`keepSourceFallbacks` defaults to `true`, including `vite build`, so a missing
+catalog chunk renders readable source text instead of a compiled hash. Set it
+to `false` to opt into smaller output when source text must not ship. The
+parser-free runtime returns an ICU source fallback literally; use
+`@palamedes/core` if a fallback itself must interpolate values.
 
 `cwd` and `skipValidation` are passed through to `loadPalamedesConfig`: `cwd`
 sets the directory the config search starts from, and `skipValidation` loads

@@ -71,7 +71,9 @@ export function createPalamedesRemixLoadHook(
   const include = options.include ?? DEFAULT_INCLUDE
   const exclude = options.exclude ?? DEFAULT_EXCLUDE
   const runtimeModule = resolveMacroRuntimeModule(options.runtimeModule)
-  const keepSourceFallbacks = options.keepSourceFallbacks ?? process.env.NODE_ENV !== "production"
+  // Keep misses readable across production deploy skew by default. Hosts that
+  // must not embed authored text can choose the compact, hash-only behavior.
+  const keepSourceFallbacks = options.keepSourceFallbacks ?? true
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
   const configCache = new Map<string, LoadedPalamedesConfig>()
 

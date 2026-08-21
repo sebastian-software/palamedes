@@ -48,7 +48,7 @@ Defaults:
 - `failOnMissing`: `false`
 - `failOnCompileError`: `false`
 - `runtimeModule`: `"@palamedes/runtime"`
-- `keepSourceFallbacks`: `true` in development, `false` in production
+- `keepSourceFallbacks`: `true`
 - `serverFunctions`: `false`
 - `messageSplitting`: `false`
 
@@ -64,6 +64,13 @@ Catalog `include` and `exclude` globs match dot-prefixed path segments. Since
 1.17.1 this behavior is shared with the Vite integration, so a matching source
 file below a dot-directory is transformed and participates in
 `failOnMissing` validation.
+
+Production output keeps authored source fallbacks by default so deploy skew or
+a missing split catalog remains readable. Set `keepSourceFallbacks: false` only
+when bundle size or source-text exposure outweighs that resilience; then a
+missing entry renders its compiled id. The parser-free runtime intentionally
+does not parse retained ICU source patterns, so use `@palamedes/core` if a
+fallback must interpolate and use `onMissing` to measure misses.
 
 ## Usage
 
@@ -206,12 +213,12 @@ Palamedes intentionally provides no in-document locale-switching mode. See
 [Locale strategies](../locale-strategies.md#unsupported-root-key-escape-hatch)
 for the unsupported root-key escape hatch and its limitations.
 
-Production output strips authored messages from generated runtime calls by
-default and therefore requires compiled catalogs to be loaded before translated
-code renders. It also omits translator comments and context metadata from
-runtime descriptors. Set `keepSourceFallbacks: true` when production must
-retain readable source-message fallbacks. The option is forwarded identically
-to the Turbopack and webpack transform loaders.
+Production output retains authored messages by default, so a missing catalog
+fragment stays readable during a staggered deploy. It still omits translator
+comments and context metadata from runtime descriptors. Set
+`keepSourceFallbacks: false` to opt into smaller, hash-only output when source
+text cannot ship. The option is forwarded identically to the Turbopack and
+webpack transform loaders.
 
 Production does not immediately retry a rejected fragment import. This is a
 deliberate trade-off: likely deterministic CDN, ad-blocker, or stale-deploy

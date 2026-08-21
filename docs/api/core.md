@@ -58,6 +58,13 @@ declare module "*.po" {
 Its `load()` rejects unbranded hand-written string catalogs. Use the package-root
 factory below when runtime ICU strings are intentional.
 
+When a parser-free instance misses a compiled catalog entry, it can return a
+retained `metadata.message` as readable source text, but it deliberately does
+not parse or interpolate that ICU pattern. This keeps the compiled entry free
+of the parser. Use the package-root entry when a source fallback itself must be
+formatted, and attach `onMissing` to measure catalog/code skew rather than
+adding a default console logger.
+
 ## `createI18n(options?)`
 
 Creates an in-memory i18n instance. It starts with `DEFAULT_LOCALE` (`"en"`).

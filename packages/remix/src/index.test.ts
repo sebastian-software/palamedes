@@ -71,7 +71,7 @@ describe("createPalamedesRemixLoadHook", () => {
     )
   })
 
-  it("strips source fallbacks in production unless explicitly preserved", () => {
+  it("preserves source fallbacks in production unless explicitly disabled", () => {
     vi.stubEnv("NODE_ENV", "production")
     const source = [
       'import { t } from "@palamedes/core/macro"',
@@ -80,20 +80,20 @@ describe("createPalamedesRemixLoadHook", () => {
       "}",
     ].join("\n")
     const loadDefault = createPalamedesRemixLoadHook()
-    const stripped = loadDefault(
+    const preserved = loadDefault(
       new URL("file:///repo/app/routes/home.tsx").href,
       loadContext,
       () => ({ format: "module", source })
     )
-    const loadPreserved = createPalamedesRemixLoadHook({ keepSourceFallbacks: true })
-    const preserved = loadPreserved(
+    const loadCompact = createPalamedesRemixLoadHook({ keepSourceFallbacks: false })
+    const stripped = loadCompact(
       new URL("file:///repo/app/routes/home.tsx").href,
       loadContext,
       () => ({ format: "module", source })
     )
 
-    expect(String(stripped.source)).not.toContain('message: "Production fallback"')
     expect(String(preserved.source)).toContain('message: "Production fallback"')
+    expect(String(stripped.source)).not.toContain('message: "Production fallback"')
   })
 
   it("targets the hook-free runtime", () => {

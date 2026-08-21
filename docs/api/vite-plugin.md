@@ -42,7 +42,7 @@ Defaults:
 - `failOnCompileError`: `false`
 - `framework`: `"react"`
 - `runtimeModule`: `"@palamedes/runtime"`
-- `keepSourceFallbacks`: `true` during `vite serve`, `false` during `vite build`
+- `keepSourceFallbacks`: `true`
 - `mdx`: values from Palamedes config with React defaults; `false` disables MDX
 - `experimentalGraphSplitting`: `false`
 
@@ -55,11 +55,16 @@ Locale changes require document navigation. `runtimeModule` is an advanced
 override for only the macro transform's module path.
 
 `keepSourceFallbacks` applies to both macro transforms and generated MDX.
-Production builds strip authored messages from runtime calls by default and
-therefore require compiled catalogs to be loaded before translated code
-renders. They also omit translator comments and context metadata from runtime
-descriptors. Set `keepSourceFallbacks` to `true` when production must retain
-readable source-message fallbacks.
+Production builds retain authored messages by default, so a temporarily missing
+catalog chunk renders readable source text instead of an opaque compiled id.
+They still omit translator comments and context metadata from runtime
+descriptors. Set `keepSourceFallbacks: false` to minimize generated output or
+when shipping source text is not acceptable; that explicit opt-out makes a
+missing catalog entry fall back to its compiled id.
+
+The parser-free compiled runtime does not parse retained ICU source fallbacks.
+It returns the raw source pattern on a miss; use `@palamedes/core` when that
+fallback must interpolate values, and configure `onMissing` for observability.
 
 Generated MDX modules can set `mdx.runtime-module` in `palamedes.yaml` or
 `mdx.runtimeModule` on the plugin when integrating a custom runtime.
