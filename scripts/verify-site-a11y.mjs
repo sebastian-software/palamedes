@@ -8,7 +8,7 @@ import axe from "axe-core"
 import { startSiteStaticServer } from "./site-static-server.mjs"
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
-const PORT = 4104
+const PORT = Number(process.env.SITE_A11Y_PORT ?? 4104)
 const staticServer = process.env.PALAMEDES_SITE_URL
   ? null
   : await startSiteStaticServer({ clientDir: join(repoRoot, "site/build/client"), port: PORT })
@@ -27,6 +27,15 @@ const paths = [
   "/docs",
   "/decisions",
   "/blog",
+  "/compare",
+  "/compare/lingui",
+  "/compare/fbtee",
+  "/compare/i18next",
+  "/compare/next-intl",
+  "/compare/react-intl",
+  "/compare/paraglide",
+  "/compare/tolgee",
+  "/compare/intlayer",
 ]
 const viewports = [
   { name: "desktop", width: 1440, height: 1000 },
