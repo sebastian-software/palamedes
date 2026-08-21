@@ -4,7 +4,28 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-fn audit_warning_threshold_prints_failed_status_and_exits_one() {
+fn audit_error_threshold_exits_its_policy_code() {
+    let fixture = fixture_dir("audit-error-threshold");
+    write_config(&fixture);
+    write_catalogs(
+        &fixture,
+        "msgid \"Save\"\nmsgstr \"Save\"\n",
+        "msgid \"Save\"\nmsgstr \"\"\n",
+    );
+
+    let output = audit(&fixture, &[]);
+
+    assert_eq!(output.status.code(), Some(5), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Catalog audit failed: 1 error(s)"),
+        "{output:?}"
+    );
+
+    fs::remove_dir_all(fixture).expect("cleanup");
+}
+
+#[test]
+fn audit_warning_threshold_prints_failed_status_and_exits_its_policy_code() {
     let fixture = fixture_dir("audit-warning-threshold");
     write_config(&fixture);
     write_catalogs(
@@ -21,7 +42,7 @@ fn audit_warning_threshold_prints_failed_status_and_exits_one() {
     let fail_on_warning = audit(&fixture, &["--fail-on", "warning"]);
     assert_eq!(
         fail_on_warning.status.code(),
-        Some(1),
+        Some(5),
         "{fail_on_warning:?}"
     );
     assert!(String::from_utf8_lossy(&fail_on_warning.stdout)
@@ -31,7 +52,7 @@ fn audit_warning_threshold_prints_failed_status_and_exits_one() {
 }
 
 #[test]
-fn audit_info_threshold_prints_failed_status_and_exits_one() {
+fn audit_info_threshold_prints_failed_status_and_exits_its_policy_code() {
     let fixture = fixture_dir("audit-info-threshold");
     write_config(&fixture);
     write_catalogs(
@@ -46,7 +67,7 @@ fn audit_info_threshold_prints_failed_status_and_exits_one() {
         .contains("Catalog audit passed: 0 error(s), 0 warning(s), 1 info"));
 
     let fail_on_info = audit(&fixture, &["--fail-on", "info"]);
-    assert_eq!(fail_on_info.status.code(), Some(1), "{fail_on_info:?}");
+    assert_eq!(fail_on_info.status.code(), Some(5), "{fail_on_info:?}");
     assert!(
         String::from_utf8_lossy(&fail_on_info.stdout)
             .contains("Catalog audit failed: 0 error(s), 0 warning(s), 1 info"),
@@ -72,10 +93,22 @@ fn audit_json_output_remains_machine_readable_when_its_threshold_fails() {
     );
 
     let output = audit(&fixture, &["--json", "--fail-on", "warning"]);
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert_eq!(output.status.code(), Some(5), "{output:?}");
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("audit JSON");
     assert_eq!(json["summary"]["warnings"], 1);
     assert!(!String::from_utf8_lossy(&output.stdout).contains("Catalog audit"));
+
+    fs::remove_dir_all(fixture).expect("cleanup");
+}
+
+#[test]
+fn audit_operational_failures_keep_the_generic_exit_code() {
+    let fixture = fixture_dir("audit-configuration-failure");
+    fs::create_dir_all(&fixture).expect("create fixture");
+
+    let output = audit(&fixture, &[]);
+
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
 
     fs::remove_dir_all(fixture).expect("cleanup");
 }

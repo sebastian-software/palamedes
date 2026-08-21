@@ -211,7 +211,8 @@ Options:
 `--fail-on info` makes informational diagnostics such as
 `catalog.fuzzy_flag` fail the command, which is useful when CI must reject every
 catalog entry that still carries a review marker. The default remains
-`--fail-on error`.
+`--fail-on error`. Exit code `5` means the audit completed and the configured
+policy threshold failed.
 
 ## `pmds report`
 
@@ -236,6 +237,24 @@ Options:
 | `--locale <locale...>`      | Report only selected target locales. Space-separated and comma-separated values work. |
 | `--json`                    | Print the machine-readable completeness report.                                       |
 | `--fail-if-below <percent>` | Fail when any reported locale is below this translated percentage.                    |
+
+Exit code `6` means the report completed and at least one reported locale was
+below `--fail-if-below`.
+
+## Exit codes
+
+The CI-facing commands use stable, distinct exit codes so a policy verdict is
+not confused with an operational failure:
+
+| Code | Meaning |
+| ---- | ------- |
+| `0` | The command completed and its configured policy passed. |
+| `1` | The command could not complete because of configuration, I/O, serialization, or another operational failure. |
+| `2` | Clap rejected invalid command-line usage. |
+| `3` | `extract --check` completed and found catalog drift. |
+| `4` | `lint` completed and its `--fail-on` policy failed, or source analysis could not complete for one or more files. |
+| `5` | `audit` completed and its `--fail-on` policy failed. |
+| `6` | `report` completed and one or more locales were below `--fail-if-below`. |
 
 ## `pmds catalog merge`
 

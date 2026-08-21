@@ -282,6 +282,22 @@ workspace:
 pnpm exec pmds extract --check --json
 ```
 
+`pmds` uses stable exit codes for CI, so a completed policy verdict is distinct
+from a command that could not run:
+
+| Code | Meaning |
+| ---- | ------- |
+| `0` | The command and its configured policy passed. |
+| `1` | Configuration, I/O, serialization, or another operational failure. |
+| `2` | Invalid command-line usage. |
+| `3` | `extract --check` found catalog drift. |
+| `4` | `lint` completed but its policy or source analysis failed. |
+| `5` | `audit` completed but its `--fail-on` policy failed. |
+| `6` | `report` completed but a locale was below `--fail-if-below`. |
+
+See the [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md#exit-codes)
+for the complete contract.
+
 For semantic catalog conflict handling, Palamedes can also act as a Git merge
 driver:
 

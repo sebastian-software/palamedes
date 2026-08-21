@@ -10,6 +10,10 @@ use crate::config::ConfigError;
 pub const CATALOG_DRIFT_EXIT_CODE: u8 = 3;
 /// Exit status used when `lint` completes analysis but its requested threshold fails.
 pub const LINT_VERDICT_EXIT_CODE: u8 = 4;
+/// Exit status used when `audit` completes but its requested threshold fails.
+pub const AUDIT_VERDICT_EXIT_CODE: u8 = 5;
+/// Exit status used when `report` completes but a completeness threshold fails.
+pub const REPORT_VERDICT_EXIT_CODE: u8 = 6;
 
 #[derive(Debug, Error)]
 pub enum CliError {
@@ -83,7 +87,60 @@ impl CliError {
             Self::LintFailedOnError { .. }
             | Self::LintFailedOnWarning { .. }
             | Self::LintAnalysisFailed { .. } => LINT_VERDICT_EXIT_CODE,
+            Self::AuditFailedOnError { .. }
+            | Self::AuditFailedOnWarning { .. }
+            | Self::AuditFailedOnInfo { .. } => AUDIT_VERDICT_EXIT_CODE,
+            Self::CompletenessBelowThreshold { .. } => REPORT_VERDICT_EXIT_CODE,
             _ => 1,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CliError, AUDIT_VERDICT_EXIT_CODE, CATALOG_DRIFT_EXIT_CODE, LINT_VERDICT_EXIT_CODE,
+        REPORT_VERDICT_EXIT_CODE,
+    };
+
+    #[test]
+    fn completed_command_verdicts_keep_their_dedicated_exit_codes() {
+        assert_eq!(
+            CliError::CatalogDrift { catalogs: 1 }.exit_code(),
+            CATALOG_DRIFT_EXIT_CODE
+        );
+        assert_eq!(
+            CliError::LintFailedOnError { errors: 1 }.exit_code(),
+            LINT_VERDICT_EXIT_CODE
+        );
+        assert_eq!(
+            CliError::AuditFailedOnError { errors: 1 }.exit_code(),
+            AUDIT_VERDICT_EXIT_CODE
+        );
+        assert_eq!(
+            CliError::AuditFailedOnWarning {
+                errors: 0,
+                warnings: 1,
+            }
+            .exit_code(),
+            AUDIT_VERDICT_EXIT_CODE
+        );
+        assert_eq!(
+            CliError::AuditFailedOnInfo {
+                errors: 0,
+                warnings: 0,
+                infos: 1,
+            }
+            .exit_code(),
+            AUDIT_VERDICT_EXIT_CODE
+        );
+        assert_eq!(
+            CliError::CompletenessBelowThreshold {
+                threshold: "95%".to_owned(),
+                locales: "de (50%)".to_owned(),
+            }
+            .exit_code(),
+            REPORT_VERDICT_EXIT_CODE
+        );
     }
 }
