@@ -121,6 +121,7 @@ export default function App() {
     <SiteUiProvider linkComponent={RouterSiteLink}>
       <ArdoRoot
         config={config}
+        tocLabel="Page outline"
         editLink={{
           pattern: "https://github.com/sebastian-software/palamedes/edit/main/:path",
           text: "Edit this page on GitHub",

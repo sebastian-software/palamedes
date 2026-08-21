@@ -8,7 +8,7 @@
  * Usage: node scripts/verify-site-routes.mjs  (requires a prior site build)
  */
 
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -17,6 +17,7 @@ import { startSiteStaticServer } from "./site-static-server.mjs"
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
+const generatedDocsDir = join(repoRoot, "site/app/routes/docs")
 const PORT = 4102
 
 /*
@@ -736,6 +737,87 @@ async function checkHomepageDecisionViewport(browser, width) {
   await context.close()
 }
 
+async function checkProgressiveDocsOutline(browser) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const page = await context.newPage()
+  await gotoAndSettle(page, "/docs/configuration", { settleMs: 1000 })
+
+  const outline = page.locator(".pmds-progressive-outline")
+  if ((await outline.count()) !== 1) {
+    fail("progressive docs outline: missing on a long direct-entry page")
+  } else {
+    const links = outline.locator('a[href^="#"]')
+    if ((await links.count()) !== 11) {
+      fail(`progressive docs outline: expected 11 anchor links, got ${await links.count()}`)
+    }
+    const details = outline.locator("details")
+    if (await details.evaluate((element) => element.hasAttribute("open"))) {
+      fail("progressive docs outline: additional sections must start collapsed")
+    }
+    const summary = details.locator("summary")
+    await summary.focus()
+    await page.keyboard.press("Enter")
+    if (!(await details.evaluate((element) => element.hasAttribute("open")))) {
+      fail("progressive docs outline: keyboard did not open additional sections")
+    }
+    const target = details.getByRole("link", { name: "Other Data Formats", exact: true })
+    await target.click()
+    if (new URL(page.url()).hash !== "#other-data-formats") {
+      fail("progressive docs outline: a disclosed anchor did not update the URL")
+    }
+  }
+  await context.close()
+
+  const noJsContext = await browser.newContext({ javaScriptEnabled: false })
+  const noJsPage = await noJsContext.newPage()
+  await gotoAndSettle(noJsPage, "/docs/configuration", { settleMs: 100 })
+  const noJsOutline = noJsPage.locator(".pmds-progressive-outline")
+  if (
+    (await noJsOutline.count()) !== 1 ||
+    (await noJsOutline.locator('a[href^="#"]').count()) !== 11
+  ) {
+    fail("progressive docs outline: direct no-JS entry lost its anchors")
+  }
+  await noJsContext.close()
+}
+
+async function checkProgressiveOutlineAnchors(browser) {
+  const docs = readdirSync(generatedDocsDir, { recursive: true })
+    .filter((entry) => /\.mdx?$/u.test(entry))
+    .map((entry) => ({
+      entry,
+      source: readFileSync(join(generatedDocsDir, entry), "utf8"),
+    }))
+    .filter(({ source }) => source.includes('className="pmds-progressive-outline"'))
+
+  if (docs.length !== 21) {
+    fail(`progressive docs outline: expected 21 generated long docs, got ${docs.length}`)
+  }
+
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  for (const { entry, source } of docs) {
+    const routeEntry = entry
+      .replaceAll("\\", "/")
+      .replace(/\.mdx?$/u, "")
+      .replace(/\/index$/u, "")
+    const path = `/docs/${routeEntry}`
+    const expectedIds = [...source.matchAll(/<a href="#([^"#]+)"/gu)].map((match) => match[1])
+    await gotoAndSettle(page, path, { settleMs: 200 })
+    const missingIds = await page.evaluate(
+      (ids) => ids.filter((id) => document.getElementById(id) == null),
+      expectedIds
+    )
+    if (missingIds.length > 0) {
+      fail(
+        `progressive docs outline: ${path} links to missing heading IDs: ${missingIds.join(", ")}`
+      )
+    }
+  }
+  console.log(`  progressive outline heading IDs verified across ${docs.length} generated docs`)
+  await context.close()
+}
+
 function trackPageErrors(page, getPath, consoleErrors, knownHydrationWarnings) {
   page.on("pageerror", (error) => {
     const message = error.message
@@ -803,6 +885,8 @@ await checkRoutes(await browser.newContext({ javaScriptEnabled: false }), "no-js
 await checkGetStartedTextResize(browser)
 await checkHomepageDecisionViewport(browser, 320)
 await checkHomepageDecisionViewport(browser, 390)
+await checkProgressiveDocsOutline(browser)
+await checkProgressiveOutlineAnchors(browser)
 
 await browser.close()
 await staticServer?.close()
