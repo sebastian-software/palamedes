@@ -150,6 +150,10 @@ diagnostics; `pmds lint` remains the stable CI and MDX interface. For custom
 translation tooling, `@palamedes/core-node` exposes
 `listTranslationCandidates(...)` and `applyTranslationPatches(...)`; create a
 patch from the candidate `fingerprint` so stale catalog state is rejected.
+File-touching custom integrations should use the additive `Async` catalog,
+patch, compile, and extraction variants so native work runs on Node's shared
+libuv worker pool instead of the event-loop thread; bound caller concurrency
+because queued native work is not cancellable.
 
 ## CLI plugins
 

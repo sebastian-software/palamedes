@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use napi::bindgen_prelude::{Either, JsObjectValue, Result};
+use napi::bindgen_prelude::{AsyncTask, Either, JsObjectValue, Result, ToNapiValue};
 use napi::{Env, Error, Status};
 use napi_derive::napi;
 
@@ -22,7 +22,7 @@ fn selected_catalog_cache() -> &'static palamedes::CatalogCompilationCache {
     CACHE.get_or_init(|| palamedes::CatalogCompilationCache::new(SELECTED_CATALOG_CACHE_CAPACITY))
 }
 
-use crate::shared::{checked_u32, to_napi_error};
+use crate::shared::{catch_blocking_panic, checked_u32, to_napi_error, BlockingTask};
 
 #[napi(object)]
 pub struct CatalogOrigin {
@@ -1706,9 +1706,26 @@ impl From<palamedes::CatalogArtifactResult> for CatalogArtifactResult {
 /// Returns an error when the Rust core update fails or when update statistics
 /// cannot be represented safely in the Node binding shape.
 pub fn update_catalog_file(request: CatalogUpdateRequest) -> Result<CatalogUpdateResult> {
+    update_catalog_file_impl(request)
+}
+
+fn update_catalog_file_impl(request: CatalogUpdateRequest) -> Result<CatalogUpdateResult> {
     palamedes::update_catalog_file(request.into())
         .map_err(to_napi_error)
         .and_then(CatalogUpdateResult::try_from)
+}
+
+#[napi(catch_unwind, ts_return_type = "Promise<CatalogUpdateResult>")]
+#[allow(clippy::needless_pass_by_value)]
+/// Updates a catalog on the libuv worker pool without blocking the Node event loop.
+pub fn update_catalog_file_async(
+    request: CatalogUpdateRequest,
+) -> AsyncTask<BlockingTask<CatalogUpdateRequest, CatalogUpdateResult>> {
+    AsyncTask::new(BlockingTask::new(
+        "updateCatalogFileAsync",
+        request,
+        update_catalog_file_impl,
+    ))
 }
 
 #[napi(catch_unwind)]
@@ -1762,6 +1779,88 @@ pub fn apply_translation_patches(
     translation_patch_result_or_throw(env, palamedes::apply_translation_patches(request))
 }
 
+pub struct ApplyTranslationPatchesTask {
+    operation: Option<ApplyTranslationPatchesOperation>,
+}
+
+enum ApplyTranslationPatchesOperation {
+    Apply(palamedes::TranslationPatchRequest),
+    #[cfg(feature = "test-support")]
+    ApplyWithInjectedWriteFailure {
+        request: palamedes::TranslationPatchRequest,
+        failing_path: PathBuf,
+    },
+}
+
+impl napi::Task for ApplyTranslationPatchesTask {
+    type Output = palamedes::PalamedesResult<palamedes::TranslationPatchResult>;
+    type JsValue = TranslationPatchResult;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let operation = self.operation.take().ok_or_else(|| {
+            Error::new(
+                Status::GenericFailure,
+                "applyTranslationPatchesAsync task was executed more than once".to_owned(),
+            )
+        })?;
+        catch_blocking_panic("applyTranslationPatchesAsync", || {
+            Ok(match operation {
+                ApplyTranslationPatchesOperation::Apply(request) => {
+                    palamedes::apply_translation_patches(request)
+                }
+                #[cfg(feature = "test-support")]
+                ApplyTranslationPatchesOperation::ApplyWithInjectedWriteFailure {
+                    request,
+                    failing_path,
+                } => palamedes::apply_translation_patches_with_injected_write_failure(
+                    request,
+                    &failing_path,
+                ),
+            })
+        })
+    }
+
+    fn resolve(&mut self, env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        translation_patch_result_or_throw(env, output)
+    }
+}
+
+#[napi(catch_unwind, ts_return_type = "Promise<TranslationPatchResult>")]
+#[allow(clippy::needless_pass_by_value)]
+/// Applies translation patches on the libuv worker pool without blocking the Node event loop.
+///
+/// The rejected promise preserves the synchronous API's structured write error,
+/// including `code`, `cause`, and the partial `report`.
+///
+/// # Errors
+///
+/// Returns an error before scheduling when the request cannot be converted to
+/// the core representation.
+pub fn apply_translation_patches_async(
+    request: TranslationPatchRequest,
+) -> Result<AsyncTask<ApplyTranslationPatchesTask>> {
+    Ok(AsyncTask::new(ApplyTranslationPatchesTask {
+        operation: Some(ApplyTranslationPatchesOperation::Apply(request.try_into()?)),
+    }))
+}
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+#[napi(catch_unwind, ts_return_type = "Promise<TranslationPatchResult>")]
+pub fn apply_translation_patches_with_injected_write_failure_async(
+    request: TranslationPatchRequest,
+    failing_path: String,
+) -> Result<AsyncTask<ApplyTranslationPatchesTask>> {
+    Ok(AsyncTask::new(ApplyTranslationPatchesTask {
+        operation: Some(
+            ApplyTranslationPatchesOperation::ApplyWithInjectedWriteFailure {
+                request: request.try_into()?,
+                failing_path: PathBuf::from(failing_path),
+            },
+        ),
+    }))
+}
+
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
 #[napi(catch_unwind)]
@@ -1795,17 +1894,17 @@ fn translation_patch_result_or_throw(
     match result {
         Ok(result) => TranslationPatchResult::try_from(result),
         Err(palamedes::PalamedesError::TranslationPatchWrite { result, source }) => {
-            throw_translation_patch_write_error(env, result, source)
+            Err(translation_patch_write_error(env, result, source)?)
         }
         Err(error) => Err(to_napi_error(error)),
     }
 }
 
-fn throw_translation_patch_write_error(
+fn translation_patch_write_error(
     env: Env,
     result: palamedes::TranslationPatchResult,
     source: Box<palamedes::PalamedesError>,
-) -> Result<TranslationPatchResult> {
+) -> Result<Error> {
     let report = TranslationPatchResult::try_from(result)?;
     let mut cause = env.create_error(Error::new(Status::GenericFailure, source.to_string()))?;
     cause.set_named_property("code", TRANSLATION_PATCH_WRITE_CAUSE_CODE)?;
@@ -1816,10 +1915,8 @@ fn throw_translation_patch_write_error(
     error.set_named_property("code", TRANSLATION_PATCH_WRITE_ERROR_CODE)?;
     error.set_named_property("cause", cause)?;
     error.set_named_property("report", report)?;
-    env.throw(error)?;
-    Err(Error::new(
-        Status::PendingException,
-        "translation patch catalog replacement failed",
+    Ok(Error::from_unknown_without_coercion(
+        error.into_unknown(&env)?,
     ))
 }
 
@@ -1945,10 +2042,27 @@ pub fn merge_catalog_files_three_way(
 /// Returns an error when config resolution, catalog loading, or artifact
 /// compilation fails.
 pub fn compile_catalog_artifact(request: CatalogArtifactRequest) -> Result<CatalogArtifactResult> {
+    compile_catalog_artifact_impl(request)
+}
+
+fn compile_catalog_artifact_impl(request: CatalogArtifactRequest) -> Result<CatalogArtifactResult> {
     let request = request.into();
     palamedes::compile_catalog_artifact(&request)
         .map(CatalogArtifactResult::from)
         .map_err(to_napi_error)
+}
+
+#[napi(catch_unwind, ts_return_type = "Promise<CatalogArtifactResult>")]
+#[allow(clippy::needless_pass_by_value)]
+/// Compiles a full catalog artifact on the libuv worker pool.
+pub fn compile_catalog_artifact_async(
+    request: CatalogArtifactRequest,
+) -> AsyncTask<BlockingTask<CatalogArtifactRequest, CatalogArtifactResult>> {
+    AsyncTask::new(BlockingTask::new(
+        "compileCatalogArtifactAsync",
+        request,
+        compile_catalog_artifact_impl,
+    ))
 }
 
 #[napi(catch_unwind)]
@@ -1960,6 +2074,10 @@ pub fn compile_catalog_artifact(request: CatalogArtifactRequest) -> Result<Catal
 /// Returns an error when catalog compilation fails, missing translations are
 /// configured as fatal, or compile diagnostics are configured as fatal.
 pub fn compile_catalog_module(request: CatalogModuleRequest) -> Result<CatalogModuleResult> {
+    compile_catalog_module_impl(request)
+}
+
+fn compile_catalog_module_impl(request: CatalogModuleRequest) -> Result<CatalogModuleResult> {
     let CatalogModuleRequest {
         config,
         resource_path,
@@ -1991,6 +2109,19 @@ pub fn compile_catalog_module(request: CatalogModuleRequest) -> Result<CatalogMo
     create_catalog_module_result(artifact, &render_options)
 }
 
+#[napi(catch_unwind, ts_return_type = "Promise<CatalogModuleResult>")]
+#[allow(clippy::needless_pass_by_value)]
+/// Compiles and renders a catalog module on the libuv worker pool.
+pub fn compile_catalog_module_async(
+    request: CatalogModuleRequest,
+) -> AsyncTask<BlockingTask<CatalogModuleRequest, CatalogModuleResult>> {
+    AsyncTask::new(BlockingTask::new(
+        "compileCatalogModuleAsync",
+        request,
+        compile_catalog_module_impl,
+    ))
+}
+
 #[napi(catch_unwind)]
 #[allow(clippy::needless_pass_by_value)]
 /// Compiles a selected subset of runtime IDs for a requested locale.
@@ -2002,10 +2133,51 @@ pub fn compile_catalog_module(request: CatalogModuleRequest) -> Result<CatalogMo
 pub fn compile_catalog_artifact_selected(
     request: CatalogArtifactSelectedRequest,
 ) -> Result<CatalogArtifactResult> {
+    compile_catalog_artifact_selected_impl(request)
+}
+
+fn compile_catalog_artifact_selected_impl(
+    request: CatalogArtifactSelectedRequest,
+) -> Result<CatalogArtifactResult> {
     let request = request.into();
     palamedes::compile_catalog_artifact_selected_cached(selected_catalog_cache(), &request)
         .map(CatalogArtifactResult::from)
         .map_err(to_napi_error)
+}
+
+#[napi(catch_unwind, ts_return_type = "Promise<CatalogArtifactResult>")]
+#[allow(clippy::needless_pass_by_value)]
+/// Compiles selected catalog IDs on the libuv worker pool.
+pub fn compile_catalog_artifact_selected_async(
+    request: CatalogArtifactSelectedRequest,
+) -> AsyncTask<BlockingTask<CatalogArtifactSelectedRequest, CatalogArtifactResult>> {
+    AsyncTask::new(BlockingTask::new(
+        "compileCatalogArtifactSelectedAsync",
+        request,
+        compile_catalog_artifact_selected_impl,
+    ))
+}
+
+#[cfg(feature = "test-support")]
+fn compile_catalog_artifact_with_delay_for_test_support_impl(
+    input: (CatalogArtifactRequest, u32),
+) -> Result<CatalogArtifactResult> {
+    std::thread::sleep(std::time::Duration::from_millis(u64::from(input.1)));
+    compile_catalog_artifact_impl(input.0)
+}
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+#[napi(catch_unwind)]
+pub fn compile_catalog_artifact_with_delay_for_test_support(
+    request: CatalogArtifactRequest,
+    delay_ms: u32,
+) -> AsyncTask<BlockingTask<(CatalogArtifactRequest, u32), CatalogArtifactResult>> {
+    AsyncTask::new(BlockingTask::new(
+        "compileCatalogArtifactWithDelayForTestSupport",
+        (request, delay_ms),
+        compile_catalog_artifact_with_delay_for_test_support_impl,
+    ))
 }
 
 fn create_catalog_module_result(

@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto"
+import { execFile } from "node:child_process"
 import { createRequire } from "node:module"
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { runInNewContext } from "node:vm"
+import { promisify } from "node:util"
 
 import { afterEach, describe, expect, it } from "vitest"
 
@@ -12,9 +14,15 @@ import {
   analyzeMdxNative,
   analyzeSourceNative,
   applyTranslationPatches,
+  applyTranslationPatchesAsync,
   compileCatalogArtifact,
+  compileCatalogArtifactAsync,
   compileCatalogArtifactSelected,
+  compileCatalogArtifactSelectedAsync,
   compileCatalogModule,
+  compileCatalogModuleAsync,
+  extractCatalogMessagesFromFiles,
+  extractCatalogMessagesFromFilesAsync,
   extractMessagesNative,
   getNativeInfo,
   listTranslationCandidates,
@@ -24,6 +32,7 @@ import {
   renderCatalogModule,
   transformMacrosNative,
   updateCatalogFile,
+  updateCatalogFileAsync,
 } from "./index"
 import type {
   NativeBindings as GeneratedNativeBindings,
@@ -47,6 +56,7 @@ type SourceMapLike = {
 
 const tempDirs: string[] = []
 let testSupportAddon: TestSupportBindings | undefined
+const execFileAsync = promisify(execFile)
 
 afterEach(async () => {
   await Promise.all(
@@ -499,6 +509,181 @@ msgstr "Oeffnen"
     ])
   })
 
+  it("keeps sync and async catalog, extraction, update, and patch results equivalent", async () => {
+    const rootDir = await createTempDir()
+    const syncRoot = path.join(rootDir, "sync")
+    const asyncRoot = path.join(rootDir, "async")
+    const catalog = `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "Hello"
+msgstr "Hallo"
+`
+    const source = `import { t } from "@palamedes/core/macro"
+export function greeting() {
+  return t({ message: "Hello" })
+}
+`
+
+    for (const fixtureRoot of [syncRoot, asyncRoot]) {
+      await mkdir(path.join(fixtureRoot, "locales", "en"), { recursive: true })
+      await mkdir(path.join(fixtureRoot, "locales", "de"), { recursive: true })
+      await mkdir(path.join(fixtureRoot, "src"), { recursive: true })
+      await writeFile(
+        path.join(fixtureRoot, "locales", "en", "messages.po"),
+        catalog.replace("Language: de", "Language: en").replace('msgstr "Hallo"', 'msgstr "Hello"')
+      )
+      await writeFile(path.join(fixtureRoot, "locales", "de", "messages.po"), catalog)
+      await writeFile(path.join(fixtureRoot, "src", "message.ts"), source)
+    }
+
+    const configFor = (fixtureRoot: string) => ({
+      rootDir: fixtureRoot,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    })
+    const syncConfig = configFor(syncRoot)
+    const asyncConfig = configFor(asyncRoot)
+    const syncCatalogPath = path.join(syncRoot, "locales", "de", "messages.po")
+    const asyncCatalogPath = path.join(asyncRoot, "locales", "de", "messages.po")
+
+    const syncArtifact = compileCatalogArtifact(syncConfig, syncCatalogPath)
+    expect(await compileCatalogArtifactAsync(syncConfig, syncCatalogPath)).toStrictEqual(
+      syncArtifact
+    )
+    const compiledId = Object.keys(syncArtifact.messages)[0]
+    if (!compiledId) {
+      throw new Error("Expected a compiled message ID for async parity")
+    }
+    expect(
+      await compileCatalogArtifactSelectedAsync(syncConfig, syncCatalogPath, [compiledId])
+    ).toStrictEqual(compileCatalogArtifactSelected(syncConfig, syncCatalogPath, [compiledId]))
+    expect(
+      await compileCatalogModuleAsync(syncConfig, syncCatalogPath, { locale: "de" })
+    ).toStrictEqual(compileCatalogModule(syncConfig, syncCatalogPath, { locale: "de" }))
+
+    const syncSourcePath = path.join(syncRoot, "src", "message.ts")
+    const extractRequest = {
+      rootDir: syncRoot,
+      files: [syncSourcePath],
+      maxThreads: 1,
+    }
+    const syncExtract = extractCatalogMessagesFromFiles(extractRequest)
+    const asyncExtract = await extractCatalogMessagesFromFilesAsync(extractRequest)
+    expect(asyncExtract).toStrictEqual(syncExtract)
+
+    const updateMessages = [
+      { message: "Hello", extractedComments: [], origins: [] },
+      { message: "New", extractedComments: [], origins: [] },
+    ]
+    const syncUpdate = updateCatalogFile({
+      targetPath: syncCatalogPath,
+      locale: "de",
+      sourceLocale: "en",
+      clean: false,
+      messages: updateMessages,
+    })
+    const asyncUpdate = await updateCatalogFileAsync({
+      targetPath: asyncCatalogPath,
+      locale: "de",
+      sourceLocale: "en",
+      clean: false,
+      messages: updateMessages,
+    })
+    expect(asyncUpdate).toStrictEqual(syncUpdate)
+    expect(await readFile(asyncCatalogPath, "utf8")).toBe(await readFile(syncCatalogPath, "utf8"))
+
+    const syncCandidate = listTranslationCandidates({ config: syncConfig }).candidates.find(
+      (candidate) => candidate.id.message === "New"
+    )
+    const asyncCandidate = listTranslationCandidates({ config: asyncConfig }).candidates.find(
+      (candidate) => candidate.id.message === "New"
+    )
+    if (!syncCandidate || !asyncCandidate) {
+      throw new Error("Expected matching translation candidates for async parity")
+    }
+    const syncPatch = applyTranslationPatches({
+      config: syncConfig,
+      patches: [
+        {
+          id: syncCandidate.id,
+          fingerprint: syncCandidate.fingerprint,
+          translation: { kind: "singular", value: "Neu" },
+        },
+      ],
+    })
+    const asyncPatch = await applyTranslationPatchesAsync({
+      config: asyncConfig,
+      patches: [
+        {
+          id: asyncCandidate.id,
+          fingerprint: asyncCandidate.fingerprint,
+          translation: { kind: "singular", value: "Neu" },
+        },
+      ],
+    })
+    expect(asyncPatch).toStrictEqual(syncPatch)
+    expect(await readFile(asyncCatalogPath, "utf8")).toBe(await readFile(syncCatalogPath, "utf8"))
+  })
+
+  it("keeps async errors equivalent to sync errors", async () => {
+    const rootDir = await createTempDir()
+    const config = {
+      rootDir,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+    const missingPath = path.join(rootDir, "locales", "de", "messages.po")
+    let syncError: unknown
+    try {
+      compileCatalogArtifact(config, missingPath)
+    } catch (error) {
+      syncError = error
+    }
+
+    await expect(compileCatalogArtifactAsync(config, missingPath)).rejects.toMatchObject({
+      message: (syncError as Error).message,
+    })
+  })
+
+  it("keeps the event loop responsive while catalog compilation runs off-thread", async () => {
+    const rootDir = await createTempDir()
+    const sourceCatalogDir = path.join(rootDir, "locales", "en")
+    const catalogDir = path.join(rootDir, "locales", "de")
+    await mkdir(sourceCatalogDir, { recursive: true })
+    await mkdir(catalogDir, { recursive: true })
+    await writeFile(
+      path.join(sourceCatalogDir, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: en\\n"
+
+msgid "Hello"
+msgstr "Hello"
+`
+    )
+    await writeFile(
+      path.join(catalogDir, "messages.po"),
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "Hello"
+msgstr "Hallo"
+`
+    )
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
+    const addonPath = await testSupportAddonPath(repoRoot)
+    const childPath = path.join(repoRoot, "packages/core-node/scripts/async-event-loop-child.mjs")
+
+    await expect(
+      execFileAsync(process.execPath, [childPath, addonPath, rootDir], { timeout: 10_000 })
+    ).resolves.toMatchObject({ stderr: "" })
+  })
+
   it("performs deletion-aware three-way catalog merges across the NAPI boundary", async () => {
     const catalog = (entries: string) => `msgid ""
 msgstr ""
@@ -750,6 +935,22 @@ msgstr ""
     })
     await expect(readFile(firstPath, "utf8")).resolves.toContain('msgstr "Hallo"')
     await expect(readFile(secondPath, "utf8")).resolves.toBe(catalog)
+
+    await Promise.all([writeFile(firstPath, catalog), writeFile(secondPath, catalog)])
+    await expect(
+      addon.applyTranslationPatchesWithInjectedWriteFailureAsync(request, secondPath)
+    ).rejects.toMatchObject({
+      code: "ERR_PALAMEDES_TRANSLATION_PATCH_WRITE",
+      cause: expect.objectContaining({ code: "ERR_PALAMEDES_CATALOG_WRITE" }),
+      report: expect.objectContaining({
+        updated: true,
+        stats: expect.objectContaining({ requested: 2, applied: 1, catalogsUpdated: 1 }),
+        outcomes: [
+          expect.objectContaining({ id: first.id, status: "Applied" }),
+          expect.objectContaining({ id: second.id, status: "NotApplied" }),
+        ],
+      }),
+    })
   })
 
   it("surfaces a native panic as a catchable JavaScript error", async () => {
@@ -1141,10 +1342,18 @@ async function createTempDir(): Promise<string> {
 }
 
 type TestSupportBindings = Pick<GeneratedNativeBindings, "listTranslationCandidates"> & {
+  compileCatalogArtifactWithDelayForTestSupport(
+    request: Parameters<GeneratedNativeBindings["compileCatalogArtifact"]>[0],
+    delayMs: number
+  ): Promise<Awaited<ReturnType<GeneratedNativeBindings["compileCatalogArtifactAsync"]>>>
   applyTranslationPatchesWithInjectedWriteFailure(
     request: GeneratedTranslationPatchRequest,
     failingPath: string
   ): GeneratedTranslationPatchResult
+  applyTranslationPatchesWithInjectedWriteFailureAsync(
+    request: GeneratedTranslationPatchRequest,
+    failingPath: string
+  ): Promise<GeneratedTranslationPatchResult>
   panicForTestSupport(): void
 }
 
