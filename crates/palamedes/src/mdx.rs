@@ -4,7 +4,7 @@
 //! stream. Palamedes consumes that stream to define translation units, rich
 //! placeholders, message identity, extraction records, and the runtime module.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ferromark::block::{CodeBlockKind, ListKind};
 use ferromark::mdx::{parse_events_strict, MdxDiagnostic, MdxEvent};
@@ -1952,7 +1952,7 @@ fn static_jsx_attributes(source: &str) -> Vec<StaticJsxAttribute<'_>> {
     attributes
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SourceAnchor {
     generated_line: usize,
     generated_column: usize,
@@ -1963,12 +1963,19 @@ struct SourceAnchor {
 struct WriterCheckpoint {
     code_len: usize,
     anchor_len: usize,
+    generated_line: usize,
+    generated_column: usize,
 }
 
 #[derive(Default)]
 struct ModuleWriter {
     code: String,
     anchors: Vec<SourceAnchor>,
+    // These are the UTF-16 source-map coordinates immediately after `code`.
+    // `append` is the only mutation path, so recording them avoids rescanning
+    // the generated module for every anchored append.
+    generated_line: usize,
+    generated_column: usize,
 }
 
 impl ModuleWriter {
@@ -1976,57 +1983,123 @@ impl ModuleWriter {
         WriterCheckpoint {
             code_len: self.code.len(),
             anchor_len: self.anchors.len(),
+            generated_line: self.generated_line,
+            generated_column: self.generated_column,
         }
     }
 
     fn restore(&mut self, checkpoint: WriterCheckpoint) {
         self.code.truncate(checkpoint.code_len);
         self.anchors.truncate(checkpoint.anchor_len);
+        self.generated_line = checkpoint.generated_line;
+        self.generated_column = checkpoint.generated_column;
     }
 
     fn append(&mut self, value: &str) {
         self.code.push_str(value);
+        for character in value.chars() {
+            if character == '\n' {
+                self.generated_line += 1;
+                self.generated_column = 0;
+            } else {
+                self.generated_column += character.len_utf16();
+            }
+        }
     }
 
     fn append_at(&mut self, value: &str, source_offset: usize) {
-        let (generated_line, generated_column) = generated_position(&self.code);
         self.anchors.push(SourceAnchor {
-            generated_line,
-            generated_column,
+            generated_line: self.generated_line,
+            generated_column: self.generated_column,
             source_offset,
         });
-        self.code.push_str(value);
+        self.append(value);
     }
 
     fn append_writer(&mut self, writer: &Self, indent: &str) {
-        let target_line_base = generated_position(&self.code).0;
+        let target_line_base = self.generated_line;
+        let indent_column = indent.encode_utf16().count();
         for line in writer.code.split_inclusive('\n') {
             if !line.is_empty() {
-                self.code.push_str(indent);
+                self.append(indent);
             }
-            self.code.push_str(line);
+            self.append(line);
         }
         for anchor in &writer.anchors {
             self.anchors.push(SourceAnchor {
                 generated_line: target_line_base + anchor.generated_line,
-                generated_column: anchor.generated_column + indent.encode_utf16().count(),
+                generated_column: anchor.generated_column + indent_column,
                 source_offset: anchor.source_offset,
             });
         }
     }
 }
 
-fn generated_position(source: &str) -> (usize, usize) {
-    let line = source.bytes().filter(|byte| *byte == b'\n').count();
-    let column_source = source.rsplit_once('\n').map_or(source, |(_, tail)| tail);
-    (line, column_source.encode_utf16().count())
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct SourcePosition {
+    line: usize,
+    column: usize,
 }
 
-fn source_position_utf16(source: &str, offset: usize) -> (usize, usize) {
-    let prefix = &source[..offset.min(source.len())];
-    let line = prefix.bytes().filter(|byte| *byte == b'\n').count();
-    let line_source = prefix.rsplit_once('\n').map_or(prefix, |(_, tail)| tail);
-    (line, line_source.encode_utf16().count())
+#[derive(Default)]
+struct SourcePositionCursor {
+    position: SourcePosition,
+    #[cfg(test)]
+    scanned_bytes: usize,
+}
+
+impl SourcePositionCursor {
+    fn advance(&mut self, character: char) {
+        #[cfg(test)]
+        {
+            self.scanned_bytes += character.len_utf8();
+        }
+        if character == '\n' {
+            self.position.line += 1;
+            self.position.column = 0;
+        } else {
+            self.position.column += character.len_utf16();
+        }
+    }
+}
+
+/// Resolves every anchor from one linear source walk.
+///
+/// The source-map emission order remains generated-position order below. A
+/// byte-offset index lets generated anchors refer to source text in any order,
+/// while source location lookup stays O(document + anchors).
+fn source_positions_for_anchors(
+    anchors: &[SourceAnchor],
+    source: &str,
+) -> (Vec<SourcePosition>, SourcePositionCursor) {
+    let mut positions_by_offset = HashMap::with_capacity(anchors.len());
+    for anchor in anchors {
+        let offset = anchor.source_offset.min(source.len());
+        assert!(
+            source.is_char_boundary(offset),
+            "source-map anchor must be on a UTF-8 boundary"
+        );
+        positions_by_offset
+            .entry(offset)
+            .or_insert_with(SourcePosition::default);
+    }
+
+    let mut cursor = SourcePositionCursor::default();
+    for (offset, character) in source.char_indices() {
+        if let Some(position) = positions_by_offset.get_mut(&offset) {
+            *position = cursor.position;
+        }
+        cursor.advance(character);
+    }
+    if let Some(position) = positions_by_offset.get_mut(&source.len()) {
+        *position = cursor.position;
+    }
+
+    let positions = anchors
+        .iter()
+        .map(|anchor| positions_by_offset[&anchor.source_offset.min(source.len())])
+        .collect();
+    (positions, cursor)
 }
 
 fn encode_mappings(anchors: &[SourceAnchor], source: &str) -> String {
@@ -2036,6 +2109,7 @@ fn encode_mappings(anchors: &[SourceAnchor], source: &str) -> String {
     let mut anchors = anchors.to_vec();
     anchors.sort_by_key(|anchor| (anchor.generated_line, anchor.generated_column));
     anchors.dedup_by_key(|anchor| (anchor.generated_line, anchor.generated_column));
+    let (source_positions, _) = source_positions_for_anchors(&anchors, source);
     let max_line = anchors
         .iter()
         .map(|anchor| anchor.generated_line)
@@ -2067,11 +2141,17 @@ fn encode_mappings(anchors: &[SourceAnchor], source: &str) -> String {
             previous_generated_column = anchor.generated_column as i64;
             vlq(-previous_source, &mut output);
             previous_source = 0;
-            let (source_line, source_column) = source_position_utf16(source, anchor.source_offset);
-            vlq(source_line as i64 - previous_original_line, &mut output);
-            previous_original_line = source_line as i64;
-            vlq(source_column as i64 - previous_original_column, &mut output);
-            previous_original_column = source_column as i64;
+            let source_position = source_positions[index];
+            vlq(
+                source_position.line as i64 - previous_original_line,
+                &mut output,
+            );
+            previous_original_line = source_position.line as i64;
+            vlq(
+                source_position.column as i64 - previous_original_column,
+                &mut output,
+            );
+            previous_original_column = source_position.column as i64;
             index += 1;
         }
     }
@@ -2441,6 +2521,142 @@ See ![Diagram label](./d.png) here.
             parsed.diagnostics.is_empty(),
             "generated module must be valid TSX: {:?}\n{source}",
             parsed.diagnostics
+        );
+    }
+
+    #[test]
+    fn preserves_existing_unicode_source_map_snapshot() {
+        let source = "α😀\r\nβz\n終";
+        let after_emoji = "α😀".len();
+        let beta = source.find('β').expect("beta offset");
+        let after_beta = beta + 'β'.len_utf8();
+        let after_last = source.len();
+        let anchors = [
+            SourceAnchor {
+                generated_line: 1,
+                generated_column: 3,
+                source_offset: beta,
+            },
+            SourceAnchor {
+                generated_line: 0,
+                generated_column: 2,
+                source_offset: after_emoji,
+            },
+            SourceAnchor {
+                generated_line: 1,
+                generated_column: 3,
+                source_offset: after_beta,
+            },
+            SourceAnchor {
+                generated_line: 2,
+                generated_column: 4,
+                source_offset: after_beta,
+            },
+            SourceAnchor {
+                generated_line: 3,
+                generated_column: 0,
+                source_offset: after_last,
+            },
+        ];
+
+        assert_eq!(encode_mappings(&anchors, source), "EAAG;GACH;IAAC;AACA");
+    }
+
+    #[test]
+    fn tracks_generated_utf16_positions_across_multiline_appends_and_restore() {
+        let mut writer = ModuleWriter::default();
+        writer.append("prefix😀\r\n");
+        writer.append_at("first", 0);
+        let checkpoint = writer.checkpoint();
+        writer.append("\nβ");
+        writer.append_at("discarded", 1);
+        writer.restore(checkpoint);
+        writer.append_at("second", 2);
+
+        assert_eq!(
+            writer.anchors,
+            [
+                SourceAnchor {
+                    generated_line: 1,
+                    generated_column: 0,
+                    source_offset: 0,
+                },
+                SourceAnchor {
+                    generated_line: 1,
+                    generated_column: 5,
+                    source_offset: 2,
+                },
+            ]
+        );
+        assert_eq!(writer.code, "prefix😀\r\nfirstsecond");
+    }
+
+    #[test]
+    fn appending_writer_preserves_unicode_anchor_columns() {
+        let mut body = ModuleWriter::default();
+        body.append_at("x\n", 0);
+        body.append("😀");
+        body.append_at("y", 8);
+
+        let mut writer = ModuleWriter::default();
+        writer.append("before\n");
+        writer.append_writer(&body, "  😀");
+
+        assert_eq!(
+            writer.anchors,
+            [
+                SourceAnchor {
+                    generated_line: 1,
+                    generated_column: 4,
+                    source_offset: 0,
+                },
+                SourceAnchor {
+                    generated_line: 2,
+                    generated_column: 6,
+                    source_offset: 8,
+                },
+            ]
+        );
+        assert_eq!(writer.code, "before\n  😀x\n  😀😀y");
+    }
+
+    #[test]
+    fn resolves_source_positions_with_one_linear_source_walk() {
+        let source = "😀x\r\n".repeat(256);
+        let offsets = source
+            .char_indices()
+            .map(|(offset, _)| offset)
+            .chain(std::iter::once(source.len()))
+            .collect::<Vec<_>>();
+        let anchors = offsets
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(generated_line, &source_offset)| SourceAnchor {
+                generated_line,
+                generated_column: 0,
+                source_offset,
+            })
+            .collect::<Vec<_>>();
+
+        let (positions, cursor) = source_positions_for_anchors(&anchors, &source);
+
+        for (anchor, position) in anchors.iter().zip(&positions) {
+            let prefix = &source[..anchor.source_offset];
+            let line = prefix.bytes().filter(|byte| *byte == b'\n').count();
+            let line_source = prefix.rsplit_once('\n').map_or(prefix, |(_, tail)| tail);
+            assert_eq!(
+                *position,
+                SourcePosition {
+                    line,
+                    column: line_source.encode_utf16().count(),
+                },
+            );
+        }
+        assert_eq!(
+            cursor.scanned_bytes,
+            source.len(),
+            "source position resolution must scan each source byte at most once"
         );
     }
 }
