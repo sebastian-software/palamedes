@@ -50,6 +50,15 @@ The native CLI and JS config loader both accept snake_case aliases for these
 hyphenated config keys: `source_locale`, `fallback_locales`, `pseudo_locale`,
 `source_reference_root`, and `reference_scopes`.
 
+`@palamedes/config` treats config objects as strict. Data configs use the
+documented kebab-case keys (or their supported snake_case aliases), while
+`palamedes.config.*` files use the camelCase JavaScript API names. Unless
+`skipValidation` is explicitly used to inspect a partially authored config, an
+unknown key at the top level or in `mdx`, `lint`, a catalog entry, or catalog
+`po` options stops loading; close misspellings include a replacement hint. This
+catches errors such as `fallbck-locales` before they silently change extraction
+or runtime behavior.
+
 `extract-threads` and `extract-cache` (and their `extract_threads` /
 `extract_cache` aliases) are read by the native `pmds` CLI only. They tune
 extraction and lint source analysis, which the CLI owns; the JS config loader
@@ -189,10 +198,13 @@ mdx:
   translatable-attributes: [alt, title]
   front-matter-fields: [title, description]
   ignore-directive: palamedes-ignore
+  keep-source-fallbacks: true
 ```
 
 See [MDX messages](./mdx.md) for authoring semantics, framework setup, all
-options, diagnostics, and the native architecture boundary.
+options, diagnostics, and the native architecture boundary. Set
+`keep-source-fallbacks` when production MDX modules must retain their readable
+source text as runtime fallbacks.
 
 ## Source References
 

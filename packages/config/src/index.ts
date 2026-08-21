@@ -40,6 +40,7 @@ export type PalamedesMdxConfig = {
   transModule?: string
   runtimeModule?: string
   ignoreDirective?: string
+  keepSourceFallbacks?: boolean
 }
 
 export type PalamedesSourceRuleLevel = "off" | "info" | "warning" | "error"
@@ -83,6 +84,12 @@ type PalamedesDataConfig = {
   lint?: unknown
   catalogs?: unknown
   plugins?: unknown
+  // These data-only CLI options are intentionally ignored by the JavaScript
+  // loader, but remain valid in shared config files.
+  "extract-threads"?: unknown
+  extract_threads?: unknown
+  "extract-cache"?: unknown
+  extract_cache?: unknown
 }
 
 export type LoadedPalamedesConfig = {
@@ -107,7 +114,7 @@ export async function loadPalamedesConfig(
 ): Promise<LoadedPalamedesConfig> {
   const cwd = path.resolve(options.cwd ?? process.cwd())
   const configPath = await resolveConfigPath(cwd, options.configPath)
-  const config = await loadConfigFile(configPath)
+  const config = await loadConfigFile(configPath, !options.skipValidation)
 
   if (!options.skipValidation) {
     validateConfig(config, configPath)
@@ -121,7 +128,7 @@ export function loadPalamedesConfigSync(
 ): LoadedPalamedesConfig {
   const cwd = path.resolve(options.cwd ?? process.cwd())
   const configPath = resolveConfigPathSync(cwd, options.configPath)
-  const config = loadConfigFileSync(configPath)
+  const config = loadConfigFileSync(configPath, !options.skipValidation)
 
   if (!options.skipValidation) {
     validateConfig(config, configPath)
@@ -130,25 +137,28 @@ export function loadPalamedesConfigSync(
   return normalizeConfigSync(config as PalamedesConfig, configPath)
 }
 
-async function loadConfigFile(configPath: string): Promise<unknown> {
+async function loadConfigFile(configPath: string, validateDataKeys: boolean): Promise<unknown> {
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
     return normalizeDataConfig(
       parseYaml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
-      configPath
+      configPath,
+      validateDataKeys
     )
   }
 
   if (configPath.endsWith(".json")) {
     return normalizeDataConfig(
       JSON.parse(await readFile(configPath, "utf8")) as PalamedesDataConfig,
-      configPath
+      configPath,
+      validateDataKeys
     )
   }
 
   if (configPath.endsWith(".toml")) {
     return normalizeDataConfig(
       parseToml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
-      configPath
+      configPath,
+      validateDataKeys
     )
   }
 
@@ -158,25 +168,28 @@ async function loadConfigFile(configPath: string): Promise<unknown> {
   return unwrapModule(jiti(configPath) as unknown)
 }
 
-function loadConfigFileSync(configPath: string): unknown {
+function loadConfigFileSync(configPath: string, validateDataKeys: boolean): unknown {
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
     return normalizeDataConfig(
       parseYaml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
-      configPath
+      configPath,
+      validateDataKeys
     )
   }
 
   if (configPath.endsWith(".json")) {
     return normalizeDataConfig(
       JSON.parse(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
-      configPath
+      configPath,
+      validateDataKeys
     )
   }
 
   if (configPath.endsWith(".toml")) {
     return normalizeDataConfig(
       parseToml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
-      configPath
+      configPath,
+      validateDataKeys
     )
   }
 
@@ -192,7 +205,85 @@ const CAMEL_CASE_DATA_KEYS: [string, string][] = [
   ["pseudoLocale", "pseudo-locale"],
   ["sourceReferenceRoot", "source-reference-root"],
   ["referenceScopes", "reference-scopes"],
+  ["extractThreads", "extract-threads"],
+  ["extractCache", "extract-cache"],
 ]
+
+const DATA_CONFIG_KEYS = [
+  "locales",
+  "source-locale",
+  "source_locale",
+  "fallback-locales",
+  "fallback_locales",
+  "pseudo-locale",
+  "pseudo_locale",
+  "source-reference-root",
+  "source_reference_root",
+  "reference-scopes",
+  "reference_scopes",
+  "extract-threads",
+  "extract_threads",
+  "extract-cache",
+  "extract_cache",
+  "mdx",
+  "lint",
+  "catalogs",
+  "plugins",
+] as const
+
+const CONFIG_KEYS = [
+  "locales",
+  "sourceLocale",
+  "fallbackLocales",
+  "pseudoLocale",
+  "sourceReferenceRoot",
+  "referenceScopes",
+  "mdx",
+  "lint",
+  "catalogs",
+  "plugins",
+] as const
+
+const MDX_DATA_CONFIG_KEYS = [
+  "framework",
+  "translatable-attributes",
+  "translatable_attributes",
+  "front-matter-fields",
+  "front_matter_fields",
+  "trans-module",
+  "trans_module",
+  "runtime-module",
+  "runtime_module",
+  "ignore-directive",
+  "ignore_directive",
+  "keep-source-fallbacks",
+  "keep_source_fallbacks",
+] as const
+
+const MDX_CONFIG_KEYS = [
+  "framework",
+  "translatableAttributes",
+  "frontMatterFields",
+  "transModule",
+  "runtimeModule",
+  "ignoreDirective",
+  "keepSourceFallbacks",
+] as const
+
+const LINT_CONFIG_KEYS = ["rules"] as const
+
+const LINT_RULE_DATA_CONFIG_KEYS = [
+  "placeholder-only",
+  "empty-component-only",
+  "prefer-trans-in-jsx",
+] as const
+
+const LINT_RULE_CONFIG_KEYS = ["placeholderOnly", "emptyComponentOnly", "preferTransInJsx"] as const
+
+const CATALOG_CONFIG_KEYS = ["path", "format", "po", "include", "exclude"] as const
+
+const PO_DATA_CONFIG_KEYS = ["line-breaks", "line_breaks"] as const
+const PO_CONFIG_KEYS = ["lineBreaks"] as const
 
 /*
  * Data configs are kebab-case (with snake_case aliases). Lingui-style
@@ -210,8 +301,68 @@ function rejectCamelCaseDataKeys(config: PalamedesDataConfig, configPath: string
   }
 }
 
-function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): PalamedesConfig {
-  rejectCamelCaseDataKeys(config, configPath)
+function rejectUnknownKeys(
+  record: Record<string, unknown>,
+  configPath: string,
+  fieldPath: string,
+  knownKeys: readonly string[]
+): void {
+  for (const key of Object.keys(record)) {
+    if (knownKeys.includes(key)) {
+      continue
+    }
+
+    const suggestion = suggestKnownKey(key, knownKeys)
+    const suggestionMessage = suggestion === undefined ? "" : ` Did you mean "${suggestion}"?`
+    throw new Error(
+      `Invalid Palamedes config in ${configPath}: unknown key "${fieldPath}${key}".${suggestionMessage}`
+    )
+  }
+}
+
+function suggestKnownKey(key: string, knownKeys: readonly string[]): string | undefined {
+  const maxDistance = Math.max(1, Math.floor(key.length / 3))
+  let bestMatch: string | undefined
+  let bestDistance = Number.POSITIVE_INFINITY
+
+  for (const knownKey of knownKeys) {
+    const distance = levenshteinDistance(key, knownKey)
+    if (distance < bestDistance) {
+      bestMatch = knownKey
+      bestDistance = distance
+    }
+  }
+
+  return bestDistance <= maxDistance ? bestMatch : undefined
+}
+
+function levenshteinDistance(left: string, right: string): number {
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index)
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex]
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1]! + 1,
+        previous[rightIndex]! + 1,
+        previous[rightIndex - 1]! + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
+      )
+    }
+    previous = current
+  }
+
+  return previous[right.length]!
+}
+
+function normalizeDataConfig(
+  config: PalamedesDataConfig,
+  configPath: string,
+  validateDataKeys: boolean
+): PalamedesConfig {
+  if (validateDataKeys) {
+    rejectCamelCaseDataKeys(config, configPath)
+    rejectUnknownKeys(config, configPath, "", DATA_CONFIG_KEYS)
+  }
   const fallbackLocales = getConfigValue(config, "fallback-locales", "fallback_locales")
   const pseudoLocale = getConfigValue(config, "pseudo-locale", "pseudo_locale")
   const sourceReferenceRoot = getConfigValue(
@@ -220,9 +371,14 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
     "source_reference_root"
   )
   const referenceScopes = getConfigValue(config, "reference-scopes", "reference_scopes")
-  const mdx = config.mdx === undefined ? undefined : normalizeMdxDataConfig(config.mdx, configPath)
+  const mdx =
+    config.mdx === undefined
+      ? undefined
+      : normalizeMdxDataConfig(config.mdx, configPath, validateDataKeys)
   const lint =
-    config.lint === undefined ? undefined : normalizeLintDataConfig(config.lint, configPath)
+    config.lint === undefined
+      ? undefined
+      : normalizeLintDataConfig(config.lint, configPath, validateDataKeys)
 
   return {
     locales: config.locales as string[],
@@ -237,14 +393,22 @@ function normalizeDataConfig(config: PalamedesDataConfig, configPath: string): P
     ...(referenceScopes !== undefined ? { referenceScopes: referenceScopes as boolean } : {}),
     ...(mdx !== undefined ? { mdx } : {}),
     ...(lint !== undefined ? { lint } : {}),
-    catalogs: normalizeDataCatalogs(config.catalogs, configPath) as PalamedesCatalogConfig[],
+    catalogs: normalizeDataCatalogs(
+      config.catalogs,
+      configPath,
+      validateDataKeys
+    ) as PalamedesCatalogConfig[],
     ...(config.plugins !== undefined
       ? { plugins: config.plugins as PalamedesPluginDeclaration[] }
       : {}),
   }
 }
 
-function normalizeDataCatalogs(value: unknown, configPath: string): unknown {
+function normalizeDataCatalogs(
+  value: unknown,
+  configPath: string,
+  validateDataKeys: boolean
+): unknown {
   if (!Array.isArray(value)) {
     return value
   }
@@ -253,12 +417,15 @@ function normalizeDataCatalogs(value: unknown, configPath: string): unknown {
       return catalog
     }
     const record = catalog as Record<string, unknown>
+    if (validateDataKeys) {
+      rejectUnknownKeys(record, configPath, `catalogs[${index}].`, CATALOG_CONFIG_KEYS)
+    }
     if (record.po === undefined) {
       return catalog
     }
     return {
       ...record,
-      po: normalizePoDataConfig(record.po, configPath, index),
+      po: normalizePoDataConfig(record.po, configPath, index, validateDataKeys),
     }
   })
 }
@@ -266,26 +433,22 @@ function normalizeDataCatalogs(value: unknown, configPath: string): unknown {
 function normalizePoDataConfig(
   value: unknown,
   configPath: string,
-  catalogIndex: number
+  catalogIndex: number,
+  validateDataKeys: boolean
 ): PalamedesPoOutputOptions {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return value as PalamedesPoOutputOptions
   }
   const record = value as Record<string, unknown>
-  for (const [camel, kebab] of [["lineBreaks", "line-breaks"]]) {
-    if (camel in record) {
-      throw new Error(
-        `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${catalogIndex}].po.${camel}". Data configs use kebab-case: "catalogs[${catalogIndex}].po.${kebab}".`
-      )
+  if (validateDataKeys) {
+    for (const [camel, kebab] of [["lineBreaks", "line-breaks"]]) {
+      if (camel in record) {
+        throw new Error(
+          `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${catalogIndex}].po.${camel}". Data configs use kebab-case: "catalogs[${catalogIndex}].po.${kebab}".`
+        )
+      }
     }
-  }
-  const knownKeys = new Set(["line-breaks", "line_breaks"])
-  for (const key of Object.keys(record)) {
-    if (!knownKeys.has(key)) {
-      throw new Error(
-        `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${catalogIndex}].po.${key}".`
-      )
-    }
+    rejectUnknownKeys(record, configPath, `catalogs[${catalogIndex}].po.`, PO_DATA_CONFIG_KEYS)
   }
   const lineBreaks = record["line-breaks"] ?? record.line_breaks
   return lineBreaks === undefined ? {} : { lineBreaks: normalizeLineBreaksDataValue(lineBreaks) }
@@ -305,23 +468,31 @@ function normalizeLineBreaksDataValue(value: unknown): PalamedesPoOutputOptions[
   return value as PalamedesPoOutputOptions["lineBreaks"]
 }
 
-function normalizeMdxDataConfig(value: unknown, configPath: string): PalamedesMdxConfig {
+function normalizeMdxDataConfig(
+  value: unknown,
+  configPath: string,
+  validateDataKeys: boolean
+): PalamedesMdxConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`)
   }
   const record = value as Record<string, unknown>
-  for (const [camel, kebab] of [
-    ["translatableAttributes", "translatable-attributes"],
-    ["frontMatterFields", "front-matter-fields"],
-    ["transModule", "trans-module"],
-    ["runtimeModule", "runtime-module"],
-    ["ignoreDirective", "ignore-directive"],
-  ]) {
-    if (camel in record) {
-      throw new Error(
-        `Invalid Palamedes config in ${configPath}: unknown key "mdx.${camel}". Data configs use kebab-case: "mdx.${kebab}".`
-      )
+  if (validateDataKeys) {
+    for (const [camel, kebab] of [
+      ["translatableAttributes", "translatable-attributes"],
+      ["frontMatterFields", "front-matter-fields"],
+      ["transModule", "trans-module"],
+      ["runtimeModule", "runtime-module"],
+      ["ignoreDirective", "ignore-directive"],
+      ["keepSourceFallbacks", "keep-source-fallbacks"],
+    ]) {
+      if (camel in record) {
+        throw new Error(
+          `Invalid Palamedes config in ${configPath}: unknown key "mdx.${camel}". Data configs use kebab-case: "mdx.${kebab}".`
+        )
+      }
     }
+    rejectUnknownKeys(record, configPath, "mdx.", MDX_DATA_CONFIG_KEYS)
   }
   const read = (kebab: string, snake: string) => record[kebab] ?? record[snake]
   const framework = record.framework
@@ -330,6 +501,7 @@ function normalizeMdxDataConfig(value: unknown, configPath: string): PalamedesMd
   const transModule = read("trans-module", "trans_module")
   const runtimeModule = read("runtime-module", "runtime_module")
   const ignoreDirective = read("ignore-directive", "ignore_directive")
+  const keepSourceFallbacks = read("keep-source-fallbacks", "keep_source_fallbacks")
 
   return {
     ...(framework !== undefined ? { framework: framework as "react" | "solid" } : {}),
@@ -342,14 +514,24 @@ function normalizeMdxDataConfig(value: unknown, configPath: string): PalamedesMd
     ...(transModule !== undefined ? { transModule: transModule as string } : {}),
     ...(runtimeModule !== undefined ? { runtimeModule: runtimeModule as string } : {}),
     ...(ignoreDirective !== undefined ? { ignoreDirective: ignoreDirective as string } : {}),
+    ...(keepSourceFallbacks !== undefined
+      ? { keepSourceFallbacks: keepSourceFallbacks as boolean }
+      : {}),
   }
 }
 
-function normalizeLintDataConfig(value: unknown, configPath: string): PalamedesLintConfig {
+function normalizeLintDataConfig(
+  value: unknown,
+  configPath: string,
+  validateDataKeys: boolean
+): PalamedesLintConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`Invalid Palamedes config in ${configPath}: "lint" must be an object.`)
   }
   const lint = value as Record<string, unknown>
+  if (validateDataKeys) {
+    rejectUnknownKeys(lint, configPath, "lint.", LINT_CONFIG_KEYS)
+  }
   const rules = lint.rules
   if (rules === undefined) {
     return {}
@@ -360,16 +542,19 @@ function normalizeLintDataConfig(value: unknown, configPath: string): PalamedesL
     )
   }
   const record = rules as Record<string, unknown>
-  for (const [camel, kebab] of [
-    ["placeholderOnly", "placeholder-only"],
-    ["emptyComponentOnly", "empty-component-only"],
-    ["preferTransInJsx", "prefer-trans-in-jsx"],
-  ]) {
-    if (camel in record) {
-      throw new Error(
-        `Invalid Palamedes config in ${configPath}: unknown key "lint.rules.${camel}". Data configs use kebab-case: "lint.rules.${kebab}".`
-      )
+  if (validateDataKeys) {
+    for (const [camel, kebab] of [
+      ["placeholderOnly", "placeholder-only"],
+      ["emptyComponentOnly", "empty-component-only"],
+      ["preferTransInJsx", "prefer-trans-in-jsx"],
+    ]) {
+      if (camel in record) {
+        throw new Error(
+          `Invalid Palamedes config in ${configPath}: unknown key "lint.rules.${camel}". Data configs use kebab-case: "lint.rules.${kebab}".`
+        )
+      }
     }
+    rejectUnknownKeys(record, configPath, "lint.rules.", LINT_RULE_DATA_CONFIG_KEYS)
   }
   return {
     rules: {
@@ -717,6 +902,7 @@ function validateConfig(config: unknown, configPath: string): asserts config is 
   }
 
   const record = config as Record<string, unknown>
+  rejectUnknownKeys(record, configPath, "", CONFIG_KEYS)
 
   if (
     !Array.isArray(record.locales) ||
@@ -790,6 +976,7 @@ function validateMdx(value: unknown, configPath: string): void {
     throw new TypeError(`Invalid Palamedes config in ${configPath}: "mdx" must be an object.`)
   }
   const record = value as Record<string, unknown>
+  rejectUnknownKeys(record, configPath, "mdx.", MDX_CONFIG_KEYS)
   if (
     record.framework !== undefined &&
     record.framework !== "react" &&
@@ -822,6 +1009,11 @@ function validateMdx(value: unknown, configPath: string): void {
       )
     }
   }
+  if (record.keepSourceFallbacks !== undefined && typeof record.keepSourceFallbacks !== "boolean") {
+    throw new TypeError(
+      `Invalid Palamedes config in ${configPath}: "mdx.keepSourceFallbacks" must be a boolean when provided.`
+    )
+  }
 }
 
 function validateLint(value: unknown, configPath: string): void {
@@ -831,7 +1023,9 @@ function validateLint(value: unknown, configPath: string): void {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`Invalid Palamedes config in ${configPath}: "lint" must be an object.`)
   }
-  const rules = (value as Record<string, unknown>).rules
+  const lint = value as Record<string, unknown>
+  rejectUnknownKeys(lint, configPath, "lint.", LINT_CONFIG_KEYS)
+  const rules = lint.rules
   if (rules === undefined) {
     return
   }
@@ -841,6 +1035,7 @@ function validateLint(value: unknown, configPath: string): void {
     )
   }
   const record = rules as Record<string, unknown>
+  rejectUnknownKeys(record, configPath, "lint.rules.", LINT_RULE_CONFIG_KEYS)
   for (const field of ["placeholderOnly", "emptyComponentOnly", "preferTransInJsx"] as const) {
     const level = record[field]
     if (level !== undefined && !["off", "info", "warning", "error"].includes(level as string)) {
@@ -935,6 +1130,7 @@ function validateCatalog(catalog: unknown, configPath: string, index: number): v
   }
 
   const record = catalog as Record<string, unknown>
+  rejectUnknownKeys(record, configPath, `catalogs[${index}].`, CATALOG_CONFIG_KEYS)
 
   if (typeof record.path !== "string" || record.path.length === 0) {
     throw new Error(
@@ -991,13 +1187,7 @@ function validatePoOutputOptions(
     )
   }
   const po = value as Record<string, unknown>
-  for (const key of Object.keys(po)) {
-    if (key !== "lineBreaks") {
-      throw new Error(
-        `Invalid Palamedes config in ${configPath}: unknown key "catalogs[${index}].po.${key}".`
-      )
-    }
-  }
+  rejectUnknownKeys(po, configPath, `catalogs[${index}].po.`, PO_CONFIG_KEYS)
   if (po.lineBreaks !== undefined && po.lineBreaks !== "auto" && po.lineBreaks !== "off") {
     throw new Error(
       `Invalid Palamedes config in ${configPath}: "catalogs[${index}].po.lineBreaks" must be "auto" or "off" when provided.`
