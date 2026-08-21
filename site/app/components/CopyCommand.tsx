@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 type CopyState = "copied" | "failed" | null
 
@@ -43,7 +43,24 @@ export function CopyCommand({
   className?: string
 }) {
   const commandRef = useRef<HTMLElement>(null)
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [copyState, setCopyState] = useState<CopyState>(null)
+
+  useEffect(
+    () => () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+    },
+    []
+  )
+
+  function showCopyState(state: Exclude<CopyState, null>) {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+    setCopyState(state)
+    resetTimerRef.current = setTimeout(() => {
+      setCopyState(null)
+      resetTimerRef.current = null
+    }, 1500)
+  }
 
   function selectCommand() {
     if (!commandRef.current) return
@@ -68,12 +85,11 @@ export function CopyCommand({
           onClick={async () => {
             try {
               await writeCommand(command)
-              setCopyState("copied")
+              showCopyState("copied")
             } catch {
               selectCommand()
-              setCopyState("failed")
+              showCopyState("failed")
             }
-            setTimeout(() => setCopyState(null), 1500)
           }}
         >
           {copyState === "copied" ? "copied" : copyState === "failed" ? "selected" : "copy"}

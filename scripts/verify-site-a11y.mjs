@@ -233,6 +233,10 @@ try {
   await page.keyboard.press("Enter")
   await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "pnpm bench:e2e")
+  await page.waitForTimeout(1000)
+  await page.keyboard.press("Enter")
+  await page.waitForTimeout(700)
+  await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
 
   await page.goto(`${baseUrl}/frameworks`, { waitUntil: "networkidle" })
   const matrix = page.getByLabel("Verified framework and locale strategy matrix")
