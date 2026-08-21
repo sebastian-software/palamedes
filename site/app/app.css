@@ -82,6 +82,65 @@
 }
 
 /*
+ * Generated docs keep ARDO's own component structure. These are local,
+ * semantic hooks for the prebuild-owned index micro-labels and the public
+ * runtime outline component; no ARDO implementation class is targeted.
+ */
+.pmds-docs-micro-label,
+.pmds-progressive-outline-label {
+  margin: 0 0 0.65rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-gray-spec);
+}
+
+.pmds-progressive-outline {
+  margin: 1.5rem 0 2rem;
+  padding: 1rem 1.125rem;
+  border-block: 1px solid var(--color-hair);
+  background: var(--ardo-color-bgSoft);
+}
+
+.pmds-progressive-outline-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.pmds-progressive-outline-list li[data-depth="1"] {
+  margin-left: 0.75rem;
+}
+
+.pmds-progressive-outline-list a,
+.pmds-progressive-outline-more summary {
+  color: var(--ardo-color-text);
+}
+
+.pmds-progressive-outline-list a:focus-visible,
+.pmds-progressive-outline-more summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pmds-progressive-outline-more {
+  margin-top: 0.75rem;
+}
+
+.pmds-progressive-outline-more summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.pmds-progressive-outline-more .pmds-progressive-outline-list {
+  margin-top: 0.75rem;
+}
+
+/*
  * The header wordmark. ARDO renders the site title as a plain <span> inside
  * the logo home link and exposes no className hook for it; like the
  * mobile-panel nav below, it is scoped through semantics (the only header

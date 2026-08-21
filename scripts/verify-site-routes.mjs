@@ -736,6 +736,50 @@ async function checkHomepageDecisionViewport(browser, width) {
   await context.close()
 }
 
+async function checkProgressiveDocsOutline(browser) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const page = await context.newPage()
+  await gotoAndSettle(page, "/docs/configuration", { settleMs: 1000 })
+
+  const outline = page.locator(".pmds-progressive-outline")
+  if ((await outline.count()) !== 1) {
+    fail("progressive docs outline: missing on a long direct-entry page")
+  } else {
+    const links = outline.locator('a[href^="#"]')
+    if ((await links.count()) !== 11) {
+      fail(`progressive docs outline: expected 11 anchor links, got ${await links.count()}`)
+    }
+    const details = outline.locator("details")
+    if (await details.evaluate((element) => element.hasAttribute("open"))) {
+      fail("progressive docs outline: additional sections must start collapsed")
+    }
+    const summary = details.locator("summary")
+    await summary.focus()
+    await page.keyboard.press("Enter")
+    if (!(await details.evaluate((element) => element.hasAttribute("open")))) {
+      fail("progressive docs outline: keyboard did not open additional sections")
+    }
+    const target = details.getByRole("link", { name: "Other Data Formats", exact: true })
+    await target.click()
+    if (new URL(page.url()).hash !== "#other-data-formats") {
+      fail("progressive docs outline: a disclosed anchor did not update the URL")
+    }
+  }
+  await context.close()
+
+  const noJsContext = await browser.newContext({ javaScriptEnabled: false })
+  const noJsPage = await noJsContext.newPage()
+  await gotoAndSettle(noJsPage, "/docs/configuration", { settleMs: 100 })
+  const noJsOutline = noJsPage.locator(".pmds-progressive-outline")
+  if (
+    (await noJsOutline.count()) !== 1 ||
+    (await noJsOutline.locator('a[href^="#"]').count()) !== 11
+  ) {
+    fail("progressive docs outline: direct no-JS entry lost its anchors")
+  }
+  await noJsContext.close()
+}
+
 function trackPageErrors(page, getPath, consoleErrors, knownHydrationWarnings) {
   page.on("pageerror", (error) => {
     const message = error.message
@@ -803,6 +847,7 @@ await checkRoutes(await browser.newContext({ javaScriptEnabled: false }), "no-js
 await checkGetStartedTextResize(browser)
 await checkHomepageDecisionViewport(browser, 320)
 await checkHomepageDecisionViewport(browser, 390)
+await checkProgressiveDocsOutline(browser)
 
 await browser.close()
 await staticServer?.close()

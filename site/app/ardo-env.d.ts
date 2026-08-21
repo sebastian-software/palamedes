@@ -5,6 +5,13 @@ declare module "*.md" {
   export default Component
 }
 
+declare module "*.mdx" {
+  import type { FunctionComponent } from "react"
+
+  const Component: FunctionComponent
+  export default Component
+}
+
 declare module "virtual:ardo/config" {
   import type { ArdoConfig } from "ardo"
 
