@@ -18,7 +18,20 @@ import { startSiteStaticServer } from "./site-static-server.mjs"
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
 const generatedDocsDir = join(repoRoot, "site/app/routes/docs")
-const PORT = Number(process.env.SITE_VERIFY_PORT ?? 4102)
+
+function portFromEnv(name, fallback) {
+  const configured = process.env[name]
+  if (configured === undefined) return fallback
+  const port = Number(configured)
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(
+      `${name} must be an integer between 1 and 65_535, got ${JSON.stringify(configured)}`
+    )
+  }
+  return port
+}
+
+const PORT = portFromEnv("SITE_VERIFY_PORT", 4102)
 
 /*
  * The ProofStrip speedup figure is read out of bench.ts rather than repeated

@@ -8,7 +8,19 @@ import axe from "axe-core"
 import { startSiteStaticServer } from "./site-static-server.mjs"
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
-const PORT = Number(process.env.SITE_A11Y_PORT ?? 4104)
+function portFromEnv(name, fallback) {
+  const configured = process.env[name]
+  if (configured === undefined) return fallback
+  const port = Number(configured)
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(
+      `${name} must be an integer between 1 and 65_535, got ${JSON.stringify(configured)}`
+    )
+  }
+  return port
+}
+
+const PORT = portFromEnv("SITE_A11Y_PORT", 4104)
 const staticServer = process.env.PALAMEDES_SITE_URL
   ? null
   : await startSiteStaticServer({ clientDir: join(repoRoot, "site/build/client"), port: PORT })
