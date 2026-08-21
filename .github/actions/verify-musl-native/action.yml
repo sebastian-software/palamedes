@@ -1,0 +1,82 @@
+name: Verify musl native package
+description: Build and smoke-test a musl native package without publishing it.
+
+inputs:
+  package_name:
+    description: Native package to build and smoke-test.
+    required: true
+  package_dir:
+    description: Workspace-relative directory of the native package.
+    required: true
+  rust_target:
+    description: Rust target required by a musl CLI package.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate musl package input
+      shell: bash
+      run: |
+        case "${{ inputs.package_name }}" in
+          @palamedes/core-node-linux-*-musl|@palamedes/cli-linux-*-musl) ;;
+          *)
+            echo "Unsupported musl native package: ${{ inputs.package_name }}" >&2
+            exit 1
+            ;;
+        esac
+
+    # The static-musl CLI builds on the Linux host, matching the release lane.
+    - name: Prepare musl CLI toolchain
+      if: startsWith(inputs.package_name, '@palamedes/cli-')
+      shell: bash
+      run: |
+        rustup target add "${{ inputs.rust_target }}"
+        sudo apt-get update
+        sudo apt-get install -y musl-tools
+
+    - name: Build musl native CLI package
+      if: startsWith(inputs.package_name, '@palamedes/cli-')
+      shell: bash
+      run: pnpm --filter "${{ inputs.package_name }}" build
+
+    # A core-node musl addon is a dynamically linked cdylib. Build it in the
+    # same native-musl environment used to prove that it will load in Alpine.
+    - name: Build musl core-node addon (native musl toolchain)
+      if: startsWith(inputs.package_name, '@palamedes/core-node-')
+      shell: bash
+      run: >
+        docker run --rm
+        -v "$PWD:/workspace"
+        -w "/workspace/${{ inputs.package_dir }}"
+        -e PALAMEDES_RUST_PROFILE=release
+        rust:alpine
+        sh -c "apk add --no-cache nodejs build-base &&
+        node ../core-node/scripts/build-native.mjs"
+
+    - name: Smoke-test musl native Node package
+      if: startsWith(inputs.package_name, '@palamedes/core-node-')
+      shell: bash
+      run: >
+        docker run --rm
+        -v "$PWD:/workspace"
+        -w "/workspace/${{ inputs.package_dir }}"
+        node:24-alpine
+        node --input-type=module -e
+        "import { createRequire } from 'node:module';
+        const require = createRequire(import.meta.url);
+        const native = require('./palamedes-node.node');
+        if (typeof native.transformMacros !== 'function') process.exit(1)"
+
+    - name: Smoke-test musl native CLI package
+      if: startsWith(inputs.package_name, '@palamedes/cli-')
+      shell: bash
+      run: >
+        docker run --rm
+        -v "$PWD:/workspace"
+        -w "/workspace/${{ inputs.package_dir }}"
+        node:24-alpine
+        node --input-type=module -e
+        "import { execFileSync } from 'node:child_process';
+        const out = execFileSync('./bin/pmds', ['version'], { encoding: 'utf8' });
+        if (!out.includes('pmds (Palamedes)')) process.exit(1)"
