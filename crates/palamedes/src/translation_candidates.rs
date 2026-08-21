@@ -1199,8 +1199,10 @@ fn atomic_replace_catalog(
 ) -> PalamedesResult<()> {
     // `PreparedCatalog::content` has already been rendered into its target format. Writing it
     // directly avoids asking `convert_catalog_file` to parse and render the same catalog again.
-    // Keep its atomic-replacement durability contract: create the temporary file beside the
-    // target, sync it, rename it into place, then sync the containing directory on Unix.
+    // Keep the replacement atomic: create the temporary file beside the target, sync its
+    // content, then rename it into place. Do not perform another fallible operation after the
+    // rename: `persist` is the commit point, and reporting a later durability failure as a
+    // rejected patch would contradict the catalog state already visible to callers.
     let directory = catalog
         .path
         .parent()
@@ -1233,23 +1235,6 @@ fn atomic_replace_catalog(
             path: catalog.path.clone(),
             source: source.error,
         })?;
-    sync_catalog_directory(directory, &catalog.path)?;
-    Ok(())
-}
-
-fn sync_catalog_directory(
-    directory: &std::path::Path,
-    path: &std::path::Path,
-) -> PalamedesResult<()> {
-    #[cfg(unix)]
-    fs::File::open(directory)
-        .and_then(|file| file.sync_all())
-        .map_err(|source| PalamedesError::WriteFile {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    #[cfg(not(unix))]
-    let _ = (directory, path);
     Ok(())
 }
 
