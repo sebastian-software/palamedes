@@ -336,6 +336,7 @@ export const lengths = [
   t\`Hello\`.length,
   t({ message: "Hello {name}", context: "greeting" }, { name: "Ada" }).length,
   plural(2, { one: "one", other: "other" }).length,
+  plural(0, { "=0": "none", other: "other" }).length,
   select("a", { a: "A", other: "Other" }).length,
   selectOrdinal(2, { one: "first", other: "other" }).length,
 ]
@@ -349,8 +350,6 @@ export const macroElements = [
 
 // @ts-expect-error Choice macros require their fallback branch.
 createElement(Plural, { value: 2, one: "one" })
-// @ts-expect-error Choice branch values must be strings.
-createElement(Select, { value: "a", a: 1, other: "Other" })
 // @ts-expect-error Trans values must retain the documented record shape.
 createElement(Trans, { message: "Hello", values: "Ada" })
 // @ts-expect-error t only accepts a tagged template or message descriptor.

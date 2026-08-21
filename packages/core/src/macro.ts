@@ -7,9 +7,12 @@ type MessageDescriptor = {
 }
 
 type MacroValues = Record<string, unknown>
-type PluralOptions = Omit<PluralProps, "value">
+// JSX choice components use `_N` because `=N` is not a valid JSX attribute
+// name. The JavaScript macros accept both spellings, though, so preserve the
+// documented `=N` exact-branch syntax for object literals.
+type PluralOptions = Omit<PluralProps, "value"> & Record<`=${number}`, string>
 type SelectOptions = Omit<SelectProps, "value">
-type SelectOrdinalOptions = Omit<SelectOrdinalProps, "value">
+type SelectOrdinalOptions = Omit<SelectOrdinalProps, "value"> & Record<`=${number}`, string>
 
 function throwMacroError(): never {
   throw new Error(
