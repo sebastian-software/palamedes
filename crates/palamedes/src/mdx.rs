@@ -4,7 +4,7 @@
 //! stream. Palamedes consumes that stream to define translation units, rich
 //! placeholders, message identity, extraction records, and the runtime module.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use ferromark::block::{CodeBlockKind, ListKind};
 use ferromark::mdx::{parse_events_strict, MdxDiagnostic, MdxEvent};
@@ -2043,22 +2043,52 @@ struct SourcePosition {
 
 #[derive(Default)]
 struct SourcePositionCursor {
+    byte_offset: usize,
     position: SourcePosition,
+}
+
+#[derive(Default)]
+struct SourceResolutionWork {
     #[cfg(test)]
-    scanned_bytes: usize,
+    source_bytes_scanned: usize,
+    #[cfg(test)]
+    anchor_steps: usize,
+    #[cfg(test)]
+    offset_slots: usize,
 }
 
 impl SourcePositionCursor {
-    fn advance(&mut self, character: char) {
+    fn advance_to(&mut self, source: &str, offset: usize, _work: &mut SourceResolutionWork) {
+        debug_assert!(offset >= self.byte_offset);
+        let scanned = &source[self.byte_offset..offset];
         #[cfg(test)]
         {
-            self.scanned_bytes += character.len_utf8();
+            _work.source_bytes_scanned += scanned.len();
         }
-        if character == '\n' {
-            self.position.line += 1;
-            self.position.column = 0;
-        } else {
-            self.position.column += character.len_utf16();
+        for character in scanned.chars() {
+            if character == '\n' {
+                self.position.line += 1;
+                self.position.column = 0;
+            } else {
+                self.position.column += character.len_utf16();
+            }
+        }
+        self.byte_offset = offset;
+    }
+}
+
+impl SourceResolutionWork {
+    fn visit_anchor(&mut self) {
+        #[cfg(test)]
+        {
+            self.anchor_steps += 1;
+        }
+    }
+
+    fn visit_offset_slot(&mut self) {
+        #[cfg(test)]
+        {
+            self.offset_slots += 1;
         }
     }
 }
@@ -2066,40 +2096,53 @@ impl SourcePositionCursor {
 /// Resolves every anchor from one linear source walk.
 ///
 /// The source-map emission order remains generated-position order below. A
-/// byte-offset index lets generated anchors refer to source text in any order,
-/// while source location lookup stays O(document + anchors).
+/// stable counting index orders separate anchor indices by their bounded source
+/// byte offsets. This preserves the anchors themselves (including duplicates)
+/// while making source location lookup deterministically O(document + anchors).
 fn source_positions_for_anchors(
     anchors: &[SourceAnchor],
     source: &str,
-) -> (Vec<SourcePosition>, SourcePositionCursor) {
-    let mut positions_by_offset = HashMap::with_capacity(anchors.len());
+) -> (Vec<SourcePosition>, SourceResolutionWork) {
+    // The extra leading slot turns each source offset into a count boundary;
+    // the final slot represents the valid offset immediately after the source.
+    let mut offset_boundaries = vec![0usize; source.len() + 2];
+    let mut work = SourceResolutionWork::default();
     for anchor in anchors {
+        work.visit_anchor();
         let offset = anchor.source_offset.min(source.len());
         assert!(
             source.is_char_boundary(offset),
             "source-map anchor must be on a UTF-8 boundary"
         );
-        positions_by_offset
-            .entry(offset)
-            .or_insert_with(SourcePosition::default);
+        offset_boundaries[offset + 1] += 1;
+    }
+
+    for slot in 1..offset_boundaries.len() {
+        work.visit_offset_slot();
+        offset_boundaries[slot] += offset_boundaries[slot - 1];
+    }
+
+    let mut source_order = vec![0usize; anchors.len()];
+    for (index, anchor) in anchors.iter().enumerate() {
+        work.visit_anchor();
+        let offset = anchor.source_offset.min(source.len());
+        let destination = offset_boundaries[offset];
+        source_order[destination] = index;
+        offset_boundaries[offset] += 1;
     }
 
     let mut cursor = SourcePositionCursor::default();
-    for (offset, character) in source.char_indices() {
-        if let Some(position) = positions_by_offset.get_mut(&offset) {
-            *position = cursor.position;
-        }
-        cursor.advance(character);
+    let mut positions = vec![SourcePosition::default(); anchors.len()];
+    for index in source_order {
+        work.visit_anchor();
+        cursor.advance_to(
+            source,
+            anchors[index].source_offset.min(source.len()),
+            &mut work,
+        );
+        positions[index] = cursor.position;
     }
-    if let Some(position) = positions_by_offset.get_mut(&source.len()) {
-        *position = cursor.position;
-    }
-
-    let positions = anchors
-        .iter()
-        .map(|anchor| positions_by_offset[&anchor.source_offset.min(source.len())])
-        .collect();
-    (positions, cursor)
+    (positions, work)
 }
 
 fn encode_mappings(anchors: &[SourceAnchor], source: &str) -> String {
@@ -2639,7 +2682,7 @@ See ![Diagram label](./d.png) here.
             })
             .collect::<Vec<_>>();
 
-        let (positions, cursor) = source_positions_for_anchors(&anchors, &source);
+        let (positions, work) = source_positions_for_anchors(&anchors, &source);
 
         for (anchor, position) in anchors.iter().zip(&positions) {
             let prefix = &source[..anchor.source_offset];
@@ -2654,9 +2697,11 @@ See ![Diagram label](./d.png) here.
             );
         }
         assert_eq!(
-            cursor.scanned_bytes,
+            work.source_bytes_scanned,
             source.len(),
             "source position resolution must scan each source byte at most once"
         );
+        assert_eq!(work.anchor_steps, anchors.len() * 3);
+        assert_eq!(work.offset_slots, source.len() + 1);
     }
 }
