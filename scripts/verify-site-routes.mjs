@@ -8,7 +8,7 @@
  * Usage: node scripts/verify-site-routes.mjs  (requires a prior site build)
  */
 
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -17,6 +17,7 @@ import { startSiteStaticServer } from "./site-static-server.mjs"
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
+const generatedDocsDir = join(repoRoot, "site/app/routes/docs")
 const PORT = 4102
 
 /*
@@ -780,6 +781,35 @@ async function checkProgressiveDocsOutline(browser) {
   await noJsContext.close()
 }
 
+async function checkProgressiveOutlineAnchors(browser) {
+  const docs = readdirSync(generatedDocsDir, { recursive: true })
+    .filter((entry) => entry.endsWith(".mdx"))
+    .map((entry) => ({
+      entry,
+      source: readFileSync(join(generatedDocsDir, entry), "utf8"),
+    }))
+    .filter(({ source }) => source.includes('className="pmds-progressive-outline"'))
+
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  for (const { entry, source } of docs) {
+    const path = `/docs/${entry.replace(/\.mdx$/u, "")}`
+    const expectedIds = [...source.matchAll(/<a href="#([^"#]+)"/gu)].map((match) => match[1])
+    await gotoAndSettle(page, path, { settleMs: 200 })
+    const missingIds = await page.evaluate(
+      (ids) => ids.filter((id) => document.getElementById(id) == null),
+      expectedIds
+    )
+    if (missingIds.length > 0) {
+      fail(
+        `progressive docs outline: ${path} links to missing heading IDs: ${missingIds.join(", ")}`
+      )
+    }
+  }
+  console.log(`  progressive outline heading IDs verified across ${docs.length} generated docs`)
+  await context.close()
+}
+
 function trackPageErrors(page, getPath, consoleErrors, knownHydrationWarnings) {
   page.on("pageerror", (error) => {
     const message = error.message
@@ -848,6 +878,7 @@ await checkGetStartedTextResize(browser)
 await checkHomepageDecisionViewport(browser, 320)
 await checkHomepageDecisionViewport(browser, 390)
 await checkProgressiveDocsOutline(browser)
+await checkProgressiveOutlineAnchors(browser)
 
 await browser.close()
 await staticServer?.close()
