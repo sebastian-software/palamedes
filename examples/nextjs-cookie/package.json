@@ -8,8 +8,8 @@
     "start": "next start --port 4010",
     "extract": "pmds extract",
     "test:message-splitting:development": "node ./scripts/message-splitting-development.test.mjs",
-    "test:rsc-scope": "next build && node ./scripts/rsc-scope-production.test.mjs",
-    "test:rsc-scope:webpack": "next build --webpack && node ./scripts/rsc-scope-production.test.mjs"
+    "test:rsc-scope": "node ../../scripts/next-build-from-root.mjs examples/nextjs-cookie && node ./scripts/rsc-scope-production.test.mjs",
+    "test:rsc-scope:webpack": "node ../../scripts/next-build-from-root.mjs examples/nextjs-cookie --webpack && node ./scripts/rsc-scope-production.test.mjs"
   },
   "dependencies": {
     "@palamedes/core": "workspace:^",

@@ -15,6 +15,15 @@ const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected"
 
+function resolveLoaderCwd(context, options) {
+  if (typeof options.cwd === "string" && options.cwd.length > 0) {
+    return path.resolve(options.cwd)
+  }
+  if (typeof context.rootContext === "string" && context.rootContext.length > 0) {
+    return path.resolve(context.rootContext)
+  }
+}
+
 function canonicalPath(value) {
   try {
     return realpathSync.native(value)
@@ -486,7 +495,11 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
   }
 
   try {
-    const config = loadConfigCachedSync(options.configPath, loadPalamedesConfigSync)
+    const config = loadConfigCachedSync(
+      options.configPath,
+      loadPalamedesConfigSync,
+      resolveLoaderCwd(this, options)
+    )
     if (typeof this.addDependency === "function" && config.configPath) {
       this.addDependency(config.configPath)
     } else {
