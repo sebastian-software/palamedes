@@ -1,10 +1,56 @@
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import path from "node:path"
 
 const require = createRequire(import.meta.url)
 const SUPPORTED_TARGETS =
   "darwin/arm64, linux/x64 glibc, linux/x64 musl, linux/arm64 glibc, linux/arm64 musl, and win32/x64"
+
+function readPackageVersion(packageName, packageJsonPath, readFile, wrapperVersion) {
+  let manifest
+  try {
+    manifest = JSON.parse(readFile(packageJsonPath, "utf8"))
+  } catch (error) {
+    if (wrapperVersion) {
+      throw new Error(
+        `Palamedes CLI native package ${packageName} has invalid package metadata at ${packageJsonPath}. ` +
+          `Reinstall ${packageName} or install matching ${packageName}@${wrapperVersion}.`,
+        { cause: error }
+      )
+    }
+    throw new Error(
+      `Palamedes CLI could not read its own package metadata at ${packageJsonPath}. ` +
+        "Reinstall @palamedes/cli.",
+      { cause: error }
+    )
+  }
+
+  if (typeof manifest?.version !== "string" || manifest.version.trim().length === 0) {
+    if (wrapperVersion) {
+      throw new Error(
+        `Palamedes CLI native package ${packageName} has no valid version in ${packageJsonPath}. ` +
+          `Reinstall ${packageName} or install matching ${packageName}@${wrapperVersion}.`
+      )
+    }
+    throw new Error(
+      `Palamedes CLI could not read its own version from ${packageJsonPath}. Reinstall @palamedes/cli.`
+    )
+  }
+
+  return manifest.version
+}
+
+export function assertNativeExecutableVersion(wrapperVersion, packageName, nativeVersion) {
+  if (nativeVersion === wrapperVersion) {
+    return
+  }
+
+  throw new Error(
+    `Palamedes CLI version mismatch: @palamedes/cli@${wrapperVersion} resolved ${packageName}@${nativeVersion}. ` +
+      "Reinstall @palamedes/cli so its exact optional platform dependency is refreshed, " +
+      `or install matching ${packageName}@${wrapperVersion}.`
+  )
+}
 
 export function resolveNativeExecutable(options = {}) {
   const platform = options.platform ?? process.platform
@@ -17,6 +63,9 @@ export function resolveNativeExecutable(options = {}) {
   })
   const resolvePackageJson =
     options.resolvePackageJson ?? ((specifier) => require.resolve(specifier))
+  const readFile = options.readFileSync ?? readFileSync
+  const wrapperPackageJsonPath =
+    options.wrapperPackageJsonPath ?? path.join(import.meta.dirname, "..", "package.json")
 
   let packageJsonPath
   try {
@@ -28,6 +77,10 @@ export function resolveNativeExecutable(options = {}) {
       { cause: error }
     )
   }
+
+  const wrapperVersion = readPackageVersion("@palamedes/cli", wrapperPackageJsonPath, readFile)
+  const nativeVersion = readPackageVersion(packageName, packageJsonPath, readFile, wrapperVersion)
+  assertNativeExecutableVersion(wrapperVersion, packageName, nativeVersion)
 
   const binaryName = platform === "win32" ? "pmds.exe" : "pmds"
   const binaryPath = path.join(path.dirname(packageJsonPath), "bin", binaryName)
