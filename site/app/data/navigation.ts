@@ -1,9 +1,8 @@
-export const GUIDE_TOPIC_PATHS = [
-  "/react-server-components-i18n",
-  "/i18n-performance",
-  "/icu-messageformat",
-  "/locale-routing",
-] as const
+import { TOPIC_SLUGS, type TopicSlug } from "./topic-slugs"
+
+export const GUIDE_TOPIC_PATHS: readonly `/${TopicSlug}`[] = TOPIC_SLUGS.map(
+  (slug): `/${TopicSlug}` => `/${slug}`
+)
 
 export interface PrimaryNavigationLink {
   label: string

@@ -6,7 +6,7 @@ import {
   PRIMARY_NAVIGATION_LINKS,
   isPrimaryNavigationLinkActive,
 } from "./navigation"
-import { TOPICS } from "./topics"
+import { TOPIC_SLUGS } from "./topic-slugs"
 
 describe("primary site navigation", () => {
   test("keeps four first-level destinations split by reader task", () => {
@@ -20,7 +20,7 @@ describe("primary site navigation", () => {
   })
 
   test("keeps the guide hub current on all four topic routes", () => {
-    const topicPaths = TOPICS.map(({ slug }) => `/${slug}`)
+    const topicPaths = TOPIC_SLUGS.map((slug) => `/${slug}`)
     const guides = PRIMARY_NAVIGATION_LINKS.find((link) => link.href === "/guides")
 
     expect(topicPaths).toEqual(GUIDE_TOPIC_PATHS)

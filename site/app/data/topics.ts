@@ -15,6 +15,7 @@
 import { BENCH_REALISTIC } from "./bench"
 import contentStats from "./generated/content-stats.json"
 import { docsHref } from "./links"
+import type { TOPIC_SLUGS, TopicSlug } from "./topic-slugs"
 import type { StreamlineIconName } from "~/components/icons/StreamlineIcon"
 
 export interface TopicFaq {
@@ -34,7 +35,7 @@ export interface TopicEvidence {
 }
 
 export interface Topic {
-  slug: string
+  slug: TopicSlug
   icon: StreamlineIconName
   metaTitle: string
   metaDescription: string
@@ -58,7 +59,15 @@ export interface Topic {
   related: { label: string; href: string }[]
 }
 
-export const TOPICS: Topic[] = [
+type TopicCollection<Slugs extends readonly TopicSlug[] = typeof TOPIC_SLUGS> =
+  Slugs extends readonly [
+    infer Slug extends TopicSlug,
+    ...infer RemainingSlugs extends readonly TopicSlug[],
+  ]
+    ? readonly [Topic & { slug: Slug }, ...TopicCollection<RemainingSlugs>]
+    : readonly []
+
+export const TOPICS = [
   {
     slug: "react-server-components-i18n",
     icon: "web-hierarchy",
@@ -447,7 +456,7 @@ select(gender, {
       { label: "Start the quickstart", href: "/get-started" },
     ],
   },
-]
+] satisfies TopicCollection
 
 export function topicBySlug(slug: string): Topic {
   const topic = TOPICS.find((candidate) => candidate.slug === slug)
