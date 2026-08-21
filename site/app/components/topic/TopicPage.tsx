@@ -99,8 +99,12 @@ export function TopicPage({ topic }: { topic: Topic }) {
             {topic.evidence.items.map((item) => (
               <div key={item.label} className="bg-paper px-5 py-5">
                 <dt className="micro text-[10px] tracking-label text-gray-spec">{item.label}</dt>
-                <dd className="mono-nums mt-2 text-[20px] text-accent">{item.value}</dd>
-                <p className="mt-2 text-[12.5px] leading-relaxed text-ink/85">{item.note}</p>
+                <dd>
+                  <span className="mono-nums mt-2 block text-[20px] text-accent">{item.value}</span>
+                  <span className="mt-2 block text-[12.5px] leading-relaxed text-ink/85">
+                    {item.note}
+                  </span>
+                </dd>
               </div>
             ))}
           </dl>

@@ -19,6 +19,11 @@ const paths = [
   "/frameworks",
   "/architecture",
   "/get-started",
+  "/guides",
+  "/react-server-components-i18n",
+  "/i18n-performance",
+  "/icu-messageformat",
+  "/locale-routing",
   "/docs",
   "/decisions",
   "/blog",
@@ -90,35 +95,118 @@ try {
     await context.close()
   }
 
+  for (const width of [320, 390, 430]) {
+    const context = await browser.newContext({ viewport: { width, height: 844 } })
+    const page = await context.newPage()
+    await page.goto(`${baseUrl}/icu-messageformat`, { waitUntil: "networkidle" })
+    assert.equal(await page.getByRole("link", { name: "Palamedes", exact: true }).count(), 1)
+
+    const menuButton = page.getByRole("button", { name: /menu/i }).first()
+    await menuButton.focus()
+    await page.keyboard.press("Enter")
+    const dialog = page.getByRole("dialog")
+    await assert.doesNotReject(() => dialog.waitFor({ state: "visible" }))
+    const navigation = dialog.getByRole("navigation")
+    const navigationLinks = navigation.getByRole("link")
+    assert.deepEqual(await navigationLinks.allTextContents(), [
+      "Frameworks",
+      "Architecture",
+      "Guides",
+      "Docs",
+    ])
+    assert.equal(await navigation.getByRole("group", { name: "Evaluate" }).count(), 1)
+    assert.equal(await navigation.getByRole("group", { name: "Resources" }).count(), 1)
+    assert.equal(
+      await navigation
+        .getByRole("link", { name: "Guides", exact: true })
+        .getAttribute("aria-current"),
+      "page"
+    )
+
+    const primaryAction = dialog.getByRole("link", { name: "Get started", exact: true })
+    assert.equal(await primaryAction.count(), 1)
+    assert.equal((await dialog.getByRole("link").allTextContents()).at(-1), "Get started")
+    assert.equal(await dialog.evaluate((element) => element.contains(document.activeElement)), true)
+    assert.equal(
+      await dialog.evaluate((element) => {
+        const nav = element.querySelector("nav")
+        const action = [...element.querySelectorAll("a")].find(
+          (link) => link.textContent?.trim() === "Get started"
+        )
+        return Boolean(
+          nav && action && nav.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING
+        )
+      }),
+      true
+    )
+
+    const closeButton = dialog.getByRole("button", { name: "Close menu" })
+    const targetLocators = [
+      menuButton,
+      closeButton,
+      ...(await navigationLinks.all()),
+      primaryAction,
+    ]
+    const targetSizes = await Promise.all(
+      targetLocators.map(async (locator) => {
+        const box = await locator.boundingBox()
+        return box ? { width: box.width, height: box.height } : null
+      })
+    )
+    for (const [index, box] of targetSizes.entries()) {
+      if (!box || box.width < 44 || box.height < 44) {
+        failures.push(
+          `mobile ${width}px control ${index + 1}: expected 44x44px, got ${JSON.stringify(box)}`
+        )
+      }
+    }
+
+    const focusedStyle = await page.evaluate(() => {
+      const focused = document.activeElement
+      if (!(focused instanceof HTMLElement)) return null
+      const style = getComputedStyle(focused)
+      return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth }
+    })
+    if (
+      !focusedStyle ||
+      focusedStyle.outlineStyle === "none" ||
+      Number.parseFloat(focusedStyle.outlineWidth) < 2
+    ) {
+      failures.push(`mobile ${width}px: initial dialog focus is not visibly outlined`)
+    }
+
+    const dialogWidth = await dialog.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }))
+    if (dialogWidth.scrollWidth > dialogWidth.clientWidth + 1) {
+      failures.push(
+        `mobile ${width}px: dialog overflows ${dialogWidth.scrollWidth}px > ${dialogWidth.clientWidth}px`
+      )
+    }
+
+    await closeButton.click()
+    await dialog.waitFor({ state: "hidden" })
+    assert.equal(await menuButton.evaluate((element) => element === document.activeElement), true)
+
+    await page.keyboard.press("Enter")
+    await dialog.waitFor({ state: "visible" })
+    await page.keyboard.press("Escape")
+    await dialog.waitFor({ state: "hidden" })
+    assert.equal(await menuButton.evaluate((element) => element === document.activeElement), true)
+
+    await page.keyboard.press("Enter")
+    await dialog.waitFor({ state: "visible" })
+    await dialog.getByRole("link", { name: "Frameworks", exact: true }).click()
+    await page.waitForURL(`${baseUrl}/frameworks`)
+    await dialog.waitFor({ state: "hidden" })
+    await context.close()
+  }
+
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl })
   const page = await context.newPage()
   await page.goto(baseUrl, { waitUntil: "networkidle" })
-  assert.equal(await page.getByRole("link", { name: "Palamedes", exact: true }).count(), 1)
-
-  const menuButton = page.getByRole("button", { name: /menu/i }).first()
-  await menuButton.click()
-  const dialog = page.getByRole("dialog")
-  await assert.doesNotReject(() => dialog.waitFor({ state: "visible" }))
-  const primaryAction = dialog.getByRole("link", { name: "Get started", exact: true })
-  assert.equal(await primaryAction.count(), 1)
-  assert.equal((await dialog.getByRole("link").allTextContents()).at(-1), "Get started")
-  assert.equal(await dialog.evaluate((element) => element.contains(document.activeElement)), true)
-  const closeButton = dialog.getByRole("button", { name: "Close menu" })
-  const targetSizes = await Promise.all(
-    [menuButton, closeButton, primaryAction].map(async (locator) => {
-      const box = await locator.boundingBox()
-      return box ? { width: box.width, height: box.height } : null
-    })
-  )
-  for (const [index, box] of targetSizes.entries()) {
-    if (!box || box.width < 44 || box.height < 44) {
-      failures.push(`mobile control ${index + 1}: expected 44x44px, got ${JSON.stringify(box)}`)
-    }
-  }
-  await page.keyboard.press("Escape")
-  await dialog.waitFor({ state: "hidden" })
-
   const copyButton = page.getByRole("button", { name: /copy command/i }).first()
   await copyButton.click()
   await page.getByRole("status").filter({ hasText: "Copied" }).waitFor()
