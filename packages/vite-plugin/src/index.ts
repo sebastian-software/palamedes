@@ -280,6 +280,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null
+  let configPath: string | null = null
   let filter: ReturnType<typeof createFilter> | null = null
   let mdxFilter: ReturnType<typeof createFilter> | null = null
   let macroIds: Set<string> | null = null
@@ -325,9 +326,24 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   async function getConfigLazy() {
     if (!config) {
       config = await loadPalamedesConfig(configLoaderOptions)
+      configPath = config.configPath
       macroIds = new Set(PALAMEDES_MACRO_PACKAGES)
     }
     return config
+  }
+
+  function isConfigChange(id: string): boolean {
+    return configPath !== null && path.resolve(stripQuery(id)) === path.resolve(configPath)
+  }
+
+  function resetConfig(): void {
+    config = null
+  }
+
+  function resetConfigOnChange(id: string): void {
+    if (isConfigChange(id)) {
+      resetConfig()
+    }
   }
 
   function getFilterLazy() {
@@ -488,7 +504,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       },
 
       buildStart() {
-        config = null
         mdxModuleIds.clear()
       },
 
@@ -496,9 +511,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cleanId = stripQuery(id)
         if (change.event === "delete") {
           mdxModuleIds.delete(cleanId)
-        }
-        if (config && path.resolve(cleanId) === path.resolve(config.configPath)) {
-          config = null
         }
       },
 
@@ -561,12 +573,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
       handleHotUpdate(context) {
         const cleanId = stripQuery(context.file)
-        const isConfig =
-          config !== null && path.resolve(cleanId) === path.resolve(config.configPath)
-        if (!isConfig) {
+        if (!isConfigChange(cleanId)) {
           return
         }
-        config = null
+        resetConfig()
         const modules = [...mdxModuleIds]
           .map((id) => context.server.moduleGraph.getModuleById(id))
           .filter((module): module is NonNullable<typeof module> => module !== undefined)
@@ -580,6 +590,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   plugins.push({
     name: "palamedes:transform",
     enforce: "pre" as const,
+
+    // Config invalidation belongs on the transform plugin because it is the
+    // only Palamedes plugin present for every supported configuration. In
+    // particular, graph splitting can intentionally disable both MDX and the
+    // eager PO loader while its sidecars still read this shared config.
+    buildStart() {
+      resetConfig()
+    },
+
+    watchChange(id) {
+      resetConfigOnChange(id)
+    },
 
     config(viteConfig, env) {
       // A catalog chunk can be unavailable briefly during a staggered deploy or
@@ -896,20 +918,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   if (enablePoLoader) {
     plugins.push({
       name: "palamedes:po-loader",
-
-      /*
-       * Drop the cached config at the start of every build so edits to
-       * palamedes.yaml take effect without a dev-server restart.
-       */
-      buildStart() {
-        config = null
-      },
-
-      watchChange(id) {
-        if (config && path.resolve(id) === path.resolve(config.configPath)) {
-          config = null
-        }
-      },
 
       async transform(src, id) {
         if (!PO_FILE_REGEX.test(id)) {
