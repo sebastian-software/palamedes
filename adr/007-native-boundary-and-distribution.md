@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-17
-**Revised:** 2026-08-11
+**Revised:** 2026-08-21
 
 ## Context
 
@@ -33,7 +33,7 @@ The package model is:
 - four Rust crates: the semantic core, Node binding, native CLI, and plugin SDK
 - two platform-aware TypeScript wrapper families: `@palamedes/core-node` and
   `@palamedes/cli`
-- six platform-specific packages for each family, carrying either the compiled
+- eight platform-specific packages for each family, carrying either the compiled
   Node addon or CLI binary artifacts
 
 ## Alternatives Considered

@@ -4,7 +4,7 @@ import path from "node:path"
 
 const require = createRequire(import.meta.url)
 const SUPPORTED_TARGETS =
-  "darwin/arm64, linux/x64 glibc, linux/x64 musl, linux/arm64 glibc, linux/arm64 musl, and win32/x64"
+  "darwin/arm64, darwin/x64, linux/x64 glibc, linux/x64 musl, linux/arm64 glibc, linux/arm64 musl, win32/x64, and win32/arm64"
 
 function readPackageVersion(packageName, packageJsonPath, readFile, wrapperVersion) {
   let manifest
@@ -103,6 +103,9 @@ export function resolvePlatformPackage(options = {}) {
   if (platform === "darwin" && arch === "arm64") {
     return "@palamedes/cli-darwin-arm64"
   }
+  if (platform === "darwin" && arch === "x64") {
+    return "@palamedes/cli-darwin-x64"
+  }
   if (platform === "linux" && arch === "x64" && libc === "glibc") {
     return "@palamedes/cli-linux-x64-gnu"
   }
@@ -117,6 +120,9 @@ export function resolvePlatformPackage(options = {}) {
   }
   if (platform === "win32" && arch === "x64") {
     return "@palamedes/cli-win32-x64-msvc"
+  }
+  if (platform === "win32" && arch === "arm64") {
+    return "@palamedes/cli-win32-arm64-msvc"
   }
   if (platform === "linux" && !libc) {
     throw new Error(

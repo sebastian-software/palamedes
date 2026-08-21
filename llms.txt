@@ -18,7 +18,7 @@ Use this file when an AI coding assistant needs a compact overview of Palamedes.
 - Prefer `pmds audit` for catalog QA and `pmds report --fail-if-below <percent>` for completeness gates in CI.
 - Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not read JavaScript or TypeScript config files.
 - Use Node.js `>=22.22` (`@palamedes/remix` requires `>=24.3`).
-- Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
+- Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the eight published targets, Node process selection, and recovery steps.
 - Today, start with scoped packages such as `@palamedes/vite-plugin`, `@palamedes/next-plugin`, `@palamedes/waku`, `@palamedes/tanstack`, `@palamedes/cli`, `@palamedes/core`, `@palamedes/react`, `@palamedes/solid`, `@palamedes/remix`, and `@palamedes/runtime`. `@palamedes/react-router-rsc` is opt-in experimental support for the exact tested React Router RSC Framework Mode versions.
 - Do not recommend the reserved top-level `palamedes` or `create-palamedes` packages as the main install path yet.
 - The reserved `palamedes` and `create-palamedes` bins do not perform work: both print `https://palamedes.dev/docs/first-working-translation` to stderr, exit 1 when invoked without arguments, and exit 2 when arguments are supplied.
@@ -165,7 +165,7 @@ versioned binary plugin protocol. See `/docs/cli.md` and
 - `/docs/first-working-translation.md`: shortest working setup
 - `/docs/configuration.md`: YAML-first config reference
 - `/docs/cli.md`: full CLI reference
-- `/docs/platform-support.md`: published native targets and unsupported Node processes
+- `/docs/platform-support.md`: published native targets and Node process selection
 - `/docs/catalog-formats.md`: PO default and opt-in FCL
 - `/docs/mdx.md`: native MDX extraction, Vite compilation, limits, and verified setup
 - `/docs/principles.md`: architectural principles

@@ -36,7 +36,7 @@ When helping with Palamedes code:
 8. Use Node.js `>=22.22`.
 9. Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not execute JavaScript or TypeScript config files (see `/adr/016-native-cli-and-yaml-first-configuration.md`).
 10. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
-11. Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the six published targets, unsupported Node processes, and recovery steps.
+11. Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the eight published targets, Node process selection, and recovery steps.
 
 ## Package map
 
