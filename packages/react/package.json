@@ -18,34 +18,64 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
       "react-server": {
-        "types": "./dist/index-server.d.ts",
-        "import": "./dist/index-server.mjs",
-        "require": "./dist/index-server.cjs"
+        "import": {
+          "types": "./dist/index-server.d.mts",
+          "default": "./dist/index-server.mjs"
+        },
+        "require": {
+          "types": "./dist/index-server.d.cts",
+          "default": "./dist/index-server.cjs"
+        }
       },
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./compiled": {
-      "types": "./dist/compiled.d.ts",
       "react-server": {
-        "types": "./dist/compiled-server.d.ts",
-        "import": "./dist/compiled-server.mjs",
-        "require": "./dist/compiled-server.cjs"
+        "import": {
+          "types": "./dist/compiled-server.d.mts",
+          "default": "./dist/compiled-server.mjs"
+        },
+        "require": {
+          "types": "./dist/compiled-server.d.cts",
+          "default": "./dist/compiled-server.cjs"
+        }
       },
-      "import": "./dist/compiled.mjs",
-      "require": "./dist/compiled.cjs"
+      "import": {
+        "types": "./dist/compiled.d.mts",
+        "default": "./dist/compiled.mjs"
+      },
+      "require": {
+        "types": "./dist/compiled.d.cts",
+        "default": "./dist/compiled.cjs"
+      }
     },
     "./client": {
-      "types": "./dist/client.d.ts",
-      "import": "./dist/client.mjs",
-      "require": "./dist/client.cjs"
+      "import": {
+        "types": "./dist/client.d.mts",
+        "default": "./dist/client.mjs"
+      },
+      "require": {
+        "types": "./dist/client.d.cts",
+        "default": "./dist/client.cjs"
+      }
     },
     "./macro": {
-      "types": "./dist/macro.d.ts",
-      "import": "./dist/macro.mjs",
-      "require": "./dist/macro.cjs"
+      "import": {
+        "types": "./dist/macro.d.mts",
+        "default": "./dist/macro.mjs"
+      },
+      "require": {
+        "types": "./dist/macro.d.cts",
+        "default": "./dist/macro.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",
