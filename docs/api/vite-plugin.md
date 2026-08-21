@@ -90,6 +90,7 @@ export default defineConfig({
 Keep `palamedes()` before the React or Solid Vite plugin so the native MDX
 compiler emits JSX before the framework transform runs. React MDX parsing is
 configured automatically. Solid must use
-`solid({ extensions: [".mdx"] })`. MDX compilation requires Vite 7 or newer;
-set `mdx: false` on older Vite releases. See [MDX messages](../mdx.md) for
-authoring and configuration.
+`solid({ extensions: [".mdx"] })`. React MDX requires Vite 8 or newer because
+the generated JSX module type needs Rolldown; Vite 7 and older projects can
+set `mdx: false` while keeping macros and catalog loading. See [MDX
+messages](../mdx.md) for authoring and configuration.
