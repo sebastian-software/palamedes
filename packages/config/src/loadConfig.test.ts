@@ -287,6 +287,7 @@ describe("loadPalamedesConfig", () => {
           translatable-attributes: [alt, title]
           front-matter-fields: [title, description]
           ignore-directive: no-translate
+          keep-source-fallbacks: true
         catalogs:
           - path: src/locales/{locale}
             include: [src]
@@ -300,7 +301,60 @@ describe("loadPalamedesConfig", () => {
       translatableAttributes: ["alt", "title"],
       frontMatterFields: ["title", "description"],
       ignoreDirective: "no-translate",
+      keepSourceFallbacks: true,
     })
+  })
+
+  it("preserves shared MDX source fallbacks in data and JavaScript configs", async () => {
+    for (const key of ["keep-source-fallbacks", "keep_source_fallbacks"]) {
+      const fixtureDir = await createTempDir()
+      await writeFile(
+        path.join(fixtureDir, "palamedes.yaml"),
+        `
+          locales: [en]
+          source-locale: en
+          mdx:
+            ${key}: true
+          catalogs:
+            - path: locales/{locale}
+              include: [src]
+        `
+      )
+
+      expect((await loadPalamedesConfig({ cwd: fixtureDir })).mdx).toStrictEqual({
+        keepSourceFallbacks: true,
+      })
+    }
+
+    const javascriptDir = await createTempDir()
+    await writeFile(
+      path.join(javascriptDir, "palamedes.config.ts"),
+      `export default { ...${JSON.stringify(baseJavaScriptConfig())}, mdx: { keepSourceFallbacks: true } }`
+    )
+
+    expect((await loadPalamedesConfig({ cwd: javascriptDir })).mdx).toStrictEqual({
+      keepSourceFallbacks: true,
+    })
+  })
+
+  it("lets data-config inspection skip unknown-key validation", async () => {
+    const fixtureDir = await createTempDir()
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        locales: [en]
+        source-locale: en
+        partially-authored: true
+        catalogs:
+          - path: locales/{locale}
+            include: [src]
+      `
+    )
+
+    expect(() => loadPalamedesConfigSync({ cwd: fixtureDir })).toThrow(
+      /unknown key "partially-authored"\./
+    )
+    expect(() => loadPalamedesConfigSync({ cwd: fixtureDir, skipValidation: true })).not.toThrow()
   })
 
   it("rejects unknown keys at every schema-defined level in data and JavaScript configs", async () => {
