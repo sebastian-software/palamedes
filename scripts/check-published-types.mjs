@@ -324,6 +324,8 @@ try {
   writeFileSync(
     esmFixture,
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
+import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/react/macro"
+import { createElement } from "react"
 import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
@@ -332,10 +334,27 @@ import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
 
 export const lengths = [
   t\`Hello\`.length,
+  t({ message: "Hello {name}", context: "greeting" }, { name: "Ada" }).length,
   plural(2, { one: "one", other: "other" }).length,
   select("a", { a: "A", other: "Other" }).length,
   selectOrdinal(2, { one: "first", other: "other" }).length,
 ]
+
+export const macroElements = [
+  createElement(Trans, { message: "Hello", values: { name: "Ada" }, children: "Hello" }),
+  createElement(Plural, { value: 2, one: "one", other: "other" }),
+  createElement(Select, { value: "a", a: "A", other: "Other" }),
+  createElement(SelectOrdinal, { value: 2, one: "first", other: "other" }),
+]
+
+// @ts-expect-error Choice macros require their fallback branch.
+createElement(Plural, { value: 2, one: "one" })
+// @ts-expect-error Choice branch values must be strings.
+createElement(Select, { value: "a", a: 1, other: "Other" })
+// @ts-expect-error Trans values must retain the documented record shape.
+createElement(Trans, { message: "Hello", values: "Ada" })
+// @ts-expect-error t only accepts a tagged template or message descriptor.
+t("Hello")
 
 export default withPalamedes({})
 export const vitePlugins = [vitePalamedes(), palamedes()]
