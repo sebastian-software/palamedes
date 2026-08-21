@@ -19,7 +19,6 @@ test(
       writeFileSync(
         receiver,
         `import { writeFileSync } from "node:fs"
-writeFileSync(${JSON.stringify(marker)}, "ready")
 let signals = 0
 let finish
 process.on(${JSON.stringify(signal)}, () => {
@@ -30,6 +29,7 @@ process.on(${JSON.stringify(signal)}, () => {
     process.exit(0)
   }, 150)
 })
+writeFileSync(${JSON.stringify(marker)}, "ready")
 setInterval(() => {}, 1000)
 `
       )
@@ -172,7 +172,6 @@ test(
     writeFileSync(
       worker,
       `import { writeFileSync } from "node:fs"
-writeFileSync(${JSON.stringify(workerReady)}, "ready")
 let signals = 0
 let finish
 process.on("SIGHUP", () => {
@@ -183,6 +182,7 @@ process.on("SIGHUP", () => {
     process.exit(0)
   }, 150)
 })
+writeFileSync(${JSON.stringify(workerReady)}, "ready")
 setInterval(() => {}, 1000)
 `
     )
@@ -247,6 +247,7 @@ test(
   { skip: process.platform === "win32" },
   async (context) => {
     const fixture = mkdtempSync(path.join(os.tmpdir(), "palamedes-native-parent-exit-"))
+    const ready = path.join(fixture, "native-ready")
     const marker = path.join(fixture, "native-terminated")
     const receiver = path.join(fixture, "receiver.mjs")
     const launcher = path.join(fixture, "launcher.mjs")
@@ -258,14 +259,21 @@ process.on("SIGTERM", () => {
   writeFileSync(${JSON.stringify(marker)}, "terminated")
   process.exit(0)
 })
+writeFileSync(${JSON.stringify(ready)}, "ready")
 setInterval(() => {}, 1000)
 `
     )
     writeFileSync(
       launcher,
       `import { spawnNative } from ${JSON.stringify(nativeModule)}
+import { existsSync } from "node:fs"
 void spawnNative([${JSON.stringify(receiver)}], { nativeExecutable: process.execPath })
-setTimeout(() => process.exit(75), 100)
+const timer = setInterval(() => {
+  if (existsSync(${JSON.stringify(ready)})) {
+    clearInterval(timer)
+    process.exit(75)
+  }
+}, 10)
 `
     )
 
