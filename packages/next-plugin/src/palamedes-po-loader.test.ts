@@ -88,6 +88,15 @@ describe("palamedes-po-loader.cjs", () => {
     )
   })
 
+  it("uses the loader root context for config discovery", async () => {
+    await runLoader({ cwd: "/wrong-root" }, { rootContext: "/next-app" })
+
+    expect(loadPalamedesConfig).toHaveBeenCalledWith({
+      configPath: undefined,
+      cwd: "/next-app",
+    })
+  })
+
   it("fails missing translations when configured", async () => {
     compileCatalogModule.mockImplementation(() => {
       throw new Error("Missing 1 translation")

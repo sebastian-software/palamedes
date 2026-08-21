@@ -123,9 +123,20 @@ export type WithPalamedesOptions = {
 
   /**
    * Path to a Palamedes config file.
-   * If not provided, searches for config automatically.
+   * Relative paths resolve from the Next project root. If not provided,
+   * Palamedes searches for config automatically from that root.
    */
   configPath?: string
+
+  /**
+   * Absolute or relative Next project directory. Set this when Next's project
+   * directory cannot be derived automatically, for example in a custom host.
+   * `cwd` is an alias for compatibility with loader terminology.
+   */
+  projectRoot?: string
+
+  /** @deprecated Use projectRoot instead. */
+  cwd?: string
 
   /**
    * If true, fail compilation on missing translations.
@@ -153,7 +164,8 @@ export type WithPalamedesOptions = {
 
   /**
    * Monorepo workspace root to use for Turbopack and output file tracing.
-   * If omitted, Palamedes will try to detect a workspace root from process.cwd().
+   * If omitted, Palamedes will try to detect a workspace root from the Next
+   * project root.
    */
   workspaceRoot?: string
 
@@ -176,10 +188,9 @@ export type WithPalamedesOptions = {
   messageSplitting?: boolean
 }
 
-function resolveServerFunctionInitializer(enabled: boolean | undefined) {
+function resolveServerFunctionInitializer(enabled: boolean | undefined, projectRoot: string) {
   if (!enabled) return
 
-  const projectRoot = process.cwd()
   const candidates = ["src", ""].flatMap((directory) =>
     SERVER_FUNCTION_ENTRY_EXTENSIONS.map((extension) =>
       path.join(projectRoot, directory, `palamedes.server${extension}`)
@@ -204,12 +215,12 @@ function resolveServerFunctionInitializer(enabled: boolean | undefined) {
   }
 }
 
-function resolveWorkspaceRoot(explicitRoot?: string) {
+function resolveWorkspaceRoot(projectRoot: string, explicitRoot?: string) {
   if (explicitRoot) {
-    return explicitRoot
+    return path.resolve(projectRoot, explicitRoot)
   }
 
-  let currentDir = process.cwd()
+  let currentDir = projectRoot
   const initialDir = currentDir
 
   while (true) {
@@ -230,6 +241,60 @@ function resolveWorkspaceRoot(explicitRoot?: string) {
     }
     currentDir = parentDir
   }
+}
+
+type NextConfigWithResolvedPath = NextConfig & { configFile?: string }
+type WebpackContextWithDir = { dir?: unknown }
+
+function resolveProjectRoot(
+  options: Pick<WithPalamedesOptions, "projectRoot" | "cwd">,
+  baseConfig: NextConfig,
+  context?: WebpackContextWithDir
+): string {
+  const explicitProjectRoot = options.projectRoot
+  const explicitCwd = options.cwd
+  if (explicitProjectRoot && explicitCwd) {
+    const projectRoot = path.resolve(explicitProjectRoot)
+    const cwd = path.resolve(explicitCwd)
+    if (projectRoot !== cwd) {
+      throw new TypeError("withPalamedes projectRoot and cwd must resolve to the same directory.")
+    }
+  }
+  if (explicitProjectRoot || explicitCwd) {
+    return path.resolve(explicitProjectRoot ?? explicitCwd!)
+  }
+
+  if (typeof context?.dir === "string" && context.dir.length > 0) {
+    return path.resolve(context.dir)
+  }
+
+  const configFile = (baseConfig as NextConfigWithResolvedPath).configFile
+  if (typeof configFile === "string" && configFile.length > 0) {
+    return path.dirname(path.resolve(configFile))
+  }
+
+  const cliProjectRoot = resolveNextCliProjectRoot()
+  if (cliProjectRoot) {
+    return cliProjectRoot
+  }
+
+  return process.cwd()
+}
+
+function resolveNextCliProjectRoot(): string | undefined {
+  const commandIndex = process.argv.findIndex((argument) =>
+    ["dev", "build", "start"].includes(argument)
+  )
+  if (commandIndex === -1) {
+    return
+  }
+
+  const directory = process.argv[commandIndex + 1]
+  if (!directory || directory.startsWith("-")) {
+    return
+  }
+
+  return path.resolve(directory)
 }
 
 function hasWorkspaces(packageJsonPath: string) {
@@ -286,6 +351,8 @@ export function withPalamedes(
     failOnCompileError = false,
     runtimeModule: explicitRuntimeModule,
     keepSourceFallbacks: explicitKeepSourceFallbacks,
+    projectRoot: explicitProjectRoot,
+    cwd: explicitCwd,
     workspaceRoot: explicitWorkspaceRoot,
     serverFunctions: serverFunctionOptions,
     messageSplitting = false,
@@ -294,15 +361,23 @@ export function withPalamedes(
   const runtimeModule = resolveMacroRuntimeModule(explicitRuntimeModule)
   const keepSourceFallbacks = explicitKeepSourceFallbacks ?? process.env.NODE_ENV !== "production"
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
-  const serverFunctionEntry = resolveServerFunctionInitializer(serverFunctionOptions)
+  const projectRoot = resolveProjectRoot(
+    { projectRoot: explicitProjectRoot, cwd: explicitCwd },
+    baseConfig
+  )
+  const resolvedConfigPath = configPath ? path.resolve(projectRoot, configPath) : undefined
+  const serverFunctionEntry = resolveServerFunctionInitializer(serverFunctionOptions, projectRoot)
   const serverFunctions = serverFunctionEntry
     ? {
         initializerModule: SERVER_FUNCTION_INITIALIZER_MODULE,
         initializerExport: SERVER_FUNCTION_INITIALIZER_EXPORT,
       }
     : undefined
-  const workspaceRoot = resolveWorkspaceRoot(explicitWorkspaceRoot)
-  const configuredTurbopackRoot = baseConfig.turbopack?.root ?? workspaceRoot
+  const workspaceRoot = resolveWorkspaceRoot(projectRoot, explicitWorkspaceRoot)
+  const configuredTurbopackRoot =
+    typeof baseConfig.turbopack?.root === "string"
+      ? path.resolve(projectRoot, baseConfig.turbopack.root)
+      : workspaceRoot
   const outputFileTracingRoot =
     baseConfig.outputFileTracingRoot ??
     (typeof configuredTurbopackRoot === "string" ? configuredTurbopackRoot : undefined)
@@ -313,13 +388,15 @@ export function withPalamedes(
   const poLoaderOptions = {
     failOnMissing,
     failOnCompileError,
-    ...(configPath ? { configPath } : {}),
+    cwd: projectRoot,
+    ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
   }
   const transformLoaderOptions = {
     runtimeModule,
     keepSourceFallbacks,
     stripNonEssentialProps,
-    ...(configPath ? { configPath } : {}),
+    cwd: projectRoot,
+    ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
     ...(serverFunctions ? { serverFunctions } : {}),
   }
   // A missing production chunk must not make the entire client entry module
@@ -417,6 +494,20 @@ export function withPalamedes(
 
     // Webpack configuration
     webpack(config, context) {
+      const webpackProjectRoot = resolveProjectRoot(
+        { projectRoot: explicitProjectRoot, cwd: explicitCwd },
+        baseConfig,
+        context as WebpackContextWithDir
+      )
+      const webpackServerFunctionEntry = resolveServerFunctionInitializer(
+        serverFunctionOptions,
+        webpackProjectRoot
+      )
+      const webpackTransformLoaderOptions = {
+        ...transformLoaderOptions,
+        cwd: webpackProjectRoot,
+      }
+
       if (messageSplitting && !context.isServer) {
         config.experiments ??= {}
         config.experiments.topLevelAwait = true
@@ -425,17 +516,17 @@ export function withPalamedes(
         config.output.environment.asyncFunction = true
       }
 
-      if (serverFunctionEntry) {
+      if (webpackServerFunctionEntry) {
         config.resolve ??= {}
         if (Array.isArray(config.resolve.alias)) {
           config.resolve.alias.push({
             name: SERVER_FUNCTION_ENTRY_MODULE,
-            alias: serverFunctionEntry.absolutePath,
+            alias: webpackServerFunctionEntry.absolutePath,
           })
         } else {
           config.resolve.alias = {
             ...config.resolve.alias,
-            [SERVER_FUNCTION_ENTRY_MODULE]: serverFunctionEntry.absolutePath,
+            [SERVER_FUNCTION_ENTRY_MODULE]: webpackServerFunctionEntry.absolutePath,
           }
         }
       }
@@ -449,7 +540,7 @@ export function withPalamedes(
           {
             loader: oxcLoaderPath,
             options: {
-              ...transformLoaderOptions,
+              ...webpackTransformLoaderOptions,
               ...(serverFunctions && context.isServer ? { serverMessageSplitting: true } : {}),
               ...(messageSplitting && !context.isServer
                 ? { clientMessageSplitting: true, clientFragmentFailureMode }
@@ -471,7 +562,7 @@ export function withPalamedes(
           use: [
             {
               loader: poLoaderPath,
-              options: poLoaderOptions,
+              options: { ...poLoaderOptions, cwd: webpackProjectRoot },
             },
           ],
         })

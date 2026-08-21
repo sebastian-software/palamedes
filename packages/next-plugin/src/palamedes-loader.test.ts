@@ -108,6 +108,24 @@ describe("palamedes-loader.cjs", () => {
     expect(dependencies).toEqual(["/repo/palamedes.yaml"])
   })
 
+  it("uses the loader root context for split catalog config discovery", async () => {
+    transformPalamedesMacros.mockReturnValue({
+      code: "export const translated = true",
+      map: null,
+      compiledIds: ["id-a"],
+    })
+
+    await runLoader(
+      { serverMessageSplitting: true, cwd: "/wrong-root" },
+      { rootContext: "/next-app" }
+    )
+
+    expect(loadPalamedesConfigSync).toHaveBeenCalledWith({
+      configPath: undefined,
+      cwd: "/next-app",
+    })
+  })
+
   it("warns once per development compilation when splitting cannot add config dependencies", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "export const translated = true",

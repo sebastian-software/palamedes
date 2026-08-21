@@ -9,6 +9,15 @@ const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected"
 
+function resolveLoaderCwd(context, options) {
+  if (typeof context.rootContext === "string" && context.rootContext.length > 0) {
+    return path.resolve(context.rootContext)
+  }
+  if (typeof options.cwd === "string" && options.cwd.length > 0) {
+    return path.resolve(options.cwd)
+  }
+}
+
 module.exports = function palamedesPoLoader() {
   const callback = this.async()
   const options = typeof this.getOptions === "function" ? this.getOptions() : {}
@@ -16,7 +25,11 @@ module.exports = function palamedesPoLoader() {
   const failOnCompileError = options.failOnCompileError === true
 
   ;(async () => {
-    const cfg = await loadConfigCached(options.configPath, loadPalamedesConfig)
+    const cfg = await loadConfigCached(
+      options.configPath,
+      loadPalamedesConfig,
+      resolveLoaderCwd(this, options)
+    )
     const locale = path.basename(this.resourcePath, ".po")
     const artifactConfig = {
       rootDir: cfg.rootDir,

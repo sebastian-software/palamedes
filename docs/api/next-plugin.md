@@ -27,6 +27,9 @@ interface WithPalamedesOptions {
   exclude?: RegExp
   enablePoLoader?: boolean
   configPath?: string
+  projectRoot?: string
+  /** @deprecated Use projectRoot. */
+  cwd?: string
   failOnMissing?: boolean
   failOnCompileError?: boolean
   runtimeModule?: string
@@ -48,6 +51,14 @@ Defaults:
 - `keepSourceFallbacks`: `true` in development, `false` in production
 - `serverFunctions`: `false`
 - `messageSplitting`: `false`
+
+`projectRoot` is the Next application directory used for Palamedes config
+discovery, `palamedes.server.*` resolution, loader cache keys, and workspace
+root detection. With `next dev apps/web` or `next build apps/web`, it is derived
+from the Next CLI directory; webpack and Turbopack loaders use their Next root
+context when available. Relative `configPath` values resolve from this root.
+For custom hosts or ambiguous invocation, set `projectRoot` explicitly. `cwd`
+is a deprecated alias.
 
 Catalog `include` and `exclude` globs match dot-prefixed path segments. Since
 1.17.1 this behavior is shared with the Vite integration, so a matching source
@@ -236,4 +247,4 @@ into the equivalent rule config (`{ loaders: ["my-loader"] }`), because a list
 mixing bare loaders with rule configs has no defined meaning.
 
 `workspaceRoot` can be set explicitly in monorepos when automatic root
-detection is not correct.
+detection from the Next project root is not correct.

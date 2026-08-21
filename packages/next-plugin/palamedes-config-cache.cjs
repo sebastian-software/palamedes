@@ -5,30 +5,36 @@ const { readFileSync } = require("node:fs")
 
 const configCache = new Map()
 
-function loadConfigCachedSync(configPath, loadConfig) {
-  const cached = getCachedConfig(configPath)
+function loadConfigCachedSync(configPath, loadConfig, cwd) {
+  const cacheKey = getCacheKey(configPath, cwd)
+  const cached = getCachedConfig(cacheKey)
   if (cached) {
     return cached
   }
 
-  const config = loadConfig({ configPath })
-  cacheConfig(configPath, config)
+  const config = loadConfig({ configPath, cwd })
+  cacheConfig(cacheKey, config)
   return config
 }
 
-async function loadConfigCached(configPath, loadConfig) {
-  const cached = getCachedConfig(configPath)
+async function loadConfigCached(configPath, loadConfig, cwd) {
+  const cacheKey = getCacheKey(configPath, cwd)
+  const cached = getCachedConfig(cacheKey)
   if (cached) {
     return cached
   }
 
-  const config = await loadConfig({ configPath })
-  cacheConfig(configPath, config)
+  const config = await loadConfig({ configPath, cwd })
+  cacheConfig(cacheKey, config)
   return config
 }
 
-function getCachedConfig(configPath) {
-  const cached = configCache.get(configPath ?? "")
+function getCacheKey(configPath, cwd) {
+  return JSON.stringify([configPath ?? "", cwd ?? process.cwd()])
+}
+
+function getCachedConfig(cacheKey) {
+  const cached = configCache.get(cacheKey)
   if (!cached) {
     return null
   }
@@ -41,9 +47,9 @@ function getCachedConfig(configPath) {
   }
 }
 
-function cacheConfig(configPath, config) {
+function cacheConfig(cacheKey, config) {
   try {
-    configCache.set(configPath ?? "", {
+    configCache.set(cacheKey, {
       config,
       digest: digestConfig(config.configPath),
     })

@@ -303,6 +303,7 @@ module.exports = withPalamedes(
     exclude: /node_modules/,
     enablePoLoader: true,
     configPath: "./palamedes.yaml",
+    projectRoot: undefined,
     failOnMissing: false,
     failOnCompileError: false,
     keepSourceFallbacks: undefined,
@@ -343,8 +344,16 @@ The `.po` loader is scoped the same way. It is registered with
 webpack, so a dependency that ships importable `.po` files is left alone
 instead of failing the build as an unmatched catalog.
 
+`projectRoot` pins the Next application directory. Under the normal Next CLI,
+Palamedes derives it from `next dev apps/web` / `next build apps/web`; webpack
+and Turbopack loaders also prefer their supplied Next root context. This makes
+config discovery, `palamedes.server.*`, catalog paths, and cache entries belong
+to the app rather than the shell's working directory. Relative `configPath`
+values resolve from this directory. Set `projectRoot` explicitly in a custom
+Next host or if the app directory is ambiguous. `cwd` is a deprecated alias.
+
 `workspaceRoot` pins the monorepo root used for Turbopack and output file
-tracing. When omitted, `withPalamedes` walks upward from the working directory
+tracing. When omitted, `withPalamedes` walks upward from the Next project root
 looking for workspace markers (`workspaces` in package.json,
 `pnpm-workspace.yaml`, `turbo.json`, or `.git`) and — when it finds one — sets
 `outputFileTracingRoot` and `turbopack.root` on the Next config as a side
