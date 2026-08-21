@@ -1,3 +1,7 @@
+#[cfg(test)]
+use std::cell::Cell;
+use std::cell::OnceCell;
+
 use oxc_diagnostics::OxcDiagnostic;
 use serde::{Deserialize, Serialize};
 
@@ -180,7 +184,48 @@ pub struct SourceFileAnalysisResult {
 /// Byte-offset to source-location index shared by source analyzers.
 pub(crate) struct SourceLocator<'a> {
     source: &'a str,
-    line_starts: Vec<usize>,
+    line_starts: OnceCell<Vec<usize>>,
+}
+
+/// Produces the filename, line, and column text attached to a diagnostic.
+///
+/// Most callers already have formatted text. The transform visitor keeps an
+/// [`IndexedSourceLocation`] instead, so successful macro transforms do not
+/// calculate an error-only position.
+pub(crate) trait DiagnosticLocation {
+    fn format(&self) -> String;
+}
+
+impl DiagnosticLocation for str {
+    fn format(&self) -> String {
+        self.to_owned()
+    }
+}
+
+/// A lazily formatted location backed by a file-wide line index.
+pub(crate) struct IndexedSourceLocation<'locator, 'source> {
+    locator: &'locator SourceLocator<'source>,
+    filename: &'locator str,
+    offset: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SOURCE_LOCATOR_INDEX_BUILD_COUNT: Cell<usize> = const { Cell::new(0) };
+    static INDEXED_LOCATION_FORMAT_COUNT: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_diagnostic_location_metrics() {
+    SOURCE_LOCATOR_INDEX_BUILD_COUNT.with(|count| count.set(0));
+    INDEXED_LOCATION_FORMAT_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn diagnostic_location_metrics() -> (usize, usize) {
+    let source_locator_index_builds = SOURCE_LOCATOR_INDEX_BUILD_COUNT.with(Cell::get);
+    let indexed_location_formats = INDEXED_LOCATION_FORMAT_COUNT.with(Cell::get);
+    (source_locator_index_builds, indexed_location_formats)
 }
 
 /// Formats parser diagnostics with the source locations carried by their labels.
@@ -223,27 +268,49 @@ pub(crate) fn display_filename(filename: &str) -> &str {
 
 impl<'a> SourceLocator<'a> {
     pub(crate) fn new(source: &'a str) -> Self {
-        let mut line_starts = vec![0];
-        for (index, &byte) in source.as_bytes().iter().enumerate() {
-            if byte == b'\n' {
-                line_starts.push(index + 1);
-            }
-        }
         Self {
             source,
-            line_starts,
+            line_starts: OnceCell::new(),
         }
+    }
+
+    fn line_starts(&self) -> &Vec<usize> {
+        self.line_starts.get_or_init(|| {
+            #[cfg(test)]
+            SOURCE_LOCATOR_INDEX_BUILD_COUNT.with(|count| count.set(count.get() + 1));
+
+            let mut line_starts = vec![0];
+            for (index, &byte) in self.source.as_bytes().iter().enumerate() {
+                if byte == b'\n' {
+                    line_starts.push(index + 1);
+                }
+            }
+            line_starts
+        })
     }
 
     pub(crate) fn location(&self, offset: usize) -> (usize, usize) {
         let offset = offset.min(self.source.len());
-        let line_index = match self.line_starts.binary_search(&offset) {
+        let line_starts = self.line_starts();
+        let line_index = match line_starts.binary_search(&offset) {
             Ok(index) => index,
             Err(index) => index.saturating_sub(1),
         };
-        let line_start = self.line_starts[line_index];
+        let line_start = line_starts[line_index];
         let column = self.source[line_start..offset].chars().count() + 1;
         (line_index + 1, column)
+    }
+
+    pub(crate) fn indexed_location<'locator>(
+        &'locator self,
+        filename: &'locator str,
+        offset: usize,
+    ) -> IndexedSourceLocation<'locator, 'a> {
+        IndexedSourceLocation {
+            locator: self,
+            filename,
+            offset,
+        }
     }
 
     pub(crate) fn line(&self, offset: usize) -> usize {
@@ -258,6 +325,16 @@ impl<'a> SourceLocator<'a> {
             line,
             column,
         }
+    }
+}
+
+impl DiagnosticLocation for IndexedSourceLocation<'_, '_> {
+    fn format(&self) -> String {
+        #[cfg(test)]
+        INDEXED_LOCATION_FORMAT_COUNT.with(|count| count.set(count.get() + 1));
+
+        let (line, column) = self.locator.location(self.offset);
+        format!("{}:{line}:{column}", self.filename)
     }
 }
 

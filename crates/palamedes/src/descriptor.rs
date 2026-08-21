@@ -1,6 +1,7 @@
 use oxc_ast::ast::{Expression, ObjectExpression, ObjectPropertyKind};
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::source::DiagnosticLocation;
 
 pub(crate) fn descriptor_property_value<'a>(
     object: &'a ObjectExpression<'a>,
@@ -18,7 +19,7 @@ pub(crate) fn descriptor_static_property(
     object: &ObjectExpression<'_>,
     property_name: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<String>> {
     let Some(value) = descriptor_property_value(object, property_name) else {
         return Ok(None);
@@ -37,12 +38,12 @@ pub(crate) fn descriptor_static_property(
 
 pub(crate) fn unsupported_macro_syntax(
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
     detail: impl Into<String>,
 ) -> PalamedesError {
     PalamedesError::UnsupportedMacroSyntax {
         macro_name: macro_name.to_string(),
-        location: location.to_string(),
+        location: location.format(),
         detail: detail.into(),
     }
 }

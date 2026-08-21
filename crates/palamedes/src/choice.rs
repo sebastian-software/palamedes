@@ -1,6 +1,7 @@
 use oxc_ast::ast::{Expression, JSXAttributeValue, JSXExpression};
 
 use crate::error::PalamedesError;
+use crate::source::DiagnosticLocation;
 
 const PLURAL_CATEGORIES: [&str; 6] = ["zero", "one", "two", "few", "many", "other"];
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
@@ -63,18 +64,25 @@ pub(crate) fn jsx_offset_value(value: &JSXAttributeValue<'_>) -> Option<String> 
     }
 }
 
-pub(crate) fn invalid_offset(macro_name: &str, location: &str) -> PalamedesError {
+pub(crate) fn invalid_offset(
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+) -> PalamedesError {
     PalamedesError::UnsupportedMacroSyntax {
         macro_name: macro_name.to_string(),
-        location: location.to_string(),
+        location: location.format(),
         detail: "`offset` must be a static non-negative integer".to_string(),
     }
 }
 
-pub(crate) fn invalid_choice_option(macro_name: &str, location: &str, key: &str) -> PalamedesError {
+pub(crate) fn invalid_choice_option(
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+    key: &str,
+) -> PalamedesError {
     PalamedesError::UnsupportedMacroSyntax {
         macro_name: macro_name.to_string(),
-        location: location.to_string(),
+        location: location.format(),
         detail: format!(
             "`{key}` is not a valid plural category; use zero, one, two, few, many, other, or an exact _N key"
         ),
