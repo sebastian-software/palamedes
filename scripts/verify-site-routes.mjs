@@ -67,7 +67,7 @@ const ROUTE_EXPECTATIONS = [
     h1: "Vite i18n for React and Solid, in one plugin.",
   },
   { path: "/proof", h1: "Claims you can re-run." },
-  { path: "/get-started", h1: "The guided first-translation path." },
+  { path: "/get-started", h1: "The guided 5-minute path." },
   { path: "/compare", h1: "Compare it properly." },
   { path: "/compare/lingui", h1: "The same idea, on an engine" },
   { path: "/compare/i18next", h1: "You already know what the string says." },
@@ -348,10 +348,23 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!poVisible) {
       fail("code showcase: Translate tab did not reveal .po pane")
     }
-    // Get-started stack picker switches the six-step flow per stack.
+    // Get-started keeps the diagram, stack picker, and forward route as distinct
+    // numbered sections. Each stack gives the package caveat its own numbered
+    // step immediately after the install command.
     currentPath = "/get-started"
     await gotoAndSettle(page, "/get-started", { settleMs: 1500 })
-    await page.getByRole("tab", { name: "Vite + Solid" }).click()
+    await checkGetStartedStructure(page, label)
+    const reactTab = page.getByRole("tab", { name: "Vite + React" })
+    const solidTab = page.getByRole("tab", { name: "Vite + Solid" })
+    await reactTab.focus()
+    await page.keyboard.press("ArrowRight")
+    if (!(await solidTab.evaluate((element) => element === document.activeElement))) {
+      fail(`get-started ${label}: ArrowRight did not focus the Solid stack tab`)
+    }
+    await page.keyboard.press("Enter")
+    if ((await solidTab.getAttribute("aria-selected")) !== "true") {
+      fail(`get-started ${label}: Enter did not select the focused Solid stack tab`)
+    }
     const solidVisible = await page.getByText("vite-plugin-solid").first().isVisible()
     if (!solidVisible) {
       fail("get-started: Solid tab did not reveal Solid setup")
@@ -415,6 +428,9 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!integrationBand || !questionRouting || !faq) {
       fail("no-JS: homepage completion blocks missing from prerendered HTML")
     }
+    currentPath = "/get-started"
+    await gotoAndSettle(page, "/get-started", { settleMs: 100 })
+    await checkGetStartedStructure(page, label)
   }
 
   if (consoleErrors.length > 0) {
@@ -428,6 +444,66 @@ async function checkRoutes(context, label, { expectHydration }) {
     )
   }
   await page.close()
+}
+
+async function checkGetStartedStructure(page, label) {
+  const sectionNumbers = (await page.locator(".pmds-section-number").allTextContents()).map(
+    (text) => text.trim()
+  )
+  const expectedSections = ["01 — The loop", "02 — Choose a host", "03 — Next"]
+  if (sectionNumbers.join("|") !== expectedSections.join("|")) {
+    fail(`get-started ${label}: numbered sections drifted (${sectionNumbers.join(", ")})`)
+  }
+
+  const visiblePanel = page.getByRole("tabpanel").first()
+  const listItems = visiblePanel.getByRole("listitem")
+  const expectedSteps = [
+    { number: "01", heading: "Install" },
+    { number: "02", heading: "Use the scoped packages" },
+    { number: "03", heading: "Configure" },
+  ]
+  for (const [index, expected] of expectedSteps.entries()) {
+    const item = listItems.nth(index)
+    const numberCount = await item.getByText(expected.number, { exact: true }).count()
+    const headingCount = await item
+      .getByRole("heading", { name: expected.heading, exact: true })
+      .count()
+    if (numberCount !== 1 || headingCount !== 1) {
+      fail(
+        `get-started ${label}: step ${index + 1} order drifted (number ${numberCount}, heading ${headingCount})`
+      )
+    }
+  }
+  const listItemCount = await listItems.count()
+  if (listItemCount !== 7) {
+    fail(`get-started ${label}: expected seven guided steps, got ${listItemCount}`)
+  }
+  if ((await listItems.nth(1).getByText("Package boundary", { exact: true }).count()) !== 1) {
+    fail(`get-started ${label}: package boundary rail is missing from step 02`)
+  }
+
+  const loopHref = await page
+    .getByRole("link", { name: "See the local loop", exact: true })
+    .getAttribute("href")
+  if (
+    loopHref !== "#loop" ||
+    (await page.locator("#loop").count()) !== 1 ||
+    (await page.locator("#install").count()) !== 1
+  ) {
+    fail(`get-started ${label}: preserved loop/install anchors drifted`)
+  }
+
+  const frameworkHref = await page
+    .getByRole("link", { name: "Choose your framework", exact: true })
+    .getAttribute("href")
+  const localeHref = await page
+    .getByRole("link", { name: "Explore locale architecture", exact: true })
+    .getAttribute("href")
+  if (frameworkHref !== "/frameworks" || localeHref !== "/locale-routing") {
+    fail(
+      `get-started ${label}: closing CTA must move forward (${frameworkHref ?? "missing"}, ${localeHref ?? "missing"})`
+    )
+  }
 }
 
 async function checkHomepageDecisionViewport(browser, width) {

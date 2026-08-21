@@ -1,9 +1,17 @@
-export interface Step {
+interface InstructionStep {
+  kind?: undefined
   title: string
   body: string
   code?: string
   aside?: string
 }
+
+interface PackageBoundaryStep {
+  kind: "package-boundary"
+  title: string
+}
+
+export type Step = InstructionStep | PackageBoundaryStep
 
 export type StackId = "react" | "solid" | "next"
 
@@ -20,6 +28,11 @@ declare module "*.po" {
   export const messages: CompiledCatalogMessages
 }`
 
+export const PACKAGE_BOUNDARY_STEP: PackageBoundaryStep = {
+  kind: "package-boundary",
+  title: "Use the scoped packages",
+}
+
 export const QUICKSTART_STEPS: Record<StackId, Step[]> = {
   react: [
     {
@@ -28,6 +41,7 @@ export const QUICKSTART_STEPS: Record<StackId, Step[]> = {
       code: `pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli @vitejs/plugin-react`,
     },
+    PACKAGE_BOUNDARY_STEP,
     {
       title: "Configure",
       body: "One YAML file declares your locales and where catalogs live.",
@@ -92,6 +106,7 @@ $ pnpm dev`,
       code: `pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
 pnpm add -D @palamedes/cli vite-plugin-solid`,
     },
+    PACKAGE_BOUNDARY_STEP,
     {
       title: "Configure",
       body: "One YAML file declares your locales and where catalogs live.",
@@ -163,6 +178,7 @@ $ pnpm dev`,
       code: `pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plugin
 pnpm add -D @palamedes/cli @palamedes/config`,
     },
+    PACKAGE_BOUNDARY_STEP,
     {
       title: "Configure",
       body: "One YAML file declares your locales and where catalogs live.",
