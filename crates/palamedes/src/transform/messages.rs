@@ -331,6 +331,7 @@ pub(super) fn escape_string(value: &str) -> String {
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('\n', "\\n")
+        .replace('\r', "\\r")
 }
 
 pub(super) fn first_argument_object<'a>(
