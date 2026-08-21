@@ -340,14 +340,25 @@ export const lengths = [
   selectOrdinal(2, { one: "first", other: "other" }).length,
 ]
 
+// @ts-expect-error Core Select macro branches must be strings.
+select("a", { a: 1, other: "Other" })
+// @ts-expect-error Core Select macro branches cannot be undefined.
+select("a", { a: undefined, other: "Other" })
+
 export const macroProps = [
   { message: "Hello", values: { name: "Ada" }, children: "Hello" } satisfies Parameters<
     typeof Trans
   >[0],
   { value: 2, one: "one", other: "other" } satisfies Parameters<typeof Plural>[0],
-  { value: "a", a: "A", other: "Other" } satisfies Parameters<typeof Select>[0],
   { value: 2, one: "first", other: "other" } satisfies Parameters<typeof SelectOrdinal>[0],
 ]
+
+Select({ value: "a", a: "A", other: "Other" })
+Select({ value: 2, two: "Two", other: "Other" })
+// @ts-expect-error React Select macro branches must be strings.
+Select({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error React Select macro branches cannot be undefined.
+Select({ value: "a", a: undefined, other: "Other" })
 
 // @ts-expect-error Choice macros require their fallback branch.
 const missingPluralFallback: Parameters<typeof Plural>[0] = { value: 2, one: "one" }
@@ -379,8 +390,19 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
   writeFileSync(
     commonJsFixture,
     `// @palamedes/tanstack is intentionally ESM-only and belongs in consumer.mts.
+import coreMacro = require("@palamedes/core/macro")
+import reactMacro = require("@palamedes/react/macro")
 import nextPlugin = require("@palamedes/next-plugin")
 import vitePlugin = require("@palamedes/vite-plugin")
+
+export const selectLengths = [
+  coreMacro.select("a", { a: "A", other: "Other" }).length,
+  reactMacro.Select({ value: "a", a: "A", other: "Other" }),
+]
+// @ts-expect-error Core Select macro branches must be strings in CommonJS too.
+coreMacro.select("a", { a: 1, other: "Other" })
+// @ts-expect-error React Select macro branches must be strings in CommonJS too.
+reactMacro.Select({ value: "a", a: 1, other: "Other" })
 
 export const config = nextPlugin.withPalamedes({})
 export const vitePlugins = vitePlugin.palamedes()

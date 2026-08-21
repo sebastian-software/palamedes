@@ -11,7 +11,7 @@ type MacroValues = Record<string, unknown>
 // name. The JavaScript macros accept both spellings, though, so preserve the
 // documented `=N` exact-branch syntax for object literals.
 type PluralOptions = Omit<PluralProps, "value"> & Record<`=${number}`, string>
-type SelectOptions = Omit<SelectProps, "value">
+type SelectOptions<Options extends { other: string }> = Options & Record<keyof Options, string>
 type SelectOrdinalOptions = Omit<SelectOrdinalProps, "value"> & Record<`=${number}`, string>
 
 function throwMacroError(): never {
@@ -34,7 +34,10 @@ export function plural(value: string | number, options: PluralOptions): string {
   return throwMacroError()
 }
 
-export function select(value: string | number, options: SelectOptions): string {
+export function select<const Options extends { other: string }>(
+  value: string | number,
+  options: SelectOptions<Options>
+): string {
   return throwMacroError()
 }
 

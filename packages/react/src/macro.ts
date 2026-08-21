@@ -21,7 +21,9 @@ export function Plural(_props: PluralProps): ReactNode {
   return throwMacroError()
 }
 
-export function Select(_props: SelectProps): ReactNode {
+export function Select<const Props extends { value: string | number; other: string }>(
+  _props: SelectProps<Props>
+): ReactNode {
   return throwMacroError()
 }
 

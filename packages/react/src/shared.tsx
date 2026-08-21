@@ -50,7 +50,10 @@ export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
     return renderChoice(useI18n(), "selectordinal", value, choices, offset)
   }
 
-  function Select({ value, ...choices }: SelectProps): ReactNode {
+  function Select<const Props extends { value: string | number; other: string }>({
+    value,
+    ...choices
+  }: SelectProps<Props>): ReactNode {
     return renderChoice(useI18n(), "select", value, choices)
   }
 
