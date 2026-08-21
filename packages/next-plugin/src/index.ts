@@ -288,7 +288,7 @@ function resolveProjectRoot(
 }
 
 function resolveNextConfigProjectRoot(): string | undefined {
-  const stack = new Error().stack
+  const stack = new Error("Resolve the Next config evaluation stack.").stack
   if (!stack) {
     return
   }
