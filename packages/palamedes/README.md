@@ -29,7 +29,8 @@ If you want to use Palamedes today, install the scoped packages directly:
 ## Current Status
 
 - package name is reserved
-- the included binary prints a short status message
+- the included binary prints the supported quickstart to stderr and exits with
+  status `1`; supplied command arguments are unsupported and exit with status `2`
 - future releases may turn this into a first-class top-level entry point
 
 ## Recommended Starting Point Today
@@ -45,6 +46,10 @@ host framework.
 For the real starting path, use:
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+
+The reserved `palamedes` binary does not run extraction or another command yet.
+Its non-zero exit status prevents `npx palamedes extract` from reporting a
+successful no-op; use `@palamedes/cli` instead.
 
 ## Related Packages
 
