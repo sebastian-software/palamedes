@@ -12,6 +12,11 @@ use ferrocat_icu::{parse_icu, stringify_icu, IcuMessage, IcuNode, IcuOption, Icu
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod fcl_collation;
+mod fcl_collation_table;
+
+use self::fcl_collation::{collation_key, CollationKey};
+
 #[cfg(test)]
 thread_local! {
     static SOURCE_CATALOG_PARSE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -784,6 +789,12 @@ fn parse_catalog_as_po(
 ) -> PalamedesResult<PoFile> {
     #[cfg(test)]
     SOURCE_CATALOG_PARSE_COUNT.with(|count| count.set(count.get() + 1));
+    if source_locale.trim().is_empty() {
+        return Err(ferrocat::ApiError::InvalidArguments(
+            "source_locale must not be empty".to_owned(),
+        )
+        .into());
+    }
     match format {
         PalamedesCatalogFormat::Po => Ok(ferrocat::parse_po(content)?),
         PalamedesCatalogFormat::Fcl => parse_fcl_as_po(content, source_locale, locale),
@@ -810,6 +821,31 @@ fn validate_icu_native_po_item(item: &PoItem) -> PalamedesResult<()> {
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FclOrder {
+    LegacyBytewise,
+    Collated,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct FclCollatedKey {
+    message: CollationKey,
+    context: CollationKey,
+    raw_message: String,
+    raw_context: Option<String>,
+    obsolete: bool,
+}
+
+fn fcl_collated_key(item: &PoItem) -> FclCollatedKey {
+    FclCollatedKey {
+        message: collation_key(&item.msgid),
+        context: collation_key(item.msgctxt.as_deref().unwrap_or("")),
+        raw_message: item.msgid.clone(),
+        raw_context: item.msgctxt.clone(),
+        obsolete: item.obsolete,
+    }
+}
+
 fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> PalamedesResult<PoFile> {
     let mut lines = content.lines().enumerate();
     let (_, header) = lines.next().ok_or_else(|| {
@@ -825,7 +861,9 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
         .into());
     }
     let mut declared_source = None;
+    let mut declared_locale = None;
     let mut declared_order = false;
+    let mut order = FclOrder::LegacyBytewise;
     for tag in fields {
         let (key, raw_value) = tag.split_once('=').ok_or_else(|| {
             ferrocat::ApiError::InvalidArguments(format!("invalid FCL header tag {tag:?}"))
@@ -833,14 +871,17 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
         let value = unescape_fcl(raw_value)?;
         match key {
             "source" => declared_source = Some(value),
-            "locale" => {}
+            "locale" => declared_locale = Some(value),
             "order" if declared_order => {
                 return Err(ferrocat::ApiError::InvalidArguments(
                     "duplicate FCL header key `order`".to_owned(),
                 )
                 .into())
             }
-            "order" if value == "collated" => declared_order = true,
+            "order" if value == "collated" => {
+                declared_order = true;
+                order = FclOrder::Collated;
+            }
             "order" => {
                 return Err(ferrocat::ApiError::InvalidArguments(format!(
                     "unknown FCL order {value:?}"
@@ -865,6 +906,16 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
         ))
         .into());
     }
+    if declared_locale
+        .as_deref()
+        .is_some_and(|value| value != locale)
+    {
+        return Err(ferrocat::ApiError::InvalidArguments(format!(
+            "FCL locale {:?} did not match requested locale {locale:?}",
+            declared_locale.as_deref().unwrap_or_default()
+        ))
+        .into());
+    }
     let mut po = PoFile {
         headers: vec![Header {
             key: "Language".to_owned(),
@@ -873,6 +924,7 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
         ..PoFile::default()
     };
     let mut identities = BTreeSet::new();
+    let mut previous_collated_key: Option<FclCollatedKey> = None;
     for (line_index, line) in lines {
         if line.is_empty() {
             continue;
@@ -897,6 +949,31 @@ fn parse_fcl_as_po(content: &str, source_locale: &str, locale: &str) -> Palamede
                 item.msgid, item.msgctxt
             ))
             .into());
+        }
+        if let Some(previous) = po.items.last() {
+            let identity_order = (item.msgid.as_str(), item.msgctxt.as_deref())
+                .cmp(&(previous.msgid.as_str(), previous.msgctxt.as_deref()));
+            if order == FclOrder::LegacyBytewise && identity_order.is_lt() {
+                return Err(ferrocat::ApiError::InvalidArguments(format!(
+                    "FCL entries must be sorted by (id, ctxt); line {} is out of order",
+                    line_index + 1
+                ))
+                .into());
+            }
+        }
+        if order == FclOrder::Collated {
+            let key = fcl_collated_key(&item);
+            if previous_collated_key
+                .as_ref()
+                .is_some_and(|previous| key < *previous)
+            {
+                return Err(ferrocat::ApiError::InvalidArguments(format!(
+                    "FCL entries must follow the declared collated order; line {} is out of order",
+                    line_index + 1
+                ))
+                .into());
+            }
+            previous_collated_key = Some(key);
         }
         po.items.push(item);
     }
@@ -1744,11 +1821,11 @@ mod tests {
     use super::{
         apply_translation_patches, apply_translation_patches_with_replacement,
         atomic_replace_catalog, atomic_replace_catalog_with_directory_sync, build_candidate,
-        find_po_item, list_translation_candidates, load_catalog, po_item_indexes,
-        reset_source_catalog_parse_count, source_catalog_parse_count, TranslationCandidate,
-        TranslationCandidateId, TranslationCandidateRequest, TranslationMachineProvenance,
-        TranslationPatch, TranslationPatchOutcomeStatus, TranslationPatchRequest,
-        TranslationPluralKind, TranslationValue,
+        find_po_item, list_translation_candidates, load_catalog, parse_catalog_as_po,
+        po_item_indexes, reset_source_catalog_parse_count, source_catalog_parse_count,
+        TranslationCandidate, TranslationCandidateId, TranslationCandidateRequest,
+        TranslationMachineProvenance, TranslationPatch, TranslationPatchOutcomeStatus,
+        TranslationPatchRequest, TranslationPluralKind, TranslationValue,
     };
     use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError};
 
@@ -1793,6 +1870,169 @@ mod tests {
             assert_eq!(po_candidate.origins, fcl_candidate.origins);
             assert_eq!(po_candidate.review, fcl_candidate.review);
             assert_eq!(po_candidate.machine, fcl_candidate.machine);
+        }
+    }
+
+    #[test]
+    fn single_pass_fcl_decoder_rejects_locale_source_and_order_contract_violations() {
+        let cases = [
+            (
+                "%FCL1\tsource=en\tlocale=fr\torder=collated\nAlpha\t\tA\n",
+                "en",
+                "de",
+                "declared target locale",
+                false,
+            ),
+            (
+                "%FCL1\tsource=en\tlocale=de\torder=collated\nAlpha\t\tA\n",
+                " \n\t ",
+                "de",
+                "empty source locale",
+                true,
+            ),
+            (
+                "%FCL1\tsource=en\tlocale=de\nZulu\t\tZ\nAlpha\t\tA\n",
+                "en",
+                "de",
+                "legacy bytewise order",
+                true,
+            ),
+            (
+                "%FCL1\tsource=en\tlocale=de\torder=collated\n<0>Continue</0>\t\tmarkup\n{count, plural, one {#} other {#}}\t\tplaceholder\n",
+                "en",
+                "de",
+                "declared collated order",
+                true,
+            ),
+        ];
+
+        for (content, source_locale, locale, contract, ferrocat_rejects) in cases {
+            reset_source_catalog_parse_count();
+            assert!(
+                parse_catalog_as_po(content, source_locale, locale, PalamedesCatalogFormat::Fcl,)
+                    .is_err(),
+                "single-pass decoder accepted invalid {contract}"
+            );
+            assert_eq!(
+                source_catalog_parse_count(),
+                1,
+                "rejecting {contract} must not add a second parse"
+            );
+            if ferrocat_rejects {
+                assert!(
+                    parse_catalog(
+                        ParseCatalogOptions::new(content, source_locale)
+                            .with_locale(locale)
+                            .with_mode(CatalogMode::IcuFcl),
+                    )
+                    .is_err(),
+                    "Ferrocat accepted invalid {contract}"
+                );
+            }
+        }
+
+        reset_source_catalog_parse_count();
+        assert!(
+            parse_catalog_as_po(
+                "msgid \"Alpha\"\nmsgstr \"A\"\n",
+                " \t ",
+                "de",
+                PalamedesCatalogFormat::Po,
+            )
+            .is_err(),
+            "PO and FCL must share the empty source-locale contract"
+        );
+        assert_eq!(source_catalog_parse_count(), 1);
+    }
+
+    #[test]
+    fn candidate_listing_rejects_invalid_fcl_before_exposing_messages() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("features/de.fcl");
+        fs::create_dir_all(path.parent().expect("catalog parent")).expect("create catalog parent");
+        let cases = [
+            (
+                "%FCL1\tsource=en\tlocale=fr\torder=collated\nAlpha\t\tA\n",
+                "en",
+            ),
+            (
+                "%FCL1\tsource=en\tlocale=de\torder=collated\nAlpha\t\tA\n",
+                " \t ",
+            ),
+            ("%FCL1\tsource=en\tlocale=de\nZulu\t\tZ\nAlpha\t\tA\n", "en"),
+        ];
+
+        for (content, source_locale) in cases {
+            fs::write(&path, content).expect("write invalid FCL fixture");
+            let mut config = fcl_config(fixture.path());
+            config.source_locale = source_locale.to_owned();
+            let result = list_translation_candidates(&TranslationCandidateRequest {
+                config,
+                locales: vec!["de".to_owned()],
+                targets: Vec::new(),
+                max_origins: 8,
+            });
+            assert!(result.is_err(), "candidate listing accepted {content:?}");
+        }
+    }
+
+    #[test]
+    fn fcl_order_validation_matches_ferrocat_for_canonical_and_adjacent_swaps() {
+        let po = r#"
+msgid "<0>Continue</0>"
+msgstr "markup"
+
+msgctxt "button"
+msgid "Alpha"
+msgstr "alpha"
+
+msgid "Zulu"
+msgstr "zulu"
+
+msgid "cafe"
+msgstr "plain"
+
+msgid "café"
+msgstr "accented"
+
+msgid "{count, plural, one {#} other {#}}"
+msgstr "placeholder"
+"#;
+        let canonical = convert_catalog(
+            ConvertCatalogOptions::new(po, "en", CatalogMode::IcuPo, CatalogMode::IcuFcl)
+                .with_locale("de"),
+        )
+        .expect("render Ferrocat's canonical collated order")
+        .content;
+
+        assert!(parse_catalog_as_po(&canonical, "en", "de", PalamedesCatalogFormat::Fcl).is_ok());
+        assert!(parse_catalog(
+            ParseCatalogOptions::new(&canonical, "en")
+                .with_locale("de")
+                .with_mode(CatalogMode::IcuFcl),
+        )
+        .is_ok());
+
+        let lines = canonical.lines().collect::<Vec<_>>();
+        for first in 1..lines.len() - 1 {
+            let mut swapped = lines.clone();
+            swapped.swap(first, first + 1);
+            let invalid = format!("{}\n", swapped.join("\n"));
+            assert!(
+                parse_catalog_as_po(&invalid, "en", "de", PalamedesCatalogFormat::Fcl).is_err(),
+                "single-pass decoder accepted swapped lines {first}/{}",
+                first + 1
+            );
+            assert!(
+                parse_catalog(
+                    ParseCatalogOptions::new(&invalid, "en")
+                        .with_locale("de")
+                        .with_mode(CatalogMode::IcuFcl),
+                )
+                .is_err(),
+                "Ferrocat accepted swapped lines {first}/{}",
+                first + 1
+            );
         }
     }
 
