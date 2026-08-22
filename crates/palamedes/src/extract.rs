@@ -2113,18 +2113,24 @@ pub fn extract_catalog_messages_cached(
                 messages,
                 diagnostics: file_diagnostics,
                 comments,
-                fresh,
+                cache_insert,
                 fingerprint,
             } => {
-                if fresh {
-                    cache.insert(
+                match cache_insert {
+                    Some(CacheInsertKind::Complete) => cache.insert(
                         path.clone(),
                         relative_file.clone(),
                         &messages,
                         &file_diagnostics,
                         &comments,
                         fingerprint,
-                    );
+                    ),
+                    Some(CacheInsertKind::ExtractionOnly) => cache.insert_extraction_only(
+                        path.clone(),
+                        relative_file.clone(),
+                        fingerprint,
+                    ),
+                    None => {}
                 }
                 if is_mdx_filename(&path) && !file_diagnostics.is_empty() {
                     failed_files.push(ExtractCatalogFileFailure {
@@ -2181,7 +2187,7 @@ fn extract_one_file(
             messages,
             diagnostics,
             comments,
-            fresh: false,
+            cache_insert: None,
             fingerprint: None,
         };
     }
@@ -2232,9 +2238,9 @@ fn extract_one_file(
             messages: Vec::new(),
             diagnostics: Vec::new(),
             comments: Vec::new(),
-            // The marker fast path has not produced a complete comment list,
-            // so it must not seed the shared source-analysis cache.
-            fresh: false,
+            // Extraction can cache the empty result; the entry remains marked
+            // incomplete so source lint still performs the full analysis.
+            cache_insert: Some(CacheInsertKind::ExtractionOnly),
             fingerprint,
         };
     }
@@ -2258,7 +2264,7 @@ fn extract_one_file(
             messages: analysis.messages,
             diagnostics: analysis.diagnostics,
             comments: analysis.comments,
-            fresh: true,
+            cache_insert: Some(CacheInsertKind::Complete),
             fingerprint,
         },
         Err(
@@ -2298,6 +2304,12 @@ fn resolve_extract_threads(requested: Option<usize>, file_count: usize) -> usize
         .min(file_count.max(1))
 }
 
+#[derive(Clone, Copy)]
+enum CacheInsertKind {
+    Complete,
+    ExtractionOnly,
+}
+
 /// Per-file result of the parallel extraction pass, merged in input order.
 enum FileExtraction {
     Extracted {
@@ -2307,8 +2319,8 @@ enum FileExtraction {
         messages: Vec<ExtractedMessageRecord>,
         diagnostics: Vec<SourceDiagnostic>,
         comments: Vec<SourceComment>,
-        /// Whether the result contains a complete parse and should be cached.
-        fresh: bool,
+        /// How this result should populate the cache, or `None` for a hit.
+        cache_insert: Option<CacheInsertKind>,
         /// File identity observed before reading, used to reject mid-run edits.
         fingerprint: Option<ReadStartFingerprint>,
     },
@@ -4455,7 +4467,7 @@ const message = t({ message })
     }
 
     #[test]
-    fn extraction_marker_fast_path_does_not_cache_incomplete_comments() {
+    fn extraction_marker_fast_path_caches_only_the_empty_extraction_result() {
         let root = temp_root("shared-analysis-fast-path");
         fs::create_dir_all(&root).expect("create root");
         let source_path = root.join("plain.ts");
@@ -4474,8 +4486,8 @@ const message = t({ message })
         let path = source_path.to_string_lossy().into_owned();
         let root_dir = root.to_string_lossy().into_owned();
         let options = ExtractCatalogMessagesOptions::default();
-        let mut cache =
-            ExtractCache::load_with_options(&root.join("cache.json"), &root_dir, &options);
+        let cache_path = root.join("cache.json");
+        let mut cache = ExtractCache::load_with_options(&cache_path, &root_dir, &options);
         extract_catalog_messages_cached(
             ExtractCatalogMessagesRequest {
                 root_dir: root_dir.clone(),
@@ -4486,10 +4498,33 @@ const message = t({ message })
             &mut cache,
         )
         .expect("marker-free extraction");
-        assert_eq!(
-            cache.len(),
-            0,
-            "fast path must not seed an incomplete entry"
+        assert_eq!(cache.len(), 1, "fast path should seed an extract hit");
+        let extraction_hit = cache.get(&path).expect("marker-free extraction hit");
+        assert!(extraction_hit.1.is_empty());
+        assert!(extraction_hit.2.is_empty());
+        assert!(extraction_hit.3.is_empty());
+
+        cache
+            .save(&cache_path)
+            .expect("persist extraction sentinel");
+        let payload: serde_json::Value = serde_json::from_slice(
+            &fs::read(&cache_path).expect("read persisted extraction sentinel"),
+        )
+        .expect("parse persisted extraction sentinel");
+        let persisted = payload["entries"]
+            .get(&path)
+            .expect("persisted marker-free entry");
+        assert_eq!(persisted["analysis"]["kind"], "extractionOnly");
+        assert!(
+            persisted["analysis"].get("messages").is_none(),
+            "the sentinel should not serialize empty full-analysis vectors"
+        );
+        let mut cache = ExtractCache::load_with_options(&cache_path, &root_dir, &options);
+        assert!(cache.get(&path).is_some(), "persisted extraction hit");
+        let before = cache.fingerprint_before_read(&path);
+        assert!(
+            cache.get_after_read(&path, before).is_none(),
+            "incomplete comments must not satisfy source analysis"
         );
 
         let analyzed =
@@ -4497,7 +4532,12 @@ const message = t({ message })
                 .expect("source analysis");
         assert_eq!(analyzed.analysis.comments.len(), 1);
         assert_eq!(analyzed.analysis.comments[0].kind, SourceCommentKind::Line);
-        assert_eq!(cache.len(), 1, "full analysis should seed the cache");
+        assert_eq!(cache.len(), 1, "full analysis should replace the sentinel");
+        let before = cache.fingerprint_before_read(&path);
+        assert!(
+            cache.get_after_read(&path, before).is_some(),
+            "the replacement entry should satisfy source analysis"
+        );
 
         fs::remove_dir_all(root).expect("cleanup");
     }

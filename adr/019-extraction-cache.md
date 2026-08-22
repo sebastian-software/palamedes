@@ -80,16 +80,32 @@ runtime-call spellings carry one of these substrings, but a future supported
 surface that does not would be skipped until this gate is updated. Neither
 outcome lets textual scanning establish that a file is valid syntax.
 
+### Extraction-only marker sentinels (22 August 2026)
+
+Marker-free files are the majority of a typical source tree. Remembering only
+fully parsed files meant the textual gate avoided their parse but still read
+their complete contents on every extract and every watch rebuild. The cache now
+stores a distinct extraction-only sentinel after the gate returns an empty
+result. A compatible extraction hit therefore needs only the same `stat` as any
+other hit and skips the repeated source read.
+
+The sentinel does not claim that parser-owned comments or source diagnostics
+are complete. Shared source analysis behind `pmds lint` rejects this entry kind,
+reads and parses the file, and replaces the sentinel with a complete analysis.
+This preserves the conservative lint behavior described above while allowing
+batch extraction to remember the narrower result it actually proved.
+
 ## Decision
 
 Native source analysis keeps a per-file cache of its results, validated by
 `stat`. Extraction and source lint share it.
 
-An entry stores the extracted messages, source-authoring diagnostics, and the
-origin path for one source file, keyed by absolute path and guarded by size plus
-modification time. A compatible hit skips the parse; extraction also skips the
-read, while lint still reads the small source text needed to apply inline
-suppressions. The cache keeps its established location at
+An entry stores the origin path and either a complete source analysis or the
+extraction-only sentinel described above, keyed by absolute path and guarded by
+size plus modification time. A compatible complete hit skips the parse;
+extraction also skips the read, while lint still reads the small source text
+needed to apply inline suppressions. A compatible sentinel is reusable only by
+extraction. The cache keeps its established location at
 `.palamedes/extract-cache.json` under the project root and is written atomically
 through a temporary file.
 
@@ -128,6 +144,9 @@ Correctness rests on discarding aggressively rather than reasoning cleverly:
   they are retried on the next run rather than remembered as broken. Structured
   MDX diagnostics are a successful analysis result and are cached; extraction
   still treats them as a failed source file, while lint reports their ranges.
+- Marker-free batch-extraction results use an extraction-only sentinel. It is a
+  valid empty result for extraction but never a source-lint hit; the first full
+  analysis replaces it with messages, diagnostics, and comments.
 - Entries for files no longer in the extraction set are dropped, so a long-lived
   watch process does not grow without bound. Retention runs once over the union
   of every catalog's files; doing it per catalog would make each catalog evict
