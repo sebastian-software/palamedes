@@ -2,10 +2,13 @@
 //!
 //! Extraction is dominated by reading and parsing source. On a repeat run most
 //! files are untouched, so their result is still valid and the work is pure
-//! waste. This caches extracted messages, source diagnostics, and parser-owned
-//! comment ranges per file, and validates entries with a `stat` instead of a
-//! parse: on the realistic benchmark corpus, reading all 1500 files costs ~25
-//! ms and parsing them ~94 ms, against ~2.7 ms to stat them.
+//! waste. This caches complete extracted messages, source diagnostics, and
+//! parser-owned comment ranges per file. It also stores an extraction-only
+//! sentinel for files rejected by the textual marker gate, without letting
+//! that incomplete result satisfy source lint. Entries are validated with a
+//! `stat` instead of a parse: on the realistic benchmark corpus, reading all
+//! 1500 files costs ~25 ms and parsing them ~94 ms, against ~2.7 ms to stat
+//! them.
 //!
 //! The cache is advisory. Anything unexpected — missing file, unreadable
 //! directory, corrupt or stale payload, schema change — degrades to a miss and
@@ -22,7 +25,7 @@ use crate::source::{SourceComment, SourceDiagnostic, SourceRuleOptions};
 
 /// Bumped whenever the cached payload shape or the extractor's output changes
 /// in a way that makes previously stored entries wrong.
-const CACHE_SCHEMA: u32 = 4;
+const CACHE_SCHEMA: u32 = 5;
 
 /*
  * A file modified in the same instant it was cached cannot be distinguished
@@ -78,9 +81,20 @@ struct CacheEntry {
     fingerprint: FileFingerprint,
     /// Origin path as stored in catalogs, which depends on the reference root.
     relative_file: String,
-    messages: Vec<ExtractedMessageRecord>,
-    diagnostics: Vec<SourceDiagnostic>,
-    comments: Vec<SourceComment>,
+    analysis: CachedEntryAnalysis,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum CachedEntryAnalysis {
+    /// The textual gate proved that extraction is empty, but no parser-owned
+    /// diagnostics or comments were collected for source lint.
+    ExtractionOnly,
+    Complete {
+        messages: Vec<ExtractedMessageRecord>,
+        diagnostics: Vec<SourceDiagnostic>,
+        comments: Vec<SourceComment>,
+    },
 }
 
 type CachedAnalysis = (
@@ -211,12 +225,24 @@ impl ExtractCache {
         if current != entry.fingerprint {
             return None;
         }
-        Some((
-            entry.relative_file.clone(),
-            entry.messages.clone(),
-            entry.diagnostics.clone(),
-            entry.comments.clone(),
-        ))
+        Some(match &entry.analysis {
+            CachedEntryAnalysis::ExtractionOnly => (
+                entry.relative_file.clone(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            CachedEntryAnalysis::Complete {
+                messages,
+                diagnostics,
+                comments,
+            } => (
+                entry.relative_file.clone(),
+                messages.clone(),
+                diagnostics.clone(),
+                comments.clone(),
+            ),
+        })
     }
 
     /// Returns an entry only when `path` stayed unchanged across a caller-owned read.
@@ -233,15 +259,23 @@ impl ExtractCache {
         }
         let before = before?;
         let entry = self.entries.get(path)?;
+        let CachedEntryAnalysis::Complete {
+            messages,
+            diagnostics,
+            comments,
+        } = &entry.analysis
+        else {
+            return None;
+        };
         let current = FileFingerprint::read(Path::new(path))?;
         if current != before.fingerprint || current != entry.fingerprint {
             return None;
         }
         Some((
             entry.relative_file.clone(),
-            entry.messages.clone(),
-            entry.diagnostics.clone(),
-            entry.comments.clone(),
+            messages.clone(),
+            diagnostics.clone(),
+            comments.clone(),
         ))
     }
 
@@ -309,6 +343,43 @@ impl ExtractCache {
     ) where
         ExtractedMessageRecord: Clone,
     {
+        self.insert_entry(
+            path,
+            relative_file,
+            CachedEntryAnalysis::Complete {
+                messages: messages.to_vec(),
+                diagnostics: diagnostics.to_vec(),
+                comments: comments.to_vec(),
+            },
+            before,
+        );
+    }
+
+    /// Records a marker-less extraction result without claiming that parser
+    /// diagnostics or comments were collected. Extraction can reuse the empty
+    /// result after one `stat`; source lint still reparses the file and then
+    /// replaces this sentinel with a complete entry.
+    pub(crate) fn insert_extraction_only(
+        &mut self,
+        path: String,
+        relative_file: String,
+        before: Option<ReadStartFingerprint>,
+    ) {
+        self.insert_entry(
+            path,
+            relative_file,
+            CachedEntryAnalysis::ExtractionOnly,
+            before,
+        );
+    }
+
+    fn insert_entry(
+        &mut self,
+        path: String,
+        relative_file: String,
+        analysis: CachedEntryAnalysis,
+        before: Option<ReadStartFingerprint>,
+    ) {
         if !self.enabled {
             return;
         }
@@ -330,9 +401,7 @@ impl ExtractCache {
             CacheEntry {
                 fingerprint,
                 relative_file,
-                messages: messages.to_vec(),
-                diagnostics: diagnostics.to_vec(),
-                comments: comments.to_vec(),
+                analysis,
             },
         );
         self.dirty = true;
