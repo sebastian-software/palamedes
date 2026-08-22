@@ -7,6 +7,16 @@ use palamedes::ExtractCache;
 
 use crate::config::{ConfigLintRules, LoadedConfig};
 
+/// Session-local reporting state for a long-lived watch process.
+///
+/// A failed save leaves the cache dirty, so every later extraction retries it.
+/// Remembering the first warning here keeps a persistent filesystem problem
+/// visible without flooding stderr on every watched edit.
+#[derive(Default)]
+pub(super) struct CachePersistenceWarnings {
+    reported: bool,
+}
+
 /// Resolves and loads the cache, or a disabled one when it is turned off.
 pub(crate) fn load_extract_cache(config: &LoadedConfig, no_cache: bool) -> ExtractCache {
     if no_cache || !config.extract_cache {
@@ -59,12 +69,13 @@ pub(super) fn rebuild_extract_cache_for_reload(
     next: &LoadedConfig,
     no_cache: bool,
     cache: &mut ExtractCache,
+    warnings: &mut CachePersistenceWarnings,
 ) {
     if extract_cache_identity(previous) == extract_cache_identity(next) {
         return;
     }
 
-    persist_extract_cache(previous, cache);
+    persist_extract_cache_for_watch(previous, cache, warnings);
     *cache = load_extract_cache(next, no_cache);
 }
 
@@ -74,10 +85,27 @@ pub(super) fn rebuild_extract_cache_for_reload(
  * costing every invocation.
  */
 pub(crate) fn persist_extract_cache(config: &LoadedConfig, cache: &mut ExtractCache) {
+    let mut warnings = CachePersistenceWarnings::default();
+    persist_extract_cache_for_watch(config, cache, &mut warnings);
+}
+
+/// Persists a watch-mode cache while reporting at most one write failure for
+/// the lifetime of the watcher.
+pub(super) fn persist_extract_cache_for_watch(
+    config: &LoadedConfig,
+    cache: &mut ExtractCache,
+    warnings: &mut CachePersistenceWarnings,
+) -> bool {
     if let Err(error) = cache.save(&extract_cache_path(config)) {
+        if warnings.reported {
+            return false;
+        }
+        warnings.reported = true;
         eprintln!(
             "Warning: could not write the extraction cache to {}: {error}",
             extract_cache_path(config).display()
         );
+        return true;
     }
+    false
 }
