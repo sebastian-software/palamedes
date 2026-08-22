@@ -22,11 +22,12 @@ export function createWakuI18nInterceptor<T extends I18nInstance = I18nInstance>
     let request: Request
     try {
       request = unstable_getRequest()
-    } catch (error) {
-      if (error instanceof Error && error.message === "Request is not available.") {
-        return await next()
-      }
-      throw error
+    } catch {
+      // Waku exposes no stable error type or code for its intentionally
+      // unstable request accessor. A throw means this interceptor is running
+      // outside a request phase, so preserve the documented pass-through path
+      // without coupling it to an upstream diagnostic sentence.
+      return await next()
     }
     return await runner.run(request, next)
   }
