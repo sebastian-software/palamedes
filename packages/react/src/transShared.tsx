@@ -38,9 +38,21 @@ type RendererI18n = Pick<
   | "renderMessage"
   | "reportError"
 >
+type ResettableReactMessageRuntime = {
+  reset: () => void
+  runtime: CompiledMessageRuntime<ReactNode[]>
+}
+type CachedReactMessageRuntime = ResettableReactMessageRuntime & {
+  locale: string
+  timeZone: string | undefined
+}
+
+const EMPTY_COMPONENTS: Record<string, ReactElement> = Object.freeze({})
+const EMPTY_VALUES: Record<string, unknown> = Object.freeze({})
 
 /** Creates the shared Trans component for compatibility and compiled entries. */
 export function createTrans(useI18n: () => RendererI18n, fallbackParser?: PatternParser) {
+  const runtimeCache = createReactMessageRuntimeCache(fallbackParser)
   return function Trans({
     id,
     message,
@@ -57,8 +69,47 @@ export function createTrans(useI18n: () => RendererI18n, fallbackParser?: Patter
       comment,
       renderUncompiledPattern: fallbackParser !== undefined,
     }
-    const runtime = createReactMessageRuntime(i18n, components ?? {}, fallbackParser)
-    return <>{renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)}</>
+    const runtime = runtimeCache.get(i18n, components ?? EMPTY_COMPONENTS)
+    return <>{renderI18nMessage(i18n, resolvedId, values ?? EMPTY_VALUES, runtime, metadata)}</>
+  }
+}
+
+export function createReactMessageRuntimeCache(fallbackParser?: PatternParser) {
+  // Keep the shared component entries hook-free for React Server Components.
+  // Weak identity keys release application-owned i18n/component objects while
+  // still avoiding a fresh closure graph on each render.
+  const cache = new WeakMap<
+    RendererI18n,
+    WeakMap<Record<string, ReactElement>, CachedReactMessageRuntime>
+  >()
+
+  return {
+    get(
+      i18n: RendererI18n,
+      components: Record<string, ReactElement>
+    ): CompiledMessageRuntime<ReactNode[]> {
+      let byComponents = cache.get(i18n)
+      if (byComponents === undefined) {
+        byComponents = new WeakMap()
+        cache.set(i18n, byComponents)
+      }
+
+      let cached = byComponents.get(components)
+      if (
+        cached === undefined ||
+        cached.locale !== i18n.locale ||
+        cached.timeZone !== i18n.timeZone
+      ) {
+        cached = {
+          ...createResettableReactMessageRuntime(i18n, components, fallbackParser),
+          locale: i18n.locale,
+          timeZone: i18n.timeZone,
+        }
+        byComponents.set(components, cached)
+      }
+      cached.reset()
+      return cached.runtime
+    },
   }
 }
 
@@ -98,6 +149,14 @@ export function createReactMessageRuntime(
   components: Record<string, ReactElement>,
   fallbackParser?: PatternParser
 ): CompiledMessageRuntime<ReactNode[]> {
+  return createResettableReactMessageRuntime(i18n, components, fallbackParser).runtime
+}
+
+function createResettableReactMessageRuntime(
+  i18n: RendererI18n,
+  components: Record<string, ReactElement>,
+  fallbackParser?: PatternParser
+): ResettableReactMessageRuntime {
   const locale = i18n.locale
   const timeZone = i18n.timeZone
   let nextKey = 0
@@ -138,7 +197,12 @@ export function createReactMessageRuntime(
       },
     }
   )
-  return runtime
+  return {
+    reset() {
+      nextKey = 0
+    },
+    runtime,
+  }
 }
 
 function parsePattern(

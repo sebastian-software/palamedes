@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { isValidElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -17,6 +18,8 @@ import { resetI18nRuntime, setClientI18n } from "@palamedes/runtime"
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
 import { Trans as CompiledTrans } from "./compiled"
+import { createRuntimeComponents } from "./shared"
+import { createReactMessageRuntimeCache, createTrans } from "./transShared"
 
 describe("@palamedes/react", () => {
   afterEach(() => {
@@ -37,6 +40,61 @@ describe("@palamedes/react", () => {
     )
 
     expect(html).toBe("Bereitgestellt von <strong>Palamedes</strong>")
+  })
+
+  it("reuses Trans runtimes by i18n and component identity while resetting render keys", () => {
+    const i18n = createI18n({ locale: "en" })
+    const renderMessage = vi.spyOn(i18n, "renderMessage")
+    const CachedTrans = createTrans(() => i18n)
+    const stableComponents = { 0: <strong /> }
+
+    expect(
+      renderToStaticMarkup(
+        <CachedTrans id="first" message="<0>body</0>" components={stableComponents} />
+      )
+    ).toBe("<strong>body</strong>")
+    expect(
+      renderToStaticMarkup(
+        <CachedTrans id="second" message="<0>body</0>" components={stableComponents} />
+      )
+    ).toBe("<strong>body</strong>")
+    expect(renderMessage.mock.calls[1]?.[2]).toBe(renderMessage.mock.calls[0]?.[2])
+
+    renderToStaticMarkup(
+      <CachedTrans id="new-components" message="<0>body</0>" components={{ 0: <strong /> }} />
+    )
+    expect(renderMessage.mock.calls[2]?.[2]).not.toBe(renderMessage.mock.calls[1]?.[2])
+
+    i18n.activate("de")
+    renderToStaticMarkup(
+      <CachedTrans id="new-locale" message="<0>body</0>" components={stableComponents} />
+    )
+    expect(renderMessage.mock.calls[3]?.[2]).not.toBe(renderMessage.mock.calls[1]?.[2])
+
+    const runtimeCache = createReactMessageRuntimeCache()
+    const firstRuntime = runtimeCache.get(i18n, stableComponents)
+    const firstResult = firstRuntime.tag("0", firstRuntime.join("body"))
+    const secondRuntime = runtimeCache.get(i18n, stableComponents)
+    const secondResult = secondRuntime.tag("0", secondRuntime.join("body"))
+    expect(secondRuntime).toBe(firstRuntime)
+    expect([
+      isValidElement(firstResult[0]) ? firstResult[0].key : null,
+      isValidElement(secondResult[0]) ? secondResult[0].key : null,
+    ]).toEqual(["0", "0"])
+  })
+
+  it("reuses the components-less runtime for choice components", () => {
+    const i18n = createI18n({ locale: "en" })
+    const renderMessage = vi.spyOn(i18n, "renderMessage")
+    const { Plural: CachedPlural } = createRuntimeComponents(() => i18n)
+
+    renderToStaticMarkup(<CachedPlural value={1} one="# item" other="# items" />)
+    renderToStaticMarkup(<CachedPlural value={2} one="# item" other="# items" />)
+    expect(renderMessage.mock.calls[1]?.[2]).toBe(renderMessage.mock.calls[0]?.[2])
+
+    i18n.activate("de")
+    renderToStaticMarkup(<CachedPlural value={3} one="# item" other="# items" />)
+    expect(renderMessage.mock.calls[2]?.[2]).not.toBe(renderMessage.mock.calls[1]?.[2])
   })
 
   it("executes generated message functions directly through the React renderer", () => {
