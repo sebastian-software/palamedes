@@ -38,7 +38,9 @@ test("Next.js first run keeps its executable server path and navigation in sync"
   const siteSteps = "site/app/data/steps.ts"
   assertIncludes(
     siteSteps,
-    'import { createActiveServerI18n, runWithServerI18n } from "../lib/load-i18n.server"'
+    `// src/app/page.tsx
+import { t } from "@palamedes/core/macro"
+import { createActiveServerI18n, runWithServerI18n } from "../lib/load-i18n.server"`
   )
   assert.ok(
     !read(siteSteps).includes('from "@/lib/load-i18n.server"'),
