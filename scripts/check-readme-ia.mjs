@@ -38,6 +38,8 @@ function renderedHeadingText(heading) {
     .replaceAll(/\[([^\]]+)\]\s*\[[^\]]*\]/gu, "$1")
     .replaceAll(/<((?:https?:\/\/|mailto:)[^>]+)>/giu, "$1")
     .replaceAll(/<[^>]*>/gu, "")
+    .replaceAll(/(?<![\\\p{L}\p{M}\p{N}_`])__([^_]+?)__(?![\p{L}\p{M}\p{N}_`])/gu, "$1")
+    .replaceAll(/(?<![\\\p{L}\p{M}\p{N}_`])_([^_]+?)_(?![\p{L}\p{M}\p{N}_`])/gu, "$1")
     .replaceAll(/(`+)(.*?)\1/gu, "$2")
     .replaceAll(/\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~])/gu, "$1")
 }
