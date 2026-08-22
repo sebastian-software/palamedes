@@ -118,3 +118,14 @@ test("removes underscore emphasis without losing literal or code underscores", (
   assert.throws(check(`${headings}\n[Source strong](#__strong__)\n`), /missing anchor/u)
   assert.throws(check(`${headings}\n[Stripped code](#spaced)\n`), /missing anchor/u)
 })
+
+test("parses emphasis between escaped literal backticks", () => {
+  const escapedBackticks = `${readme}
+
+${"### \\`_Not code_\\`"}
+[Rendered emphasis](#not-code)
+`
+
+  assert.doesNotThrow(check(escapedBackticks))
+  assert.throws(check(`${escapedBackticks}\n[Source emphasis](#_not-code_)\n`), /missing anchor/u)
+})
