@@ -821,6 +821,29 @@ describe("catalog source matching", () => {
       path.resolve(config.rootDir, "locales", "de.po")
     )
   })
+
+  it("appends storage extensions without truncating dotted names or locales", () => {
+    expect(
+      catalogResourcePath(
+        config,
+        { path: "locales/{locale}/messages.v2", include: ["src"] },
+        "pt.BR"
+      )
+    ).toBe(path.resolve(config.rootDir, "locales/pt.BR/messages.v2.po"))
+  })
+
+  it("keeps matching storage extensions and preserves other suffixes", () => {
+    expect(
+      catalogResourcePath(config, { path: "locales/{locale}/messages.po", include: ["src"] }, "de")
+    ).toBe(path.resolve(config.rootDir, "locales/de/messages.po"))
+    expect(
+      catalogResourcePath(
+        config,
+        { path: "locales/{locale}/messages.po", format: "fcl", include: ["src"] },
+        "de"
+      )
+    ).toBe(path.resolve(config.rootDir, "locales/de/messages.po.fcl"))
+  })
 })
 
 async function createTempDir(): Promise<string> {

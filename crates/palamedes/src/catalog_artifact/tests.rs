@@ -1,6 +1,6 @@
 use super::{
     compile_catalog_artifact, compile_catalog_artifact_selected,
-    compile_catalog_artifact_selected_cached, CatalogArtifactConfig,
+    compile_catalog_artifact_selected_cached, resolve_catalog_file_path, CatalogArtifactConfig,
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
     CatalogCompilationCache, CatalogConfig, PalamedesCatalogFormat,
 };
@@ -14,6 +14,106 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[test]
+fn catalog_file_paths_append_the_format_without_truncating_dots() {
+    let root = Path::new("workspace");
+    let cases = [
+        (
+            "locales/{locale}/messages.v2",
+            "de",
+            PalamedesCatalogFormat::Po,
+            "locales/de/messages.v2.po",
+        ),
+        (
+            "locales/{locale}",
+            "pt.BR",
+            PalamedesCatalogFormat::Po,
+            "locales/pt.BR.po",
+        ),
+        (
+            "locales/{locale}/messages.po",
+            "de",
+            PalamedesCatalogFormat::Po,
+            "locales/de/messages.po",
+        ),
+        (
+            "locales/{locale}/messages.fcl",
+            "de",
+            PalamedesCatalogFormat::Fcl,
+            "locales/de/messages.fcl",
+        ),
+        (
+            "locales/{locale}/messages.po",
+            "de",
+            PalamedesCatalogFormat::Fcl,
+            "locales/de/messages.po.fcl",
+        ),
+        (
+            r"locales\{locale}\messages.v2",
+            "de",
+            PalamedesCatalogFormat::Po,
+            r"locales\de\messages.v2.po",
+        ),
+    ];
+
+    for (pattern, locale, format, expected) in cases {
+        assert_eq!(
+            resolve_catalog_file_path(root, pattern, locale, format),
+            root.join(expected),
+            "pattern {pattern} for locale {locale}",
+        );
+    }
+}
+
+#[test]
+fn compiles_a_dotted_catalog_name_for_a_dotted_locale() {
+    let fixture = create_fixture_dir("catalog-artifact-dotted-path");
+    let source_dir = fixture.join("src/locales/en");
+    let target_dir = fixture.join("src/locales/pt.BR");
+    fs::create_dir_all(&source_dir).expect("source locale dir");
+    fs::create_dir_all(&target_dir).expect("target locale dir");
+    fs::write(
+        source_dir.join("messages.v2.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"\"\n",
+    )
+    .expect("write source catalog");
+    fs::write(
+        target_dir.join("messages.v2.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: pt.BR\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Olá\"\n",
+    )
+    .expect("write target catalog");
+
+    let target_path = target_dir.join("messages.v2.po");
+    let request = CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "pt.BR".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "src/locales/{locale}/messages.v2".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: target_path.to_string_lossy().into_owned(),
+    };
+
+    let result = compile_catalog_artifact(&request).expect("compile dotted catalog path");
+
+    assert_eq!(
+        result
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Olá"),
+    );
+    assert_eq!(
+        result.watch_files,
+        vec![target_path, source_dir.join("messages.v2.po")]
+    );
+}
 
 #[test]
 fn compiles_catalog_artifact_with_ferrocat_v1_keys() {

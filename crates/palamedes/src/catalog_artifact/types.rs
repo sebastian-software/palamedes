@@ -59,7 +59,8 @@ pub enum FallbackLocales {
 /// Single catalog path configuration entry.
 #[derive(Debug, Deserialize)]
 pub struct CatalogConfig {
-    /// Catalog path pattern, usually containing `{locale}`.
+    /// Catalog path pattern, usually containing `{locale}` and omitting the
+    /// storage extension. A matching extension is accepted for compatibility.
     pub path: String,
     /// Storage format for configured catalogs.
     #[serde(default)]
