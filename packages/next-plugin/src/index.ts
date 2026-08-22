@@ -11,7 +11,11 @@ import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 import type { NextConfig } from "next"
 
-import { PALAMEDES_MACRO_PACKAGES, resolveMacroRuntimeModule } from "@palamedes/transform"
+import {
+  PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
+  PALAMEDES_MACRO_PACKAGES,
+  resolveMacroRuntimeModule,
+} from "@palamedes/transform"
 
 const require = createRequire(import.meta.url)
 
@@ -106,7 +110,7 @@ function appendTurbopackRule(
 export type WithPalamedesOptions = {
   /**
    * Pattern to include files for transformation.
-   * @default /\.(tsx?|jsx?)$/
+   * @default /\.(tsx?|jsx?|mjs|cjs)$/
    */
   include?: RegExp
 
@@ -386,7 +390,7 @@ export function withPalamedes(
   options: WithPalamedesOptions = {}
 ): NextConfig {
   const {
-    include = /\.[jt]sx?$/,
+    include = PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
     exclude = /node_modules/,
     enablePoLoader = true,
     configPath,

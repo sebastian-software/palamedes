@@ -52,6 +52,15 @@ export const PALAMEDES_MACRO_PACKAGES = [
 ] as const
 
 /**
+ * Default source filter for bundler integrations that can transform both ESM
+ * and CommonJS modules.
+ *
+ * Loader-only integrations may intentionally use a narrower filter when their
+ * host cannot execute the ESM imports emitted by the macro transform.
+ */
+export const PALAMEDES_BUNDLER_TRANSFORM_INCLUDE = /\.(tsx?|jsx?|mjs|cjs)$/
+
+/**
  * JS macro function names
  */
 export const JS_MACROS = ["t", "plural", "select", "selectOrdinal"] as const

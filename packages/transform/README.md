@@ -65,6 +65,8 @@ deprecated.
 - `transformPalamedesMacros(code, filename, options?)`
 - `mightContainPalamedesMacros(code)`
 - `findMacroImports(program)` for compatibility with callers that already have an OXC AST
+- `PALAMEDES_BUNDLER_TRANSFORM_INCLUDE`, the shared Vite/Next default for
+  `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, and `.cjs` sources
 - `PALAMEDES_MACRO_PACKAGES`
 - `JS_MACROS`
 - `JSX_MACROS`
