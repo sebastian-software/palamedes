@@ -362,11 +362,20 @@ fn save_plugin_manifest_cache(config: &LoadedConfig, cache: &PluginManifestCache
         return;
     };
     // This cache is an optional startup optimization. A read-only checkout or
-    // interrupted write must never stop the requested plugin command; the next
+    // failed publication must never stop the requested plugin command; the next
     // invocation simply performs the describe handshake again.
     if fs::create_dir_all(parent).is_ok() {
-        let _ = fs::write(path, raw);
+        let _ = persist_plugin_manifest_cache(&path, &raw);
     }
+}
+
+fn persist_plugin_manifest_cache(path: &Path, raw: &[u8]) -> io::Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(raw)?;
+    temporary.flush()?;
+    temporary.persist(path).map_err(|error| error.error)?;
+    Ok(())
 }
 
 fn plugin_cache_identity(resolved: &ResolvedPlugin) -> Option<(String, PluginBinaryStamp)> {
@@ -1374,9 +1383,10 @@ mod tests {
 
     use super::{
         command_namespace_tokens, finish_run, is_kebab_name, matches_constraint, parse_event,
-        plugin_catalogs, reserved_plugin_namespaces, resolve_binary_plugin, validate_manifest,
-        validate_manifest_with_reserved_namespaces, BinaryInvocation, PluginEvent,
-        PluginInvocation, PluginManifest, ResolvedPlugin, PROTOCOL_VERSION,
+        persist_plugin_manifest_cache, plugin_catalogs, reserved_plugin_namespaces,
+        resolve_binary_plugin, validate_manifest, validate_manifest_with_reserved_namespaces,
+        BinaryInvocation, PluginEvent, PluginInvocation, PluginManifest, ResolvedPlugin,
+        PROTOCOL_VERSION,
     };
     use crate::config::load_config;
     use palamedes_plugin::ManifestCommand;
@@ -1946,6 +1956,27 @@ catalogs:
         assert!(matches_constraint(&["darwin".to_owned()], "darwin"));
         assert!(!matches_constraint(&["linux".to_owned()], "darwin"));
         assert!(!matches_constraint(&["!darwin".to_owned()], "darwin"));
+    }
+
+    #[test]
+    fn publishes_plugin_manifest_cache_without_leaving_partial_files() {
+        let root = temp_dir("atomic-manifest-cache");
+        let cache_dir = root.join(".palamedes");
+        fs::create_dir_all(&cache_dir).expect("cache directory");
+        let cache_path = cache_dir.join("plugin-manifests.json");
+        fs::write(&cache_path, br#"{"generation":"old"}"#).expect("seed cache");
+
+        let replacement = br#"{"generation":"new","entries":{"plugin":{}}}"#;
+        persist_plugin_manifest_cache(&cache_path, replacement).expect("publish cache");
+
+        assert_eq!(fs::read(&cache_path).expect("read cache"), replacement);
+        assert_eq!(
+            fs::read_dir(&cache_dir)
+                .expect("read cache directory")
+                .map(|entry| entry.expect("cache entry").file_name())
+                .collect::<Vec<_>>(),
+            [std::ffi::OsString::from("plugin-manifests.json")]
+        );
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
