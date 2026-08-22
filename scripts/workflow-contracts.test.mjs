@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readFile, stat } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { describe, expect, it } from "vitest"
@@ -360,6 +360,94 @@ describe("workflow contracts", () => {
       build.indexOf("run: pnpm verify:site-a11y")
     )
     expect(build).toContain("run: pnpm exec playwright install --with-deps chromium")
+  })
+
+  it("maps every contributor-owned repository surface in CONTRIBUTING", async () => {
+    const contributing = await readRepositoryFile("CONTRIBUTING.md")
+    const repositoryPaths = [
+      "packages/",
+      "crates/",
+      "examples/",
+      "site/",
+      "docs/",
+      "adr/",
+      "benchmarks/",
+      "proof/",
+      "tests/",
+      "scripts/",
+      ".github/workflows/",
+    ]
+
+    for (const repositoryPath of repositoryPaths) {
+      expect((await stat(resolve(repositoryRoot, repositoryPath))).isDirectory()).toBe(true)
+      expect(contributing).toContain(`\`${repositoryPath}\``)
+    }
+  })
+
+  it("keeps the documented website workflow aligned with executable commands and paths", async () => {
+    const [contributing, packageJson, sitePackageJson] = await Promise.all([
+      readRepositoryFile("CONTRIBUTING.md"),
+      readRepositoryFile("package.json").then(JSON.parse),
+      readRepositoryFile("site/package.json").then(JSON.parse),
+    ])
+
+    expect(packageJson.scripts["dev:site"]).toBe("pnpm --filter @palamedes/site dev")
+    expect(packageJson.scripts["build:site"]).toBe("pnpm --filter @palamedes/site build")
+    expect(packageJson.scripts["verify:site-routes"]).toBe("node ./scripts/verify-site-routes.mjs")
+    expect(packageJson.scripts["verify:site-a11y"]).toBe("node ./scripts/verify-site-a11y.mjs")
+    expect(packageJson.scripts["verify:site-docs-dev"]).toBe(
+      "node ./site/scripts/verify-docs-development.mjs"
+    )
+    expect(sitePackageJson.scripts.dev).toBe(
+      "node ./scripts/prebuild-content.mjs && react-router dev --port 4100"
+    )
+
+    const buildSteps = [
+      "node ../scripts/verify-site-bench-data.mjs",
+      "node ../scripts/check-example-matrix.mjs",
+      "node ../scripts/verify-site-editorial-rails.mjs",
+      "node ../scripts/verify-site-streamline-assets.mjs",
+      "node ./scripts/generate-og-images.mjs --check",
+      "node ./scripts/prebuild-content.mjs",
+      "react-router build",
+      "node ../scripts/copy-llms-to-site.mjs",
+    ]
+    let previousBuildStep = -1
+    for (const buildStep of buildSteps) {
+      const index = sitePackageJson.scripts.build.indexOf(buildStep)
+      expect(index).toBeGreaterThan(previousBuildStep)
+      previousBuildStep = index
+    }
+
+    const documentedCommands = [
+      "pnpm dev:site",
+      "pnpm build:site",
+      "pnpm verify:site-routes",
+      "pnpm verify:site-a11y",
+      "pnpm verify:site-docs-dev",
+    ]
+    let previousCommand = -1
+    for (const command of documentedCommands) {
+      const index = contributing.indexOf(command)
+      expect(index).toBeGreaterThan(previousCommand)
+      previousCommand = index
+    }
+
+    for (const documentedPath of [
+      "docs/",
+      "adr/",
+      "site/content/blog/",
+      "site/app/routes.ts",
+      "site/app/routes/docs/",
+      "site/app/routes/decisions/",
+      "site/app/routes/blog/",
+      "site/app/routes/api-reference/",
+      "site/app/data/generated/",
+    ]) {
+      expect(contributing).toContain(`\`${documentedPath}\``)
+    }
+    expect(contributing).toContain("http://localhost:4100")
+    expect(contributing).toContain("pnpm exec playwright install chromium")
   })
 
   it("checks cold-cache docs navigation on the full pull-request job", async () => {
