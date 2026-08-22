@@ -173,10 +173,7 @@ pub(super) fn run_watch_mode(
         }
 
         if config_changed {
-            match load_config(
-                &std::env::current_dir().expect("current dir"),
-                options.config.as_deref(),
-            ) {
+            match load_config_for_watch_reload(std::env::current_dir(), options.config.as_deref()) {
                 Ok(reloaded) => {
                     eprintln!(
                         "Config changed; reloaded {}",
@@ -231,6 +228,18 @@ pub(super) fn run_watch_mode(
     }
 }
 
+/// Resolves a watch reload without assuming the process still has a usable
+/// working directory. A checkout can disappear while a long-lived watcher is
+/// running; that is a recoverable reload failure, just like an invalid config
+/// written midway through an editor save.
+fn load_config_for_watch_reload(
+    current_dir: std::io::Result<PathBuf>,
+    explicit_path: Option<&Path>,
+) -> Result<LoadedConfig, CliError> {
+    let current_dir = current_dir.map_err(CliError::CurrentDir)?;
+    Ok(load_config(&current_dir, explicit_path)?)
+}
+
 fn touches_config(paths: &[PathBuf], config: &LoadedConfig) -> bool {
     paths.iter().any(|path| path == &config.config_path)
 }
@@ -260,11 +269,28 @@ mod tests {
 
     use palamedes::ExtractCache;
 
-    use super::{run_watch_extraction, WatchMatchers};
+    use super::{load_config_for_watch_reload, run_watch_extraction, WatchMatchers};
     use crate::commands::extract::cache::{load_extract_cache, rebuild_extract_cache_for_reload};
     use crate::commands::extract::test_support::{cached_extract_options, extract_options};
     use crate::commands::test_support::{temp_dir, write_config};
     use crate::config::load_config;
+
+    #[test]
+    fn config_reload_treats_a_missing_current_directory_as_recoverable() {
+        let missing_cwd = std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "the watched checkout was removed",
+        );
+
+        let error = load_config_for_watch_reload(Err(missing_cwd), None)
+            .expect_err("a missing cwd cannot resolve a config reload");
+
+        assert!(matches!(error, crate::error::CliError::CurrentDir(_)));
+        assert_eq!(
+            error.to_string(),
+            "Could not determine the current directory: the watched checkout was removed"
+        );
+    }
 
     /*
      * Catalogs stored under a glob-style include match that include, so an
