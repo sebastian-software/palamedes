@@ -8,7 +8,7 @@ use super::load::{
     load_catalogs, parse_catalog_sources_with_observer, read_catalog_sources, CatalogSources,
 };
 use super::types::{CatalogArtifactConfig, FallbackLocales};
-use super::{resolve_catalog_path, PreparedCompilation};
+use super::{resolve_catalog_file_path, resolve_catalog_path, PreparedCompilation};
 
 #[derive(Debug, Clone)]
 struct ResolvedCatalogRequest {
@@ -204,9 +204,8 @@ pub(super) fn catalog_locale_matcher(
     root_dir: &Path,
     catalog: &super::types::CatalogConfig,
 ) -> PalamedesResult<Regex> {
-    let absolute_catalog_path = root_dir
-        .join(&catalog.path)
-        .with_extension(catalog.format.extension());
+    let absolute_catalog_path =
+        resolve_catalog_file_path(root_dir, &catalog.path, "{locale}", catalog.format);
     let pattern = normalize_path(&absolute_catalog_path);
     let regex_pattern = regex::escape(&pattern).replace("\\{locale\\}", "([^/]+)");
     Regex::new(&format!("^{regex_pattern}$")).map_err(|source| {
@@ -219,4 +218,40 @@ pub(super) fn catalog_locale_matcher(
 
 pub(super) fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{catalog_locale_matcher, normalize_path};
+    use crate::{CatalogConfig, PalamedesCatalogFormat};
+    use std::path::Path;
+
+    #[test]
+    fn locale_matcher_preserves_dotted_names_and_captures_dotted_locales() {
+        let root = Path::new("workspace");
+        let catalog = CatalogConfig {
+            path: "locales/{locale}/messages.v2".to_owned(),
+            format: PalamedesCatalogFormat::Po,
+        };
+        let matcher = catalog_locale_matcher(root, &catalog).expect("catalog matcher");
+        let expected = normalize_path(&root.join("locales/pt.BR/messages.v2.po"));
+        let captures = matcher.captures(&expected).expect("dotted catalog match");
+
+        assert_eq!(captures.get(1).map(|value| value.as_str()), Some("pt.BR"));
+        assert!(!matcher.is_match(&normalize_path(&root.join("locales/pt.BR/messages.po"))));
+        assert!(!matcher.is_match(&normalize_path(&root.join("locales/pt.BR/messages.v2.fcl"))));
+    }
+
+    #[test]
+    fn locale_matcher_does_not_duplicate_a_configured_storage_extension() {
+        let root = Path::new("workspace");
+        let catalog = CatalogConfig {
+            path: "locales/{locale}/messages.po".to_owned(),
+            format: PalamedesCatalogFormat::Po,
+        };
+        let matcher = catalog_locale_matcher(root, &catalog).expect("catalog matcher");
+
+        assert!(matcher.is_match(&normalize_path(&root.join("locales/de/messages.po"))));
+        assert!(!matcher.is_match(&normalize_path(&root.join("locales/de/messages.po.po"))));
+    }
 }

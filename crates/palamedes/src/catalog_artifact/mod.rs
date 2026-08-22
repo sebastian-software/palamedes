@@ -30,14 +30,47 @@ pub use self::types::{
     PalamedesCatalogFormat,
 };
 
+/// Resolves a configured catalog pattern to its concrete storage file.
+///
+/// A matching storage extension already present in the configured pattern is
+/// preserved for compatibility. Otherwise the format extension is appended to
+/// the expanded path, so dots in locale names or logical catalog names remain
+/// part of the filename.
+#[must_use]
+pub fn resolve_catalog_file_path(
+    root_dir: &Path,
+    catalog_path: &str,
+    locale: &str,
+    format: PalamedesCatalogFormat,
+) -> PathBuf {
+    let expanded = root_dir.join(catalog_path.replace("{locale}", locale));
+    let extension = format.extension();
+    let has_storage_extension = Path::new(catalog_path)
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value == extension);
+
+    if has_storage_extension {
+        return expanded;
+    }
+
+    let mut suffixed = expanded.into_os_string();
+    suffixed.push(".");
+    suffixed.push(extension);
+    PathBuf::from(suffixed)
+}
+
 pub(crate) fn resolve_catalog_path(
     config: &CatalogArtifactConfig,
     catalog: &CatalogConfig,
     locale: &str,
 ) -> PathBuf {
-    Path::new(&config.root_dir)
-        .join(catalog.path.replace("{locale}", locale))
-        .with_extension(catalog.format.extension())
+    resolve_catalog_file_path(
+        Path::new(&config.root_dir),
+        &catalog.path,
+        locale,
+        catalog.format,
+    )
 }
 
 pub(super) struct PreparedCompilation {

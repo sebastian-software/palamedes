@@ -504,9 +504,7 @@ fn process_catalog(
     options: &ExtractOptions,
     operation: CatalogOperation,
 ) -> Result<CatalogJobOutcome, CliError> {
-    let catalog_path = config
-        .resolve_catalog_path(&catalog.path, locale)
-        .with_extension(catalog.format.extension());
+    let catalog_path = config.resolve_catalog_path(&catalog.path, locale, catalog.format);
     let request = CatalogUpdateRequest {
         target_path: catalog_path.to_string_lossy().into_owned(),
         locale: locale.to_owned(),
@@ -609,6 +607,35 @@ mod tests {
         let output = fs::read_to_string(app.join("locales/en/messages.po")).expect("read po");
         assert!(output.contains("msgid \"Dashboard\""));
         assert!(output.contains("#: apps/web/app/page.tsx#title"));
+    }
+
+    #[test]
+    fn extract_appends_the_storage_extension_to_a_dotted_catalog_name() {
+        let app = temp_dir("extract-dotted-catalog-name");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages.v2
+    include: [app]
+"#,
+        )
+        .expect("write config");
+        fs::write(
+            app.join("app/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Dashboard`; }\n",
+        )
+        .expect("write source");
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        run_extraction(&config, &extract_options()).expect("extract");
+
+        let output =
+            fs::read_to_string(app.join("locales/en/messages.v2.po")).expect("read dotted catalog");
+        assert!(output.contains("msgid \"Dashboard\""));
+        assert!(!app.join("locales/en/messages.po").exists());
     }
 
     #[test]

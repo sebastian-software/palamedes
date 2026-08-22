@@ -48,7 +48,9 @@ warnings because the runtime falls back to default `Intl` formatting.
 
 `compileCatalogModule(config, resourcePath, options)` renders the compiled
 catalog artifact as a JavaScript module. The locale is resolved from the
-configured catalog path pattern (so layouts like `{locale}/messages.po` work);
+configured catalog path pattern. A matching storage suffix in a pattern such
+as `{locale}/messages.po` is accepted without duplication, while logical dotted
+names such as `{locale}/messages.v2` resolve to `{locale}/messages.v2.po`;
 the caller-supplied `options.locale` is only a fallback when resolution is
 unavailable, and the result reports the effective locale as `locale`. The
 first-party Vite, Next, and Remix integrations use this function for `.po`

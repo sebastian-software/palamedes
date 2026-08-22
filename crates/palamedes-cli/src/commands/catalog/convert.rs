@@ -87,16 +87,13 @@ impl Command for ConvertOptions {
                         continue;
                     }
                     for locale in &config.locales {
-                        let input = config
-                            .resolve_catalog_path(&catalog.path, locale)
-                            .with_extension(catalog.format.extension());
+                        let input =
+                            config.resolve_catalog_path(&catalog.path, locale, catalog.format);
                         if !input.exists() {
                             skipped += 1;
                             continue;
                         }
-                        let output = config
-                            .resolve_catalog_path(&catalog.path, locale)
-                            .with_extension(convert_extension(self.to));
+                        let output = input.with_extension(convert_extension(self.to));
                         convert_one_catalog(
                             &input,
                             &output,
@@ -185,8 +182,54 @@ const fn convert_extension(to: ConvertFormat) -> &'static str {
 mod tests {
     use std::fs;
 
-    use super::{convert_one_catalog, ConvertFormat};
+    use super::{convert_one_catalog, ConvertFormat, ConvertOptions, ConvertReport};
+    use crate::command::{Command, Context};
     use crate::commands::test_support::temp_dir;
+
+    #[test]
+    fn configured_conversion_preserves_a_dotted_catalog_name() {
+        let fixture = temp_dir("convert-dotted-catalog-name");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages.v2
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        fs::write(
+            catalog_dir.join("messages.v2.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write catalog");
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+
+        let report = options
+            .run(&Context::with_cwd(&fixture))
+            .expect("convert configured catalog");
+
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 1,
+                skipped: 0
+            }
+        ));
+        assert!(catalog_dir.join("messages.v2.fcl").exists());
+        assert!(!catalog_dir.join("messages.fcl").exists());
+    }
 
     #[test]
     fn fuzzy_po_conversion_preserves_review_metadata_in_fcl() {

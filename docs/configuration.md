@@ -114,9 +114,12 @@ catalogs:
     exclude: [src/generated]
 ```
 
-`path` should include `{locale}` and points to the catalog path without the
-storage extension. Palamedes appends `.po` by default or `.fcl` when
-`format: fcl` is set.
+`path` should include `{locale}` and normally omits the storage extension.
+Palamedes appends `.po` by default or `.fcl` when `format: fcl` is set. Dots in
+the expanded path are preserved: `messages.v2` becomes `messages.v2.po`, and a
+locale such as `pt.BR` becomes `pt.BR.po`. A matching configured `.po` or `.fcl`
+suffix is accepted and is not duplicated; any other suffix remains part of the
+catalog name before the configured format suffix.
 
 `format` accepts `po` and `fcl`. `ndjson` is no longer supported; use `fcl`
 for Ferrocat Catalog Lines.

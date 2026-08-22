@@ -659,8 +659,10 @@ export function catalogResourcePath(
 ): string {
   const extension = catalog.format ?? "po"
   const configuredPath = resolveCatalogPath(config, catalog.path, locale)
-  const parsed = path.parse(configuredPath)
-  return path.format({ dir: parsed.dir, name: parsed.name, ext: `.${extension}` })
+  if (path.extname(catalog.path) === `.${extension}`) {
+    return configuredPath
+  }
+  return `${configuredPath}.${extension}`
 }
 
 export function expandFallbackLocales(

@@ -888,8 +888,7 @@ fn plugin_catalogs(config: &LoadedConfig) -> Value {
                     "locales": config.locales.iter().map(|locale| json!({
                         "locale": locale,
                         "path": config
-                            .resolve_catalog_path(&catalog.path, locale)
-                            .with_extension(catalog.format.extension()),
+                            .resolve_catalog_path(&catalog.path, locale, catalog.format),
                     })).collect::<Vec<_>>(),
                 })
             })
@@ -1645,6 +1644,8 @@ catalogs:
   - path: locales/{locale}/lines
     format: fcl
     include: [src]
+  - path: locales/{locale}/messages.v2
+    include: [src]
 "#,
         )
         .expect("write config");
@@ -1661,6 +1662,10 @@ catalogs:
             json!(root.join("locales/en/lines.fcl")),
         );
         assert_eq!(catalogs[0]["path"], json!("locales/{locale}/messages"));
+        assert_eq!(
+            catalogs[2]["locales"][0]["path"],
+            json!(root.join("locales/en/messages.v2.po")),
+        );
     }
 
     #[test]

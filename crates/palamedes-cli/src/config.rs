@@ -333,8 +333,13 @@ impl LoadedConfig {
         }
     }
 
-    pub fn resolve_catalog_path(&self, catalog_path: &str, locale: &str) -> PathBuf {
-        self.root_dir.join(catalog_path.replace("{locale}", locale))
+    pub fn resolve_catalog_path(
+        &self,
+        catalog_path: &str,
+        locale: &str,
+        format: palamedes::PalamedesCatalogFormat,
+    ) -> PathBuf {
+        palamedes::resolve_catalog_file_path(&self.root_dir, catalog_path, locale, format)
     }
 
     /// Finds the configured catalog a file belongs to.
@@ -358,11 +363,11 @@ impl LoadedConfig {
             .enumerate()
             .filter(|(_, catalog)| {
                 self.locales.iter().any(|locale| {
-                    let configured = normalize_path(
-                        &self
-                            .resolve_catalog_path(&catalog.path, locale)
-                            .with_extension(catalog.format.extension()),
-                    );
+                    let configured = normalize_path(&self.resolve_catalog_path(
+                        &catalog.path,
+                        locale,
+                        catalog.format,
+                    ));
                     candidates.contains(&configured)
                 })
             })
