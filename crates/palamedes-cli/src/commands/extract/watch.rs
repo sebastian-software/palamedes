@@ -173,16 +173,15 @@ pub(super) fn run_watch_mode(
         }
 
         if config_changed {
-            match load_config(
-                &std::env::current_dir().expect("current dir"),
+            let previous_config = config.clone();
+            match reload_config_for_watch(
+                &mut config,
+                std::env::current_dir(),
                 options.config.as_deref(),
             ) {
-                Ok(reloaded) => {
-                    eprintln!(
-                        "Config changed; reloaded {}",
-                        reloaded.config_path.display()
-                    );
-                    let next_roots = watch_roots(&reloaded);
+                Ok(()) => {
+                    eprintln!("Config changed; reloaded {}", config.config_path.display());
+                    let next_roots = watch_roots(&config);
                     for stale in watched_roots
                         .iter()
                         .filter(|root| !next_roots.contains(root))
@@ -207,13 +206,12 @@ pub(super) fn run_watch_mode(
                     watched_roots = next_roots;
 
                     rebuild_extract_cache_for_reload(
+                        &previous_config,
                         &config,
-                        &reloaded,
                         options.no_cache,
                         options.verbose,
                         &mut cache,
                     );
-                    config = reloaded;
                     matchers = WatchMatchers::build(&config);
                 }
                 Err(error) => {
@@ -229,6 +227,21 @@ pub(super) fn run_watch_mode(
         }
         run_watch_extraction(&config, options, &mut cache)?;
     }
+}
+
+/// Resolves a watch reload without assuming the process still has a usable
+/// working directory. A checkout can disappear while a long-lived watcher is
+/// running; that is a recoverable reload failure, just like an invalid config
+/// written midway through an editor save.
+fn reload_config_for_watch(
+    config: &mut LoadedConfig,
+    current_dir: std::io::Result<PathBuf>,
+    explicit_path: Option<&Path>,
+) -> Result<(), CliError> {
+    let current_dir = current_dir.map_err(CliError::CurrentDir)?;
+    let reloaded = load_config(&current_dir, explicit_path)?;
+    *config = reloaded;
+    Ok(())
 }
 
 fn touches_config(paths: &[PathBuf], config: &LoadedConfig) -> bool {
@@ -260,11 +273,46 @@ mod tests {
 
     use palamedes::ExtractCache;
 
-    use super::{run_watch_extraction, WatchMatchers};
+    use super::{reload_config_for_watch, run_watch_extraction, WatchMatchers};
     use crate::commands::extract::cache::{load_extract_cache, rebuild_extract_cache_for_reload};
     use crate::commands::extract::test_support::{cached_extract_options, extract_options};
     use crate::commands::test_support::{temp_dir, write_config};
     use crate::config::load_config;
+
+    #[test]
+    fn config_reload_keeps_the_previous_config_and_watch_extraction_usable() {
+        let app = temp_dir("watch-reload-missing-cwd");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        write_config(&app, None);
+        fs::write(
+            app.join("app/page.tsx"),
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Still watched`; }\n",
+        )
+        .expect("write source");
+        let mut config =
+            load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load initial config");
+        let previous_config_path = config.config_path.clone();
+        let missing_cwd = std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "the watched checkout was removed",
+        );
+
+        let error = reload_config_for_watch(&mut config, Err(missing_cwd), None)
+            .expect_err("a missing cwd cannot resolve a config reload");
+
+        assert!(matches!(error, crate::error::CliError::CurrentDir(_)));
+        assert_eq!(
+            error.to_string(),
+            "Could not determine the current directory: the watched checkout was removed"
+        );
+        assert_eq!(config.config_path, previous_config_path);
+
+        run_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
+            .expect("watch should keep extracting with the previous config");
+        let output = fs::read_to_string(app.join("locales/en/messages.po"))
+            .expect("read catalog from continued watch extraction");
+        assert!(output.contains("msgid \"Still watched\""));
+    }
 
     /*
      * Catalogs stored under a glob-style include match that include, so an
