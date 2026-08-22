@@ -93,7 +93,10 @@ Convert every configured PO catalog:
 pmds catalog convert --config palamedes.yaml --to fcl
 ```
 
-After conversion, update the matching catalog config to `format: fcl`.
+After conversion, update the matching catalog config to `format: fcl`. Config
+mode derives each output through the target-format resolver, so a path that
+already ends in `.po` produces `.po.fcl`; keep the configured path unchanged
+and switch only its format.
 
 The full 1.0 migration checklist, including merge-driver cleanup and metadata
 shape changes, lives in [Migrating to Palamedes 1.0](./migrations/1.0.0.md).

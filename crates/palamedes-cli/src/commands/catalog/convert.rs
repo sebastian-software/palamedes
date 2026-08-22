@@ -93,7 +93,11 @@ impl Command for ConvertOptions {
                             skipped += 1;
                             continue;
                         }
-                        let output = input.with_extension(convert_extension(self.to));
+                        let output = config.resolve_catalog_path(
+                            &catalog.path,
+                            locale,
+                            target_catalog_format(self.to),
+                        );
                         convert_one_catalog(
                             &input,
                             &output,
@@ -163,9 +167,7 @@ fn convert_one_catalog(
         input_path: input.to_path_buf(),
         output_path: output.to_path_buf(),
         source_format: PalamedesCatalogFormat::Po,
-        target_format: match to {
-            ConvertFormat::Fcl => PalamedesCatalogFormat::Fcl,
-        },
+        target_format: target_catalog_format(to),
         source_locale: source_locale.to_owned(),
         locale: locale.map(str::to_owned),
     })?;
@@ -175,6 +177,12 @@ fn convert_one_catalog(
 const fn convert_extension(to: ConvertFormat) -> &'static str {
     match to {
         ConvertFormat::Fcl => "fcl",
+    }
+}
+
+const fn target_catalog_format(to: ConvertFormat) -> PalamedesCatalogFormat {
+    match to {
+        ConvertFormat::Fcl => PalamedesCatalogFormat::Fcl,
     }
 }
 
@@ -229,6 +237,72 @@ catalogs:
         ));
         assert!(catalog_dir.join("messages.v2.fcl").exists());
         assert!(!catalog_dir.join("messages.fcl").exists());
+    }
+
+    #[test]
+    fn configured_conversion_matches_the_target_resolver_for_an_explicit_po_suffix() {
+        let fixture = temp_dir("convert-explicit-po-suffix");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages.po
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        fs::write(
+            catalog_dir.join("messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write catalog");
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path.clone()),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+
+        let report = options
+            .run(&Context::with_cwd(&fixture))
+            .expect("convert configured catalog");
+
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 1,
+                skipped: 0
+            }
+        ));
+        assert!(catalog_dir.join("messages.po.fcl").exists());
+        assert!(!catalog_dir.join("messages.fcl").exists());
+
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages.po
+    format: fcl
+    include: [src]
+"#,
+        )
+        .expect("write migrated config");
+        let migrated = Context::with_cwd(&fixture)
+            .load_config(Some(&config_path))
+            .expect("load migrated config");
+        let catalog = &migrated.catalogs[0];
+
+        assert_eq!(
+            migrated.resolve_catalog_path(&catalog.path, "en", catalog.format),
+            catalog_dir.join("messages.po.fcl")
+        );
     }
 
     #[test]

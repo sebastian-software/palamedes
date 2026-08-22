@@ -348,7 +348,10 @@ pmds catalog convert --config palamedes.yaml --to fcl
 ```
 
 Config mode writes `.fcl` files beside existing `.po` files and leaves the
-source catalogs untouched. Update the catalog config afterwards:
+source catalogs untouched. It derives each output through the target-format
+resolver, so an explicitly configured `messages.po` path becomes
+`messages.po.fcl` and will resolve after changing only `format`. Update the
+catalog config afterwards:
 
 ```yaml
 catalogs:
