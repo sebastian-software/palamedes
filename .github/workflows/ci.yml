@@ -270,9 +270,9 @@ jobs:
           path: coverage/rust/coverage-summary.json
           if-no-files-found: warn
 
-      # Palamedes ships prebuilt binaries for eight platforms, so anything baked
-      # into the executable multiplies. Checked once, on the pinned toolchain,
-      # because the number only has to be watched — not watched twice.
-      - name: Check shipped binary size
+      # Palamedes ships the CLI and core-node addon for eight platforms, so
+      # anything baked into either artifact multiplies. Checked once, on the
+      # pinned toolchain, because the number only has to be watched — not twice.
+      - name: Check shipped binary sizes
         if: matrix.toolchain == '1.95'
         run: node ./scripts/check-binary-size.mjs

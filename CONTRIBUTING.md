@@ -49,12 +49,15 @@ pnpm check:binary-size
 pnpm check:llms
 ```
 
-`pnpm check:binary-size` builds the release CLI and holds it under a fixed
-ceiling. Palamedes ships prebuilt binaries for eight platforms, so anything
-baked into the executable multiplies; the check exists because linking a full
-Unicode collator once added 1.3 MB and only surfaced when someone measured by
-hand. CI runs it on the pinned toolchain. Raising the ceiling is a deliberate
-edit to `scripts/check-binary-size.mjs`, not something to do in passing.
+`pnpm check:binary-size` builds the release CLI and core-node addon and holds
+each artifact under its own fixed ceiling. Palamedes
+ships prebuilt binaries for eight platforms in both native families, so
+anything baked into either artifact multiplies; the check exists because
+linking a full Unicode collator once added 1.3 MB and only surfaced when someone
+measured by hand. The script records the published Linux x64 GNU baseline and
+the deliberate headroom behind each ceiling. CI runs the contract on the pinned
+toolchain. Raising a ceiling is a deliberate edit to
+`scripts/check-binary-size.mjs`, not something to do in passing.
 
 Use `pnpm verify:examples` when a change touches framework integration,
 runtime wiring, or `.po` loading. It is intentionally broader and slower than

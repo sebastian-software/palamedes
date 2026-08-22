@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync } from "node:fs"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
-import { buildNativePackage } from "../../../scripts/build-native-lib.mjs"
+import { buildNativePackage, rustArtifactFileName } from "../../../scripts/build-native-lib.mjs"
 
 const targets = {
   "@palamedes/core-node-darwin-arm64": {
@@ -91,18 +91,7 @@ buildNativePackage({
       .join(" ")
   },
   postBuild({ packageDir, profile, repoRoot, target }) {
-    const extensionByPlatform = {
-      darwin: "dylib",
-      linux: "so",
-      win32: "dll",
-    }
-    const extension = extensionByPlatform[process.platform]
-    if (!extension) {
-      throw new Error(`Unsupported platform for Palamedes native build: ${process.platform}`)
-    }
-
-    const binaryName =
-      process.platform === "win32" ? "palamedes_node.dll" : `libpalamedes_node.${extension}`
+    const binaryName = rustArtifactFileName({ name: "palamedes_node", kind: "cdylib" })
     const sourcePath = target.rustTarget
       ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
       : path.join(repoRoot, "target", profile, binaryName)

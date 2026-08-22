@@ -103,6 +103,20 @@ describe("workflow contracts", () => {
     expect(toolchain).toContain('channel = "1.95"')
   })
 
+  it("budgets both shipped native artifact families on the pinned toolchain", async () => {
+    const [ci, binarySizeCheck] = await Promise.all([
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile("scripts/check-binary-size.mjs"),
+    ])
+    const validateRust = job(ci, "validate-rust")
+
+    expect(validateRust).toContain("- name: Check shipped binary sizes")
+    expect(validateRust).toContain("if: matrix.toolchain == '1.95'")
+    expect(validateRust).toContain("run: node ./scripts/check-binary-size.mjs")
+    expect(binarySizeCheck).toContain('crate: "palamedes-cli"')
+    expect(binarySizeCheck).toContain('crate: "palamedes-node"')
+  })
+
   it("runs the React Router RSC request-isolation proof on Linux", async () => {
     const ci = await readRepositoryFile(".github/workflows/ci.yml")
     const validate = job(ci, "validate", "validate-rust")
