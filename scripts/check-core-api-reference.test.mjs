@@ -1,7 +1,35 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { renderExportBlock, replaceExportBlock } from "./check-core-api-reference.mjs"
+import {
+  collectExports,
+  renderExportBlock,
+  replaceExportBlock,
+} from "./check-core-api-reference.mjs"
+
+test("includes direct type declarations in the public API inventory", () => {
+  assert.deepEqual(
+    collectExports(`
+      export interface DirectInterface {}
+      export type DirectAlias = string
+      export const directValue = 1
+    `),
+    [
+      { name: "DirectAlias", kind: "type" },
+      { name: "DirectInterface", kind: "type" },
+      { name: "directValue", kind: "runtime" },
+    ]
+  )
+})
+
+test("rejects root export forms it cannot inventory", () => {
+  assert.throws(() => collectExports('export * from "./other"'), /unsupported root export form/)
+  assert.throws(
+    () => collectExports("export default function named() {}"),
+    /unsupported root export form/
+  )
+  assert.throws(() => collectExports("export default {}"), /unsupported root export form/)
+})
 
 test("renders an Oxfmt-compatible root export block idempotently", () => {
   const block = renderExportBlock([

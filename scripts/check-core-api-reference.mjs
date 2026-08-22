@@ -21,10 +21,19 @@ export function collectExports(source, filename = "index.ts") {
 
   for (const statement of file.statements) {
     if (
-      ts.isExportDeclaration(statement) &&
-      statement.exportClause &&
-      ts.isNamedExports(statement.exportClause)
+      ts.isExportAssignment(statement) ||
+      statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)
     ) {
+      throw new Error(
+        `${filename} uses an unsupported root export form. Use explicit named exports so the API reference remains complete.`
+      )
+    }
+    if (ts.isExportDeclaration(statement)) {
+      if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) {
+        throw new Error(
+          `${filename} uses an unsupported root export form. Use explicit named exports so the API reference remains complete.`
+        )
+      }
       for (const element of statement.exportClause.elements) {
         exports.set(
           element.name.text,
@@ -46,6 +55,16 @@ export function collectExports(source, filename = "index.ts") {
       for (const declaration of statement.declarationList.declarations) {
         if (ts.isIdentifier(declaration.name)) exports.set(declaration.name.text, "runtime")
       }
+      continue
+    }
+    if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) {
+      exports.set(statement.name.text, "type")
+      continue
+    }
+    if (ts.isModuleDeclaration(statement)) {
+      throw new Error(
+        `${filename} uses an unsupported root export form. Use explicit named exports so the API reference remains complete.`
+      )
     }
   }
 
