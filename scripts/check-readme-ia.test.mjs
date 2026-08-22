@@ -76,3 +76,24 @@ test("matches GitHub duplicate-heading suffixes", () => {
 `)
   )
 })
+
+test("matches GitHub rendered heading text and global slug collisions", () => {
+  const headings = `${readme}
+
+### Under_score
+### [Linked](https://example.com)
+### Collision
+### Collision-1
+### Collision
+[Underscore](#under_score)
+[Rendered link text](#linked)
+[Collision after an explicit suffix](#collision-2)
+`
+
+  assert.doesNotThrow(check(headings))
+  assert.throws(check(`${headings}\n[Wrong underscore](#underscore)\n`), /missing anchor/u)
+  assert.throws(
+    check(`${headings}\n[Wrong source-derived link](#linkedhttpsexamplecom)\n`),
+    /missing anchor/u
+  )
+})

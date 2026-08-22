@@ -10,13 +10,44 @@ function fail(message) {
   throw new Error(`README information architecture: ${message}`)
 }
 
+function decodeMarkdownEntities(value) {
+  const named = new Map([
+    ["amp", "&"],
+    ["apos", "'"],
+    ["gt", ">"],
+    ["lt", "<"],
+    ["quot", '"'],
+  ])
+
+  return value.replaceAll(/&(#(?:x[\da-f]+|\d+)|[a-z]+);/giu, (entity, name) => {
+    if (name[0] !== "#") return named.get(name.toLowerCase()) ?? entity
+    const hex = name[1]?.toLowerCase() === "x"
+    const radix = hex ? 16 : 10
+    const codePoint = Number.parseInt(name.slice(hex ? 2 : 1), radix)
+    return Number.isSafeInteger(codePoint) && codePoint <= 1_114_111
+      ? String.fromCodePoint(codePoint)
+      : entity
+  })
+}
+
+function renderedHeadingText(heading) {
+  return decodeMarkdownEntities(heading)
+    .replaceAll(/<!--.*?-->/gu, "")
+    .replaceAll(/!\[([^\]]*)\]\((?:\\.|[^)])*\)/gu, "$1")
+    .replaceAll(/\[([^\]]+)\]\((?:\\.|[^)])*\)/gu, "$1")
+    .replaceAll(/\[([^\]]+)\]\s*\[[^\]]*\]/gu, "$1")
+    .replaceAll(/<((?:https?:\/\/|mailto:)[^>]+)>/giu, "$1")
+    .replaceAll(/<[^>]*>/gu, "")
+    .replaceAll(/(`+)(.*?)\1/gu, "$2")
+    .replaceAll(/\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~])/gu, "$1")
+}
+
 function headingSlug(heading) {
-  return heading
+  return renderedHeadingText(heading)
     .trim()
     .toLowerCase()
-    .replaceAll(/[^\p{L}\p{N}\s-]/gu, "")
+    .replaceAll(/[^\p{L}\p{M}\p{N}\s_-]/gu, "")
     .replaceAll(/\s+/gu, "-")
-    .replaceAll(/-+/gu, "-")
 }
 
 function markdownOutsideFences(markdown) {
@@ -70,13 +101,16 @@ function markdownLinks(markdown) {
 
 function headingAnchors(markdown) {
   const anchors = new Set()
-  const occurrences = new Map()
 
   for (const { heading } of markdownHeadings(markdown)) {
     const base = headingSlug(heading)
-    const occurrence = occurrences.get(base) ?? 0
-    occurrences.set(base, occurrence + 1)
-    anchors.add(occurrence === 0 ? base : `${base}-${occurrence}`)
+    let anchor = base
+    let suffix = 0
+    while (anchors.has(anchor)) {
+      suffix += 1
+      anchor = `${base}-${suffix}`
+    }
+    anchors.add(anchor)
   }
 
   return anchors
