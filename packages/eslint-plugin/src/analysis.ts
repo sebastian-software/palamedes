@@ -24,7 +24,13 @@ export type AnalyzeSource = (
 type CachedAnalysis = {
   fingerprint: string
   diagnostics: SourceDiagnostic[]
+  utf16PrimaryRanges: Utf16Range[]
   failure?: NativeFailure
+}
+
+type Utf16Range = {
+  start: number
+  end: number
 }
 
 export type NativeFailure = {
@@ -75,14 +81,17 @@ export function createAnalysisCoordinator(analyze: AnalyzeSource = analyzeSource
     nativeCalls += 1
     let cached: CachedAnalysis
     try {
+      const diagnostics = analyze(source, context.filename, ALL_RULES).diagnostics
       cached = {
         fingerprint,
-        diagnostics: analyze(source, context.filename, ALL_RULES).diagnostics,
+        diagnostics,
+        utf16PrimaryRanges: utf8DiagnosticPrimaryRanges(source, diagnostics),
       }
     } catch (error) {
       cached = {
         fingerprint,
         diagnostics: [],
+        utf16PrimaryRanges: [],
         failure: nativeFailureFromError(error),
       }
     }
@@ -175,20 +184,61 @@ function sourceFingerprint(source: string): string {
 }
 
 export function utf8ByteOffsetToUtf16Index(source: string, requestedOffset: number): number {
-  const target = Math.max(0, requestedOffset)
+  return utf8ByteOffsetsToUtf16Indices(source, [requestedOffset])[0] ?? 0
+}
+
+/**
+ * Convert a batch of native UTF-8 byte offsets with one forward source walk.
+ * Native diagnostics use byte offsets while ESLint and Oxlint expect UTF-16
+ * indices. Sorting preserves the caller's result order while avoiding a full
+ * Unicode scan for every diagnostic endpoint.
+ */
+export function utf8ByteOffsetsToUtf16Indices(
+  source: string,
+  requestedOffsets: readonly number[]
+): number[] {
+  const targets = requestedOffsets
+    .map((requestedOffset, index) => ({
+      index,
+      target: normalizedUtf8ByteOffset(requestedOffset),
+    }))
+    .sort((left, right) => left.target - right.target)
+  const indices = Array.from<number>({ length: requestedOffsets.length })
   let bytes = 0
   let utf16Index = 0
 
-  for (const character of source) {
-    if (bytes >= target) {
-      break
+  for (const { index, target } of targets) {
+    while (utf16Index < source.length && bytes < target) {
+      const codePoint = source.codePointAt(utf16Index) ?? 0
+      bytes += utf8Length(codePoint)
+      utf16Index += codePoint > 0xff_ff ? 2 : 1
     }
-    const codePoint = character.codePointAt(0) ?? 0
-    bytes += utf8Length(codePoint)
-    utf16Index += character.length
+    indices[index] = utf16Index
   }
 
-  return Math.min(utf16Index, source.length)
+  return indices
+}
+
+function utf8DiagnosticPrimaryRanges(
+  source: string,
+  diagnostics: readonly SourceDiagnostic[]
+): Utf16Range[] {
+  const indices = utf8ByteOffsetsToUtf16Indices(
+    source,
+    diagnostics.flatMap(({ primary }) => [primary.start, primary.end])
+  )
+  return diagnostics.map((_, index) => ({
+    start: indices[index * 2] ?? 0,
+    end: indices[index * 2 + 1] ?? 0,
+  }))
+}
+
+function normalizedUtf8ByteOffset(requestedOffset: number): number {
+  const target = Math.max(0, requestedOffset)
+  // The former scalar conversion reaches the end of the source for both NaN
+  // and positive Infinity. Keep that edge behavior while making endpoints
+  // sortable for one shared forward pass.
+  return Number.isFinite(target) ? target : Number.POSITIVE_INFINITY
 }
 
 function utf8Length(codePoint: number): number {

@@ -5,7 +5,6 @@ import {
   createAnalysisCoordinator,
   mightContainPalamedesSource,
   nativeFailureLocationToUtf16Index,
-  utf8ByteOffsetToUtf16Index,
 } from "./analysis"
 
 type DiagnosticCode =
@@ -64,13 +63,11 @@ function createFacade(code: DiagnosticCode, description: string): Rule {
 
           const result = analysis.analyzeContext(analysisContext)
 
-          for (const diagnostic of result.diagnostics) {
+          for (const [diagnosticIndex, diagnostic] of result.diagnostics.entries()) {
             if (diagnostic.code !== code) continue
-            const start = utf8ByteOffsetToUtf16Index(
-              context.sourceCode.text,
-              diagnostic.primary.start
-            )
-            const end = utf8ByteOffsetToUtf16Index(context.sourceCode.text, diagnostic.primary.end)
+            const range = result.utf16PrimaryRanges[diagnosticIndex]
+            if (!range) continue
+            const { start, end } = range
             context.report({
               loc: {
                 start: context.sourceCode.getLocFromIndex(start),

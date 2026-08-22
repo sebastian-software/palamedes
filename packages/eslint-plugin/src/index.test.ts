@@ -13,6 +13,7 @@ import {
   nativeFailureLocationToUtf16Index,
   parseNativeFailureLocation,
   utf8ByteOffsetToUtf16Index,
+  utf8ByteOffsetsToUtf16Indices,
 } from "./analysis"
 
 function eslintFor(rules: Record<string, "warn" | "error">): ESLint {
@@ -40,6 +41,51 @@ describe("native Palamedes lint adapter", () => {
     expect(utf8ByteOffsetToUtf16Index(source, 4)).toBe(2)
     expect(utf8ByteOffsetToUtf16Index(source, 6)).toBe(3)
     expect(utf8ByteOffsetToUtf16Index(source, 7)).toBe(4)
+  })
+
+  it("maps unsorted diagnostic endpoints with one Unicode-aware index", () => {
+    const source = "\r\n😀é\n漢a"
+
+    expect(
+      utf8ByteOffsetsToUtf16Indices(source, [13, 0, 3, 2, 6, 8, 9, 12, -1, Infinity])
+    ).toStrictEqual([8, 0, 4, 2, 4, 5, 6, 7, 0, 8])
+  })
+
+  it("precomputes every cached diagnostic range before rule facades report", () => {
+    const source = "😀\r\n漢é"
+    const coordinator = createAnalysisCoordinator(() => ({
+      diagnostics: [
+        {
+          code: "pmds/no-placeholder-only-message",
+          severity: "warning",
+          file: "view.jsx",
+          primary: { start: 4, end: 10, line: 1, column: 1 },
+          message: "first",
+          help: "first help",
+        },
+        {
+          code: "pmds/prefer-trans-in-jsx",
+          severity: "warning",
+          file: "view.jsx",
+          primary: { start: 2, end: 4, line: 1, column: 1 },
+          message: "second",
+          help: "second help",
+        },
+      ],
+    }))
+
+    const result = coordinator.analyzeContext({
+      filename: "view.jsx",
+      sourceCode: { text: source },
+    })
+    expect(result.utf16PrimaryRanges).toStrictEqual([
+      { start: 2, end: 6 },
+      { start: 2, end: 2 },
+    ])
+    expect(coordinator.analyzeContext({ filename: "view.jsx", sourceCode: { text: source } })).toBe(
+      result
+    )
+    expect(coordinator.nativeCallCount()).toBe(1)
   })
 
   it("shares one native analysis across rule facades and invalidates on edits", () => {
