@@ -19,10 +19,22 @@ pnpm install --frozen-lockfile
 
 ## Repository Shape
 
-- `packages/*` contains the published JavaScript and TypeScript packages.
-- `crates/*` contains the Rust core and Node native binding.
-- `examples/*` contains framework verification apps.
-- `docs/` and `adr/` explain product, architecture, and adoption decisions.
+- `packages/` contains the JavaScript and TypeScript workspaces, including the
+  public packages and shared internal UI packages.
+- `crates/` contains the Rust core, CLI, plugin boundary, and Node native
+  binding.
+- `examples/` contains the framework apps used by smoke and browser
+  verification.
+- `site/` contains the private React Router workspace for
+  [palamedes.dev](https://palamedes.dev).
+- `docs/` contains the canonical guides and references; `adr/` contains the
+  canonical architecture decisions.
+- `benchmarks/` contains reproducible benchmark harnesses and checked results;
+  `proof/` contains checked semantic proof fixtures.
+- `tests/` contains repository-level browser contracts across the example
+  apps.
+- `scripts/` contains shared build, verification, release, and content
+  generation automation.
 - `.github/workflows/` contains CI, release, screenshot, and deployment
   automation.
 
@@ -62,6 +74,50 @@ toolchain. Raising a ceiling is a deliberate edit to
 Use `pnpm verify:examples` when a change touches framework integration,
 runtime wiring, or `.po` loading. It is intentionally broader and slower than
 the package unit tests.
+
+## Website Development
+
+Complete the repository prerequisites above, then start the website from the
+repository root:
+
+```bash
+pnpm dev:site
+```
+
+The site is available at <http://localhost:4100>. The command runs
+`site/scripts/prebuild-content.mjs` before it starts the React Router
+development server. That prebuild reads the canonical `docs/`, `adr/`, and
+`site/content/blog/` sources and the public package sources used by TypeDoc.
+It generates Git-ignored routes and data under
+`site/app/routes/docs/`, `site/app/routes/decisions/`,
+`site/app/routes/api-reference/`, and `site/app/data/generated/`. Edit the
+canonical sources, not those generated paths. The copied files under
+`site/public/docs/` are generated for the same reason.
+
+Before opening a pull request that changes the website, documentation, ADRs,
+package API sources, or benchmark evidence, build and verify the site in this
+order:
+
+```bash
+pnpm build:site
+pnpm verify:site-routes
+pnpm verify:site-a11y
+pnpm verify:site-docs-dev
+```
+
+The browser checks use Playwright. If no compatible local Chrome or Chromium is
+available, install the managed browser once:
+
+```bash
+pnpm exec playwright install chromium
+```
+
+`pnpm build:site` checks benchmark data, the example matrix, editorial-rail
+placement, Streamline assets, and generated Open Graph images before it
+regenerates content and builds the static site. The route check then exercises
+the built sitemap with default, reduced-motion, and JavaScript-disabled passes;
+the accessibility check covers Axe and responsive overflow; and the docs
+development check verifies cold-cache navigation, reload, and browser history.
 
 ## Development Notes
 
