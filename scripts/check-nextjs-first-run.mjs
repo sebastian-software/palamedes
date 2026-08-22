@@ -35,6 +35,16 @@ test("Next.js first run keeps its executable server path and navigation in sync"
     "the guide must not require an app alias"
   )
 
+  const siteSteps = "site/app/data/steps.ts"
+  assertIncludes(
+    siteSteps,
+    'import { createActiveServerI18n, runWithServerI18n } from "../lib/load-i18n.server"'
+  )
+  assert.ok(
+    !read(siteSteps).includes('from "@/lib/load-i18n.server"'),
+    "the site quickstart must not require an app alias"
+  )
+
   for (const file of ["README.md", "llms.txt", "llms-full.txt", "packages/next-plugin/README.md"]) {
     assertIncludes(file, "docs/nextjs-first-run.md")
   }

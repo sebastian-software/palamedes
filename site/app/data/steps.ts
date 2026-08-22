@@ -208,7 +208,7 @@ export const serverI18n = createNextServerI18nScope<ReturnType<typeof createI18n
       body: "Author the message in a Server Component and run it inside the request-local server scope, then extract catalogs.",
       code: `// app/page.tsx
 import { t } from "@palamedes/core/macro"
-import { createActiveServerI18n, runWithServerI18n } from "@/lib/load-i18n.server"
+import { createActiveServerI18n, runWithServerI18n } from "../lib/load-i18n.server"
 
 function translateWelcome() {
   return t\`Welcome to Palamedes\`
