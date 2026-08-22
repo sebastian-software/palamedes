@@ -30,6 +30,10 @@ export type SelectProps = {
 }
 
 const PLURAL_CATEGORIES = new Set(["zero", "one", "two", "few", "many", "other"])
+const CHOICE_MESSAGE_CACHE_LIMIT = 256
+// Choice props may be dynamic, so keep validated patterns in a small FIFO
+// instead of letting render-time source text grow a process-wide cache forever.
+const choiceMessageCache = new Map<string, string>()
 
 export function buildChoiceMessage(
   variable: string,
@@ -50,11 +54,24 @@ export function buildChoiceMessage(
     )
   }
 
+  const cacheKey = JSON.stringify([variable, kind, offset, entries])
+  const cached = choiceMessageCache.get(cacheKey)
+  if (cached !== undefined) {
+    return cached
+  }
+
   const keys = entries.map(([key]) => normalizeChoiceKey(kind, key))
   const parts = entries.map(([key, value], index) => `${keys[index]} {${value}}`)
   const offsetPart = offset === undefined ? "" : ` offset:${offset}`
   const message = `{${variable}, ${kind},${offsetPart} ${parts.join(" ")}}`
   assertParseableChoiceMessage(message, kind, keys)
+  if (choiceMessageCache.size >= CHOICE_MESSAGE_CACHE_LIMIT) {
+    const oldestKey = choiceMessageCache.keys().next().value
+    if (oldestKey !== undefined) {
+      choiceMessageCache.delete(oldestKey)
+    }
+  }
+  choiceMessageCache.set(cacheKey, message)
   return message
 }
 

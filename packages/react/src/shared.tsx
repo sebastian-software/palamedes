@@ -1,5 +1,5 @@
 import * as React from "react"
-import type { ReactNode } from "react"
+import type { ReactElement, ReactNode } from "react"
 
 import { buildChoiceMessage, parseMessagePattern } from "@palamedes/core"
 import type {
@@ -10,16 +10,19 @@ import type {
   SelectProps,
 } from "@palamedes/core"
 
-import { createReactMessageRuntime, createTrans, renderI18nMessage } from "./transShared"
+import { createReactMessageRuntimeCache, createTrans, renderI18nMessage } from "./transShared"
 
 export { Fragment, type TransProps } from "./transShared"
 export type { PluralProps, SelectOrdinalProps, SelectProps } from "@palamedes/core"
+
+const EMPTY_COMPONENTS: Record<string, ReactElement> = Object.freeze({})
 
 type StrictSelectProps<Props extends SelectProps> = Props &
   Record<Exclude<keyof Props, "value">, string>
 
 export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
   const Trans = createTrans(useI18n, parseMessagePattern)
+  const choiceRuntimeCache = createReactMessageRuntimeCache(parseMessagePattern)
 
   /*
    * The choice components resolve through the i18n instance exactly like
@@ -41,7 +44,7 @@ export function createRuntimeComponents(useI18n: () => PalamedesI18n) {
       reportMissing: false,
       renderUncompiledPattern: true,
     }
-    const runtime = createReactMessageRuntime(i18n, {}, parseMessagePattern)
+    const runtime = choiceRuntimeCache.get(i18n, EMPTY_COMPONENTS)
     return <>{renderI18nMessage(i18n, message, { value }, runtime, metadata)}</>
   }
 
