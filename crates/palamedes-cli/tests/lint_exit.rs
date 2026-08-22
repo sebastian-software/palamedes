@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
 fn lint_verdicts_have_a_dedicated_exit_code() {
@@ -261,6 +261,44 @@ fn lint_configuration_failures_keep_the_generic_exit_code() {
 
     let output = pmds(&fixture, &["lint", "--json"]);
     assert_eq!(output.status.code(), Some(1), "{output:?}");
+
+    fs::remove_dir_all(fixture).expect("cleanup fixture");
+}
+
+#[test]
+fn lint_reports_an_unwritable_extraction_cache_without_verbose_output() {
+    let fixture = fixture_dir("cache-write-failure");
+    fs::create_dir_all(fixture.join("src")).expect("create source directory");
+    fs::write(
+        fixture.join("palamedes.yaml"),
+        "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+    )
+    .expect("write config");
+    fs::write(
+        fixture.join("src/view.tsx"),
+        "import { t } from \"@palamedes/core/macro\";\nexport function label() { return t`Hello`; }\n",
+    )
+    .expect("write source");
+    fs::File::options()
+        .write(true)
+        .open(fixture.join("src/view.tsx"))
+        .expect("open source")
+        .set_modified(SystemTime::now() - Duration::from_secs(10))
+        .expect("age source for cache eligibility");
+    // A file where the cache directory belongs makes saving fail consistently
+    // across platforms without relying on permission bits or privileged users.
+    fs::write(fixture.join(".palamedes"), "not a directory")
+        .expect("block cache directory creation");
+
+    let output = pmds(&fixture, &["lint", "--json", "--threads", "1"]);
+
+    assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Warning: could not write the extraction cache to"),
+        "{output:?}"
+    );
+    assert!(stderr.contains(".palamedes"), "{output:?}");
 
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }

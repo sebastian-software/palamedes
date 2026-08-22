@@ -84,6 +84,9 @@ or lint rule levels change. Use `--no-cache` on `pmds extract` or `pmds lint` fo
 a one-off cold run, or set this to `false` if a tool in your pipeline rewrites
 files without changing their size or modification time. See
 [ADR-019](https://github.com/sebastian-software/palamedes/blob/main/adr/019-extraction-cache.md).
+If the cache cannot be persisted, the command continues with its normal result
+but prints a warning to stderr even without `--verbose`; use `--no-cache` or
+`extract-cache: false` when the cache location is intentionally unwritable.
 
 ## Source Lint
 

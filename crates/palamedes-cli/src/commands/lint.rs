@@ -123,7 +123,7 @@ impl Command for LintOptions {
             .map(|path| path.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         cache.retain_paths(&cache_keys.iter().map(String::as_str).collect());
-        persist_extract_cache(&config, false, &mut cache);
+        persist_extract_cache(&config, &mut cache);
 
         diagnostics.sort_by(|left, right| {
             (

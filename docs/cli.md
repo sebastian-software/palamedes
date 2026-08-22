@@ -183,7 +183,8 @@ diagnostics together, so `extract` and `lint` can reuse the same native parse.
 Lint follows extraction's bounded parallel read/parse model. Workers only
 observe the immutable cache; results are suppressed, merged, and inserted into
 the cache serially in source-file order, so cold, warm, and repeated runs keep
-the same diagnostic output.
+the same diagnostic output. A failed cache write remains non-fatal but is
+always reported on stderr, including without `--verbose`.
 
 ## `pmds audit`
 

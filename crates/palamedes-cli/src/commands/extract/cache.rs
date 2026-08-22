@@ -58,14 +58,13 @@ pub(super) fn rebuild_extract_cache_for_reload(
     previous: &LoadedConfig,
     next: &LoadedConfig,
     no_cache: bool,
-    verbose: bool,
     cache: &mut ExtractCache,
 ) {
     if extract_cache_identity(previous) == extract_cache_identity(next) {
         return;
     }
 
-    persist_extract_cache(previous, verbose, cache);
+    persist_extract_cache(previous, cache);
     *cache = load_extract_cache(next, no_cache);
 }
 
@@ -74,17 +73,11 @@ pub(super) fn rebuild_extract_cache_for_reload(
  * cold. Report it once so a permanently unwritable directory is not silently
  * costing every invocation.
  */
-pub(crate) fn persist_extract_cache(
-    config: &LoadedConfig,
-    verbose: bool,
-    cache: &mut ExtractCache,
-) {
+pub(crate) fn persist_extract_cache(config: &LoadedConfig, cache: &mut ExtractCache) {
     if let Err(error) = cache.save(&extract_cache_path(config)) {
-        if verbose {
-            eprintln!(
-                "Warning: could not write the extraction cache to {}: {error}",
-                extract_cache_path(config).display()
-            );
-        }
+        eprintln!(
+            "Warning: could not write the extraction cache to {}: {error}",
+            extract_cache_path(config).display()
+        );
     }
 }

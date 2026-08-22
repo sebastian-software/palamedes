@@ -127,6 +127,7 @@ pnpm exec pmds report
 - `pmds report --fail-if-below 90`: per-locale completeness gate for CI
 - `pmds lint --json --fail-on warning`: non-mutating source-authoring diagnostics for configured JS, TS, JSX, TSX, and MDX files. Use `pmds lint` rather than the Preview ESLint/Oxlint adapter for stable CI and MDX.
 - `pmds extract --check --json`: CI drift check; it compares projected catalog output without changing catalog files or creating catalog directories. It can still update the extraction cache unless `--no-cache` is passed.
+- Extraction-cache write failures are non-fatal but always warn on stderr, including for `pmds lint` and without `--verbose`; use `--no-cache` or `extract-cache: false` when the cache location is intentionally unwritable.
 - `pmds catalog merge --conflict-strategy=use-first --output out.po a.po b.po`: semantic merge of exactly two catalogs; add `--base base.po` for a deletion-aware three-way merge. Supported PO/FCL extensions infer the format; use `--format po|fcl` only as an explicit override.
 - `pmds catalog merge-driver %O %A %B %A --path %P --conflict-strategy=use-first`: one deletion-aware Git merge driver for PO and FCL. `%P` is the logical catalog path, so it selects the format even when Git temporary paths are extensionless; use `--format po|fcl` only as an explicit override. It maps merge and rebase roles so `use-first` stays the branch being merged or rebased.
 - `pmds catalog convert --to fcl input.po`: convert PO catalogs to the opt-in FCL format

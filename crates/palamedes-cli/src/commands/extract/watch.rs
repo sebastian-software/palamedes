@@ -209,7 +209,6 @@ pub(super) fn run_watch_mode(
                         &previous_config,
                         &config,
                         options.no_cache,
-                        options.verbose,
                         &mut cache,
                     );
                     matchers = WatchMatchers::build(&config);
@@ -257,7 +256,7 @@ fn run_watch_extraction(
     cache: &mut ExtractCache,
 ) -> Result<(), CliError> {
     let result = run_extraction_with_cache(config, options, cache);
-    persist_extract_cache(config, options.verbose, cache);
+    persist_extract_cache(config, cache);
     match result {
         Ok(_) => Ok(()),
         Err(error) => {
@@ -432,13 +431,7 @@ catalogs:
         // without a rebuilt cache the catalog would keep the old origins.
         write_watch_config("git", true, "warning");
         let reloaded = load_config(&app, Some(&config_path)).expect("reload config");
-        rebuild_extract_cache_for_reload(
-            &config,
-            &reloaded,
-            options.no_cache,
-            options.verbose,
-            &mut cache,
-        );
+        rebuild_extract_cache_for_reload(&config, &reloaded, options.no_cache, &mut cache);
         assert!(
             cache.is_empty(),
             "a stamp-relevant reload must start from an empty cache"
@@ -453,13 +446,7 @@ catalogs:
         // Reloading only a rule must therefore discard stale analysis.
         write_watch_config("git", true, "off");
         let rules_reloaded = load_config(&app, Some(&config_path)).expect("reload rules");
-        rebuild_extract_cache_for_reload(
-            &reloaded,
-            &rules_reloaded,
-            options.no_cache,
-            options.verbose,
-            &mut cache,
-        );
+        rebuild_extract_cache_for_reload(&reloaded, &rules_reloaded, options.no_cache, &mut cache);
         assert!(
             cache.is_empty(),
             "a rule-level reload must start from an empty cache"
@@ -471,13 +458,7 @@ catalogs:
         let previous = rules_reloaded;
         write_watch_config("git", false, "off");
         let disabled = load_config(&app, Some(&config_path)).expect("reload config");
-        rebuild_extract_cache_for_reload(
-            &previous,
-            &disabled,
-            options.no_cache,
-            options.verbose,
-            &mut cache,
-        );
+        rebuild_extract_cache_for_reload(&previous, &disabled, options.no_cache, &mut cache);
         run_watch_extraction(&disabled, &options, &mut cache).expect("extraction without cache");
         assert!(cache.is_empty(), "a disabled cache must not store entries");
         assert!(!cache.is_dirty());
