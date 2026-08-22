@@ -439,6 +439,7 @@ describe("workflow contracts", () => {
       "site/content/blog/",
       "site/app/routes/docs/",
       "site/app/routes/decisions/",
+      "site/app/routes/blog/",
       "site/app/routes/api-reference/",
       "site/app/data/generated/",
     ]) {
