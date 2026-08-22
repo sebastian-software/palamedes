@@ -28,6 +28,26 @@ catalogs, a native toolchain for transformation, extraction, validation,
 merging, and compilation, one runtime model, and first-party integrations for
 supported hosts.
 
+## Start Here
+
+For the shortest supported path, install the shared Vite packages:
+
+```bash
+pnpm add @palamedes/core @palamedes/runtime @palamedes/vite-plugin
+pnpm add -D @palamedes/cli
+```
+
+Then follow the [5-minute quickstart](docs/first-working-translation.md) to add
+React, configure a catalog, and render the first translation. There is no
+top-level `palamedes` install path yet; use the scoped packages above.
+
+Already evaluating Palamedes? [Skip to the proof](#proof-you-can-inspect), or
+browse the [framework](https://palamedes.dev/frameworks),
+[architecture](https://palamedes.dev/architecture), and
+[documentation](https://palamedes.dev/docs) paths.
+
+## Proof You Can Inspect
+
 The same core and authoring model work across Next.js, TanStack Start,
 SolidStart, Waku, React Router, Vite, and backend servers; server-first Remix v3
 is smoke-verified. The framework matrix is evidence that the architecture stays
@@ -152,7 +172,7 @@ Evidence:
 - [qooxdoo](https://qooxdoo.org/)
 - [Salesforce announcement for Regrello](https://www.salesforce.com/news/stories/salesforce-signs-definitive-agreement-to-acquire-regrello/)
 
-## Start Here
+## Explore the Docs and Packages
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 - [API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md)
@@ -172,9 +192,6 @@ Evidence:
 - [`@palamedes/config`](https://www.npmjs.com/package/@palamedes/config) for JavaScript host configuration
 - [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) for extraction workflows and CI
 - [`@palamedes/eslint-plugin`](https://www.npmjs.com/package/@palamedes/eslint-plugin) for preview ESLint/Oxlint editor diagnostics
-
-There is no top-level `palamedes` install path yet. If you are trying
-Palamedes today, start with the scoped packages above.
 
 ## Recommended Packages
 
