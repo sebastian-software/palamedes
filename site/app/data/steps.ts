@@ -191,7 +191,7 @@ catalogs:
     },
     {
       title: "Wire the plugin & runtime",
-      body: "The Next plugin handles macro transform and .po loading; server code binds request-local i18n before macros run.",
+      body: "The Next plugin handles macro transform and .po loading; one server-only scope binds request-local i18n for the App Router render.",
       code: `// next.config.mjs
 import { withPalamedes } from "@palamedes/next-plugin"
 export default withPalamedes({})
@@ -205,11 +205,18 @@ export const serverI18n = createNextServerI18nScope<ReturnType<typeof createI18n
     },
     {
       title: "Write & extract",
-      body: "Author the message in a Server Component after activating the server i18n scope, then run extraction.",
-      code: `// app/page.tsx
+      body: "Author the message in a Server Component and run it inside the request-local server scope, then extract catalogs.",
+      code: `// src/app/page.tsx
 import { t } from "@palamedes/core/macro"
-export default function Page() {
-  return <h1>{t\`Welcome to Palamedes\`}</h1>
+import { createActiveServerI18n, runWithServerI18n } from "../lib/load-i18n.server"
+
+function translateWelcome() {
+  return t\`Welcome to Palamedes\`
+}
+
+export default async function Page() {
+  const i18n = await createActiveServerI18n()
+  return runWithServerI18n(i18n, () => <h1>{translateWelcome()}</h1>)
 }
 
 $ pmds extract`,
@@ -234,12 +241,17 @@ import { serverI18n } from "./i18n.server"
 import { messages as enMessages } from "../locales/en.po"
 import { messages as deMessages } from "../locales/de.po"
 
-export function activateServerI18n(locale: "en" | "de") {
+export async function createActiveServerI18n() {
   const i18n = createI18n()
   i18n.load("en", enMessages)
   i18n.load("de", deMessages)
-  i18n.activate(locale)
+  i18n.activate("de")
   serverI18n.activate(i18n)
+  return i18n
+}
+
+export function runWithServerI18n<Result>(i18n: ReturnType<typeof createI18n>, callback: () => Result) {
+  return serverI18n.run(i18n, callback)
 }
 
 $ pnpm dev`,

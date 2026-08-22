@@ -41,7 +41,8 @@ const DOC_GROUPS = [
   {
     title: "Start and configure",
     description: "Reach a first translation, then configure the local catalog workflow.",
-    match: /\/(first-working-translation|platform-support|configuration|cli|catalog-formats|mdx)$/u,
+    match:
+      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx)$/u,
   },
   {
     title: "Integrate and operate",
@@ -72,7 +73,7 @@ const DOC_INDEX_GROUPS = [
     title: "Guides",
     description: "Start a translation workflow, connect a host, and operate it day to day.",
     match:
-      /\/(first-working-translation|platform-support|configuration|cli|catalog-formats|mdx|locale-strategies|framework-example-notes|demo-deployments|backend-servers|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
+      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|locale-strategies|framework-example-notes|demo-deployments|backend-servers|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
   },
   {
     title: "References",
@@ -238,6 +239,7 @@ async function collectDocs() {
   const topLevel = await readMarkdownFiles("docs")
   const order = new Map([
     ["first-working-translation.md", 10],
+    ["nextjs-first-run.md", 12],
     ["platform-support.md", 15],
     ["configuration.md", 20],
     ["cli.md", 30],

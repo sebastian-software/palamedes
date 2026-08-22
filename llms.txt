@@ -170,6 +170,7 @@ changes; cache failures are non-fatal. See `/docs/cli.md` and
 
 - `/README.md`: product overview and package map
 - `/docs/first-working-translation.md`: shortest working setup
+- `/docs/nextjs-first-run.md`: App Router server first run and its client/action boundaries
 - `/docs/configuration.md`: YAML-first config reference
 - `/docs/cli.md`: full CLI reference
 - `/docs/platform-support.md`: published native targets and Node process selection

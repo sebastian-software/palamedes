@@ -479,6 +479,7 @@ Read these first:
 
 - `/README.md`
 - `/docs/first-working-translation.md`
+- `/docs/nextjs-first-run.md`
 - `/docs/platform-support.md`
 - `/docs/principles.md`
 - `/examples/README.md`

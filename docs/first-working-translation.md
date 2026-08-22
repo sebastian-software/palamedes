@@ -12,6 +12,9 @@ It uses Vite plus React because that is the smallest copy-paste setup today.
 The same Vite plugin, runtime model, and `.po` flow now also work with Solid
 through `@palamedes/solid` and `vite-plugin-solid`.
 
+For a Next.js 16 App Router application, use the separate
+[First Working Translation with Next.js](./nextjs-first-run.md) guide.
+
 Before installing the native CLI, check [Platform support](./platform-support.md).
 The first-run path requires a Node process on one of its published targets.
 
