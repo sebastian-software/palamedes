@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import path from "node:path"
 import type { registerHooks } from "node:module"
 
@@ -66,6 +66,7 @@ export type LoadResult = ReturnType<LoadHook>
 const DEFAULT_INCLUDE = /\.(tsx?|jsx?|mjs)$/
 const DEFAULT_EXCLUDE = /[/\\]node_modules[/\\]/
 const PO_FILE = /\.po$/
+const CONFIG_WATCH_QUERY_PARAM = "palamedes-config-watch"
 const INLINE_SOURCE_MAP_COMMENT =
   /(?:\r?\n)?\/\/# sourceMappingURL=data:application\/json[^,\r\n]*;base64,[^\r\n]+(?:\r?\n)?$/u
 
@@ -87,6 +88,14 @@ export function createPalamedesRemixLoadHook(
   const configCache = new Map<string, CachedPalamedesConfig>()
 
   return (url, context, nextLoad) => {
+    if (isConfigWatchUrl(url)) {
+      return {
+        format: "module",
+        shortCircuit: true,
+        source: "",
+      }
+    }
+
     if (shouldLoadCatalogUrl(url, exclude)) {
       return loadCatalogModule(url, options, configCache)
     }
@@ -163,7 +172,7 @@ function loadCatalogModule(
   return {
     format: "module",
     shortCircuit: true,
-    source: result.code,
+    source: prependConfigWatchImport(result.code, config.configPath),
   }
 }
 
@@ -206,6 +215,16 @@ function cacheConfig(
 
 function digestConfig(configPath: string): string {
   return createHash("sha256").update(readFileSync(configPath)).digest("hex")
+}
+
+function isConfigWatchUrl(url: string): boolean {
+  return url.startsWith("file:") && new URL(url).searchParams.has(CONFIG_WATCH_QUERY_PARAM)
+}
+
+function prependConfigWatchImport(code: string, configPath: string): string {
+  const configUrl = pathToFileURL(configPath)
+  configUrl.searchParams.set(CONFIG_WATCH_QUERY_PARAM, "")
+  return `import ${JSON.stringify(configUrl.href)}\n${code}`
 }
 
 function shouldTransformUrl(url: string, include: RegExp, exclude: RegExp): boolean {

@@ -41,6 +41,7 @@ afterEach(() => {
 describe("createPalamedesRemixLoadHook", () => {
   beforeEach(() => {
     mocks.loadPalamedesConfigSync.mockReset().mockReturnValue({
+      configPath: "/repo/palamedes.yaml",
       rootDir: "/repo",
       locales: ["en", "de"],
       sourceLocale: "en",
@@ -129,11 +130,14 @@ describe("createPalamedesRemixLoadHook", () => {
     const loaded = load(new URL("file:///repo/app/locales/de.po").href, loadContext, nextLoad)
 
     expect(nextLoad).not.toHaveBeenCalled()
-    expect(loaded).toStrictEqual({
+    expect(loaded).toMatchObject({
       format: "module",
       shortCircuit: true,
-      source: 'export const messages={"greeting":"Hallo"};export default { messages };',
     })
+    expect(String(loaded.source)).toBe(
+      'import "file:///repo/palamedes.yaml?palamedes-config-watch="\n' +
+        'export const messages={"greeting":"Hallo"};export default { messages };'
+    )
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
       configPath: undefined,
       cwd: "/repo/app/locales",
@@ -143,6 +147,20 @@ describe("createPalamedesRemixLoadHook", () => {
       "/repo/app/locales/de.po",
       expect.objectContaining({ locale: "de" })
     )
+  })
+
+  it("loads the config dependency as an empty module for node watch mode", () => {
+    const load = createPalamedesRemixLoadHook()
+    const nextLoad = vi.fn()
+
+    const loaded = load(
+      "file:///repo/palamedes.yaml?palamedes-config-watch=",
+      loadContext,
+      nextLoad
+    )
+
+    expect(nextLoad).not.toHaveBeenCalled()
+    expect(loaded).toStrictEqual({ format: "module", shortCircuit: true, source: "" })
   })
 
   it("reloads a cached config when its file content changes", () => {
