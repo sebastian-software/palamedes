@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import test from "node:test"
 
 import {
+  assertSameExports,
+  collectDeclarationExports,
   collectExports,
   renderExportBlock,
   replaceExportBlock,
@@ -22,13 +27,65 @@ test("includes direct type declarations in the public API inventory", () => {
   )
 })
 
+test("preserves aliased named export names and kinds", () => {
+  assert.deepEqual(
+    collectExports(`
+      export { internalValue as publicValue } from "./other"
+      export type { InternalType as PublicType } from "./other"
+      export { type ElementType as PublicElementType } from "./other"
+    `),
+    [
+      { name: "PublicElementType", kind: "type" },
+      { name: "PublicType", kind: "type" },
+      { name: "publicValue", kind: "runtime" },
+    ]
+  )
+})
+
 test("rejects root export forms it cannot inventory", () => {
   assert.throws(() => collectExports('export * from "./other"'), /unsupported root export form/)
+  assert.throws(
+    () => collectExports('export * as namespaceExport from "./other"'),
+    /unsupported root export form/
+  )
   assert.throws(
     () => collectExports("export default function named() {}"),
     /unsupported root export form/
   )
   assert.throws(() => collectExports("export default {}"), /unsupported root export form/)
+  assert.throws(
+    () => collectExports('export import legacy = require("./other")'),
+    /unsupported root export form/
+  )
+  assert.throws(
+    () => collectExports("export const { publicValue } = source"),
+    /unsupported root export form/
+  )
+  assert.throws(
+    () => collectExports("export const [publicValue] = source"),
+    /unsupported root export form/
+  )
+})
+
+test("rejects declaration kind drift that would break a runtime import", (context) => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "palamedes-core-api-kind-"))
+  context.after(() => rmSync(directory, { recursive: true, force: true }))
+  const declarationPath = path.join(directory, "index.d.mts")
+  const expected = [{ name: "createI18n", kind: "runtime" }]
+
+  writeFileSync(declarationPath, "declare function createI18n(): void; export { createI18n };\n")
+  assert.deepEqual(collectDeclarationExports(declarationPath), expected)
+
+  writeFileSync(
+    declarationPath,
+    "declare function createI18n(): void; export type { createI18n };\n"
+  )
+  const drifted = collectDeclarationExports(declarationPath)
+  assert.deepEqual(drifted, [{ name: "createI18n", kind: "type" }])
+  assert.throws(
+    () => assertSameExports(expected, drifted, declarationPath),
+    /createI18n is type, expected runtime/u
+  )
 })
 
 test("renders an Oxfmt-compatible root export block idempotently", () => {

@@ -53,7 +53,10 @@ export function collectExports(source, filename = "index.ts") {
     }
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name)) exports.set(declaration.name.text, "runtime")
+        if (!ts.isIdentifier(declaration.name)) {
+          throw unsupportedExportError(filename)
+        }
+        exports.set(declaration.name.text, "runtime")
       }
       continue
     }
@@ -61,16 +64,18 @@ export function collectExports(source, filename = "index.ts") {
       exports.set(statement.name.text, "type")
       continue
     }
-    if (ts.isModuleDeclaration(statement)) {
-      throw new Error(
-        `${filename} uses an unsupported root export form. Use explicit named exports so the API reference remains complete.`
-      )
-    }
+    throw unsupportedExportError(filename)
   }
 
   return [...exports.entries()]
     .map(([name, kind]) => ({ name, kind }))
     .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+function unsupportedExportError(filename) {
+  return new Error(
+    `${filename} uses an unsupported root export form. Use explicit named exports so the API reference remains complete.`
+  )
 }
 
 export function renderExportBlock(exports) {
@@ -108,11 +113,60 @@ function hasExportModifier(statement) {
   )
 }
 
-function assertSameNames(expected, actual, label) {
-  const expectedNames = expected.map(({ name }) => name).sort()
-  const actualNames = actual.map(({ name }) => name).sort()
-  if (expectedNames.join("\n") !== actualNames.join("\n")) {
-    throw new Error(`${label} does not match packages/core/src/index.ts root exports.`)
+function isTypeOnlyAlias(symbol) {
+  return symbol.declarations?.some((declaration) => {
+    if (!ts.isExportSpecifier(declaration)) return false
+    return declaration.isTypeOnly || declaration.parent.parent.isTypeOnly
+  })
+}
+
+export function collectDeclarationExports(filename) {
+  const program = ts.createProgram([filename], {
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    noEmit: true,
+    skipLibCheck: true,
+    target: ts.ScriptTarget.Latest,
+  })
+  const sourceFile = program.getSourceFile(filename)
+  if (!sourceFile) throw new Error(`Could not load declaration entrypoint: ${filename}`)
+
+  const checker = program.getTypeChecker()
+  const moduleSymbol = checker.getSymbolAtLocation(sourceFile)
+  if (!moduleSymbol) throw new Error(`Could not inspect declaration entrypoint: ${filename}`)
+
+  return checker
+    .getExportsOfModule(moduleSymbol)
+    .map((symbol) => {
+      const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
+      const kind =
+        isTypeOnlyAlias(symbol) || !(target.flags & ts.SymbolFlags.Value) ? "type" : "runtime"
+      return { name: symbol.name, kind }
+    })
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+export function assertSameExports(expected, actual, label) {
+  const expectedByName = new Map(expected.map((entry) => [entry.name, entry.kind]))
+  const actualByName = new Map(actual.map((entry) => [entry.name, entry.kind]))
+  const problems = []
+
+  for (const [name, expectedKind] of expectedByName) {
+    const actualKind = actualByName.get(name)
+    if (!actualKind) {
+      problems.push(`missing ${expectedKind} export ${name}`)
+    } else if (actualKind !== expectedKind) {
+      problems.push(`${name} is ${actualKind}, expected ${expectedKind}`)
+    }
+  }
+  for (const [name, actualKind] of actualByName) {
+    if (!expectedByName.has(name)) problems.push(`unexpected ${actualKind} export ${name}`)
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      `${label} does not match packages/core/src/index.ts root exports:\n${problems.join("\n")}`
+    )
   }
 }
 
@@ -122,25 +176,21 @@ async function check() {
   const block = renderExportBlock(sourceExports)
 
   for (const declarationPath of declarationPaths) {
-    assertSameNames(
-      sourceExports,
-      collectExports(readFileSync(declarationPath, "utf8"), declarationPath),
-      declarationPath
-    )
+    assertSameExports(sourceExports, collectDeclarationExports(declarationPath), declarationPath)
   }
 
   const esm = await import(pathToFileUrl(path.join(root, "packages/core/dist/index.mjs")))
   const require = createRequire(import.meta.url)
   const cjs = require(path.join(root, "packages/core/dist/index.cjs"))
   const runtime = sourceExports.filter(({ kind }) => kind === "runtime")
-  assertSameNames(
+  assertSameExports(
     runtime,
-    Object.keys(esm).map((name) => ({ name })),
+    Object.keys(esm).map((name) => ({ name, kind: "runtime" })),
     "ESM root runtime exports"
   )
-  assertSameNames(
+  assertSameExports(
     runtime,
-    Object.keys(cjs).map((name) => ({ name })),
+    Object.keys(cjs).map((name) => ({ name, kind: "runtime" })),
     "CJS root runtime exports"
   )
 
