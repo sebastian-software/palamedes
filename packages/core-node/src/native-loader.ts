@@ -151,6 +151,14 @@ export function assertWellFormedNativeArguments(operation: string, arguments_: u
   snapshotNativeArguments(operation, arguments_)
 }
 
+/**
+ * Captures one wrapper input as stable, validated plain data before a wrapper
+ * converts it into the native request shape.
+ */
+export function snapshotNativeArgument<T extends object>(operation: string, value: T): T {
+  return snapshotNativeArguments(operation, [value])[0] as T
+}
+
 export function validateNativeArgument(operation: string, value: unknown): void {
   validateStableNativeArguments(operation, [value])
 }

@@ -348,6 +348,95 @@ describe("@palamedes/core-node", () => {
     ).toThrow(/combineCatalogs\.argument\[0\]\.selection/u)
   })
 
+  it("uses one stable snapshot while converting bulk wrapper requests", async () => {
+    const updateRoot = await createTempDir()
+    const updatePath = path.join(updateRoot, "messages.po")
+    let updateMessageReads = 0
+    updateCatalogFile({
+      targetPath: updatePath,
+      locale: "en",
+      sourceLocale: "en",
+      clean: false,
+      messages: [
+        {
+          get message() {
+            updateMessageReads += 1
+            return updateMessageReads === 1 ? "Stable update" : "Malformed \ud800 update"
+          },
+          extractedComments: [],
+          origins: [],
+        },
+      ],
+    })
+    expect(updateMessageReads).toBe(1)
+    expect(await readFile(updatePath, "utf8")).toContain('msgid "Stable update"')
+
+    const patchRoot = await createTempDir()
+    const patchPath = path.join(patchRoot, "locales", "de", "messages.po")
+    await mkdir(path.dirname(patchPath), { recursive: true })
+    await writeFile(
+      patchPath,
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "Stable patch"
+msgstr ""
+`
+    )
+    const stableConfig = {
+      rootDir: patchRoot,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+    const candidate = listTranslationCandidates({ config: stableConfig }).candidates[0]
+    if (!candidate) {
+      throw new Error("Expected a translation candidate")
+    }
+    let rootDirReads = 0
+    const applied = applyTranslationPatches({
+      config: {
+        get rootDir() {
+          rootDirReads += 1
+          return rootDirReads === 1 ? patchRoot : "\ud800"
+        },
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+      },
+      patches: [
+        {
+          id: candidate.id,
+          fingerprint: candidate.fingerprint,
+          translation: { kind: "singular", value: "Stabiler Patch" },
+        },
+      ],
+    })
+    expect(rootDirReads).toBe(1)
+    expect(applied.stats.applied).toBe(1)
+    expect(await readFile(patchPath, "utf8")).toContain('msgstr "Stabiler Patch"')
+
+    let combineContentReads = 0
+    const input = new Proxy(
+      { content: "" },
+      {
+        get(target, property, receiver) {
+          if (property === "content") {
+            combineContentReads += 1
+            return combineContentReads === 1
+              ? 'msgid "Stable combine"\nmsgstr "Stable combine"'
+              : "Malformed \ud800 combine"
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }
+    )
+    const combined = combineCatalogs({ inputs: [input], sourceLocale: "en" })
+    expect(combineContentReads).toBe(1)
+    expect(combined.content).toContain('msgid "Stable combine"')
+  })
+
   it("snapshots nested accessors, arrays, and getter failures deterministically", () => {
     let nestedReads = 0
     const nested: { config: { locales: string[] } } = { config: {} as { locales: string[] } }

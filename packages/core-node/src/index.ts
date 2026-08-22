@@ -73,11 +73,7 @@ import type {
   TranslationPatchResult as GeneratedTranslationPatchResult,
   TranslationValue as GeneratedTranslationValue,
 } from "./generated/palamedes-node-types"
-import {
-  loadNativeBindings,
-  markPreparedNativeArgument,
-  validateNativeArgument,
-} from "./native-loader"
+import { loadNativeBindings, prepareNativeArgument, snapshotNativeArgument } from "./native-loader"
 
 export type NativeInfo = GeneratedNativeInfo
 export type ParsedPoItem = GeneratedParsedPoItem
@@ -497,11 +493,11 @@ function toNativeTranslationPatchRequest(
   operation: string,
   request: TranslationPatchRequest
 ): NativeTranslationPatchRequest {
-  validateNativeArgument(operation, request)
-  return markPreparedNativeArgument({
-    config: toOwnedNativeArtifactConfig(request.config),
-    patches: request.patches.map(toNativeTranslationPatch),
-    po: toNativePoOptions(request.po),
+  const source = snapshotNativeArgument(operation, request)
+  return prepareNativeArgument(operation, {
+    config: toOwnedNativeArtifactConfig(source.config),
+    patches: source.patches.map(toNativeTranslationPatch),
+    po: toNativePoOptions(source.po),
   })
 }
 
@@ -729,16 +725,16 @@ function toNativeCombineRequest(
   operation: string,
   request: CatalogCombineRequest
 ): NativeCatalogCombineRequest {
-  const conflictStrategy = request.conflictStrategy
-  const selection = request.selection
-  validateNativeArgument(operation, request)
-  return markPreparedNativeArgument({
-    inputs: request.inputs.map((input) => ({ content: input.content, label: input.label })),
-    sourceLocale: request.sourceLocale,
-    locale: request.locale,
+  const source = snapshotNativeArgument(operation, request)
+  const conflictStrategy = source.conflictStrategy
+  const selection = source.selection
+  return prepareNativeArgument(operation, {
+    inputs: source.inputs.map((input) => ({ content: input.content, label: input.label })),
+    sourceLocale: source.sourceLocale,
+    locale: source.locale,
     conflictStrategy: conflictStrategy ? toNativeConflictStrategy(conflictStrategy) : undefined,
     selection: selection ? toOwnedNativeSelection(selection) : undefined,
-    includeObsolete: request.includeObsolete,
+    includeObsolete: source.includeObsolete,
   })
 }
 
@@ -842,17 +838,17 @@ function toNativeUpdateRequest(
   operation: string,
   request: CatalogUpdateRequest
 ): NativeCatalogUpdateRequest {
-  const format = request.format
-  validateNativeArgument(operation, request)
-  return markPreparedNativeArgument({
-    targetPath: request.targetPath,
-    locale: request.locale,
-    sourceLocale: request.sourceLocale,
-    clean: request.clean,
-    forceClean: request.forceClean,
+  const source = snapshotNativeArgument(operation, request)
+  const format = source.format
+  return prepareNativeArgument(operation, {
+    targetPath: source.targetPath,
+    locale: source.locale,
+    sourceLocale: source.sourceLocale,
+    clean: source.clean,
+    forceClean: source.forceClean,
     format: format ? toNativeConfigFormat(format) : undefined,
-    po: toNativePoOptions(request.po),
-    messages: request.messages.map((message) => {
+    po: toNativePoOptions(source.po),
+    messages: source.messages.map((message) => {
       const placeholders = message.placeholders
       return {
         message: message.message,
