@@ -98,10 +98,19 @@ export function checkBinarySizes({
   let failed = false
 
   for (const budget of BUDGETS) {
-    execute("cargo", ["build", "--release", "--locked", "-p", budget.crate], {
-      cwd: ROOT,
-      stdio: "inherit",
-    })
+    try {
+      execute("cargo", ["build", "--release", "--locked", "-p", budget.crate], {
+        cwd: ROOT,
+        stdio: "inherit",
+      })
+    } catch (error) {
+      failed = true
+      output.error(
+        `${budget.label}: failed to build Rust crate ${budget.crate}; this artifact could not be measured.\n` +
+          `Cause: ${error instanceof Error ? error.message : String(error)}`
+      )
+      continue
+    }
 
     const relativeBinaryPath = releaseArtifactPath(budget, platform)
     const binaryPath = path.join(ROOT, relativeBinaryPath)

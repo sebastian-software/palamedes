@@ -113,3 +113,42 @@ test("keeps checking after a built artifact is unexpectedly missing", () => {
   assert.equal(logs.length, 1)
   assert.match(logs[0], /core-node addon \(release\)/u)
 })
+
+test("keeps building and measuring after an earlier cargo build fails", () => {
+  const builds = []
+  const errors = []
+  const logs = []
+
+  const exitCode = checkBinarySizes({
+    platform: "linux",
+    execute(_command, args) {
+      const crate = args.at(-1)
+      builds.push(crate)
+      if (crate === BUDGETS[0].crate) {
+        throw new Error("synthetic cargo failure")
+      }
+    },
+    stat() {
+      return { size: BUDGETS[1].baseline.bytes }
+    },
+    output: {
+      error(message) {
+        errors.push(message)
+      },
+      log(message) {
+        logs.push(message)
+      },
+    },
+  })
+
+  assert.equal(exitCode, 1)
+  assert.deepEqual(
+    builds,
+    BUDGETS.map(({ crate }) => crate)
+  )
+  assert.equal(errors.length, 1)
+  assert.match(errors[0], /failed to build Rust crate palamedes-cli/u)
+  assert.match(errors[0], /Cause: synthetic cargo failure/u)
+  assert.equal(logs.length, 1)
+  assert.match(logs[0], /core-node addon \(release\)/u)
+})
