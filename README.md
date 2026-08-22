@@ -175,6 +175,7 @@ Evidence:
 ## Explore the Docs and Packages
 
 - [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [First working translation with Next.js](https://github.com/sebastian-software/palamedes/blob/main/docs/nextjs-first-run.md)
 - [API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md)
 - [Configuration reference](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md)
 - [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md)

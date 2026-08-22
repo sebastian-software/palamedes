@@ -3,6 +3,9 @@
 `@palamedes/next-plugin` wires Palamedes macro transformation and `.po` loading
 into Next.js.
 
+For an executable App Router Server Component path, start with
+[First Working Translation with Next.js](../nextjs-first-run.md).
+
 Catalog storage can be PO or FCL in `palamedes.yaml`, but this API is still a
 `.po` import loader. See [Catalog formats](../catalog-formats.md) for the
 storage/import boundary.

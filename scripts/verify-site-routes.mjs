@@ -122,6 +122,10 @@ const ROUTE_EXPECTATIONS = [
     path: "/docs/first-working-translation",
     h1: "First Working Translation",
   },
+  {
+    path: "/docs/nextjs-first-run",
+    h1: "First Working Translation with Next.js",
+  },
   { path: "/docs/platform-support", h1: "Platform Support" },
   { path: "/docs/cli", h1: "CLI Reference" },
   { path: "/docs/example-screenshots", h1: "Example Screenshots" },
@@ -974,8 +978,8 @@ async function checkProgressiveOutlineAnchors(browser) {
     }))
     .filter(({ source }) => source.includes('className="pmds-progressive-outline"'))
 
-  if (docs.length !== 21) {
-    fail(`progressive docs outline: expected 21 generated long docs, got ${docs.length}`)
+  if (docs.length !== 22) {
+    fail(`progressive docs outline: expected 22 generated long docs, got ${docs.length}`)
   }
 
   const context = await browser.newContext()

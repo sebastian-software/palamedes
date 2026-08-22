@@ -30,7 +30,7 @@ and catalog problems show up while the app is still easy to fix.
 
 Use the full copy-paste setup guide:
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [First working translation with Next.js](https://github.com/sebastian-software/palamedes/blob/main/docs/nextjs-first-run.md)
 
 ## Installation
 
