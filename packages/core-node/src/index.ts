@@ -73,7 +73,11 @@ import type {
   TranslationPatchResult as GeneratedTranslationPatchResult,
   TranslationValue as GeneratedTranslationValue,
 } from "./generated/palamedes-node-types"
-import { loadNativeBindings, prepareNativeArgument } from "./native-loader"
+import {
+  loadNativeBindings,
+  markPreparedNativeArgument,
+  validateNativeArgument,
+} from "./native-loader"
 
 export type NativeInfo = GeneratedNativeInfo
 export type ParsedPoItem = GeneratedParsedPoItem
@@ -493,7 +497,8 @@ function toNativeTranslationPatchRequest(
   operation: string,
   request: TranslationPatchRequest
 ): NativeTranslationPatchRequest {
-  return prepareNativeArgument(operation, {
+  validateNativeArgument(operation, request)
+  return markPreparedNativeArgument({
     config: toOwnedNativeArtifactConfig(request.config),
     patches: request.patches.map(toNativeTranslationPatch),
     po: toNativePoOptions(request.po),
@@ -726,7 +731,8 @@ function toNativeCombineRequest(
 ): NativeCatalogCombineRequest {
   const conflictStrategy = request.conflictStrategy
   const selection = request.selection
-  return prepareNativeArgument(operation, {
+  validateNativeArgument(operation, request)
+  return markPreparedNativeArgument({
     inputs: request.inputs.map((input) => ({ content: input.content, label: input.label })),
     sourceLocale: request.sourceLocale,
     locale: request.locale,
@@ -837,7 +843,8 @@ function toNativeUpdateRequest(
   request: CatalogUpdateRequest
 ): NativeCatalogUpdateRequest {
   const format = request.format
-  return prepareNativeArgument(operation, {
+  validateNativeArgument(operation, request)
+  return markPreparedNativeArgument({
     targetPath: request.targetPath,
     locale: request.locale,
     sourceLocale: request.sourceLocale,

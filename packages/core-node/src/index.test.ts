@@ -284,6 +284,70 @@ describe("@palamedes/core-node", () => {
     ).toThrow(/combineCatalogs\.argument\[0\]\.inputs\[0\]\.content/u)
   })
 
+  it("preserves Map boundary rejections before normalizing bulk payloads", () => {
+    expect(() =>
+      updateCatalogFile({
+        targetPath: "/unused/messages.po",
+        locale: "en",
+        sourceLocale: "en",
+        clean: false,
+        messages: [
+          {
+            message: "Hello",
+            placeholders: new Map([["name", ["Name"]]]),
+            extractedComments: [],
+            origins: [],
+          },
+        ],
+      } as never)
+    ).toThrow(/updateCatalogFile\.argument\[0\]\.messages\[0\]\.placeholders/u)
+
+    expect(() =>
+      applyTranslationPatches({
+        config: {
+          rootDir: "/unused",
+          locales: ["en", "de"],
+          sourceLocale: "en",
+          fallbackLocales: new Map([["de", ["en"]]]),
+          catalogs: [],
+        },
+        patches: [],
+      } as never)
+    ).toThrow(/applyTranslationPatches\.argument\[0\]\.config\.fallbackLocales/u)
+
+    expect(() =>
+      applyTranslationPatches({
+        config: {
+          rootDir: "/unused",
+          locales: ["en", "de"],
+          sourceLocale: "en",
+          catalogs: [],
+        },
+        patches: [
+          {
+            id: { catalog: "/unused/messages.po", locale: "de", message: "Hello" },
+            fingerprint: "fingerprint",
+            translation: {
+              kind: "plural",
+              variable: "count",
+              pluralKind: "cardinal",
+              offset: 0,
+              values: new Map([["one", "One"]]),
+            },
+          },
+        ],
+      } as never)
+    ).toThrow(/applyTranslationPatches\.argument\[0\]\.patches\[0\]\.translation\.values/u)
+
+    expect(() =>
+      combineCatalogs({
+        inputs: [{ content: 'msgid "Hello"\nmsgstr ""' }],
+        sourceLocale: "en",
+        selection: new Map([["moreThan", 1]]),
+      } as never)
+    ).toThrow(/combineCatalogs\.argument\[0\]\.selection/u)
+  })
+
   it("snapshots nested accessors, arrays, and getter failures deterministically", () => {
     let nestedReads = 0
     const nested: { config: { locales: string[] } } = { config: {} as { locales: string[] } }

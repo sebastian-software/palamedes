@@ -151,13 +151,21 @@ export function assertWellFormedNativeArguments(operation: string, arguments_: u
   snapshotNativeArguments(operation, arguments_)
 }
 
+export function validateNativeArgument(operation: string, value: unknown): void {
+  validateStableNativeArguments(operation, [value])
+}
+
 /**
- * Marks a wrapper-owned plain-data tree after validating it without creating a
- * second copy. The wrapper must own every nested object and array before using
- * this helper; native bindings may read the prepared tree directly.
+ * Marks a wrapper-owned plain-data tree after validating its public source
+ * without creating a second copy. The wrapper must own every nested object and
+ * array in `value`; native bindings may read the prepared tree directly.
  */
 export function prepareNativeArgument<T extends object>(operation: string, value: T): T {
-  validateStableNativeArguments(operation, [value])
+  validateNativeArgument(operation, value)
+  return markPreparedNativeArgument(value)
+}
+
+export function markPreparedNativeArgument<T extends object>(value: T): T {
   preparedNativeArguments.add(value)
   return value
 }
