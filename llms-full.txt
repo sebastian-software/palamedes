@@ -42,7 +42,7 @@ When helping with Palamedes code:
 
 Recommended app-facing packages:
 
-- `@palamedes/core`: app-facing i18n instance and core macro entry point
+- `@palamedes/core`: app-facing i18n instance and core macro entry point. Its complete root export inventory, including runtime and type-only names, is generated in `docs/api/core.md` from the published API contract.
 - `@palamedes/runtime`: runtime bridge for transformed code
 - `@palamedes/react`: React translation components and React macro entry point
 - `@palamedes/solid`: Solid translation components and Solid macro entry point
