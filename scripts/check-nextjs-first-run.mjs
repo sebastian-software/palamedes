@@ -30,6 +30,10 @@ test("Next.js first run keeps its executable server path and navigation in sync"
   ]) {
     assertIncludes(guide, value)
   }
+  assert.ok(
+    !read(guide).includes('from "@/lib/i18n.server"'),
+    "the guide must not require an app alias"
+  )
 
   for (const file of ["README.md", "llms.txt", "llms-full.txt", "packages/next-plugin/README.md"]) {
     assertIncludes(file, "docs/nextjs-first-run.md")

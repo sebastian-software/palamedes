@@ -101,7 +101,7 @@ switcher; [Locale strategies](./locale-strategies.md) shows the trade-offs.
 ```tsx
 // src/app/page.tsx
 import { t } from "@palamedes/core/macro"
-import { createActiveServerI18n, runWithServerI18n } from "@/lib/i18n.server"
+import { createActiveServerI18n, runWithServerI18n } from "../lib/i18n.server"
 
 function translateWelcome() {
   return t`Welcome to Palamedes`
