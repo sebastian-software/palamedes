@@ -19,7 +19,7 @@ function toLines(code: string): { no: number; text: string }[] {
 
 function toneFor(line: string): string {
   if (line.startsWith("import ") || line.startsWith("export ")) return "text-accent-soft"
-  if (line.startsWith("//") || line.startsWith("#")) return "text-gray-spec"
+  if (line.startsWith("//") || line.startsWith("#")) return "text-paper/70"
   return "text-paper/85"
 }
 
@@ -78,7 +78,7 @@ function RivalMatrix({ rival, rows }: { rival: string; rows: RivalRow[] }) {
             <th className="micro border border-hair px-4 py-3 text-left text-[10px] tracking-th text-ink">
               {rival}
             </th>
-            <th className="micro border border-hair border-l-2 border-l-accent bg-hover-fill px-4 py-3 text-left text-[10px] tracking-th text-accent">
+            <th className="micro border border-hair border-l-2 border-l-accent bg-hover-fill px-4 py-3 text-left text-[10px] tracking-th text-ink">
               Palamedes
             </th>
           </tr>
@@ -156,6 +156,30 @@ function PickList({ title, items, accent }: { title: string; items: string[]; ac
   )
 }
 
+function RivalFaq({ rival }: { rival: Rival }) {
+  return (
+    <div className="border-y border-hair">
+      {rival.faq.map((entry, index) => (
+        <details key={entry.q} className="group border-b border-hair last:border-b-0">
+          <summary className="grid cursor-pointer grid-cols-[2.75rem_1fr_auto] gap-4 px-5 py-5 text-[15px] font-semibold leading-snug marker:content-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent">
+            <span className="mono-nums text-[11px] font-normal text-gray-spec">0{index + 1}</span>
+            <span>{entry.q}</span>
+            <span className="text-accent group-open:hidden" aria-hidden>
+              +
+            </span>
+            <span className="hidden text-accent group-open:inline" aria-hidden>
+              −
+            </span>
+          </summary>
+          <p className="max-w-[52rem] px-5 pb-6 pl-[5.75rem] text-[14px] leading-relaxed text-ink/80 max-tight:pl-5">
+            {entry.a}
+          </p>
+        </details>
+      ))}
+    </div>
+  )
+}
+
 export function RivalPage({ rival }: { rival: Rival }) {
   const usesBenchmark = rival.rows.some((row) => row.palamedes.includes("¹"))
   /*
@@ -168,6 +192,9 @@ export function RivalPage({ rival }: { rival: Rival }) {
     <Page>
       <section className="px-8 pt-16 pb-14 max-tight:px-5">
         <p className="eyebrow">{rival.eyebrow}</p>
+        <p className="micro mt-5 max-w-[58em] text-[10px] tracking-label text-gray-spec">
+          For {rival.audience}
+        </p>
         <h1 className="mt-6 max-w-[13em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
           {rival.headline}
         </h1>
@@ -187,13 +214,13 @@ export function RivalPage({ rival }: { rival: Rival }) {
         </p>
 
         <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href="/get-started">Try the 5-minute quickstart</ButtonLink>
+          <ButtonLink href={rival.evaluation.href}>{rival.evaluation.label}</ButtonLink>
           <ButtonLink variant="outline" href="#decide">
-            Which should you pick?
+            See the decision summary
           </ButtonLink>
         </div>
         <EditorialRail tone="emphasis" className="mt-12 bg-hover-fill py-6 pr-6">
-          <p className="micro text-[10px] tracking-label text-gray-spec">Our position</p>
+          <p className="micro text-[10px] tracking-label text-gray-spec">Recommendation</p>
           <p className="mt-3 max-w-[46em] text-[16px] leading-relaxed">{rival.thesis}</p>
         </EditorialRail>
       </section>
@@ -201,8 +228,8 @@ export function RivalPage({ rival }: { rival: Rival }) {
       <Section
         num="01 — Decide"
         id="decide"
-        title="Which one should you actually pick?"
-        lede={`We think most React and Solid teams are better off here, and the left column says why. The right column is not a disclaimer — if it describes your situation, use ${rival.name} and do not think twice about it.`}
+        title="Choose the model that leaves you with less recurring work."
+        lede={`For the audience above, we recommend Palamedes. The alternative is not a disclaimer: if the right column describes your constraint, choose ${rival.name} and do not think twice about it.`}
       >
         <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
           <PickList title="Pick Palamedes when…" items={rival.pickPalamedes} accent />
@@ -223,25 +250,9 @@ export function RivalPage({ rival }: { rival: Rival }) {
       </Section>
 
       <Section
-        num={`02 — ${rival.name}`}
-        title="Credit where it is due, and what it costs."
-        lede={`Every strength is a decision, and every decision has a price someone pays. Here is ${rival.name} at its strongest — and the bill that comes with it. Both columns are sourced from the research notes, not from our marketing department.`}
-      >
-        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
-          <LedgerColumn label="Credit" title={rival.respectTitle} items={rival.respect} />
-          <LedgerColumn
-            label="The flipside"
-            title={rival.flipsideTitle}
-            items={rival.flipside}
-            accent
-          />
-        </div>
-      </Section>
-
-      <Section
-        num="03 — Difference"
-        title="Why Palamedes is built the way it is"
-        lede="Not a feature list — the handful of decisions that actually change how the two feel in daily work, and the reasoning behind each one."
+        num="02 — Daily work"
+        title="What changes after the choice is made."
+        lede="These are workflow consequences, not a feature inventory: fewer conventions to maintain, one catalog boundary to review, and one runtime model to carry through the supported hosts. Each point maps back to an inspectable artifact."
       >
         <div
           className={`hairline-grid ${differenceCols} max-grid:grid-cols-2 max-tight:grid-cols-1`}
@@ -250,12 +261,38 @@ export function RivalPage({ rival }: { rival: Rival }) {
             <div key={difference.title} className="bg-paper px-6 py-6">
               <h3 className="text-[15px] font-bold">{difference.title}</h3>
               <p className="mt-2 text-[13.5px] leading-relaxed text-ink/85">{difference.body}</p>
+              <a
+                href={rival.outcomeProof.href}
+                className="mono-nums mt-4 inline-block text-[12px] text-accent hover:underline"
+              >
+                {rival.outcomeProof.label} →
+              </a>
             </div>
           ))}
         </div>
       </Section>
 
-      <Section num="04 — Code" title={rival.code.caption}>
+      <Section
+        num={`03 — ${rival.name}`}
+        title="Where the competitor is the stronger fit."
+        lede={`The strengths and trade-offs below are sourced from the dated research for ${rival.name}. They explain why the right decision can genuinely be ${rival.name}, even when Palamedes is our recommendation for the audience above.`}
+      >
+        <div className="hairline-grid grid-cols-2 max-tight:grid-cols-1">
+          <LedgerColumn
+            label="Competitor strength"
+            title={rival.respectTitle}
+            items={rival.respect}
+          />
+          <LedgerColumn
+            label="Trade-off"
+            title={rival.flipsideTitle}
+            items={rival.flipside}
+            accent
+          />
+        </div>
+      </Section>
+
+      <Section num="04 — Proof in code" title={rival.code.caption}>
         <CodeCompare code={rival.code} />
       </Section>
 
@@ -270,12 +307,30 @@ export function RivalPage({ rival }: { rival: Rival }) {
         ) : null}
       </Section>
 
-      <StatementBand num="06 — The honest bit">{rival.honest}</StatementBand>
+      <StatementBand num="06 — The trade-off">{rival.honest}</StatementBand>
+
+      <Section num="07 — Evaluate" title={rival.evaluation.title} lede={rival.evaluation.body}>
+        <div className="flex flex-wrap gap-3">
+          <ButtonLink href={rival.evaluation.href}>{rival.evaluation.label}</ButtonLink>
+          <ButtonLink variant="outline" href={rival.outcomeProof.href}>
+            {rival.outcomeProof.label}
+          </ButtonLink>
+        </div>
+      </Section>
+
+      <Section
+        num="08 — Questions"
+        id="faq"
+        title={`Questions teams ask before leaving ${rival.name}.`}
+        lede="The migration, framework, catalog, runtime and trade-off boundaries are stated here and included in the page's structured data."
+      >
+        <RivalFaq rival={rival} />
+      </Section>
 
       <CtaBand
-        headline="Check the receipts before you believe the page."
-        primary={{ label: "See the proof", href: "/proof" }}
-        secondary={{ label: "Compare the others", href: "/compare" }}
+        headline="Make the next step match the decision you still need to make."
+        primary={{ label: rival.evaluation.label, href: rival.evaluation.href }}
+        secondary={{ label: "Compare another model", href: "/compare" }}
       />
     </Page>
   )

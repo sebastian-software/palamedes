@@ -2,12 +2,24 @@
 
 const path = require("node:path")
 const { loadPalamedesConfig } = require("@palamedes/config")
-const { compileCatalogArtifactSelected, compileCatalogModule } = require("@palamedes/core-node")
+const {
+  compileCatalogArtifactSelectedAsync,
+  compileCatalogModuleAsync,
+} = require("@palamedes/core-node")
 const { createCatalogLoaderResult, createMissingErrorMessage } = require("@palamedes/transform")
 const { loadConfigCached } = require("./palamedes-config-cache.cjs")
 const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs")
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected"
+
+function resolveLoaderCwd(context, options) {
+  if (typeof options.cwd === "string" && options.cwd.length > 0) {
+    return path.resolve(options.cwd)
+  }
+  if (typeof context.rootContext === "string" && context.rootContext.length > 0) {
+    return path.resolve(context.rootContext)
+  }
+}
 
 module.exports = function palamedesPoLoader() {
   const callback = this.async()
@@ -16,7 +28,11 @@ module.exports = function palamedesPoLoader() {
   const failOnCompileError = options.failOnCompileError === true
 
   ;(async () => {
-    const cfg = await loadConfigCached(options.configPath, loadPalamedesConfig)
+    const cfg = await loadConfigCached(
+      options.configPath,
+      loadPalamedesConfig,
+      resolveLoaderCwd(this, options)
+    )
     const locale = path.basename(this.resourcePath, ".po")
     const artifactConfig = {
       rootDir: cfg.rootDir,
@@ -45,7 +61,7 @@ module.exports = function palamedesPoLoader() {
       if (!Array.isArray(compiledIds) || !compiledIds.every((id) => typeof id === "string")) {
         throw new TypeError("Invalid Palamedes selected-message query.")
       }
-      const artifact = compileCatalogArtifactSelected(
+      const artifact = await compileCatalogArtifactSelectedAsync(
         artifactConfig,
         this.resourcePath,
         compiledIds
@@ -59,7 +75,7 @@ module.exports = function palamedesPoLoader() {
         result.warnings.push(createMissingErrorMessage(resolvedLocale, artifact.missing))
       }
     } else {
-      result = compileCatalogModule(artifactConfig, this.resourcePath, loaderOptions)
+      result = await compileCatalogModuleAsync(artifactConfig, this.resourcePath, loaderOptions)
     }
     if (typeof this.addDependency === "function") {
       if (cfg.configPath) {

@@ -8,7 +8,7 @@ use oxc_semantic::Semantic;
 use oxc_span::GetSpan;
 
 use crate::error::PalamedesError;
-use crate::translation_scope::source_location;
+use crate::source::{DiagnosticLocation, SourceLocator};
 
 use super::imports::ImportCollector;
 use super::runtime::{
@@ -21,6 +21,7 @@ use oxc_syntax::symbol::SymbolId;
 pub(super) struct TransformVisitor<'a> {
     filename: &'a str,
     source: &'a str,
+    source_locator: SourceLocator<'a>,
     imports: &'a ImportCollector,
     options: &'a NativeTransformOptions,
     pub replacements: Vec<Replacement>,
@@ -44,6 +45,7 @@ impl<'a> TransformVisitor<'a> {
         Self {
             filename,
             source,
+            source_locator: SourceLocator::new(source),
             imports,
             options,
             replacements: Vec::new(),
@@ -75,9 +77,10 @@ impl<'a> TransformVisitor<'a> {
     }
 
     fn fail_unsupported_macro(&mut self, macro_name: &str, start: usize) {
+        let location = self.source_locator.indexed_location(self.filename, start);
         self.fail(PalamedesError::UnsupportedMacroSyntax {
             macro_name: macro_name.to_string(),
-            location: source_location(self.source, self.filename, start),
+            location: location.format(),
             detail: "the macro could not be statically transformed; use a supported literal, template, descriptor, or choice shape".to_string(),
         });
     }
@@ -184,7 +187,10 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             if let Some(nested_start) = nested_message_macro_in_children(&it.children, self.imports)
             {
                 self.fail(PalamedesError::NestedMessageMacro {
-                    location: source_location(self.source, self.filename, nested_start),
+                    location: self
+                        .source_locator
+                        .indexed_location(self.filename, nested_start)
+                        .format(),
                 });
                 return;
             }
@@ -210,13 +216,18 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 &attribute_replacements,
                 self.options,
             ),
-            "Plural" | "Select" | "SelectOrdinal" => transform_choice_jsx_element(
-                it,
-                self.source,
-                &macro_info.imported_name,
-                &source_location(self.source, self.filename, it.span.start as usize),
-                self.options,
-            ),
+            "Plural" | "Select" | "SelectOrdinal" => {
+                let location = self
+                    .source_locator
+                    .indexed_location(self.filename, it.span.start as usize);
+                transform_choice_jsx_element(
+                    it,
+                    self.source,
+                    &macro_info.imported_name,
+                    &location,
+                    self.options,
+                )
+            }
             _ => Ok(None),
         };
 
@@ -341,7 +352,9 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             walk::walk_call_expression(self, it);
             return;
         };
-        let location = source_location(self.source, self.filename, it.span.start as usize);
+        let location = self
+            .source_locator
+            .indexed_location(self.filename, it.span.start as usize);
 
         match macro_info.imported_name.as_str() {
             "t" => {

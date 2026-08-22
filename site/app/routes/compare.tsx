@@ -15,7 +15,7 @@ export function meta() {
     title:
       "Palamedes compared — Lingui, fbtee, i18next, next-intl, React Intl, Paraglide, Intlayer, Tolgee",
     description:
-      "Side-by-side comparisons of Palamedes with the major TypeScript i18n libraries: 5× to 100× faster on a checked benchmark, with what each of them does better and when to pick them instead.",
+      "Choose an i18n model that stays coherent as a TypeScript application grows. Compare Palamedes with eight alternatives through explicit recommendations, dated research, checked workflow evidence and honest exits.",
     path: "/compare",
   })
 }
@@ -54,25 +54,24 @@ export default function Compare() {
       <section className="px-8 pt-16 pb-14 max-tight:px-5">
         <p className="eyebrow">Comparison</p>
         <h1 className="mt-6 max-w-[12em] text-display leading-[0.98] font-bold tracking-[-0.03em] text-balance">
-          Compare it properly. We&nbsp;will argue the other side for you.
+          Choose the i18n model you can keep.
         </h1>
         <p className="mt-6 max-w-[42em]">
-          Palamedes combines broad framework and workflow coverage with fewer competing concepts. It
-          is measured faster than the five workflows covered by the checked benchmark — 5× to 100×,
-          depending on the measured workflow. The 5× React Intl reference is extraction-only; the
-          four catalog-update workflows span 30× to 100×. Both the product boundary and the
-          benchmark scope are explicit. Every page below states what the other project earned, what
-          that strength costs its users, and where we would send you elsewhere.
+          For React and Solid teams that want source strings, repository-owned PO catalogs and one
+          runtime model across supported hosts, Palamedes is the more durable default. That is a
+          recommendation, not a claim that every alternative loses: each page states when another
+          tool is the better fit, links the workflow outcome to proof, and keeps measured results
+          separate from dated research.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonLink href="/compare/lingui">Start with Lingui</ButtonLink>
+          <ButtonLink href="/compare/lingui">Compare the closest model: Lingui</ButtonLink>
           <ButtonLink variant="outline" href="/proof">
-            See the proof
+            Inspect the workflow proof
           </ButtonLink>
         </div>
 
         <EditorialRail tone="emphasis" className="mt-12 bg-hover-fill py-6 pr-6">
-          <p className="micro text-[10px] tracking-label text-gray-spec">Why now</p>
+          <p className="micro text-[10px] tracking-label text-gray-spec">Decision frame</p>
           <h2 className="mt-2 max-w-[24em] text-[19px] font-bold">{NATIVE_SHIFT.title}</h2>
           <p className="mt-3 max-w-[46em] text-[15px] leading-relaxed text-ink/85">
             {NATIVE_SHIFT.body}
@@ -82,8 +81,9 @@ export default function Compare() {
 
       <Section
         num="01 — Comparison ledger"
+        id="comparison-ledger"
         title="What we measured, what we researched, and where we made no claim."
-        lede={`${RIVALS.length} libraries, ${RIVALS.length} separate arguments. The ledger separates directly measured workflow results from dated research. An empty measurement is an explicit boundary, not a footnote — and each comparison starts with a verdict before the supporting detail.`}
+        lede={`${RIVALS.length} libraries, ${RIVALS.length} decisions. Start with the recommendation that fits your current architecture, then use this ledger to verify the evidence boundary. An empty measurement is an explicit boundary, not a footnote.`}
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] border-collapse border border-hair">
@@ -118,7 +118,7 @@ export default function Compare() {
                     <td className="border border-hair bg-hover-fill px-4 py-4 align-top text-[13px] leading-relaxed">
                       {measurement ? (
                         <>
-                          <p className="font-bold text-accent">{measurement.palamedes}</p>
+                          <p className="font-bold text-ink">{measurement.palamedes}</p>
                           <p className="mt-1 text-[11.5px] text-gray-spec">
                             Scope: {measurement.criterion}
                           </p>
@@ -139,7 +139,7 @@ export default function Compare() {
                         viewTransition
                         className="mono-nums text-[13px] text-accent hover:underline"
                       >
-                        Read verdict →
+                        Read decision →
                       </Link>
                     </td>
                   </tr>
@@ -155,7 +155,10 @@ export default function Compare() {
             issue with the comparison you need — every page here is backed by a dated research note
             in the repository, and we would rather write one than guess.
           </p>
-          <a href={`${REPO}/issues`} className="micro mt-3 inline-block text-[12px] text-accent">
+          <a
+            href={`${REPO}/issues`}
+            className="micro mt-3 inline-block text-[12px] text-ink underline decoration-accent underline-offset-4 hover:text-accent"
+          >
             Ask on GitHub →
           </a>
         </EditorialRail>
@@ -242,10 +245,10 @@ export default function Compare() {
       </StatementBand>
 
       <CtaBand
-        headline="Judge it by the receipts, not the copy."
-        primary={{ label: "See the proof", href: "/proof" }}
+        headline="Start with the comparison that matches the risk you need to remove."
+        primary={{ label: "Compare Palamedes with Lingui", href: "/compare/lingui" }}
         secondary={{
-          label: "Try the 5-minute quickstart",
+          label: "Run the guided evaluation setup",
           href: "/get-started",
         }}
       />

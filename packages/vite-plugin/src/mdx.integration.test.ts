@@ -64,7 +64,7 @@ describe("Palamedes MDX Vite integration", () => {
   })
 
   it.each(["react", "solid"] as const)(
-    "builds a real %s MDX entry through the framework pipeline",
+    "builds a real Vite 8 %s MDX entry through the framework pipeline",
     async (framework) => {
       const root = await createFixture()
       const frameworkPlugin = framework === "react" ? react() : solid({ extensions: [".mdx"] })

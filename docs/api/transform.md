@@ -55,6 +55,12 @@ Most apps should use a framework plugin instead of this package directly.
 transform includes the authored message in generated `i18n._()` descriptors and
 `Trans` props so missing catalogs can render readable source text.
 
+The first-party Vite, Next, and Remix adapters enable this option by default,
+including in production, because independently loaded catalog chunks can lag a
+code deploy. Direct transform callers keep the compact default and must opt in
+when readable misses are required. Retained ICU text is formatted only by a
+parser-capable runtime; the parser-free compiled runtime returns it literally.
+
 `stripMessageField` is the deprecated inverse compatibility option. An explicit
 `keepSourceFallbacks` value takes precedence; new integrations should use only
 the positive option.

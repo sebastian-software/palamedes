@@ -11,6 +11,7 @@ export function meta() {
     title: rival.metaTitle,
     description: rival.metaDescription,
     path: "/compare/next-intl",
+    faq: rival.faq,
   })
 }
 

@@ -191,6 +191,8 @@ export function discoverTranslationApi(source) {
 }
 
 function verifyPackages(read, listDirectories) {
+  const reservedBinContract =
+    "The reserved `palamedes` and `create-palamedes` bins do not perform work: both print `https://palamedes.dev/docs/first-working-translation` to stderr, exit 1 when invoked without arguments, and exit 2 when arguments are supplied."
   const packages = discoverPublishedPackages(read, listDirectories)
   const directPackages = packages
     .filter(({ name }) => !platformParent(name))
@@ -207,6 +209,8 @@ function verifyPackages(read, listDirectories) {
   }
   for (const name of compactPackageInventory)
     assertContains(read("llms.txt"), name, "compact package inventory: llms.txt")
+  for (const file of ["llms.txt", "llms-full.txt"])
+    assertContains(read(file), reservedBinContract, `${file} reserved-bin contract`)
 }
 
 function verifyCli(read) {

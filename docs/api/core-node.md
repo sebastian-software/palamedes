@@ -9,8 +9,10 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `parsePo(source)`
 - `parseCatalog(request)`
 - `updateCatalogFile(request)`
+- `updateCatalogFileAsync(request)`
 - `listTranslationCandidates(request)`
 - `applyTranslationPatches(request)`
+- `applyTranslationPatchesAsync(request)`
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
 - `deriveMessageMetadata(message, context?)`
@@ -21,13 +23,17 @@ core. Most apps use it indirectly through the CLI and plugins.
 - `mergeCatalogsThreeWay(request)`
 - `mergeCatalogFilesThreeWay(request)`
 - `compileCatalogArtifact(config, resourcePath)`
+- `compileCatalogArtifactAsync(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
+- `compileCatalogArtifactSelectedAsync(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`
+- `compileCatalogModuleAsync(config, resourcePath, options)`
 - `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
 - `analyzeSourceNative(source, filename, options?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
+- `extractCatalogMessagesFromFilesAsync(request)`
 - `transformMacrosNative(source, filename, options?)`
 
 `analyzeMdxNative` returns messages, structured diagnostics, generated
@@ -47,6 +53,18 @@ the caller-supplied `options.locale` is only a fallback when resolution is
 unavailable, and the result reports the effective locale as `locale`. The
 first-party Vite, Next, and Remix integrations use this function for `.po`
 imports.
+
+For event-loop-sensitive integrations, use the additive `Async` variants of
+catalog update, translation patch, catalog artifact/module compilation, and
+file extraction. Each call moves one owned operation to Node's shared libuv
+worker pool and returns the same result or error shape in a promise. Vite and
+Next await these APIs in their asynchronous plugin hooks. Remix's synchronous
+module hook continues to use `compileCatalogModule()`.
+
+Queued native work is not cancellable through these APIs. Bound concurrency in
+the caller for bulk work; do not launch an unbounded promise fan-out. The pool
+is shared with other Node filesystem and native work, and
+`UV_THREADPOOL_SIZE` is the process-level pool control.
 
 `renderCatalogModule(messages)` exposes the same native module generator for
 custom integrations that already have a compiled message map. The TypeScript

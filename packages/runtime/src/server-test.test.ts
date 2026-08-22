@@ -162,8 +162,14 @@ describe("@palamedes/runtime/server/test fallback", () => {
       exports: Record<string, { browser: unknown; default: unknown }>
     }
     const fallback = {
-      import: "./dist/server-test-unavailable.mjs",
-      require: "./dist/server-test-unavailable.cjs",
+      import: {
+        types: "./dist/server-test-unavailable.d.mts",
+        default: "./dist/server-test-unavailable.mjs",
+      },
+      require: {
+        types: "./dist/server-test-unavailable.d.cts",
+        default: "./dist/server-test-unavailable.cjs",
+      },
     }
 
     expect(packageJson.exports["./server/test"]?.browser).toStrictEqual(fallback)

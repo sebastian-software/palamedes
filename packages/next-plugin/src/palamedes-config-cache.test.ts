@@ -11,11 +11,13 @@ const { clearConfigCache, loadConfigCached, loadConfigCachedSync } =
     clearConfigCache(): void
     loadConfigCached<T>(
       configPath: string | undefined,
-      loadConfig: (options: { configPath?: string }) => Promise<T>
+      loadConfig: (options: { configPath?: string; cwd?: string }) => Promise<T>,
+      cwd?: string
     ): Promise<T>
     loadConfigCachedSync<T>(
       configPath: string | undefined,
-      loadConfig: (options: { configPath?: string }) => T
+      loadConfig: (options: { configPath?: string; cwd?: string }) => T,
+      cwd?: string
     ): T
   }
 
@@ -49,6 +51,26 @@ describe("palamedes-config-cache.cjs", () => {
 
     await expect(loadConfigCached(configPath, loadAsync)).resolves.toBe(second)
     expect(loadAsync).toHaveBeenCalledOnce()
+  })
+
+  it("does not share automatic config discovery between Next project roots", async () => {
+    const firstRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-app-a-"))
+    const secondRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-app-b-"))
+    tempDirs.push(firstRoot, secondRoot)
+    const firstPath = path.join(firstRoot, "palamedes.yaml")
+    const secondPath = path.join(secondRoot, "palamedes.yaml")
+    await Promise.all([writeFile(firstPath, "first"), writeFile(secondPath, "second")])
+    const loadConfig = vi.fn(({ cwd }: { cwd?: string }) =>
+      cwd === firstRoot
+        ? { configPath: firstPath, value: "first" }
+        : { configPath: secondPath, value: "second" }
+    )
+
+    expect(loadConfigCachedSync(undefined, loadConfig, firstRoot)).toMatchObject({ value: "first" })
+    expect(loadConfigCachedSync(undefined, loadConfig, secondRoot)).toMatchObject({
+      value: "second",
+    })
+    expect(loadConfig).toHaveBeenCalledTimes(2)
   })
 })
 

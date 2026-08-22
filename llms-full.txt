@@ -36,6 +36,7 @@ When helping with Palamedes code:
 8. Use Node.js `>=22.22`.
 9. Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not execute JavaScript or TypeScript config files (see `/adr/016-native-cli-and-yaml-first-configuration.md`).
 10. Do not recommend top-level `palamedes` or `create-palamedes` as the main entry points yet; those names are reserved placeholders today.
+11. Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the eight published targets, Node process selection, and recovery steps.
 
 ## Package map
 
@@ -64,6 +65,10 @@ Reserved placeholder packages, not the normal starting point today:
 
 - `palamedes`
 - `create-palamedes`
+
+The reserved `palamedes` and `create-palamedes` bins do not perform work: both
+print `https://palamedes.dev/docs/first-working-translation` to stderr, exit 1
+when invoked without arguments, and exit 2 when arguments are supplied.
 
 ## Minimal Vite + React setup
 
@@ -105,7 +110,7 @@ Register runtime:
 import { createI18n } from "@palamedes/core/compiled"
 import { setClientI18n } from "@palamedes/runtime"
 
-const i18n = createI18n()
+const i18n = createI18n({ timeZone: "Europe/Berlin" })
 setClientI18n(i18n)
 
 export { i18n }
@@ -114,6 +119,13 @@ export { i18n }
 Generated `.po` catalogs use the parser-free `/compiled` entrypoint and its
 `CompiledCatalogMessages` type. Use the package root only when runtime ICU
 strings are intentional; see `/docs/api/core.md`.
+
+For SSR and hydrated client components, configure the same IANA `timeZone` on
+every `createI18n()` path. ICU `date` and `time` formatting otherwise uses the
+host process or browser zone. Invalid or empty zone identifiers throw
+`RangeError` at instance creation. Timestamp strings should include `Z` or an
+explicit offset so both hosts parse the same instant; date-only ISO strings use
+JavaScript's UTC parsing semantics before formatting in the configured zone.
 
 ```ts
 // src/po.d.ts
@@ -273,7 +285,7 @@ Important consequences:
 
 ### Translation candidate and patch APIs
 
-Custom translation tooling can use the synchronous typed APIs from
+Custom translation tooling can use the typed APIs from
 `@palamedes/core-node`:
 
 ```ts
@@ -295,6 +307,17 @@ The candidate/patch type surface is `TranslationCandidateId`,
 reports `applied`, `unchanged`, `rejected`, or `notApplied` outcomes and
 diagnostics. A failed catalog replacement throws an error with a partial report;
 do not treat a thrown write error as proof that no earlier catalog patch completed.
+
+File-touching operations also have additive promise-returning variants:
+`updateCatalogFileAsync`, `applyTranslationPatchesAsync`,
+`compileCatalogArtifactAsync`, `compileCatalogArtifactSelectedAsync`,
+`compileCatalogModuleAsync`, and `extractCatalogMessagesFromFilesAsync`.
+They preserve the synchronous result and error shapes while scheduling one
+owned operation on Node's shared libuv worker pool. The Vite and Next plugin
+hooks await them; the Remix synchronous module hook keeps
+`compileCatalogModule`. These promises do not cancel queued native work, so
+custom bulk callers must bound their own concurrency rather than launch an
+unbounded promise fan-out.
 
 ## CLI model
 
@@ -339,6 +362,18 @@ the normal extraction and serialization path, compares the result with disk,
 and reports deterministic clean, drift, or error data. It exits nonzero for
 drift without writing catalog files or creating missing catalog directories.
 The extraction cache may still be updated unless `--no-cache` is passed.
+
+### CLI exit codes
+
+| Code | CI meaning |
+| ---- | ---------- |
+| `0` | The command completed and its configured policy passed. |
+| `1` | Configuration, I/O, serialization, or another operational failure prevented completion. |
+| `2` | Invalid command-line usage rejected by Clap. |
+| `3` | `extract --check` completed and found catalog drift. |
+| `4` | `lint` completed and its `--fail-on` policy failed, or source analysis failed for one or more files. |
+| `5` | `audit` completed and its `--fail-on` policy failed. |
+| `6` | `report` completed and one or more locales were below `--fail-if-below`. |
 
 Catalog utilities:
 
@@ -436,6 +471,7 @@ Read these first:
 
 - `/README.md`
 - `/docs/first-working-translation.md`
+- `/docs/platform-support.md`
 - `/docs/principles.md`
 - `/examples/README.md`
 

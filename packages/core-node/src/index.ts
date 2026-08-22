@@ -418,7 +418,18 @@ export function parsePo(source: string): ParsedPoFile {
 }
 
 export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult {
-  const result = native.updateCatalogFile(toNativeUpdateRequest(request))
+  return fromNativeCatalogUpdateResult(native.updateCatalogFile(toNativeUpdateRequest(request)))
+}
+
+/** Run the catalog read/update/write cycle on Node's shared libuv worker pool. */
+export async function updateCatalogFileAsync(
+  request: CatalogUpdateRequest
+): Promise<CatalogUpdateResult> {
+  const result = await native.updateCatalogFileAsync(toNativeUpdateRequest(request))
+  return fromNativeCatalogUpdateResult(result)
+}
+
+function fromNativeCatalogUpdateResult(result: GeneratedCatalogUpdateResult): CatalogUpdateResult {
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
@@ -451,21 +462,45 @@ export function listTranslationCandidates(
 }
 
 export function applyTranslationPatches(request: TranslationPatchRequest): TranslationPatchResult {
-  const nativeRequest: NativeTranslationPatchRequest = {
-    config: toNativeArtifactConfig(request.config),
-    patches: request.patches.map(toNativeTranslationPatch),
-    po: toNativePoOptions(request.po),
-  }
+  const nativeRequest = toNativeTranslationPatchRequest(request)
   try {
     const result: GeneratedTranslationPatchResult = native.applyTranslationPatches(nativeRequest)
     return fromNativeTranslationPatchResult(result)
   } catch (error) {
-    if (isNativeTranslationPatchWriteError(error)) {
-      const writeError = error as unknown as TranslationPatchWriteError
-      writeError.report = fromNativeTranslationPatchResult(error.report)
-    }
-    throw error
+    throw mapTranslationPatchError(error)
   }
+}
+
+/** Run translation patch validation and catalog replacement on the libuv worker pool. */
+export async function applyTranslationPatchesAsync(
+  request: TranslationPatchRequest
+): Promise<TranslationPatchResult> {
+  try {
+    const result = await native.applyTranslationPatchesAsync(
+      toNativeTranslationPatchRequest(request)
+    )
+    return fromNativeTranslationPatchResult(result)
+  } catch (error) {
+    throw mapTranslationPatchError(error)
+  }
+}
+
+function toNativeTranslationPatchRequest(
+  request: TranslationPatchRequest
+): NativeTranslationPatchRequest {
+  return {
+    config: toNativeArtifactConfig(request.config),
+    patches: request.patches.map(toNativeTranslationPatch),
+    po: toNativePoOptions(request.po),
+  }
+}
+
+function mapTranslationPatchError(error: unknown): unknown {
+  if (isNativeTranslationPatchWriteError(error)) {
+    const writeError = error as unknown as TranslationPatchWriteError
+    writeError.report = fromNativeTranslationPatchResult(error.report)
+  }
+  return error
 }
 
 export function isTranslationPatchWriteError(error: unknown): error is TranslationPatchWriteError {
@@ -841,6 +876,18 @@ function mapCatalogDiagnostics(diagnostics: GeneratedCatalogDiagnostic[]): Catal
   }))
 }
 
+function fromNativeCatalogArtifactResult(
+  result: GeneratedCatalogArtifactResult
+): CatalogArtifactResult {
+  return {
+    ...result,
+    diagnostics: result.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      severity: mapNativeDiagnosticSeverity(diagnostic.severity),
+    })),
+  }
+}
+
 export function compileCatalogArtifact(
   config: CatalogArtifactConfig,
   resourcePath: string
@@ -849,15 +896,19 @@ export function compileCatalogArtifact(
     config: toNativeArtifactConfig(config),
     resourcePath,
   }
-  const result = native.compileCatalogArtifact(request)
+  return fromNativeCatalogArtifactResult(native.compileCatalogArtifact(request))
+}
 
-  return {
-    ...result,
-    diagnostics: result.diagnostics.map((diagnostic) => ({
-      ...diagnostic,
-      severity: mapNativeDiagnosticSeverity(diagnostic.severity),
-    })),
+/** Compile a full catalog artifact on Node's shared libuv worker pool. */
+export async function compileCatalogArtifactAsync(
+  config: CatalogArtifactConfig,
+  resourcePath: string
+): Promise<CatalogArtifactResult> {
+  const request: NativeCatalogArtifactRequest = {
+    config: toNativeArtifactConfig(config),
+    resourcePath,
   }
+  return fromNativeCatalogArtifactResult(await native.compileCatalogArtifactAsync(request))
 }
 
 export function compileCatalogArtifactSelected(
@@ -870,15 +921,21 @@ export function compileCatalogArtifactSelected(
     resourcePath,
     compiledIds,
   }
-  const result = native.compileCatalogArtifactSelected(request)
+  return fromNativeCatalogArtifactResult(native.compileCatalogArtifactSelected(request))
+}
 
-  return {
-    ...result,
-    diagnostics: result.diagnostics.map((diagnostic) => ({
-      ...diagnostic,
-      severity: mapNativeDiagnosticSeverity(diagnostic.severity),
-    })),
+/** Compile selected runtime IDs on Node's shared libuv worker pool. */
+export async function compileCatalogArtifactSelectedAsync(
+  config: CatalogArtifactConfig,
+  resourcePath: string,
+  compiledIds: string[]
+): Promise<CatalogArtifactResult> {
+  const request: NativeCatalogArtifactSelectedRequest = {
+    config: toNativeArtifactConfig(config),
+    resourcePath,
+    compiledIds,
   }
+  return fromNativeCatalogArtifactResult(await native.compileCatalogArtifactSelectedAsync(request))
 }
 
 export function compileCatalogModule(
@@ -898,6 +955,26 @@ export function compileCatalogModule(
     diagnosticsWarningHint: options.diagnosticsWarningHint,
   }
   return native.compileCatalogModule(request)
+}
+
+/** Compile and render a catalog module on Node's shared libuv worker pool. */
+export async function compileCatalogModuleAsync(
+  config: CatalogArtifactConfig,
+  resourcePath: string,
+  options: CatalogModuleOptions
+): Promise<CatalogModuleResult> {
+  const request: NativeCatalogModuleRequest = {
+    config: toNativeArtifactConfig(config),
+    resourcePath,
+    locale: options.locale,
+    pseudoLocale: options.pseudoLocale,
+    failOnMissing: options.failOnMissing ?? false,
+    failOnCompileError: options.failOnCompileError ?? false,
+    missingFailureHint: options.missingFailureHint,
+    compileFailureHint: options.compileFailureHint,
+    diagnosticsWarningHint: options.diagnosticsWarningHint,
+  }
+  return native.compileCatalogModuleAsync(request)
 }
 
 /** Render an already-compiled message map through the canonical native generator. */
@@ -981,6 +1058,16 @@ export function extractCatalogMessagesFromFiles(
   request: ExtractCatalogMessagesRequest
 ): ExtractCatalogMessagesResult {
   return native.extractCatalogMessagesFromFiles({
+    ...request,
+    mdx: toNativeMdxOptions(request.mdx),
+  })
+}
+
+/** Read and extract source files on Node's shared libuv worker pool. */
+export async function extractCatalogMessagesFromFilesAsync(
+  request: ExtractCatalogMessagesRequest
+): Promise<ExtractCatalogMessagesResult> {
+  return native.extractCatalogMessagesFromFilesAsync({
     ...request,
     mdx: toNativeMdxOptions(request.mdx),
   })

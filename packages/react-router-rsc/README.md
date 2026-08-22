@@ -4,17 +4,18 @@ Experimental request-scoped i18n for React Router RSC Framework Mode Server
 Functions.
 
 React Router marks RSC as experimental and allows breaking changes in patch and
-minor releases. This package is opt-in and intentionally pins its supported
-upstream contract to React Router `8.3.0` and `@vitejs/plugin-rsc` `0.5.34`.
-Review React Router's RSC release notes and rerun the production fixture before
-upgrading either package.
+minor releases. This package is opt-in and supports the patch release lines
+React Router `~8.3.0` and `@vitejs/plugin-rsc` `~0.5.34`. Its peer dependencies
+allow compatible patch updates, but deliberately exclude later minor releases
+until they have been verified. Review React Router's RSC release notes and rerun
+the production fixture before upgrading either package beyond those ranges.
 
 ## Installation
 
 ```sh
 pnpm add @palamedes/core @palamedes/runtime @palamedes/react-router-rsc
-pnpm add -D @palamedes/cli @palamedes/vite-plugin @react-router/dev@8.3.0 \
-  @vitejs/plugin-rsc@0.5.34 vite react-router@8.3.0
+pnpm add -D @palamedes/cli @palamedes/vite-plugin @react-router/dev@~8.3.0 \
+  @vitejs/plugin-rsc@~0.5.34 vite react-router@~8.3.0
 ```
 
 `@palamedes/react-router-rsc` is ESM-only, matching React Router's RSC and Vite

@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
@@ -8,6 +17,7 @@ import { publicWorkspacePackages } from "./release-packages.mjs"
 const root = process.cwd()
 const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-published-types-"))
 const scopeDirectory = path.join(fixtureRoot, "node_modules", "@palamedes")
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm"
 
 /*
  * Published packages that carry no `types` field, with the reason each one is
@@ -18,16 +28,20 @@ const scopeDirectory = path.join(fixtureRoot, "node_modules", "@palamedes")
 const UNTYPED_PACKAGES = new Map([
   ["@palamedes/cli", "npm launcher for the pmds binary; no TypeScript surface"],
   ["@palamedes/cli-darwin-arm64", "prebuilt binary shim"],
+  ["@palamedes/cli-darwin-x64", "prebuilt binary shim"],
   ["@palamedes/cli-linux-arm64-gnu", "prebuilt binary shim"],
   ["@palamedes/cli-linux-arm64-musl", "prebuilt binary shim"],
   ["@palamedes/cli-linux-x64-gnu", "prebuilt binary shim"],
   ["@palamedes/cli-linux-x64-musl", "prebuilt binary shim"],
+  ["@palamedes/cli-win32-arm64-msvc", "prebuilt binary shim"],
   ["@palamedes/cli-win32-x64-msvc", "prebuilt binary shim"],
   ["@palamedes/core-node-darwin-arm64", "prebuilt native addon"],
+  ["@palamedes/core-node-darwin-x64", "prebuilt native addon"],
   ["@palamedes/core-node-linux-arm64-gnu", "prebuilt native addon"],
   ["@palamedes/core-node-linux-arm64-musl", "prebuilt native addon"],
   ["@palamedes/core-node-linux-x64-gnu", "prebuilt native addon"],
   ["@palamedes/core-node-linux-x64-musl", "prebuilt native addon"],
+  ["@palamedes/core-node-win32-arm64-msvc", "prebuilt native addon"],
   ["@palamedes/core-node-win32-x64-msvc", "prebuilt native addon"],
   ["create-palamedes", "scaffold placeholder; ships a bin only"],
   ["palamedes", "meta package; re-exports nothing itself"],
@@ -37,6 +51,51 @@ const UNTYPED_PACKAGES = new Map([
 const UNTYPED_SUBPATHS = new Map([
   ["@palamedes/next-plugin", new Set(["./palamedes-loader", "./palamedes-po-loader"])],
 ])
+
+const SOURCE_FALLBACK_DOC_TARGETS = [
+  {
+    packageDirectory: "packages/vite-plugin",
+    docs: "docs/api/vite-plugin.md",
+  },
+  {
+    packageDirectory: "packages/next-plugin",
+    docs: "docs/api/next-plugin.md",
+  },
+  {
+    packageDirectory: "packages/remix",
+    docs: "docs/api/remix.md",
+  },
+]
+
+const SOURCE_FALLBACK_TSDOC_PATTERN =
+  /Defaults to `true` in every environment\.[\s\S]*Set to `false` for compact,[\s\S]*bundle size or embedding authored source text/u
+
+const SOURCE_FALLBACK_POLICY_TARGETS = [
+  {
+    file: "adr/004-internal-compiled-lookup-keys.md",
+    snippets: [
+      "Low-level transforms generate compact runtime calls without embedding the authored source message by default.",
+      "First-party host adapters override that low-level default and preserve source fallbacks in both development and production",
+      "Set `keepSourceFallbacks: false` for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+    ],
+  },
+  {
+    file: "CHANGELOG.md",
+    snippets: [
+      "First-party host adapters preserve inline source-message fallbacks in macro and MDX output by default in both development and production.",
+      "Set `keepSourceFallbacks: false` for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+      "The low-level transform retains its stripped default (`keepSourceFallbacks: false`)",
+    ],
+  },
+  {
+    file: "crates/palamedes/src/transform/mod.rs",
+    snippets: [
+      "The native transform itself strips source fallbacks by default (`None` resolves to `false`).",
+      "First-party host adapters set this to `true` in every environment unless explicitly configured with `keepSourceFallbacks: false`",
+      "for compact, hash-only output when bundle size or embedding authored source text is a concern.",
+    ],
+  },
+]
 
 function typedSubpaths({ manifest }) {
   const skipped = UNTYPED_SUBPATHS.get(manifest.name) ?? new Set()
@@ -75,6 +134,93 @@ function assertEveryPublishedPackageIsCovered(packages) {
   }
 }
 
+/*
+ * A top-level `types` condition wins before TypeScript can select a nested
+ * `require` condition. Keep declarations beside their runtime format so CJS
+ * consumers resolve `.d.cts` even on TypeScript versions that reject requiring
+ * an ESM declaration file. This is checked structurally rather than relying on
+ * the workspace TypeScript version, which changed that diagnostic in 5.8.
+ */
+function assertDualExportsUseFormatSpecificDeclarations(packages) {
+  const problems = []
+
+  for (const { manifest } of packages) {
+    for (const [subpath, condition] of Object.entries(manifest.exports ?? {})) {
+      visitCondition(condition, subpath, false, manifest.name, problems)
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(problems.join("\n"))
+  }
+}
+
+function visitCondition(condition, conditionPath, hasTypesAncestor, packageName, problems) {
+  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return
+
+  const hasTypesCondition = hasTypesAncestor || Object.hasOwn(condition, "types")
+  const hasDualRuntimeConditions =
+    Object.hasOwn(condition, "import") && Object.hasOwn(condition, "require")
+
+  if (hasDualRuntimeConditions) {
+    if (hasTypesCondition) {
+      problems.push(
+        `${packageName} ${conditionPath} has a "types" condition that masks its import and require declarations.`
+      )
+    }
+    assertFormatSpecificDeclaration(
+      condition.import,
+      "import",
+      ".d.mts",
+      packageName,
+      conditionPath,
+      problems
+    )
+    assertFormatSpecificDeclaration(
+      condition.require,
+      "require",
+      ".d.cts",
+      packageName,
+      conditionPath,
+      problems
+    )
+  }
+
+  for (const [name, nestedCondition] of Object.entries(condition)) {
+    if (name !== "types") {
+      visitCondition(
+        nestedCondition,
+        `${conditionPath}.${name}`,
+        hasTypesCondition,
+        packageName,
+        problems
+      )
+    }
+  }
+}
+
+function assertFormatSpecificDeclaration(
+  condition,
+  mode,
+  extension,
+  packageName,
+  conditionPath,
+  problems
+) {
+  if (!condition || typeof condition !== "object" || Array.isArray(condition)) {
+    problems.push(
+      `${packageName} ${conditionPath}.${mode} must nest a ${extension} declaration beside its runtime target.`
+    )
+    return
+  }
+
+  if (typeof condition.types !== "string" || !condition.types.endsWith(extension)) {
+    problems.push(
+      `${packageName} ${conditionPath}.${mode}.types must reference a ${extension} declaration.`
+    )
+  }
+}
+
 function exportTargets(condition, targets) {
   if (typeof condition === "string") {
     if (condition.startsWith("./")) targets.add(condition)
@@ -90,6 +236,14 @@ function exportTargets(condition, targets) {
   return targets
 }
 
+function advertisedTargets(manifest) {
+  const targets = exportTargets(manifest.exports ?? {}, new Set())
+  for (const field of ["main", "module", "types"]) {
+    if (typeof manifest[field] === "string") targets.add(manifest[field])
+  }
+  return [...targets].sort()
+}
+
 /*
  * Type resolution stops at the first matching `types` condition, so it cannot
  * see that a `require` condition points at a build output that is never
@@ -101,11 +255,7 @@ function exportTargets(condition, targets) {
 function assertExportTargetsExist(packages) {
   const problems = []
   for (const { directory, manifest } of packages) {
-    const targets = exportTargets(manifest.exports ?? {}, new Set())
-    for (const field of ["main", "module", "types"]) {
-      if (typeof manifest[field] === "string") targets.add(manifest[field])
-    }
-    for (const target of [...targets].sort()) {
+    for (const target of advertisedTargets(manifest)) {
       if (existsSync(path.join(root, directory, target))) continue
       problems.push(
         `${manifest.name} advertises ${target}, which is missing after a build; drop the condition or emit the file.`
@@ -115,6 +265,102 @@ function assertExportTargetsExist(packages) {
   if (problems.length > 0) {
     throw new Error(problems.join("\n"))
   }
+}
+
+function assertDeclarationTargetsArePacked(packages) {
+  const problems = []
+  for (const { directory, manifest } of packages) {
+    const packedFiles = packedFilePaths(path.join(root, directory))
+    for (const target of advertisedTargets(manifest)) {
+      if (!/\.d\.(?:cts|mts|ts)$/u.test(target)) continue
+      if (packedFiles.has(target.slice(2))) continue
+      problems.push(`${manifest.name} advertises ${target}, but npm pack excludes it.`)
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(problems.join("\n"))
+  }
+}
+
+/**
+ * Adapter defaults are user-facing behavior, including the comments copied to
+ * published declarations. Pin both declaration formats and the canonical API
+ * docs so a runtime-default change cannot leave editor help behind again.
+ */
+function assertSourceFallbackDefaultDocumentation() {
+  const problems = []
+
+  for (const { packageDirectory, docs } of SOURCE_FALLBACK_DOC_TARGETS) {
+    const declarationFiles = ["index.d.ts", "index.d.mts", "index.d.cts"].map((file) =>
+      path.join(root, packageDirectory, "dist", file)
+    )
+
+    for (const file of [
+      path.join(root, packageDirectory, "src", "index.ts"),
+      ...declarationFiles,
+    ]) {
+      if (!existsSync(file)) {
+        problems.push(`${path.relative(root, file)} is missing after a build.`)
+        continue
+      }
+      const text = readFileSync(file, "utf8")
+      const optionIndex = text.indexOf("keepSourceFallbacks?: boolean")
+      const docStart = text.lastIndexOf("/**", optionIndex)
+      const docEnd = text.indexOf("*/", docStart)
+      if (optionIndex === -1 || docStart === -1 || docEnd < docStart || docEnd > optionIndex) {
+        problems.push(
+          `${path.relative(root, file)} has no public TSDoc immediately before keepSourceFallbacks.`
+        )
+        continue
+      }
+      const optionDocs = text.slice(docStart, docEnd)
+      if (!SOURCE_FALLBACK_TSDOC_PATTERN.test(optionDocs)) {
+        problems.push(
+          `${path.relative(root, file)} does not document the all-environments default and compact/source-exposure opt-out.`
+        )
+      }
+    }
+
+    const docsText = readFileSync(path.join(root, docs), "utf8")
+    if (!docsText.includes("- `keepSourceFallbacks`: `true`")) {
+      problems.push(`${docs} does not document the default as true.`)
+    }
+    if (!docsText.includes("`keepSourceFallbacks: false`")) {
+      problems.push(`${docs} does not document the explicit compact/hash-only opt-out.`)
+    }
+  }
+
+  for (const { file, snippets } of SOURCE_FALLBACK_POLICY_TARGETS) {
+    const policyText = readFileSync(path.join(root, file), "utf8")
+      .replace(/^\s*\/\/\/\s?/gmu, "")
+      .replace(/\s+/gu, " ")
+      .trim()
+    for (const snippet of snippets) {
+      if (!policyText.includes(snippet)) {
+        problems.push(`${file} has drifted from the source-fallback policy: missing ${snippet}`)
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(problems.join("\n"))
+  }
+}
+
+function packedFilePaths(packageDirectory) {
+  const result = spawnSync(npmCommand, ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+    cwd: packageDirectory,
+    encoding: "utf8",
+    env: { ...process.env, npm_config_cache: path.join(fixtureRoot, "npm-cache") },
+    shell: process.platform === "win32",
+  })
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    throw new Error(`npm pack failed in ${packageDirectory}:\n${result.stderr}`)
+  }
+
+  const [{ files }] = JSON.parse(result.stdout)
+  return new Set(files.map(({ path: filePath }) => filePath))
 }
 
 function linkPackage(name) {
@@ -152,7 +398,10 @@ try {
   assertEveryPublishedPackageIsCovered(packages)
 
   const typedPackages = packages.filter(({ manifest }) => manifest.types)
+  assertDualExportsUseFormatSpecificDeclarations(typedPackages)
   assertExportTargetsExist(typedPackages)
+  assertDeclarationTargetsArePacked(typedPackages)
+  assertSourceFallbackDefaultDocumentation()
   for (const { directory } of typedPackages) {
     linkPackage(directory)
   }
@@ -198,6 +447,8 @@ try {
   writeFileSync(
     esmFixture,
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
+import { Select as RuntimeSelect } from "@palamedes/react"
+import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/react/macro"
 import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
@@ -206,10 +457,46 @@ import vitePalamedes, { palamedes } from "@palamedes/vite-plugin"
 
 export const lengths = [
   t\`Hello\`.length,
+  t({ message: "Hello {name}", context: "greeting" }, { name: "Ada" }).length,
   plural(2, { one: "one", other: "other" }).length,
+  plural(0, { "=0": "none", other: "other" }).length,
   select("a", { a: "A", other: "Other" }).length,
   selectOrdinal(2, { one: "first", other: "other" }).length,
 ]
+
+// @ts-expect-error Core Select macro branches must be strings.
+select("a", { a: 1, other: "Other" })
+// @ts-expect-error Core Select macro branches cannot be undefined.
+select("a", { a: undefined, other: "Other" })
+// @ts-expect-error Core Select macro requires its fallback branch.
+select("a", { a: "A" })
+
+export const macroProps = [
+  { message: "Hello", values: { name: "Ada" }, children: "Hello" } satisfies Parameters<
+    typeof Trans
+  >[0],
+  { value: 2, one: "one", other: "other" } satisfies Parameters<typeof Plural>[0],
+  { value: 2, one: "first", other: "other" } satisfies Parameters<typeof SelectOrdinal>[0],
+]
+
+Select({ value: "a", a: "A", other: "Other" })
+Select({ value: 2, two: "Two", other: "Other" })
+RuntimeSelect({ value: "female", female: "She", other: "They" })
+// @ts-expect-error React Select macro branches must be strings.
+Select({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error React Select macro branches cannot be undefined.
+Select({ value: "a", a: undefined, other: "Other" })
+// @ts-expect-error React runtime Select branches must be strings.
+RuntimeSelect({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error React runtime Select branches cannot be undefined.
+RuntimeSelect({ value: "a", a: undefined, other: "Other" })
+
+// @ts-expect-error Choice macros require their fallback branch.
+const missingPluralFallback: Parameters<typeof Plural>[0] = { value: 2, one: "one" }
+// @ts-expect-error Trans values must retain the documented record shape.
+const invalidTransValues: Parameters<typeof Trans>[0] = { message: "Hello", values: "Ada" }
+// @ts-expect-error t only accepts a tagged template or message descriptor.
+t("Hello")
 
 export default withPalamedes({})
 export const vitePlugins = [vitePalamedes(), palamedes()]
@@ -234,8 +521,31 @@ export const tanstackMiddleware = createTanStackI18nRequestMiddleware((request) 
   writeFileSync(
     commonJsFixture,
     `// @palamedes/tanstack is intentionally ESM-only and belongs in consumer.mts.
+import coreMacro = require("@palamedes/core/macro")
+import reactRuntime = require("@palamedes/react")
+import reactMacro = require("@palamedes/react/macro")
 import nextPlugin = require("@palamedes/next-plugin")
 import vitePlugin = require("@palamedes/vite-plugin")
+
+export const selectLengths = [
+  coreMacro.select("a", { a: "A", other: "Other" }).length,
+  reactRuntime.Select({ value: "female", female: "She", other: "They" }),
+  reactMacro.Select({ value: "a", a: "A", other: "Other" }),
+]
+// @ts-expect-error Core Select macro branches must be strings in CommonJS too.
+coreMacro.select("a", { a: 1, other: "Other" })
+// @ts-expect-error Core Select macro branches cannot be undefined in CommonJS either.
+coreMacro.select("a", { a: undefined, other: "Other" })
+// @ts-expect-error Core Select macro requires its fallback branch in CommonJS too.
+coreMacro.select("a", { a: "A" })
+// @ts-expect-error React Select macro branches must be strings in CommonJS too.
+reactMacro.Select({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error React Select macro branches cannot be undefined in CommonJS either.
+reactMacro.Select({ value: "a", a: undefined, other: "Other" })
+// @ts-expect-error React runtime Select branches must be strings in CommonJS too.
+reactRuntime.Select({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error React runtime Select branches cannot be undefined in CommonJS either.
+reactRuntime.Select({ value: "a", a: undefined, other: "Other" })
 
 export const config = nextPlugin.withPalamedes({})
 export const vitePlugins = vitePlugin.palamedes()

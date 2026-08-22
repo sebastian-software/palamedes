@@ -1,3 +1,8 @@
+#[cfg(test)]
+use std::cell::Cell;
+use std::cell::OnceCell;
+
+use oxc_diagnostics::OxcDiagnostic;
 use serde::{Deserialize, Serialize};
 
 use crate::extract::ExtractedMessageRecord;
@@ -179,32 +184,133 @@ pub struct SourceFileAnalysisResult {
 /// Byte-offset to source-location index shared by source analyzers.
 pub(crate) struct SourceLocator<'a> {
     source: &'a str,
-    line_starts: Vec<usize>,
+    line_starts: OnceCell<Vec<usize>>,
+}
+
+/// Produces the filename, line, and column text attached to a diagnostic.
+///
+/// Most callers already have formatted text. The transform visitor keeps an
+/// [`IndexedSourceLocation`] instead, so successful macro transforms do not
+/// calculate an error-only position.
+pub(crate) trait DiagnosticLocation {
+    fn format(&self) -> String;
+}
+
+impl DiagnosticLocation for str {
+    fn format(&self) -> String {
+        self.to_owned()
+    }
+}
+
+/// A lazily formatted location backed by a file-wide line index.
+pub(crate) struct IndexedSourceLocation<'locator, 'source> {
+    locator: &'locator SourceLocator<'source>,
+    filename: &'locator str,
+    offset: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SOURCE_LOCATOR_INDEX_BUILD_COUNT: Cell<usize> = const { Cell::new(0) };
+    static INDEXED_LOCATION_FORMAT_COUNT: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_diagnostic_location_metrics() {
+    SOURCE_LOCATOR_INDEX_BUILD_COUNT.with(|count| count.set(0));
+    INDEXED_LOCATION_FORMAT_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn diagnostic_location_metrics() -> (usize, usize) {
+    let source_locator_index_builds = SOURCE_LOCATOR_INDEX_BUILD_COUNT.with(Cell::get);
+    let indexed_location_formats = INDEXED_LOCATION_FORMAT_COUNT.with(Cell::get);
+    (source_locator_index_builds, indexed_location_formats)
+}
+
+/// Formats parser diagnostics with the source locations carried by their labels.
+///
+/// The parser may emit more than one diagnostic, so each entry keeps its own
+/// location and message on a separate line. Diagnostics without a label retain
+/// the supplied filename without inventing a position.
+pub(crate) fn format_parser_diagnostics(
+    source: &str,
+    filename: &str,
+    diagnostics: &[OxcDiagnostic],
+) -> String {
+    let filename = display_filename(filename);
+    let source_locator = SourceLocator::new(source);
+
+    diagnostics
+        .iter()
+        .map(|diagnostic| {
+            let location = diagnostic.labels.first().map_or_else(
+                || filename.to_owned(),
+                |label| {
+                    let (line, column) = source_locator.location(label.offset() as usize);
+                    format!("{filename}:{line}:{column}")
+                },
+            );
+            format!("{location}: {}", diagnostic.message)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Returns a displayable source identity without treating an empty path as a real filename.
+pub(crate) fn display_filename(filename: &str) -> &str {
+    if filename.is_empty() {
+        "<unknown source>"
+    } else {
+        filename
+    }
 }
 
 impl<'a> SourceLocator<'a> {
     pub(crate) fn new(source: &'a str) -> Self {
-        let mut line_starts = vec![0];
-        for (index, &byte) in source.as_bytes().iter().enumerate() {
-            if byte == b'\n' {
-                line_starts.push(index + 1);
-            }
-        }
         Self {
             source,
-            line_starts,
+            line_starts: OnceCell::new(),
         }
+    }
+
+    fn line_starts(&self) -> &Vec<usize> {
+        self.line_starts.get_or_init(|| {
+            #[cfg(test)]
+            SOURCE_LOCATOR_INDEX_BUILD_COUNT.with(|count| count.set(count.get() + 1));
+
+            let mut line_starts = vec![0];
+            for (index, &byte) in self.source.as_bytes().iter().enumerate() {
+                if byte == b'\n' {
+                    line_starts.push(index + 1);
+                }
+            }
+            line_starts
+        })
     }
 
     pub(crate) fn location(&self, offset: usize) -> (usize, usize) {
         let offset = offset.min(self.source.len());
-        let line_index = match self.line_starts.binary_search(&offset) {
+        let line_starts = self.line_starts();
+        let line_index = match line_starts.binary_search(&offset) {
             Ok(index) => index,
             Err(index) => index.saturating_sub(1),
         };
-        let line_start = self.line_starts[line_index];
+        let line_start = line_starts[line_index];
         let column = self.source[line_start..offset].chars().count() + 1;
         (line_index + 1, column)
+    }
+
+    pub(crate) fn indexed_location<'locator>(
+        &'locator self,
+        filename: &'locator str,
+        offset: usize,
+    ) -> IndexedSourceLocation<'locator, 'a> {
+        IndexedSourceLocation {
+            locator: self,
+            filename,
+            offset,
+        }
     }
 
     pub(crate) fn line(&self, offset: usize) -> usize {
@@ -222,14 +328,39 @@ impl<'a> SourceLocator<'a> {
     }
 }
 
+impl DiagnosticLocation for IndexedSourceLocation<'_, '_> {
+    fn format(&self) -> String {
+        #[cfg(test)]
+        INDEXED_LOCATION_FORMAT_COUNT.with(|count| count.set(count.get() + 1));
+
+        let (line, column) = self.locator.location(self.offset);
+        format!("{}:{line}:{column}", self.filename)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::SourceLocator;
+    use super::{format_parser_diagnostics, SourceLocator};
+    use oxc_diagnostics::OxcDiagnostic;
+    use oxc_span::Span;
 
     #[test]
     fn source_locations_use_unicode_scalar_columns() {
         let locator = SourceLocator::new("a😀b\nc");
         assert_eq!(locator.location("a😀".len()), (1, 3));
         assert_eq!(locator.location("a😀b\n".len()), (2, 1));
+    }
+
+    #[test]
+    fn parser_diagnostics_keep_each_message_on_its_own_located_line() {
+        let diagnostics = vec![
+            OxcDiagnostic::error("first parser error").with_label(Span::new(0, 1)),
+            OxcDiagnostic::error("second parser error").with_label(Span::new(4, 5)),
+        ];
+
+        assert_eq!(
+            format_parser_diagnostics("bad\ncode", "view.ts", &diagnostics),
+            "view.ts:1:1: first parser error\nview.ts:2:1: second parser error"
+        );
     }
 }

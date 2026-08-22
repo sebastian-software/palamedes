@@ -1,22 +1,45 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
-import { detectLinuxLibc, resolveNativeExecutable, resolvePlatformPackage } from "./platform.mjs"
+import {
+  assertNativeExecutableVersion,
+  detectLinuxLibc,
+  resolveNativeExecutable,
+  resolvePlatformPackage,
+} from "./platform.mjs"
+
+const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
+const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
 
 test("runtime target selection covers every published CLI package", () => {
   const targets = [
     [{ platform: "darwin", arch: "arm64" }, "@palamedes/cli-darwin-arm64"],
+    [{ platform: "darwin", arch: "x64" }, "@palamedes/cli-darwin-x64"],
     [{ platform: "linux", arch: "x64", libc: "glibc" }, "@palamedes/cli-linux-x64-gnu"],
     [{ platform: "linux", arch: "x64", libc: "musl" }, "@palamedes/cli-linux-x64-musl"],
     [{ platform: "linux", arch: "arm64", libc: "glibc" }, "@palamedes/cli-linux-arm64-gnu"],
     [{ platform: "linux", arch: "arm64", libc: "musl" }, "@palamedes/cli-linux-arm64-musl"],
     [{ platform: "win32", arch: "x64" }, "@palamedes/cli-win32-x64-msvc"],
+    [{ platform: "win32", arch: "arm64" }, "@palamedes/cli-win32-arm64-msvc"],
   ]
 
   for (const [target, expectedPackage] of targets) {
     assert.equal(resolvePlatformPackage(target), expectedPackage)
   }
+
+  assert.deepEqual(
+    new Set(targets.map(([, packageName]) => packageName)),
+    new Set(Object.keys(packageJson.optionalDependencies))
+  )
+})
+
+test("the README points users to the canonical platform-support page", () => {
+  assert.match(
+    readme,
+    /\[Platform support\]\(https:\/\/github\.com\/sebastian-software\/palamedes\/blob\/main\/docs\/platform-support\.md\)/u
+  )
 })
 
 test("Linux libc selection uses the runtime report", () => {
@@ -38,6 +61,13 @@ test("Linux libc selection uses the runtime report", () => {
 
 test("the runtime launcher resolves the platform package binary directly", () => {
   const packageDir = path.join("fixture", "node_modules", "@palamedes", "cli-win32-x64-msvc")
+  const wrapperPackageJsonPath = path.join(
+    "fixture",
+    "node_modules",
+    "@palamedes",
+    "cli",
+    "package.json"
+  )
   let resolvedSpecifier
   let checkedPath
   const result = resolveNativeExecutable({
@@ -46,6 +76,13 @@ test("the runtime launcher resolves the platform package binary directly", () =>
     resolvePackageJson(specifier) {
       resolvedSpecifier = specifier
       return path.join(packageDir, "package.json")
+    },
+    wrapperPackageJsonPath,
+    readFileSync(candidate) {
+      assert.ok(
+        candidate === wrapperPackageJsonPath || candidate === path.join(packageDir, "package.json")
+      )
+      return JSON.stringify({ version: "1.17.3" })
     },
     existsSync(candidate) {
       checkedPath = candidate
@@ -57,6 +94,98 @@ test("the runtime launcher resolves the platform package binary directly", () =>
   assert.equal(resolvedSpecifier, "@palamedes/cli-win32-x64-msvc/package.json")
   assert.equal(checkedPath, expected)
   assert.equal(result, expected)
+})
+
+test("the runtime launcher rejects stale platform packages before starting their binary", () => {
+  const packageDir = path.join("fixture", "node_modules", "@palamedes", "cli-linux-x64-gnu")
+  const wrapperPackageJsonPath = path.join(
+    "fixture",
+    "node_modules",
+    "@palamedes",
+    "cli",
+    "package.json"
+  )
+  let binaryChecked = false
+
+  assert.throws(
+    () =>
+      resolveNativeExecutable({
+        platform: "linux",
+        arch: "x64",
+        libc: "glibc",
+        resolvePackageJson: () => path.join(packageDir, "package.json"),
+        wrapperPackageJsonPath,
+        readFileSync(candidate) {
+          return JSON.stringify({
+            version: candidate === wrapperPackageJsonPath ? "1.17.3" : "1.17.2",
+          })
+        },
+        existsSync() {
+          binaryChecked = true
+          return true
+        },
+      }),
+    /@palamedes\/cli@1\.17\.3 resolved @palamedes\/cli-linux-x64-gnu@1\.17\.2.*Reinstall @palamedes\/cli/u
+  )
+  assert.equal(binaryChecked, false)
+})
+
+test("native executable version validation accepts exact optional dependencies", () => {
+  assert.doesNotThrow(() =>
+    assertNativeExecutableVersion("1.17.3", "@palamedes/cli-linux-x64-gnu", "1.17.3")
+  )
+})
+
+test("the runtime launcher reports invalid wrapper and native package metadata", () => {
+  const packageDir = path.join("fixture", "node_modules", "@palamedes", "cli-linux-x64-musl")
+  const wrapperPackageJsonPath = path.join(
+    "fixture",
+    "node_modules",
+    "@palamedes",
+    "cli",
+    "package.json"
+  )
+  const options = {
+    platform: "linux",
+    arch: "x64",
+    libc: "musl",
+    resolvePackageJson: () => path.join(packageDir, "package.json"),
+    wrapperPackageJsonPath,
+    existsSync: () => true,
+  }
+
+  assert.throws(
+    () => resolveNativeExecutable({ ...options, readFileSync: () => "not json" }),
+    /could not read its own package metadata.*Reinstall @palamedes\/cli/u
+  )
+  assert.throws(
+    () => resolveNativeExecutable({ ...options, readFileSync: () => JSON.stringify({}) }),
+    /could not read its own version.*Reinstall @palamedes\/cli/u
+  )
+  assert.throws(
+    () =>
+      resolveNativeExecutable({
+        ...options,
+        readFileSync(candidate) {
+          return candidate === wrapperPackageJsonPath
+            ? JSON.stringify({ version: "1.17.3" })
+            : JSON.stringify({})
+        },
+      }),
+    /@palamedes\/cli-linux-x64-musl has no valid version.*install matching/u
+  )
+  assert.throws(
+    () =>
+      resolveNativeExecutable({
+        ...options,
+        readFileSync(candidate) {
+          return candidate === wrapperPackageJsonPath
+            ? JSON.stringify({ version: "1.17.3" })
+            : "not json"
+        },
+      }),
+    /@palamedes\/cli-linux-x64-musl has invalid package metadata.*install matching/u
+  )
 })
 
 test("missing optional packages and binaries produce actionable errors", () => {
@@ -79,6 +208,12 @@ test("missing optional packages and binaries produce actionable errors", () => {
         arch: "x64",
         libc: "musl",
         resolvePackageJson: () => "/fixture/package.json",
+        wrapperPackageJsonPath: "/fixture/cli/package.json",
+        readFileSync(candidate) {
+          return JSON.stringify({
+            version: candidate === "/fixture/cli/package.json" ? "1.17.3" : "1.17.3",
+          })
+        },
         existsSync: () => false,
       }),
     /@palamedes\/cli-linux-x64-musl is installed, but its binary is missing/u
@@ -87,8 +222,8 @@ test("missing optional packages and binaries produce actionable errors", () => {
 
 test("unsupported and undetectable runtime targets produce useful errors", () => {
   assert.throws(
-    () => resolvePlatformPackage({ platform: "darwin", arch: "x64" }),
-    /does not publish a native binary for darwin\/x64/u
+    () => resolvePlatformPackage({ platform: "freebsd", arch: "x64" }),
+    /does not publish a native binary for freebsd\/x64/u
   )
   assert.throws(
     () => resolvePlatformPackage({ platform: "linux", arch: "x64", report: {} }),

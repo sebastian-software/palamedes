@@ -13,38 +13,77 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./server": {
-      "types": "./dist/server.d.ts",
       "node": {
-        "import": "./dist/server.mjs",
-        "require": "./dist/server.cjs"
+        "import": {
+          "types": "./dist/server.d.mts",
+          "default": "./dist/server.mjs"
+        },
+        "require": {
+          "types": "./dist/server.d.cts",
+          "default": "./dist/server.cjs"
+        }
       },
       "browser": {
-        "import": "./dist/server-unavailable.mjs",
-        "require": "./dist/server-unavailable.cjs"
+        "import": {
+          "types": "./dist/server-unavailable.d.mts",
+          "default": "./dist/server-unavailable.mjs"
+        },
+        "require": {
+          "types": "./dist/server-unavailable.d.cts",
+          "default": "./dist/server-unavailable.cjs"
+        }
       },
       "default": {
-        "import": "./dist/server-unavailable.mjs",
-        "require": "./dist/server-unavailable.cjs"
+        "import": {
+          "types": "./dist/server-unavailable.d.mts",
+          "default": "./dist/server-unavailable.mjs"
+        },
+        "require": {
+          "types": "./dist/server-unavailable.d.cts",
+          "default": "./dist/server-unavailable.cjs"
+        }
       }
     },
     "./server/test": {
-      "types": "./dist/server-test.d.ts",
       "node": {
-        "import": "./dist/server-test.mjs",
-        "require": "./dist/server-test.cjs"
+        "import": {
+          "types": "./dist/server-test.d.mts",
+          "default": "./dist/server-test.mjs"
+        },
+        "require": {
+          "types": "./dist/server-test.d.cts",
+          "default": "./dist/server-test.cjs"
+        }
       },
       "browser": {
-        "import": "./dist/server-test-unavailable.mjs",
-        "require": "./dist/server-test-unavailable.cjs"
+        "import": {
+          "types": "./dist/server-test-unavailable.d.mts",
+          "default": "./dist/server-test-unavailable.mjs"
+        },
+        "require": {
+          "types": "./dist/server-test-unavailable.d.cts",
+          "default": "./dist/server-test-unavailable.cjs"
+        }
       },
       "default": {
-        "import": "./dist/server-test-unavailable.mjs",
-        "require": "./dist/server-test-unavailable.cjs"
+        "import": {
+          "types": "./dist/server-test-unavailable.d.mts",
+          "default": "./dist/server-test-unavailable.mjs"
+        },
+        "require": {
+          "types": "./dist/server-test-unavailable.d.cts",
+          "default": "./dist/server-test-unavailable.cjs"
+        }
       }
     }
   },

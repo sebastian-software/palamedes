@@ -33,7 +33,13 @@ jobs:
           - os: macos-14
             node: 24
             full: false
+          - os: macos-15-intel
+            node: 24
+            full: false
           - os: windows-2025
+            node: 24
+            full: false
+          - os: windows-11-arm
             node: 24
             full: false
 
@@ -162,6 +168,44 @@ jobs:
         if: ${{ matrix.full }}
         run: pnpm check-types
 
+  validate-musl-native:
+    name: validate musl native (linux x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      PALAMEDES_ALLOW_CROSS_NATIVE: "1"
+      PALAMEDES_RUST_PROFILE: release
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          rust-cache: "false"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Build both x64 musl artifacts before a release commit can reach the
+      # publish workflow. The shared action also loads/runs them in Alpine.
+      - name: Verify musl native CLI package
+        uses: ./.github/actions/verify-musl-native
+        with:
+          package_name: "@palamedes/cli-linux-x64-musl"
+          package_dir: packages/cli-linux-x64-musl
+          rust_target: x86_64-unknown-linux-musl
+
+      - name: Verify musl native Node package
+        uses: ./.github/actions/verify-musl-native
+        with:
+          package_name: "@palamedes/core-node-linux-x64-musl"
+          package_dir: packages/core-node-linux-x64-musl
+          rust_target: x86_64-unknown-linux-musl
+
   validate-rust:
     name: validate-rust (${{ matrix.os }}, Rust ${{ matrix.toolchain }})
     runs-on: ${{ matrix.os }}
@@ -226,7 +270,7 @@ jobs:
           path: coverage/rust/coverage-summary.json
           if-no-files-found: warn
 
-      # Palamedes ships prebuilt binaries for six platforms, so anything baked
+      # Palamedes ships prebuilt binaries for eight platforms, so anything baked
       # into the executable multiplies. Checked once, on the pinned toolchain,
       # because the number only has to be watched — not watched twice.
       - name: Check shipped binary size

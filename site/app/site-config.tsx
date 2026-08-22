@@ -3,6 +3,7 @@ import { defineSiteConfig } from "@palamedes/site-ui"
 import { Link } from "react-router"
 
 import { apiHref, decisionHref, docsHref, repoHref } from "~/data/links"
+import { PRIMARY_NAVIGATION_LINKS } from "~/data/navigation"
 
 export function RouterSiteLink({ href, className, children, ariaLabel }: SiteLinkComponentProps) {
   /*
@@ -29,12 +30,10 @@ export const OSS_SITE_CONFIG: SiteConfig = defineSiteConfig({
   homeHref: "/",
   logoSrc: "/logo.svg",
   logoAlt: "Palamedes",
-  navigation: [
-    { label: "Frameworks", href: "/frameworks" },
-    { label: "Architecture", href: "/architecture" },
-    { label: "Guides", href: "/guides" },
-    { label: "Docs", href: "/docs" },
-  ],
+  navigation: PRIMARY_NAVIGATION_LINKS.map(({ label, href }) => ({
+    label,
+    href,
+  })),
   primaryAction: { label: "Get started", href: "/get-started" },
   /*
    * Keep the future product relationship explicit and testable without

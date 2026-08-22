@@ -118,7 +118,7 @@ easier to review, and easier to carry from one framework to the next.
   React Router, and Vite run Playwright weekly or manually. Server-first Remix
   v3 is smoke-only and requires Node.js `>=24.3`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
-- Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet
+- Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet; their bins link to the quickstart and exit non-zero rather than silently succeeding
 - 1.0 stability tiers and public API expectations are documented in [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
 
 ## What Exists Today
@@ -158,6 +158,7 @@ Evidence:
 - [API reference](https://github.com/sebastian-software/palamedes/blob/main/docs/api/README.md)
 - [Configuration reference](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md)
 - [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md)
+- [Platform support](https://github.com/sebastian-software/palamedes/blob/main/docs/platform-support.md)
 - **Migrating from Lingui or comparing approaches:** [migration guide](https://github.com/sebastian-software/palamedes/blob/main/docs/migrate-from-lingui.md), [comparison with Lingui](https://github.com/sebastian-software/palamedes/blob/main/docs/comparison-with-lingui.md), [approach comparison](https://github.com/sebastian-software/palamedes/blob/main/docs/approach-comparison.md), [locale strategies](https://github.com/sebastian-software/palamedes/blob/main/docs/locale-strategies.md), and [catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 - [Backend servers with Hono, Express, and request-local i18n](https://github.com/sebastian-software/palamedes/blob/main/docs/backend-servers.md)
 - [Troubleshooting common setup failures](https://github.com/sebastian-software/palamedes/blob/main/docs/troubleshooting.md)
@@ -282,6 +283,22 @@ workspace:
 pnpm exec pmds extract --check --json
 ```
 
+`pmds` uses stable exit codes for CI, so a completed policy verdict is distinct
+from a command that could not run:
+
+| Code | Meaning                                                            |
+| ---- | ------------------------------------------------------------------ |
+| `0`  | The command and its configured policy passed.                      |
+| `1`  | Configuration, I/O, serialization, or another operational failure. |
+| `2`  | Invalid command-line usage.                                        |
+| `3`  | `extract --check` found catalog drift.                             |
+| `4`  | `lint` completed but its policy or source analysis failed.         |
+| `5`  | `audit` completed but its `--fail-on` policy failed.               |
+| `6`  | `report` completed but a locale was below `--fail-if-below`.       |
+
+See the [CLI reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md#exit-codes)
+for the complete contract.
+
 For semantic catalog conflict handling, Palamedes can also act as a Git merge
 driver:
 
@@ -361,7 +378,9 @@ install story.
 - [`create-palamedes`](https://www.npmjs.com/package/create-palamedes)
 
 These names are reserved for future top-level entry points. They are not the
-recommended starting point today.
+recommended starting point today: their placeholder bins print the supported
+quickstart to stderr and exit non-zero without creating a project or running a
+command.
 
 ## Development
 

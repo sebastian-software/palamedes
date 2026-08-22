@@ -12,6 +12,9 @@ It uses Vite plus React because that is the smallest copy-paste setup today.
 The same Vite plugin, runtime model, and `.po` flow now also work with Solid
 through `@palamedes/solid` and `vite-plugin-solid`.
 
+Before installing the native CLI, check [Platform support](./platform-support.md).
+The first-run path requires a Node process on one of its published targets.
+
 The steps assume an existing Vite app (with an `index.html`, an entry module,
 and a `dev` script). If you are starting from an empty directory, scaffold one
 first:

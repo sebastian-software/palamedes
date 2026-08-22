@@ -8,7 +8,7 @@
  * Usage: node scripts/verify-site-routes.mjs  (requires a prior site build)
  */
 
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -17,7 +17,21 @@ import { startSiteStaticServer } from "./site-static-server.mjs"
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const clientDir = join(repoRoot, "site/build/client")
-const PORT = 4102
+const generatedDocsDir = join(repoRoot, "site/app/routes/docs")
+
+function portFromEnv(name, fallback) {
+  const configured = process.env[name]
+  if (configured === undefined) return fallback
+  const port = Number(configured)
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(
+      `${name} must be an integer between 1 and 65_535, got ${JSON.stringify(configured)}`
+    )
+  }
+  return port
+}
+
+const PORT = portFromEnv("SITE_VERIFY_PORT", 4102)
 
 /*
  * The ProofStrip speedup figure is read out of bench.ts rather than repeated
@@ -37,7 +51,7 @@ const ROUTE_EXPECTATIONS = [
   // The homepage is verified through its real structural and interaction
   // checks below. Its marketing headline is intentionally not a test contract.
   { path: "/" },
-  { path: "/frameworks", h1: "Six frameworks." },
+  { path: "/frameworks", h1: "Six server frameworks." },
   {
     path: "/frameworks/nextjs",
     h1: "Next.js i18n for the App Router, from server to client.",
@@ -67,9 +81,10 @@ const ROUTE_EXPECTATIONS = [
     h1: "Vite i18n for React and Solid, in one plugin.",
   },
   { path: "/proof", h1: "Claims you can re-run." },
-  { path: "/get-started", h1: "The guided first-translation path." },
-  { path: "/compare", h1: "Compare it properly." },
+  { path: "/get-started", h1: "The guided 5-minute path." },
+  { path: "/compare", h1: "Choose the i18n model you can keep." },
   { path: "/compare/lingui", h1: "The same idea, on an engine" },
+  { path: "/compare/fbtee", h1: "Grammar in JSX, or standards" },
   { path: "/compare/i18next", h1: "You already know what the string says." },
   { path: "/compare/next-intl", h1: "frameworks wide." },
   { path: "/compare/react-intl", h1: "Keep the ICU rigor. Lose the provider." },
@@ -103,6 +118,7 @@ const ROUTE_EXPECTATIONS = [
     path: "/docs/first-working-translation",
     h1: "First Working Translation",
   },
+  { path: "/docs/platform-support", h1: "Platform Support" },
   { path: "/docs/cli", h1: "CLI Reference" },
   { path: "/docs/example-screenshots", h1: "Example Screenshots" },
   { path: "/decisions", h1: "Decision Records" },
@@ -117,9 +133,28 @@ const ROUTE_EXPECTATIONS = [
   { path: "/api-reference/config/types", h1: "Types" },
 ]
 
-const sitemapPaths = readSitemapPaths()
+const IA_DISCOVERY_PATHS = [
+  "/architecture",
+  "/get-started",
+  "/guides",
+  "/react-server-components-i18n",
+  "/i18n-performance",
+  "/icu-messageformat",
+  "/locale-routing",
+]
 
-const staticServer = await startSiteStaticServer({ clientDir, port: PORT })
+const sitemapPaths = readSitemapPaths()
+const missingDiscoveryPaths = IA_DISCOVERY_PATHS.filter((path) => !sitemapPaths.includes(path))
+if (missingDiscoveryPaths.length > 0) {
+  throw new Error(
+    `verify-site-routes: sitemap is missing IA routes: ${missingDiscoveryPaths.join(", ")}`
+  )
+}
+
+const staticServer = process.env.PALAMEDES_SITE_URL
+  ? null
+  : await startSiteStaticServer({ clientDir, port: PORT })
+const baseUrl = process.env.PALAMEDES_SITE_URL ?? staticServer.baseUrl
 
 if (
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE &&
@@ -200,6 +235,21 @@ async function checkRoutes(context, label, { expectHydration }) {
     } else {
       console.log(`  ok ${route.path} — "${h1.trim().slice(0, 48)}"`)
     }
+    if (IA_DISCOVERY_PATHS.includes(route.path)) {
+      const expectedUrl = `https://palamedes.dev${route.path}`
+      const metadata = await routePage.evaluate(() => ({
+        canonical: document.querySelector('link[rel="canonical"]')?.getAttribute("href"),
+        ogImage: document.querySelector('meta[property="og:image"]')?.getAttribute("content"),
+        ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute("content"),
+        ogUrl: document.querySelector('meta[property="og:url"]')?.getAttribute("content"),
+      }))
+      if (metadata.canonical !== expectedUrl || metadata.ogUrl !== expectedUrl) {
+        fail(`${label} ${route.path}: canonical/OG URL does not match ${expectedUrl}`)
+      }
+      if (!metadata.ogTitle || !metadata.ogImage?.startsWith("https://palamedes.dev/")) {
+        fail(`${label} ${route.path}: Open Graph title or image is missing`)
+      }
+    }
     await routePage.close()
   }
 
@@ -217,15 +267,25 @@ async function checkRoutes(context, label, { expectHydration }) {
     }
     // Homepage completion blocks: real routing destinations, a reproducible
     // benchmark command, and the six FAQ entries must remain present together.
-    const integrationLinks = await page
-      .locator('section[aria-label="First-party framework integrations"] li a')
-      .count()
+    const integrationSection = page.getByRole("region", { name: "First-party integrations" })
+    const integrationLinks = await integrationSection.locator("ul a").count()
     if (integrationLinks !== 9) {
       fail(`home integration band: expected 9 linked entries, got ${integrationLinks}`)
     }
-    const integrationLogos = page.locator(
-      'section[aria-label="First-party framework integrations"] li img'
-    )
+    const frontendIntegrations = await integrationSection
+      .getByRole("list", { name: "Frontend and full-stack adapters" })
+      .getByRole("listitem")
+      .count()
+    const backendIntegrations = await integrationSection
+      .getByRole("list", { name: "Backend integrations" })
+      .getByRole("listitem")
+      .count()
+    if (frontendIntegrations !== 7 || backendIntegrations !== 2) {
+      fail(
+        `home integration hierarchy: expected 7 frontend/full-stack and 2 backend entries, got ${frontendIntegrations} and ${backendIntegrations}`
+      )
+    }
+    const integrationLogos = integrationSection.locator("li img")
     const logoCount = await integrationLogos.count()
     if (logoCount !== 9) {
       fail(`home integration band: expected 9 marks, got ${logoCount}`)
@@ -237,22 +297,41 @@ async function checkRoutes(context, label, { expectHydration }) {
         fail(`home integration band: marks did not load: ${unloadedLogos.join(", ")}`)
       }
     }
-    const questionRoutes = await page
-      .locator(
-        'a[href="/frameworks"], a[href="/locale-routing"], a[href="/proof"], a[href="/docs/migrate-from-lingui"], a[href="/compare"]'
-      )
-      .count()
-    if (questionRoutes < 5) {
-      fail(`home question routing: expected five decision routes, got ${questionRoutes}`)
+    const decisionPaths = page.getByRole("list", { name: "Decision paths" })
+    const questionRoutes = await decisionPaths.locator(":scope > li").count()
+    if (questionRoutes !== 4) {
+      fail(`home question routing: expected four first-level decisions, got ${questionRoutes}`)
+    }
+    const contextualRoutes = [
+      "/frameworks#frontend-frameworks",
+      "/frameworks#backend-integrations",
+      "/react-server-components-i18n",
+      "/locale-routing",
+      "/i18n-performance",
+      "/icu-messageformat",
+      "/architecture",
+      "/proof",
+      "/compare",
+      "/get-started",
+      "/guides",
+      "/docs/migrate-from-lingui",
+      "/docs",
+    ]
+    const missingContextualRoutes = []
+    for (const href of contextualRoutes) {
+      if ((await decisionPaths.locator(`a[href="${href}"]`).count()) === 0) {
+        missingContextualRoutes.push(href)
+      }
+    }
+    if (missingContextualRoutes.length > 0) {
+      fail(`home question routing: missing contextual routes ${missingContextualRoutes.join(", ")}`)
     }
     const hierarchy = await page.evaluate(() => {
       const question = [...document.querySelectorAll("section")].find((section) =>
         section.textContent?.includes("Start from your question")
       )
       const proofStrip = document.querySelector(".hairline-grid")
-      const integration = document.querySelector(
-        'section[aria-label="First-party framework integrations"]'
-      )
+      const integration = document.querySelector('section[aria-label="First-party integrations"]')
       return {
         questionAfterProof: Boolean(
           question &&
@@ -297,20 +376,54 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (hubShift !== 1) {
       fail("compare hub: native-toolchain explanation missing")
     }
-    await gotoAndSettle(comparePage, "/compare/lingui", { settleMs: 1500 })
-    const sectionNumbers = await comparePage.locator(".pmds-section-number").allTextContents()
-    if (
-      sectionNumbers[0]?.trim() !== "01 — Decide" ||
-      sectionNumbers[1]?.trim() !== "02 — Lingui"
-    ) {
-      fail(`rival template: verdict must precede supporting detail (${sectionNumbers.join(", ")})`)
+    const rivalPaths = [
+      "/compare/lingui",
+      "/compare/fbtee",
+      "/compare/i18next",
+      "/compare/next-intl",
+      "/compare/react-intl",
+      "/compare/paraglide",
+      "/compare/tolgee",
+      "/compare/intlayer",
+    ]
+    for (const path of rivalPaths) {
+      await gotoAndSettle(comparePage, path, { settleMs: 1500 })
+      const sectionNumbers = await comparePage.locator(".pmds-section-number").allTextContents()
+      if (
+        sectionNumbers[0]?.trim() !== "01 — Decide" ||
+        sectionNumbers[1]?.trim() !== "02 — Daily work"
+      ) {
+        fail(
+          `${path}: decision and workflow outcomes must precede supporting detail (${sectionNumbers.join(", ")})`
+        )
+      }
+      if (
+        (await comparePage.getByRole("heading", { name: /Pick Palamedes when/u }).count()) !== 1
+      ) {
+        fail(`${path}: missing Palamedes decision path`)
+      }
+      if ((await comparePage.locator("details").count()) !== 5) {
+        fail(`${path}: expected five comparison-specific FAQs`)
+      }
+      const faqSchemaCount = await comparePage
+        .locator('script[type="application/ld+json"]')
+        .evaluateAll(
+          (scripts) =>
+            scripts
+              .map((script) => JSON.parse(script.textContent ?? "{}"))
+              .filter((entry) => entry["@type"] === "FAQPage")
+              .flatMap((entry) => entry.mainEntity ?? []).length
+        )
+      if (faqSchemaCount !== 5) {
+        fail(`${path}: FAQ schema must match the five visible questions`)
+      }
     }
     const repeatedShift = await comparePage
       .getByRole("heading", {
         name: "The toolchain already moved. i18n tooling mostly hasn't.",
       })
       .count()
-    if (repeatedShift > 0 || sectionNumbers.some((section) => section.includes("Also weighing"))) {
+    if (repeatedShift > 0) {
       fail("rival template: repeated shift or obsolete section remains")
     }
     await comparePage.close()
@@ -347,10 +460,23 @@ async function checkRoutes(context, label, { expectHydration }) {
     if (!poVisible) {
       fail("code showcase: Translate tab did not reveal .po pane")
     }
-    // Get-started stack picker switches the six-step flow per stack.
+    // Get-started keeps the diagram, stack picker, and forward route as distinct
+    // numbered sections. Each stack gives the package caveat its own numbered
+    // step immediately after the install command.
     currentPath = "/get-started"
     await gotoAndSettle(page, "/get-started", { settleMs: 1500 })
-    await page.getByRole("tab", { name: "Vite + Solid" }).click()
+    await checkGetStartedStructure(page, label)
+    const reactTab = page.getByRole("tab", { name: "Vite + React" })
+    const solidTab = page.getByRole("tab", { name: "Vite + Solid" })
+    await reactTab.focus()
+    await page.keyboard.press("ArrowRight")
+    if (!(await solidTab.evaluate((element) => element === document.activeElement))) {
+      fail(`get-started ${label}: ArrowRight did not focus the Solid stack tab`)
+    }
+    await page.keyboard.press("Enter")
+    if ((await solidTab.getAttribute("aria-selected")) !== "true") {
+      fail(`get-started ${label}: Enter did not select the focused Solid stack tab`)
+    }
     const solidVisible = await page.getByText("vite-plugin-solid").first().isVisible()
     if (!solidVisible) {
       fail("get-started: Solid tab did not reveal Solid setup")
@@ -391,6 +517,38 @@ async function checkRoutes(context, label, { expectHydration }) {
     await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor()
     await page.reload({ waitUntil: "networkidle" })
     await page.getByRole("heading", { level: 1, name: /First Working Translation/u }).waitFor()
+
+    // The guide hub remains the active resource for direct topic entry and
+    // browser history, while search still reaches the generated docs index.
+    currentPath = "/icu-messageformat"
+    await gotoAndSettle(page, "/icu-messageformat", { settleMs: 500 })
+    const guidesNavigation = page
+      .getByRole("banner")
+      .getByRole("link", { name: "Guides", exact: true })
+    if ((await guidesNavigation.getAttribute("aria-current")) !== "page") {
+      fail("topic navigation: Guides is not exposed as the current resource")
+    }
+    await guidesNavigation.click()
+    currentPath = "/guides"
+    await page.getByRole("heading", { level: 1, name: /decisions that actually cost/u }).waitFor()
+    await page.locator('a[href="/react-server-components-i18n"]').first().click()
+    currentPath = "/react-server-components-i18n"
+    await page.getByRole("heading", { level: 1, name: /React Server Components/u }).waitFor()
+    await page.goBack({ waitUntil: "networkidle" })
+    currentPath = "/guides"
+    await page.getByRole("heading", { level: 1, name: /decisions that actually cost/u }).waitFor()
+    await page.goForward({ waitUntil: "networkidle" })
+    currentPath = "/react-server-components-i18n"
+    await page.getByRole("heading", { level: 1, name: /React Server Components/u }).waitFor()
+
+    currentPath = "/"
+    await gotoAndSettle(page, "/", { settleMs: 500 })
+    const search = page.getByRole("combobox", { name: "Search" })
+    await search.fill("First Working Translation")
+    const searchResults = page.getByRole("listbox", { name: "Search results" })
+    if ((await searchResults.getByRole("option").count()) === 0) {
+      fail("header search: expected a result for First Working Translation")
+    }
   } else {
     // No-JS completeness: the new proof strip and ledger must be static HTML.
     currentPath = "/"
@@ -405,14 +563,33 @@ async function checkRoutes(context, label, { expectHydration }) {
       fail("no-JS: benchmark ledger missing from prerendered HTML")
     }
     const integrationBand = await page
-      .getByRole("region", { name: "First-party framework integrations" })
+      .getByRole("region", { name: "First-party integrations" })
       .isVisible()
-    const questionRouting = await page
-      .getByText("Which framework are you building with?")
-      .isVisible()
+    const questionRouting = await page.getByText("Where does Palamedes need to run?").isVisible()
     const faq = await page.getByText("Is Palamedes ready for production use?").isVisible()
     if (!integrationBand || !questionRouting || !faq) {
       fail("no-JS: homepage completion blocks missing from prerendered HTML")
+    }
+    const firstLevelNavigation = await page
+      .getByRole("banner")
+      .getByRole("navigation")
+      .getByRole("link")
+      .allTextContents()
+    if (firstLevelNavigation.join("|") !== "Frameworks|Architecture|Guides|Docs") {
+      fail(`no-JS: first-level navigation drifted (${firstLevelNavigation.join(", ")})`)
+    }
+    currentPath = "/get-started"
+    await gotoAndSettle(page, "/get-started", { settleMs: 100 })
+    await checkGetStartedStructure(page, label)
+    currentPath = "/guides"
+    await gotoAndSettle(page, "/guides", { settleMs: 100 })
+    const guideTopicLinks = await page
+      .locator(
+        'a[href="/react-server-components-i18n"], a[href="/i18n-performance"], a[href="/icu-messageformat"], a[href="/locale-routing"]'
+      )
+      .count()
+    if (guideTopicLinks !== 4) {
+      fail(`no-JS: guides hub expected four topic links, got ${guideTopicLinks}`)
     }
   }
 
@@ -427,6 +604,153 @@ async function checkRoutes(context, label, { expectHydration }) {
     )
   }
   await page.close()
+}
+
+async function checkGetStartedStructure(page, label) {
+  const sectionNumbers = (await page.locator(".pmds-section-number").allTextContents()).map(
+    (text) => text.trim()
+  )
+  const expectedSections = ["01 — The loop", "02 — Choose a host", "03 — Next"]
+  if (sectionNumbers.join("|") !== expectedSections.join("|")) {
+    fail(`get-started ${label}: numbered sections drifted (${sectionNumbers.join(", ")})`)
+  }
+
+  const visiblePanel = page.getByRole("tabpanel").first()
+  const listItems = visiblePanel.getByRole("listitem")
+  const expectedSteps = [
+    { number: "01", heading: "Install" },
+    { number: "02", heading: "Use the scoped packages" },
+    { number: "03", heading: "Configure" },
+  ]
+  for (const [index, expected] of expectedSteps.entries()) {
+    const item = listItems.nth(index)
+    const numberCount = await item.getByText(expected.number, { exact: true }).count()
+    const headingCount = await item
+      .getByRole("heading", { name: expected.heading, exact: true })
+      .count()
+    if (numberCount !== 1 || headingCount !== 1) {
+      fail(
+        `get-started ${label}: step ${index + 1} order drifted (number ${numberCount}, heading ${headingCount})`
+      )
+    }
+  }
+  const listItemCount = await listItems.count()
+  if (listItemCount !== 7) {
+    fail(`get-started ${label}: expected seven guided steps, got ${listItemCount}`)
+  }
+  if ((await listItems.nth(1).getByText("Package boundary", { exact: true }).count()) !== 1) {
+    fail(`get-started ${label}: package boundary rail is missing from step 02`)
+  }
+
+  const loopHref = await page
+    .getByRole("link", { name: "See the local loop", exact: true })
+    .getAttribute("href")
+  if (
+    loopHref !== "#loop" ||
+    (await page.locator("#loop").count()) !== 1 ||
+    (await page.locator("#install").count()) !== 1
+  ) {
+    fail(`get-started ${label}: preserved loop/install anchors drifted`)
+  }
+
+  const frameworkHref = await page
+    .getByRole("link", { name: "Choose your framework", exact: true })
+    .getAttribute("href")
+  const localeHref = await page
+    .getByRole("link", { name: "Explore locale architecture", exact: true })
+    .getAttribute("href")
+  if (frameworkHref !== "/frameworks" || localeHref !== "/locale-routing") {
+    fail(
+      `get-started ${label}: closing CTA must move forward (${frameworkHref ?? "missing"}, ${localeHref ?? "missing"})`
+    )
+  }
+}
+
+async function checkGetStartedTextResize(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+  })
+  const page = await context.newPage()
+  const response = await gotoAndSettle(page, "/get-started", { settleMs: 1500 })
+  if (response?.status() !== 200) {
+    fail(
+      `get-started 390px/200% text: expected HTTP 200, got ${response?.status() ?? "no response"}`
+    )
+    await context.close()
+    return
+  }
+
+  await page.addStyleTag({ content: ":root { font-size: 200% !important; }" })
+  await page.waitForTimeout(100)
+
+  const metrics = await page.evaluate(() => ({
+    contentWidth: document.documentElement.scrollWidth,
+    rootFontSize: Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
+    tabLabels: [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent?.trim()),
+    tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => {
+      const rect = tab.getBoundingClientRect()
+      return { height: rect.height, left: rect.left, right: rect.right, width: rect.width }
+    }),
+    viewportWidth: document.documentElement.clientWidth,
+  }))
+
+  if (metrics.rootFontSize !== 32) {
+    fail(`get-started 390px/200% text: expected 32px root font, got ${metrics.rootFontSize}px`)
+  }
+  if (metrics.contentWidth > metrics.viewportWidth + 1) {
+    fail(
+      `get-started 390px/200% text: horizontal overflow ${metrics.contentWidth}px > ${metrics.viewportWidth}px`
+    )
+  }
+  const expectedLabels = ["Vite + React", "Vite + Solid", "Next.js"]
+  if (metrics.tabLabels.join("|") !== expectedLabels.join("|")) {
+    fail(`get-started 390px/200% text: tab source order drifted (${metrics.tabLabels.join(", ")})`)
+  }
+  for (const [index, box] of metrics.tabs.entries()) {
+    if (
+      box.left < -1 ||
+      box.right > metrics.viewportWidth + 1 ||
+      box.width < 44 ||
+      box.height < 44
+    ) {
+      fail(
+        `get-started 390px/200% text: tab ${index + 1} is not viewport-contained and 44px reachable (${JSON.stringify(box)})`
+      )
+    }
+  }
+
+  const reactTab = page.getByRole("tab", { name: "Vite + React" })
+  const solidTab = page.getByRole("tab", { name: "Vite + Solid" })
+  const nextTab = page.getByRole("tab", { name: "Next.js" })
+  await reactTab.focus()
+  await page.keyboard.press("ArrowRight")
+  if (!(await solidTab.evaluate((element) => element === document.activeElement))) {
+    fail("get-started 390px/200% text: ArrowRight did not reach the Solid tab")
+  }
+  await page.keyboard.press("Enter")
+  await page.keyboard.press("ArrowRight")
+  if (!(await nextTab.evaluate((element) => element === document.activeElement))) {
+    fail("get-started 390px/200% text: ArrowRight did not reach the wrapped Next.js tab")
+  }
+  const focusStyle = await nextTab.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth }
+  })
+  if (focusStyle.outlineStyle === "none" || focusStyle.outlineWidth === "0px") {
+    fail("get-started 390px/200% text: wrapped Next.js tab has no visible keyboard focus")
+  }
+  await page.keyboard.press("Enter")
+  if ((await nextTab.getAttribute("aria-selected")) !== "true") {
+    fail("get-started 390px/200% text: Enter did not select the wrapped Next.js tab")
+  }
+  if (!(await page.getByText("@palamedes/next-plugin").first().isVisible())) {
+    fail("get-started 390px/200% text: wrapped Next.js tab did not reveal its panel")
+  }
+
+  console.log(
+    `  get-started 390px/200% text: ${metrics.contentWidth}px content, all tabs keyboard-reachable`
+  )
+  await context.close()
 }
 
 async function checkHomepageDecisionViewport(browser, width) {
@@ -458,6 +782,87 @@ async function checkHomepageDecisionViewport(browser, width) {
       `  homepage ${width}px: first decision at ${metrics.firstDecisionTop}px of ${metrics.pageHeight}px`
     )
   }
+  await context.close()
+}
+
+async function checkProgressiveDocsOutline(browser) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const page = await context.newPage()
+  await gotoAndSettle(page, "/docs/configuration", { settleMs: 1000 })
+
+  const outline = page.locator(".pmds-progressive-outline")
+  if ((await outline.count()) !== 1) {
+    fail("progressive docs outline: missing on a long direct-entry page")
+  } else {
+    const links = outline.locator('a[href^="#"]')
+    if ((await links.count()) !== 11) {
+      fail(`progressive docs outline: expected 11 anchor links, got ${await links.count()}`)
+    }
+    const details = outline.locator("details")
+    if (await details.evaluate((element) => element.hasAttribute("open"))) {
+      fail("progressive docs outline: additional sections must start collapsed")
+    }
+    const summary = details.locator("summary")
+    await summary.focus()
+    await page.keyboard.press("Enter")
+    if (!(await details.evaluate((element) => element.hasAttribute("open")))) {
+      fail("progressive docs outline: keyboard did not open additional sections")
+    }
+    const target = details.getByRole("link", { name: "Other Data Formats", exact: true })
+    await target.click()
+    if (new URL(page.url()).hash !== "#other-data-formats") {
+      fail("progressive docs outline: a disclosed anchor did not update the URL")
+    }
+  }
+  await context.close()
+
+  const noJsContext = await browser.newContext({ javaScriptEnabled: false })
+  const noJsPage = await noJsContext.newPage()
+  await gotoAndSettle(noJsPage, "/docs/configuration", { settleMs: 100 })
+  const noJsOutline = noJsPage.locator(".pmds-progressive-outline")
+  if (
+    (await noJsOutline.count()) !== 1 ||
+    (await noJsOutline.locator('a[href^="#"]').count()) !== 11
+  ) {
+    fail("progressive docs outline: direct no-JS entry lost its anchors")
+  }
+  await noJsContext.close()
+}
+
+async function checkProgressiveOutlineAnchors(browser) {
+  const docs = readdirSync(generatedDocsDir, { recursive: true })
+    .filter((entry) => /\.mdx?$/u.test(entry))
+    .map((entry) => ({
+      entry,
+      source: readFileSync(join(generatedDocsDir, entry), "utf8"),
+    }))
+    .filter(({ source }) => source.includes('className="pmds-progressive-outline"'))
+
+  if (docs.length !== 21) {
+    fail(`progressive docs outline: expected 21 generated long docs, got ${docs.length}`)
+  }
+
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  for (const { entry, source } of docs) {
+    const routeEntry = entry
+      .replaceAll("\\", "/")
+      .replace(/\.mdx?$/u, "")
+      .replace(/\/index$/u, "")
+    const path = `/docs/${routeEntry}`
+    const expectedIds = [...source.matchAll(/<a href="#([^"#]+)"/gu)].map((match) => match[1])
+    await gotoAndSettle(page, path, { settleMs: 200 })
+    const missingIds = await page.evaluate(
+      (ids) => ids.filter((id) => document.getElementById(id) == null),
+      expectedIds
+    )
+    if (missingIds.length > 0) {
+      fail(
+        `progressive docs outline: ${path} links to missing heading IDs: ${missingIds.join(", ")}`
+      )
+    }
+  }
+  console.log(`  progressive outline heading IDs verified across ${docs.length} generated docs`)
   await context.close()
 }
 
@@ -510,7 +915,7 @@ function isArdoGeneratedContentRoute(path) {
 }
 
 async function gotoAndSettle(page, path, { settleMs }) {
-  const response = await page.goto(`${staticServer.baseUrl}${path}`)
+  const response = await page.goto(`${baseUrl}${path}`)
   await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {})
   await page.waitForTimeout(settleMs)
   return response
@@ -525,11 +930,14 @@ await checkRoutes(await browser.newContext({ reducedMotion: "reduce" }), "reduce
 await checkRoutes(await browser.newContext({ javaScriptEnabled: false }), "no-js", {
   expectHydration: false,
 })
+await checkGetStartedTextResize(browser)
 await checkHomepageDecisionViewport(browser, 320)
 await checkHomepageDecisionViewport(browser, 390)
+await checkProgressiveDocsOutline(browser)
+await checkProgressiveOutlineAnchors(browser)
 
 await browser.close()
-await staticServer.close()
+await staticServer?.close()
 
 if (failures > 0) {
   console.error(`verify-site-routes: ${failures} failure(s)`)

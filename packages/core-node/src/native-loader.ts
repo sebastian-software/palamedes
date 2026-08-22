@@ -6,11 +6,13 @@ import type { NativeBindings, NativeInfo } from "./generated/palamedes-node-type
 
 const SUPPORTED_NATIVE_PACKAGES = [
   "@palamedes/core-node-darwin-arm64",
+  "@palamedes/core-node-darwin-x64",
   "@palamedes/core-node-linux-arm64-gnu",
   "@palamedes/core-node-linux-arm64-musl",
   "@palamedes/core-node-linux-x64-gnu",
   "@palamedes/core-node-linux-x64-musl",
   "@palamedes/core-node-win32-x64-msvc",
+  "@palamedes/core-node-win32-arm64-msvc",
 ] as const
 
 function detectLinuxLibc(): "gnu" | "musl" | null {
@@ -49,30 +51,44 @@ function getPlatformTriple(): string {
     : `${process.platform}-${process.arch}`
 }
 
-function getNativePackageName(): string {
-  const linuxLibc = detectLinuxLibc()
+type NativePlatform = {
+  platform?: NodeJS.Platform
+  arch?: string
+  linuxLibc?: "gnu" | "musl" | null
+}
 
-  if (process.platform === "darwin" && process.arch === "arm64") {
+export function resolveNativePackageName(options: NativePlatform = {}): string {
+  const platform = options.platform ?? process.platform
+  const arch = options.arch ?? process.arch
+  const linuxLibc = options.linuxLibc === undefined ? detectLinuxLibc() : options.linuxLibc
+
+  if (platform === "darwin" && arch === "arm64") {
     return "@palamedes/core-node-darwin-arm64"
   }
-  if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "gnu") {
+  if (platform === "darwin" && arch === "x64") {
+    return "@palamedes/core-node-darwin-x64"
+  }
+  if (platform === "linux" && arch === "x64" && linuxLibc === "gnu") {
     return "@palamedes/core-node-linux-x64-gnu"
   }
-  if (process.platform === "linux" && process.arch === "x64" && linuxLibc === "musl") {
+  if (platform === "linux" && arch === "x64" && linuxLibc === "musl") {
     return "@palamedes/core-node-linux-x64-musl"
   }
-  if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "gnu") {
+  if (platform === "linux" && arch === "arm64" && linuxLibc === "gnu") {
     return "@palamedes/core-node-linux-arm64-gnu"
   }
-  if (process.platform === "linux" && process.arch === "arm64" && linuxLibc === "musl") {
+  if (platform === "linux" && arch === "arm64" && linuxLibc === "musl") {
     return "@palamedes/core-node-linux-arm64-musl"
   }
-  if (process.platform === "win32" && process.arch === "x64") {
+  if (platform === "win32" && arch === "x64") {
     return "@palamedes/core-node-win32-x64-msvc"
+  }
+  if (platform === "win32" && arch === "arm64") {
+    return "@palamedes/core-node-win32-arm64-msvc"
   }
 
   throw new Error(
-    `No Palamedes native bindings package is available for ${getPlatformTriple()}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}. If you need to build from source, run \`cargo build --workspace\` in the Palamedes repository.`
+    `No Palamedes native bindings package is available for ${platform}-${arch}${linuxLibc ? `-${linuxLibc}` : ""}. Supported packages: ${SUPPORTED_NATIVE_PACKAGES.join(", ")}. If you need to build from source, run \`cargo build --workspace\` in the Palamedes repository.`
   )
 }
 
@@ -420,7 +436,7 @@ export function loadNativeBindings(options: LoadNativeBindingsOptions = {}): Nat
   const require = options.require ?? createRequire(import.meta.url)
   const packageDir =
     options.packageDir ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-  const nativePackageName = options.nativePackageName ?? getNativePackageName()
+  const nativePackageName = options.nativePackageName ?? resolveNativePackageName()
   let bindings: NativeBindings
 
   try {

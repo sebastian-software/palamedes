@@ -157,10 +157,10 @@ continues hydrating the client graph (including any other fragments that did
 load). It deliberately avoids an immediate, unbacked-off retry: deterministic
 CDN, ad-blocker, and stale-deploy failures are unlikely to improve in the same
 turn, while a retry can add a request without restoring the graph. Development
-remains fail-fast so catalog wiring failures stay visible while editing. In a
-production build, set `keepSourceFallbacks: true`
-if readable source text is required when a skipped fragment has no loaded
-translation; the compact default does not retain source messages.
+remains fail-fast so catalog wiring failures stay visible while editing.
+Production retains readable source text by default when a skipped fragment has
+no loaded translation. Set `keepSourceFallbacks: false` when the smaller
+hash-only output is required because authored source text cannot ship.
 
 `messageSplitting` currently supports PO catalogs and defaults to `false` for
 compatibility. Keep using `createClientCatalogBoundary()` from
@@ -303,6 +303,7 @@ module.exports = withPalamedes(
     exclude: /node_modules/,
     enablePoLoader: true,
     configPath: "./palamedes.yaml",
+    projectRoot: undefined,
     failOnMissing: false,
     failOnCompileError: false,
     keepSourceFallbacks: undefined,
@@ -313,10 +314,11 @@ module.exports = withPalamedes(
 )
 ```
 
-`keepSourceFallbacks` defaults to `true` in development and `false` in
-production. Production output therefore relies on loaded compiled catalogs and
-does not duplicate authored source messages in transformed modules. Set the
-option explicitly when readable runtime fallbacks are required in production.
+`keepSourceFallbacks` defaults to `true` in both development and production,
+so a missing catalog fragment renders readable source text rather than a
+compiled hash. Set it to `false` to opt into smaller output or prevent source
+text from shipping. The parser-free runtime leaves ICU source fallbacks raw;
+use `@palamedes/core` when such a fallback must interpolate values.
 
 `include` and `exclude` select which sources are macro-transformed, and apply
 under both bundlers: webpack uses them as the loader's `test`/`exclude`, and
@@ -343,8 +345,16 @@ The `.po` loader is scoped the same way. It is registered with
 webpack, so a dependency that ships importable `.po` files is left alone
 instead of failing the build as an unmatched catalog.
 
+`projectRoot` pins the Next application directory. Under the normal Next CLI,
+Palamedes derives it from `next dev apps/web` / `next build apps/web`; webpack
+and Turbopack loaders also prefer their supplied Next root context. This makes
+config discovery, `palamedes.server.*`, catalog paths, and cache entries belong
+to the app rather than the shell's working directory. Relative `configPath`
+values resolve from this directory. Set `projectRoot` explicitly in a custom
+Next host or if the app directory is ambiguous. `cwd` is a deprecated alias.
+
 `workspaceRoot` pins the monorepo root used for Turbopack and output file
-tracing. When omitted, `withPalamedes` walks upward from the working directory
+tracing. When omitted, `withPalamedes` walks upward from the Next project root
 looking for workspace markers (`workspaces` in package.json,
 `pnpm-workspace.yaml`, `turbo.json`, or `.git`) and — when it finds one — sets
 `outputFileTracingRoot` and `turbopack.root` on the Next config as a side

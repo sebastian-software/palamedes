@@ -30,7 +30,13 @@ export type TransProps = {
 type PatternParser = (pattern: string) => MessageNode[]
 type RendererI18n = Pick<
   PalamedesI18n,
-  "locale" | "getMessage" | "getMessageNodes" | "parsePattern" | "renderMessage" | "reportError"
+  | "locale"
+  | "timeZone"
+  | "getMessage"
+  | "getMessageNodes"
+  | "parsePattern"
+  | "renderMessage"
+  | "reportError"
 >
 
 /** Creates the shared Trans component for compatibility and compiled entries. */
@@ -91,6 +97,7 @@ export function createSolidMessageRuntime(
   fallbackParser?: PatternParser
 ): CompiledMessageRuntime<JSX.Element[]> {
   const locale = i18n.locale
+  const timeZone = i18n.timeZone
   const runtime: CompiledMessageRuntime<JSX.Element[]> = createCompiledMessageRuntime<
     JSX.Element[]
   >(locale, {
@@ -108,10 +115,10 @@ export function createSolidMessageRuntime(
       return [formatMessageArgument("number", value, style, locale)]
     },
     date(value: unknown, style?: string) {
-      return [formatMessageArgument("date", value, style, locale)]
+      return [formatMessageArgument("date", value, style, locale, timeZone)]
     },
     time(value: unknown, style?: string) {
-      return [formatMessageArgument("time", value, style, locale)]
+      return [formatMessageArgument("time", value, style, locale, timeZone)]
     },
     pound(value: number) {
       return [replacePoundPlaceholders("#", value, locale)]

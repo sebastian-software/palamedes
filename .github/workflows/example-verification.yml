@@ -12,6 +12,7 @@ on:
       - "pnpm-workspace.yaml"
       - "package.json"
       - "scripts/example-matrix*.mjs"
+      - "scripts/example-time-zone-contract.test.mjs"
       - "scripts/container/**"
       - "scripts/verify-examples*.mjs"
       - "scripts/check-example-matrix.mjs"
@@ -32,6 +33,7 @@ on:
       - "pnpm-workspace.yaml"
       - "package.json"
       - "scripts/example-matrix*.mjs"
+      - "scripts/example-time-zone-contract.test.mjs"
       - "scripts/container/**"
       - "scripts/verify-examples*.mjs"
       - "scripts/check-example-matrix.mjs"
@@ -80,6 +82,9 @@ jobs:
 
       - name: Build workspace packages
         run: pnpm build
+
+      - name: Verify time-zone hydration contract
+        run: pnpm verify:example-time-zone-contract
 
       - name: Smoke-test all 25 examples
         run: pnpm verify:examples:smoke

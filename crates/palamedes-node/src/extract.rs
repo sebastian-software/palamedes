@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use napi::bindgen_prelude::Result;
+use napi::bindgen_prelude::{AsyncTask, Result};
 use napi_derive::napi;
 
 use crate::catalog::CatalogUpdateMessage;
 use crate::mdx::NativeMdxOptions;
-use crate::shared::{checked_optional_u32, checked_u32, to_napi_error};
+use crate::shared::{checked_optional_u32, checked_u32, to_napi_error, BlockingTask};
 
 #[napi(object)]
 pub struct ExtractedMessageOrigin {
@@ -137,6 +137,12 @@ pub fn extract_messages(
 pub fn extract_catalog_messages_from_files(
     request: ExtractCatalogMessagesRequest,
 ) -> Result<ExtractCatalogMessagesResult> {
+    extract_catalog_messages_from_files_impl(request)
+}
+
+fn extract_catalog_messages_from_files_impl(
+    request: ExtractCatalogMessagesRequest,
+) -> Result<ExtractCatalogMessagesResult> {
     let options = palamedes::ExtractCatalogMessagesOptions {
         reference_scopes: request.reference_scopes.unwrap_or(true),
         mdx: request.mdx.map(Into::into).unwrap_or_default(),
@@ -150,4 +156,17 @@ pub fn extract_catalog_messages_from_files(
     palamedes::extract_catalog_messages_from_files_with_options(request, options)
         .map_err(to_napi_error)
         .and_then(ExtractCatalogMessagesResult::try_from)
+}
+
+#[napi(catch_unwind, ts_return_type = "Promise<ExtractCatalogMessagesResult>")]
+#[allow(clippy::needless_pass_by_value)]
+/// Extracts catalog messages from files on the libuv worker pool.
+pub fn extract_catalog_messages_from_files_async(
+    request: ExtractCatalogMessagesRequest,
+) -> AsyncTask<BlockingTask<ExtractCatalogMessagesRequest, ExtractCatalogMessagesResult>> {
+    AsyncTask::new(BlockingTask::new(
+        "extractCatalogMessagesFromFilesAsync",
+        request,
+        extract_catalog_messages_from_files_impl,
+    ))
 }

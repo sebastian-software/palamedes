@@ -15,9 +15,12 @@ right way to start.
 
 Right now, you probably should not.
 
-`create-palamedes` is a placeholder package that prints a short status message
-and exits. Once scaffolding lands, this will become the natural starting point
-for `pnpm create palamedes`.
+`create-palamedes` is a placeholder package, not a scaffold. Invoking
+`pnpm create palamedes` prints the supported quickstart to stderr and exits
+with status `1`; it does not create a project. Supplying project arguments is
+unsupported and exits with status `2`, so chained shell commands cannot mistake
+the placeholder for a successful scaffold. Once scaffolding lands, this will
+become the natural starting point for `pnpm create palamedes`.
 
 ## Installation
 

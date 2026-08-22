@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use string_wizard::{Hires, MagicString, SourceMapOptions};
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::source::{display_filename, format_parser_diagnostics};
 use crate::translation_scope::{source_location, validate_translation_macro_scopes};
 
 use self::imports::ImportCollector;
@@ -46,8 +47,11 @@ pub struct NativeTransformOptions {
     pub strip_non_essential_props: Option<bool>,
     /// Keeps source messages in generated runtime calls and rich-text props.
     ///
-    /// Source fallbacks are stripped by default. Development host adapters set
-    /// this to `true`; production adapters only do so when explicitly asked.
+    /// The native transform itself strips source fallbacks by default (`None`
+    /// resolves to `false`). First-party host adapters set this to `true` in
+    /// every environment unless explicitly configured with
+    /// `keepSourceFallbacks: false` for compact, hash-only output when bundle
+    /// size or embedding authored source text is a concern.
     #[serde(rename = "keepSourceFallbacks")]
     pub keep_source_fallbacks: Option<bool>,
     /// Legacy inverse of `keep_source_fallbacks`.
@@ -170,15 +174,10 @@ pub fn transform_macros(
     let parsed = Parser::new(&allocator, source, source_type).parse();
 
     if !parsed.diagnostics.is_empty() {
-        let messages = parsed
-            .diagnostics
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let filename = display_filename(filename).to_owned();
         return Err(PalamedesError::ParseModuleSource {
-            filename: filename.to_owned(),
-            messages,
+            messages: format_parser_diagnostics(source, &filename, &parsed.diagnostics),
+            filename,
         });
     }
 

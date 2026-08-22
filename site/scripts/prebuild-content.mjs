@@ -41,7 +41,7 @@ const DOC_GROUPS = [
   {
     title: "Start and configure",
     description: "Reach a first translation, then configure the local catalog workflow.",
-    match: /\/(first-working-translation|configuration|cli|catalog-formats|mdx)$/u,
+    match: /\/(first-working-translation|platform-support|configuration|cli|catalog-formats|mdx)$/u,
   },
   {
     title: "Integrate and operate",
@@ -61,6 +61,35 @@ const DOC_GROUPS = [
     match: /.*/u,
   },
 ]
+
+/*
+ * The documentation landing page answers a different question from the
+ * sidebar. Its short, reader-facing taxonomy helps someone choose a starting
+ * point; the sidebar retains the four lifecycle groups used while reading.
+ */
+const DOC_INDEX_GROUPS = [
+  {
+    title: "Guides",
+    description: "Start a translation workflow, connect a host, and operate it day to day.",
+    match:
+      /\/(first-working-translation|platform-support|configuration|cli|catalog-formats|mdx|locale-strategies|framework-example-notes|demo-deployments|backend-servers|pseudo-localization|translation-candidate-patches|troubleshooting|operations\/)/u,
+  },
+  {
+    title: "References",
+    description:
+      "Look up package APIs, configuration details, compatibility notes, and project policy.",
+    match: /\/(api\/|example-screenshots|stability|principles)$/u,
+  },
+  {
+    title: "Comparisons and migrations",
+    description:
+      "Evaluate tradeoffs, inspect proof, and plan a migration with the supporting evidence.",
+    match:
+      /\/(migrate-from-lingui|comparison-with-lingui|approach-comparison|proof-and-benchmarks|icu-semantics-proof|benchmark-e2e-workflow|benchmark-lingui-v6-preview|migrations\/)/u,
+  },
+]
+
+const PROGRESSIVE_OUTLINE_THRESHOLD = 5
 
 buildTypedocPackages()
 
@@ -209,6 +238,7 @@ async function collectDocs() {
   const topLevel = await readMarkdownFiles("docs")
   const order = new Map([
     ["first-working-translation.md", 10],
+    ["platform-support.md", 15],
     ["configuration.md", 20],
     ["cli.md", 30],
     ["catalog-formats.md", 40],
@@ -235,7 +265,7 @@ async function collectDocs() {
     entries.push({
       source: `docs/${fileName}`,
       route: `/docs/${stripMarkdownExtension(fileName)}`,
-      out: join(routesRoot, "docs", fileName),
+      out: join(routesRoot, "docs", fileName.replace(/\.md$/u, ".mdx")),
       order: order.get(fileName) ?? 500,
     })
   }
@@ -321,10 +351,7 @@ async function readMarkdownFiles(sourceDir) {
 }
 
 async function writeDocsIndex(docs) {
-  const guides = docs.filter(
-    (doc) => doc.source.startsWith("docs/") && !doc.source.startsWith("docs/api/")
-  )
-  const summaries = await Promise.all(guides.map(readEntrySummary))
+  const summaries = await Promise.all(docs.map(readEntrySummary))
   const lines = [
     "---",
     'title: "Documentation"',
@@ -334,11 +361,13 @@ async function writeDocsIndex(docs) {
     "",
     "# Documentation",
     "",
-    "Canonical source files still live under `docs/`; this page groups the generated routes by the task in front of you.",
+    '<p className="pmds-docs-micro-label">Field guide / maintained from source</p>',
+    "",
+    "Canonical source files still live under `docs/`; this page groups the generated routes by the question in front of you.",
     "",
   ]
-  for (const group of DOC_GROUPS) {
-    const entries = summaries.filter((entry) => docGroupFor(entry.route) === group)
+  for (const group of DOC_INDEX_GROUPS) {
+    const entries = summaries.filter((entry) => indexDocGroupFor(entry.route) === group)
     if (entries.length === 0) continue
     lines.push(`## ${group.title}`, "", group.description, "", "<CardGroup cols={2}>")
     for (const entry of entries) {
@@ -379,6 +408,8 @@ async function writeDecisionsIndex(adrs) {
     "---",
     "",
     "# Decision Records",
+    "",
+    '<p className="pmds-docs-micro-label">Decision trail / recorded in the repository</p>',
     "",
     "The ADR files remain canonical in `adr/`. This decision trail is generated from their current title, status, and date during the site prebuild.",
     "",
@@ -425,6 +456,11 @@ function docGroupFor(route) {
   return DOC_GROUPS.find((group) => group.match.test(route))
 }
 
+function indexDocGroupFor(route) {
+  if (route.startsWith("/docs/api/")) return DOC_INDEX_GROUPS[1]
+  return DOC_INDEX_GROUPS.find((group) => group.match.test(route)) ?? DOC_INDEX_GROUPS[1]
+}
+
 async function writeApiReferenceIndex() {
   const packages = typedocPackages()
   const lines = [
@@ -454,17 +490,122 @@ async function writeRouteFromSource(entry) {
   const date = entry.date ?? extractAdrMeta(parsed.content, "Date")
   const body = lede ? removeLedeBlock(parsed.content, lede) : parsed.content
   const content = transformLinks(body, entry.source)
+  const usesProgressiveOutline =
+    entry.source.startsWith("docs/") &&
+    countTopLevelHeadings(content) > PROGRESSIVE_OUTLINE_THRESHOLD
   const frontmatter = {
     title,
     description,
     order: entry.order,
     ...(date ? { date } : {}),
     ...(status ? { status } : {}),
+    ...(usesProgressiveOutline ? { outline: false } : {}),
   }
   entry.title ??= title
   entry.status = status
   entry.date = date
-  await writeGeneratedFile(entry.out, `${toFrontmatter(frontmatter)}\n${content.trim()}\n`)
+  const progressiveOutline = usesProgressiveOutline
+    ? `${renderProgressiveOutline(buildProgressiveOutlineItems(content))}\n\n`
+    : ""
+  await writeGeneratedFile(
+    entry.out,
+    `${toFrontmatter(frontmatter)}\n${progressiveOutline}${content.trim()}\n`
+  )
+}
+
+function countTopLevelHeadings(content) {
+  let fence = null
+  let count = 0
+
+  for (const line of content.split("\n")) {
+    const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line)
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0]
+      if (fence == null) fence = marker
+      else if (fence === marker) fence = null
+      continue
+    }
+    if (fence == null && /^##(?!#)\s+\S/u.test(line)) count += 1
+  }
+
+  return count
+}
+
+function buildProgressiveOutlineItems(content) {
+  const items = []
+  const slugs = new Map()
+  let fence = null
+
+  for (const line of content.split("\n")) {
+    const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line)
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0]
+      if (fence == null) fence = marker
+      else if (fence === marker) fence = null
+      continue
+    }
+    if (fence != null) continue
+
+    const heading = /^##(?!#)\s+(.+?)\s*#*\s*$/u.exec(line)
+    if (!heading) continue
+
+    const text = heading[1]
+    const base = slugifyHeading(text) || `heading-${items.length}`
+    const duplicate = slugs.get(base) ?? 0
+    slugs.set(base, duplicate + 1)
+    items.push({
+      id: duplicate === 0 ? base : `${base}-${duplicate}`,
+      text,
+      depth: 2,
+    })
+  }
+
+  return items
+}
+
+function slugifyHeading(text) {
+  let slug = text
+    .replace(/<[^>]*>/gu, "")
+    .toLowerCase()
+    .trim()
+    .replaceAll(/[`*_~[\]()]/gu, "")
+    .replaceAll(/[^\p{Letter}\p{Number}\s-]/gu, "")
+    .replaceAll(/[\s_]+/gu, "-")
+
+  while (slug.includes("--")) slug = slug.replaceAll("--", "-")
+  return slug.replaceAll(/^-|-$/gu, "")
+}
+
+function renderProgressiveOutline(items) {
+  const visibleItems = items.slice(0, 4)
+  const remainingItems = items.slice(4)
+  return [
+    '<section className="pmds-progressive-outline" aria-labelledby="page-outline-title">',
+    '<p id="page-outline-title" className="pmds-progressive-outline-label">Page outline</p>',
+    '<nav aria-label="Page outline">',
+    renderProgressiveOutlineList(visibleItems),
+    '<details className="pmds-progressive-outline-more">',
+    `<summary>More sections (${remainingItems.length})</summary>`,
+    renderProgressiveOutlineList(remainingItems),
+    "</details>",
+    "</nav>",
+    "</section>",
+  ].join("\n")
+}
+
+function renderProgressiveOutlineList(items) {
+  return [
+    '<ol className="pmds-progressive-outline-list">',
+    ...items.map(
+      (item) =>
+        `<li data-depth="${item.depth}"><a href="#${item.id}">${escapeHtml(item.text)}</a></li>`
+    ),
+    "</ol>",
+  ].join("\n")
+}
+
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
 }
 
 async function generateTypedocReference() {

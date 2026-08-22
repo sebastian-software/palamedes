@@ -36,13 +36,9 @@ Or run it without adding it to your project first:
 pnpm dlx @palamedes/cli extract
 ```
 
-The npm package currently publishes native binaries for:
-
-- macOS arm64
-- Linux x64 glibc
-- Linux x64 musl
-- Linux arm64 glibc
-- Windows x64 MSVC
+See [Platform support](https://github.com/sebastian-software/palamedes/blob/main/docs/platform-support.md)
+before installing the native CLI. It is the authoritative list of published
+targets, Linux libc variants, Node process selection, and recovery steps.
 
 The `pmds` launcher selects the matching optional native package when the
 command runs. Installation does not require npm lifecycle scripts, so package
@@ -105,22 +101,33 @@ must fail CI; the default continues to fail only on errors.
 `pmds lint` is non-mutating and checks Palamedes authoring across the same
 configured sources as extraction. It supports stable human and JSON output,
 configured rule levels, code-specific line suppressions, and CI thresholds.
-Its verdict uses exit code `4` when diagnostics meet `--fail-on` or a source
-file cannot be analyzed; exit code `1` remains for configuration, I/O, and
-output failures, and `2` for invalid CLI usage. Lint source analysis uses the
-same bounded parallel worker policy as extraction; `--threads` overrides
-`extract-threads` and `1` runs it serially.
+Lint source analysis uses the same bounded parallel worker policy as
+extraction; `--threads` overrides `extract-threads` and `1` runs it serially.
 
 `pmds extract --check` projects configured PO and FCL catalogs through the
 same extraction and serialization path without changing catalog files or
 creating missing catalog directories. Add `--json` for deterministic CI
-output. Exit code `0` means clean, `1` means extraction or configuration
-failed, `2` means invalid CLI usage, and `3` means catalog drift. The extraction
-cache may still be updated unless `--no-cache` is present.
+output. The extraction cache may still be updated unless `--no-cache` is
+present.
 
 ```bash
 pnpm exec pmds extract --check --json
 ```
+
+## Exit codes
+
+CI can distinguish a completed policy verdict from a command that could not
+run:
+
+| Code | Meaning                                                                                              |
+| ---- | ---------------------------------------------------------------------------------------------------- |
+| `0`  | The command completed and its configured policy passed.                                              |
+| `1`  | Configuration, I/O, serialization, or another operational failure prevented completion.              |
+| `2`  | Invalid command-line usage rejected by Clap.                                                         |
+| `3`  | `extract --check` completed and found catalog drift.                                                 |
+| `4`  | `lint` completed and its `--fail-on` policy failed, or source analysis failed for one or more files. |
+| `5`  | `audit` completed and its `--fail-on` policy failed.                                                 |
+| `6`  | `report` completed and one or more locales were below `--fail-if-below`.                             |
 
 `pmds catalog convert` preserves translator comments, obsolete state, and
 review markers such as `fuzzy` when converting PO catalogs to FCL.

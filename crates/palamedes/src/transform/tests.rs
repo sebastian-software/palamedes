@@ -4,6 +4,7 @@ use super::{
 };
 use crate::error::PalamedesResult;
 use crate::icu_text::compiled_message_key;
+use crate::source::{diagnostic_location_metrics, reset_diagnostic_location_metrics};
 use crate::test_support::scope_macro_test_source;
 use ferrocat::compiled_key;
 use oxc_allocator::Allocator;
@@ -30,6 +31,69 @@ fn transform_macros(
     }
 
     Ok(result)
+}
+
+#[test]
+fn parser_errors_include_filename_line_and_column() {
+    let source = "const first = ;\n";
+    let error = transform_macros_raw(source, "src/view.ts", None).expect_err("parse error");
+    let message = error.to_string();
+
+    assert!(message.starts_with("Parse error in src/view.ts:"));
+    assert!(message.contains("src/view.ts:1:15:"));
+    assert!(message.contains("Unexpected token"), "{message}");
+}
+
+#[test]
+fn successful_transforms_build_one_lazy_location_index_without_formatting_locations() {
+    let mut source = String::from(
+        "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nexport function Component(count: number) {\n",
+    );
+    for index in 0..256 {
+        source.push_str(&format!(
+            "  const label{index} = t({{ message: \"Message {index}\" }});\n"
+        ));
+    }
+    source.push_str("  return <Plural value={count} one=\"# item\" other=\"# items\" />;\n}\n");
+
+    reset_diagnostic_location_metrics();
+    let result = transform_macros_raw(&source, "component.tsx", None)
+        .expect("many valid descriptor and JSX macros should transform");
+
+    assert!(result.has_changed);
+    assert_eq!(
+        diagnostic_location_metrics(),
+        (0, 0),
+        "successful transforms do not build or format error-only source locations"
+    );
+}
+
+#[test]
+fn lazy_transform_locations_preserve_unicode_error_coordinates() {
+    let cases = [
+        (
+            "import { plural } from \"@palamedes/core/macro\";\nexport function Component(count: number) {\n  const emoji = \"😀\";\n  return plural(count, { offset: dynamicOffset, other: \"# items\" });\n}\n",
+            "plural",
+        ),
+        (
+            "import { Plural } from \"@palamedes/react/macro\";\nexport function Component(count: number) {\n  const emoji = \"😀\";\n  return <Plural value={count} offset={dynamicOffset} other=\"# items\" />;\n}\n",
+            "Plural",
+        ),
+    ];
+
+    for (source, macro_name) in cases {
+        reset_diagnostic_location_metrics();
+        let error = transform_macros_raw(source, "unicode.tsx", None)
+            .expect_err("invalid plural offset should retain a source location");
+
+        assert!(
+            error.to_string().contains(&format!(
+                "Unsupported `{macro_name}` macro usage at unicode.tsx:4:10"
+            )),
+            "{error}"
+        );
+        assert_eq!(diagnostic_location_metrics(), (1, 1));
+    }
 }
 
 fn server_function_options() -> NativeTransformOptions {
@@ -966,6 +1030,63 @@ const message = t({
             "Descriptor {name}",
             Some("probe context")
         )]
+    );
+}
+
+#[test]
+fn escapes_carriage_returns_in_generated_runtime_strings() {
+    assert_eq!(
+        super::messages::escape_string("quote\" slash\\ line\nreturn\r"),
+        "quote\\\" slash\\\\ line\\nreturn\\r"
+    );
+
+    let descriptor = transform_macros(
+        r#"import { t } from "@palamedes/core/macro";
+const message = t({
+  message: "Line1\rLine2",
+  context: "dialog\rtitle",
+  comment: "Translator\rnote",
+});
+"#,
+        "test.ts",
+        None,
+    )
+    .expect("descriptor with carriage returns should transform");
+
+    assert!(descriptor.code.contains(r#"message: "Line1\rLine2""#));
+    assert!(descriptor.code.contains(r#"context: "dialog\rtitle""#));
+    assert!(descriptor.code.contains(r#"comment: "Translator\rnote""#));
+    assert!(!descriptor.code.contains('\r'));
+
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &descriptor.code, SourceType::ts()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "descriptor output should remain valid TypeScript: {:?}",
+        parsed.diagnostics
+    );
+
+    let jsx = transform_macros(
+        r#"import { Plural, Trans } from "@palamedes/react/macro";
+const rich = <Trans message={"Line1\rLine2"} context={"dialog\rtitle"} />;
+const choice = <Plural value={count} one="item" other="items" comment={"Translator\rnote"} context={"count\rlabel"} />;
+"#,
+        "test.tsx",
+        None,
+    )
+    .expect("JSX attributes with carriage returns should transform");
+
+    assert!(jsx.code.contains(r#"message={"Line1\rLine2"}"#));
+    assert!(jsx.code.contains(r#"context: "count\rlabel""#));
+    assert!(jsx.code.contains(r#"comment: "Translator\rnote""#));
+    assert!(!jsx.code.contains('\r'));
+
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &jsx.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "JSX output should remain valid TSX: {:?}",
+        parsed.diagnostics
     );
 }
 

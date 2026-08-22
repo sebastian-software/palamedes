@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto"
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -29,8 +32,8 @@ vi.mock("@palamedes/config", async (importOriginal) => {
 
 vi.mock("@palamedes/core-node", () => ({
   analyzeMdxNative: mocks.analyzeMdxNative,
-  compileCatalogArtifactSelected: mocks.compileCatalogArtifactSelected,
-  compileCatalogModule: mocks.compileCatalogModule,
+  compileCatalogArtifactSelectedAsync: mocks.compileCatalogArtifactSelected,
+  compileCatalogModuleAsync: mocks.compileCatalogModule,
   renderCatalogModule: mocks.renderCatalogModule,
 }))
 
@@ -76,12 +79,12 @@ beforeEach(() => {
       mappings: "AAAA",
     },
   })
-  mocks.compileCatalogModule.mockReturnValue({
+  mocks.compileCatalogModule.mockResolvedValue({
     code: 'export const messages={"greeting":"Hallo"};export default { messages };',
     warnings: [],
     watchFiles: ["/repo/src/locales/en.po"],
   })
-  mocks.compileCatalogArtifactSelected.mockReturnValue({
+  mocks.compileCatalogArtifactSelected.mockResolvedValue({
     messages: {},
     missing: [],
     diagnostics: [],
@@ -121,9 +124,7 @@ describe("palamedes vite plugin", () => {
   })
 
   it("fails missing translations when configured", async () => {
-    mocks.compileCatalogModule.mockImplementation(() => {
-      throw new Error("Missing 1 translation")
-    })
+    mocks.compileCatalogModule.mockRejectedValue(new Error("Missing 1 translation"))
 
     await expect(runPoTransform({}, { failOnMissing: true })).rejects.toThrow(
       /Missing 1 translation/
@@ -131,7 +132,7 @@ describe("palamedes vite plugin", () => {
   })
 
   it("routes diagnostics through the plugin warning channel when not fatal", async () => {
-    mocks.compileCatalogModule.mockReturnValue({
+    mocks.compileCatalogModule.mockResolvedValue({
       code: "export const messages={};export default { messages };",
       warnings: ["Catalog diagnostics for locale de"],
       watchFiles: [],
@@ -394,7 +395,7 @@ describe("palamedes vite plugin", () => {
   })
 
   it.each([
-    ["build", false, true],
+    ["build", true, true],
     ["serve", true, false],
   ] as const)(
     "sets runtime fallback metadata for Vite %s",
@@ -412,18 +413,18 @@ describe("palamedes vite plugin", () => {
     }
   )
 
-  it("lets keepSourceFallbacks override the Vite command default", () => {
-    runMacroTransform({ keepSourceFallbacks: true }, "build")
+  it("lets keepSourceFallbacks opt out of the Vite default", () => {
+    runMacroTransform({ keepSourceFallbacks: false }, "build")
 
     expect(mocks.transformPalamedesMacros).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      expect.objectContaining({ keepSourceFallbacks: true })
+      expect.objectContaining({ keepSourceFallbacks: false })
     )
   })
 
   it("applies the source fallback mode to compiled MDX", async () => {
-    await runMdxTransform({}, {}, "serve")
+    await runMdxTransform({}, {}, "build")
 
     expect(mocks.analyzeMdxNative).toHaveBeenCalledWith(
       "# Welcome",
@@ -465,6 +466,175 @@ describe("experimental graph splitting", () => {
     expect(result?.code).toMatch(
       /^transformed\nimport "virtual:palamedes-messages\/[0-9a-f]{12}";\n$/
     )
+  })
+
+  it("derives reproducible sidecar output from the Palamedes-root-relative path", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages))
+    )
+
+    async function sidecarOutput(rootDir: string) {
+      const sourceId = `${rootDir}/src/label.ts`
+      mocks.loadPalamedesConfig.mockResolvedValue({
+        configPath: `${rootDir}/palamedes.yaml`,
+        rootDir,
+        locales: ["en", "de", "pseudo"],
+        sourceLocale: "en",
+        pseudoLocale: "pseudo",
+        fallbackLocales: undefined,
+        catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
+      })
+      const result = await runSidecarLoad(
+        ["id-a"],
+        {},
+        { pluginOptions: IMPORT_MAP_OPTIONS, command: "build", sourceId }
+      )
+      return {
+        transformedCode: result.transformedCode,
+        registration: await result.load(`\0palamedes:messages/${result.key}`, { ssr: false }),
+        emitted: await emitImportMap(result.sidecarPlugin, result.key),
+      }
+    }
+
+    const first = await sidecarOutput("/builds/runner-one/project")
+    const second = await sidecarOutput("/builds/runner-two/project")
+
+    expect(second).toStrictEqual(first)
+  })
+
+  it("normalizes Windows separators before hashing the root-relative path", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "C:\\checkout\\project\\palamedes.yaml",
+      rootDir: "C:\\checkout\\project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    const result = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      ["id-a"],
+      "c:\\checkout\\project\\src\\label.ts"
+    )) as { code?: string } | null
+    const expectedKey = createHash("sha256").update("src/label.ts").digest("hex").slice(0, 12)
+
+    expect(result?.code).toContain(`virtual:palamedes-messages/${expectedKey}`)
+  })
+
+  it("uses a portable relative identity for sources outside the Palamedes root", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/checkout/project/palamedes.yaml",
+      rootDir: "/checkout/project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    const sourceId = "/checkout/shared/label.ts"
+    const result = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      ["id-a"],
+      sourceId
+    )) as { code?: string } | null
+    const expectedKey = createHash("sha256").update("../shared/label.ts").digest("hex").slice(0, 12)
+
+    expect(result?.code).toContain(`virtual:palamedes-messages/${expectedKey}`)
+    expect(result?.code).not.toContain("checkout")
+  })
+
+  it("rejects a cross-volume Windows source instead of hashing its absolute path", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "D:\\checkout\\project\\palamedes.yaml",
+      rootDir: "D:\\checkout\\project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    await expect(
+      runMacroTransform(
+        { experimentalGraphSplitting: true },
+        undefined,
+        ["id-a"],
+        "C:\\shared\\label.ts"
+      )
+    ).rejects.toThrow(/different filesystem volume/)
+  })
+
+  it("rejects Windows UNC sources on a different share before deriving a relative key", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "\\\\checkout-server\\project\\palamedes.yaml",
+      rootDir: "\\\\checkout-server\\project",
+      locales: ["en"],
+      sourceLocale: "en",
+      catalogs: [],
+    })
+
+    await expect(
+      runMacroTransform(
+        { experimentalGraphSplitting: true },
+        undefined,
+        ["id-a"],
+        "\\\\checkout-server\\shared\\label.ts"
+      )
+    ).rejects.toThrow(/different filesystem volume/)
+  })
+
+  it.skipIf(process.platform === "win32")(
+    "canonicalizes symlinked module ids before deriving the sidecar key",
+    async () => {
+      const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-vite-sidecar-"))
+      const sourceId = path.join(rootDir, "src", "label.ts")
+      const symlinkId = path.join(rootDir, "linked-label.ts")
+      mkdirSync(path.dirname(sourceId), { recursive: true })
+      writeFileSync(sourceId, "export const label = 'Hello'\n")
+      symlinkSync(sourceId, symlinkId)
+      mocks.loadPalamedesConfig.mockResolvedValue({
+        configPath: path.join(rootDir, "palamedes.yaml"),
+        rootDir,
+        locales: ["en"],
+        sourceLocale: "en",
+        catalogs: [],
+      })
+
+      try {
+        const source = (await runMacroTransform(
+          { experimentalGraphSplitting: true },
+          undefined,
+          ["id-a"],
+          sourceId
+        )) as { code?: string } | null
+        const symlink = (await runMacroTransform(
+          { experimentalGraphSplitting: true },
+          undefined,
+          ["id-a"],
+          symlinkId
+        )) as { code?: string } | null
+
+        expect(symlink?.code).toBe(source?.code)
+      } finally {
+        rmSync(rootDir, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it("keeps distinct in-root modules in distinct sidecars", async () => {
+    const first = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      ["id-a"],
+      "/repo/src/first.ts"
+    )) as { code?: string } | null
+    const second = (await runMacroTransform(
+      { experimentalGraphSplitting: true },
+      undefined,
+      ["id-a"],
+      "/repo/src/second.ts"
+    )) as { code?: string } | null
+
+    expect(first?.code).not.toBe(second?.code)
   })
 
   it("leaves modules without message references untouched", async () => {
@@ -690,19 +860,7 @@ describe("experimental graph splitting", () => {
       {},
       { pluginOptions: IMPORT_MAP_OPTIONS, command: "build" }
     )
-    const emitted: { fileName: string; source: string }[] = []
-    await sidecarPlugin.generateBundle.call(
-      {
-        environment: { name: "client" },
-        emitFile: (file: { fileName: string; source: string }) => emitted.push(file),
-      } as never,
-      {},
-      {
-        "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
-        "assets/vendor.js": { type: "chunk", imports: [] },
-        "assets/style.css": { type: "asset" },
-      }
-    )
+    const emitted = await emitImportMap(sidecarPlugin, key)
 
     // One dependency-free asset per (sidecar x locale), pseudo included.
     const assets = emitted.filter((file) => file.fileName.startsWith("assets/palamedes-m-"))
@@ -726,6 +884,39 @@ describe("experimental graph splitting", () => {
     // the mapped assets of the chunks they serve.
     expect(parsed.chunkImports).toEqual({ "assets/home-abc.js": [`#pmds/${key}`] })
   })
+
+  it.each([
+    ["/app", "/app/"],
+    ["/app/", "/app/"],
+    ["./", "./"],
+    ["/app", "/configured-by-another-plugin/"],
+  ] as const)(
+    "uses Vite's final base %s when generating import-map assets as %s",
+    async (rawBase, finalBase) => {
+      mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+        nativeModuleShape(JSON.stringify(messages))
+      )
+      const { key, sidecarPlugin } = await runSidecarLoad(
+        ["id-a"],
+        {},
+        {
+          pluginOptions: IMPORT_MAP_OPTIONS,
+          command: "build",
+          rawBase,
+          finalBase,
+        }
+      )
+
+      const emitted = await emitImportMap(sidecarPlugin, key)
+      const asset = emitted.find((file) => file.fileName.startsWith("assets/palamedes-m-"))
+      const importMap = emitted.find((file) => file.fileName.includes("palamedes-importmap.en-"))
+      const assetUrl = JSON.parse(importMap!.source).imports[`#pmds/${key}`]
+
+      expect(assetUrl).toBe(`${finalBase}${asset!.fileName}`)
+      expect(assetUrl).not.toContain("/appassets/")
+      expect(assetUrl).not.toContain(".assets/")
+    }
+  )
 
   it("fails the import-map build on missing translations when configured", async () => {
     // The emitted assets are the only client-visible artifact of this binding,
@@ -811,10 +1002,14 @@ async function runSidecarLoad(
   setup: {
     pluginOptions?: Parameters<typeof palamedes>[0]
     command?: "build" | "serve"
+    rawBase?: string
+    finalBase?: string
+    sourceId?: string
   } = {}
 ): Promise<{
   load: (id: string, loadOptions?: { ssr?: boolean }) => Promise<any>
   key: string
+  transformedCode: string
   addWatchFile: ReturnType<typeof vi.fn>
   sidecarPlugin: any
 }> {
@@ -839,18 +1034,26 @@ async function runSidecarLoad(
   if (setup.command && typeof macroPlugin?.config === "function") {
     macroPlugin.config.call(
       {} as any,
-      {} as any,
+      setup.rawBase === undefined ? ({} as any) : ({ base: setup.rawBase } as any),
       {
         command: setup.command,
         mode: setup.command === "serve" ? "development" : "production",
       } as any
+    )
+
+    if (typeof macroPlugin.configResolved !== "function") {
+      throw new TypeError("Expected transform configResolved hook")
+    }
+    macroPlugin.configResolved.call(
+      {} as any,
+      { base: setup.finalBase ?? setup.rawBase ?? "/" } as any
     )
   }
 
   const transformed = (await transform.call(
     { error: vi.fn() } as never,
     'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
-    "/repo/src/label.ts"
+    setup.sourceId ?? "/repo/src/label.ts"
   )) as { code?: string } | null
   const key = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(transformed?.code ?? "")?.[1]
   if (!key) {
@@ -874,13 +1077,37 @@ async function runSidecarLoad(
       )
     )
 
-  return { load: boundLoad, key, addWatchFile, sidecarPlugin }
+  return {
+    load: boundLoad,
+    key,
+    transformedCode: transformed?.code ?? "",
+    addWatchFile,
+    sidecarPlugin,
+  }
+}
+
+async function emitImportMap(sidecarPlugin: any, key: string) {
+  const emitted: { fileName: string; source: string }[] = []
+  await sidecarPlugin.generateBundle.call(
+    {
+      environment: { name: "client" },
+      emitFile: (file: { fileName: string; source: string }) => emitted.push(file),
+    } as never,
+    {},
+    {
+      "assets/home-abc.js": { type: "chunk", imports: [`#pmds/${key}`, "assets/vendor.js"] },
+      "assets/vendor.js": { type: "chunk", imports: [] },
+      "assets/style.css": { type: "asset" },
+    }
+  )
+  return emitted
 }
 
 function runMacroTransform(
   options: Parameters<typeof palamedes>[0] = {},
   command?: "build" | "serve",
-  compiledIds: string[] = []
+  compiledIds: string[] = [],
+  sourceId = "/repo/src/label.ts"
 ) {
   mocks.transformPalamedesMacros.mockClear()
   mocks.transformPalamedesMacros.mockReturnValue({
@@ -907,7 +1134,7 @@ function runMacroTransform(
   return transform.call(
     { error: vi.fn() } as never,
     'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
-    "/repo/src/label.ts"
+    sourceId
   )
 }
 

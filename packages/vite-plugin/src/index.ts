@@ -20,8 +20,8 @@ import {
 } from "@palamedes/config"
 import {
   analyzeMdxNative,
-  compileCatalogArtifactSelected,
-  compileCatalogModule,
+  compileCatalogArtifactSelectedAsync,
+  compileCatalogModuleAsync,
   renderCatalogModule,
   type CatalogArtifactConfig,
 } from "@palamedes/core-node"
@@ -71,16 +71,60 @@ function bareMessageAsset(rendered: string, locale: string): string {
 }
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config."
 const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
+// `moduleType` and Rollup's `moduleTypes` bridge were added with Vite's
+// Rolldown-based pipeline. Rollup-based Vite 7 ignores both, leaving React
+// MDX's generated JSX for import analysis (or the browser) to parse as .mdx.
+const VITE_SUPPORTS_REACT_MDX_MODULE_TYPE = VITE_MAJOR >= 8
+
+const REACT_MDX_VITE_REQUIREMENT =
+  'Palamedes React MDX compilation requires Vite 8 or newer because Vite 7\'s Rollup pipeline cannot parse generated JSX from .mdx files. Upgrade Vite, set `mdx: { framework: "solid" }` for Solid, or disable first-class MDX with `mdx: false`.'
 function stripQuery(id: string): string {
   return id.split("?")[0] ?? id
 }
 
 function canonicalPath(value: string): string {
+  const pathImplementation = isWindowsPath(value) ? path.win32 : path
   try {
     return realpathSync.native(value)
   } catch {
-    return path.resolve(value)
+    return pathImplementation.resolve(value)
   }
+}
+
+function isWindowsPath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\")
+}
+
+function canonicalRelativePath(rootDir: string, sourceId: string): string {
+  const canonicalRootDir = canonicalPath(rootDir)
+  const canonicalSourceId = canonicalPath(sourceId)
+  const usesWindowsPaths = isWindowsPath(canonicalRootDir) || isWindowsPath(canonicalSourceId)
+  const pathImplementation = usesWindowsPaths ? path.win32 : path
+
+  // Windows returns a traversal path for UNC locations on the same server but
+  // different shares. Compare roots before deriving a relative identity so a
+  // share boundary cannot make the sidecar key depend on checkout depth.
+  if (
+    usesWindowsPaths &&
+    path.win32.parse(canonicalRootDir).root.toLowerCase() !==
+      path.win32.parse(canonicalSourceId).root.toLowerCase()
+  ) {
+    throw new Error(
+      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`
+    )
+  }
+  const relativePath = pathImplementation.relative(canonicalRootDir, canonicalSourceId)
+
+  // There is no checkout-independent relative identity across filesystem
+  // volumes, so refusing graph splitting is safer than baking a machine path
+  // into sidecar keys and emitted chunk content.
+  if (pathImplementation.isAbsolute(relativePath)) {
+    throw new Error(
+      `Palamedes graph splitting cannot derive a reproducible sidecar key for ${sourceId}: it is on a different filesystem volume than ${rootDir}.`
+    )
+  }
+
+  return (relativePath || ".").replaceAll("\\", "/")
 }
 
 function catalogArtifactConfig(
@@ -167,7 +211,9 @@ export type PalamedesPluginOptions = {
 
   /**
    * Preserve authored source messages as browser/runtime fallbacks.
-   * Defaults to `true` during `vite serve` and `false` during `vite build`.
+   * Defaults to `true` in every environment. Set to `false` for compact,
+   * hash-only output when bundle size or embedding authored source text is a
+   * concern.
    */
   keepSourceFallbacks?: boolean
 
@@ -227,7 +273,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   const importMapBinding =
     typeof experimentalGraphSplitting === "object" &&
     experimentalGraphSplitting.localeBinding === "import-map"
-  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? false
+  let resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true
   let stripNonEssentialProps = true
   let isBuildCommand = false
   let resolvedBase = "/"
@@ -241,17 +287,19 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   /*
    * Message sidecar registry for experimental graph splitting, keyed by a
-   * short hash of the source module id. Entries are written when a module is
-   * transformed and read when the bundler loads the sidecar it imports, so
-   * population always precedes the read within one build. Entries are
-   * overwritten on re-transform and deliberately never cleared: a stale entry
-   * for an untouched module keeps dev-server requests working across config
-   * reloads.
+   * short hash of the canonical source path relative to the Palamedes root.
+   * Entries are written when a module is transformed and read when the bundler
+   * loads the sidecar it imports, so population always precedes the read
+   * within one build. Entries are overwritten on re-transform and deliberately
+   * never cleared: a stale entry for an untouched module keeps dev-server
+   * requests working across config reloads.
    */
   const sidecarModules = new Map<string, { sourceId: string; compiledIds: string[] }>()
 
-  function sidecarKey(sourceId: string): string {
-    return createHash("sha256").update(sourceId).digest("hex").slice(0, 12)
+  async function sidecarKey(sourceId: string): Promise<string> {
+    const cfg = await getConfigLazy()
+    const modulePath = canonicalRelativePath(cfg.rootDir, sourceId)
+    return createHash("sha256").update(modulePath).digest("hex").slice(0, 12)
   }
 
   /*
@@ -260,13 +308,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
    * Both the macro transform and MDX compilation route through here, so MDX
    * content splits exactly like `t`/`Trans` call sites do.
    */
-  function withSidecarImport(code: string, sourceId: string, compiledIds: string[]): string {
+  function withSidecarImport(
+    code: string,
+    sourceId: string,
+    compiledIds: string[]
+  ): string | Promise<string> {
     if (!graphSplitting || compiledIds.length === 0) {
       return code
     }
-    const key = sidecarKey(sourceId)
-    sidecarModules.set(key, { sourceId, compiledIds })
-    return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`
+    return sidecarKey(sourceId).then((key) => {
+      sidecarModules.set(key, { sourceId, compiledIds })
+      return `${code}\nimport "${VIRTUAL_MESSAGES_PREFIX}${key}";\n`
+    })
   }
 
   async function getConfigLazy() {
@@ -322,12 +375,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     )
   }
 
-  function validateMdxTranslations(
+  async function validateMdxTranslations(
     cfg: LoadedPalamedesConfig,
     id: string,
     compiledIds: string[],
     addWatchFile: (file: string) => void
-  ): void {
+  ): Promise<void> {
     if (!failOnMissing || compiledIds.length === 0) {
       return
     }
@@ -346,7 +399,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           continue
         }
         const resourcePath = catalogResourcePath(cfg, catalog, locale)
-        const result = compileCatalogArtifactSelected(artifactConfig, resourcePath, compiledIds)
+        const result = await compileCatalogArtifactSelectedAsync(
+          artifactConfig,
+          resourcePath,
+          compiledIds
+        )
         result.watchFiles.forEach(addWatchFile)
         if (result.missing.length > 0) {
           throw new Error(
@@ -416,7 +473,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           ...resolveMdxOptions(cfg),
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
         }
-        if ((mdx.framework ?? "react") === "solid") {
+        if ((mdx.framework ?? "react") !== "react" || !VITE_SUPPORTS_REACT_MDX_MODULE_TYPE) {
           return
         }
         return {
@@ -455,16 +512,20 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             "Palamedes MDX compilation requires Vite 7 or newer. Disable it with `mdx: false` when using an older Vite release."
           )
         }
-
         const cfg = await getConfigLazy()
         const mdx = {
           ...resolveMdxOptions(cfg),
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
         }
+        if ((mdx.framework ?? "react") === "react" && !VITE_SUPPORTS_REACT_MDX_MODULE_TYPE) {
+          this.error(REACT_MDX_VITE_REQUIREMENT)
+        }
         const result = analyzeMdxNative(source, cleanId, mdx)
         mdxModuleIds.add(cleanId)
         this.addWatchFile(cfg.configPath)
-        validateMdxTranslations(cfg, cleanId, result.compiledIds, (file) => this.addWatchFile(file))
+        await validateMdxTranslations(cfg, cleanId, result.compiledIds, (file) =>
+          this.addWatchFile(file)
+        )
 
         if (result.diagnostics.length > 0 || !result.code) {
           const details = result.diagnostics
@@ -492,7 +553,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         return {
-          code: withSidecarImport(result.code, cleanId, result.compiledIds),
+          code: await withSidecarImport(result.code, cleanId, result.compiledIds),
           map: result.map,
           ...((mdx.framework ?? "react") === "react" ? { moduleType: "jsx" as const } : {}),
         }
@@ -521,10 +582,14 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre" as const,
 
     config(viteConfig, env) {
-      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? env.command === "serve"
+      // A catalog chunk can be unavailable briefly during a staggered deploy or
+      // while an import-map fragment is still loading. Keep the authored
+      // message in first-party output by default so that case remains readable
+      // instead of exposing the opaque compiled id. Consumers that cannot ship
+      // source text can opt out explicitly.
+      resolvedKeepSourceFallbacks = keepSourceFallbacks ?? true
       stripNonEssentialProps = env.command === "build"
       isBuildCommand = env.command === "build"
-      resolvedBase = typeof viteConfig.base === "string" ? viteConfig.base : "/"
       const ids = new Set(PALAMEDES_MACRO_PACKAGES)
       macroIds = ids
 
@@ -538,6 +603,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       for (const macroId of ids) {
         viteConfig.optimizeDeps.exclude.push(macroId)
       }
+    },
+
+    // Vite normalizes `base` and applies every plugin's config hook before
+    // this lifecycle point. Import maps need that final base so asset URLs
+    // retain their separator for non-root and relative deployments.
+    configResolved(viteConfig) {
+      resolvedBase = viteConfig.base
     },
 
     transform(code, id) {
@@ -566,10 +638,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           return null
         }
 
-        return {
-          code: withSidecarImport(result.code, cleanId, result.compiledIds),
-          map: result.map as any,
+        const sidecarCode = withSidecarImport(result.code, cleanId, result.compiledIds)
+        if (typeof sidecarCode === "string") {
+          return {
+            code: sidecarCode,
+            map: result.map as any,
+          }
         }
+        return sidecarCode.then((transformedCode) => ({
+          code: transformedCode,
+          map: result.map as any,
+        }))
       } catch (error) {
         const err = error as Error
         this.error(`Palamedes transform error in ${cleanId}: ${err.message}`)
@@ -589,12 +668,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     // `warn` is required rather than optional: an omitted channel would
     // silently disable the `failOnMissing` gate below along with the warning,
     // and every caller has a plugin context that provides one.
-    function compileSidecarLocale(
+    async function compileSidecarLocale(
       cfg: LoadedPalamedesConfig,
       entry: SidecarEntry,
       locale: string,
       context: { addWatchFile?: (file: string) => void; warn: (message: string) => void }
-    ): Record<string, string> | null {
+    ): Promise<Record<string, string> | null> {
       const catalogs = cfg.catalogs.filter((catalog) =>
         catalogMatchesSource(cfg, catalog, entry.sourceId)
       )
@@ -609,7 +688,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       for (const catalog of catalogs) {
         const artifactConfig = catalogArtifactConfig(cfg, [catalog])
         const resourcePath = catalogResourcePath(cfg, catalog, locale)
-        const result = compileCatalogArtifactSelected(
+        const result = await compileCatalogArtifactSelectedAsync(
           artifactConfig,
           resourcePath,
           entry.compiledIds
@@ -730,7 +809,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
         let selected: Record<string, string> | null = null
         try {
-          selected = compileSidecarLocale(cfg, entry, locale, {
+          selected = await compileSidecarLocale(cfg, entry, locale, {
             addWatchFile: (file) => this.addWatchFile(file),
             warn: (message) => this.warn(message),
           })
@@ -759,7 +838,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const sortedSidecars = [...sidecarModules.entries()].sort(([a], [b]) => a.localeCompare(b))
         for (const [key, entry] of sortedSidecars) {
           for (const locale of locales) {
-            const selected = compileSidecarLocale(cfg, entry, locale, {
+            const selected = await compileSidecarLocale(cfg, entry, locale, {
               warn: (message) => this.warn(message),
             })
             const asset = bareMessageAsset(renderCatalogModule(selected ?? {}), locale)
@@ -841,7 +920,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         this.addWatchFile(cfg.configPath)
         const cleanId = stripQuery(id)
         const locale = path.basename(cleanId, ".po")
-        const result = compileCatalogModule(catalogArtifactConfig(cfg), cleanId, {
+        const result = await compileCatalogModuleAsync(catalogArtifactConfig(cfg), cleanId, {
           locale,
           pseudoLocale: cfg.pseudoLocale,
           failOnMissing,

@@ -116,6 +116,41 @@ describe("workflow contracts", () => {
     )
   })
 
+  it("preflights x64 musl artifacts in CI with the release build and smoke commands", async () => {
+    const [ci, publish, verifyMuslNative] = await Promise.all([
+      readRepositoryFile(".github/workflows/ci.yml"),
+      readRepositoryFile(".github/workflows/publish.yml"),
+      readRepositoryFile(".github/actions/verify-musl-native/action.yml"),
+    ])
+    const validateMuslNative = job(ci, "validate-musl-native", "validate-rust")
+    const publishNative = job(publish, "publish-native", "publish-js")
+
+    expect(ci).toContain("pull_request:")
+    expect(ci).toContain("- main")
+    expect(validateMuslNative).toContain("runs-on: ubuntu-24.04")
+    expect(validateMuslNative).toContain("permissions:\n      contents: read")
+    expect(validateMuslNative).toContain('rust-cache: "false"')
+    expect(validateMuslNative).toContain("run: pnpm install --frozen-lockfile")
+    expect(validateMuslNative).not.toContain("publish-package-if-needed.mjs")
+    for (const packageName of [
+      "@palamedes/cli-linux-x64-musl",
+      "@palamedes/core-node-linux-x64-musl",
+    ]) {
+      expect(validateMuslNative).toContain(`package_name: "${packageName}"`)
+    }
+    expect(validateMuslNative.indexOf("@palamedes/cli-linux-x64-musl")).toBeLessThan(
+      validateMuslNative.indexOf("@palamedes/core-node-linux-x64-musl")
+    )
+    expect(validateMuslNative).toContain("uses: ./.github/actions/verify-musl-native")
+    expect(publishNative).toContain("uses: ./.github/actions/verify-musl-native")
+    expect(verifyMuslNative).toContain('rustup target add "${{ inputs.rust_target }}"')
+    expect(verifyMuslNative).toContain('pnpm --filter "${{ inputs.package_name }}" build')
+    expect(verifyMuslNative).toContain("rust:alpine")
+    expect(verifyMuslNative).toContain("node:24-alpine")
+    expect(verifyMuslNative).toContain("node ../core-node/scripts/build-native.mjs")
+    expect(verifyMuslNative).toContain("execFileSync('./bin/pmds', ['version']")
+  })
+
   it("caches Rust example builds and retries only scheduled browser verification", async () => {
     const [exampleVerification, browserConfig] = await Promise.all([
       readRepositoryFile(".github/workflows/example-verification.yml"),

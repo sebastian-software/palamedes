@@ -36,17 +36,9 @@ If you are integrating Palamedes into an app, you usually want one of these inst
 pnpm add @palamedes/core-node
 ```
 
-The package loads one of these platform packages behind the scenes:
-
-- `@palamedes/core-node-darwin-arm64`
-- `@palamedes/core-node-linux-x64-gnu`
-- `@palamedes/core-node-linux-x64-musl`
-- `@palamedes/core-node-linux-arm64-gnu`
-- `@palamedes/core-node-linux-arm64-musl`
-- `@palamedes/core-node-win32-x64-msvc`
-
-Linux packages are split by libc on both architectures, so Alpine and other musl
-environments use the musl package while glibc distributions use the GNU package.
+See [Platform support](https://github.com/sebastian-software/palamedes/blob/main/docs/platform-support.md)
+before installing the native binding. It is the authoritative list of published
+targets, Linux libc variants, Node process selection, and recovery steps.
 
 ## Example
 
@@ -104,7 +96,12 @@ console.log(po.headers.Language)
 - `getNativeInfo()`
 - `parsePo(source)`
 - `updateCatalogFile(request)`
+- `updateCatalogFileAsync(request)`
 - `parseCatalog(request)`
+- `listTranslationCandidates(request)`
+- `applyTranslationPatches(request)`
+- `applyTranslationPatchesAsync(request)`
+- `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
 - `deriveMessageMetadata(message, context?)`
 - `normalizeMessageMetadata(input)`
@@ -114,13 +111,17 @@ console.log(po.headers.Language)
 - `mergeCatalogsThreeWay(request)`
 - `mergeCatalogFilesThreeWay(request)`
 - `compileCatalogArtifact(config, resourcePath)`
+- `compileCatalogArtifactAsync(config, resourcePath)`
 - `compileCatalogArtifactSelected(config, resourcePath, compiledIds)`
+- `compileCatalogArtifactSelectedAsync(config, resourcePath, compiledIds)`
 - `compileCatalogModule(config, resourcePath, options)`
+- `compileCatalogModuleAsync(config, resourcePath, options)`
 - `renderCatalogModule(messages)`
 - `extractMessagesNative(source, filename, mdxOptions?)`
 - `analyzeSourceNative(source, filename, options?)`
 - `analyzeMdxNative(source, filename, options?)`
 - `extractCatalogMessagesFromFiles(request)`
+- `extractCatalogMessagesFromFilesAsync(request)`
 - `transformMacrosNative(source, filename, options?)`
 
 `analyzeMdxNative()` and `transformMacrosNative()` omit authored source-message
@@ -164,6 +165,18 @@ the artifact config, the resource path, and options such as `locale`, `pseudoLoc
 of constant strings and executable message functions lowered from Ferrocat's
 AST, so valid dynamic messages need neither ICU parsing nor AST interpretation
 in the browser.
+
+Use the `Async` variants for file reads, catalog writes, and catalog
+compilation on a server or build-tool event loop. They preserve the synchronous
+result and error shapes, but schedule one owned operation on Node's shared
+libuv worker pool. The first-party Vite and Next loaders await these variants;
+the Remix synchronous module hook keeps the compatible synchronous API.
+
+These promises do not cancel native work after it is queued. When custom
+tooling starts many independent operations, limit its own concurrency instead
+of creating an unbounded `Promise.all` fan-out. The libuv pool is shared with
+other Node filesystem and native work; `UV_THREADPOOL_SIZE` remains Node's
+process-level control.
 
 `renderCatalogModule(messages)` exposes that same canonical native generator
 for compatibility helpers and custom integrations that already have a compiled

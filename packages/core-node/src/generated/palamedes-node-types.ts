@@ -556,9 +556,11 @@ export interface NativeTransformResult {
 
 export interface NativeBindings {
   updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult;
+  updateCatalogFileAsync(request: CatalogUpdateRequest): Promise<CatalogUpdateResult>;
   parseCatalog(request: CatalogParseRequest): CatalogParseResult;
   listTranslationCandidates(request: TranslationCandidateRequest): TranslationCandidateResult;
   applyTranslationPatches(request: TranslationPatchRequest): TranslationPatchResult;
+  applyTranslationPatchesAsync(request: TranslationPatchRequest): Promise<TranslationPatchResult>;
   auditCatalogs(request: CatalogAuditRequest): CatalogAuditResult;
   deriveMessageMetadata(message: string, context?: string | undefined | null): MessageMetadata;
   normalizeMessageMetadata(input: MessageMetadataInput): MessageMetadata;
@@ -568,11 +570,15 @@ export interface NativeBindings {
   mergeCatalogsThreeWay(request: CatalogThreeWayMergeRequest): CatalogCombineResult;
   mergeCatalogFilesThreeWay(request: CatalogFileThreeWayMergeRequest): CatalogFileCombineResult;
   compileCatalogArtifact(request: CatalogArtifactRequest): CatalogArtifactResult;
+  compileCatalogArtifactAsync(request: CatalogArtifactRequest): Promise<CatalogArtifactResult>;
   compileCatalogModule(request: CatalogModuleRequest): CatalogModuleResult;
+  compileCatalogModuleAsync(request: CatalogModuleRequest): Promise<CatalogModuleResult>;
   compileCatalogArtifactSelected(request: CatalogArtifactSelectedRequest): CatalogArtifactResult;
+  compileCatalogArtifactSelectedAsync(request: CatalogArtifactSelectedRequest): Promise<CatalogArtifactResult>;
   renderCatalogModule(messages: Record<string, string>): string;
   extractMessages(source: string, filename: string, mdx?: NativeMdxOptions | undefined | null): Array<NativeExtractedMessage>;
   extractCatalogMessagesFromFiles(request: ExtractCatalogMessagesRequest): ExtractCatalogMessagesResult;
+  extractCatalogMessagesFromFilesAsync(request: ExtractCatalogMessagesRequest): Promise<ExtractCatalogMessagesResult>;
   analyzeMdx(source: string, filename: string, options?: NativeMdxOptions | undefined | null): NativeMdxAnalysisResult;
   getNativeInfo(): NativeInfo;
   parsePo(source: string): ParsedPoFile;

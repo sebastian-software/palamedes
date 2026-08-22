@@ -5,14 +5,12 @@ import { QUICKSTART_STEPS, STACKS } from "~/data/steps"
 export function StackPicker() {
   return (
     <Tabs.Root defaultValue="react">
-      <Tabs.List className="inline-flex border border-hair">
-        {STACKS.map((stack, index) => (
+      <Tabs.List className="inline-flex max-w-full flex-wrap border-l border-t border-hair">
+        {STACKS.map((stack) => (
           <Tabs.Tab
             key={stack.id}
             value={stack.id}
-            className={`micro px-5 py-2.5 text-[11px] tracking-label transition-colors hover:text-accent data-[selected]:bg-ink data-[selected]:text-paper ${
-              index < STACKS.length - 1 ? "border-r border-hair" : ""
-            }`}
+            className="micro min-h-11 border-r border-b border-hair px-5 py-2.5 text-[11px] tracking-label transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent data-[selected]:bg-ink data-[selected]:text-paper"
           >
             {stack.label}
           </Tabs.Tab>

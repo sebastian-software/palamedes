@@ -20,7 +20,14 @@
  */
 
 import { BENCH_REALISTIC } from "./bench"
-import contentStats from "./generated/content-stats.json"
+
+/*
+ * Keep comparison data importable by its contract test without a site
+ * prebuild. The generated content statistics are for page-level proof
+ * surfaces; these named, supported hosts are the durable comparison fact.
+ */
+const SUPPORTED_SERVER_FRAMEWORKS =
+  "Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3"
 
 export interface RivalFact {
   label: string
@@ -47,6 +54,18 @@ export interface RivalCode {
   note?: string
 }
 
+export interface RivalEvaluation {
+  title: string
+  body: string
+  label: string
+  href: string
+}
+
+export interface RivalFaq {
+  q: string
+  a: string
+}
+
 export interface Rival {
   slug: string
   name: string
@@ -63,6 +82,10 @@ export interface Rival {
   facts: RivalFact[]
   /** The confident statement of position, shown directly under the hero. */
   thesis: string
+  /** The evaluation situation this comparison is written to help resolve. */
+  audience: string
+  /** One proof artifact placed beside the workflow outcomes. */
+  outcomeProof: { label: string; href: string }
   respectTitle: string
   respect: string[]
   flipsideTitle: string
@@ -75,7 +98,13 @@ export interface Rival {
   pickPalamedes: string[]
   honest: string
   migration?: { body: string; label: string; href: string }
+  /** A bounded, reversible way to learn whether a switch is justified. */
+  evaluation: RivalEvaluation
+  /** Visible comparison questions; route metadata derives FAQPage schema from these. */
+  faq: RivalFaq[]
 }
+
+type RivalSource = Omit<Rival, "audience" | "outcomeProof" | "evaluation" | "faq">
 
 function speedup(tool: string): string {
   const row = BENCH_REALISTIC.rows.find((candidate) => candidate.tool === tool)
@@ -107,7 +136,7 @@ export const NATIVE_SHIFT = {
   body: `Bundling went native with esbuild and Rolldown. Transforms went native with SWC and OXC. Linting and formatting went native with Biome and Oxlint. Extraction, catalog merging and ICU validation are the same category of work — parse the source, understand it, write structured output — and almost all of it is still running on JavaScript plugin stacks assembled over a decade. Palamedes was built after that shift rather than before it: one Rust core (ferrocat) owns parsing, merging, auditing and compilation. In the checked benchmark it is 5× faster than the narrower extraction-only React Intl lane and 30× to 100× faster than the four catalog-update workflows.`,
 }
 
-export const RIVALS: Rival[] = [
+const RIVAL_SOURCE: RivalSource[] = [
   {
     slug: "lingui",
     name: "Lingui",
@@ -186,12 +215,12 @@ export const RIVALS: Rival[] = [
       {
         criterion: "Framework coverage",
         rival: "React, React Native, Vue, Solid, vanilla",
-        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} server frameworks; no Vue, no React Native`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}; no Vue, no React Native`,
       },
       {
         criterion: "Verified host coverage",
         rival: "Broad UI-framework packages",
-        palamedes: `${contentStats.smokeExampleCount} smoke-verified examples; ${contentStats.browserExampleCount} browser-checked weekly`,
+        palamedes: "Smoke-verified examples; browser-capable examples checked weekly",
       },
     ],
     code: {
@@ -308,7 +337,7 @@ function checkoutLabel(seats) {
       {
         criterion: "Server integration",
         rival: "React locale context plus explicit server setup",
-        palamedes: `Request-local runtime across ${contentStats.serverFrameworkCount} verified server frameworks`,
+        palamedes: "Request-local runtime across the supported server frameworks",
       },
       {
         criterion: "Agent translation",
@@ -354,7 +383,7 @@ plural(seats, {
       "Your durable translation interface should be source-readable PO or FCL rather than hash-keyed JSON.",
       "ICU interoperability matters across languages, tools or systems outside this JavaScript application.",
       "You want extraction, merging, audits, diagnostics and compilation to share one native catalog engine.",
-      `You need one request-local runtime model across the ${contentStats.serverFrameworkCount} verified server frameworks Palamedes supports.`,
+      "You need one request-local runtime model across every supported server framework.",
       `The checked local collect-and-update path matters: ${publicFactor("fbtee")} on the realistic fixture separates the two workflows on the measured machine.`,
     ],
     honest:
@@ -489,7 +518,7 @@ plural(seats, {
     metaDescription:
       "next-intl is the most Next.js-idiomatic i18n library there is, routing included. Palamedes trades that depth for one runtime and message model across supported hosts — and ships source-string extraction as the stable path, not an experiment.",
     eyebrow: "Compare · next-intl",
-    headline: `One framework deep, or ${contentStats.serverFrameworkCount} server frameworks wide.`,
+    headline: "One framework deep, or six frameworks wide.",
     lede: "next-intl is built into Next.js as far as a library can be — localized pathnames, domain routing and RSC integration are the product, not add-ons. That depth is genuinely valuable and it is also the shape of the lock-in. Palamedes draws the boundary differently: your framework keeps routing, while Palamedes carries the same authoring, catalog, validation, and runtime model across supported hosts.",
     card: "Next-native depth including routing, against one shared model across supported hosts.",
     facts: [
@@ -519,7 +548,7 @@ plural(seats, {
       },
       {
         title: "The model outlives the framework choice",
-        body: `Palamedes runs the same runtime and identity model across Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3, with ${contentStats.smokeExampleCount} examples smoke-checked on relevant PRs and main pushes across four locale strategies. ${contentStats.browserExampleCount} browser-capable examples run the Playwright contract weekly or on manual dispatch. That is not a compatibility table — it is a test suite. Changing meta-framework changes your routing layer and nothing about your messages.`,
+        body: `Palamedes runs the same runtime and identity model across ${SUPPORTED_SERVER_FRAMEWORKS}. Its examples are smoke-checked on relevant PRs and main pushes across four locale strategies; browser-capable examples run the Playwright contract weekly or on manual dispatch. That is not a compatibility table — it is a test suite. Changing meta-framework changes your routing layer and nothing about your messages.`,
       },
       {
         title: "Source strings as the stable path, not the experiment",
@@ -781,7 +810,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework coverage",
         rival: "Broad, via one Vite plugin",
-        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} verified server frameworks`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}`,
       },
       {
         criterion: "Extract + update speed",
@@ -892,7 +921,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework bindings",
         rival: "React, Vue, Angular and Svelte",
-        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} verified server frameworks`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}`,
       },
       {
         criterion: "Extract + update speed",
@@ -1011,7 +1040,7 @@ function buyLabel(seats) {
       {
         criterion: "Framework coverage",
         rival: "The widest here — ~19 first-party adapters",
-        palamedes: `React and Solid across ${contentStats.serverFrameworkCount} server frameworks, ${contentStats.smokeExampleCount} apps smoke-checked in CI`,
+        palamedes: `React and Solid across ${SUPPORTED_SERVER_FRAMEWORKS}, with examples smoke-checked in CI`,
       },
       {
         criterion: "Extract + update speed",
@@ -1060,6 +1089,135 @@ function buyLabel(seats) {
       "Intlayer covers far more UI frameworks than Palamedes, and removing the scanner eliminates a category of failure — nothing can drift out of a catalog you wrote by hand. The technical tradeoff is repeated keyed dictionary work for every message versus one extraction compiler in the build. Which model fits depends on the team's authoring workflow.",
   },
 ]
+
+/*
+ * Acquisition content lives beside the researched comparison facts rather
+ * than in route components. The recommendation is intentionally subjective;
+ * the tables and dated research above remain the factual boundary.
+ */
+const RIVAL_SUPPORT: Record<string, Omit<Rival, keyof RivalSource | "faq">> = {
+  lingui: {
+    audience:
+      "React or Solid teams already committed to source-derived messages and PO catalogs, but now feeling the drag of their extraction and catalog workflow.",
+    outcomeProof: { label: "Inspect the checked extract-and-update result", href: "/proof" },
+    evaluation: {
+      title: "Migrate one catalog boundary first",
+      body: "Keep the first change small: select one bounded feature, run the documented catalog and runtime migration there, then review the generated PO diff before changing the rest of the application. Explicit-ID-heavy catalogs need the guide's cleanup path; do not promise a mechanical import where one is not documented.",
+      label: "Read the Lingui migration playbook",
+      href: "/docs/migrate-from-lingui",
+    },
+  },
+  fbtee: {
+    audience:
+      "React or Solid teams deciding whether a grammar-specific FBT surface or a portable PO and ICU workflow is the better long-term boundary.",
+    outcomeProof: { label: "Inspect the checked local workflow result", href: "/proof" },
+    evaluation: {
+      title: "Evaluate one disposable feature boundary",
+      body: "Use a small, isolated feature branch to rewrite one representative message flow, then inspect the generated PO catalog and the source-to-runtime proof. This tests the authoring and catalog boundary without presenting a mixed-runtime migration as a supported path.",
+      label: "Start a bounded evaluation",
+      href: "/get-started",
+    },
+  },
+  i18next: {
+    audience:
+      "React or Solid teams for whom key naming, JSON namespace maintenance, or raw-key fallbacks have become recurring workflow cost.",
+    outcomeProof: { label: "Inspect source-to-catalog and ICU proof", href: "/proof" },
+    evaluation: {
+      title: "Test the source-string boundary before planning migration",
+      body: "There is no documented i18next migration playbook yet because moving key-based catalogs to source-string identity requires project-specific decisions. Keep evaluation reversible: model one representative feature on a branch, inspect its PO output and runtime behavior, then decide whether a migration plan is warranted.",
+      label: "Run the guided evaluation setup",
+      href: "/get-started",
+    },
+  },
+  "next-intl": {
+    audience:
+      "Next.js teams deciding whether tightly integrated locale routing outweighs keeping their message and catalog model portable across future hosts.",
+    outcomeProof: {
+      label: "Inspect the verified framework and locale matrix",
+      href: "/frameworks",
+    },
+    evaluation: {
+      title: "Separate routing from the message-model question",
+      body: "Try one small, non-routing feature on a branch and keep your existing route policy intact. The evaluation can establish whether source-string catalogs and the request-local runtime fit your code without claiming that Palamedes replaces next-intl's routing product.",
+      label: "Review the framework boundary",
+      href: "/frameworks/nextjs",
+    },
+  },
+  "react-intl": {
+    audience:
+      "React teams that need ICU rigor in server components and want to remove Context-specific i18n plumbing from their application boundary.",
+    outcomeProof: { label: "Inspect the executable ICU source-to-runtime proof", href: "/proof" },
+    evaluation: {
+      title: "Prove catalog compatibility before changing runtime code",
+      body: "Start with a representative ICU fixture and run the checked proof alongside your existing catalog. Palamedes does not provide a universal React Intl migration guide; unsupported formatter kinds are a real compatibility check, not a detail to defer until rollout.",
+      label: "Inspect the ICU proof",
+      href: "/proof",
+    },
+  },
+  paraglide: {
+    audience:
+      "Teams for whom PO catalog ownership, catalog diagnostics, and a shared server/client contract matter more than eliminating every runtime byte.",
+    outcomeProof: { label: "Inspect PO ownership and workflow evidence", href: "/proof" },
+    evaluation: {
+      title: "Keep the bundle-size decision explicit",
+      body: "There is no documented Paraglide migration path yet. Evaluate one representative feature in a branch, inspect the PO and runtime shape, and keep Paraglide when the zero-runtime bundle budget remains the deciding constraint.",
+      label: "Start a bounded evaluation",
+      href: "/get-started",
+    },
+  },
+  tolgee: {
+    audience:
+      "React or Solid teams choosing between an explicit-key runtime client and a repository-owned source-to-catalog workflow.",
+    outcomeProof: { label: "Inspect the checked catalog and ICU proof", href: "/proof" },
+    evaluation: {
+      title: "Evaluate the local workflow, not the connected platform",
+      body: "This page compares the MIT JavaScript SDK, not Tolgee's connected product. There is no documented migration guide; use one representative feature branch to inspect source strings, generated PO catalogs, and runtime behavior before planning a broader change.",
+      label: "Review the local workflow",
+      href: "/get-started",
+    },
+  },
+  intlayer: {
+    audience:
+      "Teams deciding whether hand-authored, co-located dictionaries are worth the repeated key and declaration work for each new message.",
+    outcomeProof: { label: "Inspect the catalog and ICU proof", href: "/proof" },
+    evaluation: {
+      title: "Test one-edit authoring on a representative feature",
+      body: "There is no documented Intlayer migration playbook yet. Keep the decision reversible by modelling one feature on a branch, reviewing the generated PO catalog and checking the source-to-runtime proof before committing to a catalog conversion.",
+      label: "Start a bounded evaluation",
+      href: "/get-started",
+    },
+  },
+}
+
+function comparisonFaqs(rival: Omit<Rival, "faq">): RivalFaq[] {
+  return [
+    {
+      q: `Can we evaluate Palamedes without replacing ${rival.name} everywhere?`,
+      a: rival.evaluation.body,
+    },
+    {
+      q: "Does Palamedes make sense if we use only one framework?",
+      a: "Yes, if the source-string, catalog and runtime model is the fit. Framework breadth is proof that the supported adapters share one model, not a requirement that one application use several frameworks. Check the supported host and its documented boundary before adopting.",
+    },
+    {
+      q: "Who owns the catalogs?",
+      a: "Palamedes keeps source-string-first PO catalogs in the repository. Extraction, catalog updates, audits, merging and compilation are local workflow steps; it does not provide a hosted TMS or machine translation service.",
+    },
+    {
+      q: "What runtime code reaches the application?",
+      a: "Transformed code reaches the active Palamedes instance through getI18n(). The exact adapter and compiled artifact depend on the supported host; inspect the framework documentation and proof rather than treating this comparison as a bundle-size claim.",
+    },
+    {
+      q: `What do we give up by choosing Palamedes over ${rival.name}?`,
+      a: rival.honest,
+    },
+  ]
+}
+
+export const RIVALS: Rival[] = RIVAL_SOURCE.map((rival) => {
+  const supported = { ...rival, ...RIVAL_SUPPORT[rival.slug] }
+  return { ...supported, faq: comparisonFaqs(supported) }
+})
 
 export function rivalBySlug(slug: string): Rival {
   const rival = RIVALS.find((candidate) => candidate.slug === slug)

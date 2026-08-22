@@ -50,7 +50,7 @@ pnpm check:llms
 ```
 
 `pnpm check:binary-size` builds the release CLI and holds it under a fixed
-ceiling. Palamedes ships prebuilt binaries for six platforms, so anything
+ceiling. Palamedes ships prebuilt binaries for eight platforms, so anything
 baked into the executable multiplies; the check exists because linking a full
 Unicode collator once added 1.3 MB and only surfaced when someone measured by
 hand. CI runs it on the pinned toolchain. Raising the ceiling is a deliberate

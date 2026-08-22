@@ -1,5 +1,4 @@
-import { createI18n } from "@palamedes/core"
-import type { CompiledCatalogMessages } from "@palamedes/core/compiled"
+import { createI18n, type CompiledCatalogMessages } from "@palamedes/core/compiled"
 import { defineLocaleControls } from "@palamedes/core/locale"
 
 export const LOCALES = ["en", "de", "es"] as const
@@ -30,7 +29,7 @@ export async function loadMessages(locale: Locale): Promise<CompiledCatalogMessa
 }
 
 export function createExampleI18n() {
-  return createI18n()
+  return createI18n({ timeZone: "Europe/Berlin" })
 }
 
 export function getLocaleLabel(locale: Locale): string {

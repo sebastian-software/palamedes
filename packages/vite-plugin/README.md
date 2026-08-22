@@ -106,10 +106,11 @@ palamedes({
 })
 ```
 
-`keepSourceFallbacks` defaults to `true` during `vite serve` and `false` during
-`vite build`. Production builds therefore emit compact catalog lookups instead
-of duplicating authored messages in macro and generated MDX output. Set it
-explicitly to override the command-based default.
+`keepSourceFallbacks` defaults to `true`, including `vite build`, so a missing
+catalog chunk renders readable source text instead of a compiled hash. Set it
+to `false` to opt into smaller output when source text must not ship. The
+parser-free runtime returns an ICU source fallback literally; use
+`@palamedes/core` if a fallback itself must interpolate values.
 
 `cwd` and `skipValidation` are passed through to `loadPalamedesConfig`: `cwd`
 sets the directory the config search starts from, and `skipValidation` loads
@@ -134,10 +135,14 @@ a module through the Palamedes catalog loader.
 
 `.mdx` modules are compiled before the React or Solid JSX plugin. Catalog
 extraction discovers the same files automatically, and both paths share the
-native semantic analyzer. MDX compilation requires Vite 7 or newer; older Vite
-projects can set `mdx: false` while continuing to use macros and catalog
-loading. React parsing is configured automatically, while Solid requires
-`solid({ extensions: [".mdx"] })`.
+native semantic analyzer. React MDX requires Vite 8 or newer: its Rolldown
+pipeline recognizes the generated module type. Vite 7 projects can continue to
+use macros and catalog loading with `mdx: false`, or compile MDX for Solid with
+`solid({ extensions: [".mdx"] })`. React parsing is configured automatically,
+while Solid requires that explicit extension setting.
+
+The package peer range remains broad because macros and catalog loading work on
+supported Vite releases independently of the React MDX compiler.
 See the [MDX guide](https://github.com/sebastian-software/palamedes/blob/main/docs/mdx.md).
 
 ## What This Package Handles

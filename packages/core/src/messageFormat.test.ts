@@ -212,4 +212,29 @@ describe("formatMessagePattern", () => {
     expect(formatMessagePattern("At {when}", { when })).toBe(`At ${when.toISOString()}`)
     expect(formatMessagePattern("At {when}", { when: new Date("garbage") })).toBe("At Invalid Date")
   })
+
+  it("formats date-only ISO strings as UTC instants in the configured time zone", () => {
+    const dateOnly = "2026-06-12"
+
+    expect(
+      formatMessagePattern("Due {when, date, medium}", { when: dateOnly }, "en-US", "UTC")
+    ).toBe(
+      `Due ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(
+        new Date(dateOnly)
+      )}`
+    )
+    expect(
+      formatMessagePattern(
+        "Due {when, date, medium}",
+        { when: dateOnly },
+        "en-US",
+        "America/Los_Angeles"
+      )
+    ).toBe(
+      `Due ${new Intl.DateTimeFormat("en-US", {
+        dateStyle: "medium",
+        timeZone: "America/Los_Angeles",
+      }).format(new Date(dateOnly))}`
+    )
+  })
 })

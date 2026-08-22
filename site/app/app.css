@@ -82,6 +82,65 @@
 }
 
 /*
+ * Generated docs keep ARDO's own component structure. These are local,
+ * semantic hooks for the prebuild-owned index micro-labels and the public
+ * runtime outline component; no ARDO implementation class is targeted.
+ */
+.pmds-docs-micro-label,
+.pmds-progressive-outline-label {
+  margin: 0 0 0.65rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-gray-spec);
+}
+
+.pmds-progressive-outline {
+  margin: 1.5rem 0 2rem;
+  padding: 1rem 1.125rem;
+  border-block: 1px solid var(--color-hair);
+  background: var(--ardo-color-bgSoft);
+}
+
+.pmds-progressive-outline-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.pmds-progressive-outline-list li[data-depth="1"] {
+  margin-left: 0.75rem;
+}
+
+.pmds-progressive-outline-list a,
+.pmds-progressive-outline-more summary {
+  color: var(--ardo-color-text);
+}
+
+.pmds-progressive-outline-list a:focus-visible,
+.pmds-progressive-outline-more summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pmds-progressive-outline-more {
+  margin-top: 0.75rem;
+}
+
+.pmds-progressive-outline-more summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.pmds-progressive-outline-more .pmds-progressive-outline-list {
+  margin-top: 0.75rem;
+}
+
+/*
  * The header wordmark. ARDO renders the site title as a plain <span> inside
  * the logo home link and exposes no className hook for it; like the
  * mobile-panel nav below, it is scoped through semantics (the only header
@@ -100,14 +159,58 @@ header a[href="/"] span {
 }
 
 /*
- * Inside ARDO's mobile slide panel (a role="dialog" overlay) the same nav
- * must stack vertically with touch-sized targets. Scoped via semantics, not
- * ARDO's hashed class names.
+ * Evaluation and resource links remain one ARDO navigation landmark. The
+ * relationship is a restrained rule on desktop and explicit group labels in
+ * ARDO's mobile dialog. All selectors use our public classes or semantics,
+ * never ARDO's generated implementation classes.
  */
-[role="dialog"][aria-modal="true"] nav:has(> .pmds-nav-link) {
+.pmds-primary-nav,
+.pmds-nav-group {
+  display: flex;
+  align-items: center;
+}
+
+.pmds-primary-nav {
+  gap: 0.5rem;
+}
+
+.pmds-nav-group + .pmds-nav-group {
+  margin-left: 0.25rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--color-hair);
+}
+
+.pmds-nav-group-label {
+  display: none;
+}
+
+[role="dialog"][aria-modal="true"] .pmds-primary-nav {
   flex-direction: column;
   align-items: stretch;
-  gap: 0;
+  gap: 0.75rem;
+}
+
+[role="dialog"][aria-modal="true"] .pmds-nav-group {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+[role="dialog"][aria-modal="true"] .pmds-nav-group + .pmds-nav-group {
+  margin-left: 0;
+  padding-top: 0.75rem;
+  padding-left: 0;
+  border-top: 1px solid var(--color-hair);
+  border-left: 0;
+}
+
+[role="dialog"][aria-modal="true"] .pmds-nav-group-label {
+  display: block;
+  padding: 0.25rem 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-gray-spec);
 }
 
 [role="dialog"][aria-modal="true"] .pmds-nav-link {
@@ -117,6 +220,18 @@ header a[href="/"] span {
   padding: 0.65rem 0;
   border-bottom: none;
   font-size: 12px;
+}
+
+.pmds-nav-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+header button[aria-label="Toggle menu"]:focus-visible,
+[role="dialog"][aria-modal="true"] button[aria-label="Close menu"]:focus-visible,
+[role="dialog"][aria-modal="true"] a[href="/"]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 header button[aria-label="Toggle menu"],

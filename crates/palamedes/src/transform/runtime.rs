@@ -11,6 +11,7 @@ use crate::descriptor::{
 };
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::compiled_message_key;
+use crate::source::DiagnosticLocation;
 
 use super::messages::{
     append_unique_bindings, build_icu_message, choice_expression_binding, escape_string,
@@ -48,7 +49,7 @@ pub(super) fn transform_descriptor_call(
     call: &CallExpression<'_>,
     source: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let Some(object) = first_argument_object(call) else {
@@ -67,7 +68,7 @@ fn transform_descriptor_object(
     object: &ObjectExpression<'_>,
     source: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     if descriptor_property_value(object, "id").is_some() {
@@ -135,7 +136,7 @@ fn descriptor_values_argument(
     message: &str,
     implicit_values: Vec<ValueBinding>,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Option<String>> {
     let Some(argument) = call.arguments.get(1) else {
         if implicit_values.is_empty() {
@@ -169,7 +170,7 @@ fn merge_descriptor_values(
     mut implicit_values: Vec<ValueBinding>,
     explicit_values: Vec<ValueBinding>,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<Vec<ValueBinding>> {
     for binding in explicit_values {
         if let Some(existing) = implicit_values
@@ -302,7 +303,7 @@ pub(super) fn transform_choice_call(
     call: &CallExpression<'_>,
     source: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let Some(value_arg) = call.arguments.first() else {
@@ -411,7 +412,7 @@ pub(super) fn transform_choice_jsx_element(
     element: &JSXElement<'_>,
     source: &str,
     macro_name: &str,
-    location: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
     options: &NativeTransformOptions,
 ) -> PalamedesResult<Option<(String, String)>> {
     let attrs = jsx_attributes(&element.opening_element);

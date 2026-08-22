@@ -1,3 +1,5 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -5,10 +7,18 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { withPalamedes } from "./index"
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
+  if (originalArgv) {
+    process.argv = originalArgv
+    originalArgv = undefined
+  }
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true })))
 })
+
+const tempDirs: string[] = []
+let originalArgv: string[] | undefined
 
 const nextExampleRoot = fileURLToPath(new URL("../../../examples/nextjs-cookie", import.meta.url))
 const serverInitializerModule = "@palamedes/next-plugin/server-function-initializer"
@@ -33,6 +43,109 @@ function conditionList(rule: RuleItem): unknown[] {
 }
 
 describe("withPalamedes turbopack config", () => {
+  it("uses the Next CLI project directory instead of the monorepo working directory", async () => {
+    const monorepoRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-project-root-"))
+    tempDirs.push(monorepoRoot)
+    const appRoot = path.join(monorepoRoot, "apps", "web")
+    await mkdir(path.join(appRoot, "src"), { recursive: true })
+    await Promise.all([
+      writeFile(path.join(monorepoRoot, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n"),
+      writeFile(path.join(monorepoRoot, "palamedes.yaml"), "locales: [en]\n"),
+      writeFile(path.join(appRoot, "palamedes.yaml"), "locales: [de]\n"),
+      writeFile(
+        path.join(monorepoRoot, "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+      writeFile(
+        path.join(appRoot, "src", "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+    ])
+    vi.spyOn(process, "cwd").mockReturnValue(monorepoRoot)
+    originalArgv = process.argv
+    process.argv = ["node", "next", "dev", "apps/web"]
+
+    const config = withPalamedes({}, { serverFunctions: true })
+    const transformRule = getRules(config)["*"] as RuleItem[]
+    const poRule = getRules(config)["*.po"] as RuleItem
+
+    expect(config.turbopack?.resolveAlias).toMatchObject({
+      [serverEntryModule]: "./src/palamedes.server.ts",
+    })
+    expect(transformRule[0]?.loaders?.[0]?.options).toMatchObject({ cwd: appRoot })
+    expect(poRule.loaders?.[0]?.options).toMatchObject({ cwd: appRoot })
+    expect(config.turbopack?.root).toBe(monorepoRoot)
+    expect(config.outputFileTracingRoot).toBe(monorepoRoot)
+  })
+
+  it("derives the app root from the config evaluation stack after Next consumes its CLI directory", async () => {
+    const monorepoRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-config-stack-"))
+    tempDirs.push(monorepoRoot)
+    const appRoot = path.join(monorepoRoot, "apps", "web")
+    await mkdir(path.join(appRoot, "src"), { recursive: true })
+    await Promise.all([
+      writeFile(path.join(monorepoRoot, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n"),
+      writeFile(path.join(monorepoRoot, "palamedes.yaml"), "locales: [en]\n"),
+      writeFile(path.join(appRoot, "palamedes.yaml"), "locales: [de]\n"),
+      writeFile(
+        path.join(monorepoRoot, "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+      writeFile(
+        path.join(appRoot, "src", "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+    ])
+    vi.spyOn(process, "cwd").mockReturnValue(monorepoRoot)
+    originalArgv = process.argv
+    process.argv = ["node", "next"]
+
+    // Simulate the loaded config module's stack frame after Next consumes the CLI directory.
+    // eslint-disable-next-line no-new-func
+    const loadNextConfig = new Function(
+      "withPalamedes",
+      `return () => withPalamedes({}, { serverFunctions: true })\n//# sourceURL=${path.join(appRoot, "next.config.mjs")}`
+    ) as (configure: typeof withPalamedes) => () => ReturnType<typeof withPalamedes>
+    const config = loadNextConfig(withPalamedes)()
+    const transformRule = getRules(config)["*"] as RuleItem[]
+    const poRule = getRules(config)["*.po"] as RuleItem
+
+    expect(config.turbopack?.resolveAlias).toMatchObject({
+      [serverEntryModule]: "./src/palamedes.server.ts",
+    })
+    expect(transformRule[0]?.loaders?.[0]?.options).toMatchObject({ cwd: appRoot })
+    expect(poRule.loaders?.[0]?.options).toMatchObject({ cwd: appRoot })
+    expect(config.turbopack?.root).toBe(monorepoRoot)
+  })
+
+  it("normalizes projectRoot once for config paths, loaders, and workspace detection", async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-project-option-"))
+    tempDirs.push(projectRoot)
+    const workspaceRoot = path.dirname(projectRoot)
+
+    const config = withPalamedes(
+      {},
+      {
+        projectRoot,
+        configPath: "config/palamedes.yaml",
+        workspaceRoot,
+      }
+    )
+    const transformRule = getRules(config)["*"] as RuleItem
+    const poRule = getRules(config)["*.po"] as RuleItem
+    const expectedConfigPath = path.join(projectRoot, "config", "palamedes.yaml")
+
+    expect(transformRule.loaders?.[0]?.options).toMatchObject({
+      cwd: projectRoot,
+      configPath: expectedConfigPath,
+    })
+    expect(poRule.loaders?.[0]?.options).toMatchObject({
+      cwd: projectRoot,
+      configPath: expectedConfigPath,
+    })
+    expect(config.turbopack?.root).toBe(workspaceRoot)
+  })
+
   it("uses the hook-free macro runtime", () => {
     const config = withPalamedes()
 
@@ -51,7 +164,7 @@ describe("withPalamedes turbopack config", () => {
 
   it.each([
     ["development", true, false],
-    ["production", false, true],
+    ["production", true, true],
   ] as const)(
     "sets runtime fallback metadata for the %s Turbopack mode",
     (mode, expectedFallbacks, expectedMetadataStrip) => {
@@ -66,12 +179,12 @@ describe("withPalamedes turbopack config", () => {
     }
   )
 
-  it("lets keepSourceFallbacks override the Next mode default", () => {
+  it("lets keepSourceFallbacks opt out of the Next default", () => {
     vi.stubEnv("NODE_ENV", "production")
-    const config = withPalamedes({}, { keepSourceFallbacks: true })
+    const config = withPalamedes({}, { keepSourceFallbacks: false })
 
     const rule = getRules(config)["*"] as RuleItem
-    expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: true })
+    expect(rule.loaders?.[0]?.options).toMatchObject({ keepSourceFallbacks: false })
   })
 
   it("translates include/exclude options into the turbopack rule condition", () => {
@@ -279,6 +392,77 @@ function collectWebpackRules(
 }
 
 describe("withPalamedes webpack config", () => {
+  it("re-resolves config and Server Function modules from Next's webpack project directory", async () => {
+    const monorepoRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-webpack-project-root-"))
+    tempDirs.push(monorepoRoot)
+    const appRoot = path.join(monorepoRoot, "apps", "web")
+    await mkdir(path.join(appRoot, "src"), { recursive: true })
+    await Promise.all([
+      writeFile(
+        path.join(monorepoRoot, "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+      writeFile(
+        path.join(appRoot, "src", "palamedes.server.ts"),
+        "export async function initializeServerFunctionI18n() {}\n"
+      ),
+    ])
+    vi.spyOn(process, "cwd").mockReturnValue(monorepoRoot)
+    originalArgv = process.argv
+    process.argv = ["node", "vitest"]
+
+    const configured = withPalamedes(
+      {},
+      {
+        configPath: "config/palamedes.yaml",
+        serverFunctions: true,
+      }
+    )
+    const webpack = configured.webpack as unknown as (
+      config: {
+        module: { rules: WebpackRule[] }
+        resolve: { alias: Record<string, string> }
+      },
+      context: Record<string, unknown>
+    ) => unknown
+    const webpackConfig = { module: { rules: [] as WebpackRule[] }, resolve: { alias: {} } }
+
+    webpack(webpackConfig, { dir: appRoot, isServer: true })
+
+    const transformRule = webpackConfig.module.rules.find((rule) =>
+      rule.use?.[0]?.loader.includes("palamedes-loader")
+    )
+    const poRule = webpackConfig.module.rules.find((rule) =>
+      rule.use?.[0]?.loader.includes("palamedes-po-loader")
+    )
+    expect(transformRule?.use?.[0]?.options).toMatchObject({
+      configPath: path.join(appRoot, "config", "palamedes.yaml"),
+      cwd: appRoot,
+      serverFunctions: {
+        initializerModule: serverInitializerModule,
+        initializerExport: "initializeServerFunctionI18n",
+      },
+      serverMessageSplitting: true,
+    })
+    expect(poRule?.use?.[0]?.options).toMatchObject({
+      configPath: path.join(appRoot, "config", "palamedes.yaml"),
+      cwd: appRoot,
+    })
+    expect(webpackConfig.resolve.alias).toMatchObject({
+      [serverEntryModule]: path.join(appRoot, "src", "palamedes.server.ts"),
+    })
+  })
+
+  it("uses Next's project directory for webpack loader options", () => {
+    const projectRoot = path.join(nextExampleRoot, "webpack-context-root")
+    const rules = collectWebpackRules(withPalamedes(), { dir: projectRoot })
+    const transformRule = rules.find((rule) => rule.use?.[0]?.loader.includes("palamedes-loader"))
+    const poRule = rules.find((rule) => rule.use?.[0]?.loader.includes("palamedes-po-loader"))
+
+    expect(transformRule?.use?.[0]?.options).toMatchObject({ cwd: projectRoot })
+    expect(poRule?.use?.[0]?.options).toMatchObject({ cwd: projectRoot })
+  })
+
   it("forwards Server Function instrumentation to webpack", () => {
     useNextExampleProject()
     const rules = collectWebpackRules(withPalamedes({}, { serverFunctions: true }), {
