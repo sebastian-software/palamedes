@@ -15,6 +15,7 @@ import {
   analyzeSourceNative,
   applyTranslationPatches,
   applyTranslationPatchesAsync,
+  combineCatalogs,
   compileCatalogArtifact,
   compileCatalogArtifactAsync,
   compileCatalogArtifactSelected,
@@ -43,6 +44,7 @@ import {
   assertNativeBindingVersion,
   assertWellFormedNativeArguments,
   loadNativeBindings,
+  prepareNativeArgument,
   resolveNativePackageName,
   snapshotNativeArguments,
 } from "./native-loader"
@@ -192,6 +194,94 @@ describe("@palamedes/core-node", () => {
     expect(proxyReads).toBe(1)
     expect(proxyRendered).toContain("from proxy")
     expect(proxyRendered).not.toContain("�")
+  })
+
+  it("passes wrapper-owned prepared bulk requests without a second deep copy", () => {
+    const captured: unknown[] = []
+    const fixtureBindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      combineCatalogs(request: unknown) {
+        captured.push(request)
+        return {}
+      },
+    }
+    const guarded = loadNativeBindings({
+      packageDir: "/fixture/core-node",
+      nativePackageName: "fixture-native",
+      require(specifier) {
+        return specifier.endsWith("package.json") ? { version: "fixture" } : fixtureBindings
+      },
+    })
+
+    const prepared = prepareNativeArgument("combineCatalogs", {
+      inputs: Array.from({ length: 2048 }, (_, index) => ({
+        content: `msgid "message-${index}"`,
+        label: `catalog-${index}`,
+      })),
+      sourceLocale: "en",
+    })
+    ;(guarded.combineCatalogs as unknown as (request: unknown) => unknown)(prepared)
+    expect(captured[0]).toBe(prepared)
+
+    let reads = 0
+    const unprepared = {
+      get sourceLocale() {
+        reads += 1
+        return "en"
+      },
+    }
+    ;(guarded.combineCatalogs as unknown as (request: unknown) => unknown)(unprepared)
+    expect(reads).toBe(1)
+    expect(captured[1]).not.toBe(unprepared)
+    expect(captured[1]).toStrictEqual({ sourceLocale: "en" })
+
+    expect(() =>
+      prepareNativeArgument("combineCatalogs", {
+        inputs: [{ content: "\ud800" }],
+      })
+    ).toThrow(/combineCatalogs\.argument\[0\]\.inputs\[0\]\.content/u)
+    expect(() =>
+      prepareNativeArgument("combineCatalogs", {
+        labels: new Map([["catalog", "primary"]]),
+      })
+    ).toThrow(/rejected a Map/u)
+  })
+
+  it("validates wrapper-owned bulk payloads before the native call", () => {
+    expect(() =>
+      updateCatalogFile({
+        targetPath: "/unused/messages.po",
+        locale: "en",
+        sourceLocale: "en",
+        clean: false,
+        messages: [
+          {
+            message: "\ud800",
+            extractedComments: [],
+            origins: [],
+          },
+        ],
+      })
+    ).toThrow(/updateCatalogFile\.argument\[0\]\.messages\[0\]\.message/u)
+
+    expect(() =>
+      applyTranslationPatches({
+        config: {
+          rootDir: "\udc00",
+          locales: ["en"],
+          sourceLocale: "en",
+          catalogs: [],
+        },
+        patches: [],
+      })
+    ).toThrow(/applyTranslationPatches\.argument\[0\]\.config\.rootDir/u)
+
+    expect(() =>
+      combineCatalogs({
+        inputs: [{ content: "\ud800" }, { content: 'msgid "ok"' }],
+        sourceLocale: "en",
+      })
+    ).toThrow(/combineCatalogs\.argument\[0\]\.inputs\[0\]\.content/u)
   })
 
   it("snapshots nested accessors, arrays, and getter failures deterministically", () => {
