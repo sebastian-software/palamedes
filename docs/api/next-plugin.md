@@ -42,7 +42,7 @@ interface WithPalamedesOptions {
 
 Defaults:
 
-- `include`: `/\.[jt]sx?$/`
+- `include`: `/\.(tsx?|jsx?|mjs|cjs)$/`
 - `exclude`: `/node_modules/`
 - `enablePoLoader`: `true`
 - `failOnMissing`: `false`
@@ -236,7 +236,7 @@ loader `test`/`exclude`, under Turbopack translated into the rule condition
 The regex is not matched against the same string in both cases. Webpack tests
 the absolute resource path (`/home/me/app/src/page.tsx`); Turbopack tests its
 own internal path representation for the module, which is not guaranteed to be
-that absolute OS path. Extension patterns (`/\.[jt]sx?$/`) and path-segment
+that absolute OS path. Extension patterns (`/\.(tsx?|jsx?|mjs|cjs)$/`) and path-segment
 patterns (`/[/\\]generated[/\\]/`) behave the same under both. Patterns
 anchored with `^`, or built from an absolute directory, are the ones that can
 match under webpack and silently miss under Turbopack — prefer segment-based

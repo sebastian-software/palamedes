@@ -43,6 +43,20 @@ function conditionList(rule: RuleItem): unknown[] {
 }
 
 describe("withPalamedes turbopack config", () => {
+  it("matches ESM and CommonJS JavaScript extensions with the shared bundler default", () => {
+    const rule = getRules(withPalamedes())["*"] as RuleItem
+    const include = (
+      conditionList(rule).find(
+        (condition) => typeof condition === "object" && condition !== null && "path" in condition
+      ) as { path: RegExp }
+    ).path
+
+    for (const file of ["page.ts", "page.tsx", "page.js", "page.jsx", "page.mjs", "page.cjs"]) {
+      expect(include.test(file)).toBe(true)
+    }
+    expect(include.test("page.css")).toBe(false)
+  })
+
   it("uses the Next CLI project directory instead of the monorepo working directory", async () => {
     const monorepoRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-project-root-"))
     tempDirs.push(monorepoRoot)
@@ -392,6 +406,17 @@ function collectWebpackRules(
 }
 
 describe("withPalamedes webpack config", () => {
+  it("uses the shared bundler extension default", () => {
+    const transformRule = collectWebpackRules(withPalamedes()).find((rule) =>
+      rule.use?.[0]?.loader.includes("palamedes-loader")
+    )
+
+    for (const file of ["page.ts", "page.tsx", "page.js", "page.jsx", "page.mjs", "page.cjs"]) {
+      expect(transformRule?.test?.test(file)).toBe(true)
+    }
+    expect(transformRule?.test?.test("page.css")).toBe(false)
+  })
+
   it("re-resolves config and Server Function modules from Next's webpack project directory", async () => {
     const monorepoRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-webpack-project-root-"))
     tempDirs.push(monorepoRoot)

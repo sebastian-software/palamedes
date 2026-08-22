@@ -27,6 +27,7 @@ import {
 } from "@palamedes/core-node"
 import { createMissingErrorMessage, transformPalamedesMacros } from "@palamedes/transform"
 import {
+  PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
   PALAMEDES_MACRO_PACKAGES,
   mdxFrameworkFor,
   resolveMacroRuntimeModule,
@@ -256,7 +257,7 @@ export type PalamedesPluginOptions = {
  */
 export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   const {
-    include = /\.(tsx?|jsx?|mjs|cjs)$/,
+    include = PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
     exclude = /node_modules/,
     enablePoLoader = true,
     failOnMissing = false,

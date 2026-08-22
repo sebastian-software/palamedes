@@ -53,6 +53,11 @@ The default intentionally excludes `.cjs` because the macro transform injects
 ESM imports. Pass a custom `include` only if your hook also provides a
 CommonJS-compatible runtime binding.
 
+Vite and Next use the shared bundler default from `@palamedes/transform`, which
+also includes `.cjs`. Remix keeps this narrower loader-only exception because
+Node executes a `.cjs` load result as CommonJS rather than passing it through a
+bundler.
+
 Macro calls use the plain, framework-neutral getter; locale changes require
 document navigation.
 

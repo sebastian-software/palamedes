@@ -7,7 +7,12 @@
 
 export { transformPalamedesMacros } from "./transform"
 export type { TransformOptions, TransformResult, SourceMap } from "./types"
-export { PALAMEDES_MACRO_PACKAGES, JS_MACROS, JSX_MACROS } from "./types"
+export {
+  PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
+  PALAMEDES_MACRO_PACKAGES,
+  JS_MACROS,
+  JSX_MACROS,
+} from "./types"
 export { mightContainPalamedesMacros, findMacroImports } from "./detect"
 export { resolveMacroRuntimeModule, mdxFrameworkFor } from "./framework"
 export type { PalamedesFramework } from "./framework"

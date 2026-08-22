@@ -42,6 +42,7 @@ vi.mock("@palamedes/transform", async (importOriginal) => {
   // implementation so these tests pin the derived defaults, not a stub.
   const actual = await importOriginal<typeof PalamedesTransformModule>()
   return {
+    PALAMEDES_BUNDLER_TRANSFORM_INCLUDE: actual.PALAMEDES_BUNDLER_TRANSFORM_INCLUDE,
     PALAMEDES_MACRO_PACKAGES: ["@palamedes/core/macro", "@palamedes/react/macro"],
     createMissingErrorMessage: mocks.createMissingErrorMessage,
     transformPalamedesMacros: mocks.transformPalamedesMacros,
@@ -103,6 +104,12 @@ beforeEach(() => {
 })
 
 describe("palamedes vite plugin", () => {
+  it.each(["label.mjs", "label.cjs"])("transforms %s with the shared bundler default", (file) => {
+    expect(runMacroTransform({}, undefined, [], `/repo/src/${file}`)).toMatchObject({
+      code: "transformed",
+    })
+  })
+
   it("compiles PO files and registers watch dependencies", async () => {
     const addWatchFile = vi.fn()
     const result = await runPoTransform({ addWatchFile })
