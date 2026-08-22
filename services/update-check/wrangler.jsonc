@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "palamedes-update-check",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-08-22",
+  "workers_dev": false,
+  "observability": { "enabled": false },
+  "routes": [{ "pattern": "version.palamedes.dev/check", "zone_name": "palamedes.dev" }],
+  "analytics_engine_datasets": [
+    { "binding": "UPDATE_CHECKS", "dataset": "palamedes_update_checks" },
+  ],
+}

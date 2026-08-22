@@ -387,6 +387,53 @@ pmds version
 pmds --version
 ```
 
+## Advisory update checks
+
+The native CLI contains a privacy-bounded update-check client, but published
+binaries keep it disabled until the repository-owned endpoint has valid
+DNS/TLS, its aggregate dataset, and a verified deployment. Enabling a release
+is an explicit build step; a binary without that release-time endpoint makes no
+update-check request and writes no update-check cache.
+
+Once enabled, a regular `pmds` subcommand checks at most once per 24 hours. It
+runs as part of that process — never as a daemon, background service, or
+postinstall hook — and sends only this JSON shape over HTTPS:
+
+```json
+{ "version": "1.17.3", "os": "linux", "arch": "x86_64", "ci": false }
+```
+
+There is no installation or telemetry ID and no command, arguments, path,
+project data, username, or hostname. Palamedes application code does not read
+or store the client IP or request headers. The service aggregates rate-limited
+request volume and version/OS/architecture/CI distributions; because it has no
+stable identifier, those requests are not unique weekly installations.
+
+Set either opt-out before invoking the CLI:
+
+```bash
+export DO_NOT_TRACK=1
+# or
+export PALAMEDES_UPDATE_CHECK=0
+```
+
+The platform cache is under `$XDG_CACHE_HOME/palamedes` (falling back to
+`$HOME/.cache/palamedes`) on Linux, `$HOME/Library/Caches/palamedes` on macOS,
+and `%LOCALAPPDATA%\palamedes` on Windows. A due attempt is recorded before the
+request so offline use is not retried on every command. Cache and network
+failures are non-fatal and silent. The network operation has a two-second total
+deadline; a valid newer semantic version produces only this stderr notice after
+the command output:
+
+```text
+A new version of palamedes is available: 1.17.3 → 1.18.0
+```
+
+Stdout and exit status are unchanged, including for `--json` commands. See
+[ADR-027](../adr/027-privacy-bounded-cli-update-check.md) for the data boundary
+and [the service readiness checklist](../services/update-check/README.md) for
+the currently outstanding deployment work.
+
 ## Configuration Errors
 
 The native CLI reads only data configs (`palamedes.yaml`, `.yml`, `.json`,

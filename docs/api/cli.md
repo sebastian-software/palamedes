@@ -17,6 +17,10 @@ commands.
 
 See the [CLI reference](../cli.md) for flags and examples.
 
+The CLI reference also documents the deployment-gated advisory update check,
+its 24-hour cache, exact four-field request, two opt-outs, stderr-only notice,
+and non-fatal two-second network bound.
+
 ## Plugins
 
 CLI plugins are native executables using binary plugin protocol version 1 over

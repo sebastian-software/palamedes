@@ -16,6 +16,7 @@ Use this file when an AI coding assistant needs a compact overview of Palamedes.
 - Use `.po` catalogs through Palamedes/ferrocat semantics. FCL is an opt-in catalog format for canonical, merge-friendly generated catalogs.
 - Palamedes+ is a planned optional managed layer for translation automation and collaboration. Palamedes itself covers the full local open-source workflow and does not require an account.
 - Prefer `pmds audit` for catalog QA and `pmds report --fail-if-below <percent>` for completeness gates in CI.
+- Advisory CLI update checks are deployment-gated. When enabled in a release they are limited to one attempt per 24 hours, send only version/OS/architecture/CI, respect `DO_NOT_TRACK=1` and `PALAMEDES_UPDATE_CHECK=0`, and print notices only on stderr. Request volume is not a unique-installation count.
 - Configure through `palamedes.yaml` (or `.yml`/`.json`/`.toml`). The native `pmds` CLI does not read JavaScript or TypeScript config files.
 - Use Node.js `>=22.22` (`@palamedes/remix` requires `>=24.3`).
 - Before adding the native CLI or a native-backed integration, check `/docs/platform-support.md` for the eight published targets, Node process selection, and recovery steps.
