@@ -241,7 +241,7 @@ fn run_extraction(
 ) -> Result<ExtractOutput, CliError> {
     let mut cache = load_extract_cache(config, options.no_cache);
     let result = run_extraction_with_cache(config, options, &mut cache);
-    persist_extract_cache(config, options.verbose, &mut cache);
+    persist_extract_cache(config, &mut cache);
     result
 }
 

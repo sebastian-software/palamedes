@@ -10,7 +10,8 @@ use notify::{RecursiveMode, Watcher};
 use palamedes::{ExtractCache, PalamedesCatalogFormat};
 
 use crate::commands::extract::cache::{
-    load_extract_cache, persist_extract_cache, rebuild_extract_cache_for_reload,
+    load_extract_cache, persist_extract_cache_for_watch, rebuild_extract_cache_for_reload,
+    CachePersistenceWarnings,
 };
 use crate::commands::extract::sources::{
     build_exclude_set, build_include_set, normalized_include_patterns, walk_roots_for_patterns,
@@ -121,7 +122,8 @@ pub(super) fn run_watch_mode(
      * whole point of watch mode.
      */
     let mut cache = load_extract_cache(&config, options.no_cache);
-    run_watch_extraction(&config, options, &mut cache)?;
+    let mut cache_warnings = CachePersistenceWarnings::default();
+    run_watch_extraction(&config, options, &mut cache, &mut cache_warnings)?;
 
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
@@ -209,8 +211,8 @@ pub(super) fn run_watch_mode(
                         &previous_config,
                         &config,
                         options.no_cache,
-                        options.verbose,
                         &mut cache,
+                        &mut cache_warnings,
                     );
                     matchers = WatchMatchers::build(&config);
                 }
@@ -225,7 +227,7 @@ pub(super) fn run_watch_mode(
         if options.verbose {
             eprintln!("Source changed; extracting catalogs");
         }
-        run_watch_extraction(&config, options, &mut cache)?;
+        run_watch_extraction(&config, options, &mut cache, &mut cache_warnings)?;
     }
 }
 
@@ -255,9 +257,10 @@ fn run_watch_extraction(
     config: &LoadedConfig,
     options: &ExtractOptions,
     cache: &mut ExtractCache,
+    cache_warnings: &mut CachePersistenceWarnings,
 ) -> Result<(), CliError> {
     let result = run_extraction_with_cache(config, options, cache);
-    persist_extract_cache(config, options.verbose, cache);
+    persist_extract_cache_for_watch(config, cache, cache_warnings);
     match result {
         Ok(_) => Ok(()),
         Err(error) => {
@@ -274,10 +277,28 @@ mod tests {
     use palamedes::ExtractCache;
 
     use super::{reload_config_for_watch, run_watch_extraction, WatchMatchers};
-    use crate::commands::extract::cache::{load_extract_cache, rebuild_extract_cache_for_reload};
-    use crate::commands::extract::test_support::{cached_extract_options, extract_options};
+    use crate::commands::extract::cache::{
+        load_extract_cache, persist_extract_cache_for_watch, rebuild_extract_cache_for_reload,
+        CachePersistenceWarnings,
+    };
+    use crate::commands::extract::test_support::{
+        age_file, cached_extract_options, extract_options,
+    };
     use crate::commands::test_support::{temp_dir, write_config};
     use crate::config::load_config;
+
+    fn run_test_watch_extraction(
+        config: &crate::config::LoadedConfig,
+        options: &crate::commands::extract::ExtractOptions,
+        cache: &mut ExtractCache,
+    ) -> Result<(), crate::error::CliError> {
+        run_watch_extraction(
+            config,
+            options,
+            cache,
+            &mut CachePersistenceWarnings::default(),
+        )
+    }
 
     #[test]
     fn config_reload_keeps_the_previous_config_and_watch_extraction_usable() {
@@ -307,7 +328,7 @@ mod tests {
         );
         assert_eq!(config.config_path, previous_config_path);
 
-        run_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
+        run_test_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
             .expect("watch should keep extracting with the previous config");
         let output = fs::read_to_string(app.join("locales/en/messages.po"))
             .expect("read catalog from continued watch extraction");
@@ -361,7 +382,7 @@ catalogs:
         .expect("write invalid source");
 
         let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
-        run_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
+        run_test_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
             .expect("watch should remain active");
         assert!(!app.join("locales/en/messages.po").exists());
 
@@ -370,12 +391,49 @@ catalogs:
             "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Recovered`; }\n",
         )
         .expect("repair source");
-        run_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
+        run_test_watch_extraction(&config, &extract_options(), &mut ExtractCache::disabled())
             .expect("watch should recover");
 
         let output =
             fs::read_to_string(app.join("locales/en/messages.po")).expect("read recovered catalog");
         assert!(output.contains("msgid \"Recovered\""));
+    }
+
+    #[test]
+    fn watch_reports_a_persistent_cache_write_failure_once_per_session() {
+        let app = temp_dir("watch-cache-warning-once");
+        fs::create_dir_all(app.join("app")).expect("create app");
+        write_config(&app, None);
+        let source_path = app.join("app/page.tsx");
+        fs::write(
+            &source_path,
+            "import { t } from \"@palamedes/core/macro\";\nexport function title() { return t`Cached`; }\n",
+        )
+        .expect("write source");
+        age_file(&source_path);
+
+        let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+        let options = cached_extract_options();
+        let mut cache = load_extract_cache(&config, options.no_cache);
+        crate::commands::extract::run_extraction_with_cache(&config, &options, &mut cache)
+            .expect("populate cache");
+        assert!(cache.is_dirty());
+
+        // A file at the directory path makes every save fail consistently.
+        fs::write(app.join(".palamedes"), "not a directory").expect("block cache directory");
+        let mut warnings = CachePersistenceWarnings::default();
+
+        assert!(persist_extract_cache_for_watch(
+            &config,
+            &mut cache,
+            &mut warnings
+        ));
+        assert!(cache.is_dirty(), "a failed save must remain retryable");
+        assert!(!persist_extract_cache_for_watch(
+            &config,
+            &mut cache,
+            &mut warnings
+        ));
     }
 
     /*
@@ -421,7 +479,9 @@ catalogs:
         write_watch_config("config", true, "warning");
         let config = load_config(&app, Some(&config_path)).expect("load config");
         let mut cache = load_extract_cache(&config, options.no_cache);
-        run_watch_extraction(&config, &options, &mut cache).expect("first extraction");
+        let mut cache_warnings = CachePersistenceWarnings::default();
+        run_watch_extraction(&config, &options, &mut cache, &mut cache_warnings)
+            .expect("first extraction");
 
         let catalog_path = app.join("locales/en/messages.po");
         assert!(fs::read_to_string(&catalog_path)
@@ -436,14 +496,15 @@ catalogs:
             &config,
             &reloaded,
             options.no_cache,
-            options.verbose,
             &mut cache,
+            &mut cache_warnings,
         );
         assert!(
             cache.is_empty(),
             "a stamp-relevant reload must start from an empty cache"
         );
-        run_watch_extraction(&reloaded, &options, &mut cache).expect("extraction after reload");
+        run_watch_extraction(&reloaded, &options, &mut cache, &mut cache_warnings)
+            .expect("extraction after reload");
 
         assert!(fs::read_to_string(&catalog_path)
             .expect("read catalog")
@@ -457,14 +518,14 @@ catalogs:
             &reloaded,
             &rules_reloaded,
             options.no_cache,
-            options.verbose,
             &mut cache,
+            &mut cache_warnings,
         );
         assert!(
             cache.is_empty(),
             "a rule-level reload must start from an empty cache"
         );
-        run_watch_extraction(&rules_reloaded, &options, &mut cache)
+        run_watch_extraction(&rules_reloaded, &options, &mut cache, &mut cache_warnings)
             .expect("extraction after rules reload");
 
         // Turning the cache off mid-watch has to take effect immediately.
@@ -475,10 +536,11 @@ catalogs:
             &previous,
             &disabled,
             options.no_cache,
-            options.verbose,
             &mut cache,
+            &mut cache_warnings,
         );
-        run_watch_extraction(&disabled, &options, &mut cache).expect("extraction without cache");
+        run_watch_extraction(&disabled, &options, &mut cache, &mut cache_warnings)
+            .expect("extraction without cache");
         assert!(cache.is_empty(), "a disabled cache must not store entries");
         assert!(!cache.is_dirty());
     }

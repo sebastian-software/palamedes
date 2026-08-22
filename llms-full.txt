@@ -356,6 +356,11 @@ for catalog semantics.
 source files (including MDX). It has human or deterministic JSON output;
 `--fail-on warning` also makes warnings fail. Its cache is shared with
 extraction; use `--no-cache` when the run must not write the cache.
+An extraction-cache write failure does not change the command verdict, but it
+always emits a stderr warning even without `--verbose`. Watch mode reports a
+persistent write failure once per process rather than once per file event. Use
+`--no-cache` or `extract-cache: false` for intentionally unwritable cache
+locations.
 
 `pmds extract --check --json` projects the configured PO/FCL catalogs through
 the normal extraction and serialization path, compares the result with disk,
