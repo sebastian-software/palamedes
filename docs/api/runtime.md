@@ -67,7 +67,10 @@ Returns the active runtime instance. Its `locale` is always a `string`.
 Transformed macro code calls this automatically.
 
 On the client, `getI18n()` reads the instance registered with
-`setClientI18n()`. On the server, it reads the active server getter.
+`setClientI18n()`. Browser Web Workers and Service Workers are client
+environments even though they do not expose `window`, so
+`initializeClientI18n()` and graph-split bootstraps work there too. On the
+server, `getI18n()` reads the active server getter.
 
 `getI18n()` throws a descriptive error when no active client instance or server
 getter result is available. Initialize the runtime before translated code runs.

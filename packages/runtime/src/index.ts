@@ -83,8 +83,24 @@ function globalRuntimeState(): GlobalRuntimeState {
   return globalThis as GlobalRuntimeState
 }
 
+type WindowlessClientRuntimeState = GlobalRuntimeState & {
+  importScripts?: unknown
+  self?: unknown
+  WorkerGlobalScope?: unknown
+}
+
+function isWindowlessClientEnvironment(): boolean {
+  const state = globalRuntimeState() as WindowlessClientRuntimeState
+  if (typeof state.importScripts === "function") {
+    return true
+  }
+
+  const workerGlobalScope = state.WorkerGlobalScope
+  return typeof workerGlobalScope === "function" && state.self instanceof workerGlobalScope
+}
+
 function isServerEnvironment(): boolean {
-  return typeof window === "undefined"
+  return typeof window === "undefined" && !isWindowlessClientEnvironment()
 }
 
 function getRegisteredMessages(
@@ -343,7 +359,7 @@ export function initializeClientI18n<T extends InitializableClientI18n>(
   if (active) {
     if (active.locale !== locale) {
       throw new Error(
-        `Palamedes client graph bootstrap requested locale "${locale}", but this document was initialized for "${active.locale}". Perform a document navigation to change locale.`
+        `Palamedes client graph bootstrap requested locale "${locale}", but this client runtime was initialized for "${active.locale}". Perform a navigation or restart the worker to change locale.`
       )
     }
     if (typeof active.load !== "function") {

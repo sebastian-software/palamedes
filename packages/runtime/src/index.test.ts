@@ -25,7 +25,11 @@ function createTestI18n(locale = "en"): I18nInstance {
 describe("@palamedes/runtime", () => {
   afterEach(() => {
     resetI18nRuntime()
-    delete (globalThis as Record<string, unknown>).window
+    const state = globalThis as Record<string, unknown>
+    delete state.window
+    delete state.importScripts
+    delete state.WorkerGlobalScope
+    delete state.self
   })
 
   it("fails loudly when no server instance is configured", () => {
@@ -77,8 +81,42 @@ describe("@palamedes/runtime", () => {
     expect(createI18n).toHaveBeenCalledOnce()
     expect(activate).toHaveBeenCalledWith("de")
     expect(() => initializeClientI18n("en", createI18n)).toThrow(
-      /document was initialized for "de"/
+      /client runtime was initialized for "de"/
     )
+  })
+
+  it("initializes and resolves client instances in classic web workers", () => {
+    ;(globalThis as Record<string, unknown>).importScripts = () => null
+    const activate = vi.fn<(locale: string) => void>()
+    const createI18n = vi.fn(() => ({
+      locale: "",
+      _: (message: string) => message,
+      activate(locale: string) {
+        activate(locale)
+        this.locale = locale
+      },
+      load: vi.fn(),
+    }))
+
+    const i18n = initializeClientI18n("de", createI18n)
+
+    expect(getI18n()).toBe(i18n)
+    expect(createI18n).toHaveBeenCalledOnce()
+    expect(activate).toHaveBeenCalledWith("de")
+  })
+
+  it("recognizes module workers without importScripts", () => {
+    class TestWorkerGlobalScope {
+      public readonly kind = "worker"
+    }
+    const state = globalThis as Record<string, unknown>
+    state.WorkerGlobalScope = TestWorkerGlobalScope
+    state.self = new TestWorkerGlobalScope()
+    const i18n = createTestI18n("worker-module")
+
+    setClientI18n(i18n)
+
+    expect(getI18n()).toBe(i18n)
   })
 
   it("resolves the request-local server instance", () => {
