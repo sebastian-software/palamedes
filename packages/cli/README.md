@@ -179,6 +179,10 @@ catalog discovery, structured diagnostics, results, and built-in command
 execution. A configured plugin has the same local permissions as a build tool,
 so review and pin plugin dependencies.
 
+Validated plugin manifests are cached under `.palamedes` by canonical binary
+path and file metadata. A changed binary, host version, or protocol version is
+described again; cache read/write failures are non-fatal.
+
 See the [binary plugin protocol](https://github.com/sebastian-software/palamedes/blob/main/docs/api/cli-binary-plugin.md)
 for packaging, output envelopes, exit codes, and collision rules.
 

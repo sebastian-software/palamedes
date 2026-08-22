@@ -19,8 +19,10 @@ pmds <plugin> <command> --config ./palamedes.yaml [...args]
 produce the native plugin host's unknown-namespace diagnostic.
 
 Plugin loading is explicit, binary-only, and applies only to non-built-in
-namespaces. See the [configuration field](./configuration.md#cli-plugins) and
-the [binary plugin protocol](./api/cli-binary-plugin.md).
+namespaces. Validated manifests are cached under `.palamedes`; changed binaries
+are described again, while cache failures fall back to the normal handshake.
+See the [configuration field](./configuration.md#cli-plugins) and the
+[binary plugin protocol](./api/cli-binary-plugin.md).
 
 ## `pmds extract`
 
