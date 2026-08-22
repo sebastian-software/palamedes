@@ -14,8 +14,10 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 config = { version = "0.15.25", default-features = false, features = ["json", "toml", "yaml"] }
+# Source discovery. 0.5.0 is the first release with `resolve_symlink_kind`,
+# which is what makes the walk's idea of a file match palamedes'.
+ferralk = "0.5.0"
 globset = "0.4.20"
-ignore = "0.4.33"
 notify = "8.2.0"
 palamedes = { path = "../palamedes" }
 palamedes-plugin = { path = "../palamedes-plugin" }
