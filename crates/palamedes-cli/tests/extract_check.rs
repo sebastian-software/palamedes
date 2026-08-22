@@ -248,6 +248,41 @@ fn json_distinguishes_execution_errors_and_clap_rejects_invalid_combinations() {
     fs::remove_dir_all(fixture).expect("cleanup fixture");
 }
 
+#[test]
+fn extracts_sources_from_a_parent_sibling_directory() {
+    let workspace = fixture_dir("parent-sibling");
+    let web = workspace.join("web");
+    let api = workspace.join("api");
+    fs::create_dir_all(api.join("src")).expect("create sibling source directory");
+    fs::create_dir_all(&web).expect("create configured project");
+    fs::write(
+        web.join("palamedes.yaml"),
+        r#"locales: [de]
+source-locale: de
+extract-cache: false
+catalogs:
+  - path: locales/{locale}/messages
+    format: po
+    include: [../api/src]
+"#,
+    )
+    .expect("write config");
+    fs::write(
+        api.join("src/messages.ts"),
+        "import { t } from \"@palamedes/core/macro\";\nexport function message() { return t`Sibling API`; }\n",
+    )
+    .expect("write sibling source");
+
+    let output = pmds(&web, &["extract", "--no-cache"]);
+
+    assert!(output.status.success(), "{output:?}");
+    let catalog =
+        fs::read_to_string(web.join("locales/de/messages.po")).expect("read generated catalog");
+    assert!(catalog.contains("msgid \"Sibling API\""), "{catalog}");
+
+    fs::remove_dir_all(workspace).expect("cleanup fixture");
+}
+
 fn write_project(root: &Path, config: &str, messages: &[&str]) {
     fs::create_dir_all(root.join("src")).expect("create source directory");
     fs::write(root.join("palamedes.yaml"), config).expect("write config");

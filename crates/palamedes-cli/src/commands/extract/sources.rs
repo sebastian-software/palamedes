@@ -1,24 +1,18 @@
 //! Turning a catalog's include/exclude patterns into the set of source files
 //! to extract from.
 //!
-//! Discovery is one [ferralk] walk. The catalog's patterns go to the walker as
-//! they are: absolute, `globset`-flavoured, one list of includes and one of
-//! excludes across every root. Excluded subtrees are pruned during traversal
-//! instead of filtered afterwards and the walk is parallel, which is what
-//! palamedes#875 asked for.
-//!
-//! Two switches make the walker read a palamedes catalog the way `globset`
-//! read it, and both are load-bearing rather than decorative -- see
-//! [`WildcardMode::SeparatorCrossing`] and [`Walker::match_hidden`] at the call
-//! site.
+//! Discovery uses [ferralk] for parallel traversal and `globset` for the
+//! catalog's public pattern contract. Ferralk has a larger pattern language,
+//! so walks start at the literal roots derived from includes, the established
+//! `GlobSet`s decide which files survive on worker threads, and only a narrow,
+//! equivalent subset of whole-subtree excludes is pushed down for pruning.
 //!
 //! [ferralk]: https://github.com/sebastian-software/ferralk
 
-use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
-use ferralk::{ErrorPolicy, WalkOptions, Walker, WildcardMode};
+use ferralk::{ErrorPolicy, Verdict, WalkOptions, Walker, WildcardMode};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 
 use crate::config::{ConfigCatalog, LoadedConfig};
@@ -30,120 +24,119 @@ pub(crate) fn collect_source_files(
 ) -> Result<Vec<PathBuf>, CliError> {
     let include_patterns = normalized_include_patterns(catalog, config);
     let exclude_patterns = resolved_exclude_patterns(catalog, config);
-    let roots = discovery_roots(&include_patterns, &config.root_dir);
-    let (first, rest) = roots.split_first().expect("discovery always has one root");
+    let include = build_glob_set(&include_patterns, "include")?;
+    let exclude = build_glob_set(&exclude_patterns, "exclude")?;
+    let mut files = Vec::new();
 
-    let mut walker = Walker::new(first)
-        // A catalog pattern is a `globset` pattern, and `globset` as palamedes
-        // builds it lets an ordinary wildcard cross a separator: a single-star
-        // segment selects `src/a/b/c.ts` today. Reading the same pattern under
-        // filesystem-glob semantics would quietly select less.
-        //
-        // Unlike `match_hidden`, this one does not recompile patterns already
-        // added, so it has to come before them.
-        .wildcard_mode(WildcardMode::SeparatorCrossing)
-        /*
-         * `globset` lets a wildcard cover a leading period, and palamedes
-         * discovers hidden sources on purpose: 179 of this repository's own
-         * catalog files live under `site/.react-router/`. `skip_hidden` stays at
-         * its `false` default -- that governs traversal, this governs what a
-         * wildcard may cover.
-         */
-        .match_hidden(true)
-        .threads(discovery_threads(config))
-        // Recoverable traversal errors are dropped rather than reported, as the
-        // `ignore` walk this replaced dropped its `Err` items.
-        .error_policy(ErrorPolicy::Skip)
-        .options(
-            WalkOptions::default()
-                .files_only(true)
-                /*
-                 * `files_only` classifies an entry by what the listing said it
-                 * is, and an unfollowed symlink is not a directory, so a broken
-                 * link and a link to a directory would both count as sources.
-                 * This resolves a symlink entry by its target instead, which is
-                 * the POSIX reading `Path::is_file` gave the walker this
-                 * replaced. ferralk's default is the zlob reading; the stat is
-                 * paid only for symlink entries.
-                 */
-                .resolve_symlink_kind(true),
-        )
-        // `add_root` only compiles the patterns already on the builder, and
-        // there are none yet, so this cannot reject anything.
-        .add_roots(rest.iter())
-        .expect("adding a root before any pattern always succeeds");
+    for root in walk_roots_for_patterns(&include_patterns, &config.root_dir) {
+        let mut walker = Walker::new(&root)
+            .wildcard_mode(WildcardMode::SeparatorCrossing)
+            .match_hidden(true)
+            .threads(discovery_threads(config))
+            // Recoverable traversal errors are dropped rather than reported,
+            // as the `ignore` walk this replaced dropped its `Err` items.
+            .error_policy(ErrorPolicy::Skip)
+            .options(
+                WalkOptions::default()
+                    .files_only(true)
+                    /*
+                     * An unfollowed symlink is neither a listed directory nor
+                     * necessarily a source file. Resolve its kind to preserve
+                     * the old Path::is_file reading without following links.
+                     */
+                    .resolve_symlink_kind(true),
+            );
 
-    // A catalog pattern the walker refuses is a config problem, so it is named
-    // in the failure rather than dropped: unlike the `GlobSet` arrangement this
-    // replaced, there is no second matcher to fall back on.
-    let rejected = |pattern: &String| {
-        let pattern = pattern.clone();
-        move |source| CliError::DiscoveryPattern { pattern, source }
-    };
-    for pattern in &include_patterns {
-        walker = walker
-            .include(walker_pattern(pattern).as_ref())
-            .map_err(rejected(pattern))?;
-    }
-    for pattern in &exclude_patterns {
-        walker = walker
-            .exclude(walker_pattern(pattern).as_ref())
-            .map_err(rejected(pattern))?;
+        for pattern in safe_prune_patterns(&exclude_patterns, &root) {
+            walker = walker
+                .exclude(&pattern)
+                .map_err(|source| CliError::DiscoveryPattern {
+                    pattern: pattern.clone(),
+                    source,
+                })?;
+        }
+
+        // GlobSet remains authoritative and runs on the producing worker.
+        // Ferralk may only remove a subtree after the helper below proved its
+        // smaller dialect-independent pattern equivalent.
+        let result = walker.visit(|entry| {
+            if include.is_match(entry.path()) && !exclude.is_match(entry.path()) {
+                Verdict::Keep
+            } else {
+                Verdict::Skip
+            }
+        })?;
+        files.extend(result.entries().iter().map(|entry| entry.path().to_owned()));
     }
 
-    // No visitor and no caller-side filter of any kind: the walker decides what
-    // a catalog pattern selects, start to finish.
-    let result = walker.collect()?;
-
-    let mut files: Vec<PathBuf> = result
-        .entries()
-        .iter()
-        .map(|entry| entry.path().to_owned())
-        .collect();
     sort_and_dedupe_paths(&mut files);
     Ok(files)
 }
 
-/// Where the walk starts.
+/// Whole-subtree excludes which ferralk may safely apply before `GlobSet`.
 ///
-/// Every catalog pattern is resolved against the config root, so that is the
-/// shallowest anchor any of them can have, and an exclude like
-/// `<root>/**/node_modules/**` can only be expressed relative to a root at or
-/// above it. Starting there costs nothing: the includes name their own
-/// subtrees, so the walker prunes back down to `app/` on its own.
-///
-/// A pattern resolving outside the config root -- an absolute `include` -- keeps
-/// the root [`walk_roots_for_patterns`] derived for it.
-fn discovery_roots(include_patterns: &[String], root_dir: &Path) -> Vec<PathBuf> {
-    walk_roots_for_patterns(include_patterns, root_dir)
-        .into_iter()
-        .map(|root| {
-            if root.starts_with(root_dir) {
-                root_dir.to_path_buf()
-            } else {
-                root
-            }
-        })
-        .collect::<BTreeSet<_>>()
-        .into_iter()
+/// This deliberately accepts less than either glob engine: literal components
+/// plus a complete `**` component, with `/**` at the end. Those patterns have
+/// the same meaning in both engines. Braces, character classes, extglobs,
+/// parent traversal, and partial wildcards remain per-file GlobSet checks, so
+/// an optimization can never broaden an existing exclude.
+fn safe_prune_patterns(patterns: &[String], root: &Path) -> Vec<String> {
+    patterns
+        .iter()
+        .filter_map(|pattern| safe_prune_pattern(pattern, root))
         .collect()
 }
 
-/// Respells a resolved catalog pattern for the walker.
-///
-/// These patterns are built by joining `PathBuf`s, so on Windows they carry
-/// `\` separators. Walker patterns use `/` on every platform and read `\` as an
-/// escape, which turns `C:\repo\app\**` into the literal `C:repoapp**` and
-/// silently selects nothing. `globset` normalised this away internally, so the
-/// need for it only appeared once the walker started doing the matching.
-///
-/// Unix is left alone deliberately: a backslash is a legal character in a path
-/// there, and treating it as an escape is what the previous matcher did too.
-fn walker_pattern(pattern: &str) -> Cow<'_, str> {
-    if cfg!(windows) && pattern.contains('\\') {
-        Cow::Owned(pattern.replace('\\', "/"))
+fn safe_prune_pattern(pattern: &str, root: &Path) -> Option<String> {
+    if root.components().any(|part| part == Component::ParentDir) {
+        return None;
+    }
+
+    let components = Path::new(pattern).components().collect::<Vec<_>>();
+    let first_double_star = components
+        .iter()
+        .position(|part| matches!(part, Component::Normal(value) if *value == "**"))?;
+    if !matches!(components.last(), Some(Component::Normal(value)) if *value == "**") {
+        return None;
+    }
+    if components.iter().any(|part| match part {
+        Component::ParentDir => true,
+        Component::Normal(value) if *value == "**" => false,
+        Component::Normal(value) => value
+            .to_string_lossy()
+            .contains(['*', '?', '[', ']', '{', '}', '(', ')', '\\']),
+        _ => false,
+    }) {
+        return None;
+    }
+
+    let literal_prefix =
+        components[..first_double_star]
+            .iter()
+            .fold(PathBuf::new(), |mut path, part| {
+                path.push(part.as_os_str());
+                path
+            });
+    let mut relative = if literal_prefix.starts_with(root) {
+        literal_prefix.strip_prefix(root).ok()?.to_path_buf()
+    } else if root.starts_with(&literal_prefix) {
+        PathBuf::new()
     } else {
-        Cow::Borrowed(pattern)
+        return None;
+    };
+    for part in &components[first_double_star..] {
+        relative.push(part.as_os_str());
+    }
+    let pattern = relative.to_string_lossy();
+    (!pattern.is_empty()).then(|| walker_pattern(&pattern))
+}
+
+/// Walker patterns use `/` on every platform and read `\` as an escape.
+fn walker_pattern(pattern: &str) -> String {
+    if cfg!(windows) {
+        pattern.replace('\\', "/")
+    } else {
+        pattern.to_owned()
     }
 }
 
@@ -379,6 +372,35 @@ mod tests {
     }
 
     #[test]
+    fn only_equivalent_whole_subtree_patterns_are_pushed_down() {
+        let root = temp_dir("safe-prune");
+        let app = root.join("app");
+        let default = format!("{}/**/node_modules/**", root.to_string_lossy());
+        let custom = format!("{}/app/generated/**", root.to_string_lossy());
+
+        assert_eq!(
+            super::safe_prune_pattern(&default, &app).as_deref(),
+            Some("**/node_modules/**")
+        );
+        assert_eq!(
+            super::safe_prune_pattern(&custom, &app).as_deref(),
+            Some("generated/**")
+        );
+        for unsafe_pattern in [
+            format!("{}/**/@(foo|bar)/**", root.to_string_lossy()),
+            format!("{}/**/[[:digit:]]/**", root.to_string_lossy()),
+            format!("{}/**/{{,foo}}/**", root.to_string_lossy()),
+            format!("{}/**/generated*/**", root.to_string_lossy()),
+        ] {
+            assert_eq!(super::safe_prune_pattern(&unsafe_pattern, &app), None);
+        }
+        assert_eq!(
+            super::safe_prune_pattern(&default, &root.join("app/../api")),
+            None
+        );
+    }
+
+    #[test]
     fn a_single_star_include_reaches_nested_files() {
         let root = temp_dir("crossing-wildcard");
         fs::write(
@@ -397,6 +419,90 @@ mod tests {
             discovered(&root),
             vec![root.join("app/nested/deep.tsx"), root.join("app/page.tsx")]
         );
+    }
+
+    #[test]
+    fn ferralk_only_syntax_does_not_expand_include_patterns() {
+        for (name, pattern, expanded, selected) in [
+            (
+                "extglob-include",
+                "app/@(foo|bar).ts",
+                &["app/foo.ts", "app/bar.ts"][..],
+                &[][..],
+            ),
+            (
+                "posix-include",
+                "app/[[:digit:]].ts",
+                &["app/1.ts"][..],
+                &[][..],
+            ),
+            (
+                "brace-include",
+                "app/{,foo}.ts",
+                &["app/.ts", "app/foo.ts"][..],
+                &["app/foo.ts"][..],
+            ),
+        ] {
+            let root = temp_dir(name);
+            fs::write(
+                root.join("palamedes.yaml"),
+                format!(
+                    "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{{locale}}/messages\n    include: ['{pattern}']\n"
+                ),
+            )
+            .expect("write config");
+            for relative in expanded {
+                let path = root.join(relative);
+                fs::create_dir_all(path.parent().expect("source has a parent"))
+                    .expect("create source directory");
+                fs::write(path, "export const message = 1;").expect("write source");
+            }
+
+            let expected = selected
+                .iter()
+                .map(|relative| root.join(relative))
+                .collect::<Vec<_>>();
+            assert_eq!(discovered(&root), expected, "{pattern}");
+        }
+    }
+
+    #[test]
+    fn ferralk_only_syntax_does_not_expand_exclude_patterns() {
+        for (name, pattern, expanded) in [
+            (
+                "extglob-exclude",
+                "app/@(foo|bar).ts",
+                &["app/foo.ts", "app/bar.ts"][..],
+            ),
+            ("posix-exclude", "app/[[:digit:]].ts", &["app/1.ts"][..]),
+            (
+                "brace-exclude",
+                "app/{,foo}.ts",
+                &["app/.ts", "app/foo.ts"][..],
+            ),
+        ] {
+            let mut sources = vec!["app/keeper.ts"];
+            sources.extend_from_slice(expanded);
+            let root = project_with_sources(name, &sources);
+            fs::write(
+                root.join("palamedes.yaml"),
+                format!(
+                    "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{{locale}}/messages\n    include: [app]\n    exclude: ['{pattern}']\n"
+                ),
+            )
+            .expect("write config");
+            let mut expected = sources
+                .iter()
+                .filter(|relative| match pattern {
+                    "app/{,foo}.ts" => **relative != "app/foo.ts",
+                    _ => true,
+                })
+                .map(|relative| root.join(relative))
+                .collect::<Vec<_>>();
+            expected.sort();
+
+            assert_eq!(discovered(&root), expected, "{pattern}");
+        }
     }
 
     /*
