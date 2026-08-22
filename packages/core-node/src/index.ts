@@ -73,7 +73,7 @@ import type {
   TranslationPatchResult as GeneratedTranslationPatchResult,
   TranslationValue as GeneratedTranslationValue,
 } from "./generated/palamedes-node-types"
-import { loadNativeBindings } from "./native-loader"
+import { loadNativeBindings, prepareNativeArgument, snapshotNativeArgument } from "./native-loader"
 
 export type NativeInfo = GeneratedNativeInfo
 export type ParsedPoItem = GeneratedParsedPoItem
@@ -418,14 +418,18 @@ export function parsePo(source: string): ParsedPoFile {
 }
 
 export function updateCatalogFile(request: CatalogUpdateRequest): CatalogUpdateResult {
-  return fromNativeCatalogUpdateResult(native.updateCatalogFile(toNativeUpdateRequest(request)))
+  return fromNativeCatalogUpdateResult(
+    native.updateCatalogFile(toNativeUpdateRequest("updateCatalogFile", request))
+  )
 }
 
 /** Run the catalog read/update/write cycle on Node's shared libuv worker pool. */
 export async function updateCatalogFileAsync(
   request: CatalogUpdateRequest
 ): Promise<CatalogUpdateResult> {
-  const result = await native.updateCatalogFileAsync(toNativeUpdateRequest(request))
+  const result = await native.updateCatalogFileAsync(
+    toNativeUpdateRequest("updateCatalogFileAsync", request)
+  )
   return fromNativeCatalogUpdateResult(result)
 }
 
@@ -462,7 +466,7 @@ export function listTranslationCandidates(
 }
 
 export function applyTranslationPatches(request: TranslationPatchRequest): TranslationPatchResult {
-  const nativeRequest = toNativeTranslationPatchRequest(request)
+  const nativeRequest = toNativeTranslationPatchRequest("applyTranslationPatches", request)
   try {
     const result: GeneratedTranslationPatchResult = native.applyTranslationPatches(nativeRequest)
     return fromNativeTranslationPatchResult(result)
@@ -477,7 +481,7 @@ export async function applyTranslationPatchesAsync(
 ): Promise<TranslationPatchResult> {
   try {
     const result = await native.applyTranslationPatchesAsync(
-      toNativeTranslationPatchRequest(request)
+      toNativeTranslationPatchRequest("applyTranslationPatchesAsync", request)
     )
     return fromNativeTranslationPatchResult(result)
   } catch (error) {
@@ -486,13 +490,15 @@ export async function applyTranslationPatchesAsync(
 }
 
 function toNativeTranslationPatchRequest(
+  operation: string,
   request: TranslationPatchRequest
 ): NativeTranslationPatchRequest {
-  return {
-    config: toNativeArtifactConfig(request.config),
-    patches: request.patches.map(toNativeTranslationPatch),
-    po: toNativePoOptions(request.po),
-  }
+  const source = snapshotNativeArgument(operation, request)
+  return prepareNativeArgument(operation, {
+    config: toOwnedNativeArtifactConfig(source.config),
+    patches: source.patches.map(toNativeTranslationPatch),
+    po: toNativePoOptions(source.po),
+  })
 }
 
 function mapTranslationPatchError(error: unknown): unknown {
@@ -581,11 +587,28 @@ function fromNativeTranslationValue(value: GeneratedTranslationValue): Translati
 }
 
 function toNativeTranslationPatch(patch: TranslationPatch): GeneratedTranslationPatch {
+  const id = patch.id
+  const machine = patch.machine
+  const ai = machine?.ai
   return {
-    id: patch.id,
+    id: {
+      catalog: id.catalog,
+      locale: id.locale,
+      message: id.message,
+      context: id.context,
+    },
     fingerprint: patch.fingerprint,
     translation: toNativeTranslationValue(patch.translation),
-    machine: patch.machine,
+    machine: machine
+      ? {
+          ai: ai
+            ? {
+                model: ai.model,
+                confidence: ai.confidence,
+              }
+            : undefined,
+        }
+      : undefined,
   }
 }
 
@@ -600,7 +623,7 @@ function toNativeTranslationValue(value: TranslationValue): GeneratedTranslation
         variable: value.variable,
         pluralKind: value.pluralKind === "cardinal" ? "Cardinal" : "Ordinal",
         offset: value.offset,
-        values: value.values,
+        values: { ...value.values },
       }
     }
   }
@@ -663,7 +686,7 @@ export function validateMessageMetadata(
 }
 
 export function combineCatalogs(request: CatalogCombineRequest): CatalogCombineResult {
-  const result = native.combineCatalogs(toNativeCombineRequest(request))
+  const result = native.combineCatalogs(toNativeCombineRequest("combineCatalogs", request))
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
@@ -698,17 +721,21 @@ export function mergeCatalogFilesThreeWay(
   }
 }
 
-function toNativeCombineRequest(request: CatalogCombineRequest): NativeCatalogCombineRequest {
-  return {
-    inputs: request.inputs,
-    sourceLocale: request.sourceLocale,
-    locale: request.locale,
-    conflictStrategy: request.conflictStrategy
-      ? toNativeConflictStrategy(request.conflictStrategy)
-      : undefined,
-    selection: request.selection ? toNativeSelection(request.selection) : undefined,
-    includeObsolete: request.includeObsolete,
-  }
+function toNativeCombineRequest(
+  operation: string,
+  request: CatalogCombineRequest
+): NativeCatalogCombineRequest {
+  const source = snapshotNativeArgument(operation, request)
+  const conflictStrategy = source.conflictStrategy
+  const selection = source.selection
+  return prepareNativeArgument(operation, {
+    inputs: source.inputs.map((input) => ({ content: input.content, label: input.label })),
+    sourceLocale: source.sourceLocale,
+    locale: source.locale,
+    conflictStrategy: conflictStrategy ? toNativeConflictStrategy(conflictStrategy) : undefined,
+    selection: selection ? toOwnedNativeSelection(selection) : undefined,
+    includeObsolete: source.includeObsolete,
+  })
 }
 
 function toNativeThreeWayMergeRequest(
@@ -782,8 +809,9 @@ function toNativePoOptions(po: PoOutputOptions | undefined): NativeCatalogUpdate
   if (!po) {
     return undefined
   }
+  const lineBreaks = po.lineBreaks
   return {
-    lineBreaks: po.lineBreaks ? toNativePoLineBreaks(po.lineBreaks) : undefined,
+    lineBreaks: lineBreaks ? toNativePoLineBreaks(lineBreaks) : undefined,
   }
 }
 
@@ -806,12 +834,39 @@ function toNativeConfigFormat(
   return toNativeFileFormat(format)
 }
 
-function toNativeUpdateRequest(request: CatalogUpdateRequest): NativeCatalogUpdateRequest {
-  return {
-    ...request,
-    format: request.format ? toNativeConfigFormat(request.format) : undefined,
-    po: toNativePoOptions(request.po),
-  }
+function toNativeUpdateRequest(
+  operation: string,
+  request: CatalogUpdateRequest
+): NativeCatalogUpdateRequest {
+  const source = snapshotNativeArgument(operation, request)
+  const format = source.format
+  return prepareNativeArgument(operation, {
+    targetPath: source.targetPath,
+    locale: source.locale,
+    sourceLocale: source.sourceLocale,
+    clean: source.clean,
+    forceClean: source.forceClean,
+    format: format ? toNativeConfigFormat(format) : undefined,
+    po: toNativePoOptions(source.po),
+    messages: source.messages.map((message) => {
+      const placeholders = message.placeholders
+      return {
+        message: message.message,
+        context: message.context,
+        placeholders: placeholders
+          ? Object.fromEntries(
+              Object.entries(placeholders).map(([name, values]) => [name, [...values]])
+            )
+          : undefined,
+        extractedComments: [...message.extractedComments],
+        origins: message.origins.map((origin) => ({
+          file: origin.file,
+          line: origin.line,
+          scope: origin.scope,
+        })),
+      }
+    }),
+  })
 }
 
 function toNativePoLineBreaks(
@@ -844,6 +899,36 @@ function toNativeArtifactConfig(config: CatalogArtifactConfig): GeneratedCatalog
   }
 }
 
+function toOwnedNativeArtifactConfig(
+  config: CatalogArtifactConfig
+): GeneratedCatalogArtifactConfig {
+  const fallbackLocales = config.fallbackLocales
+  return {
+    rootDir: config.rootDir,
+    locales: [...config.locales],
+    sourceLocale: config.sourceLocale,
+    fallbackLocales: Array.isArray(fallbackLocales)
+      ? [...fallbackLocales]
+      : fallbackLocales
+        ? Object.fromEntries(
+            Object.entries(fallbackLocales).map(([locale, fallbacks]) => [locale, [...fallbacks]])
+          )
+        : undefined,
+    pseudoLocale: config.pseudoLocale,
+    catalogs: config.catalogs.map((catalog) => {
+      const format = catalog.format
+      const include = catalog.include
+      const exclude = catalog.exclude
+      return {
+        path: catalog.path,
+        format: format ? toNativeConfigFormat(format) : undefined,
+        include: include ? [...include] : undefined,
+        exclude: exclude ? [...exclude] : undefined,
+      }
+    }),
+  }
+}
+
 function fromNativeFileFormat(
   format: GeneratedCatalogFileCombineResult["format"]
 ): CatalogFileFormat {
@@ -867,6 +952,13 @@ function toNativeSelection(
     return "Unique"
   }
   return selection
+}
+
+function toOwnedNativeSelection(
+  selection: CatalogCombineSelection
+): NonNullable<NativeCatalogCombineRequest["selection"]> {
+  const nativeSelection = toNativeSelection(selection)
+  return typeof nativeSelection === "object" ? { ...nativeSelection } : nativeSelection
 }
 
 function mapCatalogDiagnostics(diagnostics: GeneratedCatalogDiagnostic[]): CatalogDiagnostic[] {

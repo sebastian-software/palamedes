@@ -145,8 +145,98 @@ function isWellFormed(value: string): boolean {
   return true
 }
 
+const preparedNativeArguments = new WeakSet<object>()
+
 export function assertWellFormedNativeArguments(operation: string, arguments_: unknown[]): void {
   snapshotNativeArguments(operation, arguments_)
+}
+
+/**
+ * Captures one wrapper input as stable, validated plain data before a wrapper
+ * converts it into the native request shape.
+ */
+export function snapshotNativeArgument<T extends object>(operation: string, value: T): T {
+  return snapshotNativeArguments(operation, [value])[0] as T
+}
+
+export function validateNativeArgument(operation: string, value: unknown): void {
+  validateStableNativeArguments(operation, [value])
+}
+
+/**
+ * Marks a wrapper-owned plain-data tree after validating its public source
+ * without creating a second copy. The wrapper must own every nested object and
+ * array in `value`; native bindings may read the prepared tree directly.
+ */
+export function prepareNativeArgument<T extends object>(operation: string, value: T): T {
+  validateNativeArgument(operation, value)
+  return markPreparedNativeArgument(value)
+}
+
+export function markPreparedNativeArgument<T extends object>(value: T): T {
+  preparedNativeArguments.add(value)
+  return value
+}
+
+function validateStableNativeArguments(operation: string, arguments_: unknown[]): void {
+  const seen = new Set<object>()
+  const pending: Array<{ value: unknown; path: NativeArgumentPath }> = arguments_.map(
+    (value, index) => ({
+      value,
+      path: { segment: `${operation}.argument[${index}]` },
+    })
+  )
+
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (!current) continue
+
+    const { path: currentPath, value } = current
+    if (typeof value === "string") {
+      assertWellFormedString(value, currentPath, operation)
+      continue
+    }
+    if (value === null || typeof value !== "object" || seen.has(value)) {
+      continue
+    }
+    seen.add(value)
+
+    const classification = classifySnapshotObject(value, currentPath)
+    if (classification.kind === "map") {
+      throw nativeBoundaryUnsupportedMapError(currentPath)
+    }
+    const keys =
+      classification.kind === "array"
+        ? enumerablePropertyNames(value, currentPath)
+        : nativeVisiblePropertyNames(value, classification, currentPath)
+    for (const key of keys) {
+      const propertyPath = appendNativeArgumentPath(
+        currentPath,
+        classification.kind === "array" ? arrayPropertyPath(key) : `.${key}`
+      )
+      assertWellFormedPropertyName(key, propertyPath)
+      let propertyValue: unknown
+      try {
+        propertyValue = Reflect.get(value, key)
+      } catch (error) {
+        throw nativeBoundaryReadError(propertyPath, error)
+      }
+      pending.push({ value: propertyValue, path: propertyPath })
+    }
+  }
+}
+
+function assertWellFormedString(
+  value: string,
+  argumentPath: NativeArgumentPath,
+  operation: string
+): void {
+  if (!isWellFormed(value)) {
+    const field = formatNativeArgumentPath(argumentPath)
+    throw new TypeError(
+      `Palamedes native boundary rejected malformed Unicode in ${field}; replace the unpaired UTF-16 surrogate before calling ${operation}.`
+    )
+  }
 }
 
 /**
@@ -191,12 +281,7 @@ export function snapshotNativeArguments(operation: string, arguments_: unknown[]
     const { path: currentPath, value } = current
 
     if (typeof value === "string") {
-      if (!isWellFormed(value)) {
-        const field = formatNativeArgumentPath(currentPath)
-        throw new TypeError(
-          `Palamedes native boundary rejected malformed Unicode in ${field}; replace the unpaired UTF-16 surrogate before calling ${operation}.`
-        )
-      }
+      assertWellFormedString(value, currentPath, operation)
       current.assign(value)
       continue
     }
@@ -426,8 +511,28 @@ function guardNativeBindings(bindings: NativeBindings): NativeBindings {
       if (typeof property !== "string" || typeof value !== "function") {
         return value
       }
-      return (...arguments_: unknown[]) =>
-        Reflect.apply(value, target, snapshotNativeArguments(property, arguments_))
+      return (...arguments_: unknown[]) => {
+        const prepared = arguments_.every(
+          (argument) =>
+            argument === null ||
+            typeof argument !== "object" ||
+            preparedNativeArguments.has(argument)
+        )
+        if (!prepared) {
+          return Reflect.apply(value, target, snapshotNativeArguments(property, arguments_))
+        }
+        for (const [index, argument] of arguments_.entries()) {
+          if (typeof argument === "string") {
+            assertWellFormedString(
+              argument,
+              { segment: `${property}.argument[${index}]` },
+              property
+            )
+          }
+        }
+        const nativeArguments = arguments_
+        return Reflect.apply(value, target, nativeArguments)
+      }
     },
   })
 }

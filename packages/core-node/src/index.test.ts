@@ -15,6 +15,7 @@ import {
   analyzeSourceNative,
   applyTranslationPatches,
   applyTranslationPatchesAsync,
+  combineCatalogs,
   compileCatalogArtifact,
   compileCatalogArtifactAsync,
   compileCatalogArtifactSelected,
@@ -43,6 +44,7 @@ import {
   assertNativeBindingVersion,
   assertWellFormedNativeArguments,
   loadNativeBindings,
+  prepareNativeArgument,
   resolveNativePackageName,
   snapshotNativeArguments,
 } from "./native-loader"
@@ -192,6 +194,247 @@ describe("@palamedes/core-node", () => {
     expect(proxyReads).toBe(1)
     expect(proxyRendered).toContain("from proxy")
     expect(proxyRendered).not.toContain("�")
+  })
+
+  it("passes wrapper-owned prepared bulk requests without a second deep copy", () => {
+    const captured: unknown[] = []
+    const fixtureBindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      combineCatalogs(request: unknown) {
+        captured.push(request)
+        return {}
+      },
+    }
+    const guarded = loadNativeBindings({
+      packageDir: "/fixture/core-node",
+      nativePackageName: "fixture-native",
+      require(specifier) {
+        return specifier.endsWith("package.json") ? { version: "fixture" } : fixtureBindings
+      },
+    })
+
+    const prepared = prepareNativeArgument("combineCatalogs", {
+      inputs: Array.from({ length: 2048 }, (_, index) => ({
+        content: `msgid "message-${index}"`,
+        label: `catalog-${index}`,
+      })),
+      sourceLocale: "en",
+    })
+    ;(guarded.combineCatalogs as unknown as (request: unknown) => unknown)(prepared)
+    expect(captured[0]).toBe(prepared)
+
+    let reads = 0
+    const unprepared = {
+      get sourceLocale() {
+        reads += 1
+        return "en"
+      },
+    }
+    ;(guarded.combineCatalogs as unknown as (request: unknown) => unknown)(unprepared)
+    expect(reads).toBe(1)
+    expect(captured[1]).not.toBe(unprepared)
+    expect(captured[1]).toStrictEqual({ sourceLocale: "en" })
+
+    expect(() =>
+      prepareNativeArgument("combineCatalogs", {
+        inputs: [{ content: "\ud800" }],
+      })
+    ).toThrow(/combineCatalogs\.argument\[0\]\.inputs\[0\]\.content/u)
+    expect(() =>
+      prepareNativeArgument("combineCatalogs", {
+        labels: new Map([["catalog", "primary"]]),
+      })
+    ).toThrow(/rejected a Map/u)
+  })
+
+  it("validates wrapper-owned bulk payloads before the native call", () => {
+    expect(() =>
+      updateCatalogFile({
+        targetPath: "/unused/messages.po",
+        locale: "en",
+        sourceLocale: "en",
+        clean: false,
+        messages: [
+          {
+            message: "\ud800",
+            extractedComments: [],
+            origins: [],
+          },
+        ],
+      })
+    ).toThrow(/updateCatalogFile\.argument\[0\]\.messages\[0\]\.message/u)
+
+    expect(() =>
+      applyTranslationPatches({
+        config: {
+          rootDir: "\udc00",
+          locales: ["en"],
+          sourceLocale: "en",
+          catalogs: [],
+        },
+        patches: [],
+      })
+    ).toThrow(/applyTranslationPatches\.argument\[0\]\.config\.rootDir/u)
+
+    expect(() =>
+      combineCatalogs({
+        inputs: [{ content: "\ud800" }, { content: 'msgid "ok"' }],
+        sourceLocale: "en",
+      })
+    ).toThrow(/combineCatalogs\.argument\[0\]\.inputs\[0\]\.content/u)
+  })
+
+  it("preserves Map boundary rejections before normalizing bulk payloads", () => {
+    expect(() =>
+      updateCatalogFile({
+        targetPath: "/unused/messages.po",
+        locale: "en",
+        sourceLocale: "en",
+        clean: false,
+        messages: [
+          {
+            message: "Hello",
+            placeholders: new Map([["name", ["Name"]]]),
+            extractedComments: [],
+            origins: [],
+          },
+        ],
+      } as never)
+    ).toThrow(/updateCatalogFile\.argument\[0\]\.messages\[0\]\.placeholders/u)
+
+    expect(() =>
+      applyTranslationPatches({
+        config: {
+          rootDir: "/unused",
+          locales: ["en", "de"],
+          sourceLocale: "en",
+          fallbackLocales: new Map([["de", ["en"]]]),
+          catalogs: [],
+        },
+        patches: [],
+      } as never)
+    ).toThrow(/applyTranslationPatches\.argument\[0\]\.config\.fallbackLocales/u)
+
+    expect(() =>
+      applyTranslationPatches({
+        config: {
+          rootDir: "/unused",
+          locales: ["en", "de"],
+          sourceLocale: "en",
+          catalogs: [],
+        },
+        patches: [
+          {
+            id: { catalog: "/unused/messages.po", locale: "de", message: "Hello" },
+            fingerprint: "fingerprint",
+            translation: {
+              kind: "plural",
+              variable: "count",
+              pluralKind: "cardinal",
+              offset: 0,
+              values: new Map([["one", "One"]]),
+            },
+          },
+        ],
+      } as never)
+    ).toThrow(/applyTranslationPatches\.argument\[0\]\.patches\[0\]\.translation\.values/u)
+
+    expect(() =>
+      combineCatalogs({
+        inputs: [{ content: 'msgid "Hello"\nmsgstr ""' }],
+        sourceLocale: "en",
+        selection: new Map([["moreThan", 1]]),
+      } as never)
+    ).toThrow(/combineCatalogs\.argument\[0\]\.selection/u)
+  })
+
+  it("uses one stable snapshot while converting bulk wrapper requests", async () => {
+    const updateRoot = await createTempDir()
+    const updatePath = path.join(updateRoot, "messages.po")
+    let updateMessageReads = 0
+    updateCatalogFile({
+      targetPath: updatePath,
+      locale: "en",
+      sourceLocale: "en",
+      clean: false,
+      messages: [
+        {
+          get message() {
+            updateMessageReads += 1
+            return updateMessageReads === 1 ? "Stable update" : "Malformed \ud800 update"
+          },
+          extractedComments: [],
+          origins: [],
+        },
+      ],
+    })
+    expect(updateMessageReads).toBe(1)
+    expect(await readFile(updatePath, "utf8")).toContain('msgid "Stable update"')
+
+    const patchRoot = await createTempDir()
+    const patchPath = path.join(patchRoot, "locales", "de", "messages.po")
+    await mkdir(path.dirname(patchPath), { recursive: true })
+    await writeFile(
+      patchPath,
+      `msgid ""
+msgstr ""
+"Language: de\\n"
+
+msgid "Stable patch"
+msgstr ""
+`
+    )
+    const stableConfig = {
+      rootDir: patchRoot,
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+    }
+    const candidate = listTranslationCandidates({ config: stableConfig }).candidates[0]
+    if (!candidate) {
+      throw new Error("Expected a translation candidate")
+    }
+    let rootDirReads = 0
+    const applied = applyTranslationPatches({
+      config: {
+        get rootDir() {
+          rootDirReads += 1
+          return rootDirReads === 1 ? patchRoot : "\ud800"
+        },
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+      },
+      patches: [
+        {
+          id: candidate.id,
+          fingerprint: candidate.fingerprint,
+          translation: { kind: "singular", value: "Stabiler Patch" },
+        },
+      ],
+    })
+    expect(rootDirReads).toBe(1)
+    expect(applied.stats.applied).toBe(1)
+    expect(await readFile(patchPath, "utf8")).toContain('msgstr "Stabiler Patch"')
+
+    let combineContentReads = 0
+    const input = new Proxy(
+      { content: "" },
+      {
+        get(target, property, receiver) {
+          if (property === "content") {
+            combineContentReads += 1
+            return combineContentReads === 1
+              ? 'msgid "Stable combine"\nmsgstr "Stable combine"'
+              : "Malformed \ud800 combine"
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }
+    )
+    const combined = combineCatalogs({ inputs: [input], sourceLocale: "en" })
+    expect(combineContentReads).toBe(1)
+    expect(combined.content).toContain('msgid "Stable combine"')
   })
 
   it("snapshots nested accessors, arrays, and getter failures deterministically", () => {
