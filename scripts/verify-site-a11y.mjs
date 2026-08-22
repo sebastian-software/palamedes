@@ -274,6 +274,58 @@ try {
   assert.equal(await fallbackPage.evaluate(() => globalThis.__proofCopyFallback), "copy")
   assert.equal(await fallbackButton.evaluate((element) => element === document.activeElement), true)
   await fallbackContext.close()
+
+  const delayedCopyContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  await delayedCopyContext.addInitScript(() => {
+    const proofCopyTimers = new Set()
+    const setTimeoutForProofCopy = globalThis.setTimeout
+    const clearTimeoutForProofCopy = globalThis.clearTimeout
+    globalThis.setTimeout = (callback, delay, ...args) => {
+      const timer = setTimeoutForProofCopy(
+        () => {
+          proofCopyTimers.delete(timer)
+          return callback()
+        },
+        delay,
+        ...args
+      )
+      if (delay === 1500) proofCopyTimers.add(timer)
+      return timer
+    }
+    globalThis.clearTimeout = (timer) => {
+      proofCopyTimers.delete(timer)
+      return clearTimeoutForProofCopy(timer)
+    }
+    globalThis.__proofCopyTimers = proofCopyTimers
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () =>
+          new Promise((resolve) => {
+            globalThis.__resolveProofCopy = resolve
+          }),
+      },
+    })
+  })
+  const delayedCopyPage = await delayedCopyContext.newPage()
+  const delayedCopyErrors = []
+  delayedCopyPage.on("pageerror", (error) => delayedCopyErrors.push(error.message))
+  delayedCopyPage.on("console", (message) => {
+    if (message.type() === "error") delayedCopyErrors.push(message.text())
+  })
+  await delayedCopyPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
+  await delayedCopyPage.getByRole("button", { name: "Copy command: pnpm bench:e2e" }).click()
+  await delayedCopyPage.waitForFunction(() => typeof globalThis.__resolveProofCopy === "function")
+  await delayedCopyPage.getByRole("link", { name: "i18n performance", exact: true }).click()
+  await delayedCopyPage.waitForURL(`${baseUrl}/i18n-performance`)
+  await delayedCopyPage.evaluate(async () => {
+    globalThis.__resolveProofCopy()
+    await Promise.resolve()
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  })
+  assert.equal(await delayedCopyPage.evaluate(() => globalThis.__proofCopyTimers.size), 0)
+  assert.deepEqual(delayedCopyErrors, [])
+  await delayedCopyContext.close()
 } finally {
   await browser?.close()
   await staticServer?.close()

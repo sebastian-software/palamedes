@@ -44,19 +44,24 @@ export function CopyCommand({
 }) {
   const commandRef = useRef<HTMLElement>(null)
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activationRef = useRef(0)
   const [copyState, setCopyState] = useState<CopyState>(null)
 
   useEffect(
     () => () => {
+      activationRef.current += 1
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+      resetTimerRef.current = null
     },
     []
   )
 
-  function showCopyState(state: Exclude<CopyState, null>) {
+  function showCopyState(activation: number, state: Exclude<CopyState, null>) {
+    if (activation !== activationRef.current) return
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
     setCopyState(state)
     resetTimerRef.current = setTimeout(() => {
+      if (activation !== activationRef.current) return
       setCopyState(null)
       resetTimerRef.current = null
     }, 1500)
@@ -83,12 +88,14 @@ export function CopyCommand({
           className="micro min-h-11 shrink-0 border-l border-hair px-3 text-[10px] text-gray-spec transition-colors hover:bg-ink hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
           aria-label={`Copy command: ${command}`}
           onClick={async () => {
+            const activation = ++activationRef.current
             try {
               await writeCommand(command)
-              showCopyState("copied")
+              showCopyState(activation, "copied")
             } catch {
+              if (activation !== activationRef.current) return
               selectCommand()
-              showCopyState("failed")
+              showCopyState(activation, "failed")
             }
           }}
         >
