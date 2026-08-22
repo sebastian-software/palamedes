@@ -1,3 +1,8 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type * as CoreNode from "@palamedes/core-node"
@@ -24,13 +29,19 @@ const loadContext = {
   importAttributes: {},
 }
 
+const tempDirectories: string[] = []
+
 afterEach(() => {
   vi.unstubAllEnvs()
+  for (const directory of tempDirectories.splice(0)) {
+    rmSync(directory, { force: true, recursive: true })
+  }
 })
 
 describe("createPalamedesRemixLoadHook", () => {
   beforeEach(() => {
-    mocks.loadPalamedesConfigSync.mockReturnValue({
+    mocks.loadPalamedesConfigSync.mockReset().mockReturnValue({
+      configPath: "/repo/palamedes.yaml",
       rootDir: "/repo",
       locales: ["en", "de"],
       sourceLocale: "en",
@@ -38,7 +49,7 @@ describe("createPalamedesRemixLoadHook", () => {
       fallbackLocales: undefined,
       catalogs: [{ path: "app/locales/{locale}", include: ["app"] }],
     })
-    mocks.compileCatalogModule.mockReturnValue({
+    mocks.compileCatalogModule.mockReset().mockReturnValue({
       code: 'export const messages={"greeting":"Hallo"};export default { messages };',
       warnings: [],
       watchFiles: ["/repo/app/locales/en.po"],
@@ -119,11 +130,14 @@ describe("createPalamedesRemixLoadHook", () => {
     const loaded = load(new URL("file:///repo/app/locales/de.po").href, loadContext, nextLoad)
 
     expect(nextLoad).not.toHaveBeenCalled()
-    expect(loaded).toStrictEqual({
+    expect(loaded).toMatchObject({
       format: "module",
       shortCircuit: true,
-      source: 'export const messages={"greeting":"Hallo"};export default { messages };',
     })
+    expect(String(loaded.source)).toBe(
+      'import "file:///repo/palamedes.yaml?palamedes-config-watch="\n' +
+        'export const messages={"greeting":"Hallo"};export default { messages };'
+    )
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
       configPath: undefined,
       cwd: "/repo/app/locales",
@@ -132,6 +146,63 @@ describe("createPalamedesRemixLoadHook", () => {
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
       "/repo/app/locales/de.po",
       expect.objectContaining({ locale: "de" })
+    )
+  })
+
+  it("loads the config dependency as an empty module for node watch mode", () => {
+    const load = createPalamedesRemixLoadHook()
+    const nextLoad = vi.fn()
+
+    const loaded = load(
+      "file:///repo/palamedes.yaml?palamedes-config-watch=",
+      loadContext,
+      nextLoad
+    )
+
+    expect(nextLoad).not.toHaveBeenCalled()
+    expect(loaded).toStrictEqual({ format: "module", shortCircuit: true, source: "" })
+  })
+
+  it("reloads a cached config when its file content changes", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "palamedes-remix-config-cache-"))
+    tempDirectories.push(directory)
+    const configPath = path.join(directory, "palamedes.yaml")
+    const catalogPath = path.join(directory, "de.po")
+    writeFileSync(configPath, "first")
+    mocks.loadPalamedesConfigSync.mockImplementation(() => {
+      const changed = readFileSync(configPath, "utf8") === "second"
+      return {
+        configPath,
+        rootDir: directory,
+        locales: changed ? ["en", "fr"] : ["en", "de"],
+        sourceLocale: "en",
+        pseudoLocale: undefined,
+        fallbackLocales: changed ? { fr: ["en"] } : undefined,
+        catalogs: [{ path: "{locale}", include: ["app"] }],
+      }
+    })
+    const load = createPalamedesRemixLoadHook({ configPath })
+    const catalogUrl = pathToFileURL(catalogPath).href
+
+    load(catalogUrl, loadContext, vi.fn())
+    load(catalogUrl, loadContext, vi.fn())
+    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledOnce()
+
+    writeFileSync(configPath, "second")
+    load(catalogUrl, loadContext, vi.fn())
+
+    expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledTimes(2)
+    expect(mocks.compileCatalogModule).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ locales: ["en", "de"], fallbackLocales: undefined }),
+      catalogPath,
+      expect.any(Object)
+    )
+    expect(mocks.compileCatalogModule).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ locales: ["en", "fr"], fallbackLocales: { fr: ["en"] } }),
+      catalogPath,
+      expect.any(Object)
     )
   })
 

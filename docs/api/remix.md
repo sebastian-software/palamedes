@@ -72,6 +72,9 @@ and configure `onMissing` to observe misses.
 `.po` imports are claimed by the hook before Node's default loader runs. They
 compile through the same catalog module path used by the Vite/Next integrations
 and require a Palamedes config (`palamedes.yaml`, `palamedes.config.ts`, etc.).
+The hook caches loaded config objects while validating the config file's content
+digest on every cache hit, so `node --watch` processes observe config edits
+without a manual restart.
 
 ## Server Request Scope
 

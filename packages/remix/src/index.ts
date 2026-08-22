@@ -1,4 +1,6 @@
-import { fileURLToPath } from "node:url"
+import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import path from "node:path"
 import type { registerHooks } from "node:module"
 
@@ -64,8 +66,14 @@ export type LoadResult = ReturnType<LoadHook>
 const DEFAULT_INCLUDE = /\.(tsx?|jsx?|mjs)$/
 const DEFAULT_EXCLUDE = /[/\\]node_modules[/\\]/
 const PO_FILE = /\.po$/
+const CONFIG_WATCH_QUERY_PARAM = "palamedes-config-watch"
 const INLINE_SOURCE_MAP_COMMENT =
   /(?:\r?\n)?\/\/# sourceMappingURL=data:application\/json[^,\r\n]*;base64,[^\r\n]+(?:\r?\n)?$/u
+
+type CachedPalamedesConfig = {
+  config: LoadedPalamedesConfig
+  digest: string
+}
 
 export function createPalamedesRemixLoadHook(
   options: PalamedesRemixRegisterOptions = {}
@@ -77,9 +85,17 @@ export function createPalamedesRemixLoadHook(
   // must not embed authored text can choose the compact, hash-only behavior.
   const keepSourceFallbacks = options.keepSourceFallbacks ?? true
   const stripNonEssentialProps = process.env.NODE_ENV === "production"
-  const configCache = new Map<string, LoadedPalamedesConfig>()
+  const configCache = new Map<string, CachedPalamedesConfig>()
 
   return (url, context, nextLoad) => {
+    if (isConfigWatchUrl(url)) {
+      return {
+        format: "module",
+        shortCircuit: true,
+        source: "",
+      }
+    }
+
     if (shouldLoadCatalogUrl(url, exclude)) {
       return loadCatalogModule(url, options, configCache)
     }
@@ -122,7 +138,7 @@ function loadCatalogModule(
     PalamedesRemixRegisterOptions,
     "configPath" | "failOnMissing" | "failOnCompileError"
   >,
-  configCache: Map<string, LoadedPalamedesConfig>
+  configCache: Map<string, CachedPalamedesConfig>
 ): LoadResult {
   const resourcePath = fileURLToPath(url)
   const config = getPalamedesConfigForCatalog(resourcePath, options.configPath, configCache)
@@ -156,25 +172,59 @@ function loadCatalogModule(
   return {
     format: "module",
     shortCircuit: true,
-    source: result.code,
+    source: prependConfigWatchImport(result.code, config.configPath),
   }
 }
 
 function getPalamedesConfigForCatalog(
   resourcePath: string,
   configPath: string | undefined,
-  configCache: Map<string, LoadedPalamedesConfig>
+  configCache: Map<string, CachedPalamedesConfig>
 ): LoadedPalamedesConfig {
   const cwd = path.dirname(resourcePath)
   const cacheKey = `${cwd}\0${configPath ?? ""}`
   const cached = configCache.get(cacheKey)
-  if (cached) {
-    return cached
+  if (cached && isCurrentConfig(cached)) {
+    return cached.config
   }
 
   const config = loadPalamedesConfigSync({ cwd, configPath })
-  configCache.set(cacheKey, config)
+  cacheConfig(configCache, cacheKey, config)
   return config
+}
+
+function isCurrentConfig(cached: CachedPalamedesConfig): boolean {
+  try {
+    return digestConfig(cached.config.configPath) === cached.digest
+  } catch {
+    return false
+  }
+}
+
+function cacheConfig(
+  configCache: Map<string, CachedPalamedesConfig>,
+  cacheKey: string,
+  config: LoadedPalamedesConfig
+): void {
+  try {
+    configCache.set(cacheKey, { config, digest: digestConfig(config.configPath) })
+  } catch {
+    // Tests and virtual configs may not have a readable config file.
+  }
+}
+
+function digestConfig(configPath: string): string {
+  return createHash("sha256").update(readFileSync(configPath)).digest("hex")
+}
+
+function isConfigWatchUrl(url: string): boolean {
+  return url.startsWith("file:") && new URL(url).searchParams.has(CONFIG_WATCH_QUERY_PARAM)
+}
+
+function prependConfigWatchImport(code: string, configPath: string): string {
+  const configUrl = pathToFileURL(configPath)
+  configUrl.searchParams.set(CONFIG_WATCH_QUERY_PARAM, "")
+  return `import ${JSON.stringify(configUrl.href)}\n${code}`
 }
 
 function shouldTransformUrl(url: string, include: RegExp, exclude: RegExp): boolean {
