@@ -457,6 +457,98 @@ describe("palamedes vite plugin", () => {
 })
 
 describe("experimental graph splitting", () => {
+  it("reloads sidecars after config edits without the MDX or PO plugins", async () => {
+    mocks.transformPalamedesMacros.mockReturnValue({
+      code: "transformed",
+      hasChanged: true,
+      compiledIds: ["message-id"],
+      map: null,
+    })
+    const initialConfig = {
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      fallbackLocales: { de: ["en"] },
+      catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
+    }
+    const updatedConfig = {
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "fr"],
+      sourceLocale: "en",
+      fallbackLocales: { fr: ["en"] },
+      catalogs: [{ path: "translations/{locale}", include: ["src/**/*"] }],
+    }
+    mocks.loadPalamedesConfig
+      .mockResolvedValueOnce(initialConfig)
+      .mockResolvedValueOnce(initialConfig)
+      .mockResolvedValueOnce(updatedConfig)
+
+    const plugins = palamedes({
+      mdx: false,
+      enablePoLoader: false,
+      experimentalGraphSplitting: true,
+    })
+    const transformPlugin = plugins.find((plugin) => plugin.name === "palamedes:transform")
+    const sidecarPlugin = plugins.find((plugin) => plugin.name === "palamedes:message-sidecars")
+    const buildStart = transformPlugin?.buildStart
+    const transform = transformPlugin?.transform
+    const watchChange = transformPlugin?.watchChange
+    const load = sidecarPlugin?.load
+    if (
+      typeof buildStart !== "function" ||
+      typeof transform !== "function" ||
+      typeof watchChange !== "function" ||
+      typeof load !== "function"
+    ) {
+      throw new TypeError("Expected always-present transform and graph-splitting hooks")
+    }
+    expect(plugins.some((plugin) => plugin.name === "palamedes:mdx")).toBe(false)
+    expect(plugins.some((plugin) => plugin.name === "palamedes:po-loader")).toBe(false)
+
+    const transformed = (await transform.call(
+      { error: vi.fn() } as never,
+      'import { t } from "@palamedes/core/macro"\nexport const label = t`Hello`',
+      "/repo/src/label.ts"
+    )) as { code?: string } | null
+    const key = /virtual:palamedes-messages\/([0-9a-f]{12})/.exec(transformed?.code ?? "")?.[1]
+    if (!key) {
+      throw new TypeError("Expected a graph-splitting sidecar import")
+    }
+    const context = {
+      addWatchFile: vi.fn(),
+      error(message: unknown) {
+        throw message instanceof Error ? message : new Error(String(message))
+      },
+      warn: vi.fn(),
+    }
+
+    const configLoadsBeforeBuildStart = mocks.loadPalamedesConfig.mock.calls.length
+    buildStart.call({} as never, {} as never)
+    const beforeEdit = await load.call(context as never, `\0palamedes:messages/${key}`)
+    const beforeEditCode = typeof beforeEdit === "string" ? beforeEdit : beforeEdit?.code
+    expect(beforeEditCode).toContain(`virtual:palamedes-messages/${key}/de`)
+    expect(mocks.loadPalamedesConfig).toHaveBeenCalledTimes(configLoadsBeforeBuildStart + 1)
+
+    watchChange.call({} as never, "/repo/palamedes.yaml", { event: "update" } as never)
+
+    const afterEdit = await load.call(context as never, `\0palamedes:messages/${key}`)
+    const afterEditCode = typeof afterEdit === "string" ? afterEdit : afterEdit?.code
+    expect(afterEditCode).toContain(`virtual:palamedes-messages/${key}/fr`)
+    expect(afterEditCode).not.toContain(`virtual:palamedes-messages/${key}/de`)
+
+    await load.call(context as never, `\0palamedes:messages/${key}/fr`)
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        catalogs: [{ path: "translations/{locale}", include: ["src/**/*"] }],
+        fallbackLocales: { fr: ["en"] },
+      }),
+      path.resolve("/repo/translations/fr.po"),
+      ["message-id"]
+    )
+  })
+
   it("appends a sidecar import to modules that reference messages", async () => {
     const result = (await runMacroTransform({ experimentalGraphSplitting: true }, undefined, [
       "id-a",
