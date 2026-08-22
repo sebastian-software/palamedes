@@ -89,7 +89,7 @@ The site is available at <http://localhost:4100>. The command runs
 development server. That prebuild reads the canonical `docs/`, `adr/`, and
 `site/content/blog/` sources and the public package sources used by TypeDoc.
 It generates Git-ignored routes and data under
-`site/app/routes/docs/`, `site/app/routes/decisions/`,
+`site/app/routes.ts`, `site/app/routes/docs/`, `site/app/routes/decisions/`,
 `site/app/routes/blog/`, `site/app/routes/api-reference/`, and
 `site/app/data/generated/`. Edit the canonical sources, not those generated
 paths. The copied files under `site/public/docs/` are generated for the same

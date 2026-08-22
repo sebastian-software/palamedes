@@ -437,6 +437,7 @@ describe("workflow contracts", () => {
       "docs/",
       "adr/",
       "site/content/blog/",
+      "site/app/routes.ts",
       "site/app/routes/docs/",
       "site/app/routes/decisions/",
       "site/app/routes/blog/",
