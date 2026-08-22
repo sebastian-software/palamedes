@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/core-node-darwin-x64",
-  "version": "1.17.3",
+  "version": "1.18.0",
   "description": "Darwin x64 native bindings for @palamedes/core-node",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {

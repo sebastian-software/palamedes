@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/cli-linux-arm64-musl",
-  "version": "1.17.3",
+  "version": "1.18.0",
   "description": "Linux arm64 musl native CLI binary for @palamedes/cli",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {
