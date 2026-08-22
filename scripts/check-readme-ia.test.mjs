@@ -105,13 +105,16 @@ test("removes underscore emphasis without losing literal or code underscores", (
 ### __Strong__
 ### Under_score
 ### \`_Code_\`
+### \`\` _Spaced_ \`\`
 [Italic](#italic)
 [Strong](#strong)
 [Literal underscore](#under_score)
 [Code underscore](#_code_)
+[Spaced code underscore](#_spaced_)
 `
 
   assert.doesNotThrow(check(headings))
   assert.throws(check(`${headings}\n[Source italic](#_italic_)\n`), /missing anchor/u)
   assert.throws(check(`${headings}\n[Source strong](#__strong__)\n`), /missing anchor/u)
+  assert.throws(check(`${headings}\n[Stripped code](#spaced)\n`), /missing anchor/u)
 })

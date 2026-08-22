@@ -30,8 +30,74 @@ function decodeMarkdownEntities(value) {
   })
 }
 
+function isEscaped(value, index) {
+  let backslashes = 0
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
+    backslashes += 1
+  }
+  return backslashes % 2 === 1
+}
+
+function protectMarkdownCodeSpans(value) {
+  const spans = []
+  let protectedValue = ""
+  let cursor = 0
+
+  while (cursor < value.length) {
+    if (value[cursor] !== "`" || isEscaped(value, cursor)) {
+      protectedValue += value[cursor]
+      cursor += 1
+      continue
+    }
+
+    let openerEnd = cursor
+    while (value[openerEnd] === "`") openerEnd += 1
+    const delimiterLength = openerEnd - cursor
+    let closingStart = -1
+    let search = openerEnd
+
+    while (search < value.length) {
+      if (value[search] !== "`" || isEscaped(value, search)) {
+        search += 1
+        continue
+      }
+      let runEnd = search
+      while (value[runEnd] === "`") runEnd += 1
+      if (runEnd - search === delimiterLength) {
+        closingStart = search
+        break
+      }
+      search = runEnd
+    }
+
+    if (closingStart === -1) {
+      protectedValue += value.slice(cursor, openerEnd)
+      cursor = openerEnd
+      continue
+    }
+
+    let content = value.slice(openerEnd, closingStart).replaceAll(/\r?\n/gu, " ")
+    if (content.startsWith(" ") && content.endsWith(" ") && /[^ ]/u.test(content)) {
+      content = content.slice(1, -1)
+    }
+    const token = `\u{e000}${spans.length}\u{e001}`
+    spans.push([token, content])
+    protectedValue += token
+    cursor = closingStart + delimiterLength
+  }
+
+  return {
+    value: protectedValue,
+    restore(rendered) {
+      for (const [token, content] of spans) rendered = rendered.replaceAll(token, content)
+      return rendered
+    },
+  }
+}
+
 function renderedHeadingText(heading) {
-  return decodeMarkdownEntities(heading)
+  const codeSpans = protectMarkdownCodeSpans(heading)
+  const rendered = decodeMarkdownEntities(codeSpans.value)
     .replaceAll(/<!--.*?-->/gu, "")
     .replaceAll(/!\[([^\]]*)\]\((?:\\.|[^)])*\)/gu, "$1")
     .replaceAll(/\[([^\]]+)\]\((?:\\.|[^)])*\)/gu, "$1")
@@ -40,8 +106,8 @@ function renderedHeadingText(heading) {
     .replaceAll(/<[^>]*>/gu, "")
     .replaceAll(/(?<![\\\p{L}\p{M}\p{N}_`])__([^_]+?)__(?![\p{L}\p{M}\p{N}_`])/gu, "$1")
     .replaceAll(/(?<![\\\p{L}\p{M}\p{N}_`])_([^_]+?)_(?![\p{L}\p{M}\p{N}_`])/gu, "$1")
-    .replaceAll(/(`+)(.*?)\1/gu, "$2")
     .replaceAll(/\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~])/gu, "$1")
+  return codeSpans.restore(rendered)
 }
 
 function headingSlug(heading) {
