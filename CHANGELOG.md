@@ -102,6 +102,63 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.18.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.17.3...palamedes-v1.18.0) (2026-08-22)
+
+
+### Features
+
+* **node:** add async catalog APIs ([#950](https://github.com/sebastian-software/palamedes/issues/950)) ([3341495](https://github.com/sebastian-software/palamedes/commit/3341495c35f6111ad6ec7e72086616947563b25e))
+* **packaging:** add Intel macOS and Windows ARM targets ([#948](https://github.com/sebastian-software/palamedes/issues/948)) ([06a7544](https://github.com/sebastian-software/palamedes/commit/06a754434c1351559d1515e06b97502ef6842be6))
+* **site:** clarify navigation decision paths ([#951](https://github.com/sebastian-software/palamedes/issues/951)) ([d34dba3](https://github.com/sebastian-software/palamedes/commit/d34dba31c1d55ff12a2ebe6d26fae7bdfb7db2ed))
+* **site:** finish proof artifact contract ([#954](https://github.com/sebastian-software/palamedes/issues/954)) ([988efbb](https://github.com/sebastian-software/palamedes/commit/988efbb2b2a837ab48ec1abe39ec5eed1b4edbf5))
+* **site:** organize generated documentation navigation ([#953](https://github.com/sebastian-software/palamedes/issues/953)) ([66771b5](https://github.com/sebastian-software/palamedes/commit/66771b573a690af19684fbef3e89ccb47b3d2e04))
+* **site:** strengthen comparison decisions ([#952](https://github.com/sebastian-software/palamedes/issues/952)) ([6074116](https://github.com/sebastian-software/palamedes/commit/60741166ee9805d6fc8ed25c3c7936b031d43710))
+* update deps ([32a3e2a](https://github.com/sebastian-software/palamedes/commit/32a3e2a2aede0bbd760a007742e168142e45dc95))
+
+
+### Bug Fixes
+
+* **adapters:** retain production source fallbacks ([#938](https://github.com/sebastian-software/palamedes/issues/938)) ([a95d7f9](https://github.com/sebastian-software/palamedes/commit/a95d7f9ed7aed851e4bac1338dd3483b16c9a93c))
+* **cli:** distinguish audit and report policy exits ([#941](https://github.com/sebastian-software/palamedes/issues/941)) ([cc2a26d](https://github.com/sebastian-software/palamedes/commit/cc2a26d58c9bf019a42e11f8e2fb3d9ec680f2b9))
+* **cli:** fail reserved placeholder bins ([#942](https://github.com/sebastian-software/palamedes/issues/942)) ([1ac25ae](https://github.com/sebastian-software/palamedes/commit/1ac25ae2dc5ece3744e42859d68c18eaeb54db18))
+* **cli:** forward SIGHUP to native process groups ([#940](https://github.com/sebastian-software/palamedes/issues/940)) ([79fbf15](https://github.com/sebastian-software/palamedes/commit/79fbf15bd26252baf6c8f82f3882508a6be43399))
+* **cli:** keep watch alive without cwd ([#956](https://github.com/sebastian-software/palamedes/issues/956)) ([17c9cc0](https://github.com/sebastian-software/palamedes/commit/17c9cc0080e731cf22e785b8e16e330ae1e4e51d))
+* **cli:** reject mismatched native package versions ([#936](https://github.com/sebastian-software/palamedes/issues/936)) ([38f71ef](https://github.com/sebastian-software/palamedes/commit/38f71efd11e362c9313fdab9cacfbe0c6b4959bf))
+* **cli:** report extraction cache write failures ([#962](https://github.com/sebastian-software/palamedes/issues/962)) ([344f592](https://github.com/sebastian-software/palamedes/commit/344f5928f554ff39be1fa28735f738d46861f8b0))
+* **config:** reject unknown configuration keys ([#930](https://github.com/sebastian-software/palamedes/issues/930)) ([e99416a](https://github.com/sebastian-software/palamedes/commit/e99416ac7742632faae833a6370c42b7b4d8d0ff))
+* **core:** avoid eager transform source locations ([#944](https://github.com/sebastian-software/palamedes/issues/944)) ([711e840](https://github.com/sebastian-software/palamedes/commit/711e8400e6f02a6c38f19e7e3f33cff419b81ddc))
+* **core:** escape carriage returns in generated strings ([#935](https://github.com/sebastian-software/palamedes/issues/935)) ([6e24042](https://github.com/sebastian-software/palamedes/commit/6e240427a42f7ade69d4611d9f5a34f513f99e7b))
+* **core:** locate parser diagnostics ([#926](https://github.com/sebastian-software/palamedes/issues/926)) ([6c3f55e](https://github.com/sebastian-software/palamedes/commit/6c3f55eb63fd4b39bad59828ebcd33bab97e1f6a))
+* **core:** preserve dotted catalog paths ([#959](https://github.com/sebastian-software/palamedes/issues/959)) ([6fd0ae8](https://github.com/sebastian-software/palamedes/commit/6fd0ae88b5e97dcb1040e973a259de8dd14836f6))
+* **macros:** publish typed authoring signatures ([#933](https://github.com/sebastian-software/palamedes/issues/933)) ([9210df8](https://github.com/sebastian-software/palamedes/commit/9210df8f5a563aa980b63d8a1eb0b4bb81499ae3))
+* **next-plugin:** resolve Palamedes from the Next project root ([#931](https://github.com/sebastian-software/palamedes/issues/931)) ([c6e439a](https://github.com/sebastian-software/palamedes/commit/c6e439a4ff1f2a7382f6519f13025cce6470dc92))
+* **packaging:** route CJS consumers to .d.cts declarations ([#927](https://github.com/sebastian-software/palamedes/issues/927)) ([4be245d](https://github.com/sebastian-software/palamedes/commit/4be245d5d7151702ca46fca6dff95df4fa9a084c))
+* **plugins:** align bundler transform filters ([#961](https://github.com/sebastian-software/palamedes/issues/961)) ([b1a1bd6](https://github.com/sebastian-software/palamedes/commit/b1a1bd63c8bd9f9c0df7990510bda89469b73158))
+* **react-router-rsc:** allow supported peer patches ([#923](https://github.com/sebastian-software/palamedes/issues/923)) ([9335e86](https://github.com/sebastian-software/palamedes/commit/9335e86294352903c5d0bd1887cf126aa2326a96))
+* **react:** render compat ICU fallbacks with compiled runtime ([#924](https://github.com/sebastian-software/palamedes/issues/924)) ([a52f325](https://github.com/sebastian-software/palamedes/commit/a52f325864922203eb6e9b2a9052b13204fed145))
+* **release:** publish JavaScript packages in dependency order ([#925](https://github.com/sebastian-software/palamedes/issues/925)) ([80da682](https://github.com/sebastian-software/palamedes/commit/80da682a053f01f4e748bf0d47772f36e8dc337a))
+* **remix:** invalidate config cache ([#960](https://github.com/sebastian-software/palamedes/issues/960)) ([2299c97](https://github.com/sebastian-software/palamedes/commit/2299c97fa3aced82a386f98a31a7bd4b3a21839c))
+* **runtime:** recognize browser workers ([#957](https://github.com/sebastian-software/palamedes/issues/957)) ([00e28f4](https://github.com/sebastian-software/palamedes/commit/00e28f4a0458cf51dbc2390856628dc267f10c2c))
+* **runtime:** support deterministic ICU time zones ([#937](https://github.com/sebastian-software/palamedes/issues/937)) ([e9caac1](https://github.com/sebastian-software/palamedes/commit/e9caac13e1b4ae718b7fa318689de1979e4372b8))
+* **site:** restructure the guided quickstart ([#949](https://github.com/sebastian-software/palamedes/issues/949)) ([84f664c](https://github.com/sebastian-software/palamedes/commit/84f664ce9ec5e7a879c4bef41b7afc52d8ce53cf))
+* **vite-plugin:** gate React MDX on Vite 8 ([#939](https://github.com/sebastian-software/palamedes/issues/939)) ([79f3ac2](https://github.com/sebastian-software/palamedes/commit/79f3ac227d11c4a7a3fc6224c590d010c7c50a56))
+* **vite-plugin:** invalidate graph config ([#955](https://github.com/sebastian-software/palamedes/issues/955)) ([5b2e362](https://github.com/sebastian-software/palamedes/commit/5b2e36238073f72141da03fe9d9fd1d0f9cd72e1))
+* **vite-plugin:** stabilize graph sidecar keys ([#932](https://github.com/sebastian-software/palamedes/issues/932)) ([14e3ac5](https://github.com/sebastian-software/palamedes/commit/14e3ac5ed6d020c4ea88c20e3985b50b9e9eb1f9))
+* **vite-plugin:** use resolved base for import maps ([#929](https://github.com/sebastian-software/palamedes/issues/929)) ([a234e27](https://github.com/sebastian-software/palamedes/commit/a234e27a084b74eb525361d76f680382f593546d))
+* **waku:** decouple request fallback errors ([#958](https://github.com/sebastian-software/palamedes/issues/958)) ([c2149db](https://github.com/sebastian-software/palamedes/commit/c2149db2c5abbab258b6e88c2c3a068af014c85d))
+
+
+### Performance Improvements
+
+* **cli:** cache binary plugin manifests ([#965](https://github.com/sebastian-software/palamedes/issues/965)) ([c2d6261](https://github.com/sebastian-software/palamedes/commit/c2d626106a891fb3d145c2cc64c876dea20f2186))
+* **cli:** discover sources with ferralk ([#878](https://github.com/sebastian-software/palamedes/issues/878)) ([e3eb76f](https://github.com/sebastian-software/palamedes/commit/e3eb76f8903df72587b79794a0a741967f320476))
+* **core-node:** avoid duplicate bulk argument copies ([#964](https://github.com/sebastian-software/palamedes/issues/964)) ([1254152](https://github.com/sebastian-software/palamedes/commit/12541522332056868bf2393fff1b40bfa6333eb0))
+* **core:** cache marker-free extraction results ([#963](https://github.com/sebastian-software/palamedes/issues/963)) ([dfb4427](https://github.com/sebastian-software/palamedes/commit/dfb4427cfc5db4b330b422d1c0749d8035d7d39e))
+* **core:** index translation candidate PO items ([#947](https://github.com/sebastian-software/palamedes/issues/947)) ([698f5d1](https://github.com/sebastian-software/palamedes/commit/698f5d11d1bfcdae187779a261314c26afcc93d3))
+* **eslint-plugin:** batch diagnostic offset conversion ([#967](https://github.com/sebastian-software/palamedes/issues/967)) ([ab697c6](https://github.com/sebastian-software/palamedes/commit/ab697c69184f17890f73e2f8aaace874db8d2ce1))
+* **mdx:** linearize source map position tracking ([#946](https://github.com/sebastian-software/palamedes/issues/946)) ([0f11da0](https://github.com/sebastian-software/palamedes/commit/0f11da0ebe15eb962e0b34d153718b5b2c4564db))
+* **react:** reuse message runtimes ([#966](https://github.com/sebastian-software/palamedes/issues/966)) ([10c9cc1](https://github.com/sebastian-software/palamedes/commit/10c9cc14ebf2173bd2e46570705c10ec5e32560b))
+
 ## [1.17.3](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.17.2...palamedes-v1.17.3) (2026-08-12)
 
 

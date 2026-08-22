@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/cli-win32-arm64-msvc",
-  "version": "1.17.3",
+  "version": "1.18.0",
   "description": "Windows arm64 native CLI binary for @palamedes/cli",
   "homepage": "https://github.com/sebastian-software/palamedes",
   "repository": {
