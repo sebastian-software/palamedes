@@ -42,6 +42,10 @@ The public `I18nInstance` contract requires an initialized `locale: string`.
 Custom adapters registered with the client or server runtime must expose that
 property before registration.
 
+Browser client registration also works in windowless Web Worker and Service
+Worker globals. Graph-split bootstrap modules can therefore initialize and
+resolve their client instance off the main thread.
+
 For server-side rendering or server components, register a getter for the active request-local i18n instance:
 
 ```ts
