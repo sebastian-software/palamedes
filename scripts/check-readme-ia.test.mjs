@@ -44,3 +44,35 @@ test("rejects broken repository links and anchors", () => {
   )
   assert.throws(check(`${readme}\n[Missing section](#missing-proof)\n`), /missing anchor/)
 })
+
+test("ignores headings and links inside GFM fenced code blocks", () => {
+  const fencedOnlyStart = `${readme.replace("## Start Here", "## Start Elsewhere")}
+\n~~~markdown
+## Start Here
+[Missing guide](docs/missing-from-fence.md)
+~~~
+`
+  assert.throws(check(fencedOnlyStart), /missing Start Here/u)
+
+  assert.doesNotThrow(
+    check(`${readme}
+\n\`\`\`markdown
+[Missing guide](docs/missing-from-fence.md)
+\`\`\`
+`)
+  )
+})
+
+test("does not accept a fenced heading as a GitHub anchor", () => {
+  assert.throws(check(`${readme}\n[Ghost](#palamedesyaml)\n`), /missing anchor/u)
+})
+
+test("matches GitHub duplicate-heading suffixes", () => {
+  assert.doesNotThrow(
+    check(`${readme}
+\n### Repeated
+### Repeated
+[Second repeated heading](#repeated-1)
+`)
+  )
+})

@@ -19,28 +19,67 @@ function headingSlug(heading) {
     .replaceAll(/-+/gu, "-")
 }
 
-function secondLevelSections(markdown) {
-  const headings = [...markdown.matchAll(/^## (.+)$/gmu)]
-  return headings.map((match, index) => ({
-    heading: match[1],
+function markdownOutsideFences(markdown) {
+  let openFence = null
+
+  return markdown.replace(/^.*(?:\r?\n|$)/gmu, (line) => {
+    const content = line.replace(/\r?\n$/u, "")
+    const fence = content.match(/^ {0,3}(`{3,}|~{3,})(.*)$/u)
+
+    if (openFence) {
+      const closing = content.match(/^ {0,3}(`+|~+)[ \t]*$/u)
+      if (closing && closing[1][0] === openFence.marker && closing[1].length >= openFence.length) {
+        openFence = null
+      }
+      return line.replace(/[^\r\n]/gu, " ")
+    }
+
+    if (fence && (fence[1][0] !== "`" || !fence[2].includes("`"))) {
+      openFence = { marker: fence[1][0], length: fence[1].length }
+      return line.replace(/[^\r\n]/gu, " ")
+    }
+
+    return line
+  })
+}
+
+function markdownHeadings(markdown) {
+  const visibleMarkdown = markdownOutsideFences(markdown)
+  return [...visibleMarkdown.matchAll(/^ {0,3}(#{1,6})[ \t]+([^\r\n]+)$/gmu)].map((match) => ({
+    level: match[1].length,
+    heading: match[2].replace(/[ \t]+#+[ \t]*$/u, "").trimEnd(),
     index: match.index,
-    body: markdown.slice(
-      match.index + match[0].length,
-      headings[index + 1]?.index ?? markdown.length
-    ),
+    length: match[0].length,
+  }))
+}
+
+function secondLevelSections(markdown) {
+  const headings = markdownHeadings(markdown).filter(({ level }) => level === 2)
+  return headings.map((match, index) => ({
+    heading: match.heading,
+    index: match.index,
+    body: markdown.slice(match.index + match.length, headings[index + 1]?.index ?? markdown.length),
   }))
 }
 
 function markdownLinks(markdown) {
-  return [...markdown.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu)].map(
-    ([, target]) => target
-  )
+  return [
+    ...markdownOutsideFences(markdown).matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu),
+  ].map(([, target]) => target)
 }
 
 function headingAnchors(markdown) {
-  return new Set(
-    [...markdown.matchAll(/^#{1,6} (.+)$/gmu)].map(([, heading]) => headingSlug(heading))
-  )
+  const anchors = new Set()
+  const occurrences = new Map()
+
+  for (const { heading } of markdownHeadings(markdown)) {
+    const base = headingSlug(heading)
+    const occurrence = occurrences.get(base) ?? 0
+    occurrences.set(base, occurrence + 1)
+    anchors.add(occurrence === 0 ? base : `${base}-${occurrence}`)
+  }
+
+  return anchors
 }
 
 function localTarget(target) {
