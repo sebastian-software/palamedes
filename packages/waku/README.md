@@ -34,6 +34,10 @@ actions, including default-parameter evaluation. It keeps the scope active for
 the full awaited action, including synchronous, asynchronous, and cross-module
 helpers that use transformed Palamedes macros.
 
+When Waku invokes the interceptor outside a request phase, its unstable request
+accessor throws and Palamedes calls the handler unchanged without activating
+i18n. This fallback does not depend on the wording or shape of Waku's error.
+
 Initializer or catalog failures prevent the action body from running and throw
 an error beginning `Palamedes Waku i18n initialization failed`. Waku's default
 production handler returns its generic 500 response for uncaught errors; keep

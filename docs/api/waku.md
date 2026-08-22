@@ -42,10 +42,12 @@ Waku enters the handler interceptor before its action dispatcher invokes
 evaluation and remains active through the full awaited action, including direct
 macros and synchronous, asynchronous, or cross-module helper calls.
 
-When Waku's unstable request accessor reports that no request is available,
-the interceptor calls `next()` unchanged: it does not resolve i18n, establish a
-scope, or wrap an error. That keeps non-request handler execution compatible,
-but translated code on that path still needs its own active runtime.
+When Waku's unstable request accessor throws because no request phase is
+available, the interceptor calls `next()` unchanged: it does not resolve i18n,
+establish a scope, or wrap the accessor error. The fallback deliberately does
+not inspect the unstable error's message or shape. That keeps non-request
+handler execution compatible, but translated code on that path still needs its
+own active runtime.
 
 ## Streaming and runtime limits
 

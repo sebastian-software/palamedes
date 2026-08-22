@@ -23,9 +23,13 @@ describe("Waku i18n request scope", () => {
     getRequest.mockReset()
   })
 
-  it("skips request-local activation during static generation", async () => {
+  it.each([
+    new Error("Request is not available."),
+    new Error("Request context is unavailable during this phase."),
+    { code: "NO_REQUEST_CONTEXT" },
+  ])("skips request-local activation for unstable accessor failure %#", async (failure) => {
     getRequest.mockImplementation(() => {
-      throw new Error("Request is not available.")
+      throw failure
     })
     const resolveI18n = vi.fn(() => createTestI18n("de"))
     const interceptor = createWakuI18nInterceptor(resolveI18n)
