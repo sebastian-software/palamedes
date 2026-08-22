@@ -1,6 +1,6 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
-import { buildNativePackage } from "../../../scripts/build-native-lib.mjs"
+import { buildNativePackage, rustArtifactFileName } from "../../../scripts/build-native-lib.mjs"
 
 const targets = {
   "@palamedes/cli-darwin-arm64": {
@@ -48,7 +48,7 @@ buildNativePackage({
   unsupportedTargetMessage: (packageName) =>
     `Unsupported native CLI target package: ${packageName}`,
   postBuild({ packageDir, profile, repoRoot, target }) {
-    const binaryName = process.platform === "win32" ? "pmds.exe" : "pmds"
+    const binaryName = rustArtifactFileName({ name: "pmds", kind: "executable" })
     const sourcePath = target.rustTarget
       ? path.join(repoRoot, "target", target.rustTarget, profile, binaryName)
       : path.join(repoRoot, "target", profile, binaryName)

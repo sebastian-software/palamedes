@@ -3,6 +3,30 @@ import { copyFileSync, readFileSync } from "node:fs"
 import path from "node:path"
 
 /**
+ * Returns Cargo's host artifact name for the two native artifact families we
+ * publish. Keep this shared by packaging and size validation so a new host
+ * cannot make those paths drift independently.
+ */
+export function rustArtifactFileName({ name, kind, platform = process.platform }) {
+  if (platform !== "darwin" && platform !== "linux" && platform !== "win32") {
+    throw new Error(`Unsupported platform for Rust artifact ${name}: ${platform}`)
+  }
+
+  if (kind === "executable") {
+    return platform === "win32" ? `${name}.exe` : name
+  }
+
+  if (kind === "cdylib") {
+    if (platform === "win32") {
+      return `${name}.dll`
+    }
+    return `lib${name}.${platform === "darwin" ? "dylib" : "so"}`
+  }
+
+  throw new Error(`Unsupported Rust artifact kind for ${name}: ${kind}`)
+}
+
+/**
  * Detects the C library of a Linux Node host from Node's process report.
  *
  * Build scripts must not guess musl when no report is available: a false musl
