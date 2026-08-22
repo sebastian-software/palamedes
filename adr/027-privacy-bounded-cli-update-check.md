@@ -33,10 +33,13 @@ The native `pmds` binary owns one advisory update-check mechanism:
 
 1. It starts only after Clap has accepted a regular subcommand. There is no
    daemon, service, postinstall hook, or separate scheduled process.
-2. Release builds enable the mechanism only when built with an HTTPS
-   `PALAMEDES_UPDATE_ENDPOINT`. The release workflow must not set that build
-   variable until the production endpoint passes the readiness checklist in
-   `services/update-check/README.md`.
+2. Release builds enable the mechanism only when
+   `PALAMEDES_UPDATE_ENDPOINT` is exactly the owned HTTPS Worker route
+   `https://version.palamedes.dev/check`. Missing values keep it disabled;
+   malformed, alternate-origin, credentialed, port-qualified, query, or
+   fragment values fail the build. The release workflow must not set that
+   build variable until the production endpoint passes the readiness checklist
+   in `services/update-check/README.md`.
 3. `DO_NOT_TRACK=1` and `PALAMEDES_UPDATE_CHECK=0` disable the mechanism before
    cache or network access.
 4. A platform cache records an attempted check before network I/O. Linux uses
@@ -62,10 +65,14 @@ The repository owns a small Cloudflare Worker contract under
 `services/update-check`. It accepts exactly the four documented JSON fields,
 reads the release version from its required `LATEST_VERSION` deployment
 variable, and writes only those dimensions plus a count to Workers Analytics
-Engine. Its code never reads client IP or request headers, and its checked
-configuration disables Worker observability. Cloudflare still necessarily
-processes network metadata as infrastructure; the application contract is that
-Palamedes does not persist or query it.
+Engine. Application code does not access or persist client IP addresses,
+forwarded headers, user agents, or other identifying headers. It reads the
+request URL path, `Content-Type`, and `Content-Length` only for route,
+media-type, and body-size validation; none of that protocol metadata is written
+to Analytics Engine or application logs. The checked configuration disables
+Worker observability. Cloudflare still necessarily processes network metadata
+as infrastructure; the application contract is that Palamedes does not persist
+or query it.
 
 The Worker is locally testable without Cloudflare credentials. Deployment,
 DNS/TLS, dataset provisioning, release-version synchronization, and live

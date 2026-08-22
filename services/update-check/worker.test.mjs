@@ -42,10 +42,21 @@ function request(body, init = {}) {
   })
 }
 
-test("returns the configured latest version and stores only approved aggregate dimensions", async () => {
+test("uses protocol metadata only for validation and stores approved dimensions", async () => {
   const env = environment()
   const response = await worker.fetch(
-    request({ version: "1.2.3", os: "linux", arch: "x86_64", ci: false }),
+    request(
+      { version: "1.2.3", os: "linux", arch: "x86_64", ci: false },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": "65",
+          "User-Agent": "identifying-agent",
+          "CF-Connecting-IP": "192.0.2.1",
+          "X-Forwarded-For": "192.0.2.1",
+        },
+      }
+    ),
     env.value
   )
 
@@ -54,6 +65,8 @@ test("returns the configured latest version and stores only approved aggregate d
   assert.deepEqual(await response.json(), { latestVersion: "1.4.0" })
   assert.deepEqual(env.points, [{ blobs: ["1.2.3", "linux", "x86_64", "local"], doubles: [1] }])
   assert.equal(JSON.stringify(env.points).includes("ip"), false)
+  assert.equal(JSON.stringify(env.points).includes("identifying-agent"), false)
+  assert.equal(JSON.stringify(env.points).includes("content"), false)
 })
 
 test("rejects extra identifying fields without writing analytics", async () => {

@@ -23,8 +23,10 @@ export default {
     const payload = await readPayload(request)
     if (!isPayload(payload)) return response(400, { error: "invalid_request" })
 
-    // Deliberately no request headers, client IP, user agent, URL, timestamp,
-    // command, filesystem value, or generated identifier enters the dataset.
+    // The path and Content-Type/Content-Length are protocol checks only.
+    // Deliberately no client IP, forwarded metadata, user agent, identifying
+    // header, protocol metadata, command, filesystem value, or generated ID
+    // enters Analytics Engine or application logs.
     try {
       environment.UPDATE_CHECKS.writeDataPoint({
         blobs: [payload.version, payload.os, payload.arch, payload.ci ? "ci" : "local"],

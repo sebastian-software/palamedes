@@ -10,8 +10,11 @@ contract. The Worker accepts `POST /check` with exactly four JSON fields:
 It returns `{ "latestVersion": "1.18.0" }` from the deployment's required
 `LATEST_VERSION` variable and writes only `version`, `os`, `arch`, the CI/local
 bucket, and a count of one to the `UPDATE_CHECKS` Analytics Engine dataset.
-Application code does not read or persist IP addresses, headers, URLs, user
-agents, commands, paths, or identifiers. Worker observability is disabled in
+Application code does not access or persist client IP addresses, forwarded
+headers, user agents, or other identifying headers. It reads the request URL
+path, `Content-Type`, and `Content-Length` only to validate the route, media
+type, and body-size limit; none of that protocol metadata is written to
+Analytics Engine or application logs. Worker observability is disabled in
 `wrangler.jsonc` so request logs are not enabled by this service.
 
 Run the deterministic contract test with:
@@ -31,7 +34,7 @@ currently deployed. Before a release enables the client:
 3. deploy this checked Worker with `LATEST_VERSION` set to the released CLI
    version and keep that value synchronized with releases;
 4. verify the live request/response and confirm no request logging is enabled;
-5. build release binaries with
+5. build release binaries with the only accepted endpoint value,
    `PALAMEDES_UPDATE_ENDPOINT=https://version.palamedes.dev/check`.
 
 Until all five steps are complete, release builds omit the compile-time endpoint

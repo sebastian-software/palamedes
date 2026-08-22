@@ -393,7 +393,10 @@ The native CLI contains a privacy-bounded update-check client, but published
 binaries keep it disabled until the repository-owned endpoint has valid
 DNS/TLS, its aggregate dataset, and a verified deployment. Enabling a release
 is an explicit build step; a binary without that release-time endpoint makes no
-update-check request and writes no update-check cache.
+update-check request and writes no update-check cache. A configured build fails
+unless the value is exactly the owned HTTPS Worker route
+`https://version.palamedes.dev/check`; malformed, alternate-host, credentialed,
+port-qualified, query, and fragment values cannot produce a release binary.
 
 Once enabled, a regular `pmds` subcommand checks at most once per 24 hours. It
 runs as part of that process — never as a daemon, background service, or
@@ -404,10 +407,14 @@ postinstall hook — and sends only this JSON shape over HTTPS:
 ```
 
 There is no installation or telemetry ID and no command, arguments, path,
-project data, username, or hostname. Palamedes application code does not read
-or store the client IP or request headers. The service aggregates rate-limited
-request volume and version/OS/architecture/CI distributions; because it has no
-stable identifier, those requests are not unique weekly installations.
+project data, username, or hostname. Palamedes application code does not access
+or persist client IP addresses, forwarded headers, user agents, or other
+identifying headers. The Worker reads the request URL path, `Content-Type`, and
+`Content-Length` only to validate the route, media type, and body-size limit;
+none of that protocol metadata is written to Analytics Engine or application
+logs. The service aggregates rate-limited request volume and
+version/OS/architecture/CI distributions; because it has no stable identifier,
+those requests are not unique weekly installations.
 
 Set either opt-out before invoking the CLI:
 

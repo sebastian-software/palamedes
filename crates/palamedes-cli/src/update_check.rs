@@ -1,10 +1,10 @@
 //! Privacy-bounded, advisory CLI update checks.
 //!
 //! The production endpoint is a build-time contract. Release builds do not
-//! perform a request until the release environment supplies an HTTPS
-//! `PALAMEDES_UPDATE_ENDPOINT`; this keeps an undeployed endpoint from becoming
-//! an implicit network call. ADR 027 owns the rollout and data-minimization
-//! contract.
+//! perform a request until the release environment supplies the allowlisted
+//! `PALAMEDES_UPDATE_ENDPOINT`; invalid values fail the build. This keeps an
+//! undeployed or malformed endpoint from becoming an implicit network call.
+//! ADR 027 owns the rollout and data-minimization contract.
 
 use std::ffi::OsString;
 use std::fs;
@@ -18,6 +18,11 @@ use serde::{Deserialize, Serialize};
 const CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024;
+
+#[cfg(palamedes_update_endpoint)]
+const COMPILED_UPDATE_ENDPOINT: Option<&str> = Some(env!("PALAMEDES_VALIDATED_UPDATE_ENDPOINT"));
+#[cfg(not(palamedes_update_endpoint))]
+const COMPILED_UPDATE_ENDPOINT: Option<&str> = None;
 
 /// A due check that runs alongside the command and is joined before process
 /// exit so a successful response can produce its advisory stderr notice.
@@ -64,7 +69,7 @@ struct Settings {
 
 impl Settings {
     fn from_process() -> Option<Self> {
-        let endpoint = option_env!("PALAMEDES_UPDATE_ENDPOINT")?;
+        let endpoint = COMPILED_UPDATE_ENDPOINT?;
         Self::from_environment(endpoint, |name| std::env::var_os(name))
     }
 
@@ -72,8 +77,7 @@ impl Settings {
         endpoint: &'static str,
         environment: impl Fn(&str) -> Option<OsString>,
     ) -> Option<Self> {
-        if !endpoint.starts_with("https://")
-            || environment("DO_NOT_TRACK").as_deref() == Some("1".as_ref())
+        if environment("DO_NOT_TRACK").as_deref() == Some("1".as_ref())
             || environment("PALAMEDES_UPDATE_CHECK").as_deref() == Some("0".as_ref())
         {
             return None;
@@ -485,22 +489,16 @@ mod tests {
     }
 
     #[test]
-    fn opt_outs_and_non_https_endpoints_disable_all_work() {
-        for (endpoint, values) in [
-            (
-                "https://version.palamedes.dev/check",
-                vec![("HOME", "/tmp/home"), ("DO_NOT_TRACK", "1")],
-            ),
-            (
-                "https://version.palamedes.dev/check",
-                vec![("HOME", "/tmp/home"), ("PALAMEDES_UPDATE_CHECK", "0")],
-            ),
-            (
-                "http://version.palamedes.dev/check",
-                vec![("HOME", "/tmp/home")],
-            ),
+    fn opt_outs_disable_all_work() {
+        for values in [
+            vec![("HOME", "/tmp/home"), ("DO_NOT_TRACK", "1")],
+            vec![("HOME", "/tmp/home"), ("PALAMEDES_UPDATE_CHECK", "0")],
         ] {
-            assert!(Settings::from_environment(endpoint, environment(&values)).is_none());
+            assert!(Settings::from_environment(
+                "https://version.palamedes.dev/check",
+                environment(&values)
+            )
+            .is_none());
         }
     }
 
