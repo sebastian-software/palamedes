@@ -42,6 +42,15 @@ namespace. Commands of other configured plugins still run and report the
 skipped plugin as a `PLUGIN_UNAVAILABLE` warning; the failure is fatal only
 when the requested namespace cannot be served.
 
+After a successful `describe`, the host caches the validated manifest in
+`.palamedes/plugin-manifests.json`. Later plugin invocations reuse manifests
+whose canonical executable path, byte length, and modification time still
+match, while continuing to validate every configured namespace and collision.
+Changing a binary, the host version, or the protocol version forces another
+`describe`. The cache is only a startup optimization: missing, corrupt, or
+unwritable cache data falls back to the normal handshake without blocking a
+plugin command.
+
 The host consumes its own invocation flags before it forwards `args` to the
 plugin: `--json`, `--config PATH`, `-c PATH`, and `--config=PATH` never appear
 there. A bare `--` is likewise a host passthrough marker rather than a plugin

@@ -161,7 +161,9 @@ because queued native work is not cancellable.
 Third-party commands run as `pmds <plugin> <command>` and must be explicitly
 listed under `plugins` in the Palamedes configuration — installed packages are
 never auto-discovered. Plugins are binary-only native executables using the
-versioned binary plugin protocol. See `/docs/cli.md` and
+versioned binary plugin protocol. Validated manifests are cached under
+`.palamedes` and re-described when the binary, host, or protocol identity
+changes; cache failures are non-fatal. See `/docs/cli.md` and
 `/docs/api/cli-binary-plugin.md`.
 
 ## Recommended docs

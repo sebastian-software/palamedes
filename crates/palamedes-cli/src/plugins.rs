@@ -18,19 +18,21 @@ use std::sync::atomic::{AtomicI32, Ordering};
 #[cfg(unix)]
 use std::sync::Once;
 use std::thread;
+use std::time::UNIX_EPOCH;
 
 use clap::CommandFactory;
 use serde_json::{json, Value};
 
 use palamedes_plugin::{Event as PluginEvent, PluginDiagnostic, PluginManifest, Severity};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::command::Context;
-use crate::config::{ConfigError, ConfigPluginDeclaration, LoadedConfig};
+use crate::config::{ConfigError, LoadedConfig};
 use crate::error::CliError;
 
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
+const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 1;
 
 fn reserved_plugin_namespaces() -> BTreeSet<String> {
     command_namespace_tokens(&mut crate::cli::Cli::command())
@@ -231,13 +233,49 @@ fn load_registry(
     native_executable: &Path,
 ) -> Result<PluginRegistry, PluginFailure> {
     let mut registry = PluginRegistry::default();
+    let mut cache = load_plugin_manifest_cache(config);
+    let mut active_cache_keys = BTreeSet::new();
+    let mut cache_dirty = false;
+    let mut collision = None;
     for declaration in &config.plugins {
         // A plugin that cannot resolve or describe blocks only its own
         // namespace; other configured commands keep working and surface the
         // skipped plugin as a warning diagnostic.
-        let (resolved, manifest) =
-            match describe_plugin(declaration, config, cwd, native_executable) {
-                Ok(loaded) => loaded,
+        let resolved = match resolve_binary_plugin(declaration.specifier(), &config.config_path) {
+            Ok(resolved) => resolved,
+            Err(failure) => {
+                registry.skipped.push(SkippedPlugin {
+                    specifier: declaration.specifier().to_owned(),
+                    failure,
+                });
+                continue;
+            }
+        };
+        let cache_identity = plugin_cache_identity(&resolved);
+        let manifest = match cache_identity.as_ref().and_then(|(key, stamp)| {
+            active_cache_keys.insert(key.clone());
+            cache
+                .entries
+                .get(key)
+                .filter(|entry| &entry.stamp == stamp)
+                .map(|entry| entry.manifest.clone())
+                .filter(|manifest| validate_manifest(&resolved, manifest).is_ok())
+        }) {
+            Some(manifest) => manifest,
+            None => match describe_resolved_plugin(&resolved, cwd, native_executable) {
+                Ok(manifest) => {
+                    if let Some((key, stamp)) = cache_identity {
+                        cache.entries.insert(
+                            key,
+                            CachedPluginManifest {
+                                stamp,
+                                manifest: manifest.clone(),
+                            },
+                        );
+                        cache_dirty = true;
+                    }
+                    manifest
+                }
                 Err(failure) => {
                     registry.skipped.push(SkippedPlugin {
                         specifier: declaration.specifier().to_owned(),
@@ -245,13 +283,12 @@ fn load_registry(
                     });
                     continue;
                 }
-            };
+            },
+        };
         let namespace = manifest.name.clone();
         if registry.plugins.contains_key(&namespace) {
-            return Err(PluginFailure::new(
-                "PLUGIN_NAMESPACE_COLLISION",
-                format!("Multiple configured plugins declare the namespace \"{namespace}\"."),
-            ));
+            collision.get_or_insert(namespace);
+            continue;
         }
         registry.plugins.insert(
             namespace,
@@ -262,25 +299,104 @@ fn load_registry(
             },
         );
     }
+    let cached_entry_count = cache.entries.len();
+    cache
+        .entries
+        .retain(|key, _| active_cache_keys.contains(key));
+    cache_dirty |= cache.entries.len() != cached_entry_count;
+    if cache_dirty {
+        save_plugin_manifest_cache(config, &cache);
+    }
+    if let Some(namespace) = collision {
+        return Err(PluginFailure::new(
+            "PLUGIN_NAMESPACE_COLLISION",
+            format!("Multiple configured plugins declare the namespace \"{namespace}\"."),
+        ));
+    }
     Ok(registry)
 }
 
-fn describe_plugin(
-    declaration: &ConfigPluginDeclaration,
-    config: &LoadedConfig,
+fn describe_resolved_plugin(
+    resolved: &ResolvedPlugin,
     cwd: &Path,
     native_executable: &Path,
-) -> Result<(ResolvedPlugin, PluginManifest), PluginFailure> {
-    let resolved = resolve_binary_plugin(declaration.specifier(), &config.config_path)?;
+) -> Result<PluginManifest, PluginFailure> {
     let request = json!({
         "palamedesBinaryPluginProtocol": PROTOCOL_VERSION,
         "hostVersion": env!("CARGO_PKG_VERSION"),
         "kind": "describe",
     });
-    let invocation = invoke_binary(&resolved, &request, cwd, native_executable, None)?;
-    let manifest = manifest_from_invocation(&resolved, invocation)?;
-    validate_manifest(&resolved, &manifest)?;
-    Ok((resolved, manifest))
+    let invocation = invoke_binary(resolved, &request, cwd, native_executable, None)?;
+    let manifest = manifest_from_invocation(resolved, invocation)?;
+    validate_manifest(resolved, &manifest)?;
+    Ok(manifest)
+}
+
+fn plugin_manifest_cache_path(config: &LoadedConfig) -> PathBuf {
+    config.root_dir.join(".palamedes/plugin-manifests.json")
+}
+
+fn load_plugin_manifest_cache(config: &LoadedConfig) -> PluginManifestCache {
+    let fresh = PluginManifestCache::fresh();
+    let Ok(raw) = fs::read(plugin_manifest_cache_path(config)) else {
+        return fresh;
+    };
+    let Ok(cache) = serde_json::from_slice::<PluginManifestCache>(&raw) else {
+        return fresh;
+    };
+    if cache.schema != PLUGIN_MANIFEST_CACHE_SCHEMA
+        || cache.protocol_version != PROTOCOL_VERSION
+        || cache.host_version != env!("CARGO_PKG_VERSION")
+    {
+        return fresh;
+    }
+    cache
+}
+
+fn save_plugin_manifest_cache(config: &LoadedConfig, cache: &PluginManifestCache) {
+    let path = plugin_manifest_cache_path(config);
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    let Ok(raw) = serde_json::to_vec(cache) else {
+        return;
+    };
+    // This cache is an optional startup optimization. A read-only checkout or
+    // failed publication must never stop the requested plugin command; the next
+    // invocation simply performs the describe handshake again.
+    if fs::create_dir_all(parent).is_ok() {
+        let _ = persist_plugin_manifest_cache(&path, &raw);
+    }
+}
+
+fn persist_plugin_manifest_cache(path: &Path, raw: &[u8]) -> io::Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(raw)?;
+    temporary.flush()?;
+    temporary.persist(path).map_err(|error| error.error)?;
+    Ok(())
+}
+
+fn plugin_cache_identity(resolved: &ResolvedPlugin) -> Option<(String, PluginBinaryStamp)> {
+    let binary_path = fs::canonicalize(&resolved.binary_path).ok()?;
+    let metadata = fs::metadata(&binary_path).ok()?;
+    let modified_ns = u64::try_from(
+        metadata
+            .modified()
+            .ok()?
+            .duration_since(UNIX_EPOCH)
+            .ok()?
+            .as_nanos(),
+    )
+    .ok()?;
+    Some((
+        binary_path.to_string_lossy().into_owned(),
+        PluginBinaryStamp {
+            length: metadata.len(),
+            modified_ns,
+        },
+    ))
 }
 
 fn manifest_from_invocation(
@@ -1143,6 +1259,40 @@ struct PluginRegistry {
     skipped: Vec<SkippedPlugin>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginManifestCache {
+    schema: u64,
+    protocol_version: u64,
+    host_version: String,
+    entries: BTreeMap<String, CachedPluginManifest>,
+}
+
+impl PluginManifestCache {
+    fn fresh() -> Self {
+        Self {
+            schema: PLUGIN_MANIFEST_CACHE_SCHEMA,
+            protocol_version: PROTOCOL_VERSION,
+            host_version: env!("CARGO_PKG_VERSION").to_owned(),
+            entries: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CachedPluginManifest {
+    stamp: PluginBinaryStamp,
+    manifest: PluginManifest,
+}
+
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginBinaryStamp {
+    length: u64,
+    modified_ns: u64,
+}
+
 #[derive(Debug)]
 struct SkippedPlugin {
     specifier: String,
@@ -1233,9 +1383,10 @@ mod tests {
 
     use super::{
         command_namespace_tokens, finish_run, is_kebab_name, matches_constraint, parse_event,
-        plugin_catalogs, reserved_plugin_namespaces, resolve_binary_plugin, validate_manifest,
-        validate_manifest_with_reserved_namespaces, BinaryInvocation, PluginEvent,
-        PluginInvocation, PluginManifest, ResolvedPlugin, PROTOCOL_VERSION,
+        persist_plugin_manifest_cache, plugin_catalogs, reserved_plugin_namespaces,
+        resolve_binary_plugin, validate_manifest, validate_manifest_with_reserved_namespaces,
+        BinaryInvocation, PluginEvent, PluginInvocation, PluginManifest, ResolvedPlugin,
+        PROTOCOL_VERSION,
     };
     use crate::config::load_config;
     use palamedes_plugin::ManifestCommand;
@@ -1625,6 +1776,134 @@ plugins:
         assert_eq!(registry.skipped[0].failure.code, "PLUGIN_MISSING");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn caches_plugin_manifests_and_redescribes_only_changed_binaries() {
+        use std::os::unix::fs::PermissionsExt;
+
+        use super::{load_registry, plugin_manifest_cache_path};
+
+        let root = temp_dir("manifest-cache");
+        for namespace in ["alpha", "beta"] {
+            let plugin = root.join(namespace);
+            fs::create_dir_all(&plugin).expect("plugin directory");
+            fs::write(
+                plugin.join("package.json"),
+                r#"{"palamedes":{"pluginBinary":"./describe"}}"#,
+            )
+            .expect("plugin manifest");
+            let script = plugin.join("describe");
+            fs::write(
+                &script,
+                format!(
+                    "#!/bin/sh\nread _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
+                     printf '{{\"event\":\"manifest\",\"name\":\"{namespace}\",\
+                     \"protocolVersion\":1,\"commands\":{{\"inspect\":{{}}}}}}\\n'\n"
+                ),
+            )
+            .expect("describe script");
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        }
+        fs::write(
+            root.join("palamedes.yaml"),
+            r"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+plugins:
+  - './alpha'
+  - './beta'
+",
+        )
+        .expect("config");
+        let config = load_config(&root, None).expect("config with plugins");
+
+        let first = load_registry(&config, &root, Path::new("pmds")).expect("initial registry");
+        assert_eq!(first.plugins.len(), 2);
+        assert_eq!(fs::read_to_string(root.join("alpha/counter")).unwrap(), "x");
+        assert_eq!(fs::read_to_string(root.join("beta/counter")).unwrap(), "x");
+        assert!(plugin_manifest_cache_path(&config).is_file());
+
+        let warm = load_registry(&config, &root, Path::new("pmds")).expect("cached registry");
+        assert_eq!(warm.plugins.len(), 2);
+        assert_eq!(fs::read_to_string(root.join("alpha/counter")).unwrap(), "x");
+        assert_eq!(fs::read_to_string(root.join("beta/counter")).unwrap(), "x");
+
+        let alpha_script = root.join("alpha/describe");
+        let mut changed = fs::read_to_string(&alpha_script).expect("alpha script");
+        changed.push('\n');
+        fs::write(&alpha_script, changed).expect("change alpha binary identity");
+        let refreshed =
+            load_registry(&config, &root, Path::new("pmds")).expect("refreshed registry");
+        assert_eq!(refreshed.plugins.len(), 2);
+        assert_eq!(
+            fs::read_to_string(root.join("alpha/counter")).unwrap(),
+            "xx"
+        );
+        assert_eq!(fs::read_to_string(root.join("beta/counter")).unwrap(), "x");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cached_manifests_still_enforce_namespace_collisions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        use super::load_registry;
+
+        let root = temp_dir("cached-collision");
+        for plugin_name in ["first", "second"] {
+            let plugin = root.join(plugin_name);
+            fs::create_dir_all(&plugin).expect("plugin directory");
+            fs::write(
+                plugin.join("package.json"),
+                r#"{"palamedes":{"pluginBinary":"./describe"}}"#,
+            )
+            .expect("plugin manifest");
+            let script = plugin.join("describe");
+            fs::write(
+                &script,
+                "#!/bin/sh\nread _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
+                 printf '{\"event\":\"manifest\",\"name\":\"shared\",\
+                 \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
+            )
+            .expect("describe script");
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        }
+        fs::write(
+            root.join("palamedes.yaml"),
+            r"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+plugins:
+  - './first'
+  - './second'
+",
+        )
+        .expect("config");
+        let config = load_config(&root, None).expect("config with plugins");
+
+        for attempt in 1..=2 {
+            let error = load_registry(&config, &root, Path::new("pmds"))
+                .expect_err("duplicate namespace rejected");
+            assert_eq!(error.code, "PLUGIN_NAMESPACE_COLLISION");
+            assert_eq!(
+                fs::read_to_string(root.join("first/counter")).unwrap(),
+                "x",
+                "first binary describe count after attempt {attempt}"
+            );
+            assert_eq!(
+                fs::read_to_string(root.join("second/counter")).unwrap(),
+                "x",
+                "second binary describe count after attempt {attempt}"
+            );
+        }
+    }
+
     /*
      * The protocol documents catalogs[].locales[].path as the catalog file, so
      * a plugin has to be able to open it. Without the storage extension every
@@ -1677,6 +1956,27 @@ catalogs:
         assert!(matches_constraint(&["darwin".to_owned()], "darwin"));
         assert!(!matches_constraint(&["linux".to_owned()], "darwin"));
         assert!(!matches_constraint(&["!darwin".to_owned()], "darwin"));
+    }
+
+    #[test]
+    fn publishes_plugin_manifest_cache_without_leaving_partial_files() {
+        let root = temp_dir("atomic-manifest-cache");
+        let cache_dir = root.join(".palamedes");
+        fs::create_dir_all(&cache_dir).expect("cache directory");
+        let cache_path = cache_dir.join("plugin-manifests.json");
+        fs::write(&cache_path, br#"{"generation":"old"}"#).expect("seed cache");
+
+        let replacement = br#"{"generation":"new","entries":{"plugin":{}}}"#;
+        persist_plugin_manifest_cache(&cache_path, replacement).expect("publish cache");
+
+        assert_eq!(fs::read(&cache_path).expect("read cache"), replacement);
+        assert_eq!(
+            fs::read_dir(&cache_dir)
+                .expect("read cache directory")
+                .map(|entry| entry.expect("cache entry").file_name())
+                .collect::<Vec<_>>(),
+            [std::ffi::OsString::from("plugin-manifests.json")]
+        );
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {

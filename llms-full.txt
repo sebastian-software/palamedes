@@ -421,7 +421,10 @@ pnpm exec pmds <plugin> <command> [...args]
 Third-party CLI plugins must be explicitly listed under `plugins` in the
 Palamedes configuration — installed packages are never auto-discovered.
 Plugins are binary-only native executables that implement the versioned binary
-plugin protocol. See `/docs/cli.md`, `/docs/api/cli-binary-plugin.md`,
+plugin protocol. The host caches validated manifests under `.palamedes` by
+canonical binary path and file metadata, re-describes them when the binary,
+host, or protocol identity changes, and treats cache failures as non-fatal.
+See `/docs/cli.md`, `/docs/api/cli-binary-plugin.md`,
 `/adr/017-cli-plugin-execution-boundary.md`, and
 `/adr/018-binary-plugin-protocol.md`.
 
