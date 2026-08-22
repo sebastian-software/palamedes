@@ -227,10 +227,16 @@ try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl })
   const page = await context.newPage()
-  await page.goto(baseUrl, { waitUntil: "networkidle" })
-  const copyButton = page.getByRole("button", { name: /copy command/i }).first()
-  await copyButton.click()
-  await page.getByRole("status").filter({ hasText: "Copied" }).waitFor()
+  await page.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
+  const copyButton = page.getByRole("button", { name: "Copy command: pnpm bench:e2e" })
+  await copyButton.focus()
+  await page.keyboard.press("Enter")
+  await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "pnpm bench:e2e")
+  await page.waitForTimeout(1000)
+  await page.keyboard.press("Enter")
+  await page.waitForTimeout(700)
+  await page.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
 
   await page.goto(`${baseUrl}/frameworks`, { waitUntil: "networkidle" })
   const matrix = page.getByLabel("Verified framework and locale strategy matrix")
@@ -240,6 +246,86 @@ try {
   await page.waitForTimeout(250)
   assert.ok((await matrix.evaluate((element) => element.scrollLeft)) > initialScroll)
   await context.close()
+
+  const fallbackContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  await fallbackContext.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () => Promise.reject(new Error("clipboard permission denied")),
+      },
+    })
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value(command) {
+        globalThis.__proofCopyFallback = command
+        return command === "copy"
+      },
+    })
+  })
+  const fallbackPage = await fallbackContext.newPage()
+  await fallbackPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
+  const fallbackButton = fallbackPage.getByRole("button", {
+    name: "Copy command: pnpm bench:e2e",
+  })
+  await fallbackButton.focus()
+  await fallbackPage.keyboard.press("Space")
+  await fallbackPage.getByRole("status").filter({ hasText: "Copied pnpm bench:e2e" }).waitFor()
+  assert.equal(await fallbackPage.evaluate(() => globalThis.__proofCopyFallback), "copy")
+  assert.equal(await fallbackButton.evaluate((element) => element === document.activeElement), true)
+  await fallbackContext.close()
+
+  const delayedCopyContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  await delayedCopyContext.addInitScript(() => {
+    const proofCopyTimers = new Set()
+    const setTimeoutForProofCopy = globalThis.setTimeout
+    const clearTimeoutForProofCopy = globalThis.clearTimeout
+    globalThis.setTimeout = (callback, delay, ...args) => {
+      const timer = setTimeoutForProofCopy(
+        () => {
+          proofCopyTimers.delete(timer)
+          return callback()
+        },
+        delay,
+        ...args
+      )
+      if (delay === 1500) proofCopyTimers.add(timer)
+      return timer
+    }
+    globalThis.clearTimeout = (timer) => {
+      proofCopyTimers.delete(timer)
+      return clearTimeoutForProofCopy(timer)
+    }
+    globalThis.__proofCopyTimers = proofCopyTimers
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () =>
+          new Promise((resolve) => {
+            globalThis.__resolveProofCopy = resolve
+          }),
+      },
+    })
+  })
+  const delayedCopyPage = await delayedCopyContext.newPage()
+  const delayedCopyErrors = []
+  delayedCopyPage.on("pageerror", (error) => delayedCopyErrors.push(error.message))
+  delayedCopyPage.on("console", (message) => {
+    if (message.type() === "error") delayedCopyErrors.push(message.text())
+  })
+  await delayedCopyPage.goto(`${baseUrl}/proof`, { waitUntil: "networkidle" })
+  await delayedCopyPage.getByRole("button", { name: "Copy command: pnpm bench:e2e" }).click()
+  await delayedCopyPage.waitForFunction(() => typeof globalThis.__resolveProofCopy === "function")
+  await delayedCopyPage.getByRole("link", { name: "i18n performance", exact: true }).click()
+  await delayedCopyPage.waitForURL(`${baseUrl}/i18n-performance`)
+  await delayedCopyPage.evaluate(async () => {
+    globalThis.__resolveProofCopy()
+    await Promise.resolve()
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  })
+  assert.equal(await delayedCopyPage.evaluate(() => globalThis.__proofCopyTimers.size), 0)
+  assert.deepEqual(delayedCopyErrors, [])
+  await delayedCopyContext.close()
 } finally {
   await browser?.close()
   await staticServer?.close()
