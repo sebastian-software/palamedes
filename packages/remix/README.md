@@ -112,6 +112,11 @@ hash. Create a custom hook with
 smaller hash-only output when source text must not ship. Parser-free runtimes
 leave retained ICU fallbacks raw; use `@palamedes/core` when they must format.
 
+Loaded Palamedes configuration is cached between catalog imports, but each hit
+validates the config file's content digest. Under `node --watch`, locale,
+fallback, or catalog-path edits therefore take effect without a manual process
+restart.
+
 The transform cost moves from build time to process start, stays proportional
 to the number of macro-containing modules, and recurs per cold start. That is
 the same tradeoff Remix makes for its own TypeScript and JSX lowering, so
