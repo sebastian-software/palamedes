@@ -2,7 +2,7 @@
 /*
  * Guards the size of the shipped native artifacts.
  *
- * Palamedes ships the CLI and core-node addon for eight platforms, so a
+ * Palamedes ships the CLI and core-node addon for six platforms, so a
  * dependency that bakes data into either artifact multiplies across all of
  * them. That is easy to add without noticing: linking a full Unicode collator
  * once cost 1.3 MB and only came to light because someone measured by hand.

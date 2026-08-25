@@ -109,12 +109,6 @@ jobs:
           - package_name: "@palamedes/cli-darwin-arm64"
             runner: macos-14
             rust_target: ""
-          - package_name: "@palamedes/core-node-darwin-x64"
-            runner: macos-15-intel
-            rust_target: ""
-          - package_name: "@palamedes/cli-darwin-x64"
-            runner: macos-15-intel
-            rust_target: ""
           - package_name: "@palamedes/core-node-linux-x64-gnu"
             runner: ubuntu-24.04
             rust_target: ""
@@ -148,12 +142,6 @@ jobs:
             rust_target: ""
           - package_name: "@palamedes/cli-win32-x64-msvc"
             runner: windows-2025
-            rust_target: ""
-          - package_name: "@palamedes/core-node-win32-arm64-msvc"
-            runner: windows-11-arm
-            rust_target: ""
-          - package_name: "@palamedes/cli-win32-arm64-msvc"
-            runner: windows-11-arm
             rust_target: ""
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
