@@ -63,7 +63,7 @@ pnpm check:llms
 
 `pnpm check:binary-size` builds the release CLI and core-node addon and holds
 each artifact under its own fixed ceiling. Palamedes
-ships prebuilt binaries for eight platforms in both native families, so
+ships prebuilt binaries for six platforms in both native families, so
 anything baked into either artifact multiplies; the check exists because
 linking a full Unicode collator once added 1.3 MB and only surfaced when someone
 measured by hand. The script records the published Linux x64 GNU baseline and

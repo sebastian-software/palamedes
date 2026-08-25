@@ -38,7 +38,7 @@ pnpm add @palamedes/core-node
 
 See [Platform support](https://github.com/sebastian-software/palamedes/blob/main/docs/platform-support.md)
 before installing the native binding. It is the authoritative list of published
-targets, Linux libc variants, Node process selection, and recovery steps.
+targets, Linux libc variants, unsupported Node processes, and recovery steps.
 
 ## Example
 
