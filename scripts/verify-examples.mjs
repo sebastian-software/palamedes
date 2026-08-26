@@ -154,6 +154,22 @@ async function verifyConcurrentServerI18n(example) {
 
 async function verifySmokeCheck(example, check) {
   const response = await requestText(example.port, check.path, check.headers)
+  if (check.redirectTo) {
+    const location = response.headers.location
+    const redirectedPath = location
+      ? new URL(location, `http://127.0.0.1:${example.port}`).pathname
+      : null
+    if (
+      response.statusCode < 300 ||
+      response.statusCode >= 400 ||
+      redirectedPath !== check.redirectTo
+    ) {
+      throw new Error(
+        `Expected ${example.id} response for ${check.path} to redirect to ${check.redirectTo}, received status ${response.statusCode} and location ${JSON.stringify(location)}`
+      )
+    }
+  }
+
   if (check.expectedBarrierId) {
     const reachedBarrier = response.headers[SERVER_I18N_TEST_BARRIER_REACHED_HEADER]
     const reachedBarrierIds = Array.isArray(reachedBarrier) ? reachedBarrier : [reachedBarrier]

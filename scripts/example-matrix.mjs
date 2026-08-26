@@ -393,6 +393,12 @@ export const EXAMPLE_MATRIX = [
     },
     smokeChecks: [
       {
+        path: "/",
+        htmlLang: null,
+        redirectTo: "/en",
+        substrings: [],
+      },
+      {
         headers: { "accept-language": "de" },
         path: "/en",
         htmlLang: "en",
