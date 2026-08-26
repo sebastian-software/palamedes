@@ -6,7 +6,7 @@ plus the Vite MDX example. Release CI publishes one shared examples container to
 GitHub Container Registry; deployment from that image to the public demo
 infrastructure is managed outside this repository. Public demo URLs are
 documented as the live reference surface where hosting exists, but reachability
-depends on the hosting and DNS notes in this document. The five currently hosted
+depends on the hosting and DNS notes in this document. The four currently hosted
 subdomain demos require the per-example wildcard DNS records described under
 Subdomain Locale Hosting. The five tld rows describe the intended shape only:
 the `examples.palamedes-i18n.*` domains described under TLD Locale Hosting are
@@ -79,14 +79,19 @@ How each strategy encodes the locale:
 | subdomain | [en](https://en.react-router-subdomain.examples.palamedes.dev) · [de](https://de.react-router-subdomain.examples.palamedes.dev) · [es](https://es.react-router-subdomain.examples.palamedes.dev)                               |
 | tld       | [en](https://react-router.examples.palamedes-i18n.com) · [de](https://react-router.examples.palamedes-i18n.de) · [es](https://react-router.examples.palamedes-i18n.es) · [fr](https://react-router.examples.palamedes-i18n.fr) |
 
-### SolidStart
+### Solid
 
-| Strategy  | Live demos                                                                                                                                                                                                             |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| cookie    | [solidstart-cookie.examples.palamedes.dev](https://solidstart-cookie.examples.palamedes.dev)                                                                                                                           |
-| route     | [en](https://solidstart-route.examples.palamedes.dev/en) · [de](https://solidstart-route.examples.palamedes.dev/de) · [es](https://solidstart-route.examples.palamedes.dev/es)                                         |
-| subdomain | [en](https://en.solidstart-subdomain.examples.palamedes.dev) · [de](https://de.solidstart-subdomain.examples.palamedes.dev) · [es](https://es.solidstart-subdomain.examples.palamedes.dev)                             |
-| tld       | [en](https://solidstart.examples.palamedes-i18n.com) · [de](https://solidstart.examples.palamedes-i18n.de) · [es](https://solidstart.examples.palamedes-i18n.es) · [fr](https://solidstart.examples.palamedes-i18n.fr) |
+The Solid 2 examples are verified locally and in CI. Their renamed public hosts
+are being provisioned and are intentionally not linked as live references until
+TLS, reverse-proxy routing, and the deployed image have passed an end-to-end
+check.
+
+| Strategy  | Reference source                                        |
+| --------- | ------------------------------------------------------- |
+| cookie    | [examples/solid-cookie](../examples/solid-cookie)       |
+| route     | [examples/solid-route](../examples/solid-route)         |
+| subdomain | [examples/solid-subdomain](../examples/solid-subdomain) |
+| tld       | [examples/solid-tld](../examples/solid-tld)             |
 
 ### Remix v3
 
@@ -114,7 +119,7 @@ therefore needs its own wildcard record:
 - `*.tanstack-subdomain.examples.palamedes.dev`
 - `*.waku-subdomain.examples.palamedes.dev`
 - `*.react-router-subdomain.examples.palamedes.dev`
-- `*.solidstart-subdomain.examples.palamedes.dev`
+- `*.solid-subdomain.examples.palamedes.dev`
 
 (Five records, same record type and target as the existing wildcard.)
 
@@ -132,8 +137,10 @@ must send `Vary: Host`); otherwise a response rendered for one locale host could
 served for another. This is the same constraint the per-host routing already
 implies, but it must hold for caching layers too.
 
-These records and proxy routes are now in place, so the five subdomain rows above
-are publicly reachable (each locale host returns 200 and renders its locale). The
+These records and proxy routes are in place for Next.js, TanStack Start, Waku,
+and React Router, so those four subdomain rows are publicly reachable (each
+locale host returns 200 and renders its locale). The renamed Solid wildcard and
+proxy route are still provisioning. The
 canonical verification path remains `pnpm verify:examples`, which exercises the
 subdomain strategy locally via `*.lvh.me` hosts. Remix subdomain support is
 verified the same way, but it is not included in the public DNS/proxy deployment
@@ -148,7 +155,7 @@ Each framework example is reachable under four TLDs:
 - `tanstack.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
 - `waku.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
 - `react-router.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
-- `solidstart.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
+- `solid.examples.palamedes-i18n.com` / `.de` / `.es` / `.fr`
 
 All four TLD variants of a given framework point to the same backend. The
 reverse proxy must pass the original `Host` header through unchanged — the app

@@ -1,6 +1,6 @@
 import nextjsRoute from "~/assets/screenshots/nextjs-route-interactive.png"
 import reactRouterCookie from "~/assets/screenshots/react-router-cookie-interactive.png"
-import solidstartRoute from "~/assets/screenshots/solidstart-route-interactive.png"
+import solidRoute from "~/assets/screenshots/solid-route-interactive.png"
 import wakuCookie from "~/assets/screenshots/waku-cookie-interactive.png"
 import { docsHref } from "~/data/links"
 
@@ -17,7 +17,7 @@ const SHOTS: Shot[] = [
     caption: "react-router-cookie · de · CI run",
     url: "react-router-cookie…",
   },
-  { src: solidstartRoute, caption: "solidstart-route · /de · CI run", url: "solidstart-route…/de" },
+  { src: solidRoute, caption: "solid-route · /de · CI run", url: "solid-route…/de" },
   { src: wakuCookie, caption: "waku-cookie · de · CI run", url: "waku-cookie…" },
 ]
 

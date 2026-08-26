@@ -32,7 +32,7 @@ example needs local setup notes that do not belong in the shared matrix guide.
 
 ## What This Matrix Proves
 
-- one i18n mental model across Next.js, TanStack Start, SolidStart, Waku, React Router, and server-first Remix v3
+- one i18n mental model across Next.js, TanStack Start, Solid, Waku, React Router, and server-first Remix v3
 - one runtime story with request-local server i18n plus client interaction
 - one message identity story through source-string-first `.po` workflows
 - one proof surface with browser verification, screenshots, and SSR checks
@@ -86,7 +86,7 @@ each strategy encodes and switches locale, see
 
 - [examples/nextjs-cookie](./nextjs-cookie)
 - [examples/tanstack-cookie](./tanstack-cookie)
-- [examples/solidstart-cookie](./solidstart-cookie)
+- [examples/solid-cookie](./solid-cookie)
 - [examples/waku-cookie](./waku-cookie)
 - [examples/react-router-cookie](./react-router-cookie)
 - [examples/remix-cookie](./remix-cookie)
@@ -103,7 +103,7 @@ These examples prove:
 
 - [examples/nextjs-route](./nextjs-route)
 - [examples/tanstack-route](./tanstack-route)
-- [examples/solidstart-route](./solidstart-route)
+- [examples/solid-route](./solid-route)
 - [examples/waku-route](./waku-route)
 - [examples/react-router-route](./react-router-route)
 - [examples/remix-route](./remix-route)
@@ -120,7 +120,7 @@ These examples prove:
 
 - [examples/nextjs-subdomain](./nextjs-subdomain)
 - [examples/tanstack-subdomain](./tanstack-subdomain)
-- [examples/solidstart-subdomain](./solidstart-subdomain)
+- [examples/solid-subdomain](./solid-subdomain)
 - [examples/waku-subdomain](./waku-subdomain)
 - [examples/react-router-subdomain](./react-router-subdomain)
 - [examples/remix-subdomain](./remix-subdomain)
@@ -137,7 +137,7 @@ These examples prove:
 
 - [examples/nextjs-tld](./nextjs-tld)
 - [examples/tanstack-tld](./tanstack-tld)
-- [examples/solidstart-tld](./solidstart-tld)
+- [examples/solid-tld](./solid-tld)
 - [examples/waku-tld](./waku-tld)
 - [examples/react-router-tld](./react-router-tld)
 - [examples/remix-tld](./remix-tld)
@@ -259,7 +259,7 @@ Together they cover:
 
 `Example Verification` runs the smoke layer across the complete 25-example
 matrix on relevant pull requests and `main` pushes, including the deterministic
-request-scope concurrency checks for React Router, SolidStart, TanStack Start,
+request-scope concurrency checks for React Router, Solid, TanStack Start,
 and Waku. It runs the Playwright layer for its 21 browser-capable examples on a
 weekly schedule or when a maintainer selects `run_browser` in manual dispatch.
 The four Remix v3 examples are intentionally excluded from that browser layer:
@@ -293,10 +293,10 @@ The example scripts use a fixed port layout so the apps can run in parallel:
 - `4041` `react-router-route`
 - `4042` `react-router-subdomain`
 - `4043` `react-router-tld`
-- `4050` `solidstart-cookie`
-- `4051` `solidstart-route`
-- `4052` `solidstart-subdomain`
-- `4053` `solidstart-tld`
+- `4050` `solid-cookie`
+- `4051` `solid-route`
+- `4052` `solid-subdomain`
+- `4053` `solid-tld`
 - `4060` `remix-cookie`
 - `4061` `remix-route`
 - `4062` `remix-subdomain`

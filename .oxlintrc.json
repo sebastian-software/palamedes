@@ -691,7 +691,7 @@
       }
     },
     {
-      "files": ["examples/solidstart-*/**/*.{ts,tsx}", "packages/solid/**/*.{ts,tsx}"],
+      "files": ["examples/solid-*/**/*.{ts,tsx}", "packages/solid/**/*.{ts,tsx}"],
       "rules": {
         "react/no-unknown-property": "off"
       }
@@ -772,8 +772,8 @@
     },
     {
       "files": [
-        "examples/solidstart-*/**/*.ts",
-        "examples/solidstart-*/**/*.tsx",
+        "examples/solid-*/**/*.ts",
+        "examples/solid-*/**/*.tsx",
         "packages/solid/**/*.ts",
         "packages/solid/**/*.tsx"
       ],

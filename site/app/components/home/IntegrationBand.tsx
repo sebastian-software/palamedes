@@ -24,11 +24,11 @@ const FRONTEND_INTEGRATIONS: readonly Integration[] = [
     suffix: "Start",
   },
   {
-    name: "SolidStart",
-    href: frameworkLandingHref("solidstart"),
-    logo: "/framework-logos/solidstart.svg",
+    name: "Solid",
+    href: frameworkLandingHref("solid"),
+    logo: "/framework-logos/solid.svg",
     logoClass: "h-6 w-6",
-    suffix: "SolidStart",
+    suffix: "Solid",
   },
   {
     name: "Waku",

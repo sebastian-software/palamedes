@@ -8,7 +8,7 @@ export const CONTAINER_HOST = "0.0.0.0"
 // Host binding per framework (verified by running the container):
 // - Next.js (`next start`), Waku (`waku start`) and react-router-serve all bind
 //   0.0.0.0 already / honor the HOST env — no CLI override, just the HOST env.
-// - SolidStart v2's generated Nitro server honors HOST and PORT; the matrix
+// - Solid v2's generated Nitro server honors HOST and PORT; the matrix
 //   defaults HOST to 127.0.0.1 and buildStartEnv overrides it to 0.0.0.0.
 // - TanStack and Vite MDX bind 127.0.0.1 via hardcoded `vite preview` scripts;
 //   handled specially in buildStartArgs.

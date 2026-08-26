@@ -11,7 +11,7 @@ uses all of them. The goal is confidence, not hype.
 
 This repo can credibly prove five things:
 
-- all 25 examples receive smoke verification on relevant pull requests and `main` pushes; 21 browser-capable examples (Next.js, TanStack Start, SolidStart, Waku, React Router, and Vite) receive Playwright verification weekly and on manual dispatch, while Remix v3 remains smoke-only
+- all 25 examples receive smoke verification on relevant pull requests and `main` pushes; 21 browser-capable examples (Next.js, TanStack Start, Solid, Waku, React Router, and Vite) receive Playwright verification weekly and on manual dispatch, while Remix v3 remains smoke-only
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, source analysis, catalog update, and catalog compile steps are measured locally and reproducibly

@@ -46,7 +46,7 @@ The build is multi-stage:
    first build noticeably longer.
 2. **Runtime stage** (slimmer Debian slim): takes over the finished workspace and
    starts the supervisor. Dev dependencies stay installed because TanStack's
-   `vite preview` comes from them; SolidStart v2 runs Nitro's generated output.
+   `vite preview` comes from them; Solid v2 runs Nitro's generated output.
 
 ## Start the container
 
@@ -92,10 +92,10 @@ container with an error code as soon as a server dies unexpectedly (fail-fast).
 | 4041 | `react-router-route`        | route             |
 | 4042 | `react-router-subdomain`    | subdomain         |
 | 4043 | `react-router-tld`          | tld               |
-| 4050 | `solidstart-cookie`         | cookie            |
-| 4051 | `solidstart-route`          | route             |
-| 4052 | `solidstart-subdomain`      | subdomain         |
-| 4053 | `solidstart-tld`            | tld               |
+| 4050 | `solid-cookie`              | cookie            |
+| 4051 | `solid-route`               | route             |
+| 4052 | `solid-subdomain`           | subdomain         |
+| 4053 | `solid-tld`                 | tld               |
 | 4060 | `remix-cookie`              | cookie            |
 | 4061 | `remix-route`               | route             |
 | 4062 | `remix-subdomain`           | subdomain         |
@@ -118,7 +118,7 @@ can reach the published ports. Some frameworks otherwise bind only to
 `127.0.0.1`; the supervisor overrides that in a container-specific way, without
 touching the example `package.json` files:
 
-- **SolidStart** (Nitro v3 output): `HOST=0.0.0.0` via environment variable
+- **Solid** (Nitro v3 output): `HOST=0.0.0.0` via environment variable
 - **TanStack** (`vite preview`): the hardcoded `--host 127.0.0.1` in the script
   cannot be reliably overridden by an appended flag (Vite's CLI parser collects
   repeated flags into an array), so the supervisor runs `vite preview` directly

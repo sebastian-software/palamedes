@@ -14,7 +14,7 @@ The important design goal is a coherent i18n model from source to runtime:
 - one native core with OXC-powered transforms and extraction
 - thin host adapters for frameworks and bundlers
 
-Verified integrations currently include Next.js, Vite, TanStack Start, SolidStart, Waku, React Router, and server-first Remix v3.
+Verified integrations currently include Next.js, Vite, TanStack Start, Solid, Waku, React Router, and server-first Remix v3.
 
 The framework matrix verifies that the same core works across different app
 shapes. It does not assume that one application uses every supported framework.
@@ -177,8 +177,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(<App />)
 Install:
 
 ```bash
-pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli vite-plugin-solid vite typescript
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web solid-js
+pnpm add -D @palamedes/cli @solidjs/vite-plugin vite typescript
 ```
 
 Configure Vite:
@@ -186,11 +186,11 @@ Configure Vite:
 ```ts
 // vite.config.ts
 import { defineConfig } from "vite"
-import solid from "vite-plugin-solid"
+import solid from "@solidjs/vite-plugin"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
+  plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })],
 })
 ```
 
@@ -446,7 +446,7 @@ Use `@palamedes/remix`. The integration is server-first (register hook plus requ
 
 Use `@palamedes/react-router-rsc` only for the exact tested experimental React Router RSC Framework Mode contract. Configure a custom `app/entry.rsc.tsx` that wraps the default RSC entry with `createReactRouterRscI18nRequestScope(createRequestI18n)`. It receives the original request and activates a fresh i18n instance before Server Function argument evaluation, dispatch, revalidation, SSR, and streams. `scope.run()` restores its caller after dispatch settles, but async resources created inside it retain the request locale when they run later; separately initiated work without an inherited context has no active locale and needs explicit data or a new scope. RSC Data Mode, Edge/Worker runtimes, and graph-split server message fragments are not supported. See `/docs/api/react-router-rsc.md`.
 
-### TanStack Start, SolidStart, Waku, React Router
+### TanStack Start, Solid, Waku, React Router
 
 Use the verified examples as the source of truth for framework-specific wiring. Palamedes' goal is a consistent runtime/catalog model across these hosts.
 

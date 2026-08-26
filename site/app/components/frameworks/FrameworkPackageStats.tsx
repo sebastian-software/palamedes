@@ -5,7 +5,7 @@ const PACKAGE_BY_PATH: Record<string, string> = {
   "/frameworks/nextjs": "@palamedes/next-plugin",
   "/frameworks/react-router": "@palamedes/react-router-rsc",
   "/frameworks/remix-v3": "@palamedes/remix",
-  "/frameworks/solidstart": "@palamedes/solid",
+  "/frameworks/solid": "@palamedes/solid",
   "/frameworks/tanstack-start": "@palamedes/tanstack",
   "/frameworks/vite": "@palamedes/vite-plugin",
   "/frameworks/waku": "@palamedes/waku",

@@ -1,4 +1,4 @@
-import type { JSX } from "solid-js"
+import { createComponent, type Element, type FlowComponent } from "solid-js"
 
 import {
   createCompiledMessageRuntime,
@@ -14,7 +14,7 @@ import type {
   PalamedesI18n,
 } from "@palamedes/core/compiled"
 
-type WrapperComponent = (children: JSX.Element) => JSX.Element
+type RichTextComponent = FlowComponent<{}, Element>
 
 export type TransProps = {
   // `id` is optional in authored source: components are written with `message`
@@ -24,7 +24,7 @@ export type TransProps = {
   context?: string
   comment?: string
   values?: Record<string, unknown>
-  components?: Record<string, WrapperComponent | JSX.Element>
+  components?: Record<string, RichTextComponent>
 }
 
 type PatternParser = (pattern: string) => MessageNode[]
@@ -48,15 +48,12 @@ export function createTrans(useI18n: () => RendererI18n, fallbackParser?: Patter
     components,
     context,
     comment,
-  }: TransProps): JSX.Element {
+  }: TransProps): Element {
     const resolvedId = id ?? message ?? ""
-
-    return (() => {
-      const i18n = useI18n()
-      const metadata: MessageMetadata = { message, context, comment }
-      const runtime = createSolidMessageRuntime(i18n, components ?? {}, fallbackParser)
-      return renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)
-    }) as unknown as JSX.Element
+    const i18n = useI18n()
+    const metadata: MessageMetadata = { message, context, comment }
+    const runtime = createSolidMessageRuntime(i18n, components ?? {}, fallbackParser)
+    return renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)
   }
 }
 
@@ -64,9 +61,9 @@ export function renderI18nMessage(
   i18n: RendererI18n,
   id: string,
   values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<JSX.Element[]>,
+  runtime: CompiledMessageRuntime<Element[]>,
   metadata: MessageMetadata
-): JSX.Element[] {
+): Element[] {
   if (typeof i18n.renderMessage === "function") {
     return i18n.renderMessage(id, values, runtime, metadata)
   }
@@ -93,50 +90,54 @@ export function renderI18nMessage(
 
 export function createSolidMessageRuntime(
   i18n: RendererI18n,
-  components: Record<string, WrapperComponent | JSX.Element>,
+  components: Record<string, RichTextComponent>,
   fallbackParser?: PatternParser
-): CompiledMessageRuntime<JSX.Element[]> {
+): CompiledMessageRuntime<Element[]> {
   const locale = i18n.locale
   const timeZone = i18n.timeZone
-  const runtime: CompiledMessageRuntime<JSX.Element[]> = createCompiledMessageRuntime<
-    JSX.Element[]
-  >(locale, {
-    pattern(pattern: string, values: Record<string, unknown>) {
-      const nodes = parsePattern(i18n, pattern, fallbackParser)
-      return renderNodes(nodes, values, runtime, locale)
-    },
-    join(...parts: Array<string | JSX.Element[]>) {
-      return parts.flatMap((part) => (typeof part === "string" ? [part] : part))
-    },
-    value(value: unknown) {
-      return [renderVariable(value)]
-    },
-    number(value: unknown, style?: string) {
-      return [formatMessageArgument("number", value, style, locale)]
-    },
-    date(value: unknown, style?: string) {
-      return [formatMessageArgument("date", value, style, locale, timeZone)]
-    },
-    time(value: unknown, style?: string) {
-      return [formatMessageArgument("time", value, style, locale, timeZone)]
-    },
-    pound(value: number) {
-      return [replacePoundPlaceholders("#", value, locale)]
-    },
-    literal(value: string) {
-      return [value]
-    },
-    tag(name: string, children: JSX.Element[]) {
-      const component = components[name]
-      if (typeof component === "function") {
-        return [component(children as unknown as JSX.Element)]
-      }
-      if (component !== undefined && component !== null) {
-        return [component as JSX.Element]
-      }
-      return children
-    },
-  })
+  const runtime: CompiledMessageRuntime<Element[]> = createCompiledMessageRuntime<Element[]>(
+    locale,
+    {
+      pattern(pattern: string, values: Record<string, unknown>) {
+        const nodes = parsePattern(i18n, pattern, fallbackParser)
+        return renderNodes(nodes, values, runtime, locale)
+      },
+      join(...parts: Array<string | Element[]>) {
+        return parts.flatMap((part) => (typeof part === "string" ? [part] : part))
+      },
+      value(value: unknown) {
+        return [renderVariable(value)]
+      },
+      number(value: unknown, style?: string) {
+        return [formatMessageArgument("number", value, style, locale)]
+      },
+      date(value: unknown, style?: string) {
+        return [formatMessageArgument("date", value, style, locale, timeZone)]
+      },
+      time(value: unknown, style?: string) {
+        return [formatMessageArgument("time", value, style, locale, timeZone)]
+      },
+      pound(value: number) {
+        return [replacePoundPlaceholders("#", value, locale)]
+      },
+      literal(value: string) {
+        return [value]
+      },
+      tag(name: string, children: Element[]) {
+        const component = components[name]
+        if (component !== undefined) {
+          return [
+            createComponent(component, {
+              get children() {
+                return children
+              },
+            }),
+          ]
+        }
+        return children
+      },
+    }
+  )
   return runtime
 }
 
@@ -159,20 +160,20 @@ function parsePattern(
 function renderNodes(
   nodes: MessageNode[],
   values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<JSX.Element[]>,
+  runtime: CompiledMessageRuntime<Element[]>,
   locale: string,
   pluralValue?: number
-): JSX.Element[] {
+): Element[] {
   return nodes.flatMap((node) => renderNode(node, values, runtime, locale, pluralValue))
 }
 
 function renderNode(
   node: MessageNode,
   values: Record<string, unknown>,
-  runtime: CompiledMessageRuntime<JSX.Element[]>,
+  runtime: CompiledMessageRuntime<Element[]>,
   locale: string,
   pluralValue?: number
-): JSX.Element[] {
+): Element[] {
   switch (node.type) {
     case "text":
       return [
@@ -201,7 +202,7 @@ function renderNode(
   return []
 }
 
-function renderVariable(value: unknown): JSX.Element {
+function renderVariable(value: unknown): Element {
   if (value === null || value === undefined) {
     return ""
   }
@@ -211,5 +212,5 @@ function renderVariable(value: unknown): JSX.Element {
   if (value instanceof Date) {
     return stringifyValue(value)
   }
-  return value as JSX.Element
+  return value as Element
 }

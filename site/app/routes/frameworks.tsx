@@ -16,7 +16,7 @@ export function meta() {
   return pageMeta({
     title: "Framework i18n guides for TypeScript | Palamedes",
     description:
-      "Verified frontend and full-stack i18n adapters for Next.js, TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite, plus request-local backend integration guidance for Hono and Express.",
+      "Verified frontend and full-stack i18n adapters for Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite, plus request-local backend integration guidance for Hono and Express.",
     path: "/frameworks",
   })
 }

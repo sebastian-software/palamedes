@@ -16,6 +16,10 @@ landed in.
 
 ### Compatibility Notes
 
+- `@palamedes/solid` now targets Solid 2 (`2.0.0-rc.3` or newer) and no longer
+  supports Solid 1. The Solid examples use Solid 2 Start Mode directly through
+  `@solidjs/vite-plugin`; the retired predecessor integration and its example
+  names have been removed.
 - First-party host adapters preserve inline source-message fallbacks in macro
   and MDX output by default in both development and production. Set
   `keepSourceFallbacks: false` for compact, hash-only output when bundle size or
@@ -309,7 +313,7 @@ landed in.
 ### Bug Fixes
 
 * **deps:** patch shared tooling vulnerabilities ([#529](https://github.com/sebastian-software/palamedes/issues/529)) ([18134c5](https://github.com/sebastian-software/palamedes/commit/18134c5cd9f929cb65c63498aebf9e12faa4ebf9))
-* **deps:** patch SolidStart transitive vulnerabilities ([#528](https://github.com/sebastian-software/palamedes/issues/528)) ([41a72dc](https://github.com/sebastian-software/palamedes/commit/41a72dc6a8745a589155f7da12fb1743fe8d03ce))
+* **deps:** patch Solid transitive vulnerabilities ([#528](https://github.com/sebastian-software/palamedes/issues/528)) ([41a72dc](https://github.com/sebastian-software/palamedes/commit/41a72dc6a8745a589155f7da12fb1743fe8d03ce))
 * **lint:** address source analysis review feedback ([ece85e2](https://github.com/sebastian-software/palamedes/commit/ece85e2fb253e63842cf012eb89fc868517f923f))
 * **lint:** refresh adapter lockfile resolution ([3d56d74](https://github.com/sebastian-software/palamedes/commit/3d56d7491e46499f8ad66da14ee9eb16ad1936df))
 * **runtime:** restore hook-free locale access ([2866b7d](https://github.com/sebastian-software/palamedes/commit/2866b7ddfc9ad02206ae9f4aa297e82c878a34a6))

@@ -257,7 +257,7 @@ they can be reused.
         ["COMPILATION", "catalogs compile to runtime artifacts — no runtime parsing"],
         [
           "FRAMEWORK ADAPTERS",
-          "Next.js · TanStack Start · SolidStart · Waku · React Router · Remix v3 · Vite",
+          "Next.js · TanStack Start · Solid · Waku · React Router · Remix v3 · Vite",
         ],
         ["BACKEND SERVERS", "request-local i18n for Hono & Express, same catalogs"],
         ["LOCALE STRATEGIES", "cookie · route · subdomain · TLD — pick per product, not per tool"],
@@ -467,7 +467,7 @@ de-densifying cut V4 needed. Element carry-overs into the page flow (per review 
 - **V4 column treatment** — optional for the mechanism/trust prose if those
   sections want editorial texture; not required.
 - **Framework logo band** (requested 2026-08-12) — the framework support
-  story gets a logo strip: Next.js · TanStack Start · SolidStart · Waku ·
+  story gets a logo strip: Next.js · TanStack Start · Solid · Waku ·
   React Router · Remix v3 · Vite (+ Hono/Express for backend). It doubles as
   the trust band a young OSS project can't fill with customer logos yet —
   compatibility proof instead of adoption proof, and every logo links to its

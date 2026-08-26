@@ -43,8 +43,8 @@ pnpm add -D @vitejs/plugin-react
 or
 
 ```bash
-pnpm add @palamedes/solid solid-js
-pnpm add -D vite-plugin-solid
+pnpm add @palamedes/solid @solidjs/web solid-js
+pnpm add -D @solidjs/vite-plugin
 ```
 
 ## Minimal Setup
@@ -61,7 +61,7 @@ export default defineConfig({
 
 ```ts
 import { defineConfig } from "vite"
-import solid from "vite-plugin-solid"
+import solid from "@solidjs/vite-plugin"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({

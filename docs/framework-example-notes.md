@@ -34,13 +34,13 @@ The `tanstack-cookie`, `tanstack-route`, `tanstack-subdomain`, and
 The route example uses a dynamic `/$locale` segment; this is the canonical
 TanStack shape and remains under verification.
 
-## SolidStart
+## Solid
 
-The `solidstart-cookie`, `solidstart-route`, `solidstart-subdomain`, and
-`solidstart-tld` examples verify:
+The `solid-cookie`, `solid-route`, `solid-subdomain`, and
+`solid-tld` examples verify:
 
-- Vite-based Palamedes integration in SolidStart
-- SolidStart 2's Vite Environment API with Nitro v3 output
+- Vite-based Palamedes integration in Solid
+- Solid 2's Vite Environment API with Nitro v3 output
 - request-local SSR plus a hook-free, document-fixed client locale
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
@@ -53,9 +53,9 @@ Current framework note:
 
 - Solid Router intercepts same-origin anchor clicks, so a locale link would
   navigate on the client and leave the previously activated catalog under the new
-  document. `solidstart-route` marks its locale links `rel="external"` — the
+  document. `solid-route` marks its locale links `rel="external"` — the
   router's own opt-out — so the strategy switch stays a document load. The other
-  SolidStart examples switch across hosts or assign `window.location`, so only
+  Solid examples switch across hosts or assign `window.location`, so only
   the route example needs it.
 
 ## Waku

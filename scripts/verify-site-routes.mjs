@@ -32,6 +32,21 @@ function portFromEnv(name, fallback) {
 
 const PORT = portFromEnv("SITE_VERIFY_PORT", 4102)
 const packageScripts = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).scripts
+const legacySolidRedirect = readFileSync(
+  join(clientDir, "frameworks/solidstart/index.html"),
+  "utf8"
+)
+
+if (
+  !legacySolidRedirect.includes(
+    '<link rel="canonical" href="https://palamedes.dev/frameworks/solid">'
+  ) ||
+  !legacySolidRedirect.includes('<meta http-equiv="refresh" content="0;url=/frameworks/solid">')
+) {
+  throw new Error(
+    "verify-site-routes: legacy SolidStart page must redirect and canonicalize to /frameworks/solid"
+  )
+}
 
 if (packageScripts["bench:e2e"] !== "pnpm benchmark:e2e-workflow") {
   throw new Error("verify-site-routes: pnpm bench:e2e must run the checked end-to-end workflow")
@@ -65,8 +80,8 @@ const ROUTE_EXPECTATIONS = [
     h1: "TanStack Start i18n for routes, server functions, and the client.",
   },
   {
-    path: "/frameworks/solidstart",
-    h1: "SolidStart i18n that stays native to Solid.",
+    path: "/frameworks/solid",
+    h1: "Solid i18n that stays native to Solid.",
   },
   {
     path: "/frameworks/waku",
@@ -510,7 +525,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     if ((await solidTab.getAttribute("aria-selected")) !== "true") {
       fail(`get-started ${label}: Enter did not select the focused Solid stack tab`)
     }
-    const solidVisible = await page.getByText("vite-plugin-solid").first().isVisible()
+    const solidVisible = await page.getByText("@solidjs/vite-plugin").first().isVisible()
     if (!solidVisible) {
       fail("get-started: Solid tab did not reveal Solid setup")
     }

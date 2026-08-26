@@ -288,7 +288,9 @@ const el = <Trans>Hello <strong>{name}</strong></Trans>;
     expect(result.code).toContain('import { Trans } from "@palamedes/solid/compiled"')
     expect(result.code).toContain('<Trans id="')
     expect(result.code).toContain('message={"Hello <0>{name}</0>"}')
-    expect(result.code).toContain("components={{ 0: (children) => <strong>{children}</strong> }}")
+    expect(result.code).toContain(
+      "components={{ 0: (props) => <strong>{props.children}</strong> }}"
+    )
   })
 
   it("deduplicates same-tag component placeholders", () => {

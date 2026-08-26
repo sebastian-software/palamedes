@@ -3,9 +3,9 @@ import os from "node:os"
 import path from "node:path"
 
 import react from "@vitejs/plugin-react"
+import solid from "@solidjs/vite-plugin"
 import { afterEach, describe, expect, it } from "vitest"
 import { build } from "vite"
-import solid from "vite-plugin-solid"
 
 import { palamedes } from "./index"
 
@@ -84,7 +84,7 @@ describe("Palamedes MDX Vite integration", () => {
           build: {
             write: false,
             rollupOptions: {
-              external: [/^@palamedes\//u, /^react(?:\/|$)/u, /^solid-js(?:\/|$)/u],
+              external: [/^@palamedes\//u, /^@solidjs\//u, /^react(?:\/|$)/u, /^solid-js(?:\/|$)/u],
               input: path.join(root, "page.mdx"),
             },
           },

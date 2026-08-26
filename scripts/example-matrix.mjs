@@ -6,14 +6,7 @@ export const ROOT = path.resolve(import.meta.dirname, "..")
 // These public identities are deliberately independent of EXAMPLE_MATRIX.
 // The guard compares matrix-derived values to them so a whole-family or
 // whole-strategy rename cannot preserve cardinality while breaking selectors.
-export const SERVER_FRAMEWORKS = [
-  "nextjs",
-  "tanstack",
-  "waku",
-  "react-router",
-  "solidstart",
-  "remix",
-]
+export const SERVER_FRAMEWORKS = ["nextjs", "tanstack", "waku", "react-router", "solid", "remix"]
 export const LOCALE_STRATEGIES = ["cookie", "route", "subdomain", "tld"]
 export const VITE_EXAMPLE = { framework: "vite", strategy: "client", id: "vite-mdx" }
 
@@ -249,11 +242,11 @@ export const EXAMPLE_MATRIX = [
       "the served document is the static index.html shell; every locale decision happens after the bundle boots, so there is no server-rendered locale to fetch",
   },
   {
-    id: "solidstart-cookie",
-    framework: "solidstart",
+    id: "solid-cookie",
+    framework: "solid",
     strategy: "cookie",
     port: 4050,
-    cwd: path.join(ROOT, "examples/solidstart-cookie"),
+    cwd: path.join(ROOT, "examples/solid-cookie"),
     build: ["build"],
     start: ["start"],
     startEnv: {
@@ -387,11 +380,11 @@ export const EXAMPLE_MATRIX = [
     ],
   },
   {
-    id: "solidstart-route",
-    framework: "solidstart",
+    id: "solid-route",
+    framework: "solid",
     strategy: "route",
     port: 4051,
-    cwd: path.join(ROOT, "examples/solidstart-route"),
+    cwd: path.join(ROOT, "examples/solid-route"),
     build: ["build"],
     start: ["start"],
     startEnv: {
@@ -399,6 +392,12 @@ export const EXAMPLE_MATRIX = [
       PORT: "4051",
     },
     smokeChecks: [
+      {
+        path: "/",
+        htmlLang: null,
+        redirectTo: "/en",
+        substrings: [],
+      },
       {
         headers: { "accept-language": "de" },
         path: "/en",
@@ -512,11 +511,11 @@ export const EXAMPLE_MATRIX = [
     ],
   },
   {
-    id: "solidstart-subdomain",
-    framework: "solidstart",
+    id: "solid-subdomain",
+    framework: "solid",
     strategy: "subdomain",
     port: 4052,
-    cwd: path.join(ROOT, "examples/solidstart-subdomain"),
+    cwd: path.join(ROOT, "examples/solid-subdomain"),
     build: ["build"],
     start: ["start"],
     startEnv: {
@@ -662,11 +661,11 @@ export const EXAMPLE_MATRIX = [
     ],
   },
   {
-    id: "solidstart-tld",
-    framework: "solidstart",
+    id: "solid-tld",
+    framework: "solid",
     strategy: "tld",
     port: 4053,
-    cwd: path.join(ROOT, "examples/solidstart-tld"),
+    cwd: path.join(ROOT, "examples/solid-tld"),
     build: ["build"],
     start: ["start"],
     startEnv: {
