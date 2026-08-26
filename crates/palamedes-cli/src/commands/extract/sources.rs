@@ -203,12 +203,26 @@ pub(super) fn normalized_include_patterns(
             // that already points at a file or contains glob syntax.
             let resolved: PathBuf = config.resolve_pattern(pattern).components().collect();
             if resolved.is_dir() {
-                format!("{}/**/*.{{js,jsx,ts,tsx,mdx}}", resolved.to_string_lossy())
+                format!(
+                    "{}/**/*.{{js,jsx,ts,tsx,mdx}}",
+                    globset::escape(&resolved.to_string_lossy())
+                )
             } else {
-                resolved.to_string_lossy().into_owned()
+                resolve_glob_pattern(config, pattern)
             }
         })
         .collect()
+}
+
+/// Resolves a catalog glob without letting metacharacters in the project path
+/// become part of the caller's pattern. The configured suffix remains a glob;
+/// only the absolute root supplied by Palamedes is made literal.
+fn resolve_glob_pattern(config: &LoadedConfig, pattern: &str) -> String {
+    let escaped_root = globset::escape(&config.root_dir.to_string_lossy());
+    PathBuf::from(escaped_root)
+        .join(pattern)
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn build_glob_set(patterns: &[String], label: &str) -> Result<GlobSet, CliError> {
@@ -228,10 +242,9 @@ fn build_glob_set(patterns: &[String], label: &str) -> Result<GlobSet, CliError>
 pub(super) fn walk_roots_for_patterns(patterns: &[String], fallback: &Path) -> Vec<PathBuf> {
     let mut roots = BTreeSet::new();
     for pattern in patterns {
-        let prefix_end = pattern.find(['*', '?', '[', '{']).unwrap_or(pattern.len());
-        let prefix = Path::new(&pattern[..prefix_end]);
+        let prefix = PathBuf::from(literal_glob_prefix(pattern));
         let root = if prefix.is_dir() {
-            prefix.to_path_buf()
+            prefix
         } else {
             prefix
                 .parent()
@@ -244,6 +257,38 @@ pub(super) fn walk_roots_for_patterns(patterns: &[String], fallback: &Path) -> V
         roots.insert(fallback.to_path_buf());
     }
     roots.into_iter().collect()
+}
+
+/// Returns the filesystem prefix before the first glob operator. `globset`
+/// represents escaped literal metacharacters as bracket expressions, so decode
+/// those forms while looking for the first caller-supplied operator.
+fn literal_glob_prefix(pattern: &str) -> String {
+    let mut prefix = String::new();
+    let mut remaining = pattern;
+    while !remaining.is_empty() {
+        let Some(character) = remaining.chars().next() else {
+            break;
+        };
+        let escaped = match remaining.get(..3) {
+            Some("[*]") => Some('*'),
+            Some("[?]") => Some('?'),
+            Some("[[]") => Some('['),
+            Some("[]]") => Some(']'),
+            Some("[{]") => Some('{'),
+            Some("[}]") => Some('}'),
+            _ => None,
+        };
+        if let Some(literal) = escaped {
+            prefix.push(literal);
+            remaining = &remaining[3..];
+        } else if matches!(character, '*' | '?' | '[' | '{') {
+            break;
+        } else {
+            prefix.push(character);
+            remaining = &remaining[character.len_utf8()..];
+        }
+    }
+    prefix
 }
 
 pub(super) fn build_exclude_set(
@@ -267,12 +312,7 @@ pub(super) fn resolved_exclude_patterns(
     };
     excludes
         .iter()
-        .map(|pattern| {
-            config
-                .resolve_pattern(pattern)
-                .to_string_lossy()
-                .into_owned()
-        })
+        .map(|pattern| resolve_glob_pattern(config, pattern))
         .collect()
 }
 
@@ -341,6 +381,19 @@ mod tests {
                 root.join("app/page.tsx"),
             ]
         );
+    }
+
+    #[test]
+    fn treats_glob_metacharacters_in_the_project_path_as_literals() {
+        for name in ["bracket[project]", "brace{project}"] {
+            let root = project_with_sources(name, &["app/page.tsx", "app/nested/deep.tsx"]);
+
+            assert_eq!(
+                discovered(&root),
+                vec![root.join("app/nested/deep.tsx"), root.join("app/page.tsx")],
+                "{name}"
+            );
+        }
     }
 
     /*
