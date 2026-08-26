@@ -126,17 +126,11 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-cookie"),
     build: ["build"],
     start: ["start"],
-    // Waku pre-renders `src/pages/_root.tsx` once, so the served document always
-    // carries `lang="en"` and the client bootstrap applies the active locale (see
-    // the waku section of `docs/framework-example-notes.md`). Asserting that
-    // literal `en` keeps the constraint visible: it turns red once Waku can emit
-    // a per-request shell. The verifier's deterministic i18n-concurrency pass
-    // below additionally overlaps two request scopes.
     smokeChecks: [
       {
         headers: { "accept-language": "de" },
         path: "/",
-        htmlLang: "en",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
@@ -155,7 +149,6 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-route"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie for why the document lang stays `en` on every locale.
     smokeChecks: [
       {
         headers: { "accept-language": "de" },
@@ -165,7 +158,7 @@ export const EXAMPLE_MATRIX = [
       },
       {
         path: "/de",
-        htmlLang: "en",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
@@ -471,12 +464,11 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-subdomain"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie for why the document lang stays `en` on every locale.
     smokeChecks: [
       {
         headers: { host: "de.lvh.me:4032" },
         path: "/",
-        htmlLang: "en",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
@@ -607,18 +599,17 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-tld"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie for why the document lang stays `en` on every locale.
     smokeChecks: [
       {
         headers: { host: "palamedes-i18n.de:4033" },
         path: "/",
-        htmlLang: "en",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { host: "palamedes-i18n.fr:4033" },
         path: "/",
-        htmlLang: "en",
+        htmlLang: "fr",
         substrings: ["français", "places restantes"],
       },
       {
