@@ -15,15 +15,18 @@ active i18n instance through `getI18n()` from
 so your Solid app only needs to register the active client or server instance
 before translated code runs.
 
-This package is part of the verified SolidStart story in the example matrix. It
+This package is part of the verified Solid story in the example matrix. It
 shares the same catalog model, runtime semantics, and Vite plugin path as the
 React integrations while swapping only the JSX adapter layer.
+
+The current adapter targets Solid 2, starting with `2.0.0-rc.3`. Solid 1 is no
+longer part of the supported surface.
 
 ## Install
 
 ```bash
-pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli @palamedes/config vite-plugin-solid
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime solid-js@^2.0.0-rc.3
+pnpm add -D @palamedes/cli @palamedes/config @palamedes/vite-plugin @solidjs/vite-plugin
 ```
 
 ## Example
@@ -46,8 +49,10 @@ When the Palamedes transform runs, macro imports are rewritten to runtime
 imports from `@palamedes/solid/compiled`, which excludes the ICU parser. Rich
 JSX children are transformed to numeric component slots in the message, for
 example `<0>Palamedes</0>`, while the Solid wrapper is passed separately.
-Direct imports from `@palamedes/solid` remain the compatibility surface for
-hand-written runtime component patterns.
+Direct imports from `@palamedes/solid` remain the runtime surface for
+hand-written component patterns. Rich component slots use Solid 2
+`FlowComponent<{}, Element>` functions and receive their nested content through
+`props.children`.
 
 ## Runtime Components
 

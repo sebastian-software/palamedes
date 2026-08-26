@@ -103,8 +103,8 @@ $ pnpm dev`,
     {
       title: "Install",
       body: "Core, runtime, Solid adapter, and the Vite plugin — plus the CLI as a dev dependency.",
-      code: `pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli vite-plugin-solid`,
+      code: `pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web solid-js
+pnpm add -D @palamedes/cli @solidjs/vite-plugin`,
     },
     PACKAGE_BOUNDARY_STEP,
     {
@@ -122,8 +122,8 @@ catalogs:
       body: "The Vite plugin handles the macro transform and compiles .po catalogs; the runtime holds the active i18n instance.",
       code: `// vite.config.ts
 import { palamedes } from "@palamedes/vite-plugin"
-import solid from "vite-plugin-solid"
-export default defineConfig({ plugins: [palamedes(), solid({ extensions: [".mdx"] })] })
+import solid from "@solidjs/vite-plugin"
+export default defineConfig({ plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })] })
 
 // src/i18n.ts
 import { createI18n } from "@palamedes/core/compiled"
@@ -156,7 +156,7 @@ msgstr "Willkommen bei Palamedes"`,
       code: `${PO_DECLARATION}
 
 // src/main.tsx
-import { render } from "solid-js/web"
+import { render } from "@solidjs/web"
 import { i18n } from "./i18n"
 import { App } from "./App"
 import { messages as enMessages } from "./locales/en.po"

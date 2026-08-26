@@ -18,7 +18,7 @@
 | Remix v3         | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fremix)](https://www.npmjs.com/package/@palamedes/remix)                       | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fremix)](https://www.npmjs.com/package/@palamedes/remix)                       |
 | React Router RSC | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Freact-router-rsc)](https://www.npmjs.com/package/@palamedes/react-router-rsc) | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Freact-router-rsc)](https://www.npmjs.com/package/@palamedes/react-router-rsc) |
 | TanStack Start   | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Ftanstack)](https://www.npmjs.com/package/@palamedes/tanstack)                 | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Ftanstack)](https://www.npmjs.com/package/@palamedes/tanstack)                 |
-| SolidStart       | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fsolid)](https://www.npmjs.com/package/@palamedes/solid)                       | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fsolid)](https://www.npmjs.com/package/@palamedes/solid)                       |
+| Solid            | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fsolid)](https://www.npmjs.com/package/@palamedes/solid)                       | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fsolid)](https://www.npmjs.com/package/@palamedes/solid)                       |
 | Waku             | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Fwaku)](https://www.npmjs.com/package/@palamedes/waku)                         | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Fwaku)](https://www.npmjs.com/package/@palamedes/waku)                         |
 | React runtime    | [![npm version](https://img.shields.io/npm/v/%40palamedes%2Freact)](https://www.npmjs.com/package/@palamedes/react)                       | [![npm downloads](https://img.shields.io/npm/dm/%40palamedes%2Freact)](https://www.npmjs.com/package/@palamedes/react)                       |
 
@@ -49,7 +49,7 @@ browse the [framework](https://palamedes.dev/frameworks),
 ## Proof You Can Inspect
 
 The same core and authoring model work across Next.js, TanStack Start,
-SolidStart, Waku, React Router, Vite, and backend servers; server-first Remix v3
+Solid, Waku, React Router, Vite, and backend servers; server-first Remix v3
 is smoke-verified. The framework matrix is evidence that the architecture stays
 coherent across different app shapes; using Palamedes does not assume that one
 product uses all of them.
@@ -96,7 +96,7 @@ their warm runs cost what their cold runs cost. That makes this a capability
 difference rather than a race, which is exactly why it is kept out of every
 speedup number we publish.
 
-**Try it live.** The live reference covers cookie, route, and subdomain demos across the framework matrix (tld domains are still being provisioned). Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [SolidStart (route)](https://solidstart-route.examples.palamedes.dev), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
+**Try it live.** The live reference covers cookie, route, and subdomain demos across the deployed framework matrix (tld domains and the renamed Solid v2 hosts are still being provisioned). Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,
@@ -134,7 +134,7 @@ easier to review, and easier to carry from one framework to the next.
 
 - Recommended for new projects and teams that want cleaner i18n foundations
 - All 25 examples are smoke-verified on relevant PRs and `main`; 21
-  browser-capable examples across Next.js, TanStack Start, SolidStart, Waku,
+  browser-capable examples across Next.js, TanStack Start, Solid, Waku,
   React Router, and Vite run Playwright weekly or manually. Server-first Remix
   v3 is smoke-only and requires Node.js `>=24.3`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
@@ -237,8 +237,8 @@ pnpm add -D @vitejs/plugin-react
 or
 
 ```bash
-pnpm add @palamedes/solid solid-js
-pnpm add -D vite-plugin-solid
+pnpm add @palamedes/solid @solidjs/web solid-js
+pnpm add -D @solidjs/vite-plugin
 ```
 
 ```ts
@@ -255,11 +255,11 @@ export default defineConfig({
 ```ts
 // vite.config.ts (Solid)
 import { defineConfig } from "vite"
-import solid from "vite-plugin-solid"
+import solid from "@solidjs/vite-plugin"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
+  plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })],
 })
 ```
 

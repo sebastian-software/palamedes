@@ -57,7 +57,7 @@ const page: FrameworkLanding = {
     points: [
       {
         title: "Transform before the renderer",
-        body: "Place palamedes() before the React plugin, or add it to SolidStart's Vite configuration with the Solid runtime module.",
+        body: "Place palamedes() before the React plugin, or add it to Solid's Vite configuration with the Solid runtime module.",
       },
       {
         title: "Choose a renderer, not a new model",
@@ -85,7 +85,7 @@ export default defineConfig({
 })
 
 // Solid
-import solid from "vite-plugin-solid"
+import solid from "@solidjs/vite-plugin"
 
 export default defineConfig({
   plugins: [
@@ -100,7 +100,7 @@ export default defineConfig({
   },
   proof: {
     title: "The plugin is exercised through several full-stack hosts, not just a fixture.",
-    lede: "TanStack Start, SolidStart, Waku, and React Router use @palamedes/vite-plugin throughout the browser-verified framework matrix. Package tests cover the transform and loader boundary directly.",
+    lede: "TanStack Start, Solid, Waku, and React Router use @palamedes/vite-plugin throughout the browser-verified framework matrix. Package tests cover the transform and loader boundary directly.",
     facts: [
       {
         label: "React hosts",
@@ -110,7 +110,7 @@ export default defineConfig({
       {
         label: "Solid hosts",
         value: "1 family",
-        note: "SolidStart uses the Solid runtime integration.",
+        note: "Solid uses the Solid runtime integration.",
       },
       {
         label: "Build behavior",
@@ -152,7 +152,7 @@ export default defineConfig({
   ],
   related: [
     { label: "TanStack Start i18n", href: "/frameworks/tanstack-start" },
-    { label: "SolidStart i18n", href: "/frameworks/solidstart" },
+    { label: "Solid i18n", href: "/frameworks/solid" },
     { label: "React Router i18n in Framework Mode", href: "/frameworks/react-router" },
   ],
   finalCta: {

@@ -110,7 +110,7 @@ they are not the same capability and must not be collapsed into "25 examples."
 The valuable claim is that Palamedes supplies the integration code and tests,
 not that it appears compatible in a logo table.
 
-- 6 server-framework families: Next.js, TanStack Start, SolidStart, Waku,
+- 6 server-framework families: Next.js, TanStack Start, Solid, Waku,
   React Router, and Remix v3.
 - Vite is the shared build integration and has its own verified surface.
 - Hono and Express prove the same runtime model on backend request handlers.

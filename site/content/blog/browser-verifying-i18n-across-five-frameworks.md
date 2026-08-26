@@ -27,7 +27,7 @@ browser interaction contract and versioned screenshots:
 
 - Next.js
 - TanStack Start
-- SolidStart
+- Solid
 - Waku
 - React Router
 
@@ -68,7 +68,7 @@ For Palamedes, the thesis is:
 The matrix is where that thesis has to survive contact with frameworks.
 
 Next.js and React Router do not fail in the same places. TanStack Start,
-SolidStart, and Waku each have their own server/client boundaries. Remix v3 is
+Solid, and Waku each have their own server/client boundaries. Remix v3 is
 covered separately by the smoke lane while its UI adapter settles.
 Route-based locale state and cookie-based locale state put pressure on different
 parts of the adapter layer.

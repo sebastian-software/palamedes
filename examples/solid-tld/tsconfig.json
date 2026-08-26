@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "jsx": "preserve",
+    "jsxImportSource": "@solidjs/web",
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src", "vite.config.ts"]
+}

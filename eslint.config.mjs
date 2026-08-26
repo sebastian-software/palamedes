@@ -188,8 +188,8 @@ export default [
   },
   {
     files: [
-      "examples/solidstart-*/**/*.ts",
-      "examples/solidstart-*/**/*.tsx",
+      "examples/solid-*/**/*.ts",
+      "examples/solid-*/**/*.tsx",
       "packages/solid/**/*.ts",
       "packages/solid/**/*.tsx",
     ],

@@ -48,7 +48,7 @@ That is what makes the system calmer in practice.
 The proof is visible in the repo:
 
 - the [example matrix](../../../examples/README.md) covers Next.js, TanStack
-  Start, SolidStart, Waku, and React Router
+  Start, Solid, Waku, and React Router
 - each framework family has cookie, route, subdomain, and tld locale strategies
 - [browser screenshots](../../../docs/example-screenshots/README.md) cover the
   20 UI-adapter examples and are generated from their Playwright verification

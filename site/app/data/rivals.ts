@@ -27,7 +27,7 @@ import { BENCH_REALISTIC } from "./bench"
  * surfaces; these named, supported hosts are the durable comparison fact.
  */
 const SUPPORTED_SERVER_FRAMEWORKS =
-  "Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3"
+  "Next.js, TanStack Start, Solid, Waku, React Router and Remix v3"
 
 export interface RivalFact {
   label: string
@@ -559,7 +559,7 @@ plural(seats, {
       {
         criterion: "Framework scope",
         rival: "Next.js, deeply",
-        palamedes: "Next.js, TanStack Start, SolidStart, Waku, React Router, Remix v3",
+        palamedes: "Next.js, TanStack Start, Solid, Waku, React Router, Remix v3",
       },
       {
         criterion: "Locale routing",
@@ -656,7 +656,7 @@ function buyLabel(seats) {
     flipside: [
       "No React Server Components, structurally. The Context-based runtime is incompatible with RSC, so App Router and every other RSC-first framework need a manual workaround.",
       "Boilerplate is the API. A <FormattedMessage> around every string is explicit and verbose, and the default non-precompiled path carries the ICU parser at runtime unless you opt into /no-parser plus AST precompilation.",
-      "Newer React meta-frameworks are on you: TanStack Start, SolidStart, Waku and React Router have no first-class integration, so their server and routing boundaries require application-level wiring.",
+      "Newer React meta-frameworks are on you: TanStack Start, Solid, Waku and React Router have no first-class integration, so their server and routing boundaries require application-level wiring.",
     ],
     differences: [
       {

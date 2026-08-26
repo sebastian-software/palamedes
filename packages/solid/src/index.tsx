@@ -1,4 +1,4 @@
-import type { JSX } from "solid-js"
+import type { Element } from "solid-js"
 
 import { buildChoiceMessage, parseMessagePattern } from "@palamedes/core"
 import type {
@@ -33,7 +33,7 @@ export type { PluralProps, SelectOrdinalProps, SelectProps } from "@palamedes/co
 
 const RuntimeTrans = createTrans(getActiveI18n, parseMessagePattern)
 
-export function Trans(props: TransProps): JSX.Element {
+export function Trans(props: TransProps): Element {
   return RuntimeTrans(props)
 }
 
@@ -49,24 +49,22 @@ function renderChoice(
   value: string | number,
   choices: Record<string, string | number | undefined>,
   offset?: number
-): JSX.Element {
-  return (() => {
-    const i18n = getActiveI18n()
-    const message = buildChoiceMessage("value", kind, choices, offset)
-    const metadata: MessageMetadata = { message, reportMissing: false }
-    const runtime = createSolidMessageRuntime(i18n, {}, parseMessagePattern)
-    return renderI18nMessage(i18n, message, { value }, runtime, metadata)
-  }) as unknown as JSX.Element
+): Element {
+  const i18n = getActiveI18n()
+  const message = buildChoiceMessage("value", kind, choices, offset)
+  const metadata: MessageMetadata = { message, reportMissing: false }
+  const runtime = createSolidMessageRuntime(i18n, {}, parseMessagePattern)
+  return renderI18nMessage(i18n, message, { value }, runtime, metadata)
 }
 
-export function Plural({ value, offset, ...choices }: PluralProps): JSX.Element {
+export function Plural({ value, offset, ...choices }: PluralProps): Element {
   return renderChoice("plural", value, choices, offset)
 }
 
-export function SelectOrdinal({ value, offset, ...choices }: SelectOrdinalProps): JSX.Element {
+export function SelectOrdinal({ value, offset, ...choices }: SelectOrdinalProps): Element {
   return renderChoice("selectordinal", value, choices, offset)
 }
 
-export function Select({ value, ...choices }: SelectProps): JSX.Element {
+export function Select({ value, ...choices }: SelectProps): Element {
   return renderChoice("select", value, choices)
 }

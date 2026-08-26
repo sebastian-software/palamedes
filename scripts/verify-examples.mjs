@@ -94,7 +94,7 @@ async function verifyExample(example) {
     await waitForServer(example.port, example.strategy === "route" ? "/en" : "/")
 
     await Promise.all(example.smokeChecks.map((check) => verifySmokeCheck(example, check)))
-    if (["react-router", "solidstart", "tanstack", "waku"].includes(example.framework)) {
+    if (["react-router", "solid", "tanstack", "waku"].includes(example.framework)) {
       await verifyConcurrentServerI18n(example)
     }
   } finally {

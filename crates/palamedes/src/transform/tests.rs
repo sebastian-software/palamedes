@@ -1445,7 +1445,7 @@ fn transforms_solid_trans_jsx_macro() {
     assert!(result.code.contains("message={\"Hello <0>{name}</0>\"}"));
     assert!(result
         .code
-        .contains("components={{ 0: (children) => <strong>{children}</strong> }}"));
+        .contains("components={{ 0: (props) => <strong>{props.children}</strong> }}"));
 }
 
 #[test]

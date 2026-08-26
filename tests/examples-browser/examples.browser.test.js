@@ -53,7 +53,7 @@ function routeUrl(baseUrl) {
 }
 
 function hasClientLocaleProbe(example) {
-  return ["solidstart-cookie", "tanstack-cookie", "waku-cookie"].includes(example.id)
+  return ["solid-cookie", "tanstack-cookie", "waku-cookie"].includes(example.id)
 }
 
 function isHydrationMismatch(message) {

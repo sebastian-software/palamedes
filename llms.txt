@@ -46,18 +46,18 @@ export default defineConfig({
 ### Vite + Solid
 
 ```bash
-pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin
-pnpm add -D @palamedes/cli vite-plugin-solid vite typescript
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web solid-js
+pnpm add -D @palamedes/cli @solidjs/vite-plugin vite typescript
 ```
 
 ```ts
 // vite.config.ts
 import { defineConfig } from "vite"
-import solid from "vite-plugin-solid"
+import solid from "@solidjs/vite-plugin"
 import { palamedes } from "@palamedes/vite-plugin"
 
 export default defineConfig({
-  plugins: [palamedes(), solid({ extensions: [".mdx"] })],
+  plugins: [palamedes({ framework: "solid" }), solid({ extensions: [".mdx"] })],
 })
 ```
 

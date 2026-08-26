@@ -65,8 +65,8 @@ const ROUTE_EXPECTATIONS = [
     h1: "TanStack Start i18n for routes, server functions, and the client.",
   },
   {
-    path: "/frameworks/solidstart",
-    h1: "SolidStart i18n that stays native to Solid.",
+    path: "/frameworks/solid",
+    h1: "Solid i18n that stays native to Solid.",
   },
   {
     path: "/frameworks/waku",
@@ -510,7 +510,7 @@ async function checkRoutes(context, label, { expectHydration }) {
     if ((await solidTab.getAttribute("aria-selected")) !== "true") {
       fail(`get-started ${label}: Enter did not select the focused Solid stack tab`)
     }
-    const solidVisible = await page.getByText("vite-plugin-solid").first().isVisible()
+    const solidVisible = await page.getByText("@solidjs/vite-plugin").first().isVisible()
     if (!solidVisible) {
       fail("get-started: Solid tab did not reveal Solid setup")
     }

@@ -58,7 +58,7 @@ RUN rm -rf target && rm -rf examples/*/.next/cache
 
 # --- Runtime stage -----------------------------------------------------------
 # Dev dependencies stay installed on purpose: TanStack's `vite preview` needs
-# them. SolidStart v2 starts Nitro's generated `.output` directly.
+# them. Solid v2 starts Nitro's generated `.output` directly.
 FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production

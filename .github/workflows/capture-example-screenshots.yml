@@ -25,18 +25,18 @@ on:
           - waku-route
           - react-router-cookie
           - react-router-route
-          - solidstart-cookie
-          - solidstart-route
+          - solid-cookie
+          - solid-route
           - nextjs-subdomain
           - tanstack-subdomain
           - waku-subdomain
           - react-router-subdomain
-          - solidstart-subdomain
+          - solid-subdomain
           - nextjs-tld
           - tanstack-tld
           - waku-tld
           - react-router-tld
-          - solidstart-tld
+          - solid-tld
 
 jobs:
   capture:

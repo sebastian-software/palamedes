@@ -1,5 +1,5 @@
-/* @jsxImportSource solid-js */
-import { renderToString } from "solid-js/web/dist/server.js"
+/* @jsxImportSource @solidjs/web */
+import { renderToString } from "@solidjs/web"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -17,6 +17,10 @@ import { resetI18nRuntime, setClientI18n, setServerI18nGetter } from "@palamedes
 
 import { Plural, Select, SelectOrdinal, Trans, buildLocaleSwitchItems } from "./index"
 import { Trans as CompiledTrans } from "./compiled"
+
+function withoutHydrationMarkers(html: string): string {
+  return html.replaceAll("<!--!$-->", "")
+}
 
 describe("@palamedes/solid", () => {
   afterEach(() => {
@@ -49,14 +53,16 @@ describe("@palamedes/solid", () => {
     i18n.load("de", defineCompiledCatalog({ footer }))
     setServerI18nGetter(() => i18n)
 
-    const render = Trans({
-      id: "footer",
-      message: "Hello {name}, <0>welcome</0>",
-      values: { name: "Ada" },
-      components: { 0: (children) => ["<strong>", children, "</strong>"] },
-    }) as unknown as () => unknown
+    const html = renderToString(() => (
+      <Trans
+        id="footer"
+        message="Hello {name}, <0>welcome</0>"
+        values={{ name: "Ada" }}
+        components={{ 0: (props) => <strong>{props.children}</strong> }}
+      />
+    ))
 
-    expect([render()].flat(Infinity).join("")).toBe("Hallo Ada, <strong>willkommen</strong>")
+    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada, <strong>willkommen</strong>")
   })
 
   it("renders generated messages through the parser-free production entry", () => {
@@ -66,12 +72,9 @@ describe("@palamedes/solid", () => {
     i18n.load("de", defineParserFreeCatalog({ greeting }))
     setServerI18nGetter(() => i18n)
 
-    const render = CompiledTrans({
-      id: "greeting",
-      values: { name: "Ada" },
-    }) as unknown as () => unknown
+    const html = renderToString(() => <CompiledTrans id="greeting" values={{ name: "Ada" }} />)
 
-    expect([render()].flat(Infinity).join("")).toBe("Hallo Ada")
+    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada")
   })
 
   it("parses lazy patterns without re-entering catalog lookup", () => {
@@ -86,12 +89,9 @@ describe("@palamedes/solid", () => {
     )
     setServerI18nGetter(() => i18n)
 
-    const render = CompiledTrans({
-      id: "greeting",
-      values: { name: "Ada" },
-    }) as unknown as () => unknown
+    const html = renderToString(() => <CompiledTrans id="greeting" values={{ name: "Ada" }} />)
 
-    expect([render()].flat(Infinity).join("")).toBe("Hello Ada")
+    expect(withoutHydrationMarkers(html)).toBe("Hello Ada")
   })
 
   it("keeps rendering with older i18n instances that have no renderMessage hook", () => {
@@ -103,14 +103,16 @@ describe("@palamedes/solid", () => {
     delete legacyI18n.renderMessage
     setServerI18nGetter(() => legacyI18n)
 
-    const render = Trans({
-      id: "footer",
-      message: "Hello {name}, <0>welcome</0>",
-      values: { name: "Ada" },
-      components: { 0: (children) => ["<strong>", children, "</strong>"] },
-    }) as unknown as () => unknown
+    const html = renderToString(() => (
+      <Trans
+        id="footer"
+        message="Hello {name}, <0>welcome</0>"
+        values={{ name: "Ada" }}
+        components={{ 0: (props) => <strong>{props.children}</strong> }}
+      />
+    ))
 
-    expect([render()].flat(Infinity).join("")).toBe("Hallo Ada, <strong>willkommen</strong>")
+    expect(withoutHydrationMarkers(html)).toBe("Hallo Ada, <strong>willkommen</strong>")
   })
 
   it("formats compiled Trans fallbacks with older parser-capable i18n instances", () => {
@@ -122,13 +124,11 @@ describe("@palamedes/solid", () => {
     delete legacyI18n.renderMessage
     setServerI18nGetter(() => legacyI18n)
 
-    const render = CompiledTrans({
-      id: "inbox",
-      message: "Hello {name}",
-      values: { name: "Ada" },
-    }) as unknown as () => unknown
+    const html = renderToString(() => (
+      <CompiledTrans id="inbox" message="Hello {name}" values={{ name: "Ada" }} />
+    ))
 
-    expect([render()].flat(Infinity).join("")).toBe("Hello Ada")
+    expect(withoutHydrationMarkers(html)).toBe("Hello Ada")
   })
 
   it("renders plural output through the active runtime instance", () => {
@@ -148,14 +148,16 @@ describe("@palamedes/solid", () => {
     const direct = renderToString(() => (
       <Plural value={2} offset={1} one="# item" other="# items" />
     ))
-    const rich = Trans({
-      id: "companions",
-      message: "{count, plural, offset:1 one {you and one other} other {you and # others}}",
-      values: { count: 3 },
-    }) as unknown as () => unknown
+    const rich = renderToString(() => (
+      <Trans
+        id="companions"
+        message="{count, plural, offset:1 one {you and one other} other {you and # others}}"
+        values={{ count: 3 }}
+      />
+    ))
 
     expect(direct).toBe("1 item")
-    expect([rich()].flat().join("")).toBe("you and 2 others")
+    expect(rich).toBe("you and 2 others")
   })
 
   it("rejects invalid offsets at the direct component boundary", () => {
@@ -220,9 +222,9 @@ describe("@palamedes/solid", () => {
     i18n.activate("de")
     setServerI18nGetter(() => i18n)
 
-    const render = Trans({ id: "inbox", message: "You have mail" }) as unknown as () => unknown
+    const html = renderToString(() => <Trans id="inbox" message="You have mail" />)
 
-    expect([render()].flat().join("")).toBe("You have mail")
+    expect(html).toBe("You have mail")
     expect(onError).toHaveBeenCalledOnce()
     expect(onError.mock.calls[0]?.[0]).toMatchObject({
       id: "inbox",
@@ -240,13 +242,11 @@ describe("@palamedes/solid", () => {
 
     // Same contract as `i18n._()`: report, then degrade to the raw source
     // message rather than throwing out of the render.
-    const render = Trans({
-      id: "items",
-      message: "{n, plural, =0 {none} other {# items}}",
-      values: {},
-    }) as unknown as () => unknown
+    const html = renderToString(() => (
+      <Trans id="items" message="{n, plural, =0 {none} other {# items}}" values={{}} />
+    ))
 
-    expect([render()].flat().join("")).toBe("{n, plural, =0 {none} other {# items}}")
+    expect(html).toBe("{n, plural, =0 {none} other {# items}}")
     expect(onError).toHaveBeenCalledOnce()
     expect(onError.mock.calls[0]?.[0].error.message).toMatch(/Missing or non-numeric value/)
   })
@@ -299,13 +299,15 @@ describe("@palamedes/solid", () => {
     i18n.activate("en")
     setServerI18nGetter(() => i18n)
 
-    const render = Trans({
-      id: "quoted",
-      message: "Literal '{name}': {count, plural, other {'#' of #}}",
-      values: { count: 5, name: "ignored" },
-    }) as unknown as () => unknown
+    const html = renderToString(() => (
+      <Trans
+        id="quoted"
+        message="Literal '{name}': {count, plural, other {'#' of #}}"
+        values={{ count: 5, name: "ignored" }}
+      />
+    ))
 
-    expect([render()].flat().join("")).toBe("Literal {name}: # of 5")
+    expect(withoutHydrationMarkers(html)).toBe("Literal {name}: # of 5")
   })
 
   it("falls back when Trans encounters a malformed catalog pattern", () => {
@@ -317,13 +319,11 @@ describe("@palamedes/solid", () => {
     i18n.activate("de")
     setServerI18nGetter(() => i18n)
 
-    const render = Trans({
-      id: "greeting",
-      message: "Hello {name}",
-      values: { name: "Ada" },
-    }) as unknown as () => unknown
+    const html = renderToString(() => (
+      <Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />
+    ))
 
-    expect([render()].flat().join("")).toBe("Hello Ada")
+    expect(withoutHydrationMarkers(html)).toBe("Hello Ada")
     expect(onError).toHaveBeenCalledOnce()
   })
 

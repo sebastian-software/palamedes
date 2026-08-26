@@ -1522,12 +1522,15 @@ fn rich_message(
 
 fn component_expression(component: &RichComponent, framework: MdxFramework) -> String {
     if component.fixed {
-        return component.opening.clone();
+        return match framework {
+            MdxFramework::React => component.opening.clone(),
+            MdxFramework::Solid => format!("(_props) => {}", component.opening),
+        };
     }
     match framework {
         MdxFramework::React => opening_to_self_closing(&component.opening),
         MdxFramework::Solid => format!(
-            "(children) => {}{{children}}{}",
+            "(props) => {}{{props.children}}{}",
             component.opening, component.closing
         ),
     }
@@ -2411,7 +2414,7 @@ Do not translate this.
         .expect("Solid compile");
         assert!(solid.contains(r#"from "@palamedes/solid/compiled""#));
         assert!(solid.contains(r#"from "@palamedes/runtime""#));
-        assert!(solid.contains("0: (children) => <strong>{children}</strong>"));
+        assert!(solid.contains("0: (props) => <strong>{props.children}</strong>"));
     }
 
     #[test]

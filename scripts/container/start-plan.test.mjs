@@ -38,14 +38,14 @@ describe("buildStartArgs", () => {
   it("leaves the start script untouched for env-driven frameworks", () => {
     expect(buildStartArgs({ framework: "waku", start: ["start"] })).toEqual(["start"])
     expect(buildStartArgs({ framework: "react-router", start: ["start"] })).toEqual(["start"])
-    expect(buildStartArgs({ framework: "solidstart", start: ["start"] })).toEqual(["start"])
+    expect(buildStartArgs({ framework: "solid", start: ["start"] })).toEqual(["start"])
   })
 })
 
 describe("buildStartEnv", () => {
   it("forces HOST to the container host and pins the fixed port", () => {
     const env = buildStartEnv(
-      { framework: "solidstart", port: 4050, startEnv: { HOST: "127.0.0.1", PORT: "4050" } },
+      { framework: "solid", port: 4050, startEnv: { HOST: "127.0.0.1", PORT: "4050" } },
       { EXISTING: "1" }
     )
     expect(env.HOST).toBe(CONTAINER_HOST)
@@ -55,7 +55,7 @@ describe("buildStartEnv", () => {
 
   it("overrides a matrix startEnv that binds loopback", () => {
     const env = buildStartEnv({
-      framework: "solidstart",
+      framework: "solid",
       port: 4051,
       startEnv: { HOST: "127.0.0.1" },
     })
