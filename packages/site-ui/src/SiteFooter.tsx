@@ -1,10 +1,16 @@
 import type { CSSProperties } from "react"
 
 import { SiteLink } from "./SiteUiProvider"
-import type { SiteConfig } from "./types"
+import type { SiteBuildMetadata, SiteConfig } from "./types"
 import { Wordmark } from "./Wordmark"
 
-export function SiteFooter({ config }: { config: SiteConfig }) {
+function formatBuildTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`
+}
+
+export function SiteFooter({ config, build }: { config: SiteConfig; build?: SiteBuildMetadata }) {
   const columns = config.counterpart?.enabled
     ? [
         ...config.footerColumns,
@@ -37,7 +43,16 @@ export function SiteFooter({ config }: { config: SiteConfig }) {
         ))}
       </div>
       <div className="pmds-footer-meta">
-        <p className="pmds-footer-copyright">{config.copyright}</p>
+        <p className="pmds-footer-copyright">
+          <span>{config.copyright}</span>
+          {build ? (
+            <span className="pmds-footer-build">
+              Build <time dateTime={build.builtAt}>{formatBuildTime(build.builtAt)}</time>
+              {" · "}
+              <span className="pmds-footer-build-hash">{build.commitHash.slice(0, 8)}</span>
+            </span>
+          ) : null}
+        </p>
         <Wordmark className="pmds-footer-wordmark">{config.footerWordmark ?? config.name}</Wordmark>
       </div>
     </footer>

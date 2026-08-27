@@ -172,7 +172,17 @@ export default function App() {
         </ArdoHeader>
         <ArdoSidebar>{renderSidebarSections()}</ArdoSidebar>
         <ArdoFooter>
-          <SiteFooter config={OSS_SITE_CONFIG} />
+          <SiteFooter
+            config={OSS_SITE_CONFIG}
+            build={
+              config.buildTime
+                ? {
+                    builtAt: config.buildTime,
+                    commitHash: __PALAMEDES_BUILD_HASH__,
+                  }
+                : undefined
+            }
+          />
         </ArdoFooter>
       </ArdoRoot>
     </SiteUiProvider>

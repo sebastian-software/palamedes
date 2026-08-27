@@ -302,10 +302,22 @@
   }
 
   .pmds-footer-copyright {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 1rem;
     font-family: var(--font-mono);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
     color: var(--color-gray-spec);
+  }
+
+  .pmds-footer-build {
+    white-space: nowrap;
+  }
+
+  .pmds-footer-build-hash {
+    color: var(--color-ink);
   }
 
   .pmds-footer-wordmark {

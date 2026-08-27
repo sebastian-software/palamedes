@@ -38,10 +38,12 @@ const legacySolidRedirect = readFileSync(
 )
 
 if (
-  !legacySolidRedirect.includes(
-    '<link rel="canonical" href="https://palamedes.dev/frameworks/solid">'
+  !/<link rel="canonical" href="https:\/\/palamedes\.dev\/frameworks\/solid"\s*\/?>/u.test(
+    legacySolidRedirect
   ) ||
-  !legacySolidRedirect.includes('<meta http-equiv="refresh" content="0;url=/frameworks/solid">')
+  !/<meta http-equiv="refresh" content="0;url=\/frameworks\/solid"\s*\/?>/u.test(
+    legacySolidRedirect
+  )
 ) {
   throw new Error(
     "verify-site-routes: legacy SolidStart page must redirect and canonicalize to /frameworks/solid"

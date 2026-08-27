@@ -12,6 +12,7 @@ export type { EditorialRailTone } from "./EditorialRail"
 export type {
   ButtonLinkProps,
   ButtonVariant,
+  SiteBuildMetadata,
   SiteConfig,
   SiteCounterpart,
   SiteFooterColumn,

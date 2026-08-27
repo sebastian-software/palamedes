@@ -80,6 +80,23 @@ describe("site chrome", () => {
     expect(markup).not.toContain("<a")
   })
 
+  it("renders precise build metadata in the shared footer", () => {
+    const markup = renderToStaticMarkup(
+      <SiteFooter
+        config={baseConfig}
+        build={{
+          builtAt: "2026-08-27T21:05:32.000Z",
+          commitHash: "e9f0951ea5a128b307bb87cb94fd9a302a77b43e",
+        }}
+      />
+    )
+
+    expect(markup).toContain('<time dateTime="2026-08-27T21:05:32.000Z">')
+    expect(markup).toContain(">2026-08-27 21:05 UTC</time>")
+    expect(markup).toContain("e9f0951e")
+    expect(markup).not.toContain("e9f0951ea")
+  })
+
   it("uses one-pixel editorial rails with an explicit semantic emphasis tone", () => {
     const markup = renderToStaticMarkup(
       <>
