@@ -55,7 +55,9 @@ export function createTrans(getI18n: () => RendererI18n, fallbackParser?: Patter
       return renderI18nMessage(i18n, resolvedId, props.values ?? {}, runtime, metadata)
     })
 
-    return <>{content()}</>
+    // Solid resolves accessor children reactively. Its Element type does not
+    // currently include the accessor shape returned by createMemo.
+    return content as unknown as Element
   }
 }
 
