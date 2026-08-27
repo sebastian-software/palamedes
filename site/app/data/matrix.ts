@@ -6,9 +6,10 @@ import { repoHref } from "./links"
  * in sync with it. URL shapes mirror examples/README.md: cookie (one host),
  * route (locale path), subdomain (locale host label), tld
  * (palamedes-i18n.{com,de,es,fr}). Cookie, route, and subdomain are hosted for
- * four browser-verified frameworks. Solid's renamed v2 hosts and every tld
- * domain are still provisioning; Remix v3 is a local/CI proof surface without
- * public hosting. Those cells link the verified source instead.
+ * four browser-verified frameworks; Solid's renamed v2 hosts remain in
+ * provisioning. Tld target URLs for all five browser-capable families are
+ * linked while their hosting remains in provisioning. Remix v3 is a local/CI
+ * proof surface without public hosting.
  */
 
 export type MatrixStatus = "live" | "provisioning"
@@ -51,6 +52,7 @@ export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
 ]
 
 const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "waku", "react-router"])
+const TLD_FRAMEWORKS = new Set(["nextjs", "tanstack", "solid", "waku", "react-router"])
 
 export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework }) => [
   {
@@ -94,6 +96,14 @@ export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework 
     strategy: "tld",
     verified: true as const,
     status: "provisioning" as const,
+    demoLinks: TLD_FRAMEWORKS.has(framework)
+      ? [
+          { label: "en", href: `https://${framework}.examples.palamedes-i18n.com` },
+          { label: "de", href: `https://${framework}.examples.palamedes-i18n.de` },
+          { label: "es", href: `https://${framework}.examples.palamedes-i18n.es` },
+          { label: "fr", href: `https://${framework}.examples.palamedes-i18n.fr` },
+        ]
+      : undefined,
     sourceHref: repoHref(`examples/${framework}-tld`, "tree"),
   },
 ])

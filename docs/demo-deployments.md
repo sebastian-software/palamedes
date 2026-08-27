@@ -8,9 +8,8 @@ infrastructure is managed outside this repository. Public demo URLs are
 documented as the live reference surface where hosting exists, but reachability
 depends on the hosting and DNS notes in this document. The four currently hosted
 subdomain demos require the per-example wildcard DNS records described under
-Subdomain Locale Hosting. The five tld rows describe the intended shape only:
-the `examples.palamedes-i18n.*` domains described under TLD Locale Hosting are
-not provisioned yet, so those URLs are not publicly reachable. Remix v3 is
+Subdomain Locale Hosting. The five tld rows link their configured public URLs,
+but remain marked pending until reverse-proxy routing and TLS are active. Remix v3 is
 verified locally and in CI, but is not yet a public demo deployment target.
 
 ## Current Policy
@@ -29,8 +28,9 @@ These URLs describe the intended public reference shape — six frameworks, each
 four locale strategies. Switch language in a reachable demo and watch copy,
 plural seat counts, currency, and dates change together. The demos are grouped by
 framework below, with every locale-specific URL linked directly where public
-hosting exists. Remix v3 rows link to source because that beta integration is
-currently a local/CI proof surface.
+hosting exists. Tld URLs remain marked pending until their public hosting is
+active. Remix v3 rows link to source because that beta integration is currently
+a local/CI proof surface.
 
 How each strategy encodes the locale:
 
@@ -81,17 +81,18 @@ How each strategy encodes the locale:
 
 ### Solid
 
-The Solid 2 examples are verified locally and in CI. Their renamed public hosts
-are being provisioned and are intentionally not linked as live references until
-TLS, reverse-proxy routing, and the deployed image have passed an end-to-end
-check.
+The Solid 2 examples are verified locally and in CI. Their renamed cookie,
+route, and subdomain public hosts are being provisioned and remain source-only
+until TLS, reverse-proxy routing, and the deployed image have passed an
+end-to-end check. The tld target URLs are linked and marked pending alongside
+the other browser-capable frameworks.
 
-| Strategy  | Reference source                                        |
-| --------- | ------------------------------------------------------- |
-| cookie    | [examples/solid-cookie](../examples/solid-cookie)       |
-| route     | [examples/solid-route](../examples/solid-route)         |
-| subdomain | [examples/solid-subdomain](../examples/solid-subdomain) |
-| tld       | [examples/solid-tld](../examples/solid-tld)             |
+| Strategy  | Reference                                                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cookie    | [examples/solid-cookie](../examples/solid-cookie)                                                                                                                                                  |
+| route     | [examples/solid-route](../examples/solid-route)                                                                                                                                                    |
+| subdomain | [examples/solid-subdomain](../examples/solid-subdomain)                                                                                                                                            |
+| tld       | [en](https://solid.examples.palamedes-i18n.com) · [de](https://solid.examples.palamedes-i18n.de) · [es](https://solid.examples.palamedes-i18n.es) · [fr](https://solid.examples.palamedes-i18n.fr) |
 
 ### Remix v3
 
@@ -171,12 +172,13 @@ the `Host` in its cache key (or the app must send `Vary: Host`); otherwise a
 response for one TLD could be served for another. This is the same constraint the
 per-host routing already implies, but it must hold for caching layers too.
 
-Until these domains are provisioned, the five public tld rows in the Live
-Reference table are not yet reachable. The canonical verification path runs locally via
+DNS for these domains points at the demo server. Until the reverse-proxy routes
+and TLS certificates are active, the five public tld rows in the Live Reference
+table remain pending and are not yet reachable. The canonical verification path runs locally via
 `pnpm verify:examples`, which exercises the tld strategy using Chromium's
-`--host-resolver-rules` flag to simulate the TLD hosts without real DNS. Remix TLD
-support is covered by the same local/CI verification path, not by public TLD
-deployment yet.
+`--host-resolver-rules` flag to simulate the TLD hosts without real DNS. Remix
+TLD support is covered by the same local/CI verification path, not by public
+TLD deployment yet.
 
 ## Container Image Publication
 

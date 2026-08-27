@@ -57,9 +57,11 @@ export default function Frameworks() {
           weekly or manual Playwright runs; the four Remix v3 apps cover server responses and locale
           handling through smoke checks. Versioned screenshots cover the{" "}
           {contentStats.screenshotExampleCount} UI-adapter examples; Vite has no capture artifact.
-          Cookie, route, and subdomain demos are publicly hosted for the five browser-verified
-          frameworks; the TLD domains are still being provisioned, and Remix v3 has no public
-          hosting yet. Hosting status is documented in the repo&apos;s demo-deployments guide.
+          Cookie, route, and subdomain demos are publicly hosted for four browser-verified
+          frameworks. The TLD target URLs for all five browser-capable families are linked but
+          remain marked pending; Solid&apos;s renamed cookie, route, and subdomain hosts and every
+          Remix v3 host are still provisioning. Hosting status is documented in the repo&apos;s
+          demo-deployments guide.
         </p>
       </Section>
 

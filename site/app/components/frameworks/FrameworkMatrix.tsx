@@ -12,7 +12,7 @@ function CellContent({ cell }: { cell: MatrixCell }) {
           {cell.status === "live" ? "●" : "◌"}
         </span>
         <span className="mono-nums text-[10px] tracking-label text-gray-spec uppercase">
-          ✓ verified
+          ✓ verified{cell.status === "provisioning" ? " · host pending" : ""}
         </span>
       </div>
       <div className="mono-nums mt-2 text-[12px]">
@@ -36,9 +36,10 @@ function CellContent({ cell }: { cell: MatrixCell }) {
 
 /*
  * The 6×4 proof matrix. Cells are explicit data with per-cell hosting
- * status (never a generated URL pattern); subdomain/tld hosting is tracked
- * in issue #306. `scan` enables the /frameworks style break: a one-shot
- * accent scanline sweeping the table on first view.
+ * status (never a generated URL pattern). Provisioning cells may expose their
+ * configured target URLs before the public host becomes live. `scan` enables
+ * the /frameworks style break: a one-shot accent scanline sweeping the table
+ * on first view.
  */
 export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
   return (
