@@ -29,7 +29,8 @@ export default defineConfig({
           include: ["src/**/*.{test,spec}.?(c|m)[jt]s?(x)"],
         },
       })),
-      "packages/solid",
+      "packages/solid/vitest.config.ts",
+      "packages/solid/vitest.client.config.ts",
     ],
     coverage: {
       provider: "v8",

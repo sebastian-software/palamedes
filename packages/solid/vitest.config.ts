@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [solid()],
   test: {
     environment: "node",
+    exclude: ["**/node_modules/**", "src/client.test.tsx"],
     globals: true,
   },
 })

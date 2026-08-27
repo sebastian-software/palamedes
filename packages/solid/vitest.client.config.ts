@@ -9,5 +9,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    include: ["src/client.test.tsx"],
+    name: "@palamedes/solid-client",
   },
 })
