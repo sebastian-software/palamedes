@@ -67,12 +67,6 @@ impl WatchMatchers {
     }
 
     fn matches(&self, path: &Path) -> bool {
-        if path
-            .components()
-            .any(|component| component.as_os_str() == "node_modules")
-        {
-            return false;
-        }
         if is_catalog_storage_path(path) {
             return false;
         }
@@ -365,6 +359,37 @@ catalogs:
         assert!(matchers.matches(&app.join("src/page.tsx")));
         assert!(!matchers.matches(&app.join("src/locales/en/messages.po")));
         assert!(!matchers.matches(&app.join("src/locales/en/lines.fcl")));
+    }
+
+    #[test]
+    fn watch_matchers_honor_custom_excludes_for_node_modules_sources() {
+        let app = temp_dir("watch-custom-node-modules");
+        let config_path = app.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [app]
+    exclude: [app/generated/**]
+"#,
+        )
+        .expect("write config");
+        for path in [
+            app.join("app/node_modules/shared/index.ts"),
+            app.join("app/generated/build.ts"),
+        ] {
+            fs::create_dir_all(path.parent().expect("source has a parent"))
+                .expect("create source directory");
+            fs::write(path, "export const message = 1;").expect("write source");
+        }
+
+        let config = load_config(&app, Some(&config_path)).expect("load config");
+        let matchers = WatchMatchers::build(&config);
+
+        assert!(matchers.matches(&app.join("app/node_modules/shared/index.ts")));
+        assert!(!matchers.matches(&app.join("app/generated/build.ts")));
     }
 
     #[test]
