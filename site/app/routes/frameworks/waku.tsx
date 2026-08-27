@@ -28,8 +28,8 @@ const page: FrameworkLanding = {
     },
     {
       label: "Verified against",
-      value: "Waku 1 beta",
-      note: "React 19 Server Components on beta.6.",
+      value: "Waku 1 RC",
+      note: "React 19 Server Components on 1.0.0-rc.0.",
     },
     {
       label: "Rendering",
@@ -125,8 +125,8 @@ export default async function LocalePage() {
     ],
   },
   boundary: {
-    title: "Current proof follows Waku's beta API.",
-    body: "The matrix pins Waku 1.0.0-beta.6. The integration is intentionally thin and Vite-based, but Waku may still change configuration or rendering APIs before a stable release. Version-specific claims on this page follow the checked example.",
+    title: "Current proof follows Waku's RC API.",
+    body: "The matrix pins Waku 1.0.0-rc.0, and the integration is intentionally thin and Vite-based. Re-verify version-specific behavior when adopting the stable release; claims on this page follow the checked example.",
     link: {
       label: "Read the RSC i18n guide",
       href: "/react-server-components-i18n",
@@ -147,7 +147,7 @@ export default async function LocalePage() {
     },
     {
       q: "Is Waku support production-stable?",
-      a: "Palamedes browser-verifies its Waku integration, but the framework version in the matrix is still a Waku 1 beta. Evaluate that upstream maturity separately from the translation integration.",
+      a: "Palamedes browser-verifies its Waku integration, but the framework version in the matrix is still a Waku 1 release candidate. Evaluate that upstream maturity separately from the translation integration.",
     },
   ],
   related: [
