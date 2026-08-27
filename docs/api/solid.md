@@ -75,7 +75,7 @@ operand and takes no `offset`.
 Set the framework only so generated MDX uses Solid's component contract:
 
 ```ts
-// app.config.ts
+// vite.config.ts
 palamedes({ framework: "solid" })
 ```
 

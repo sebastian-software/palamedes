@@ -16,13 +16,11 @@ const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
 test("runtime target selection covers every published CLI package", () => {
   const targets = [
     [{ platform: "darwin", arch: "arm64" }, "@palamedes/cli-darwin-arm64"],
-    [{ platform: "darwin", arch: "x64" }, "@palamedes/cli-darwin-x64"],
     [{ platform: "linux", arch: "x64", libc: "glibc" }, "@palamedes/cli-linux-x64-gnu"],
     [{ platform: "linux", arch: "x64", libc: "musl" }, "@palamedes/cli-linux-x64-musl"],
     [{ platform: "linux", arch: "arm64", libc: "glibc" }, "@palamedes/cli-linux-arm64-gnu"],
     [{ platform: "linux", arch: "arm64", libc: "musl" }, "@palamedes/cli-linux-arm64-musl"],
     [{ platform: "win32", arch: "x64" }, "@palamedes/cli-win32-x64-msvc"],
-    [{ platform: "win32", arch: "arm64" }, "@palamedes/cli-win32-arm64-msvc"],
   ]
 
   for (const [target, expectedPackage] of targets) {
@@ -222,8 +220,8 @@ test("missing optional packages and binaries produce actionable errors", () => {
 
 test("unsupported and undetectable runtime targets produce useful errors", () => {
   assert.throws(
-    () => resolvePlatformPackage({ platform: "freebsd", arch: "x64" }),
-    /does not publish a native binary for freebsd\/x64/u
+    () => resolvePlatformPackage({ platform: "darwin", arch: "x64" }),
+    /does not publish a native binary for darwin\/x64/u
   )
   assert.throws(
     () => resolvePlatformPackage({ platform: "linux", arch: "x64", report: {} }),

@@ -81,7 +81,7 @@ const composite = `<!doctype html><html><head><meta charset="utf-8" />
     <p class="sub">The same booking, rendered by the same runtime. Switch locale and the copy, plural seat counts, currency, and dates all change together.</p>
   </div>
   <div class="grid">${cards}</div>
-  <p class="foot"><b>Pixel-identical</b> across Next.js · TanStack Start · SolidStart · Waku · React Router, in cookie and route locale strategies, each browser-verified in CI.</p>
+  <p class="foot"><b>Pixel-identical</b> across Next.js · TanStack Start · Solid · Waku · React Router, in cookie and route locale strategies, each browser-verified in CI.</p>
 </body></html>`
 
 const tmpHtml = path.resolve(".readme-hero-composite.html")

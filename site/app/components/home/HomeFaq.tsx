@@ -5,7 +5,7 @@ export const HOME_FAQ = [
   },
   {
     q: "Which frameworks does Palamedes support?",
-    a: "Palamedes has first-party integrations for Next.js, TanStack Start, SolidStart, Waku, React Router, Remix v3, and Vite. The framework matrix shows the example and verification status for each supported host; Remix v3 remains explicitly qualified as preview work.",
+    a: "Palamedes has first-party integrations for Next.js, TanStack Start, Solid, Waku, React Router, Remix v3, and Vite. The framework matrix shows the example and verification status for each supported host; Remix v3 remains explicitly qualified as preview work.",
   },
   {
     q: "Does Palamedes replace a translation management system or write translations with AI?",

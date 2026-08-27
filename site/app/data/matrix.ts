@@ -6,9 +6,9 @@ import { repoHref } from "./links"
  * in sync with it. URL shapes mirror examples/README.md: cookie (one host),
  * route (locale path), subdomain (locale host label), tld
  * (palamedes-i18n.{com,de,es,fr}). Cookie, route, and subdomain are hosted for
- * the five browser-verified frameworks; the tld domains are not provisioned
- * yet, and Remix v3 is a local/CI proof surface without public hosting — those
- * cells link the verified source instead.
+ * four browser-verified frameworks. Solid's renamed v2 hosts and every tld
+ * domain are still provisioning; Remix v3 is a local/CI proof surface without
+ * public hosting. Those cells link the verified source instead.
  */
 
 export type MatrixStatus = "live" | "provisioning"
@@ -37,7 +37,7 @@ export type StrategySlug = "cookie" | "route" | "subdomain" | "tld"
 export const FRAMEWORKS: MatrixAxis[] = [
   { name: "Next.js", slug: "nextjs" },
   { name: "TanStack Start", slug: "tanstack" },
-  { name: "SolidStart", slug: "solidstart" },
+  { name: "Solid", slug: "solid" },
   { name: "Waku", slug: "waku" },
   { name: "React Router", slug: "react-router" },
   { name: "Remix v3", slug: "remix" },
@@ -50,7 +50,7 @@ export const STRATEGIES: MatrixAxis<StrategySlug>[] = [
   { name: "TLD", slug: "tld" },
 ]
 
-const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "solidstart", "waku", "react-router"])
+const HOSTED_FRAMEWORKS = new Set(["nextjs", "tanstack", "waku", "react-router"])
 
 export const MATRIX_CELLS: MatrixCell[] = FRAMEWORKS.flatMap(({ slug: framework }) => [
   {

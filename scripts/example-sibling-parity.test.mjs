@@ -13,7 +13,7 @@ const UI_COMPONENTS = new Set([
   "SuggestionBanner.tsx",
   "TicketPanel.tsx",
 ])
-const UI_FAMILIES = new Set(["nextjs", "react-router", "solidstart", "tanstack", "waku"])
+const UI_FAMILIES = new Set(["nextjs", "react-router", "solid", "tanstack", "waku"])
 
 const sibling = (example, component) =>
   `examples/${example}/${example.startsWith("react-router-") ? "app" : "src"}/components/${component}`
@@ -66,23 +66,19 @@ const IDENTICAL_SIBLING_GROUPS = [
     "SuggestionBanner.tsx",
   ],
   [
-    "solidstart ClientReady non-cookie",
-    ["solidstart-route", "solidstart-subdomain", "solidstart-tld"],
+    "solid ClientReady non-cookie",
+    ["solid-route", "solid-subdomain", "solid-tld"],
     "ClientReady.tsx",
   ],
+  ["solid ProofPanel host strategies", ["solid-subdomain", "solid-tld"], "ProofPanel.tsx"],
   [
-    "solidstart ProofPanel host strategies",
-    ["solidstart-subdomain", "solidstart-tld"],
-    "ProofPanel.tsx",
-  ],
-  [
-    "solidstart TicketPanel non-cookie",
-    ["solidstart-route", "solidstart-subdomain", "solidstart-tld"],
+    "solid TicketPanel non-cookie",
+    ["solid-route", "solid-subdomain", "solid-tld"],
     "TicketPanel.tsx",
   ],
   [
-    "solidstart SuggestionBanner host strategies",
-    ["solidstart-subdomain", "solidstart-tld"],
+    "solid SuggestionBanner host strategies",
+    ["solid-subdomain", "solid-tld"],
     "SuggestionBanner.tsx",
   ],
   ["waku ClientReady non-cookie", ["waku-route", "waku-subdomain", "waku-tld"], "ClientReady.tsx"],
@@ -141,27 +137,23 @@ const INTENDED_DIVERGENCES = [
     "Cookie keeps the action proof that exercises its cookie-backed request locale.",
   ],
   [
-    "solidstart-cookie",
+    "solid-cookie",
     "ClientReady.tsx",
     "Cookie verifies its client locale boundary; the URL strategies need only hydration readiness.",
   ],
+  ["solid-cookie", "ProofPanel.tsx", "Cookie passes the negotiated locale to its server function."],
   [
-    "solidstart-cookie",
-    "ProofPanel.tsx",
-    "Cookie passes the negotiated locale to its server function.",
-  ],
-  [
-    "solidstart-route",
+    "solid-route",
     "ProofPanel.tsx",
     "Route derives the locale from the path; host strategies resolve it from the request host.",
   ],
   [
-    "solidstart-cookie",
+    "solid-cookie",
     "TicketPanel.tsx",
     "Cookie keeps the authored source-fallback development probe.",
   ],
   [
-    "solidstart-route",
+    "solid-route",
     "SuggestionBanner.tsx",
     "Route suggestions can stay on-origin and require the router external-link opt-out.",
   ],

@@ -8,10 +8,6 @@ const targets = {
     platform: "darwin",
     arch: "arm64",
   },
-  "@palamedes/core-node-darwin-x64": {
-    platform: "darwin",
-    arch: "x64",
-  },
   "@palamedes/core-node-linux-x64-gnu": {
     platform: "linux",
     arch: "x64",
@@ -37,10 +33,6 @@ const targets = {
   "@palamedes/core-node-win32-x64-msvc": {
     platform: "win32",
     arch: "x64",
-  },
-  "@palamedes/core-node-win32-arm64-msvc": {
-    platform: "win32",
-    arch: "arm64",
   },
 }
 

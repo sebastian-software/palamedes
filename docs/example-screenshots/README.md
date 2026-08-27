@@ -77,31 +77,31 @@ verification flow, **not** a hydration glitch or a discarded server render:
 | --- | --- |
 | ![TanStack tld – initial](./tanstack-tld-initial.png) | ![TanStack tld – interactive](./tanstack-tld-interactive.png) |
 
-## SolidStart
+## Solid
 
 ### Cookie strategy
 
 | Initial | Interactive |
 | --- | --- |
-| ![SolidStart cookie – initial](./solidstart-cookie-initial.png) | ![SolidStart cookie – interactive](./solidstart-cookie-interactive.png) |
+| ![Solid cookie – initial](./solid-cookie-initial.png) | ![Solid cookie – interactive](./solid-cookie-interactive.png) |
 
 ### Route strategy
 
 | Initial | Interactive |
 | --- | --- |
-| ![SolidStart route – initial](./solidstart-route-initial.png) | ![SolidStart route – interactive](./solidstart-route-interactive.png) |
+| ![Solid route – initial](./solid-route-initial.png) | ![Solid route – interactive](./solid-route-interactive.png) |
 
 ### Subdomain strategy
 
 | Initial | Interactive |
 | --- | --- |
-| ![SolidStart subdomain – initial](./solidstart-subdomain-initial.png) | ![SolidStart subdomain – interactive](./solidstart-subdomain-interactive.png) |
+| ![Solid subdomain – initial](./solid-subdomain-initial.png) | ![Solid subdomain – interactive](./solid-subdomain-interactive.png) |
 
 ### TLD strategy
 
 | Initial | Interactive |
 | --- | --- |
-| ![SolidStart tld – initial](./solidstart-tld-initial.png) | ![SolidStart tld – interactive](./solidstart-tld-interactive.png) |
+| ![Solid tld – initial](./solid-tld-initial.png) | ![Solid tld – interactive](./solid-tld-interactive.png) |
 
 ## Waku
 

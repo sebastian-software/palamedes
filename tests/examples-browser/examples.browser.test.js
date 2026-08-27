@@ -52,8 +52,21 @@ function routeUrl(baseUrl) {
   return `${baseUrl}/en`
 }
 
+function germanDocumentUrl(example) {
+  if (example.strategy === "route") {
+    return `${example.baseUrl}/de`
+  }
+  if (example.strategy === "subdomain") {
+    return example.subdomainUrl.replace("//en.", "//de.")
+  }
+  if (example.strategy === "tld") {
+    return example.tldUrl.replace(".com:", ".de:")
+  }
+  return `${example.baseUrl}/`
+}
+
 function hasClientLocaleProbe(example) {
-  return ["solidstart-cookie", "tanstack-cookie", "waku-cookie"].includes(example.id)
+  return ["solid-cookie", "tanstack-cookie", "waku-cookie"].includes(example.id)
 }
 
 function isHydrationMismatch(message) {
@@ -185,6 +198,25 @@ async function captureScreenshot(page, example, state) {
     path: path.join(example.screenshotDir, `${example.id}-${state}.png`),
   })
 }
+
+test("Waku initial HTML document uses the request locale", async () => {
+  const example = activeExample()
+  if (example.framework !== "waku") {
+    return
+  }
+
+  const page = await launchPage(example.strategy === "tld" ? tldHostResolverArgs() : [], {
+    browserLocale: "de-DE",
+  })
+  const response = await page.goto(germanDocumentUrl(example), {
+    waitUntil: "domcontentloaded",
+  })
+  expect(response).not.toBeNull()
+
+  const initialHtml = await response.text()
+  const documentLocale = initialHtml.match(/<html\b[^>]*\blang=["']([^"']+)["']/iu)?.[1]
+  expect(documentLocale).toBe("de")
+})
 
 test("matrix example browser contract", async () => {
   const example = activeExample()

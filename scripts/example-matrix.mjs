@@ -6,14 +6,7 @@ export const ROOT = path.resolve(import.meta.dirname, "..")
 // These public identities are deliberately independent of EXAMPLE_MATRIX.
 // The guard compares matrix-derived values to them so a whole-family or
 // whole-strategy rename cannot preserve cardinality while breaking selectors.
-export const SERVER_FRAMEWORKS = [
-  "nextjs",
-  "tanstack",
-  "waku",
-  "react-router",
-  "solidstart",
-  "remix",
-]
+export const SERVER_FRAMEWORKS = ["nextjs", "tanstack", "waku", "react-router", "solid", "remix"]
 export const LOCALE_STRATEGIES = ["cookie", "route", "subdomain", "tld"]
 export const VITE_EXAMPLE = { framework: "vite", strategy: "client", id: "vite-mdx" }
 
@@ -133,17 +126,11 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-cookie"),
     build: ["build"],
     start: ["start"],
-    // Waku pre-renders `src/pages/_root.tsx` once, so the served document always
-    // carries `lang="en"` and the client bootstrap applies the active locale (see
-    // the waku section of `docs/framework-example-notes.md`). Asserting that
-    // literal `en` keeps the constraint visible: it turns red once Waku can emit
-    // a per-request shell. The verifier's deterministic i18n-concurrency pass
-    // below additionally overlaps two request scopes.
     smokeChecks: [
       {
         headers: { "accept-language": "de" },
         path: "/",
-        htmlLang: "en",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
@@ -162,7 +149,6 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-route"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie for why the document lang stays `en` on every locale.
     smokeChecks: [
       {
         headers: { "accept-language": "de" },
@@ -172,7 +158,7 @@ export const EXAMPLE_MATRIX = [
       },
       {
         path: "/de",
-        htmlLang: "en",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
@@ -249,11 +235,11 @@ export const EXAMPLE_MATRIX = [
       "the served document is the static index.html shell; every locale decision happens after the bundle boots, so there is no server-rendered locale to fetch",
   },
   {
-    id: "solidstart-cookie",
-    framework: "solidstart",
+    id: "solid-cookie",
+    framework: "solid",
     strategy: "cookie",
     port: 4050,
-    cwd: path.join(ROOT, "examples/solidstart-cookie"),
+    cwd: path.join(ROOT, "examples/solid-cookie"),
     build: ["build"],
     start: ["start"],
     startEnv: {
@@ -387,11 +373,11 @@ export const EXAMPLE_MATRIX = [
     ],
   },
   {
-    id: "solidstart-route",
-    framework: "solidstart",
+    id: "solid-route",
+    framework: "solid",
     strategy: "route",
     port: 4051,
-    cwd: path.join(ROOT, "examples/solidstart-route"),
+    cwd: path.join(ROOT, "examples/solid-route"),
     build: ["build"],
     start: ["start"],
     startEnv: {
@@ -399,6 +385,12 @@ export const EXAMPLE_MATRIX = [
       PORT: "4051",
     },
     smokeChecks: [
+      {
+        path: "/",
+        htmlLang: null,
+        redirectTo: "/en",
+        substrings: [],
+      },
       {
         headers: { "accept-language": "de" },
         path: "/en",
@@ -472,12 +464,11 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-subdomain"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie for why the document lang stays `en` on every locale.
     smokeChecks: [
       {
         headers: { host: "de.lvh.me:4032" },
         path: "/",
-        htmlLang: "en",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
@@ -512,11 +503,11 @@ export const EXAMPLE_MATRIX = [
     ],
   },
   {
-    id: "solidstart-subdomain",
-    framework: "solidstart",
+    id: "solid-subdomain",
+    framework: "solid",
     strategy: "subdomain",
     port: 4052,
-    cwd: path.join(ROOT, "examples/solidstart-subdomain"),
+    cwd: path.join(ROOT, "examples/solid-subdomain"),
     build: ["build"],
     start: ["start"],
     startEnv: {
@@ -608,18 +599,17 @@ export const EXAMPLE_MATRIX = [
     cwd: path.join(ROOT, "examples/waku-tld"),
     build: ["build"],
     start: ["start"],
-    // See waku-cookie for why the document lang stays `en` on every locale.
     smokeChecks: [
       {
         headers: { host: "palamedes-i18n.de:4033" },
         path: "/",
-        htmlLang: "en",
+        htmlLang: "de",
         substrings: ["Deutsch", "Plätze frei"],
       },
       {
         headers: { host: "palamedes-i18n.fr:4033" },
         path: "/",
-        htmlLang: "en",
+        htmlLang: "fr",
         substrings: ["français", "places restantes"],
       },
       {
@@ -662,11 +652,11 @@ export const EXAMPLE_MATRIX = [
     ],
   },
   {
-    id: "solidstart-tld",
-    framework: "solidstart",
+    id: "solid-tld",
+    framework: "solid",
     strategy: "tld",
     port: 4053,
-    cwd: path.join(ROOT, "examples/solidstart-tld"),
+    cwd: path.join(ROOT, "examples/solid-tld"),
     build: ["build"],
     start: ["start"],
     startEnv: {

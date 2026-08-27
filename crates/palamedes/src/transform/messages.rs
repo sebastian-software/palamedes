@@ -160,7 +160,7 @@ pub(super) fn opening_element_to_component_wrapper(
         format!("{markup}>")
     };
 
-    format!("(children) => {opening}{{children}}</{name}>")
+    format!("(props) => {opening}{{props.children}}</{name}>")
 }
 
 fn source_range_with_replacements(

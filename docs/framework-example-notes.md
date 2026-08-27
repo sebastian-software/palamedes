@@ -34,13 +34,13 @@ The `tanstack-cookie`, `tanstack-route`, `tanstack-subdomain`, and
 The route example uses a dynamic `/$locale` segment; this is the canonical
 TanStack shape and remains under verification.
 
-## SolidStart
+## Solid
 
-The `solidstart-cookie`, `solidstart-route`, `solidstart-subdomain`, and
-`solidstart-tld` examples verify:
+The `solid-cookie`, `solid-route`, `solid-subdomain`, and
+`solid-tld` examples verify:
 
-- Vite-based Palamedes integration in SolidStart
-- SolidStart 2's Vite Environment API with Nitro v3 output
+- Vite-based Palamedes integration in Solid
+- Solid 2's Vite Environment API with Nitro v3 output
 - request-local SSR plus a hook-free, document-fixed client locale
 - `.po` loading through `@palamedes/vite-plugin`
 - cookie-derived, route-derived, subdomain-derived, and tld-derived locale flows
@@ -53,9 +53,9 @@ Current framework note:
 
 - Solid Router intercepts same-origin anchor clicks, so a locale link would
   navigate on the client and leave the previously activated catalog under the new
-  document. `solidstart-route` marks its locale links `rel="external"` — the
+  document. `solid-route` marks its locale links `rel="external"` — the
   router's own opt-out — so the strategy switch stays a document load. The other
-  SolidStart examples switch across hosts or assign `window.location`, so only
+  Solid examples switch across hosts or assign `window.location`, so only
   the route example needs it.
 
 ## Waku
@@ -75,15 +75,11 @@ Palamedes-side fixes already baked into these examples:
 
 Current framework note:
 
-- **the served document always carries `<html lang="en">`.** Waku pre-renders
-  `src/pages/_root.tsx` once as a static shell, so it has no access to the
-  request and cannot emit a per-request locale. All four examples apply the
-  active locale to `document.documentElement.lang` from the client bootstrap in
-  `src/lib/i18n.ts` instead, which means a client without JavaScript — including
-  a crawler that does not execute it — still sees `lang="en"` on a non-English
-  document. This is a Waku constraint, not a Palamedes one; the other framework
-  families render `lang` on the server. Revisit if Waku exposes a dynamic root
-  or document-shell API.
+- All four examples intentionally render `src/pages/_root.tsx` dynamically so
+  the server can resolve the locale from the current request and emit it in the
+  initial `<html lang="...">`. The client bootstrap in `src/lib/i18n.ts` still
+  assigns the same locale to `document.documentElement.lang`; that assignment
+  is idempotent and keeps the client state aligned with the served document.
 
 ## Remix v3
 

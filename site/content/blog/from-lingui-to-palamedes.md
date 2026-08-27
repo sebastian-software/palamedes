@@ -43,7 +43,7 @@ The cleanup is mostly below the visible authoring layer:
 - the same runtime model works across the verified example matrix
 
 That narrower model is the reason Palamedes can keep framework adapters thin.
-Next.js, TanStack Start, SolidStart, Waku, and React Router all exercise
+Next.js, TanStack Start, Solid, Waku, and React Router all exercise
 different rendering assumptions, but they do not get separate translation
 semantics.
 

@@ -121,7 +121,7 @@ export const TOPICS = [
         {
           label: "Meta-frameworks",
           value: `${contentStats.serverFrameworkCount}`,
-          note: "Next.js, TanStack Start, SolidStart, Waku, React Router and Remix v3, each with the same runtime model.",
+          note: "Next.js, TanStack Start, Solid, Waku, React Router and Remix v3, each with the same runtime model.",
         },
         {
           label: "Locale strategies each",

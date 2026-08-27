@@ -7,10 +7,6 @@ const targets = {
     platform: "darwin",
     arch: "arm64",
   },
-  "@palamedes/cli-darwin-x64": {
-    platform: "darwin",
-    arch: "x64",
-  },
   "@palamedes/cli-linux-x64-gnu": {
     platform: "linux",
     arch: "x64",
@@ -36,10 +32,6 @@ const targets = {
   "@palamedes/cli-win32-x64-msvc": {
     platform: "win32",
     arch: "x64",
-  },
-  "@palamedes/cli-win32-arm64-msvc": {
-    platform: "win32",
-    arch: "arm64",
   },
 }
 buildNativePackage({

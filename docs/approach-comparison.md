@@ -51,7 +51,7 @@ layer owns which decision.
 
 That is also why the framework matrix matters. Palamedes is unusual not because
 it has more than one adapter, but because the same runtime and identity model
-are verified across Next.js, TanStack Start, SolidStart, Waku, React Router,
+are verified across Next.js, TanStack Start, Solid, Waku, React Router,
 and Remix, with Vite MDX as the client-only proof. The matrix is evidence of
 the architecture, not a requirement that one team use several frameworks. It
 follows the integration model covered in

@@ -72,7 +72,7 @@ export interface FrameworkLanding {
 const FRAMEWORK_LANDING_PATHS: Record<string, string> = {
   nextjs: "/frameworks/nextjs",
   tanstack: "/frameworks/tanstack-start",
-  solidstart: "/frameworks/solidstart",
+  solid: "/frameworks/solid",
   waku: "/frameworks/waku",
   "react-router": "/frameworks/react-router",
   remix: "/frameworks/remix-v3",

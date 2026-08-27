@@ -26,11 +26,11 @@ For React, Palamedes marks generated `.mdx` modules as JSX automatically. Vite
 7 uses Rollup rather than Rolldown, so it cannot consume this React MDX output;
 upgrade to Vite 8 or set `mdx: false` while keeping macro and catalog support.
 
-For Solid, set `framework: "solid"` on the plugin and opt `.mdx` into
-`vite-plugin-solid` explicitly:
+For Solid 2, set `framework: "solid"` on the plugin and opt `.mdx` into
+`@solidjs/vite-plugin` explicitly:
 
 ```ts
-import solid from "vite-plugin-solid"
+import solid from "@solidjs/vite-plugin"
 import { palamedes } from "@palamedes/vite-plugin"
 import { defineConfig } from "vite"
 

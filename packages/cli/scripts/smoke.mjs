@@ -87,7 +87,7 @@ try {
   const platformDependencyVersions = Object.entries(
     installedManifest.optionalDependencies ?? {}
   ).filter(([name]) => name.startsWith("@palamedes/cli-"))
-  if (platformDependencyVersions.length !== 8) {
+  if (platformDependencyVersions.length !== 6) {
     throw new Error("The packed @palamedes/cli manifest is missing a platform dependency.")
   }
   for (const [name, version] of platformDependencyVersions) {

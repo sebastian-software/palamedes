@@ -30,10 +30,10 @@ const PANELS: FwPanel[] = [
     body: "Server functions and file-based routing, integrated through @palamedes/vite-plugin. Locale resolution runs in a server function; the client stays island-light.",
   },
   {
-    name: "SolidStart",
-    slug: "solidstart",
-    matrixSlug: "solidstart",
-    sourcePath: "examples/solidstart-route",
+    name: "Solid",
+    slug: "solid",
+    matrixSlug: "solid",
+    sourcePath: "examples/solid-route",
     body: "Solid-native rich-message rendering with @palamedes/solid — the same macro authoring, hook-free lookup, and catalogs as React.",
   },
   {
@@ -61,7 +61,7 @@ const PANELS: FwPanel[] = [
     name: "Vite",
     slug: "vite",
     sourcePath: "packages/vite-plugin",
-    body: "The shared build integration behind the TanStack Start, SolidStart, Waku, and React Router families. Use it directly with React or Solid for macro transforms, PO imports, and build diagnostics.",
+    body: "The shared build integration behind the TanStack Start, Solid, Waku, and React Router families. Use it directly with React or Solid for macro transforms, PO imports, and build diagnostics.",
   },
 ]
 

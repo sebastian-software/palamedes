@@ -10,7 +10,7 @@ extract it, translate it, and see it render without changing the mental model.
 
 It uses Vite plus React because that is the smallest copy-paste setup today.
 The same Vite plugin, runtime model, and `.po` flow now also work with Solid
-through `@palamedes/solid` and `vite-plugin-solid`.
+through `@palamedes/solid`, `@solidjs/web`, and `@solidjs/vite-plugin`.
 
 For a Next.js 16 App Router application, use the separate
 [First Working Translation with Next.js](./nextjs-first-run.md) guide.
@@ -40,8 +40,8 @@ line above just makes the full dependency set explicit.)
 For Solid, swap the host package pair:
 
 ```bash
-pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin solid-js
-pnpm add -D @palamedes/cli vite-plugin-solid vite typescript
+pnpm add @palamedes/core @palamedes/solid @palamedes/runtime @palamedes/vite-plugin @solidjs/web solid-js
+pnpm add -D @palamedes/cli @solidjs/vite-plugin vite typescript
 ```
 
 ## 2. Add `palamedes.yaml`

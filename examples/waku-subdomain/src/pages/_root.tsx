@@ -1,13 +1,18 @@
 import type { ReactNode } from "react"
+import { unstable_getHeaders } from "waku/router/server"
 import "@palamedes/example-ui/styles.css"
+import { locales } from "../lib/i18n"
 
-// Waku pre-renders this document shell once, so it cannot carry a per-request
-// locale. The active locale is applied to `document.documentElement.lang` by
-// the client bootstrap in `src/lib/i18n.ts` instead; see the waku section of
-// `docs/framework-example-notes.md`.
 export default function Root({ children }: { children: ReactNode }) {
+  const headers = unstable_getHeaders()
+  const { locale } = locales.resolve({
+    strategy: "subdomain",
+    acceptLanguageHeader: headers["accept-language"],
+    requestHost: headers.host ?? null,
+  })
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <head>
         <meta charSet="utf-8" />
         <meta content="width=device-width, initial-scale=1" name="viewport" />
@@ -15,4 +20,10 @@ export default function Root({ children }: { children: ReactNode }) {
       <body>{children}</body>
     </html>
   )
+}
+
+export async function getConfig() {
+  return {
+    render: "dynamic",
+  } as const
 }

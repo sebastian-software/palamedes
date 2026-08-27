@@ -33,13 +33,7 @@ jobs:
           - os: macos-14
             node: 24
             full: false
-          - os: macos-15-intel
-            node: 24
-            full: false
           - os: windows-2025
-            node: 24
-            full: false
-          - os: windows-11-arm
             node: 24
             full: false
 
@@ -270,7 +264,7 @@ jobs:
           path: coverage/rust/coverage-summary.json
           if-no-files-found: warn
 
-      # Palamedes ships the CLI and core-node addon for eight platforms, so
+      # Palamedes ships the CLI and core-node addon for six platforms, so
       # anything baked into either artifact multiplies. Checked once, on the
       # pinned toolchain, because the number only has to be watched — not twice.
       - name: Check shipped binary sizes
