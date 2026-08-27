@@ -17,6 +17,10 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 
 const CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
+/// Grace period after which a leaked lock directory (crash, SIGKILL, power
+/// loss inside the short claim window) is broken instead of silently
+/// disabling update checks on that machine forever.
+const STALE_LOCK_AFTER: Duration = Duration::from_secs(60 * 60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024;
 /// Wire identifier of this CLI on the shared multi-project endpoint.
@@ -149,11 +153,15 @@ trait CheckCache {
 
 struct PlatformCache {
     file: PathBuf,
+    stale_lock_after: Duration,
 }
 
 impl PlatformCache {
     fn new(file: PathBuf) -> Self {
-        Self { file }
+        Self {
+            file,
+            stale_lock_after: STALE_LOCK_AFTER,
+        }
     }
 }
 
@@ -167,9 +175,15 @@ impl CheckCache for PlatformCache {
         }
 
         let lock_path = self.file.with_extension("lock");
-        let Ok(()) = fs::create_dir(&lock_path) else {
-            return false;
-        };
+        if fs::create_dir(&lock_path).is_err() {
+            if !lock_is_stale(&lock_path, self.stale_lock_after) {
+                return false;
+            }
+            let _ = fs::remove_dir(&lock_path);
+            if fs::create_dir(&lock_path).is_err() {
+                return false;
+            }
+        }
         let _lock = DirectoryLock(&lock_path);
 
         if let Ok(value) = fs::read_to_string(&self.file) {
@@ -182,6 +196,17 @@ impl CheckCache for PlatformCache {
 
         fs::write(&self.file, format!("{now_secs}\n")).is_ok()
     }
+}
+
+/// A lock directory is stale once its mtime is older than the grace period;
+/// a live claim holds it only for a few filesystem operations. Unreadable
+/// metadata or a future mtime keeps the lock, favoring fewer requests.
+fn lock_is_stale(lock_path: &Path, after: Duration) -> bool {
+    fs::metadata(lock_path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .is_some_and(|age| age >= after)
 }
 
 struct DirectoryLock<'a>(&'a Path);
@@ -585,6 +610,29 @@ mod tests {
         fs::write(&parent_file, "occupied").expect("parent fixture");
         let cache = PlatformCache::new(parent_file.join("update-check-v1"));
         assert!(!cache.claim_due(100));
+    }
+
+    #[test]
+    fn fresh_locks_are_honored_and_stale_locks_are_broken() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let file = temp.path().join("palamedes").join("update-check-v1");
+        fs::create_dir_all(file.parent().expect("cache parent")).expect("cache dir");
+        let lock = file.with_extension("lock");
+        fs::create_dir(&lock).expect("leaked lock fixture");
+
+        // A recent lock keeps its claim.
+        assert!(!PlatformCache::new(file.clone()).claim_due(100));
+        assert!(lock.exists());
+
+        // Once the grace period has passed, the leaked lock is broken and the
+        // claim proceeds; the fresh lock is released again afterwards.
+        let cache = PlatformCache {
+            file: file.clone(),
+            stale_lock_after: Duration::ZERO,
+        };
+        assert!(cache.claim_due(100));
+        assert!(!lock.exists());
+        assert_eq!(fs::read_to_string(&file).expect("cache file").trim(), "100");
     }
 
     #[test]
