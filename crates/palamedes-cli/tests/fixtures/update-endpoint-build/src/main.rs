@@ -2,7 +2,7 @@
 fn main() {
     assert_eq!(
         env!("PALAMEDES_VALIDATED_UPDATE_ENDPOINT"),
-        "https://version.palamedes.dev/check"
+        "https://version.sebastian-software.dev/check"
     );
 }
 

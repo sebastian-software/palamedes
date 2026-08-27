@@ -4,7 +4,8 @@
 //! perform a request until the release environment supplies the allowlisted
 //! `PALAMEDES_UPDATE_ENDPOINT`; invalid values fail the build. This keeps an
 //! undeployed or malformed endpoint from becoming an implicit network call.
-//! ADR 027 owns the rollout and data-minimization contract.
+//! ADR 027 owns the client contract; the shared service half lives in the
+//! public `sebastian-software/version-service` repository.
 
 use std::ffi::OsString;
 use std::fs;
@@ -18,6 +19,9 @@ use serde::{Deserialize, Serialize};
 const CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024;
+/// Wire identifier of this CLI on the shared multi-project endpoint.
+const UPDATE_PROJECT: &str = "palamedes";
+const INSTALLED_SINCE_FILE: &str = "installed-since-v1";
 
 #[cfg(palamedes_update_endpoint)]
 const COMPILED_UPDATE_ENDPOINT: Option<&str> = Some(env!("PALAMEDES_VALIDATED_UPDATE_ENDPOINT"));
@@ -41,9 +45,11 @@ impl UpdateCheck {
             .name("pmds-update-check".to_owned())
             .spawn(move || {
                 let cache = PlatformCache::new(settings.cache_file);
+                let cohort = PlatformCohort::new(settings.cohort_file);
                 run_due_check(
                     &SystemClock,
                     &cache,
+                    &cohort,
                     &HttpTransport::new(settings.endpoint),
                     settings.payload,
                 )
@@ -64,6 +70,7 @@ impl UpdateCheck {
 struct Settings {
     endpoint: &'static str,
     cache_file: PathBuf,
+    cohort_file: PathBuf,
     payload: UpdatePayload,
 }
 
@@ -84,26 +91,33 @@ impl Settings {
         }
 
         let cache_file = platform_cache_file(current_platform(), &environment)?;
+        let cohort_file = cache_file.with_file_name(INSTALLED_SINCE_FILE);
         let ci = is_ci(&environment);
         Some(Self {
             endpoint,
             cache_file,
+            cohort_file,
             payload: UpdatePayload {
+                project: UPDATE_PROJECT.to_owned(),
                 version: env!("CARGO_PKG_VERSION").to_owned(),
                 os: std::env::consts::OS.to_owned(),
                 arch: std::env::consts::ARCH.to_owned(),
                 ci,
+                installed_since: String::new(),
             },
         })
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct UpdatePayload {
+    project: String,
     version: String,
     os: String,
     arch: String,
     ci: bool,
+    installed_since: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -178,6 +192,69 @@ impl Drop for DirectoryLock<'_> {
     }
 }
 
+trait InstallCohort {
+    /// Returns the coarse year-month install cohort, persisting it on first
+    /// use. Deliberately never finer than a month: combined with the other
+    /// payload dimensions, a finer value could form singleton combinations
+    /// whose daily requests become linkable — a de-facto identifier.
+    fn installed_since(&self, now_secs: u64) -> String;
+}
+
+struct PlatformCohort {
+    file: PathBuf,
+}
+
+impl PlatformCohort {
+    fn new(file: PathBuf) -> Self {
+        Self { file }
+    }
+}
+
+impl InstallCohort for PlatformCohort {
+    fn installed_since(&self, now_secs: u64) -> String {
+        let current = year_month(now_secs);
+        if let Ok(stored) = fs::read_to_string(&self.file) {
+            let stored = stored.trim();
+            // Fixed-width zero-padded values compare correctly as strings;
+            // future values from clock jumps are replaced, past values win.
+            if is_year_month(stored) && stored <= current.as_str() {
+                return stored.to_owned();
+            }
+        }
+        let _ = fs::write(&self.file, format!("{current}\n"));
+        current
+    }
+}
+
+fn year_month(now_secs: u64) -> String {
+    // Hinnant's civil-from-days conversion, valid for the whole Unix era.
+    let days = (now_secs / 86_400) as i64 + 719_468;
+    let era = days / 146_097;
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
+    } else {
+        shifted_month - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}")
+}
+
+fn is_year_month(value: &str) -> bool {
+    let Some((year, month)) = value.split_once('-') else {
+        return false;
+    };
+    year.len() == 4
+        && year.bytes().all(|byte| byte.is_ascii_digit())
+        && month.len() == 2
+        && month.bytes().all(|byte| byte.is_ascii_digit())
+        && matches!(month.parse::<u8>(), Ok(1..=12))
+}
+
 trait Transport {
     fn latest_version(&self, payload: &UpdatePayload) -> Option<String>;
 }
@@ -198,7 +275,7 @@ impl Transport for HttpTransport {
             .timeout_global(Some(REQUEST_TIMEOUT))
             .https_only(true)
             .max_redirects(0)
-            // Do not add library or binary identity beyond the four documented
+            // Do not add library or binary identity beyond the documented
             // JSON fields. Protocol-required headers remain transport details.
             .user_agent("")
             .accept("")
@@ -221,14 +298,17 @@ impl Transport for HttpTransport {
 fn run_due_check(
     clock: &dyn Clock,
     cache: &dyn CheckCache,
+    cohort: &dyn InstallCohort,
     transport: &dyn Transport,
-    payload: UpdatePayload,
+    mut payload: UpdatePayload,
 ) -> Option<String> {
     let now_secs = clock.now_secs()?;
     if !cache.claim_due(now_secs) {
         return None;
     }
 
+    // claim_due created the cache directory, so the cohort file shares it.
+    payload.installed_since = cohort.installed_since(now_secs);
     let latest = transport.latest_version(&payload)?;
     update_notice(&payload.version, &latest)
 }
@@ -331,6 +411,14 @@ mod tests {
         }
     }
 
+    struct FixedCohort(&'static str);
+
+    impl InstallCohort for FixedCohort {
+        fn installed_since(&self, _now_secs: u64) -> String {
+            self.0.to_owned()
+        }
+    }
+
     struct RecordingTransport {
         calls: AtomicUsize,
         payload: Mutex<Option<UpdatePayload>>,
@@ -345,12 +433,14 @@ mod tests {
         }
     }
 
-    fn payload(version: &str) -> UpdatePayload {
+    fn payload(version: &str, installed_since: &str) -> UpdatePayload {
         UpdatePayload {
+            project: "palamedes".to_owned(),
             version: version.to_owned(),
             os: "linux".to_owned(),
             arch: "x86_64".to_owned(),
             ci: false,
+            installed_since: installed_since.to_owned(),
         }
     }
 
@@ -366,7 +456,13 @@ mod tests {
             latest: Some("1.4.0".to_owned()),
         };
 
-        let notice = run_due_check(&FixedClock(Some(100)), &cache, &transport, payload("1.2.3"));
+        let notice = run_due_check(
+            &FixedClock(Some(100)),
+            &cache,
+            &FixedCohort("2026-07"),
+            &transport,
+            payload("1.2.3", ""),
+        );
 
         assert_eq!(
             notice.as_deref(),
@@ -374,14 +470,16 @@ mod tests {
         );
         assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
         let sent = transport.payload.lock().expect("payload lock").clone();
-        assert_eq!(sent, Some(payload("1.2.3")));
+        assert_eq!(sent, Some(payload("1.2.3", "2026-07")));
         assert_eq!(
             serde_json::to_value(sent.expect("sent payload")).expect("serialize payload"),
             serde_json::json!({
+                "project": "palamedes",
                 "version": "1.2.3",
                 "os": "linux",
                 "arch": "x86_64",
-                "ci": false
+                "ci": false,
+                "installedSince": "2026-07"
             })
         );
     }
@@ -398,10 +496,14 @@ mod tests {
                 payload: Mutex::new(None),
                 latest: latest.map(str::to_owned),
             };
-            assert!(
-                run_due_check(&FixedClock(Some(100)), &cache, &transport, payload("1.2.3"))
-                    .is_none()
-            );
+            assert!(run_due_check(
+                &FixedClock(Some(100)),
+                &cache,
+                &FixedCohort("2026-07"),
+                &transport,
+                payload("1.2.3", "")
+            )
+            .is_none());
         }
 
         assert!(update_notice("invalid", "2.0.0").is_none());
@@ -423,9 +525,14 @@ mod tests {
                 payload: Mutex::new(None),
                 latest: Some("2.0.0".to_owned()),
             };
-            assert!(
-                run_due_check(&FixedClock(clock), &cache, &transport, payload("1.0.0")).is_none()
-            );
+            assert!(run_due_check(
+                &FixedClock(clock),
+                &cache,
+                &FixedCohort("2026-07"),
+                &transport,
+                payload("1.0.0", "")
+            )
+            .is_none());
             assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
         }
     }
@@ -480,6 +587,54 @@ mod tests {
         assert!(!cache.claim_due(100));
     }
 
+    #[test]
+    fn year_month_conversion_is_deterministic() {
+        assert_eq!(year_month(0), "1970-01");
+        assert_eq!(year_month(951_868_799), "2000-02");
+        assert_eq!(year_month(951_868_800), "2000-03");
+        assert_eq!(year_month(1_787_788_800), "2026-08");
+
+        assert!(is_year_month("2026-08"));
+        assert!(is_year_month("1970-01"));
+        for invalid in [
+            "2026-00",
+            "2026-13",
+            "2026-8",
+            "202608",
+            "2026-08-27",
+            "20x6-08",
+            "",
+        ] {
+            assert!(!is_year_month(invalid), "accepted {invalid:?}");
+        }
+    }
+
+    #[test]
+    fn install_cohort_persists_and_replaces_invalid_or_future_values() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let file = temp.path().join(INSTALLED_SINCE_FILE);
+        let cohort = PlatformCohort::new(file.clone());
+        let now = 1_787_788_800; // 2026-08
+
+        assert_eq!(cohort.installed_since(now), "2026-08");
+        assert_eq!(
+            fs::read_to_string(&file).expect("cohort file").trim(),
+            "2026-08"
+        );
+
+        fs::write(&file, "2025-11\n").expect("older cohort");
+        assert_eq!(cohort.installed_since(now), "2025-11");
+
+        for broken in ["not-a-month\n", "2031-01\n"] {
+            fs::write(&file, broken).expect("cohort fixture");
+            assert_eq!(cohort.installed_since(now), "2026-08");
+            assert_eq!(
+                fs::read_to_string(&file).expect("cohort file").trim(),
+                "2026-08"
+            );
+        }
+    }
+
     fn environment(values: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {
         let values = values
             .iter()
@@ -495,11 +650,31 @@ mod tests {
             vec![("HOME", "/tmp/home"), ("PALAMEDES_UPDATE_CHECK", "0")],
         ] {
             assert!(Settings::from_environment(
-                "https://version.palamedes.dev/check",
+                "https://version.sebastian-software.dev/check",
                 environment(&values)
             )
             .is_none());
         }
+    }
+
+    #[test]
+    fn settings_seed_the_payload_and_place_the_cohort_beside_the_cache() {
+        let settings = Settings::from_environment(
+            "https://version.sebastian-software.dev/check",
+            environment(&[
+                ("HOME", "/home/alex"),
+                ("XDG_CACHE_HOME", "/xdg"),
+                ("LOCALAPPDATA", r"C:\Users\alex\AppData\Local"),
+            ]),
+        )
+        .expect("settings");
+
+        assert_eq!(
+            settings.cohort_file,
+            settings.cache_file.with_file_name(INSTALLED_SINCE_FILE)
+        );
+        assert_eq!(settings.payload.project, "palamedes");
+        assert!(settings.payload.installed_since.is_empty());
     }
 
     #[test]
