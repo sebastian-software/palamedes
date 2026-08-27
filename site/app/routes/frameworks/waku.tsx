@@ -126,7 +126,7 @@ export default async function LocalePage() {
   },
   boundary: {
     title: "Current proof follows Waku's RC API.",
-    body: "The matrix pins Waku 1.0.0-rc.0. The integration is intentionally thin and Vite-based, but Waku may still change configuration or rendering APIs before a stable release. Version-specific claims on this page follow the checked example.",
+    body: "The matrix pins Waku 1.0.0-rc.0, and the integration is intentionally thin and Vite-based. Re-verify version-specific behavior when adopting the stable release; claims on this page follow the checked example.",
     link: {
       label: "Read the RSC i18n guide",
       href: "/react-server-components-i18n",
