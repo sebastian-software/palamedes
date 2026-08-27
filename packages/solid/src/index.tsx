@@ -52,7 +52,11 @@ function renderChoice(
 ): Element {
   const i18n = getActiveI18n()
   const message = buildChoiceMessage("value", kind, choices, offset)
-  const metadata: MessageMetadata = { message, reportMissing: false }
+  const metadata: MessageMetadata = {
+    message,
+    reportMissing: false,
+    renderUncompiledPattern: true,
+  }
   const runtime = createSolidMessageRuntime(i18n, {}, parseMessagePattern)
   return renderI18nMessage(i18n, message, { value }, runtime, metadata)
 }

@@ -58,7 +58,7 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "test": "vitest run --globals src/index.test.tsx",
+    "test": "vitest run --globals src/index.test.tsx && vitest run --config vitest.client.config.ts --globals src/client.test.tsx",
     "stub": "unbuild --stub"
   },
   "engines": {
@@ -77,6 +77,7 @@
   "devDependencies": {
     "@solidjs/vite-plugin": "3.0.0-next.34",
     "@solidjs/web": "2.0.0-rc.3",
+    "@testing-library/jest-dom": "^6.9.1",
     "solid-js": "2.0.0-rc.3",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
