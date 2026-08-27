@@ -37,9 +37,9 @@ function CellContent({ cell }: { cell: MatrixCell }) {
 /*
  * The 6×4 proof matrix. Cells are explicit data with per-cell hosting
  * status (never a generated URL pattern). Provisioning cells may expose their
- * target URLs as rollout probes before the public host becomes live. `scan`
- * enables the /frameworks style break: a one-shot accent scanline sweeping the
- * table on first view.
+ * configured target URLs before the public host becomes live. `scan` enables
+ * the /frameworks style break: a one-shot accent scanline sweeping the table
+ * on first view.
  */
 export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
   return (

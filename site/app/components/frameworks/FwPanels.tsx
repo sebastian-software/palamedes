@@ -121,6 +121,9 @@ export function FwPanels() {
                 {tld?.demoLinks?.[0] ? (
                   <a href={tld.demoLinks[0].href} className="text-accent hover:text-ink">
                     <span aria-hidden>{tld.status === "live" ? "● " : "◌ "}</span>tld
+                    {tld.status === "provisioning" ? (
+                      <span className="sr-only"> (host pending)</span>
+                    ) : null}
                   </a>
                 ) : hasLiveDemos ? (
                   <span className="text-gray-spec">◌ tld</span>

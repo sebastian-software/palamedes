@@ -8,8 +8,8 @@ import { repoHref } from "./links"
  * (palamedes-i18n.{com,de,es,fr}). Cookie, route, and subdomain are hosted for
  * four browser-verified frameworks; Solid's renamed v2 hosts remain in
  * provisioning. Tld target URLs for all five browser-capable families are
- * published as rollout probes while reverse-proxy routing and TLS remain in
- * provisioning. Remix v3 is a local/CI proof surface without public hosting.
+ * linked while their hosting remains in provisioning. Remix v3 is a local/CI
+ * proof surface without public hosting.
  */
 
 export type MatrixStatus = "live" | "provisioning"
