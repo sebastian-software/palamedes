@@ -3,9 +3,13 @@ import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   plugins: [solid()],
+  resolve: {
+    conditions: ["browser"],
+  },
   test: {
-    environment: "node",
-    exclude: ["**/node_modules/**", "src/client.test.tsx"],
+    environment: "jsdom",
     globals: true,
+    include: ["src/client.test.tsx"],
+    name: "@palamedes/solid-client",
   },
 })

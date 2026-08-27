@@ -1,4 +1,4 @@
-import { createComponent, type Element, type FlowComponent } from "solid-js"
+import { createComponent, createMemo, type Element, type FlowComponent } from "solid-js"
 
 import {
   createCompiledMessageRuntime,
@@ -40,20 +40,24 @@ type RendererI18n = Pick<
 >
 
 /** Creates the shared Trans component for compatibility and compiled entries. */
-export function createTrans(useI18n: () => RendererI18n, fallbackParser?: PatternParser) {
-  return function Trans({
-    id,
-    message,
-    values,
-    components,
-    context,
-    comment,
-  }: TransProps): Element {
-    const resolvedId = id ?? message ?? ""
-    const i18n = useI18n()
-    const metadata: MessageMetadata = { message, context, comment }
-    const runtime = createSolidMessageRuntime(i18n, components ?? {}, fallbackParser)
-    return renderI18nMessage(i18n, resolvedId, values ?? {}, runtime, metadata)
+export function createTrans(getI18n: () => RendererI18n, fallbackParser?: PatternParser) {
+  return function Trans(props: TransProps): Element {
+    const content = createMemo(() => {
+      const i18n = getI18n()
+      const resolvedId = props.id ?? props.message ?? ""
+      const metadata: MessageMetadata = {
+        message: props.message,
+        context: props.context,
+        comment: props.comment,
+        renderUncompiledPattern: fallbackParser !== undefined,
+      }
+      const runtime = createSolidMessageRuntime(i18n, props.components ?? {}, fallbackParser)
+      return renderI18nMessage(i18n, resolvedId, props.values ?? {}, runtime, metadata)
+    })
+
+    // Solid resolves accessor children reactively. Its Element type does not
+    // currently include the accessor shape returned by createMemo.
+    return content as unknown as Element
   }
 }
 

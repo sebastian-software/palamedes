@@ -77,6 +77,19 @@ describe("@palamedes/solid", () => {
     expect(withoutHydrationMarkers(html)).toBe("Hallo Ada")
   })
 
+  it("formats parser-free ICU fallbacks through runtime components", () => {
+    const i18n = createCompiledI18n({ locale: "en" })
+    setServerI18nGetter(() => i18n)
+
+    const trans = renderToString(() => (
+      <Trans id="greeting" message="Hello {name}" values={{ name: "Ada" }} />
+    ))
+    const plural = renderToString(() => <Plural value={3} one="# item" other="# items" />)
+
+    expect(withoutHydrationMarkers(trans)).toBe("Hello Ada")
+    expect(plural).toBe("3 items")
+  })
+
   it("parses lazy patterns without re-entering catalog lookup", () => {
     const greeting: CompiledMessage = (values, runtime) => runtime.pattern("Hello {name}", values)
     const i18n = createI18n({ locale: "de" })
