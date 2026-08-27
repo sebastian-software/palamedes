@@ -96,7 +96,7 @@ their warm runs cost what their cold runs cost. That makes this a capability
 difference rather than a race, which is exactly why it is kept out of every
 speedup number we publish.
 
-**Try it live.** The live reference covers cookie, route, and subdomain demos across the deployed framework matrix (tld domains and the renamed Solid v2 hosts are still being provisioned). Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
+**Try it live.** The live reference covers cookie, route, and subdomain demos across the deployed framework matrix. Tld target URLs are published as rollout probes while routing and TLS are activated; the renamed Solid v2 cookie, route, and subdomain hosts are still provisioning. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,

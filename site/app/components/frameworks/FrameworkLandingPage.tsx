@@ -37,7 +37,7 @@ function StrategyGrid({ page }: { page: FrameworkLanding }) {
               <p className="mono-nums mt-4 flex flex-wrap gap-3 text-[11px]">
                 {cell.demoLinks?.[0] ? (
                   <a href={cell.demoLinks[0].href} className="text-accent hover:text-ink">
-                    <span aria-hidden>● </span>open demo
+                    <span aria-hidden>{cell.status === "live" ? "● " : "◌ "}</span>open demo
                   </a>
                 ) : (
                   <span className="text-gray-spec">◌ local / CI</span>
