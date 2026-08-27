@@ -103,6 +103,14 @@ function isServerEnvironment(): boolean {
   return typeof window === "undefined" && !isWindowlessClientEnvironment()
 }
 
+function getActiveServerI18n(state: GlobalRuntimeState): I18nInstance | undefined {
+  return state[SERVER_I18N_GETTER_KEY]?.() ?? state[SERVER_SCOPE_STATE_KEY]?.active.getStore()
+}
+
+function hasRegisteredServerI18n(state: GlobalRuntimeState): boolean {
+  return state[SERVER_I18N_GETTER_KEY] !== undefined || state[SERVER_SCOPE_STATE_KEY] !== undefined
+}
+
 function getRegisteredMessages(
   state = globalRuntimeState()
 ): Map<string, RegisteredMessageEntry[]> {
@@ -401,19 +409,19 @@ export function activateServerI18n<T extends I18nInstance>(i18n: T): T {
 }
 
 export function getI18n<T extends I18nInstance = I18nInstance>(): T {
-  if (isServerEnvironment()) {
-    const state = globalRuntimeState()
-    const i18n =
-      state[SERVER_I18N_GETTER_KEY]?.() ?? state[SERVER_SCOPE_STATE_KEY]?.active.getStore()
-    if (!i18n) {
-      throw new Error(
-        "No active server i18n instance. Configure @palamedes/runtime with setServerI18nGetter() before translated code runs."
-      )
-    }
-    return i18n as T
+  const state = globalRuntimeState()
+  const serverI18n = getActiveServerI18n(state)
+  if (serverI18n) {
+    return serverI18n as T
   }
 
-  const activeClientI18n = globalRuntimeState()[CLIENT_I18N_KEY]
+  if (isServerEnvironment() || hasRegisteredServerI18n(state)) {
+    throw new Error(
+      "No active server i18n instance. Configure @palamedes/runtime with setServerI18nGetter() before translated code runs."
+    )
+  }
+
+  const activeClientI18n = state[CLIENT_I18N_KEY]
   if (!activeClientI18n) {
     throw new Error(
       "No active client i18n instance. Initialize @palamedes/runtime with setClientI18n() before translated code runs."

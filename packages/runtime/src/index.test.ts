@@ -119,6 +119,38 @@ describe("@palamedes/runtime", () => {
     expect(getI18n()).toBe(i18n)
   })
 
+  it("prefers the request-local server instance in service-worker-style edge runtimes", () => {
+    class TestWorkerGlobalScope {
+      public readonly kind = "service-worker"
+    }
+    const state = globalThis as Record<string, unknown>
+    state.importScripts = () => null
+    state.WorkerGlobalScope = TestWorkerGlobalScope
+    state.self = new TestWorkerGlobalScope()
+    const serverI18n = createTestI18n("server")
+    const clientI18n = createTestI18n("client")
+
+    setClientI18n(clientI18n)
+    setServerI18nGetter(() => serverI18n)
+
+    expect(getI18n()).toBe(serverI18n)
+  })
+
+  it("does not fall back to a client instance without an active edge request", () => {
+    class TestWorkerGlobalScope {
+      public readonly kind = "service-worker"
+    }
+    const state = globalThis as Record<string, unknown>
+    state.importScripts = () => null
+    state.WorkerGlobalScope = TestWorkerGlobalScope
+    state.self = new TestWorkerGlobalScope()
+
+    setClientI18n(createTestI18n("client"))
+    setServerI18nGetter(() => undefined)
+
+    expect(() => getI18n()).toThrow(/No active server i18n instance/)
+  })
+
   it("resolves the request-local server instance", () => {
     const i18n = createTestI18n()
     setServerI18nGetter(() => i18n)
