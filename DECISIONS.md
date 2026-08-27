@@ -58,6 +58,7 @@ Then read the remaining cross-cutting decisions:
 24. [ADR-024: The npm Launcher Is A Packaging Bridge With A Node-Free Escape Hatch](./adr/024-npm-launcher-is-a-packaging-bridge.md)
 25. [ADR-025: React Router RSC Entry Request Scope](./adr/025-react-router-rsc-entry-request-scope.md)
 26. [ADR-026: Editorial Visual Brand System](./adr/026-editorial-visual-brand-system.md)
+27. [ADR-027: Privacy-Bounded CLI Update Check With Deployment-Gated Rollout](./adr/027-privacy-bounded-cli-update-check.md)
 
 ## ADR Policy
 

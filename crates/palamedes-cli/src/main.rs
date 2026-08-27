@@ -11,16 +11,28 @@ mod commands;
 mod config;
 mod error;
 mod plugins;
+mod update_check;
 
 use clap::Parser;
+use std::io::{self, Write};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    match cli::Cli::parse().execute() {
-        Ok(code) => ExitCode::from(code),
+    let cli = cli::Cli::parse();
+    let update_check = update_check::UpdateCheck::start();
+    let exit_code = match cli.execute() {
+        Ok(code) => code,
         Err(error) => {
             eprintln!("Error: {error}");
-            ExitCode::from(error.exit_code())
+            error.exit_code()
         }
+    };
+
+    if let Some(notice) = update_check.finish() {
+        // Advisory output must not turn a successful command into a broken-pipe
+        // panic when stderr is closed by its caller.
+        let _ = writeln!(io::stderr().lock(), "{notice}");
     }
+
+    ExitCode::from(exit_code)
 }

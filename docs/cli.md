@@ -387,6 +387,74 @@ pmds version
 pmds --version
 ```
 
+## Advisory update checks
+
+The native CLI contains a privacy-bounded update-check client, but published
+binaries keep it disabled until the shared endpoint has valid DNS/TLS and a
+verified deployment. Enabling a release is an explicit build step; a binary
+without that release-time endpoint makes no update-check request and writes no
+update-check cache. A configured build fails unless the value is exactly the
+owned HTTPS route `https://version.sebastian-software.dev/check`; malformed,
+alternate-host, credentialed, port-qualified, query, and fragment values cannot
+produce a release binary. The server half of the contract lives in the public
+[version-service](https://github.com/sebastian-software/version-service)
+repository and serves all Sebastian Software CLIs.
+
+Once enabled, a regular `pmds` subcommand checks at most once per 24 hours. It
+runs as part of that process — never as a daemon, background service, or
+postinstall hook — and sends only this JSON shape over HTTPS:
+
+```json
+{
+  "project": "palamedes",
+  "version": "1.17.3",
+  "os": "linux",
+  "arch": "x86_64",
+  "ci": false,
+  "installedSince": "2026-08"
+}
+```
+
+`installedSince` is a coarse year-month install cohort and is deliberately
+never finer than a month: combined with the other fields, a day-precision value
+could form singleton combinations whose daily requests become linkable — a
+de-facto identifier. There is no installation or telemetry ID and no command,
+arguments, path, project data, username, or hostname. Palamedes application
+code does not access or persist client IP addresses, forwarded headers, user
+agents, or other identifying headers. The service reads the request URL path,
+`Content-Type`, and `Content-Length` only to validate the route, media type,
+and body-size limit, and forwards nothing but the documented aggregate
+dimensions — with neutralized transport metadata — to its analytics sink. It
+aggregates rate-limited request volume and
+version/OS/architecture/CI/cohort distributions; because it has no stable
+identifier, those requests are not unique weekly installations.
+
+Set either opt-out before invoking the CLI:
+
+```bash
+export DO_NOT_TRACK=1
+# or
+export PALAMEDES_UPDATE_CHECK=0
+```
+
+The platform cache is under `$XDG_CACHE_HOME/palamedes` (falling back to
+`$HOME/.cache/palamedes`) on Linux, `$HOME/Library/Caches/palamedes` on macOS,
+and `%LOCALAPPDATA%\palamedes` on Windows. A due attempt is recorded before the
+request so offline use is not retried on every command, and the year-month
+cohort is persisted beside it as `installed-since-v1`; deleting the cache
+restarts the cohort. Cache and network failures are non-fatal and silent. The
+network operation has a two-second total deadline; a valid newer semantic
+version produces only this stderr notice after the command output:
+
+```text
+A new version of palamedes is available: 1.17.3 → 1.18.0
+```
+
+Stdout and exit status are unchanged, including for `--json` commands. See
+[ADR-027](../adr/027-privacy-bounded-cli-update-check.md) for the data boundary
+and the [version-service](https://github.com/sebastian-software/version-service)
+repository for the service implementation and its deployment guide.
+
 ## Configuration Errors
 
 The native CLI reads only data configs (`palamedes.yaml`, `.yml`, `.json`,
