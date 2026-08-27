@@ -146,9 +146,22 @@ describe("@palamedes/runtime", () => {
     state.self = new TestWorkerGlobalScope()
 
     setClientI18n(createTestI18n("client"))
-    setServerI18nGetter(() => undefined)
+    const requests = new Map<string, I18nInstance>()
+    setServerI18nGetter(() => requests.get("active"))
 
     expect(() => getI18n()).toThrow(/No active server i18n instance/)
+  })
+
+  it("uses the client instance in browser environments after server setup", () => {
+    const state = globalThis as Record<string, unknown>
+    state.window = {}
+    const clientI18n = createTestI18n("client")
+    const requests = new Map<string, I18nInstance>()
+
+    setClientI18n(clientI18n)
+    setServerI18nGetter(() => requests.get("active"))
+
+    expect(getI18n()).toBe(clientI18n)
   })
 
   it("resolves the request-local server instance", () => {

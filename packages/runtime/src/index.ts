@@ -410,15 +410,17 @@ export function activateServerI18n<T extends I18nInstance>(i18n: T): T {
 
 export function getI18n<T extends I18nInstance = I18nInstance>(): T {
   const state = globalRuntimeState()
-  const serverI18n = getActiveServerI18n(state)
-  if (serverI18n) {
-    return serverI18n as T
-  }
+  if (typeof window === "undefined") {
+    const serverI18n = getActiveServerI18n(state)
+    if (serverI18n) {
+      return serverI18n as T
+    }
 
-  if (isServerEnvironment() || hasRegisteredServerI18n(state)) {
-    throw new Error(
-      "No active server i18n instance. Configure @palamedes/runtime with setServerI18nGetter() before translated code runs."
-    )
+    if (isServerEnvironment() || hasRegisteredServerI18n(state)) {
+      throw new Error(
+        "No active server i18n instance. Configure @palamedes/runtime with setServerI18nGetter() before translated code runs."
+      )
+    }
   }
 
   const activeClientI18n = state[CLIENT_I18N_KEY]
