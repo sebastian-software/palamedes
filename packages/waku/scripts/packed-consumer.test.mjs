@@ -35,7 +35,7 @@ try {
         dependencies: {
           "@palamedes/runtime": `file:${runtimeArchive}`,
           "@palamedes/waku": `file:${wakuArchive}`,
-          waku: "1.0.0-beta.9",
+          waku: "1.0.0-rc.0",
         },
       },
       null,
@@ -61,7 +61,7 @@ try {
     JSON.parse(
       readFileSync(path.join(consumerRoot, "node_modules", "waku", "package.json"), "utf8")
     ).version,
-    "1.0.0-beta.9"
+    "1.0.0-rc.0"
   )
 
   // Waku's router entry executes under its Vite React Server Components runtime,
