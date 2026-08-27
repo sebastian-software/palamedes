@@ -40,10 +40,10 @@ type RendererI18n = Pick<
 >
 
 /** Creates the shared Trans component for compatibility and compiled entries. */
-export function createTrans(useI18n: () => RendererI18n, fallbackParser?: PatternParser) {
+export function createTrans(getI18n: () => RendererI18n, fallbackParser?: PatternParser) {
   return function Trans(props: TransProps): Element {
     const content = createMemo(() => {
-      const i18n = useI18n()
+      const i18n = getI18n()
       const resolvedId = props.id ?? props.message ?? ""
       const metadata: MessageMetadata = {
         message: props.message,
