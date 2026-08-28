@@ -59,6 +59,7 @@ Then read the remaining cross-cutting decisions:
 25. [ADR-025: React Router RSC Entry Request Scope](./adr/025-react-router-rsc-entry-request-scope.md)
 26. [ADR-026: Editorial Visual Brand System](./adr/026-editorial-visual-brand-system.md)
 27. [ADR-027: Privacy-Bounded CLI Update Check With Deployment-Gated Rollout](./adr/027-privacy-bounded-cli-update-check.md)
+28. [ADR-028: Effective Flow Project Setup](./adr/028-effective-flow-project-setup.md)
 
 ## ADR Policy
 
