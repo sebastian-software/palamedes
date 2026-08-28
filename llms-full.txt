@@ -521,6 +521,7 @@ ADRs:
 - `/adr/025-react-router-rsc-entry-request-scope.md`
 - `/adr/026-editorial-visual-brand-system.md`
 - `/adr/027-privacy-bounded-cli-update-check.md`
+- `/adr/028-effective-flow-project-setup.md`
 
 ## Development commands
 

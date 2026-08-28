@@ -37,11 +37,33 @@ const legacySolidRedirect = readFileSync(
   "utf8"
 )
 
+function hasHtmlTagWithAttributes(html, tagName, expectedAttributes) {
+  const tagPattern = new RegExp(`<${tagName}\\b([^>]*)/?>`, "giu")
+  const attributePattern = /([^\s"'<>/=]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gu
+
+  return [...html.matchAll(tagPattern)].some((tagMatch) => {
+    const attributes = new Map(
+      [...tagMatch[1].matchAll(attributePattern)].map((attributeMatch) => [
+        attributeMatch[1].toLowerCase(),
+        attributeMatch[2] ?? attributeMatch[3] ?? attributeMatch[4],
+      ])
+    )
+
+    return Object.entries(expectedAttributes).every(
+      ([name, value]) => attributes.get(name.toLowerCase()) === value
+    )
+  })
+}
+
 if (
-  !legacySolidRedirect.includes(
-    '<link rel="canonical" href="https://palamedes.dev/frameworks/solid">'
-  ) ||
-  !legacySolidRedirect.includes('<meta http-equiv="refresh" content="0;url=/frameworks/solid">')
+  !hasHtmlTagWithAttributes(legacySolidRedirect, "link", {
+    rel: "canonical",
+    href: "https://palamedes.dev/frameworks/solid",
+  }) ||
+  !hasHtmlTagWithAttributes(legacySolidRedirect, "meta", {
+    "http-equiv": "refresh",
+    content: "0;url=/frameworks/solid",
+  })
 ) {
   throw new Error(
     "verify-site-routes: legacy SolidStart page must redirect and canonicalize to /frameworks/solid"
