@@ -106,6 +106,16 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.18.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.18.0...palamedes-v1.18.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* keep frameworks live smoke content-agnostic ([#1045](https://github.com/sebastian-software/palamedes/issues/1045)) ([d757934](https://github.com/sebastian-software/palamedes/commit/d757934803e2745c218e098c2b7489a0a180c73d))
+* reflect live example hosts and unblock site deploys ([#1043](https://github.com/sebastian-software/palamedes/issues/1043)) ([00a47c0](https://github.com/sebastian-software/palamedes/commit/00a47c00f375127d88c81b1160f807c46809051b))
+* register Effective Flow setup as ADR-028 ([#1042](https://github.com/sebastian-software/palamedes/issues/1042)) ([b947906](https://github.com/sebastian-software/palamedes/commit/b9479063f10e96a836d71aaf2535ffa70b733b7c))
+* **runtime:** preserve edge worker server scopes ([#1038](https://github.com/sebastian-software/palamedes/issues/1038)) ([e9f0951](https://github.com/sebastian-software/palamedes/commit/e9f0951ea5a128b307bb87cb94fd9a302a77b43e))
+
 ## [1.18.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.17.3...palamedes-v1.18.0) (2026-08-27)
 
 
