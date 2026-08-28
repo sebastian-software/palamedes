@@ -6,11 +6,11 @@ plus the Vite MDX example. Release CI publishes one shared examples container to
 GitHub Container Registry; deployment from that image to the public demo
 infrastructure is managed outside this repository. Public demo URLs are
 documented as the live reference surface where hosting exists, but reachability
-depends on the hosting and DNS notes in this document. The four currently hosted
-subdomain demos require the per-example wildcard DNS records described under
-Subdomain Locale Hosting. The five tld rows link their configured public URLs,
-but remain marked pending until reverse-proxy routing and TLS are active. Remix v3 is
-verified locally and in CI, but is not yet a public demo deployment target.
+depends on the hosting and DNS notes in this document. The five publicly hosted
+framework families use the per-example wildcard DNS records described under
+Subdomain Locale Hosting. Their TLD rows link the 20 live public URLs across
+`.com`, `.de`, `.es`, and `.fr`. Remix v3 is verified locally and in CI, but is
+not a public demo deployment target.
 
 ## Current Policy
 
@@ -28,9 +28,9 @@ These URLs describe the intended public reference shape — six frameworks, each
 four locale strategies. Switch language in a reachable demo and watch copy,
 plural seat counts, currency, and dates change together. The demos are grouped by
 framework below, with every locale-specific URL linked directly where public
-hosting exists. Tld URLs remain marked pending until their public hosting is
-active. Remix v3 rows link to source because that beta integration is currently
-a local/CI proof surface.
+hosting exists. Next.js, TanStack Start, Solid, Waku, and React Router have live
+public demos for all four strategies. Remix v3 rows link to source because that
+beta integration is currently a local/CI proof surface.
 
 How each strategy encodes the locale:
 
@@ -81,17 +81,11 @@ How each strategy encodes the locale:
 
 ### Solid
 
-The Solid 2 examples are verified locally and in CI. Their renamed cookie,
-route, and subdomain public hosts are being provisioned and remain source-only
-until TLS, reverse-proxy routing, and the deployed image have passed an
-end-to-end check. The tld target URLs are linked and marked pending alongside
-the other browser-capable frameworks.
-
-| Strategy  | Reference                                                                                                                                                                                          |
+| Strategy  | Live demos                                                                                                                                                                                         |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| cookie    | [examples/solid-cookie](../examples/solid-cookie)                                                                                                                                                  |
-| route     | [examples/solid-route](../examples/solid-route)                                                                                                                                                    |
-| subdomain | [examples/solid-subdomain](../examples/solid-subdomain)                                                                                                                                            |
+| cookie    | [solid-cookie.examples.palamedes.dev](https://solid-cookie.examples.palamedes.dev)                                                                                                                 |
+| route     | [en](https://solid-route.examples.palamedes.dev/en) · [de](https://solid-route.examples.palamedes.dev/de) · [es](https://solid-route.examples.palamedes.dev/es)                                    |
+| subdomain | [en](https://en.solid-subdomain.examples.palamedes.dev) · [de](https://de.solid-subdomain.examples.palamedes.dev) · [es](https://es.solid-subdomain.examples.palamedes.dev)                        |
 | tld       | [en](https://solid.examples.palamedes-i18n.com) · [de](https://solid.examples.palamedes-i18n.de) · [es](https://solid.examples.palamedes-i18n.es) · [fr](https://solid.examples.palamedes-i18n.fr) |
 
 ### Remix v3
@@ -138,14 +132,12 @@ must send `Vary: Host`); otherwise a response rendered for one locale host could
 served for another. This is the same constraint the per-host routing already
 implies, but it must hold for caching layers too.
 
-These records and proxy routes are in place for Next.js, TanStack Start, Waku,
-and React Router, so those four subdomain rows are publicly reachable (each
-locale host returns 200 and renders its locale). The renamed Solid wildcard and
-proxy route are still provisioning. The
-canonical verification path remains `pnpm verify:examples`, which exercises the
-subdomain strategy locally via `*.lvh.me` hosts. Remix subdomain support is
-verified the same way, but it is not included in the public DNS/proxy deployment
-plan yet.
+These records and proxy routes are in place for Next.js, TanStack Start, Solid,
+Waku, and React Router, so all five public subdomain rows are reachable and
+render the requested locale. The canonical verification path remains
+`pnpm verify:examples`, which exercises the subdomain strategy locally via
+`*.lvh.me` hosts. Remix subdomain support is verified the same way, but it is not
+included in the public DNS/proxy deployment plan.
 
 ## TLD Locale Hosting (DNS And Reverse Proxy)
 
@@ -172,13 +164,12 @@ the `Host` in its cache key (or the app must send `Vary: Host`); otherwise a
 response for one TLD could be served for another. This is the same constraint the
 per-host routing already implies, but it must hold for caching layers too.
 
-DNS for these domains points at the demo server. Until the reverse-proxy routes
-and TLS certificates are active, the five public tld rows in the Live Reference
-table remain pending and are not yet reachable. The canonical verification path runs locally via
-`pnpm verify:examples`, which exercises the tld strategy using Chromium's
-`--host-resolver-rules` flag to simulate the TLD hosts without real DNS. Remix
-TLD support is covered by the same local/CI verification path, not by public
-TLD deployment yet.
+DNS, reverse-proxy routes, and TLS certificates are active for all 20 public TLD
+hosts across Next.js, TanStack Start, Solid, Waku, and React Router. The canonical
+verification path also runs locally via `pnpm verify:examples`, which exercises
+the tld strategy using Chromium's `--host-resolver-rules` flag to simulate the
+TLD hosts without real DNS. Remix TLD support is covered by the same local/CI
+verification path, not by public TLD deployment.
 
 ## Container Image Publication
 

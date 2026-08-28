@@ -120,7 +120,7 @@ export default async function LocalePage() {
       {
         label: "Evidence",
         value: "Live + source",
-        note: "Three hosted strategies plus the checked TLD source.",
+        note: "All four strategies are live and linked alongside their checked source.",
       },
     ],
   },
