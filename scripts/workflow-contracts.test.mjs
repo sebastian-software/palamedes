@@ -366,7 +366,9 @@ describe("workflow contracts", () => {
     const deploySite = await readRepositoryFile(".github/workflows/deploy-site.yml")
     const verify = job(deploySite, "verify", "__missing__")
 
-    expect(verify).toMatch(/^ {10}check "\/frameworks" 200$/m)
+    expect(verify.split("\n").filter((line) => line.includes('check "/frameworks"'))).toEqual([
+      '          check "/frameworks" 200',
+    ])
   })
 
   it("maps every contributor-owned repository surface in CONTRIBUTING", async () => {
