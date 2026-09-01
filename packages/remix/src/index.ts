@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import path from "node:path"
 import type { registerHooks } from "node:module"
+import type { ModuleLoader } from "remix/assets"
 
 import { loadPalamedesConfigSync, type LoadedPalamedesConfig } from "@palamedes/config"
 import { compileCatalogModule } from "@palamedes/core-node"
@@ -58,10 +59,19 @@ export type PalamedesRemixRegisterOptions = {
   failOnCompileError?: boolean
 }
 
+/** Options shared by Remix browser asset macro transforms. */
+export type PalamedesRemixAssetLoaderOptions = Pick<
+  PalamedesRemixRegisterOptions,
+  "include" | "exclude" | "runtimeModule" | "keepSourceFallbacks"
+>
+
 type RegisterHooksOptions = Parameters<typeof registerHooks>[0]
 
 export type LoadHook = NonNullable<RegisterHooksOptions["load"]>
 export type LoadResult = ReturnType<LoadHook>
+
+/** Packages imported by the default browser transform output. */
+export const PALEMEDES_REMIX_ASSET_PACKAGES = ["@palamedes/runtime"] as const
 
 const DEFAULT_INCLUDE = /\.(tsx?|jsx?|mjs)$/
 const DEFAULT_EXCLUDE = /[/\\]node_modules[/\\]/
@@ -75,16 +85,18 @@ type CachedPalamedesConfig = {
   digest: string
 }
 
+type ResolvedMacroTransformOptions = {
+  exclude: RegExp
+  include: RegExp
+  keepSourceFallbacks: boolean
+  runtimeModule: string
+  stripNonEssentialProps: boolean
+}
+
 export function createPalamedesRemixLoadHook(
   options: PalamedesRemixRegisterOptions = {}
 ): LoadHook {
-  const include = options.include ?? DEFAULT_INCLUDE
-  const exclude = options.exclude ?? DEFAULT_EXCLUDE
-  const runtimeModule = resolveMacroRuntimeModule(options.runtimeModule)
-  // Keep misses readable across production deploy skew by default. Hosts that
-  // must not embed authored text can choose the compact, hash-only behavior.
-  const keepSourceFallbacks = options.keepSourceFallbacks ?? true
-  const stripNonEssentialProps = process.env.NODE_ENV === "production"
+  const transformOptions = resolveMacroTransformOptions(options)
   const configCache = new Map<string, CachedPalamedesConfig>()
 
   return (url, context, nextLoad) => {
@@ -96,30 +108,81 @@ export function createPalamedesRemixLoadHook(
       }
     }
 
-    if (shouldLoadCatalogUrl(url, exclude)) {
+    if (shouldLoadCatalogUrl(url, transformOptions.exclude)) {
       return loadCatalogModule(url, options, configCache)
     }
 
     const loaded = nextLoad(url, context)
-    if (!shouldTransformUrl(url, include, exclude) || loaded.source == null) {
+    if (!shouldTransformUrl(url, transformOptions) || loaded.source == null) {
       return loaded
     }
 
-    const code = stringifySource(loaded.source)
-    const result = transformPalamedesMacros(code, fileURLToPath(url), {
-      runtimeModule,
-      keepSourceFallbacks,
-      stripNonEssentialProps,
+    return transformLoadedModule(url, loaded, transformOptions)
+  }
+}
+
+/**
+ * Create the post-compile loader used by Remix's browser asset server.
+ *
+ * Add the returned loader to `scripts.loaders` and add
+ * `PALEMEDES_REMIX_ASSET_PACKAGES` to the asset server's `allowPackages`.
+ */
+export function createPalamedesRemixAssetLoader(
+  options: PalamedesRemixAssetLoaderOptions = {}
+): ModuleLoader {
+  const transformOptions = resolveMacroTransformOptions(options)
+
+  return (url, context, nextLoad) => {
+    const loaded = nextLoad(url, context)
+    if (!shouldTransformUrl(url, transformOptions) || loaded.source == null) {
+      return loaded
+    }
+
+    return transformLoadedModule(url, loaded, transformOptions)
+  }
+}
+
+function resolveMacroTransformOptions(
+  options: PalamedesRemixAssetLoaderOptions
+): ResolvedMacroTransformOptions {
+  return {
+    include: options.include ?? DEFAULT_INCLUDE,
+    exclude: options.exclude ?? DEFAULT_EXCLUDE,
+    runtimeModule: resolveMacroRuntimeModule(options.runtimeModule),
+    // Keep misses readable across production deploy skew by default. Hosts that
+    // must not embed authored text can choose the compact, hash-only behavior.
+    keepSourceFallbacks: options.keepSourceFallbacks ?? true,
+    stripNonEssentialProps: process.env.NODE_ENV === "production",
+  }
+}
+
+function transformLoadedModule<Loaded extends { source?: unknown }>(
+  url: string,
+  loaded: Loaded,
+  options: ResolvedMacroTransformOptions
+): Loaded {
+  const filePath = fileURLToPath(url)
+  let result: ReturnType<typeof transformPalamedesMacros>
+  try {
+    result = transformPalamedesMacros(stringifySource(loaded.source), filePath, {
+      runtimeModule: options.runtimeModule,
+      keepSourceFallbacks: options.keepSourceFallbacks,
+      stripNonEssentialProps: options.stripNonEssentialProps,
     })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`Failed to transform Palamedes macros in ${filePath}: ${detail}`, {
+      cause: error,
+    })
+  }
 
-    if (!result.hasChanged) {
-      return loaded
-    }
+  if (!result.hasChanged) {
+    return loaded
+  }
 
-    return {
-      ...loaded,
-      source: appendInlineSourceMap(stripInlineSourceMap(result.code), result.map),
-    }
+  return {
+    ...loaded,
+    source: appendInlineSourceMap(stripInlineSourceMap(result.code), result.map),
   }
 }
 
@@ -227,16 +290,23 @@ function prependConfigWatchImport(code: string, configPath: string): string {
   return `import ${JSON.stringify(configUrl.href)}\n${code}`
 }
 
-function shouldTransformUrl(url: string, include: RegExp, exclude: RegExp): boolean {
+function shouldTransformUrl(url: string, options: ResolvedMacroTransformOptions): boolean {
   if (!url.startsWith("file:")) {
     return false
   }
 
   const filePath = fileURLToPath(url)
-  return include.test(filePath) && !exclude.test(filePath)
+  return matches(options.include, filePath) && !matches(options.exclude, filePath)
 }
 
-function stringifySource(source: NonNullable<LoadResult["source"]>): string {
+function matches(pattern: RegExp, value: string): boolean {
+  pattern.lastIndex = 0
+  const matched = pattern.test(value)
+  pattern.lastIndex = 0
+  return matched
+}
+
+function stringifySource(source: unknown): string {
   if (typeof source === "string") {
     return source
   }
@@ -245,7 +315,11 @@ function stringifySource(source: NonNullable<LoadResult["source"]>): string {
     return Buffer.from(source).toString("utf8")
   }
 
-  return Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString("utf8")
+  if (ArrayBuffer.isView(source)) {
+    return Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString("utf8")
+  }
+
+  throw new TypeError("Remix loader returned an unsupported module source")
 }
 
 function stripInlineSourceMap(code: string): string {
