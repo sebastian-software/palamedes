@@ -106,6 +106,18 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.21.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.20.0...palamedes-v1.21.0) (2026-09-01)
+
+
+### Features
+
+* **remix:** add compiled rich message runtime ([a55792c](https://github.com/sebastian-software/palamedes/commit/a55792c7711916e9c33bcd3a4e04666e1298a61b))
+
+
+### Bug Fixes
+
+* **cli:** retry transient busy plugin spawns ([4e8a8e1](https://github.com/sebastian-software/palamedes/commit/4e8a8e19b41831f1c800587d68a48052a291b4f5))
+
 ## [1.20.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.19.0...palamedes-v1.20.0) (2026-09-01)
 
 
