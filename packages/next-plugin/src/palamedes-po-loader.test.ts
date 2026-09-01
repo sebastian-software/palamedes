@@ -22,6 +22,7 @@ const createMissingErrorMessage = vi.fn()
 beforeEach(() => {
   vi.clearAllMocks()
   loadPalamedesConfig.mockResolvedValue({
+    configDependencies: ["/repo/palamedes.yaml", "/repo/config/settings.ts"],
     configPath: "/repo/palamedes.yaml",
     rootDir: "/repo",
     locales: ["en", "de", "pseudo"],
@@ -79,7 +80,11 @@ describe("palamedes-po-loader.cjs", () => {
     expect(result.code).toBe(
       'export const messages={"greeting":"Hallo"};export default { messages };'
     )
-    expect(result.dependencies).toStrictEqual(["/repo/palamedes.yaml", "/repo/src/locales/en.po"])
+    expect(result.dependencies).toStrictEqual([
+      "/repo/palamedes.yaml",
+      "/repo/config/settings.ts",
+      "/repo/src/locales/en.po",
+    ])
     expect(compileCatalogModule).toHaveBeenCalledWith(
       expect.objectContaining({ rootDir: "/repo", sourceLocale: "en" }),
       "/repo/src/locales/de.po",

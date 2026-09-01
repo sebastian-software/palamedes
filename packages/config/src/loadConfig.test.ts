@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 
@@ -51,6 +51,46 @@ describe("loadPalamedesConfig", () => {
     expect(config.sourceLocale).toBe("en")
     expect(config.referenceScopes).toBe(false)
     expect(config.catalogs[0]?.path).toBe("src/locales/{locale}")
+  })
+
+  it("tracks and reevaluates local dependencies imported by executable configs", async () => {
+    const fixtureDir = await createTempDir()
+    const configPath = path.join(fixtureDir, "palamedes.config.ts")
+    const settingsPath = path.join(fixtureDir, "settings.ts")
+    const localesPath = path.join(fixtureDir, "locales.ts")
+
+    await writeFile(
+      configPath,
+      `
+        import { locales } from "./settings"
+
+        export default {
+          locales,
+          sourceLocale: "en",
+          catalogs: [{ path: "locales/{locale}", include: ["src"] }],
+        }
+      `
+    )
+    await writeFile(settingsPath, 'export { locales } from "./locales"\n')
+    await writeFile(localesPath, 'export const locales = ["en", "de"]\n')
+
+    const first = loadPalamedesConfigSync({ cwd: fixtureDir })
+    expect(first.locales).toStrictEqual(["en", "de"])
+    expect(first.configDependencies).toStrictEqual([
+      await realpath(configPath),
+      await realpath(localesPath),
+      await realpath(settingsPath),
+    ])
+
+    await writeFile(localesPath, 'export const locales = ["en", "fr"]\n')
+    const second = await loadPalamedesConfig({ cwd: fixtureDir })
+
+    expect(second.locales).toStrictEqual(["en", "fr"])
+    expect(second.configDependencies).toStrictEqual([
+      await realpath(configPath),
+      await realpath(localesPath),
+      await realpath(settingsPath),
+    ])
   })
 
   it("loads a palamedes.yaml file with native field names", async () => {

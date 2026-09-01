@@ -309,7 +309,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   // Initialize lazily
   let config: LoadedPalamedesConfig | null = null
-  let configPath: string | null = null
+  let configDependencies = new Set<string>()
   let filter: ReturnType<typeof createFilter> | null = null
   let mdxFilter: ReturnType<typeof createFilter> | null = null
   let macroIds: Set<string> | null = null
@@ -355,14 +355,25 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   async function getConfigLazy() {
     if (!config) {
       config = await loadPalamedesConfig(configLoaderOptions)
-      configPath = config.configPath
+      configDependencies = new Set(getConfigDependencies(config).map(canonicalPath))
       macroIds = new Set(PALAMEDES_MACRO_PACKAGES)
     }
     return config
   }
 
   function isConfigChange(id: string): boolean {
-    return configPath !== null && path.resolve(stripQuery(id)) === path.resolve(configPath)
+    return configDependencies.has(canonicalPath(stripQuery(id)))
+  }
+
+  function getConfigDependencies(cfg: LoadedPalamedesConfig): string[] {
+    return Array.isArray(cfg.configDependencies) ? cfg.configDependencies : [cfg.configPath]
+  }
+
+  function addConfigWatchFiles(
+    cfg: LoadedPalamedesConfig,
+    addWatchFile: (file: string) => void
+  ): void {
+    getConfigDependencies(cfg).forEach(addWatchFile)
   }
 
   function resetConfig(): void {
@@ -563,7 +574,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
         const result = analyzeMdxNative(source, cleanId, mdx)
         mdxModuleIds.add(cleanId)
-        this.addWatchFile(cfg.configPath)
+        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file))
         await validateMdxTranslations(cfg, cleanId, result.compiledIds, (file) =>
           this.addWatchFile(file)
         )
@@ -811,7 +822,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         const cfg = await getConfigLazy()
-        this.addWatchFile(cfg.configPath)
+        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file))
         const locales = cfg.locales
 
         if (locale === undefined) {
@@ -953,7 +964,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
 
         const cfg = await getConfigLazy()
-        this.addWatchFile(cfg.configPath)
+        addConfigWatchFiles(cfg, (file) => this.addWatchFile(file))
         const cleanId = stripQuery(id)
         const locale = path.basename(cleanId, ".po")
         const result = await compileCatalogModuleAsync(catalogArtifactConfig(cfg), cleanId, {

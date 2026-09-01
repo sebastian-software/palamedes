@@ -53,6 +53,29 @@ describe("palamedes-config-cache.cjs", () => {
     expect(loadAsync).toHaveBeenCalledOnce()
   })
 
+  it("reloads when an imported config dependency changes", async () => {
+    const configPath = await createConfigFile("unchanged config")
+    const dependencyPath = path.join(path.dirname(configPath), "settings.ts")
+    await writeFile(dependencyPath, 'export const locale = "de"')
+    const first = {
+      configDependencies: [configPath, dependencyPath],
+      configPath,
+      value: "de",
+    }
+    const second = {
+      configDependencies: [configPath, dependencyPath],
+      configPath,
+      value: "fr",
+    }
+    loadConfigCachedSync(configPath, () => first)
+
+    await writeFile(dependencyPath, 'export const locale = "fr"')
+    const loadAsync = vi.fn(async () => second)
+
+    await expect(loadConfigCached(configPath, loadAsync)).resolves.toBe(second)
+    expect(loadAsync).toHaveBeenCalledOnce()
+  })
+
   it("does not share automatic config discovery between Next project roots", async () => {
     const firstRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-app-a-"))
     const secondRoot = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-app-b-"))

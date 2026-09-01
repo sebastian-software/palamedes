@@ -501,7 +501,10 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
       resolveLoaderCwd(this, options)
     )
     if (typeof this.addDependency === "function" && config.configPath) {
-      this.addDependency(config.configPath)
+      const dependencies = Array.isArray(config.configDependencies)
+        ? config.configDependencies
+        : [config.configPath]
+      dependencies.forEach((dependency) => this.addDependency(dependency))
     } else {
       warnMissingAddDependency(this)
     }
