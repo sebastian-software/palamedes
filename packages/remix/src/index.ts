@@ -71,7 +71,11 @@ export type LoadHook = NonNullable<RegisterHooksOptions["load"]>
 export type LoadResult = ReturnType<LoadHook>
 
 /** Packages imported by the default browser transform output. */
-export const PALEMEDES_REMIX_ASSET_PACKAGES = ["@palamedes/runtime", "@palamedes/remix"] as const
+export const PALEMEDES_REMIX_ASSET_PACKAGES = [
+  "@palamedes/core",
+  "@palamedes/runtime",
+  "@palamedes/remix",
+] as const
 
 const DEFAULT_INCLUDE = /\.(tsx?|jsx?|mjs)$/
 const DEFAULT_EXCLUDE = /[/\\]node_modules[/\\]/

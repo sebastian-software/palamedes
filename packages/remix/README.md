@@ -5,11 +5,13 @@ Remix v3 server and browser asset integration for Palamedes.
 ## Installation
 
 ```sh
-pnpm add @palamedes/core @palamedes/remix @palamedes/runtime remix
+pnpm add @palamedes/core @palamedes/core-node @palamedes/remix @palamedes/runtime remix
 ```
 
 `@palamedes/core` must be a direct runtime dependency because generated catalog
 modules import `defineCompiledCatalog()` from its `compiled` entrypoint.
+`@palamedes/core-node` is needed when generating serializable browser catalogs
+with `compileCatalogArtifact()` as shown below.
 
 Use this package with Remix v3's default Node loader path. Register Remix's TSX
 loader first, then Palamedes:
@@ -59,11 +61,67 @@ This integration is tested against `remix@3.0.0-rc.1`:
 | Locale strategies                                    | Cookie, route, subdomain, and TLD examples are covered by smoke tests       |
 | Server-rendered Remix UI Frames                      | Supported; document and direct frame requests retain their own locale scope |
 | Rich JSX messages                                    | Supported through the Remix-native `macro` and `compiled` subpaths          |
-| Browser/client modules                               | Ordinary and rich macros supported through `scripts.loaders`                |
+| Browser/client modules                               | Macros plus document bootstrap supported without browser `.po` imports      |
 
-Browser catalog delivery and runtime initialization remain separate from the
-macro transform. Rich JSX messages also remain outside the post-compile
-loader's scope.
+Rich JSX messages remain outside the post-compile loader's scope.
+
+## Browser Catalog Bootstrap
+
+Deliver the server-selected locale and its serializable ICU string catalog in
+the document, then initialize Palamedes before importing or rendering translated
+browser modules:
+
+```ts
+// Server setup
+export const remixI18n = createRemixI18nServer({
+  locales,
+  strategy: "cookie",
+  loadMessages, // May be an executable server catalog.
+  loadClientMessages(locale) {
+    return browserCatalogs[locale] // Serializable Record<string, string>.
+  },
+})
+
+// While rendering inside remixI18n.run(...)
+const catalog = remixI18n.renderClientBootstrap(locale)
+```
+
+Place `catalog` inside the rendered `<body>` before the external browser entry.
+It is an inert `<template id="palamedes-i18n-bootstrap">`, not executable
+inline script. In the browser entry:
+
+```ts
+import { createI18n } from "@palamedes/core"
+import { initializeRemixClientI18n } from "@palamedes/remix/client"
+
+initializeRemixClientI18n({ createI18n })
+await import("./translated-app.js")
+```
+
+The server payload uses ICU strings deliberately. Produce them at build or
+server startup with `compileCatalogArtifact(...).messages` from
+`@palamedes/core-node`; do not serialize executable `.po` module exports.
+`initializeRemixClientI18n()` uses the parser-capable `@palamedes/core`
+runtime, validates the payload and exact `<html lang>` match, installs the
+catalog, and only then exposes it to transformed browser code. Missing,
+malformed, executable, or locale-mismatched payloads fail with an actionable
+error instead of mixing locales silently.
+
+Locale changes require a full document navigation. A new request resolves the
+cookie, route, host, or language header again and emits a matching document and
+catalog. There is no browser `.po` request and no separate catalog HTTP cache:
+the payload follows the document's cache policy. Vary shared document caches by
+the locale inputs they use (for cookie selection, use `Vary: Cookie` or a
+private response) and invalidate them when the returned `catalogVersion`
+changes. The default version is a stable SHA-256 content digest; a deployment
+version can be supplied with `catalogVersion`.
+
+Server and client catalogs are cached per locale for the life of the server
+instance. Development watch processes should restart when PO/config inputs
+change. The inert template works with a CSP that disallows inline scripts; keep
+the bootstrap entry in an allowed external module. Advanced renderers may pass
+an already parsed `bootstrap` object or custom `document`/`elementId` to the
+client initializer.
 
 ## Remix UI, Frames, and Rich Messages
 
@@ -187,6 +245,12 @@ export default createController(routes, {
 Both APIs preserve the active i18n scope while a returned `Response.body` is
 streamed, so translated code that executes during body consumption still sees
 the same request-local i18n instance.
+
+`createRemixI18nServer()` also exposes `createClientBootstrap(locale)` and
+`renderClientBootstrap(locale)`. Pass `loadClientMessages` when the server's
+`loadMessages` returns executable compiled catalogs; otherwise the existing
+serializable catalog is reused. `catalogVersion` accepts a non-empty string or
+a function of `{ locale, messages }` and defaults to a deterministic digest.
 
 ## Prerelease Tracking
 
