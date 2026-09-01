@@ -23,6 +23,7 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use clap::CommandFactory;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use palamedes_plugin::{Event as PluginEvent, PluginDiagnostic, PluginManifest, Severity};
 use serde::{Deserialize, Serialize};
@@ -33,7 +34,7 @@ use crate::error::CliError;
 
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
-const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 1;
+const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 2;
 const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(5);
 const PROTOCOL_MAX_LINE_BYTES: usize = 1024 * 1024;
 const PROTOCOL_MAX_TOTAL_BYTES: usize = 16 * 1024 * 1024;
@@ -407,6 +408,16 @@ fn persist_plugin_manifest_cache(path: &Path, raw: &[u8]) -> io::Result<()> {
 fn plugin_cache_identity(resolved: &ResolvedPlugin) -> Option<(String, PluginBinaryStamp)> {
     let binary_path = fs::canonicalize(&resolved.binary_path).ok()?;
     let metadata = fs::metadata(&binary_path).ok()?;
+    let mut binary = fs::File::open(&binary_path).ok()?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let bytes_read = binary.read(&mut buffer).ok()?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
     let modified_ns = u64::try_from(
         metadata
             .modified()
@@ -421,6 +432,7 @@ fn plugin_cache_identity(resolved: &ResolvedPlugin) -> Option<(String, PluginBin
         PluginBinaryStamp {
             length: metadata.len(),
             modified_ns,
+            sha256: hasher.finalize().into(),
         },
     ))
 }
@@ -1585,6 +1597,7 @@ struct CachedPluginManifest {
 struct PluginBinaryStamp {
     length: u64,
     modified_ns: u64,
+    sha256: [u8; 32],
 }
 
 #[derive(Debug)]
@@ -2267,9 +2280,22 @@ plugins:
         assert_eq!(fs::read_to_string(root.join("beta/counter")).unwrap(), "x");
 
         let alpha_script = root.join("alpha/describe");
-        let mut changed = fs::read_to_string(&alpha_script).expect("alpha script");
-        changed.push('\n');
+        let original_metadata = fs::metadata(&alpha_script).expect("alpha script metadata");
+        let original_mtime = original_metadata.modified().expect("alpha script mtime");
+        let changed = fs::read_to_string(&alpha_script)
+            .expect("alpha script")
+            .replace("read _request", "read _payload");
+        assert_eq!(changed.len() as u64, original_metadata.len());
         write_executable_fixture(&alpha_script, changed);
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&alpha_script)
+            .expect("alpha script")
+            .set_times(fs::FileTimes::new().set_modified(original_mtime))
+            .expect("restore alpha script mtime");
+        let replacement_metadata = fs::metadata(&alpha_script).expect("replacement metadata");
+        assert_eq!(replacement_metadata.len(), original_metadata.len());
+        assert_eq!(replacement_metadata.modified().unwrap(), original_mtime);
         let refreshed =
             load_registry(&config, &root, Path::new("pmds")).expect("refreshed registry");
         assert_eq!(refreshed.plugins.len(), 2);
