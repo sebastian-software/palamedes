@@ -60,6 +60,7 @@ pub struct MdxOptions {
     #[serde(alias = "ignore-directive", alias = "ignore_directive")]
     pub ignore_directive: String,
     /// Preserve source messages as runtime fallbacks in generated modules.
+    #[serde(alias = "keep-source-fallbacks", alias = "keep_source_fallbacks")]
     pub keep_source_fallbacks: bool,
 }
 
