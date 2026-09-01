@@ -106,6 +106,13 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.22.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.21.0...palamedes-v1.22.0) (2026-09-01)
+
+
+### Features
+
+* **remix:** bootstrap client catalogs from documents ([68100e8](https://github.com/sebastian-software/palamedes/commit/68100e8d7321ff05c320178158e4b70b6c285ab9))
+
 ## [1.21.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.20.0...palamedes-v1.21.0) (2026-09-01)
 
 
