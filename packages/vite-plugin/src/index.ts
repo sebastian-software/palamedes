@@ -92,6 +92,16 @@ function isServerEnvironment(context: unknown, ssr = false): boolean {
   return ssr || environment?.config?.consumer === "server" || environment?.name === "ssr"
 }
 
+function assertImportMapBase(base: string): void {
+  if (base.startsWith("/") || URL.canParse(base)) {
+    return
+  }
+
+  throw new Error(
+    `Palamedes graph splitting with localeBinding: "import-map" requires Vite's resolved base to be root-relative (for example "/app/") or an absolute URL. Relative base ${JSON.stringify(base)} resolves import-map entries against each document URL and breaks on nested routes. Set Vite base to "/" or an absolute deployment path/URL, or use localeBinding: "embed".`
+  )
+}
+
 function stripQuery(id: string): string {
   return id.split("?")[0] ?? id
 }
@@ -858,6 +868,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         if (!importMapBinding || isServerEnvironment(this) || sidecarModules.size === 0) {
           return
         }
+
+        assertImportMapBase(resolvedBase)
 
         const cfg = await getConfigLazy()
         const locales = cfg.locales

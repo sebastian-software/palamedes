@@ -987,7 +987,7 @@ describe("experimental graph splitting", () => {
   it.each([
     ["/app", "/app/"],
     ["/app/", "/app/"],
-    ["./", "./"],
+    ["https://cdn.example.com/app/", "https://cdn.example.com/app/"],
     ["/app", "/configured-by-another-plugin/"],
   ] as const)(
     "uses Vite's final base %s when generating import-map assets as %s",
@@ -1014,6 +1014,25 @@ describe("experimental graph splitting", () => {
       expect(assetUrl).toBe(`${finalBase}${asset!.fileName}`)
       expect(assetUrl).not.toContain("/appassets/")
       expect(assetUrl).not.toContain(".assets/")
+    }
+  )
+
+  it.each(["./", "assets/"])(
+    "rejects relative Vite base %s for import-map assets",
+    async (finalBase) => {
+      const { key, sidecarPlugin } = await runSidecarLoad(
+        ["id-a"],
+        {},
+        {
+          pluginOptions: IMPORT_MAP_OPTIONS,
+          command: "build",
+          finalBase,
+        }
+      )
+
+      await expect(emitImportMap(sidecarPlugin, key)).rejects.toThrow(
+        `Relative base ${JSON.stringify(finalBase)} resolves import-map entries against each document URL and breaks on nested routes.`
+      )
     }
   )
 
