@@ -25,6 +25,7 @@ pub(super) struct ImportCollector {
     /// All authored identifiers that a generated import alias must not capture.
     pub used_identifier_names: HashSet<String>,
     reusable_trans_import_symbols: HashMap<String, SymbolId>,
+    remix_jsx_specifiers: Vec<RemixJsxImportSpecifier>,
 }
 
 impl ImportCollector {
@@ -41,13 +42,14 @@ impl ImportCollector {
             runtime_import_binding_count: 0,
             used_identifier_names: HashSet::new(),
             reusable_trans_import_symbols: HashMap::new(),
+            remix_jsx_specifiers: Vec::new(),
         }
     }
 
     /// Resolve macro references from the same native OXC semantic analysis used
     /// for transform decisions. Missing facts intentionally make a binding
     /// ineligible for removal.
-    pub(super) fn resolve_macro_references(&mut self, semantic: &Semantic<'_>) {
+    pub(super) fn resolve_references(&mut self, semantic: &Semantic<'_>) {
         for specifier in &self.macro_specifiers {
             let Some(symbol_id) = specifier.symbol_id else {
                 continue;
@@ -60,6 +62,32 @@ impl ImportCollector {
                     .insert((span.start, span.end), reference.scope_id());
             }
         }
+        for specifier in &self.remix_jsx_specifiers {
+            let Some(symbol_id) = specifier.symbol_id else {
+                continue;
+            };
+            for reference in semantic.scoping().get_resolved_references(symbol_id) {
+                let span = semantic.nodes().get_node(reference.node_id()).span();
+                self.reference_symbols
+                    .insert((span.start, span.end), symbol_id);
+                self.reference_scopes
+                    .insert((span.start, span.end), reference.scope_id());
+            }
+        }
+    }
+
+    pub(super) fn remix_jsx_binding_at(
+        &self,
+        local_name: &str,
+        span: (u32, u32),
+    ) -> Option<RemixJsxBinding> {
+        let symbol_id = *self.reference_symbols.get(&span)?;
+        self.remix_jsx_specifiers
+            .iter()
+            .find(|specifier| {
+                specifier.local_name == local_name && specifier.symbol_id == Some(symbol_id)
+            })
+            .map(|specifier| specifier.binding)
     }
 
     /// Returns a macro only if this exact use resolves to its imported binding.
@@ -213,6 +241,19 @@ struct MacroImportSpecifier {
     specifier_range: (usize, usize),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RemixJsxBinding {
+    Helper,
+    Fragment,
+}
+
+#[derive(Debug)]
+struct RemixJsxImportSpecifier {
+    binding: RemixJsxBinding,
+    local_name: String,
+    symbol_id: Option<SymbolId>,
+}
+
 fn declaration_specifier_count(source: &str, declaration_range: (usize, usize)) -> usize {
     let declaration = &source[declaration_range.0..declaration_range.1];
     let Some(brace_start) = declaration.find('{') else {
@@ -325,6 +366,31 @@ impl<'a> Visit<'a> for ImportCollector {
                             self.has_reusable_runtime_import = true;
                         }
                     }
+                }
+            }
+        }
+
+        if matches!(source, "remix/ui/jsx-runtime" | "remix/ui/jsx-dev-runtime")
+            && it.import_kind == ImportOrExportKind::Value
+        {
+            if let Some(specifiers) = &it.specifiers {
+                for specifier in specifiers {
+                    let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier else {
+                        continue;
+                    };
+                    if specifier.import_kind != ImportOrExportKind::Value {
+                        continue;
+                    }
+                    let binding = match specifier.imported.name().as_str() {
+                        "jsx" | "jsxs" | "jsxDEV" => RemixJsxBinding::Helper,
+                        "Fragment" => RemixJsxBinding::Fragment,
+                        _ => continue,
+                    };
+                    self.remix_jsx_specifiers.push(RemixJsxImportSpecifier {
+                        binding,
+                        local_name: specifier.local.name.to_string(),
+                        symbol_id: specifier.local.symbol_id.get(),
+                    });
                 }
             }
         }

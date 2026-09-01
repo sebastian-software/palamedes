@@ -95,15 +95,15 @@ The cookie example exercises both `/frames` and `/frames/locale-summary` with
 German translations. Use ordinary JavaScript macros such as `t` inside Remix UI
 components; those calls remain visible to the server loader after JSX lowering.
 
-Rich JSX macros such as `<Trans>` are not supported in Remix UI. This is a
-specific runtime boundary, rather than an untested adapter: `remix/node-tsx`
-lowers JSX to `remix/ui/jsx-runtime` before the Palamedes loader receives a
-module. Palamedes' rich-message transform requires the original JSX tree to
-derive message placeholders, and its compiled `@palamedes/react` `Trans`
-component produces React elements, while Remix UI renders its own element
-model. A supported adapter therefore needs a pre-lowering transform and a
-dedicated Remix UI rich-message runtime. The browser asset loader supports
-ordinary JavaScript macros only.
+Rich JSX macros such as `<Trans>` are not yet supported as a Remix UI runtime
+surface. The transformer does recognize the `jsx`, `jsxs`, and `jsxDEV` binding
+identities emitted by `remix/node-tsx` and recovers the same message,
+placeholders, and tag numbering as authored TSX. The remaining boundary is the
+renderer: the existing compiled `@palamedes/react` component produces React
+elements, while Remix UI has its own element model. Until a dedicated Remix UI
+compiled-message runtime and macro entry exist, use the browser asset loader
+for ordinary JavaScript macros only. Unsupported dynamic lowered trees fail
+with a source-oriented diagnostic.
 
 ## Runtime Cost
 

@@ -202,14 +202,19 @@ The `remix-cookie` smoke test requests both `/frames` and
 frame content.
 
 Ordinary JavaScript macros, including `t`, remain supported in Remix UI
-components because they survive Remix's JSX lowering. Rich JSX macros, such as
-`<Trans>`, are deliberately unsupported: `remix/node-tsx` lowers JSX to
-`remix/ui/jsx-runtime` before the Palamedes loader sees it, so the transform can
-no longer read the original children and derive placeholders. The compiled
-`@palamedes/react` runtime also returns React elements, while Remix UI uses a
-different element model. Supporting rich messages needs a pre-lowering
-transform plus a dedicated Remix UI runtime. The post-compile browser asset
-loader supports ordinary JavaScript macros only.
+components because they survive Remix's JSX lowering. The native transformer
+also recognizes the binding identities imported from `remix/ui/jsx-runtime`
+and `remix/ui/jsx-dev-runtime`; it can recover the static `Trans`, `Plural`,
+`Select`, and `SelectOrdinal` structure and produce the same message identity as
+authored TSX.
+
+Rich JSX macros are nevertheless not yet a supported Remix UI runtime surface.
+The existing compiled `@palamedes/react` component returns React elements,
+while Remix UI uses its own element and component model. Until a dedicated
+Remix UI compiled-message runtime and macro entry exist, use the post-compile
+loader for ordinary JavaScript macros only. Dynamic lowered trees and prop
+spreads are rejected with a source diagnostic instead of being left as live
+macro calls.
 
 ## Migration From The Experimental Cookie Example
 

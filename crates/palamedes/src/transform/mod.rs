@@ -1,4 +1,5 @@
 mod imports;
+mod lowered_jsx;
 mod messages;
 mod runtime;
 mod server_functions;
@@ -188,7 +189,7 @@ pub fn transform_macros(
 
     let mut collector = ImportCollector::new(&runtime_module, &runtime_import_name);
     collector.visit_program(&parsed.program);
-    collector.resolve_macro_references(&semantic);
+    collector.resolve_references(&semantic);
 
     let runtime_import_name_is_unsafe = if collector.has_reusable_runtime_import {
         collector.runtime_import_binding_count > 1
@@ -226,6 +227,10 @@ pub fn transform_macros(
                 collector
                     .macro_at(local_name, span)
                     .map(|(macro_info, _)| macro_info.imported_name)
+            },
+            |local_name, span| {
+                collector.remix_jsx_binding_at(local_name, span)
+                    == Some(imports::RemixJsxBinding::Helper)
             },
         )?;
     }

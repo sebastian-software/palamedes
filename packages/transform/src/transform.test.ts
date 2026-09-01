@@ -245,6 +245,29 @@ const el = <Trans>Hello {name}</Trans>;
     expect(result.code).toContain("values={{ name }}")
   })
 
+  it("transforms Remix-lowered JSX runtime calls", () => {
+    const code = `
+import { Trans as Message } from "@palamedes/react/macro";
+import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
+export function View() {
+  return makeMany(Message, { children: [
+    "Hello ",
+    user.name,
+    make("strong", { children: owner.name }),
+    make(Group, { children: make(Icon, {}) }),
+  ] });
+}
+`
+    const result = transformPalamedesMacros(code, "view.js")
+
+    expect(result.code).toContain('import { Trans } from "@palamedes/react/compiled"')
+    expect(result.code).toContain('makeMany(Trans, { id: "')
+    expect(result.code).toContain('message: "Hello {name}<0>{name_1}</0><1/>"')
+    expect(result.code).toContain("values: { name: user.name, name_1: owner.name }")
+    expect(result.code).toContain('components: { 0: make("strong", {  }), 1: make(Icon, {  }) }')
+    expect(result.compiledIds).toHaveLength(1)
+  })
+
   it("ignores JSX comments inside <Trans>", () => {
     const code = `
 import { Trans } from "@palamedes/react/macro";

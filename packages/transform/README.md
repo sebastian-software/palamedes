@@ -98,6 +98,9 @@ a second ICU parser or generator.
 - descriptor calls such as `t({ message: "..." })`
 - `plural(...)`, `select(...)`, `selectOrdinal(...)`
 - `<Trans>`, `<Plural>`, `<Select>`, `<SelectOrdinal>`
+- the equivalent `jsx`, `jsxs`, and `jsxDEV` calls emitted through
+  `remix/ui/jsx-runtime` or `remix/ui/jsx-dev-runtime`; helper and macro aliases
+  are resolved by import binding identity
 
 The eager `t`, `plural`, `select`, and `selectOrdinal` macros, plus
 `<Plural>`, `<Select>`, and `<SelectOrdinal>`, must be syntactically inside a

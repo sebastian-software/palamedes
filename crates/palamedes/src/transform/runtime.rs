@@ -13,6 +13,10 @@ use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_text::compiled_message_key;
 use crate::source::DiagnosticLocation;
 
+use super::imports::ImportCollector;
+use super::lowered_jsx::{
+    choice_from_call, props_object, rendered_call_with_props, trans_from_call,
+};
 use super::messages::{
     append_unique_bindings, build_icu_message, choice_expression_binding, escape_string,
     expression_source, extract_choice_options, extract_choice_options_from_jsx,
@@ -406,6 +410,81 @@ pub(super) fn transform_trans_element(
     }
 
     Ok(Some((format!("<Trans {} />", attrs.join(" ")), lookup_key)))
+}
+
+pub(super) fn transform_lowered_trans_call(
+    call: &CallExpression<'_>,
+    source: &str,
+    imports: &ImportCollector,
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+    options: &NativeTransformOptions,
+) -> PalamedesResult<Option<(String, String)>> {
+    let lowered = trans_from_call(call, source, imports, macro_name, location)?;
+    let props = props_object(call, macro_name, location)?;
+    let context = descriptor_static_property(props, "context", macro_name, location)?;
+    let lookup_key = compiled_message_key(&lowered.message, context.as_deref());
+    let mut properties = vec![format!("id: \"{}\"", escape_string(&lookup_key))];
+    if options.keep_source_fallbacks() {
+        properties.push(format!("message: \"{}\"", escape_string(&lowered.message)));
+    }
+    if !lowered.components.is_empty() {
+        properties.push(format!(
+            "components: {{ {} }}",
+            render_value_bindings(&lowered.components)
+        ));
+    }
+    if !lowered.values.is_empty() {
+        properties.push(format!(
+            "values: {{ {} }}",
+            render_value_bindings(&lowered.values)
+        ));
+    }
+
+    Ok(Some((
+        rendered_call_with_props(call, "__palamedesTrans", &properties, source),
+        lookup_key,
+    )))
+}
+
+pub(super) fn transform_lowered_choice_call(
+    call: &CallExpression<'_>,
+    source: &str,
+    macro_name: &str,
+    location: &(impl DiagnosticLocation + ?Sized),
+    options: &NativeTransformOptions,
+) -> PalamedesResult<Option<(String, String)>> {
+    let format = match macro_name {
+        "Plural" => "plural",
+        "Select" => "select",
+        "SelectOrdinal" => "selectordinal",
+        _ => return Ok(None),
+    };
+    let (value_binding, extracted_options) =
+        choice_from_call(call, source, format, macro_name, location)?;
+    let props = props_object(call, macro_name, location)?;
+    let context = descriptor_static_property(props, "context", macro_name, location)?;
+    let comment = descriptor_static_property(props, "comment", macro_name, location)?;
+    let message = build_icu_message(
+        format,
+        &value_binding.name,
+        &extracted_options.options,
+        extracted_options.offset.as_deref(),
+    );
+    let lookup_key = compiled_message_key(&message, context.as_deref());
+    let mut values = vec![value_binding];
+    append_unique_bindings(&mut values, extracted_options.values);
+    Ok(Some((
+        build_runtime_call(
+            &lookup_key,
+            Some(&message),
+            Some(values.as_slice()),
+            context.as_deref(),
+            comment.as_deref(),
+            options,
+        ),
+        lookup_key,
+    )))
 }
 
 pub(super) fn transform_choice_jsx_element(

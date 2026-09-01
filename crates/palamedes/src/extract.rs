@@ -1923,13 +1923,19 @@ fn analyze_source_in(
 
     let macro_resolution = MacroResolution::resolve(&parsed.program, &collector);
 
-    validate_translation_macro_scopes(&parsed.program, filename, source, |local_name, span| {
-        collector
-            .imported_macros
-            .get(local_name)
-            .filter(|_| macro_resolution.is_macro_use(span))
-            .map(|macro_info| macro_info.imported_name.clone())
-    })?;
+    validate_translation_macro_scopes(
+        &parsed.program,
+        filename,
+        source,
+        |local_name, span| {
+            collector
+                .imported_macros
+                .get(local_name)
+                .filter(|_| macro_resolution.is_macro_use(span))
+                .map(|macro_info| macro_info.imported_name.clone())
+        },
+        |_local_name, _span| false,
+    )?;
 
     let mut extractor = ExtractionVisitor::new(
         filename,

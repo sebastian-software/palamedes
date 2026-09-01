@@ -13,7 +13,8 @@ use crate::source::{DiagnosticLocation, SourceLocator};
 use super::imports::ImportCollector;
 use super::runtime::{
     transform_choice_call, transform_choice_jsx_element, transform_descriptor_call,
-    transform_tagged_template, transform_trans_element,
+    transform_lowered_choice_call, transform_lowered_trans_call, transform_tagged_template,
+    transform_trans_element,
 };
 use super::{NativeTransformOptions, Replacement};
 use oxc_syntax::symbol::SymbolId;
@@ -29,10 +30,25 @@ pub(super) struct TransformVisitor<'a> {
     pub needs_runtime_import: bool,
     pub trans_imports: HashSet<(String, String)>,
     pub reused_trans_imports: HashSet<String>,
-    trans_replacements: Vec<(SymbolId, String, usize, (u32, u32))>,
+    trans_replacements: Vec<TransReplacement>,
     pub consumed_binding_ranges: Vec<(SymbolId, usize, usize)>,
     pub error: Option<PalamedesError>,
     jsx_child_element_spans: Vec<(usize, usize)>,
+}
+
+#[derive(Clone)]
+struct TransReplacement {
+    import_module: String,
+    macro_symbol_id: SymbolId,
+    reference_span: (u32, u32),
+    replacement_index: usize,
+    style: TransReplacementStyle,
+}
+
+#[derive(Clone, Copy)]
+enum TransReplacementStyle {
+    Identifier,
+    Jsx,
 }
 
 impl<'a> TransformVisitor<'a> {
@@ -92,9 +108,11 @@ impl<'a> TransformVisitor<'a> {
     pub(super) fn rebind_surviving_trans(&mut self, semantic: &Semantic<'_>) {
         let mut aliases = HashMap::<SymbolId, String>::new();
         let mut reserved = self.imports.used_identifier_names.clone();
-        for (symbol_id, module, replacement_index, reference_span) in
-            self.trans_replacements.clone()
-        {
+        for replacement in self.trans_replacements.clone() {
+            let symbol_id = replacement.macro_symbol_id;
+            let module = replacement.import_module;
+            let replacement_index = replacement.replacement_index;
+            let reference_span = replacement.reference_span;
             let reuses_trans_import =
                 self.imports
                     .can_reuse_trans_import_at(semantic, &module, reference_span);
@@ -116,11 +134,22 @@ impl<'a> TransformVisitor<'a> {
             } else {
                 "Trans".to_string()
             };
-            if local_name != "Trans" {
-                self.replacements[replacement_index].text = self.replacements[replacement_index]
-                    .text
-                    .replacen("<Trans ", &format!("<{local_name} "), 1);
-            } else if reuses_trans_import {
+            match replacement.style {
+                TransReplacementStyle::Jsx if local_name != "Trans" => {
+                    self.replacements[replacement_index].text = self.replacements
+                        [replacement_index]
+                        .text
+                        .replacen("<Trans ", &format!("<{local_name} "), 1);
+                }
+                TransReplacementStyle::Identifier => {
+                    self.replacements[replacement_index].text = self.replacements
+                        [replacement_index]
+                        .text
+                        .replacen("__palamedesTrans", &local_name, 1);
+                }
+                TransReplacementStyle::Jsx => {}
+            }
+            if local_name == "Trans" && reuses_trans_import {
                 self.reused_trans_imports.insert(module.clone());
             }
             self.trans_imports.insert((module, local_name));
@@ -254,15 +283,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
                 if macro_info.imported_name == "Trans" {
                     if let Some(module) = macro_info.source.strip_suffix("/macro") {
-                        self.trans_replacements.push((
+                        self.trans_replacements.push(TransReplacement {
                             macro_symbol_id,
-                            format!("{module}/compiled"),
-                            self.replacements.len() - 1,
-                            (
+                            import_module: format!("{module}/compiled"),
+                            replacement_index: self.replacements.len() - 1,
+                            reference_span: (
                                 it.opening_element.name.span().start,
                                 it.opening_element.name.span().end,
                             ),
-                        ));
+                            style: TransReplacementStyle::Jsx,
+                        });
                     }
                 } else {
                     self.needs_runtime_import = true;
@@ -346,6 +376,13 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             walk::walk_call_expression(self, it);
             return;
         };
+
+        if self.imports.remix_jsx_binding_at(local_name, callee_span)
+            == Some(super::imports::RemixJsxBinding::Helper)
+            && self.transform_lowered_jsx_macro(it)
+        {
+            return;
+        }
 
         let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(local_name, callee_span)
         else {
@@ -434,6 +471,87 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         }
 
         walk::walk_call_expression(self, it);
+    }
+}
+
+impl TransformVisitor<'_> {
+    fn transform_lowered_jsx_macro(&mut self, call: &CallExpression<'_>) -> bool {
+        let Some(element_type) = call
+            .arguments
+            .first()
+            .and_then(|argument| argument.as_expression())
+        else {
+            return false;
+        };
+        let Some((local_name, reference_span)) = identifier_name_and_span(element_type) else {
+            return false;
+        };
+        let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(local_name, reference_span)
+        else {
+            return false;
+        };
+        if !matches!(
+            macro_info.imported_name.as_str(),
+            "Trans" | "Plural" | "Select" | "SelectOrdinal"
+        ) {
+            return false;
+        }
+
+        let location = self
+            .source_locator
+            .indexed_location(self.filename, call.span.start as usize);
+        let replacement = if macro_info.imported_name == "Trans" {
+            transform_lowered_trans_call(
+                call,
+                self.source,
+                self.imports,
+                &macro_info.imported_name,
+                &location,
+                self.options,
+            )
+        } else {
+            transform_lowered_choice_call(
+                call,
+                self.source,
+                &macro_info.imported_name,
+                &location,
+                self.options,
+            )
+        };
+
+        match replacement {
+            Ok(Some((text, compiled_id))) => {
+                self.replacements.push(Replacement {
+                    start: call.span.start as usize,
+                    end: call.span.end as usize,
+                    text,
+                });
+                self.push_compiled_id(&compiled_id);
+                self.record_consumed_binding(
+                    macro_symbol_id,
+                    call.span.start as usize,
+                    call.span.end as usize,
+                );
+                if macro_info.imported_name == "Trans" {
+                    if let Some(module) = macro_info.source.strip_suffix("/macro") {
+                        self.trans_replacements.push(TransReplacement {
+                            import_module: format!("{module}/compiled"),
+                            macro_symbol_id,
+                            reference_span,
+                            replacement_index: self.replacements.len() - 1,
+                            style: TransReplacementStyle::Identifier,
+                        });
+                    }
+                } else {
+                    self.needs_runtime_import = true;
+                }
+            }
+            Ok(None) => {
+                self.fail_unsupported_macro(&macro_info.imported_name, call.span.start as usize);
+            }
+            Err(error) => self.fail(error),
+        }
+        true
     }
 }
 
