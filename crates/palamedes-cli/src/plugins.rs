@@ -8,17 +8,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
-use std::io::{self, BufRead, BufReader, IsTerminal, Write};
+use std::io::{self, BufRead, BufReader, IsTerminal, Read, Write};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 #[cfg(unix)]
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::mpsc;
 #[cfg(unix)]
 use std::sync::Once;
 use std::thread;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use clap::CommandFactory;
 use serde_json::{json, Value};
@@ -33,6 +34,10 @@ use crate::error::CliError;
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
 const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 1;
+const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(5);
+const PROTOCOL_MAX_LINE_BYTES: usize = 1024 * 1024;
+const PROTOCOL_MAX_TOTAL_BYTES: usize = 16 * 1024 * 1024;
+const PROTOCOL_MAX_EVENTS: usize = 10_000;
 
 fn reserved_plugin_namespaces() -> BTreeSet<String> {
     command_namespace_tokens(&mut crate::cli::Cli::command())
@@ -202,7 +207,14 @@ fn run_invocation(
     } else {
         Some(&mut print_output)
     };
-    let result = invoke_binary(&plugin.resolved, &request, &cwd, &native_executable, stream)?;
+    let result = invoke_binary(
+        &plugin.resolved,
+        &request,
+        &cwd,
+        &native_executable,
+        stream,
+        InvocationPolicy::run(invocation.plugin_timeout),
+    )?;
     let mut output = finish_run(&plugin.resolved, result, !invocation.json)?;
     if !registry.skipped.is_empty() {
         let mut diagnostics = skipped_diagnostics(&registry.skipped);
@@ -326,7 +338,14 @@ fn describe_resolved_plugin(
         "hostVersion": env!("CARGO_PKG_VERSION"),
         "kind": "describe",
     });
-    let invocation = invoke_binary(resolved, &request, cwd, native_executable, None)?;
+    let invocation = invoke_binary(
+        resolved,
+        &request,
+        cwd,
+        native_executable,
+        None,
+        InvocationPolicy::describe(),
+    )?;
     let manifest = manifest_from_invocation(resolved, invocation)?;
     validate_manifest(resolved, &manifest)?;
     Ok(manifest)
@@ -565,6 +584,7 @@ fn invoke_binary(
     cwd: &Path,
     native_executable: &Path,
     mut stream_output: Option<&mut dyn FnMut(&str)>,
+    policy: InvocationPolicy,
 ) -> Result<BinaryInvocation, PluginFailure> {
     let mut request_bytes = serde_json::to_vec(request).map_err(|error| {
         PluginFailure::new(
@@ -614,13 +634,70 @@ fn invoke_binary(
         }
     });
 
-    let stdout = BufReader::new(child.stdout.take().expect("piped plugin stdout"));
+    let mut stdout = BufReader::new(child.stdout.take().expect("piped plugin stdout"));
+    let (stdout_tx, stdout_rx) = mpsc::sync_channel(1);
+    let reader = thread::spawn(move || loop {
+        let mut line = Vec::new();
+        let read = Read::take(&mut stdout, (policy.max_line_bytes + 1) as u64)
+            .read_until(b'\n', &mut line);
+        let message = match read {
+            Ok(0) => StdoutMessage::Eof,
+            Ok(_) if line.len() > policy.max_line_bytes => StdoutMessage::LineTooLong,
+            Ok(_) => StdoutMessage::Line(line),
+            Err(error) => StdoutMessage::ReadFailed(error),
+        };
+        let finished = !matches!(message, StdoutMessage::Line(_));
+        if stdout_tx.send(message).is_err() || finished {
+            break;
+        }
+    });
+
     let mut events = Vec::new();
     let mut failure = None;
-    for line in stdout.lines() {
-        let line = match line {
-            Ok(line) => line,
-            Err(error) => {
+    let mut total_bytes = 0usize;
+    let mut event_count = 0usize;
+    let started = Instant::now();
+    loop {
+        let message = match policy.deadline {
+            Some(deadline) => {
+                let Some(remaining) = deadline.checked_sub(started.elapsed()) else {
+                    failure = Some(timeout_failure(resolved, policy));
+                    break;
+                };
+                match stdout_rx.recv_timeout(remaining) {
+                    Ok(message) => message,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        failure = Some(timeout_failure(resolved, policy));
+                        break;
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        failure = Some(reader_failure(resolved));
+                        break;
+                    }
+                }
+            }
+            None => match stdout_rx.recv() {
+                Ok(message) => message,
+                Err(_) => {
+                    failure = Some(reader_failure(resolved));
+                    break;
+                }
+            },
+        };
+        let line = match message {
+            StdoutMessage::Line(line) => line,
+            StdoutMessage::Eof => break,
+            StdoutMessage::LineTooLong => {
+                failure = Some(limit_failure(
+                    resolved,
+                    format!(
+                        "one stdout line exceeded the {}-byte limit",
+                        policy.max_line_bytes
+                    ),
+                ));
+                break;
+            }
+            StdoutMessage::ReadFailed(error) => {
                 failure = Some(PluginFailure::new(
                     "PLUGIN_BINARY_PROTOCOL",
                     format!(
@@ -631,18 +708,40 @@ fn invoke_binary(
                 break;
             }
         };
+        total_bytes = total_bytes.saturating_add(line.len());
+        if total_bytes > policy.max_total_bytes {
+            failure = Some(limit_failure(
+                resolved,
+                format!(
+                    "stdout exceeded the {}-byte total limit",
+                    policy.max_total_bytes
+                ),
+            ));
+            break;
+        }
+        let Ok(line) = String::from_utf8(line) else {
+            failure = Some(protocol_failure(resolved, "stdout was not valid UTF-8"));
+            break;
+        };
+        let line = line.trim_end_matches(['\r', '\n']);
         if line.trim().is_empty() {
             continue;
         }
-        match parse_event_line(&line, resolved) {
-            Ok(event) => {
-                if let PluginEvent::Output { text } = &event {
-                    if let Some(stream) = stream_output.as_mut() {
-                        stream(text);
-                    }
+        event_count += 1;
+        if event_count > policy.max_events {
+            failure = Some(limit_failure(
+                resolved,
+                format!("stdout exceeded the {}-event limit", policy.max_events),
+            ));
+            break;
+        }
+        match parse_event_line(line, resolved) {
+            Ok(PluginEvent::Output { text }) if stream_output.is_some() => {
+                if let Some(stream) = stream_output.as_mut() {
+                    stream(&text);
                 }
-                events.push(event);
             }
+            Ok(event) => events.push(event),
             Err(error) => {
                 failure = Some(error);
                 break;
@@ -650,7 +749,7 @@ fn invoke_binary(
         }
     }
     if failure.is_some() {
-        let _ = child.kill();
+        terminate_plugin_tree(&mut child);
     }
 
     let status = child.wait().map_err(|error| {
@@ -662,7 +761,12 @@ fn invoke_binary(
             ),
         )
     })?;
+    drop(stdout_rx);
+    if reader.join().is_err() && failure.is_none() {
+        failure = Some(reader_failure(resolved));
+    }
     if let Some(failure) = failure {
+        let _ = writer.join();
         return Err(failure);
     }
     match writer.join() {
@@ -691,6 +795,106 @@ fn invoke_binary(
         exit_code: exit_code(status),
         events,
     })
+}
+
+fn timeout_failure(resolved: &ResolvedPlugin, policy: InvocationPolicy) -> PluginFailure {
+    let milliseconds = policy
+        .deadline
+        .expect("timeout failures require a deadline")
+        .as_millis();
+    PluginFailure::new(
+        "PLUGIN_BINARY_TIMEOUT",
+        format!(
+            "Binary plugin \"{}\" exceeded the {milliseconds} ms {} deadline.",
+            resolved.specifier, policy.request_kind
+        ),
+    )
+}
+
+fn limit_failure(resolved: &ResolvedPlugin, detail: impl AsRef<str>) -> PluginFailure {
+    PluginFailure::new(
+        "PLUGIN_BINARY_PROTOCOL_LIMIT",
+        format!(
+            "Binary plugin \"{}\" exceeded a protocol resource limit: {}.",
+            resolved.specifier,
+            detail.as_ref()
+        ),
+    )
+}
+
+fn reader_failure(resolved: &ResolvedPlugin) -> PluginFailure {
+    PluginFailure::new(
+        "PLUGIN_HOST_FAILED",
+        format!(
+            "The stdout reader for binary plugin \"{}\" stopped unexpectedly.",
+            resolved.specifier
+        ),
+    )
+}
+
+#[cfg(unix)]
+fn terminate_plugin_tree(child: &mut Child) {
+    let Ok(group) = i32::try_from(child.id()) else {
+        let _ = child.kill();
+        return;
+    };
+    // SAFETY: the plugin was spawned as the leader of an isolated process
+    // group, so a negative PID terminates it and every descendant in the group.
+    if unsafe { libc::kill(-group, libc::SIGKILL) } != 0 {
+        let _ = child.kill();
+    }
+}
+
+#[cfg(windows)]
+fn terminate_plugin_tree(child: &mut Child) {
+    let _ = Command::new("taskkill")
+        .args(["/PID", &child.id().to_string(), "/T", "/F"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let _ = child.kill();
+}
+
+#[cfg(not(any(unix, windows)))]
+fn terminate_plugin_tree(child: &mut Child) {
+    let _ = child.kill();
+}
+
+#[derive(Clone, Copy, Debug)]
+struct InvocationPolicy {
+    deadline: Option<Duration>,
+    request_kind: &'static str,
+    max_line_bytes: usize,
+    max_total_bytes: usize,
+    max_events: usize,
+}
+
+impl InvocationPolicy {
+    const fn describe() -> Self {
+        Self::new(Some(DESCRIBE_TIMEOUT), "describe")
+    }
+
+    const fn run(deadline: Option<Duration>) -> Self {
+        Self::new(deadline, "run")
+    }
+
+    const fn new(deadline: Option<Duration>, request_kind: &'static str) -> Self {
+        Self {
+            deadline,
+            request_kind,
+            max_line_bytes: PROTOCOL_MAX_LINE_BYTES,
+            max_total_bytes: PROTOCOL_MAX_TOTAL_BYTES,
+            max_events: PROTOCOL_MAX_EVENTS,
+        }
+    }
+}
+
+enum StdoutMessage {
+    Line(Vec<u8>),
+    Eof,
+    LineTooLong,
+    ReadFailed(io::Error),
 }
 
 #[cfg(unix)]
@@ -1172,6 +1376,7 @@ struct PluginInvocation {
     command_args: Vec<String>,
     config_path: Option<PathBuf>,
     json: bool,
+    plugin_timeout: Option<Duration>,
 }
 
 impl PluginInvocation {
@@ -1183,6 +1388,7 @@ impl PluginInvocation {
         let mut command_args = Vec::new();
         let mut config_path = None;
         let mut json = false;
+        let mut plugin_timeout = None;
         let mut passthrough = false;
         let mut index = 2;
         while index < args.len() {
@@ -1193,6 +1399,14 @@ impl PluginInvocation {
                 passthrough = true;
             } else if value == "--json" {
                 json = true;
+            } else if value == "--plugin-timeout-ms" {
+                let Some(next) = args.get(index + 1) else {
+                    return Err(plugin_timeout_argument_failure());
+                };
+                plugin_timeout = Some(parse_plugin_timeout(next)?);
+                index += 1;
+            } else if let Some(milliseconds) = value.strip_prefix("--plugin-timeout-ms=") {
+                plugin_timeout = Some(parse_plugin_timeout(milliseconds)?);
             } else if value == "--config" || value == "-c" {
                 let next = args.get(index + 1).filter(|next| !next.starts_with('-'));
                 let Some(next) = next else {
@@ -1222,8 +1436,25 @@ impl PluginInvocation {
             command_args,
             config_path,
             json,
+            plugin_timeout,
         })
     }
+}
+
+fn parse_plugin_timeout(value: &str) -> Result<Duration, PluginFailure> {
+    let milliseconds = value
+        .parse::<u64>()
+        .ok()
+        .filter(|milliseconds| *milliseconds > 0)
+        .ok_or_else(plugin_timeout_argument_failure)?;
+    Ok(Duration::from_millis(milliseconds))
+}
+
+fn plugin_timeout_argument_failure() -> PluginFailure {
+    PluginFailure::new(
+        "PLUGIN_ARGUMENT_INVALID",
+        "--plugin-timeout-ms requires a positive integer number of milliseconds.",
+    )
 }
 
 #[derive(Debug)]
@@ -1374,7 +1605,7 @@ struct PackagePalamedes {
 mod tests {
     use std::fs;
     use std::path::Path;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use clap::Command;
     use serde_json::json;
@@ -1385,8 +1616,8 @@ mod tests {
         command_namespace_tokens, finish_run, is_kebab_name, matches_constraint, parse_event,
         persist_plugin_manifest_cache, plugin_catalogs, reserved_plugin_namespaces,
         resolve_binary_plugin, validate_manifest, validate_manifest_with_reserved_namespaces,
-        BinaryInvocation, PluginEvent, PluginInvocation, PluginManifest, ResolvedPlugin,
-        PROTOCOL_VERSION,
+        BinaryInvocation, InvocationPolicy, PluginEvent, PluginInvocation, PluginManifest,
+        ResolvedPlugin, PROTOCOL_VERSION,
     };
     use crate::config::load_config;
     use palamedes_plugin::ManifestCommand;
@@ -1462,6 +1693,7 @@ mod tests {
             "acme".to_owned(),
             "inspect".to_owned(),
             "--json".to_owned(),
+            "--plugin-timeout-ms=250".to_owned(),
             "--config=palamedes.yaml".to_owned(),
             "first".to_owned(),
             "--".to_owned(),
@@ -1477,6 +1709,20 @@ mod tests {
             Some(Path::new("palamedes.yaml"))
         );
         assert!(invocation.json);
+        assert_eq!(invocation.plugin_timeout, Some(Duration::from_millis(250)));
+    }
+
+    #[test]
+    fn rejects_invalid_plugin_command_deadlines() {
+        for value in ["0", "later", ""] {
+            let error = PluginInvocation::parse(&[
+                "acme".to_owned(),
+                "inspect".to_owned(),
+                format!("--plugin-timeout-ms={value}"),
+            ])
+            .expect_err("invalid timeout rejected");
+            assert_eq!(error.code, "PLUGIN_ARGUMENT_INVALID");
+        }
     }
 
     #[test]
@@ -1689,12 +1935,84 @@ mod tests {
             &root,
             Path::new("pmds"),
             Some(&mut capture),
+            InvocationPolicy::run(None),
         )
         .expect("invocation");
 
         assert_eq!(streamed, ["one", "two"]);
         assert_eq!(invocation.exit_code, 0);
-        assert_eq!(invocation.events.len(), 3);
+        assert_eq!(invocation.events.len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn times_out_a_non_terminating_describe() {
+        use std::os::unix::fs::PermissionsExt;
+
+        use super::invoke_binary;
+
+        let root = temp_dir("describe-timeout");
+        let script = root.join("plugin");
+        fs::write(
+            &script,
+            "#!/bin/sh\nread _request\nwhile :; do sleep 30; done\n",
+        )
+        .expect("plugin script");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        let resolved = ResolvedPlugin {
+            specifier: "./plugin".to_owned(),
+            binary_path: script,
+        };
+
+        let policy = InvocationPolicy::new(Some(Duration::from_millis(500)), "describe");
+        let error = invoke_binary(
+            &resolved,
+            &json!({ "palamedesBinaryPluginProtocol": 1, "kind": "describe" }),
+            &root,
+            Path::new("pmds"),
+            None,
+            policy,
+        )
+        .expect_err("describe deadline enforced");
+
+        assert_eq!(error.code, "PLUGIN_BINARY_TIMEOUT");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_plugin_stdout_over_the_total_byte_budget() {
+        use std::os::unix::fs::PermissionsExt;
+
+        use super::invoke_binary;
+
+        let root = temp_dir("stdout-budget");
+        let script = root.join("plugin");
+        fs::write(
+            &script,
+            "#!/bin/sh\nread _request\n\
+             printf '{\"event\":\"output\",\"text\":\"this is deliberately too large\"}\\n'\n",
+        )
+        .expect("plugin script");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        let resolved = ResolvedPlugin {
+            specifier: "./plugin".to_owned(),
+            binary_path: script,
+        };
+        let mut policy = InvocationPolicy::run(None);
+        policy.max_total_bytes = 32;
+
+        let error = invoke_binary(
+            &resolved,
+            &json!({ "palamedesBinaryPluginProtocol": 1, "kind": "run" }),
+            &root,
+            Path::new("pmds"),
+            None,
+            policy,
+        )
+        .expect_err("stdout budget enforced");
+
+        assert_eq!(error.code, "PLUGIN_BINARY_PROTOCOL_LIMIT");
+        assert!(error.message.contains("32-byte total limit"));
     }
 
     #[cfg(unix)]
@@ -1702,7 +2020,7 @@ mod tests {
     fn runs_plugins_in_an_isolated_process_group() {
         use std::process::{Command, Stdio};
 
-        use super::isolate_process_group;
+        use super::{isolate_process_group, terminate_plugin_tree};
 
         let mut command = Command::new("/bin/sh");
         command
@@ -1716,14 +2034,11 @@ mod tests {
 
         // SAFETY: queries the process group of the child we just spawned.
         let child_group = unsafe { libc::getpgid(child_id) };
-        if child_group == child_id {
-            // SAFETY: terminates the isolated fixture group and its shell child.
-            unsafe { libc::kill(-child_group, libc::SIGTERM) };
-        } else {
-            child.kill().expect("fixture child cleanup");
-        }
+        terminate_plugin_tree(&mut child);
         child.wait().expect("isolated child exit");
         assert_eq!(child_group, child_id);
+        // SAFETY: signal 0 only checks whether the terminated fixture group exists.
+        assert_ne!(unsafe { libc::kill(-child_group, 0) }, 0);
     }
 
     #[cfg(unix)]

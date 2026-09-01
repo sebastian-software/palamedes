@@ -52,10 +52,10 @@ unwritable cache data falls back to the normal handshake without blocking a
 plugin command.
 
 The host consumes its own invocation flags before it forwards `args` to the
-plugin: `--json`, `--config PATH`, `-c PATH`, and `--config=PATH` never appear
-there. A bare `--` is likewise a host passthrough marker rather than a plugin
-argument; every token after it is forwarded verbatim, including flag-shaped
-ones.
+plugin: `--json`, `--config PATH`, `-c PATH`, `--config=PATH`, and
+`--plugin-timeout-ms N` never appear there. A bare `--` is likewise a host
+passthrough marker rather than a plugin argument; every token after it is
+forwarded verbatim, including flag-shaped ones.
 
 ## Protocol
 
@@ -143,6 +143,26 @@ one result event:
   130 (`SIGINT`) and 143 (`SIGTERM`) meanings. On Unix the host isolates the
   plugin process group and forwards `SIGINT` and `SIGTERM` to that group, so
   direct and terminal signals reach the plugin tree exactly once.
+
+### Time And Output Limits
+
+Every `describe` request has a 5,000 ms deadline. A normal `run` request has no
+deadline so that intentionally long-running commands continue to work; callers
+can opt into one with `--plugin-timeout-ms N`, where `N` is a positive integer.
+The deadline covers the complete request, through process exit and stdout EOF.
+
+The host applies these fixed stdout protocol budgets to both request kinds:
+
+- 1,048,576 bytes per line, including its terminating newline;
+- 16,777,216 bytes in total;
+- 10,000 non-empty protocol events.
+
+In text mode, an `output` event is rendered and discarded immediately instead
+of also being retained until exit. JSON mode retains output events within the
+same budgets so it can produce the final envelope. A deadline violation emits
+`PLUGIN_BINARY_TIMEOUT`; an output-budget violation emits
+`PLUGIN_BINARY_PROTOCOL_LIMIT`. In either case the host terminates the isolated
+process group on Unix or the child process tree on Windows before returning.
 
 ## Built-In Commands And Trust
 
