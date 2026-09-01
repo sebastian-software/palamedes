@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use oxc_ast::ast::{ImportDeclaration, ImportDeclarationSpecifier, ImportOrExportKind};
 
-pub(crate) const PALAMEDES_MACRO_PACKAGES: [&str; 3] = [
+pub(crate) const PALAMEDES_MACRO_PACKAGES: [&str; 4] = [
     "@palamedes/core/macro",
     "@palamedes/react/macro",
+    "@palamedes/remix/macro",
     "@palamedes/solid/macro",
 ];
 

@@ -268,6 +268,21 @@ export function View() {
     expect(result.compiledIds).toHaveLength(1)
   })
 
+  it("targets the Remix compiled runtime for Remix rich-message macros", () => {
+    const code = `
+import { Trans as Message } from "@palamedes/remix/macro";
+import { jsxs } from "remix/ui/jsx-runtime";
+const view = jsxs(Message, { children: ["Hello ", name] });
+`
+    const result = transformPalamedesMacros(code, "view.js")
+
+    expect(result.code).toContain('import { Trans } from "@palamedes/remix/compiled"')
+    expect(result.code).toContain('jsxs(Trans, { id: "')
+    expect(result.code).toContain('message: "Hello {name}"')
+    expect(result.code).toContain("values: { name }")
+    expect(result.code).not.toContain("@palamedes/remix/macro")
+  })
+
   it("ignores JSX comments inside <Trans>", () => {
     const code = `
 import { Trans } from "@palamedes/react/macro";

@@ -23,6 +23,8 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 - `PALEMEDES_REMIX_ASSET_PACKAGES`
 - `@palamedes/remix/register`
 - `@palamedes/remix/server`
+- `@palamedes/remix/macro`
+- `@palamedes/remix/compiled`
 - `createRemixI18nServer(options)`
 - `createRemixI18nRequestScope(resolveI18n)`
 - `remixI18nContext`
@@ -99,10 +101,12 @@ export const assetServer = createAssetServer({
 })
 ```
 
-`PALEMEDES_REMIX_ASSET_PACKAGES` contains `@palamedes/runtime`. It must be in
-`allowPackages` because transformed browser modules import `getI18n()` from that
-package; Remix then rewrites the package import to its served asset URL. If
-`runtimeModule` selects another package, allow that exact package name instead.
+`PALEMEDES_REMIX_ASSET_PACKAGES` contains `@palamedes/runtime` and
+`@palamedes/remix`. They must be in `allowPackages` because transformed browser
+modules import `getI18n()` for ordinary macros and the Remix compiled component
+for rich messages; Remix then rewrites those package imports to served asset
+URLs. If `runtimeModule` selects another package, allow that exact package name
+instead of `@palamedes/runtime`.
 
 `PalamedesRemixAssetLoaderOptions` exposes the shared `include`, `exclude`,
 `runtimeModule`, and `keepSourceFallbacks` options. Defaults match the Node
@@ -177,10 +181,13 @@ The Remix v3 support path covers:
 - module-scope catalog message caching before request activation
 - ordinary JS macros in browser assets through
   `createPalamedesRemixAssetLoader()`
+- rich Remix UI messages through `@palamedes/remix/macro`, with parser-free
+  output from `@palamedes/remix/compiled`
 
-The browser transform compiles macro call sites and imports the
-framework-neutral runtime getter. Client catalog delivery, client runtime
-initialization, and rich JSX messages are not part of this integration point.
+The browser transform compiles macro call sites and imports either the
+framework-neutral runtime getter or the Remix-native compiled component. Client
+catalog delivery and client runtime initialization remain application
+concerns.
 
 ## Runtime Cost
 
@@ -208,13 +215,18 @@ and `remix/ui/jsx-dev-runtime`; it can recover the static `Trans`, `Plural`,
 `Select`, and `SelectOrdinal` structure and produce the same message identity as
 authored TSX.
 
-Rich JSX macros are nevertheless not yet a supported Remix UI runtime surface.
-The existing compiled `@palamedes/react` component returns React elements,
-while Remix UI uses its own element and component model. Until a dedicated
-Remix UI compiled-message runtime and macro entry exist, use the post-compile
-loader for ordinary JavaScript macros only. Dynamic lowered trees and prop
-spreads are rejected with a source diagnostic instead of being left as live
-macro calls.
+Use `Trans`, `Plural`, `Select`, and `SelectOrdinal` from
+`@palamedes/remix/macro`. The transform targets
+`@palamedes/remix/compiled`, whose `Trans` component produces branded Remix UI
+nodes without a React dependency. Named tag placeholders preserve the supplied
+Remix element's props while replacing its authored children with translated
+children. Primitive placeholders, Remix elements, and nested node arrays are
+supported. Missing or malformed compiled messages follow the same readable
+source-fallback behavior as the other compiled renderers.
+
+The macro types use Remix component handles and reject React-only element
+shapes. Dynamic lowered trees and prop spreads are rejected with a source
+diagnostic instead of being left as live macro calls.
 
 ## Migration From The Experimental Cookie Example
 

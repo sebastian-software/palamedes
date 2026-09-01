@@ -48,6 +48,7 @@ export type TransformResult = {
 export const PALAMEDES_MACRO_PACKAGES = [
   "@palamedes/core/macro",
   "@palamedes/react/macro",
+  "@palamedes/remix/macro",
   "@palamedes/solid/macro",
 ] as const
 

@@ -40,6 +40,26 @@
         "default": "./dist/register.cjs"
       }
     },
+    "./compiled": {
+      "import": {
+        "types": "./dist/compiled.d.mts",
+        "default": "./dist/compiled.mjs"
+      },
+      "require": {
+        "types": "./dist/compiled.d.cts",
+        "default": "./dist/compiled.cjs"
+      }
+    },
+    "./macro": {
+      "import": {
+        "types": "./dist/macro.d.mts",
+        "default": "./dist/macro.mjs"
+      },
+      "require": {
+        "types": "./dist/macro.d.cts",
+        "default": "./dist/macro.cjs"
+      }
+    },
     "./server": {
       "import": {
         "types": "./dist/server.d.mts",

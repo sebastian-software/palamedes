@@ -58,8 +58,8 @@ This integration is tested against `remix@3.0.0-rc.1`:
 | Request-local i18n                                   | Supported through `createRemixI18nServer()` and middleware/request helpers  |
 | Locale strategies                                    | Cookie, route, subdomain, and TLD examples are covered by smoke tests       |
 | Server-rendered Remix UI Frames                      | Supported; document and direct frame requests retain their own locale scope |
-| Rich JSX messages                                    | Not supported; the React `Trans` runtime is incompatible with Remix UI      |
-| Browser/client modules                               | Ordinary macros supported through `scripts.loaders`                         |
+| Rich JSX messages                                    | Supported through the Remix-native `macro` and `compiled` subpaths          |
+| Browser/client modules                               | Ordinary and rich macros supported through `scripts.loaders`                |
 
 Browser catalog delivery and runtime initialization remain separate from the
 macro transform. Rich JSX messages also remain outside the post-compile
@@ -95,15 +95,35 @@ The cookie example exercises both `/frames` and `/frames/locale-summary` with
 German translations. Use ordinary JavaScript macros such as `t` inside Remix UI
 components; those calls remain visible to the server loader after JSX lowering.
 
-Rich JSX macros such as `<Trans>` are not yet supported as a Remix UI runtime
-surface. The transformer does recognize the `jsx`, `jsxs`, and `jsxDEV` binding
-identities emitted by `remix/node-tsx` and recovers the same message,
-placeholders, and tag numbering as authored TSX. The remaining boundary is the
-renderer: the existing compiled `@palamedes/react` component produces React
-elements, while Remix UI has its own element model. Until a dedicated Remix UI
-compiled-message runtime and macro entry exist, use the browser asset loader
-for ordinary JavaScript macros only. Unsupported dynamic lowered trees fail
-with a source-oriented diagnostic.
+Import rich-message macros from the Remix-specific entry:
+
+```tsx
+import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/remix/macro"
+import type { Handle } from "remix/ui"
+
+export function Greeting(handle: Handle<{ name: string; count: number }>) {
+  return () => (
+    <p>
+      <Trans>
+        Hello <strong>{handle.props.name}</strong>
+      </Trans>
+      <Plural value={handle.props.count} one="# message" other="# messages" />
+    </p>
+  )
+}
+```
+
+The transform rewrites `Trans` to `@palamedes/remix/compiled` and lowers the
+choice macros to the active Palamedes runtime. The compiled entry uses Remix
+UI elements and component handles directly; it has no React runtime or type
+dependency. Named tags preserve the supplied element's props and receive the
+translated children. Values may contain Remix elements and nested node arrays.
+
+Both `remix/node-tsx` output and browser asset modules are supported. The
+transformer recognizes the `jsx`, `jsxs`, and `jsxDEV` binding identities
+emitted by Remix and recovers the same message, placeholders, and tag numbering
+as authored TSX. Dynamic lowered trees still fail with a source-oriented
+diagnostic because their message identity cannot be determined statically.
 
 ## Runtime Cost
 

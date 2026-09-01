@@ -1417,6 +1417,24 @@ fn transforms_trans_jsx_macro() {
 }
 
 #[test]
+fn transforms_remix_trans_macro_to_its_native_compiled_runtime() {
+    let source = r#"import { Trans as Message } from "@palamedes/remix/macro";
+import { jsxs as render } from "remix/ui/jsx-runtime";
+const view = render(Message, { children: ["Hello ", name] });
+"#;
+    let result = transform_macros(source, "view.js", None)
+        .expect("Remix rich-message macro should transform");
+
+    assert!(result
+        .code
+        .contains("import { Trans } from \"@palamedes/remix/compiled\";"));
+    assert!(result.code.contains("render(Trans, { id: \""));
+    assert!(result.code.contains("message: \"Hello {name}\""));
+    assert!(result.code.contains("values: { name }"));
+    assert!(!result.code.contains("@palamedes/remix/macro"));
+}
+
+#[test]
 fn transforms_remix_lowered_rich_macros_by_binding_identity() {
     let source = r#"import { Trans as Message } from "@palamedes/react/macro";
 import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
