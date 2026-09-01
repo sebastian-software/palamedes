@@ -23,9 +23,13 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 - `PALEMEDES_REMIX_ASSET_PACKAGES`
 - `@palamedes/remix/register`
 - `@palamedes/remix/server`
+- `@palamedes/remix/client`
 - `@palamedes/remix/macro`
 - `@palamedes/remix/compiled`
 - `createRemixI18nServer(options)`
+- `initializeRemixClientI18n(options)`
+- `readRemixI18nBootstrap(options?)`
+- `REMIX_I18N_BOOTSTRAP_ID`
 - `createRemixI18nRequestScope(resolveI18n)`
 - `remixI18nContext`
 
@@ -101,12 +105,13 @@ export const assetServer = createAssetServer({
 })
 ```
 
-`PALEMEDES_REMIX_ASSET_PACKAGES` contains `@palamedes/runtime` and
-`@palamedes/remix`. They must be in `allowPackages` because transformed browser
-modules import `getI18n()` for ordinary macros and the Remix compiled component
-for rich messages; Remix then rewrites those package imports to served asset
-URLs. If `runtimeModule` selects another package, allow that exact package name
-instead of `@palamedes/runtime`.
+`PALEMEDES_REMIX_ASSET_PACKAGES` contains `@palamedes/core`,
+`@palamedes/runtime`, and `@palamedes/remix`. They must be in `allowPackages`
+because the browser bootstrap creates a parser-capable i18n instance, while
+transformed modules import `getI18n()` for ordinary macros and the Remix
+compiled component for rich messages. Remix rewrites those package imports to
+served asset URLs. If `runtimeModule` selects another package, allow that exact
+package name instead of `@palamedes/runtime`.
 
 `PalamedesRemixAssetLoaderOptions` exposes the shared `include`, `exclude`,
 `runtimeModule`, and `keepSourceFallbacks` options. Defaults match the Node
@@ -115,8 +120,8 @@ error as their cause.
 
 The browser loader only transforms script source. It does not claim `.po`
 imports or load `palamedes.yaml`; server catalog compilation remains the job of
-`@palamedes/remix/register`. Shipping catalogs to the browser and initializing
-the active client i18n instance are separate application concerns.
+`@palamedes/remix/register`. Use the document bootstrap below to deliver the
+selected catalog without a browser `.po` import.
 
 ## Server Request Scope
 
@@ -161,13 +166,71 @@ a different param name. Cookie serialization is available through
 
 Further `createRemixI18nServer` options: `createI18n` (factory for the
 request-local instance), `cookieName` (default `"locale"`), and `cookieMaxAge`
-(default one year, in seconds).
+(default one year, in seconds). `loadClientMessages(locale)` supplies a
+serializable ICU string catalog when `loadMessages` contains executable server
+messages. `catalogVersion` overrides the default deterministic content digest
+with a non-empty string or a function of `{ locale, messages }`.
 
 Besides `run()`, `middleware()`, and `serializeLocaleCookie()`, the server
 object exposes `resolveLocale(input)` for standalone locale resolution,
 `createI18n(locale)` for manual instance creation, and `get(context?)` — the
 read accessor for the active request scope, which is how handlers running
-under `middleware()` reach the current i18n instance.
+under `middleware()` reach the current i18n instance. It also exposes
+`createClientBootstrap(locale)` and `renderClientBootstrap(locale, options?)`.
+
+## Client Document Bootstrap
+
+Render the payload while the server request scope is active, using exactly the
+locale already selected for the document:
+
+```ts
+const response = await remixI18n.run(context, ({ locale }) => {
+  const bootstrap = remixI18n.renderClientBootstrap(locale)
+  return new Response(
+    `<!doctype html><html lang="${locale}"><body>${bootstrap}<script type="module" src="/assets/app.js"></script></body></html>`,
+    { headers: { "content-type": "text/html; charset=utf-8" } }
+  )
+})
+```
+
+The exact raw-markup insertion API depends on the Remix UI renderer. The
+returned markup is an inert `<template id="palamedes-i18n-bootstrap">` whose
+JSON is escaped so catalog text cannot terminate the element. It contains
+`locale`, `catalogVersion`, and `messages`. It contains no executable script
+and works with strict CSP when the browser entry itself is an allowed external
+module.
+
+Initialize before loading translated browser modules:
+
+```ts
+import { createI18n } from "@palamedes/core"
+import { initializeRemixClientI18n } from "@palamedes/remix/client"
+
+initializeRemixClientI18n({ createI18n })
+await import("./app.js")
+```
+
+`initializeRemixClientI18n()` validates the complete payload, requires its
+locale to exactly match `<html lang>`, loads its ICU strings, activates the
+locale, and only then installs the runtime used by transformed calls. Invalid
+payloads and parser-free runtimes fail before installation. Advanced hosts can
+pass `bootstrap`, `document`, or `elementId` explicitly;
+`readRemixI18nBootstrap()` provides validation without creating the runtime.
+
+Generate `loadClientMessages` values with the serializable `messages` returned
+by `compileCatalogArtifact()` from `@palamedes/core-node`. Imported `.po`
+modules can contain executable compiled messages and must not be JSON
+serialized; the server helper rejects such entries with a diagnostic. Install
+`@palamedes/core-node` as a direct dependency when using this compilation API.
+
+Locale selection is document-scoped. Cookie, route, subdomain, TLD, and
+`Accept-Language` changes must perform a full navigation, producing a new
+`<html lang>` and payload. The browser never requests `.po` files. The embedded
+catalog shares the HTML response's cache lifetime, so vary shared caches by the
+active locale inputs (`Vary: Cookie` or private caching for cookie-selected
+pages) and invalidate the document when `catalogVersion` changes. Server and
+client catalogs are cached per locale for the life of the server object;
+restart development watch processes after catalog/config changes.
 
 ## Current Scope
 
@@ -178,16 +241,17 @@ The Remix v3 support path covers:
 - request-local i18n activation for Fetch `Request` handlers
 - cookie, route, subdomain, TLD, and `Accept-Language` locale negotiation
 - `.po` catalog imports through `@palamedes/remix/register`
-- module-scope catalog message caching before request activation
+- module-scope server and client catalog caching before activation
 - ordinary JS macros in browser assets through
   `createPalamedesRemixAssetLoader()`
 - rich Remix UI messages through `@palamedes/remix/macro`, with parser-free
   output from `@palamedes/remix/compiled`
+- document-scoped browser catalog delivery and initialization through
+  `@palamedes/remix/client`, without browser `.po` imports
 
 The browser transform compiles macro call sites and imports either the
-framework-neutral runtime getter or the Remix-native compiled component. Client
-catalog delivery and client runtime initialization remain application
-concerns.
+framework-neutral runtime getter or the Remix-native compiled component. The
+document bootstrap installs their shared active runtime before rendering.
 
 ## Runtime Cost
 

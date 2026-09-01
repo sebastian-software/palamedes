@@ -24,6 +24,14 @@ afterEach(() => {
 })
 
 describe("createPalamedesRemixAssetLoader", () => {
+  it("allows every package required by transformed and bootstrapped browser modules", () => {
+    expect(PALEMEDES_REMIX_ASSET_PACKAGES).toStrictEqual([
+      "@palamedes/core",
+      "@palamedes/runtime",
+      "@palamedes/remix",
+    ])
+  })
+
   it.each([
     [
       "TypeScript",
@@ -139,13 +147,20 @@ function createAssetFixture(fileName: string, source: string): { rootDir: string
   tempDirectories.push(rootDir)
   const publicDirectory = path.join(rootDir, "app", "public")
   const palamedesPackages = path.join(rootDir, "node_modules", "@palamedes")
+  const corePath = path.resolve(import.meta.dirname, "../..", "core")
   const runtimePath = path.resolve(import.meta.dirname, "../..", "runtime")
+  const installedCorePath = path.join(palamedesPackages, "core")
   const installedRuntimePath = path.join(palamedesPackages, "runtime")
   const installedRemixIntegrationPath = path.join(palamedesPackages, "remix")
   mkdirSync(publicDirectory, { recursive: true })
+  mkdirSync(installedCorePath, { recursive: true })
   mkdirSync(installedRuntimePath, { recursive: true })
   mkdirSync(installedRemixIntegrationPath, { recursive: true })
   writeFileSync(path.join(publicDirectory, fileName), source)
+  copyFileSync(path.join(corePath, "package.json"), path.join(installedCorePath, "package.json"))
+  cpSync(path.join(corePath, "dist"), path.join(installedCorePath, "dist"), {
+    recursive: true,
+  })
   copyFileSync(
     path.join(runtimePath, "package.json"),
     path.join(installedRuntimePath, "package.json")
