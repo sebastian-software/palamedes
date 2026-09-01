@@ -1,6 +1,6 @@
 # @palamedes/remix
 
-Server-first Remix v3 integration for Palamedes.
+Remix v3 server and browser asset integration for Palamedes.
 
 ## Installation
 
@@ -26,10 +26,30 @@ The register hook composes with `remix/node-tsx`, receives the JavaScript source
 that Remix compiled from `.ts` and `.tsx` files, and runs the Palamedes macro
 transform before Node executes the module.
 
+For browser-delivered modules, install the post-compile asset loader and allow
+the generated runtime import:
+
+```ts
+import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix"
+import { createAssetServer } from "remix/assets"
+
+const assetServer = createAssetServer({
+  basePath: "/assets",
+  allowFiles: ["app/routes.ts", "app/**/public/**"],
+  allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  scripts: { loaders: [createPalamedesRemixAssetLoader()] },
+})
+```
+
+The browser loader transforms ordinary macros after Remix compiles TypeScript
+and JavaScript. Remix then rewrites the injected `@palamedes/runtime` import to
+an asset URL. The loader does not compile `.po` imports or load Palamedes config;
+those remain server-hook responsibilities. A custom `runtimeModule` package
+must be added to `allowPackages` in place of the default package constant.
+
 ## Scope
 
-This integration is tested against `remix@3.0.0-beta.5` and supports
-server-loaded Remix modules:
+This integration is tested against `remix@3.0.0-rc.1`:
 
 | Area                                                 | Status                                                                      |
 | ---------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -39,12 +59,11 @@ server-loaded Remix modules:
 | Locale strategies                                    | Cookie, route, subdomain, and TLD examples are covered by smoke tests       |
 | Server-rendered Remix UI Frames                      | Supported; document and direct frame requests retain their own locale scope |
 | Rich JSX messages                                    | Not supported; the React `Trans` runtime is incompatible with Remix UI      |
-| Browser/client modules                               | Not supported yet; Remix's asset pipeline has no script transform hook      |
+| Browser/client modules                               | Ordinary macros supported through `scripts.loaders`                         |
 
-The hook only reaches server-executed modules. Browser-delivered Remix v3 modules
-are compiled by Remix's asset pipeline, which does not currently expose a script
-transform hook for Palamedes macros. The upstream tracking request is
-[remix-run/remix#11580](https://github.com/remix-run/remix/issues/11580).
+Browser catalog delivery and runtime initialization remain separate from the
+macro transform. Rich JSX messages also remain outside the post-compile
+loader's scope.
 
 ## Remix UI, Frames, and Rich Messages
 
@@ -82,10 +101,9 @@ lowers JSX to `remix/ui/jsx-runtime` before the Palamedes loader receives a
 module. Palamedes' rich-message transform requires the original JSX tree to
 derive message placeholders, and its compiled `@palamedes/react` `Trans`
 component produces React elements, while Remix UI renders its own element
-model. A supported adapter therefore needs both a pre-lowering transform hook
-and a dedicated Remix UI rich-message runtime; neither is a public Remix API
-today. Browser/client macro parity is separately blocked on the
-[asset-pipeline transform hook](https://github.com/remix-run/remix/issues/11580).
+model. A supported adapter therefore needs a pre-lowering transform and a
+dedicated Remix UI rich-message runtime. The browser asset loader supports
+ordinary JavaScript macros only.
 
 ## Runtime Cost
 
@@ -150,18 +168,19 @@ Both APIs preserve the active i18n scope while a returned `Response.body` is
 streamed, so translated code that executes during body consumption still sees
 the same request-local i18n instance.
 
-## Beta Tracking
+## Prerelease Tracking
 
-The examples pin Remix to the exact beta version they are tested against. Bumps
-to newer betas should update the example `package.json` files together, run:
+The examples pin Remix to the exact prerelease they are tested against. Bumps
+to newer prereleases should update the example `package.json` files together,
+then run:
 
 ```sh
 pnpm verify:examples:smoke -- --framework remix
 ```
 
 For early warning, maintainers can run the same smoke command after temporarily
-overriding the examples to `remix@next`; failures should be treated as
-non-blocking canary signal unless the pinned beta also fails.
+overriding the examples to `remix@next`; failures should be treated as a
+non-blocking canary signal unless the pinned prerelease also fails.
 
 ## License
 

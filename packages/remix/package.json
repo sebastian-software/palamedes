@@ -81,7 +81,7 @@
     "@palamedes/transform": "workspace:^"
   },
   "peerDependencies": {
-    "remix": "^3.0.0-beta.5"
+    "remix": "^3.0.0-rc.1"
   },
   "peerDependenciesMeta": {
     "remix": {
@@ -90,7 +90,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "remix": "3.0.0-beta.5",
+    "remix": "3.0.0-rc.1",
     "typescript": "^7.0.2",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.10"

@@ -1,6 +1,7 @@
 # `@palamedes/remix`
 
-`@palamedes/remix` is the server-first Remix v3 integration for Palamedes.
+`@palamedes/remix` integrates Palamedes with Remix v3's Node loader and browser
+asset pipelines.
 
 Install `@palamedes/core` as a direct runtime dependency: generated catalog
 modules import `defineCompiledCatalog()` from its `compiled` entrypoint.
@@ -18,6 +19,8 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 ## Exports
 
 - `createPalamedesRemixLoadHook(options?)`
+- `createPalamedesRemixAssetLoader(options?)`
+- `PALEMEDES_REMIX_ASSET_PACKAGES`
 - `@palamedes/remix/register`
 - `@palamedes/remix/server`
 - `createRemixI18nServer(options)`
@@ -75,6 +78,41 @@ and require a Palamedes config (`palamedes.yaml`, `palamedes.config.ts`, etc.).
 The hook caches loaded config objects while validating the config file's content
 digest on every cache hit, so `node --watch` processes observe config edits
 without a manual restart.
+
+## Browser Assets
+
+Remix compiles TypeScript and JavaScript before calling `scripts.loaders`.
+Install the Palamedes asset loader there so ordinary macros are transformed
+before Remix analyzes imports, HMR boundaries, and minification:
+
+```ts
+import { createPalamedesRemixAssetLoader, PALEMEDES_REMIX_ASSET_PACKAGES } from "@palamedes/remix"
+import { createAssetServer } from "remix/assets"
+
+export const assetServer = createAssetServer({
+  basePath: "/assets",
+  allowFiles: ["app/routes.ts", "app/**/public/**"],
+  allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  scripts: {
+    loaders: [createPalamedesRemixAssetLoader()],
+  },
+})
+```
+
+`PALEMEDES_REMIX_ASSET_PACKAGES` contains `@palamedes/runtime`. It must be in
+`allowPackages` because transformed browser modules import `getI18n()` from that
+package; Remix then rewrites the package import to its served asset URL. If
+`runtimeModule` selects another package, allow that exact package name instead.
+
+`PalamedesRemixAssetLoaderOptions` exposes the shared `include`, `exclude`,
+`runtimeModule`, and `keepSourceFallbacks` options. Defaults match the Node
+loader. Transform failures identify the source module and retain the original
+error as their cause.
+
+The browser loader only transforms script source. It does not claim `.po`
+imports or load `palamedes.yaml`; server catalog compilation remains the job of
+`@palamedes/remix/register`. Shipping catalogs to the browser and initializing
+the active client i18n instance are separate application concerns.
 
 ## Server Request Scope
 
@@ -137,11 +175,12 @@ The Remix v3 support path covers:
 - cookie, route, subdomain, TLD, and `Accept-Language` locale negotiation
 - `.po` catalog imports through `@palamedes/remix/register`
 - module-scope catalog message caching before request activation
+- ordinary JS macros in browser assets through
+  `createPalamedesRemixAssetLoader()`
 
-The register hook covers server-executed modules only. Browser-delivered Remix
-v3 modules are compiled through Remix's asset pipeline, which does not expose a
-Palamedes macro transform hook yet. The upstream tracking request is
-[remix-run/remix#11580](https://github.com/remix-run/remix/issues/11580).
+The browser transform compiles macro call sites and imports the
+framework-neutral runtime getter. Client catalog delivery, client runtime
+initialization, and rich JSX messages are not part of this integration point.
 
 ## Runtime Cost
 
@@ -168,10 +207,9 @@ components because they survive Remix's JSX lowering. Rich JSX macros, such as
 `remix/ui/jsx-runtime` before the Palamedes loader sees it, so the transform can
 no longer read the original children and derive placeholders. The compiled
 `@palamedes/react` runtime also returns React elements, while Remix UI uses a
-different element model. Supporting rich messages needs a public pre-lowering
-transform hook plus a dedicated Remix UI runtime; there is no safe adapter to
-ship against the current public API. Client-side macro support remains tracked
-by [remix-run/remix#11580](https://github.com/remix-run/remix/issues/11580).
+different element model. Supporting rich messages needs a pre-lowering
+transform plus a dedicated Remix UI runtime. The post-compile browser asset
+loader supports ordinary JavaScript macros only.
 
 ## Migration From The Experimental Cookie Example
 
@@ -186,8 +224,8 @@ manually in the example controller. Move those pieces to the server-first setup:
 4. Keep the Node command order as
    `node --import remix/node-tsx --import @palamedes/remix/register server.ts`.
 
-## Tested Beta
+## Tested Remix Version
 
-The Remix examples are pinned to `remix@3.0.0-beta.5`. Keep the examples pinned
-to the exact beta that `pnpm verify:examples:smoke -- --framework remix`
+The Remix examples are pinned to `remix@3.0.0-rc.1`. Keep the examples pinned
+to the exact prerelease that `pnpm verify:examples:smoke -- --framework remix`
 validates.
