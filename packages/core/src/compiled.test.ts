@@ -33,6 +33,19 @@ describe("parser-free compiled runtime", () => {
     expect(i18n._("inbox", { count: 2 })).toBe("2 Nachrichten")
   })
 
+  it("preserves date-only ISO strings as civil dates in compiled messages", () => {
+    const due: CompiledMessage = (values, runtime) =>
+      runtime.join("Due ", runtime.date(values, "when", "medium"))
+    const losAngeles = createI18n({ locale: "en-US", timeZone: "America/Los_Angeles" })
+    const tokyo = createI18n({ locale: "en-US", timeZone: "Asia/Tokyo" })
+
+    losAngeles.load("en-US", defineCompiledCatalog({ due }))
+    tokyo.load("en-US", defineCompiledCatalog({ due }))
+
+    expect(losAngeles._("due", { when: "2026-06-12" })).toBe("Due Jun 12, 2026")
+    expect(tokyo._("due", { when: "2026-06-12" })).toBe("Due Jun 12, 2026")
+  })
+
   it("rejects hand-written string catalogs at the load boundary", () => {
     const i18n = createI18n()
 

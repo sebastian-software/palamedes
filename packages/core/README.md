@@ -64,11 +64,11 @@ output from drifting across environments.
 const i18n = createI18n({ locale: "en-US", timeZone: "Europe/Berlin" })
 ```
 
-Date objects and timestamps represent instants. Date-only ISO strings such as
-`"2026-06-12"` follow JavaScript's UTC parsing semantics before they are rendered
-in `timeZone`; use an explicit local-time representation when a calendar date
-must never shift across zones. Invalid or empty zone identifiers throw a
-`RangeError` while creating the instance.
+Date objects, timestamps, and ISO strings with a time represent instants and are
+rendered in `timeZone`. Date-only ISO strings such as `"2026-06-12"` represent
+civil calendar dates, so their year, month, and day stay the same in every
+configured zone. Invalid or empty zone identifiers throw a `RangeError` while
+creating the instance.
 
 Use `pmds audit --fail-on error` in CI for checked-in catalogs, then wire these
 hooks to observe runtime-loaded catalogs or fast-moving translation changes.

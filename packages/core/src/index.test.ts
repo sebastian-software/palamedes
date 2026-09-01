@@ -44,6 +44,15 @@ describe("createI18n", () => {
     )
   })
 
+  it("keeps date-only ISO strings on the same calendar day across time zones", () => {
+    const dateOnly = "2026-06-12"
+    const losAngeles = createI18n({ locale: "en-US", timeZone: "America/Los_Angeles" })
+    const tokyo = createI18n({ locale: "en-US", timeZone: "Asia/Tokyo" })
+
+    expect(losAngeles._("Due {when, date, medium}", { when: dateOnly })).toBe("Due Jun 12, 2026")
+    expect(tokyo._("Due {when, date, medium}", { when: dateOnly })).toBe("Due Jun 12, 2026")
+  })
+
   it("rejects invalid configured time zones before rendering", () => {
     expect(() => createI18n({ timeZone: "Mars/Olympus_Mons" })).toThrow(RangeError)
     expect(() => createI18n({ timeZone: "" })).toThrow(RangeError)

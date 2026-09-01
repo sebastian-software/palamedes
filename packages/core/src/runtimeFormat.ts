@@ -3,6 +3,7 @@ export type MessageFormat = "number" | "date" | "time"
 const numberFormatCache = new Map<string, Intl.NumberFormat>()
 const pluralRulesCache = new Map<string, Intl.PluralRules>()
 const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>()
+const DATE_ONLY_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 // Intl instances are keyed by (locale, style): a handful per app, so a small
 // bound is plenty and keeps the retained memory of these heavy objects low.
@@ -29,7 +30,12 @@ export function formatMessageArgument(
     return stringifyValue(value)
   }
 
-  return getDateTimeFormatter(locale, format, style, timeZone).format(dateValue)
+  const formatterTimeZone = isDateOnlyIsoString(value) ? "UTC" : timeZone
+  return getDateTimeFormatter(locale, format, style, formatterTimeZone).format(dateValue)
+}
+
+function isDateOnlyIsoString(value: unknown): value is string {
+  return typeof value === "string" && DATE_ONLY_ISO_PATTERN.test(value)
 }
 
 function getNumberFormatter(
