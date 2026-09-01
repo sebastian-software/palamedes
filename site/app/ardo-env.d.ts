@@ -18,3 +18,5 @@ declare module "virtual:ardo/config" {
   const config: ArdoConfig
   export default config
 }
+
+declare const __PALAMEDES_BUILD_HASH__: string

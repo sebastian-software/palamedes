@@ -14,6 +14,11 @@ export interface SiteFooterColumn {
   links: SiteLinkDefinition[]
 }
 
+export interface SiteBuildMetadata {
+  builtAt: string
+  commitHash: string
+}
+
 export interface SiteCounterpart extends SiteLinkDefinition {
   enabled: boolean
 }

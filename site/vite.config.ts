@@ -1,8 +1,29 @@
+import { execFileSync } from "node:child_process"
 import { resolve } from "node:path"
 
 import tailwindcss from "@tailwindcss/vite"
 import { ardo } from "ardo/vite"
 import { defineConfig, type Plugin } from "vite"
+
+function gitHash(): string {
+  const githubSha = process.env.GITHUB_SHA?.trim()
+  if (githubSha && /^[0-9a-f]{8,40}$/iu.test(githubSha)) {
+    return githubSha.slice(0, 8).toLowerCase()
+  }
+
+  try {
+    return execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
+      cwd: resolve(import.meta.dirname, ".."),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .trim()
+      .slice(0, 8)
+      .toLowerCase()
+  } catch {
+    return "unknown"
+  }
+}
 
 /*
  * Ardo 4.x injects per-page meta from markdown frontmatter in an
@@ -47,6 +68,9 @@ function markdownRouteMeta(): Plugin {
 }
 
 export default defineConfig({
+  define: {
+    __PALAMEDES_BUILD_HASH__: JSON.stringify(gitHash()),
+  },
   optimizeDeps: {
     // Ardo exposes these entry points lazily. Pre-bundle them together so Vite
     // does not invalidate the browser graph mid-navigation and temporarily

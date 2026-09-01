@@ -14,7 +14,7 @@ import {
   ArdoSocialLink,
 } from "ardo/ui"
 import { ButtonLink, SiteFooter, SiteUiProvider } from "@palamedes/site-ui"
-import { Link, useLocation } from "react-router"
+import { Link, useLoaderData, useLocation } from "react-router"
 import config from "virtual:ardo/config"
 
 import { OSS_SITE_CONFIG, RouterSiteLink } from "~/site-config"
@@ -110,6 +110,17 @@ function PrimaryNavigation() {
   )
 }
 
+export function loader() {
+  return {
+    build: config.buildTime
+      ? {
+          builtAt: config.buildTime,
+          commitHash: __PALAMEDES_BUILD_HASH__,
+        }
+      : null,
+  }
+}
+
 /*
  * ARDO owns the chrome: its header and footer render on every route (marketing
  * pages included), so nothing below <ArdoRoot> may add a second nav or footer.
@@ -117,6 +128,8 @@ function PrimaryNavigation() {
  * the public props used here — never from overriding ARDO internals.
  */
 export default function App() {
+  const { build } = useLoaderData<typeof loader>()
+
   return (
     <SiteUiProvider linkComponent={RouterSiteLink}>
       <ArdoRoot
@@ -172,7 +185,7 @@ export default function App() {
         </ArdoHeader>
         <ArdoSidebar>{renderSidebarSections()}</ArdoSidebar>
         <ArdoFooter>
-          <SiteFooter config={OSS_SITE_CONFIG} />
+          <SiteFooter config={OSS_SITE_CONFIG} build={build ?? undefined} />
         </ArdoFooter>
       </ArdoRoot>
     </SiteUiProvider>
