@@ -21,7 +21,7 @@
     "check:readme": "node ./scripts/check-readme-ia.mjs && pnpm test:readme",
     "test:decisions": "node --test ./scripts/check-decisions-index.test.mjs",
     "check:decisions": "node ./scripts/check-decisions-index.mjs && pnpm test:decisions",
-    "test:release-packages": "node --test ./scripts/release-packages.test.mjs ./scripts/publish-package-if-needed.test.mjs ./scripts/build-native-lib.test.mjs ./scripts/check-binary-size.test.mjs",
+    "test:release-packages": "node --test ./scripts/release-packages.test.mjs ./scripts/publish-package-if-needed.test.mjs ./scripts/build-native-lib.test.mjs ./scripts/check-binary-size.test.mjs ./scripts/published-export-contracts.test.mjs",
     "test:backend-guide": "pnpm --filter @palamedes/core --filter @palamedes/runtime build && node --test ./scripts/backend-guide-contract.test.mjs",
     "build": "pnpm -r --filter \"./packages/**\" build",
     "build:examples": "pnpm -r --filter \"./examples/**\" build",

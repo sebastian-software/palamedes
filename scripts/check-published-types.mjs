@@ -12,6 +12,7 @@ import os from "node:os"
 import path from "node:path"
 import process from "node:process"
 import ts from "typescript"
+import { assertDualExportsUseFormatSpecificTargets } from "./published-export-contracts.mjs"
 import { publicWorkspacePackages } from "./release-packages.mjs"
 
 const root = process.cwd()
@@ -127,93 +128,6 @@ function assertEveryPublishedPackageIsCovered(packages) {
   }
   if (problems.length > 0) {
     throw new Error(problems.join("\n"))
-  }
-}
-
-/*
- * A top-level `types` condition wins before TypeScript can select a nested
- * `require` condition. Keep declarations beside their runtime format so CJS
- * consumers resolve `.d.cts` even on TypeScript versions that reject requiring
- * an ESM declaration file. This is checked structurally rather than relying on
- * the workspace TypeScript version, which changed that diagnostic in 5.8.
- */
-function assertDualExportsUseFormatSpecificDeclarations(packages) {
-  const problems = []
-
-  for (const { manifest } of packages) {
-    for (const [subpath, condition] of Object.entries(manifest.exports ?? {})) {
-      visitCondition(condition, subpath, false, manifest.name, problems)
-    }
-  }
-
-  if (problems.length > 0) {
-    throw new Error(problems.join("\n"))
-  }
-}
-
-function visitCondition(condition, conditionPath, hasTypesAncestor, packageName, problems) {
-  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return
-
-  const hasTypesCondition = hasTypesAncestor || Object.hasOwn(condition, "types")
-  const hasDualRuntimeConditions =
-    Object.hasOwn(condition, "import") && Object.hasOwn(condition, "require")
-
-  if (hasDualRuntimeConditions) {
-    if (hasTypesCondition) {
-      problems.push(
-        `${packageName} ${conditionPath} has a "types" condition that masks its import and require declarations.`
-      )
-    }
-    assertFormatSpecificDeclaration(
-      condition.import,
-      "import",
-      ".d.mts",
-      packageName,
-      conditionPath,
-      problems
-    )
-    assertFormatSpecificDeclaration(
-      condition.require,
-      "require",
-      ".d.cts",
-      packageName,
-      conditionPath,
-      problems
-    )
-  }
-
-  for (const [name, nestedCondition] of Object.entries(condition)) {
-    if (name !== "types") {
-      visitCondition(
-        nestedCondition,
-        `${conditionPath}.${name}`,
-        hasTypesCondition,
-        packageName,
-        problems
-      )
-    }
-  }
-}
-
-function assertFormatSpecificDeclaration(
-  condition,
-  mode,
-  extension,
-  packageName,
-  conditionPath,
-  problems
-) {
-  if (!condition || typeof condition !== "object" || Array.isArray(condition)) {
-    problems.push(
-      `${packageName} ${conditionPath}.${mode} must nest a ${extension} declaration beside its runtime target.`
-    )
-    return
-  }
-
-  if (typeof condition.types !== "string" || !condition.types.endsWith(extension)) {
-    problems.push(
-      `${packageName} ${conditionPath}.${mode}.types must reference a ${extension} declaration.`
-    )
   }
 }
 
@@ -394,7 +308,7 @@ try {
   assertEveryPublishedPackageIsCovered(packages)
 
   const typedPackages = packages.filter(({ manifest }) => manifest.types)
-  assertDualExportsUseFormatSpecificDeclarations(typedPackages)
+  assertDualExportsUseFormatSpecificTargets(typedPackages)
   assertExportTargetsExist(typedPackages)
   assertDeclarationTargetsArePacked(typedPackages)
   assertSourceFallbackDefaultDocumentation()
