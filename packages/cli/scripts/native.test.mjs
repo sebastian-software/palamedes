@@ -4,7 +4,31 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
-import { spawnNative } from "./native.mjs"
+import { forwardTerminalInterrupt, spawnNative } from "./native.mjs"
+
+test("Windows terminal Ctrl+C relies on the shared console instead of hard-killing the child", () => {
+  const forwarded = []
+
+  const handled = forwardTerminalInterrupt("win32", (signal) => {
+    forwarded.push(signal)
+    return true
+  })
+
+  assert.equal(handled, false)
+  assert.deepEqual(forwarded, [])
+})
+
+test("Unix terminal Ctrl+C is forwarded to the isolated native process group", () => {
+  const forwarded = []
+
+  const handled = forwardTerminalInterrupt("linux", (signal) => {
+    forwarded.push(signal)
+    return true
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(forwarded, ["SIGINT"])
+})
 
 test(
   "Unix launcher signals reach the native child exactly once",
