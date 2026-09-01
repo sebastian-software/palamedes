@@ -38,6 +38,7 @@ const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(5);
 const PROTOCOL_MAX_LINE_BYTES: usize = 1024 * 1024;
 const PROTOCOL_MAX_TOTAL_BYTES: usize = 16 * 1024 * 1024;
 const PROTOCOL_MAX_EVENTS: usize = 10_000;
+const CHILD_EXIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 fn reserved_plugin_namespaces() -> BTreeSet<String> {
     command_namespace_tokens(&mut crate::cli::Cli::command())
@@ -748,19 +749,17 @@ fn invoke_binary(
             }
         }
     }
+    let mut status = None;
+    if failure.is_none() {
+        match wait_for_plugin_exit(&mut child, resolved, policy, started) {
+            Ok(exit_status) => status = Some(exit_status),
+            Err(error) => failure = Some(error),
+        }
+    }
     if failure.is_some() {
         terminate_plugin_tree(&mut child);
+        let _ = child.wait();
     }
-
-    let status = child.wait().map_err(|error| {
-        PluginFailure::new(
-            "PLUGIN_BINARY_SPAWN_FAILED",
-            format!(
-                "Could not wait for binary plugin \"{}\": {error}",
-                resolved.specifier
-            ),
-        )
-    })?;
     drop(stdout_rx);
     if reader.join().is_err() && failure.is_none() {
         failure = Some(reader_failure(resolved));
@@ -792,9 +791,42 @@ fn invoke_binary(
     }
 
     Ok(BinaryInvocation {
-        exit_code: exit_code(status),
+        exit_code: exit_code(status.expect("successful plugin invocation has an exit status")),
         events,
     })
+}
+
+fn wait_for_plugin_exit(
+    child: &mut Child,
+    resolved: &ResolvedPlugin,
+    policy: InvocationPolicy,
+    started: Instant,
+) -> Result<ExitStatus, PluginFailure> {
+    let Some(deadline) = policy.deadline else {
+        return child.wait().map_err(|error| wait_failure(resolved, error));
+    };
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| wait_failure(resolved, error))?
+        {
+            return Ok(status);
+        }
+        let Some(remaining) = deadline.checked_sub(started.elapsed()) else {
+            return Err(timeout_failure(resolved, policy));
+        };
+        thread::sleep(remaining.min(CHILD_EXIT_POLL_INTERVAL));
+    }
+}
+
+fn wait_failure(resolved: &ResolvedPlugin, error: io::Error) -> PluginFailure {
+    PluginFailure::new(
+        "PLUGIN_BINARY_SPAWN_FAILED",
+        format!(
+            "Could not wait for binary plugin \"{}\": {error}",
+            resolved.specifier
+        ),
+    )
 }
 
 fn timeout_failure(resolved: &ResolvedPlugin, policy: InvocationPolicy) -> PluginFailure {
@@ -1605,7 +1637,7 @@ struct PackagePalamedes {
 mod tests {
     use std::fs;
     use std::path::Path;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     use clap::Command;
     use serde_json::json;
@@ -1976,6 +2008,42 @@ mod tests {
         .expect_err("describe deadline enforced");
 
         assert_eq!(error.code, "PLUGIN_BINARY_TIMEOUT");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn eof_does_not_bypass_the_describe_deadline() {
+        use std::os::unix::fs::PermissionsExt;
+
+        use super::invoke_binary;
+
+        let root = temp_dir("describe-eof-timeout");
+        let script = root.join("plugin");
+        fs::write(
+            &script,
+            "#!/bin/sh\nread _request\nexec 1>&-\nwhile :; do sleep 30; done\n",
+        )
+        .expect("plugin script");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        let resolved = ResolvedPlugin {
+            specifier: "./plugin".to_owned(),
+            binary_path: script,
+        };
+        let policy = InvocationPolicy::new(Some(Duration::from_millis(500)), "describe");
+
+        let started = Instant::now();
+        let error = invoke_binary(
+            &resolved,
+            &json!({ "palamedesBinaryPluginProtocol": 1, "kind": "describe" }),
+            &root,
+            Path::new("pmds"),
+            None,
+            policy,
+        )
+        .expect_err("EOF cannot disable the deadline");
+
+        assert_eq!(error.code, "PLUGIN_BINARY_TIMEOUT");
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 
     #[cfg(unix)]
