@@ -57,7 +57,11 @@ documented kebab-case keys (or their supported snake_case aliases), while
 unknown key at the top level or in `mdx`, `lint`, a catalog entry, or catalog
 `po` options stops loading; close misspellings include a replacement hint. This
 catches errors such as `fallbck-locales` before they silently change extraction
-or runtime behavior.
+or runtime behavior. Data configs reserve `$schema` plus top-level keys prefixed
+with `x-` or `.` for editor and tooling metadata; both the native CLI and the JS
+loader ignore those values. For example, name a YAML anchor holder `x-defaults`
+instead of adding an unprefixed `defaults` key. `skipValidation` remains the JS
+tooling escape hatch for inspecting any other partially authored shape.
 
 `extract-threads` and `extract-cache` (and their `extract_threads` /
 `extract_cache` aliases) are read by the native `pmds` CLI only. They tune
