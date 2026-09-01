@@ -39,6 +39,12 @@ const PROTOCOL_MAX_LINE_BYTES: usize = 1024 * 1024;
 const PROTOCOL_MAX_TOTAL_BYTES: usize = 16 * 1024 * 1024;
 const PROTOCOL_MAX_EVENTS: usize = 10_000;
 const CHILD_EXIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+#[cfg(unix)]
+const PLUGIN_SPAWN_ATTEMPTS: usize = 6;
+#[cfg(unix)]
+const PLUGIN_SPAWN_RETRY_INTERVAL: Duration = Duration::from_millis(10);
+#[cfg(unix)]
+const TEXT_FILE_BUSY_OS_ERROR: i32 = 26;
 
 fn reserved_plugin_namespaces() -> BTreeSet<String> {
     command_namespace_tokens(&mut crate::cli::Cli::command())
@@ -605,7 +611,7 @@ fn invoke_binary(
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
     isolate_process_group(&mut command);
-    let mut child = command.spawn().map_err(|error| {
+    let mut child = spawn_binary(&mut command).map_err(|error| {
         PluginFailure::new(
             "PLUGIN_BINARY_SPAWN_FAILED",
             format!(
@@ -794,6 +800,31 @@ fn invoke_binary(
         exit_code: exit_code(status.expect("successful plugin invocation has an exit status")),
         events,
     })
+}
+
+fn spawn_binary(command: &mut Command) -> io::Result<Child> {
+    #[cfg(unix)]
+    {
+        for attempt in 1..=PLUGIN_SPAWN_ATTEMPTS {
+            match command.spawn() {
+                Err(error)
+                    if error.raw_os_error() == Some(TEXT_FILE_BUSY_OS_ERROR)
+                        && attempt < PLUGIN_SPAWN_ATTEMPTS =>
+                {
+                    // Package managers and atomic fixture publishers can leave
+                    // a freshly replaced executable transiently busy on Linux.
+                    thread::sleep(PLUGIN_SPAWN_RETRY_INTERVAL);
+                }
+                result => return result,
+            }
+        }
+        unreachable!("the final plugin spawn attempt always returns")
+    }
+
+    #[cfg(not(unix))]
+    {
+        command.spawn()
+    }
 }
 
 fn wait_for_plugin_exit(
@@ -1933,6 +1964,45 @@ mod tests {
                 .code,
             "PLUGIN_INVALID"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn retries_a_transient_text_file_busy_spawn() {
+        use super::invoke_binary;
+
+        let root = temp_dir("busy-plugin");
+        let script = root.join("plugin");
+        write_executable_fixture(
+            &script,
+            "#!/bin/sh\nread _request\n\
+             printf '{\"event\":\"result\",\"text\":\"done\",\"exitCode\":0}\\n'\n",
+        );
+        let writable = fs::OpenOptions::new()
+            .write(true)
+            .open(&script)
+            .expect("hold executable open for writing");
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(15));
+            drop(writable);
+        });
+        let resolved = ResolvedPlugin {
+            specifier: "./plugin".to_owned(),
+            binary_path: script,
+        };
+
+        let invocation = invoke_binary(
+            &resolved,
+            &json!({ "palamedesBinaryPluginProtocol": 1, "kind": "run" }),
+            &root,
+            Path::new("pmds"),
+            None,
+            InvocationPolicy::run(None),
+        )
+        .expect("transiently busy executable is retried");
+        release.join().expect("release writer");
+
+        assert_eq!(invocation.exit_code, 0);
     }
 
     #[cfg(unix)]
