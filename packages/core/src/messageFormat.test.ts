@@ -213,28 +213,17 @@ describe("formatMessagePattern", () => {
     expect(formatMessagePattern("At {when}", { when: new Date("garbage") })).toBe("At Invalid Date")
   })
 
-  it("formats date-only ISO strings as UTC instants in the configured time zone", () => {
+  it("preserves date-only ISO strings as civil dates across configured time zones", () => {
     const dateOnly = "2026-06-12"
+    const expected = `Due ${new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeZone: "UTC",
+    }).format(new Date(dateOnly))}`
 
-    expect(
-      formatMessagePattern("Due {when, date, medium}", { when: dateOnly }, "en-US", "UTC")
-    ).toBe(
-      `Due ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(
-        new Date(dateOnly)
-      )}`
-    )
-    expect(
-      formatMessagePattern(
-        "Due {when, date, medium}",
-        { when: dateOnly },
-        "en-US",
-        "America/Los_Angeles"
-      )
-    ).toBe(
-      `Due ${new Intl.DateTimeFormat("en-US", {
-        dateStyle: "medium",
-        timeZone: "America/Los_Angeles",
-      }).format(new Date(dateOnly))}`
-    )
+    for (const timeZone of ["UTC", "America/Los_Angeles", "Asia/Tokyo"]) {
+      expect(
+        formatMessagePattern("Due {when, date, medium}", { when: dateOnly }, "en-US", timeZone)
+      ).toBe(expected)
+    }
   })
 })
