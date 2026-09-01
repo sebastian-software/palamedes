@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import path from "node:path"
 import type { registerHooks } from "node:module"
 import type { ModuleLoader } from "remix/assets"
+import { SourceMapConsumer, type RawSourceMap } from "source-map-js"
 
 import { loadPalamedesConfigSync, type LoadedPalamedesConfig } from "@palamedes/config"
 import { compileCatalogModule } from "@palamedes/core-node"
@@ -82,7 +83,7 @@ const DEFAULT_EXCLUDE = /[/\\]node_modules[/\\]/
 const PO_FILE = /\.po$/
 const CONFIG_WATCH_QUERY_PARAM = "palamedes-config-watch"
 const INLINE_SOURCE_MAP_COMMENT =
-  /(?:\r?\n)?\/\/# sourceMappingURL=data:application\/json[^,\r\n]*;base64,[^\r\n]+(?:\r?\n)?$/u
+  /(?:\r?\n)?(?:\/\/# sourceMappingURL=data:application\/json[^,\r\n]*;base64,([A-Za-z0-9+/=]+)|\/\*# sourceMappingURL=data:application\/json[^,\r\n]*;base64,([A-Za-z0-9+/=]+) \*\/)(?:\r?\n)?$/u
 
 type CachedPalamedesConfig = {
   config: LoadedPalamedesConfig
@@ -166,15 +167,20 @@ function transformLoadedModule<Loaded extends { source?: unknown }>(
   options: ResolvedMacroTransformOptions
 ): Loaded {
   const filePath = fileURLToPath(url)
+  const source = stringifySource(loaded.source)
   let result: ReturnType<typeof transformPalamedesMacros>
   try {
-    result = transformPalamedesMacros(stringifySource(loaded.source), filePath, {
+    result = transformPalamedesMacros(source, filePath, {
       runtimeModule: options.runtimeModule,
       keepSourceFallbacks: options.keepSourceFallbacks,
       stripNonEssentialProps: options.stripNonEssentialProps,
     })
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
+    const detail = remapTransformDiagnostic(
+      error instanceof Error ? error.message : String(error),
+      filePath,
+      source
+    )
     throw new Error(`Failed to transform Palamedes macros in ${filePath}: ${detail}`, {
       cause: error,
     })
@@ -328,6 +334,79 @@ function stringifySource(source: unknown): string {
 
 function stripInlineSourceMap(code: string): string {
   return code.replace(INLINE_SOURCE_MAP_COMMENT, "")
+}
+
+function remapTransformDiagnostic(detail: string, filePath: string, source: string): string {
+  try {
+    const sourceMap = readInlineSourceMap(source)
+    if (!sourceMap) {
+      return detail
+    }
+
+    const consumer = new SourceMapConsumer(sourceMap as unknown as RawSourceMap)
+    const locationPattern = new RegExp(`${escapeRegExp(filePath)}:(\\d+):(\\d+)`, "gu")
+
+    return detail.replace(locationPattern, (location, lineText, columnText) => {
+      const line = Number(lineText)
+      const column = unicodeColumnToUtf16(source, line, Number(columnText))
+      const original = consumer.originalPositionFor({ line, column })
+      if (original.line == null || original.column == null || original.source == null) {
+        return location
+      }
+
+      const originalSource = consumer.sourceContentFor(original.source, true)
+      const originalColumn =
+        originalSource == null
+          ? original.column + 1
+          : utf16ColumnToUnicode(originalSource, original.line, original.column)
+      return `${original.source}:${original.line}:${originalColumn}`
+    })
+  } catch {
+    return detail
+  }
+}
+
+function readInlineSourceMap(source: string): SourceMap | null {
+  const match = INLINE_SOURCE_MAP_COMMENT.exec(source)
+  const encoded = match?.[1] ?? match?.[2]
+  if (!encoded) {
+    return null
+  }
+
+  return JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as SourceMap
+}
+
+function unicodeColumnToUtf16(source: string, line: number, oneBasedColumn: number): number {
+  const lineSource = source.split(/\r?\n/u)[line - 1] ?? ""
+  const targetColumn = Math.max(0, oneBasedColumn - 1)
+  let unicodeColumn = 0
+  let utf16Column = 0
+  for (const character of lineSource) {
+    if (unicodeColumn >= targetColumn) {
+      break
+    }
+    unicodeColumn += 1
+    utf16Column += character.length
+  }
+  return utf16Column
+}
+
+function utf16ColumnToUnicode(source: string, line: number, zeroBasedColumn: number): number {
+  const lineSource = source.split(/\r?\n/u)[line - 1] ?? ""
+  let unicodeColumn = 1
+  let utf16Column = 0
+  for (const character of lineSource) {
+    if (utf16Column >= zeroBasedColumn) {
+      break
+    }
+    unicodeColumn += 1
+    utf16Column += character.length
+  }
+  return unicodeColumn
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")
 }
 
 function appendInlineSourceMap(code: string, map: SourceMap | null): string {
