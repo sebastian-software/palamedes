@@ -14,6 +14,30 @@ function assertIncludes(file, value) {
   assert.ok(read(file).includes(value), `${file} must include ${JSON.stringify(value)}`)
 }
 
+function productionPnpmPackages(file) {
+  const installBlock = read(file).match(
+    /^## (?:1\. Install the packages|Installation)\n\n```bash\n(?<commands>[\s\S]*?)\n```/mu
+  )
+  assert.ok(installBlock?.groups?.commands, `${file} must have a canonical install block`)
+
+  const productionCommand = installBlock.groups.commands
+    .split("\n")
+    .find((line) => line.startsWith("pnpm add ") && !line.startsWith("pnpm add -D "))
+  assert.ok(productionCommand, `${file} must have a runtime install command`)
+
+  return new Set(productionCommand.slice("pnpm add ".length).trim().split(/\s+/u))
+}
+
+test("Next.js setup installs its standalone server boundary dependency", () => {
+  for (const file of ["docs/nextjs-first-run.md", "packages/next-plugin/README.md"]) {
+    assertIncludes(file, 'import "server-only"')
+    assert.ok(
+      productionPnpmPackages(file).has("server-only"),
+      `${file} must install server-only as a runtime dependency`
+    )
+  }
+})
+
 test("Next.js first run keeps its executable server path and navigation in sync", () => {
   const guide = "docs/nextjs-first-run.md"
   assert.ok(existsSync(join(root, guide)), `${guide} must exist`)
