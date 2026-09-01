@@ -6,72 +6,72 @@ import { frameworkMeta } from "~/lib/meta"
 const page: FrameworkLanding = {
   name: "Remix v3",
   path: "/frameworks/remix-v3",
-  eyebrow: "Remix v3 i18n · Server-first",
-  metaTitle: "Remix v3 i18n for server-first apps | Palamedes",
+  eyebrow: "Remix v3 i18n · Server and browser",
+  metaTitle: "Full-stack Remix v3 i18n | Palamedes",
   metaDescription:
-    "Add server-first i18n to the new Remix v3 with TypeScript macros, request-local catalogs, a Node loader integration, and four smoke-verified locale strategies.",
-  headline: "Remix v3 i18n for its new server-first stack.",
-  lede: "The new Remix v3 is not React Router Framework Mode and it is not a React framework. Palamedes integrates with its Node TypeScript loader and Fetch API request model to translate server-loaded modules with request-local PO catalogs.",
+    "Add full-stack i18n to Remix v3 with server and browser macro transforms, request-local catalogs, rich Remix UI messages, and document-safe client bootstrap.",
+  headline: "Remix v3 i18n, from the request to the browser.",
+  lede: "The new Remix v3 is not React Router Framework Mode and it is not a React framework. Palamedes composes with its Node TypeScript loader, browser asset server, Fetch request model, and Remix UI runtime so one locale reaches SSR, Frames, hydration, and interaction.",
   primary: {
-    label: "Browse the Remix v3 example",
-    href: repoHref("examples/remix-route", "tree"),
+    label: "Browse the full-stack example",
+    href: repoHref("examples/remix-cookie", "tree"),
   },
   secondary: {
-    label: "Read the current limitations",
+    label: "Read the complete setup",
     href: docsHref("api/remix"),
   },
   facts: [
     {
       label: "Integration",
-      value: "@palamedes/remix",
-      note: "A Node loader hook plus request-local server helpers.",
+      value: "Node + assets",
+      note: "Post-compile transforms for server and browser modules.",
     },
     {
       label: "Verified against",
-      value: "Remix 3 beta.5",
-      note: "The new full-stack Remix package, not React Router.",
+      value: "Remix 3.0.0-rc.1",
+      note: "Exact example pin with smoke and Chromium verification.",
     },
     {
       label: "Current scope",
-      value: "Server modules",
-      note: "TypeScript macros and PO imports on the server path.",
+      value: "Full stack",
+      note: "Server scope, browser macros, rich messages, and catalog bootstrap.",
     },
     {
       label: "Locale models",
-      value: "4 smoke proofs",
-      note: "Cookie, route, subdomain, and top-level domain.",
+      value: "4 + browser proof",
+      note: "Four smoke strategies and a focused full-stack cookie flow.",
     },
   ],
   problem: {
-    title: "Remix v3 moved the integration point from a bundler to the running server.",
-    lede: "Remix v3 intentionally executes TypeScript through its Node loader instead of relying on a traditional application build. Translation macros therefore have to compose with that loader and establish request scope before controllers render a response.",
+    title: "Remix v3 splits full-stack compilation across two post-compile loaders.",
+    lede: "Server TypeScript flows through Node while browser modules flow through the asset server. A complete integration must transform both outputs, keep request state isolated, and install the matching catalog before translated client code runs.",
     points: [
       "A transform hook must run after remix/node-tsx without allowing uncompiled macro stubs to reach runtime.",
-      "Fetch API requests need isolated locale state while several requests share one Node process.",
-      "Server-loaded modules and browser assets currently expose different extension points and cannot be presented as one finished adapter.",
+      "The asset loader must preserve Remix's TS/TSX source-map chain, import rewriting, HMR analysis, and minification.",
+      "Fetch requests, streamed Frames, SSR markup, and the browser bootstrap must agree on one request-local locale.",
     ],
   },
   approach: {
-    title: "Join the loader Remix already uses, then stay request-local.",
-    lede: "Palamedes does not add a separate Remix build. Its register hook receives the output from Remix's TypeScript loader, transforms message macros, and lets controllers resolve catalogs through a server helper.",
+    title: "Join both Remix loaders, then carry one locale through the document.",
+    lede: "Palamedes adds no separate build. It transforms the JavaScript Remix already compiled, scopes the server runtime to each request, and embeds serializable ICU strings in an inert document payload before browser modules initialize.",
     points: [
       {
         title: "A composable Node loader",
         body: "Register remix/node-tsx first and @palamedes/remix/register second. Macro-containing server modules are transformed once when Node loads them.",
       },
       {
-        title: "Fetch-native locale resolution",
-        body: "createRemixI18nServer() reads a Request, applies the chosen strategy, loads the catalog, and scopes the active runtime to the handler.",
+        title: "A post-compile asset loader",
+        body: "createPalamedesRemixAssetLoader() transforms ordinary and rich browser macros before Remix resolves imports, HMR boundaries, source maps, and minification.",
       },
       {
-        title: "No per-request transform work",
-        body: "After process startup, handlers execute ordinary runtime calls against compiled catalogs; the transform does not repeat for every response.",
+        title: "One document catalog",
+        body: "createRemixI18nServer() scopes Fetch requests and emits the selected ICU catalog; initializeRemixClientI18n() installs it before translated browser code loads.",
       },
     ],
   },
   code: {
-    label: "package.json + app/i18n.ts",
-    caption: "Loader order is explicit; locale policy stays in a typed server helper.",
+    label: "server.ts + app/public/entry.ts",
+    caption: "Wire both transforms, then initialize the browser from the server-selected catalog.",
     source: `// package.json
 {
   "scripts": {
@@ -79,43 +79,51 @@ const page: FrameworkLanding = {
   }
 }
 
-// app/i18n.ts
-import { createRemixI18nServer } from "@palamedes/remix/server"
+// server.ts
+import {
+  createPalamedesRemixAssetLoader,
+  PALEMEDES_REMIX_ASSET_PACKAGES,
+} from "@palamedes/remix"
+import { createAssetServer } from "remix/assets"
 
-export const remixI18n = createRemixI18nServer({
-  locales,
-  strategy: "route",
-  loadMessages,
-  routeParam: "locale",
+const assets = createAssetServer({
+  basePath: "/assets",
+  allowFiles: ["app/**/public/**"],
+  allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
+  scripts: { loaders: [createPalamedesRemixAssetLoader()] },
 })
 
-export function resolveLocale(request: Request) {
-  return remixI18n.resolveLocale(request)
-}`,
-    note: "The registration order is load-bearing: Remix lowers TypeScript first, then Palamedes transforms the resulting server module. The checked controller runs translated t and plural calls inside the resolved request scope.",
+// app/public/entry.ts
+import { createI18n } from "@palamedes/core"
+import { initializeRemixClientI18n } from "@palamedes/remix/client"
+
+initializeRemixClientI18n({ createI18n })
+await import("./interactive.js")`,
+    note: "Render remixI18n.renderClientBootstrap(locale) before the external entry. Rich UI source imports Trans, Plural, Select, and SelectOrdinal from @palamedes/remix/macro; the same asset loader lowers them for the browser.",
   },
   strategies: {
     matrixSlug: "remix",
-    lede: "The Remix server helper supports the same four locale decisions as the established UI adapters. These examples are local and CI smoke proofs today; the cells link source rather than implying a public interactive deployment.",
+    lede: "The same server helper supports cookie, route, subdomain, and TLD decisions. Every strategy is smoke-verified; the cookie example additionally proves Spanish SSR and hydration, browser macros and rich messages, interaction, and a full-navigation switch to German.",
   },
   proof: {
-    title: "Four server proofs, with the maturity level stated plainly.",
-    lede: "Remix v3 support is checked separately from React Router and separately from the browser-verified React/Solid matrix. The tests start each server and assert locale-specific responses and switching behavior.",
+    title: "Four server proofs and one focused full-stack browser proof.",
+    lede: "Remix v3 remains separate from React Router Framework Mode. CI starts all four locale-strategy servers and runs Chromium against the canonical cookie example with SSR, hydration, rich messages, interaction, and locale navigation.",
     facts: [
       {
-        label: "Module loading",
-        value: "Hook checked",
-        note: "TypeScript macros are transformed after remix/node-tsx.",
+        label: "Transforms",
+        value: "Server + browser",
+        note: "Ordinary and rich macros are checked after Remix compilation.",
       },
       {
-        label: "Catalog loading",
-        value: "PO checked",
-        note: "Server-loaded PO imports compile through the register hook.",
+        label: "Catalog path",
+        value: "PO → document",
+        note: "Server PO imports and inert browser bootstrap are checked.",
       },
       {
-        label: "Request state",
-        value: "Scoped",
-        note: "Locale and catalog resolve per Fetch API request.",
+        label: "Remix UI",
+        value: "Rich + Frames",
+        note: "Rich elements, streamed Frames, and direct frame requests are covered.",
       },
       {
         label: "Hosting",
@@ -125,8 +133,8 @@ export function resolveLocale(request: Request) {
     ],
   },
   boundary: {
-    title: "Server modules work today; client modules and rich JSX do not.",
-    body: "The current Remix asset pipeline does not expose the script transform hook Palamedes needs for browser-delivered modules. Remix also lowers JSX before the register hook sees it, so rich JSX messages are not supported on this path. The integration requires Node.js 24.3 or newer.",
+    title: "The browser locale is document-scoped, and public hosting is still pending.",
+    body: "Locale changes intentionally perform a full document navigation; reactive same-document catalog replacement and browser PO imports are not supported. The Node integration requires Node.js 24.3 or newer. Source, smoke checks, and the Chromium proof are public, but no live URL is claimed until the separately managed HTTPS deployment passes the same locale, hydration, Frames, interaction, and console checks.",
     link: {
       label: "Read the Remix v3 package scope",
       href: docsHref("api/remix"),
@@ -139,15 +147,15 @@ export function resolveLocale(request: Request) {
     },
     {
       q: "Does Palamedes support Remix v3 without React?",
-      a: "Yes for the current server-loaded module path. The integration transforms core t, plural, select, and selectOrdinal macros and loads PO catalogs without depending on @palamedes/react.",
+      a: "Yes. The integration uses Remix UI rather than React. It transforms ordinary core macros plus Remix-native Trans, Plural, Select, and SelectOrdinal components in server and browser modules.",
     },
     {
       q: "Can Remix v3 browser modules use Palamedes macros?",
-      a: "Not yet. Remix's current asset pipeline does not expose a script transform hook for the Palamedes adapter, so this page deliberately limits the support claim to server-loaded modules.",
+      a: "Yes. Add createPalamedesRemixAssetLoader() to scripts.loaders and allow PALEMEDES_REMIX_ASSET_PACKAGES. Initialize the document bootstrap before importing translated modules; browser PO imports remain unsupported.",
     },
     {
       q: "Is Remix v3 support production-ready?",
-      a: "Treat it as an early integration for an upstream beta. Four locale strategies are smoke-verified, but there is no public hosted demo, client-module transform, or rich JSX path yet.",
+      a: "Treat it as a preview integration for the exact tested Remix 3.0.0-rc.1 contract. Full-stack behavior is CI-verified, including Chromium, but the upstream release is still a prerelease and no public hosted Palamedes demo has been verified yet.",
     },
   ],
   related: [
@@ -156,10 +164,10 @@ export function resolveLocale(request: Request) {
     { label: "Next.js App Router i18n", href: "/frameworks/nextjs" },
   ],
   finalCta: {
-    headline: "Explore the new Remix on its own terms, including the sharp edges.",
+    headline: "Follow one Remix locale from the request through browser interaction.",
     primary: {
-      label: "Browse the route example",
-      href: repoHref("examples/remix-route", "tree"),
+      label: "Browse the cookie example",
+      href: repoHref("examples/remix-cookie", "tree"),
     },
     secondary: {
       label: "View @palamedes/remix",

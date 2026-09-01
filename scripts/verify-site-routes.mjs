@@ -115,7 +115,7 @@ const ROUTE_EXPECTATIONS = [
   },
   {
     path: "/frameworks/remix-v3",
-    h1: "Remix v3 i18n for its new server-first stack.",
+    h1: "Remix v3 i18n, from the request to the browser.",
   },
   {
     path: "/frameworks/vite",
@@ -1015,8 +1015,11 @@ async function checkProgressiveOutlineAnchors(browser) {
     }))
     .filter(({ source }) => source.includes('className="pmds-progressive-outline"'))
 
-  if (docs.length !== 22) {
-    fail(`progressive docs outline: expected 22 generated long docs, got ${docs.length}`)
+  if (docs.length !== 23) {
+    fail(`progressive docs outline: expected 23 generated long docs, got ${docs.length}`)
+  }
+  if (!docs.some(({ entry }) => entry.replaceAll("\\", "/") === "api/remix/index.md")) {
+    fail("progressive docs outline: Remix API guide is missing its generated outline")
   }
 
   const context = await browser.newContext()

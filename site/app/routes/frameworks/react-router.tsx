@@ -148,7 +148,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     },
   ],
   related: [
-    { label: "Remix v3 server-first i18n", href: "/frameworks/remix-v3" },
+    { label: "Full-stack Remix v3 i18n", href: "/frameworks/remix-v3" },
     { label: "TanStack Start i18n", href: "/frameworks/tanstack-start" },
     { label: "Vite i18n for React and Solid", href: "/frameworks/vite" },
   ],

@@ -14,7 +14,7 @@ The important design goal is a coherent i18n model from source to runtime:
 - one native core with OXC-powered transforms and extraction
 - thin host adapters for frameworks and bundlers
 
-Verified integrations currently include Next.js, Vite, TanStack Start, Solid, Waku, React Router, and server-first Remix v3.
+Verified integrations currently include Next.js, Vite, TanStack Start, Solid, Waku, React Router, and full-stack Remix v3.
 
 The framework matrix verifies that the same core works across different app
 shapes. It does not assume that one application uses every supported framework.
@@ -48,7 +48,7 @@ Recommended app-facing packages:
 - `@palamedes/solid`: Solid translation components and Solid macro entry point
 - `@palamedes/vite-plugin`: Vite integration and `.po` loading
 - `@palamedes/next-plugin`: Next.js integration
-- `@palamedes/remix`: server-first Remix v3 integration (requires Node.js `>=24.3`)
+- `@palamedes/remix`: full-stack Remix v3 integration with Node and browser asset loaders, request-local server scope, rich Remix UI messages, and document catalog bootstrap (requires Node.js `>=24.3`)
 - `@palamedes/waku`: ESM-only request-scoped i18n interceptor for Waku server actions
 - `@palamedes/tanstack`: ESM-only request-scoped i18n middleware for TanStack Start server functions
 - `@palamedes/cli`: native CLI (`pmds extract`, `pmds lint`, `pmds audit`, `pmds report`, `pmds catalog merge`, `pmds catalog merge-driver`, `pmds catalog convert`, `pmds version`); also dispatches explicitly configured binary CLI plugins
@@ -441,7 +441,7 @@ Use `@palamedes/next-plugin`. Keep Next-specific behavior in the adapter; do not
 
 ### Remix v3
 
-Use `@palamedes/remix`. The integration is server-first (register hook plus request-scoped server i18n) and requires Node.js `>=24.3`. See `/docs/api/remix.md`.
+Use `@palamedes/remix`. Register it after `remix/node-tsx` for server modules, add `createPalamedesRemixAssetLoader()` to the browser asset server, render the server-selected ICU catalog with `renderClientBootstrap()`, and call `initializeRemixClientI18n()` before importing translated browser modules. Ordinary and rich Remix UI macros are supported on server and browser paths. Locale changes intentionally reload the document; browser `.po` imports and reactive same-document catalog replacement are not supported. The integration requires Node.js `>=24.3` and is pinned to `remix@3.0.0-rc.1` in the verified examples. See `/docs/api/remix.md`.
 
 ### React Router RSC
 

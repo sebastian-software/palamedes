@@ -6,8 +6,8 @@ import { repoHref } from "./links"
  * in sync with it. URL shapes mirror examples/README.md: cookie (one host),
  * route (locale path), subdomain (locale host label), tld
  * (palamedes-i18n.{com,de,es,fr}). Cookie, route, and subdomain are hosted for
- * all five browser-verified frameworks. Remix v3 is a local/CI proof surface
- * without public hosting.
+ * all five hosted frameworks. Remix v3 has one focused browser proof and four
+ * smoke proofs, but no public hosting.
  */
 
 export type MatrixStatus = "live" | "provisioning"

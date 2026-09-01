@@ -49,8 +49,8 @@ browse the [framework](https://palamedes.dev/frameworks),
 ## Proof You Can Inspect
 
 The same core and authoring model work across Next.js, TanStack Start,
-Solid, Waku, React Router, Vite, and backend servers; server-first Remix v3
-is smoke-verified. The framework matrix is evidence that the architecture stays
+Solid, Waku, React Router, Vite, full-stack Remix v3, and backend servers. The
+framework matrix is evidence that the architecture stays
 coherent across different app shapes; using Palamedes does not assume that one
 product uses all of them.
 
@@ -62,9 +62,9 @@ The current proof:
 
 - Six framework families, each with cookie, route, subdomain, and tld locale
   strategies, plus Vite MDX: all 25 are smoke-verified on relevant PRs and
-  `main`; five UI-adapter families and Vite make 21 browser-capable examples
-  for the scheduled Playwright flow, while server-first Remix v3 remains
-  smoke-verified.
+  `main`; five UI-adapter families, Vite, and the focused Remix cookie proof
+  make 22 browser-capable examples for the scheduled Playwright flow. The
+  other three Remix locale strategies retain smoke coverage.
 - The image above is one demo in three locales: switch language and the copy,
   plural seat counts, currency, and dates all change together. The 20
   UI-adapter examples have versioned captures in
@@ -96,7 +96,7 @@ their warm runs cost what their cold runs cost. That makes this a capability
 difference rather than a race, which is exactly why it is kept out of every
 speedup number we publish.
 
-**Try it live.** Next.js, TanStack Start, SolidStart, Waku, and React Router have live cookie, route, subdomain, and TLD demos; the TLD demos cover `.com`, `.de`, `.es`, and `.fr`. Remix remains source-only and is not publicly hosted. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
+**Try it live.** Next.js, TanStack Start, SolidStart, Waku, and React Router have live cookie, route, subdomain, and TLD demos; the TLD demos cover `.com`, `.de`, `.es`, and `.fr`. The full-stack Remix proof is available as repository source and CI output but is not publicly hosted. Open [Next.js (cookie)](https://nextjs-cookie.examples.palamedes.dev) and [React Router (route)](https://react-router-route.examples.palamedes.dev/en), switch language, and watch copy, plural seat counts, currency, and dates change together. The full URL list and hosting notes live in [examples/README](examples/README.md).
 
 Under the hood, a Rust core, OXC-powered transforms, and `ferrocat` catalog
 semantics handle the careful work: parsing, extraction, updates, audits,
@@ -133,18 +133,18 @@ easier to review, and easier to carry from one framework to the next.
 ## Current Status
 
 - Recommended for new projects and teams that want cleaner i18n foundations
-- All 25 examples are smoke-verified on relevant PRs and `main`; 21
+- All 25 examples are smoke-verified on relevant PRs and `main`; 22
   browser-capable examples across Next.js, TanStack Start, Solid, Waku,
-  React Router, and Vite run Playwright weekly or manually. Server-first Remix
-  v3 is smoke-only and requires Node.js `>=24.3`
+  React Router, Vite, and the focused Remix v3 cookie flow run Playwright
+  weekly or manually. Remix requires Node.js `>=24.3`
 - Source-string-first catalogs are stable and powered by `ferrocat`, including structured audits and ICU authoring diagnostics
 - Placeholder top-level packages exist, but there is no `palamedes` or `create-palamedes` first-run entry yet; their bins link to the quickstart and exit non-zero rather than silently succeeding
 - 1.0 stability tiers and public API expectations are documented in [Stability and versioning](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md)
 
 ## What Exists Today
 
-- An example matrix across six framework families — five browser-verified,
-  Remix v3 smoke-verified
+- An example matrix across six framework families, including a focused
+  full-stack Remix v3 browser proof
 - Versioned screenshots for the 20 UI-adapter examples, generated from the same
   Playwright-based verifier used in CI
 - Reproducible benchmark commands for transform, extract, catalog update, compile steps, and end-to-end extract/update workflows
@@ -188,7 +188,7 @@ Evidence:
 - [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin) for Next.js projects
 - [`@palamedes/tanstack`](https://www.npmjs.com/package/@palamedes/tanstack) for TanStack Start projects
 - [`@palamedes/waku`](https://www.npmjs.com/package/@palamedes/waku) for Preview ESM-only Waku server actions
-- [`@palamedes/remix`](https://www.npmjs.com/package/@palamedes/remix) for Preview server-first Remix v3 projects
+- [`@palamedes/remix`](https://www.npmjs.com/package/@palamedes/remix) for Preview full-stack Remix v3 projects
 - [`@palamedes/react-router-rsc`](https://www.npmjs.com/package/@palamedes/react-router-rsc) for Preview React Router RSC request scopes
 - [`@palamedes/config`](https://www.npmjs.com/package/@palamedes/config) for JavaScript host configuration
 - [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli) for extraction workflows and CI
@@ -202,7 +202,7 @@ Evidence:
 | [`@palamedes/next-plugin`](https://www.npmjs.com/package/@palamedes/next-plugin)           | Recommended Next.js entry point        | App teams        |
 | [`@palamedes/tanstack`](https://www.npmjs.com/package/@palamedes/tanstack)                 | TanStack Start middleware              | App teams        |
 | [`@palamedes/waku`](https://www.npmjs.com/package/@palamedes/waku)                         | Preview ESM-only Waku interceptor      | App teams        |
-| [`@palamedes/remix`](https://www.npmjs.com/package/@palamedes/remix)                       | Preview server-first Remix v3 adapter  | App teams        |
+| [`@palamedes/remix`](https://www.npmjs.com/package/@palamedes/remix)                       | Preview full-stack Remix v3 adapter    | App teams        |
 | [`@palamedes/react-router-rsc`](https://www.npmjs.com/package/@palamedes/react-router-rsc) | Preview React Router RSC request scope | App teams        |
 | [`@palamedes/config`](https://www.npmjs.com/package/@palamedes/config)                     | JavaScript host configuration          | App teams        |
 | [`@palamedes/cli`](https://www.npmjs.com/package/@palamedes/cli)                           | Extraction CLI                         | App teams, CI    |

@@ -22,6 +22,22 @@ not a public demo deployment target.
 - public routing, TLS, DNS, and image rollout belong to the external demo
   infrastructure
 
+## Remix Public Demo Readiness Gate
+
+`remix-cookie` is the repository's focused full-stack browser proof, but a live
+URL remains separate deployment work. Change a Remix matrix cell from source
+only to `live` only when:
+
+- the published examples image contains the exact pinned Remix version;
+- the four-strategy smoke matrix and focused Remix Chromium job are green;
+- the final HTTPS hostname is reachable through the production proxy;
+- Spanish SSR/hydration, browser interaction, rich messages, Frames, and the
+  full-navigation German locale switch pass against that hostname;
+- the browser run reports no hydration, page, or console errors.
+
+This gate keeps repository readiness distinct from hosting availability. Do not
+publish a provisional live URL or infer readiness from container startup alone.
+
 ## Live Reference URLs
 
 These URLs describe the intended public reference shape — six frameworks, each in
@@ -91,8 +107,8 @@ How each strategy encodes the locale:
 ### Remix v3
 
 Remix v3 examples are verified through the default Remix Node loader path in CI.
-They are not public demo deployments yet while the Remix v3 beta hosting and UI
-adapter story settles.
+They are not public demo deployments yet; the separately managed hosting path
+has not passed the readiness gate above.
 
 | Strategy  | Reference source                                        |
 | --------- | ------------------------------------------------------- |

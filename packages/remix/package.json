@@ -1,9 +1,10 @@
 {
   "name": "@palamedes/remix",
   "version": "1.22.0",
-  "description": "Remix v3 integration for Palamedes macro transformation",
+  "description": "Full-stack Remix v3 i18n with server and browser macro transforms",
   "keywords": [
     "remix",
+    "browser",
     "i18n",
     "oxc",
     "internationalization",

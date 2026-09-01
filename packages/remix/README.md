@@ -82,17 +82,20 @@ is therefore never expected to hot-swap only an already running browser module.
 
 This integration is tested against `remix@3.0.0-rc.1`:
 
-| Area                                                 | Status                                                                      |
-| ---------------------------------------------------- | --------------------------------------------------------------------------- |
-| JS macros (`t`, `plural`, `select`, `selectOrdinal`) | Supported in server-loaded modules                                          |
-| `.po` catalog imports                                | Supported through the Palamedes register hook                               |
-| Request-local i18n                                   | Supported through `createRemixI18nServer()` and middleware/request helpers  |
-| Locale strategies                                    | Cookie, route, subdomain, and TLD examples are covered by smoke tests       |
-| Server-rendered Remix UI Frames                      | Supported; document and direct frame requests retain their own locale scope |
-| Rich JSX messages                                    | Supported through the Remix-native `macro` and `compiled` subpaths          |
-| Browser/client modules                               | Macros plus document bootstrap supported without browser `.po` imports      |
+| Area                   | Status                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| Server macros          | `t`, `plural`, `select`, and `selectOrdinal` through the Node register hook            |
+| Browser macros         | The same ordinary macros through `createPalamedesRemixAssetLoader()`                   |
+| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules         |
+| Client catalog         | Serializable ICU strings embedded in the inert document bootstrap; no browser `.po`    |
+| HMR and source maps    | Authored TS/TSX mappings plus Remix watch/HMR invalidation for browser source modules  |
+| Remix UI Frames        | Server-rendered document and direct frame requests retain independent request scope    |
+| Locale switching       | Cookie, route, subdomain, and TLD through intentional full-document navigation         |
+| Public hosting         | Repository example and CI browser proof are ready; a public live deployment is pending |
 
-Rich JSX messages remain outside the post-compile loader's scope.
+Reactive in-document locale replacement is intentionally not supported. A
+locale change must create a new document so SSR markup, `<html lang>`, the
+bootstrap catalog, and browser runtime always agree.
 
 ## Browser Catalog Bootstrap
 
@@ -283,9 +286,10 @@ a function of `{ locale, messages }` and defaults to a deterministic digest.
 
 ## Prerelease Tracking
 
-The examples pin Remix to the exact prerelease they are tested against. Bumps
-to newer prereleases should update the example `package.json` files together,
-then run:
+The package peer range is `remix@^3.0.0-rc.1`, while the examples pin the exact
+version they prove: currently `remix@3.0.0-rc.1`. A newer prerelease or stable
+release is called supported only after all four example manifests are updated
+together and the smoke and focused browser lanes pass:
 
 ```sh
 pnpm verify:examples:smoke -- --framework remix
@@ -294,6 +298,13 @@ pnpm verify:examples:smoke -- --framework remix
 For early warning, maintainers can run the same smoke command after temporarily
 overriding the examples to `remix@next`; failures should be treated as a
 non-blocking canary signal unless the pinned prerelease also fails.
+
+The repository example is technically ready to become a public demo when the
+published examples image contains it, the pinned smoke/browser checks are
+green, and an HTTPS deployment passes a reachability check plus locale switch,
+hydration, and browser-console verification. Only then should the framework
+matrix replace its source link with a live URL; hosting remains managed
+separately from this package.
 
 ## License
 

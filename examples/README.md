@@ -15,8 +15,9 @@ for its own host and locale strategy.
 The matrix is intended to be run locally and validated in CI — that remains the
 canonical verification path. The `Example Verification` workflow smoke-tests
 all 25 examples on relevant pull requests and `main` pushes. Its weekly run
-(and an opt-in manual dispatch) also exercises the 21 browser-capable examples
-with Playwright; the four server-first Remix v3 examples remain smoke-only.
+(and an opt-in manual dispatch) also exercises 22 browser-capable examples with
+Playwright, including the focused full-stack `remix-cookie` proof. The other
+three Remix locale-strategy examples remain smoke-only.
 Public demo URLs are documented as the live reference surface, but reachability
 depends on the hosting and DNS rows in
 [docs/demo-deployments.md](../docs/demo-deployments.md).
@@ -32,7 +33,7 @@ example needs local setup notes that do not belong in the shared matrix guide.
 
 ## What This Matrix Proves
 
-- one i18n mental model across Next.js, TanStack Start, Solid, Waku, React Router, and server-first Remix v3
+- one i18n mental model across Next.js, TanStack Start, Solid, Waku, React Router, and full-stack Remix v3
 - one runtime story with request-local server i18n plus client interaction
 - one message identity story through source-string-first `.po` workflows
 - one proof surface with browser verification, screenshots, and SSR checks
@@ -153,19 +154,21 @@ These examples prove:
 
 ## Shared Runtime Model
 
-All matrix examples use the same public Palamedes stack:
+The five established UI-adapter families use the same public Palamedes stack:
 
 - `@palamedes/core`
 - `@palamedes/react` or `@palamedes/solid`
 - `@palamedes/runtime`
 - `@palamedes/vite-plugin` or `@palamedes/next-plugin`
 
-Remix v3 support is server-first while Remix's component model and asset
-pipeline settle. The Remix examples intentionally do not visually match the
-React/Solid/etc. matrix yet because the shared `@palamedes/example-ui` package is
-React-based and Remix's UI adapter is not implemented. They prove the same
-server-side locale strategies, checked-in `.po` catalogs, and request-local i18n
-through Remix's default Node loader path.
+Remix v3 uses its own UI and asset runtime rather than the React-based shared
+`@palamedes/example-ui` package, so its examples intentionally do not visually
+match the React/Solid matrix. All four prove checked-in `.po` catalogs,
+request-local i18n, and locale navigation through Remix's default Node loader.
+`remix-cookie` additionally proves the post-compile browser asset loader,
+document catalog bootstrap, hydration, ordinary and rich Remix UI macros, and
+browser interaction through `@palamedes/remix`, `@palamedes/core`,
+`@palamedes/core-node`, and `@palamedes/runtime`.
 
 The matrix does not only prove core/runtime behavior. It also proves
 `buildLocaleSwitchItems()` from both first-party UI packages.
@@ -178,9 +181,9 @@ Every non-Remix example also renders the same booking ("Frontend Stage 2026") so
 the twenty established UI-adapter apps are visually identical regardless of
 framework. The whole visual layer is one shared stylesheet plus one shared
 content source, proving that only the markup and locale strategy differ across
-frameworks, not the design. Remix v3 currently proves the same server-side
-locale strategies with a simpler server-first UI while the Remix UI adapter is
-tracked separately:
+frameworks, not the design. Remix v3 proves the same locale strategies with a
+Remix-native UI; the focused cookie flow additionally covers the browser
+runtime:
 
 - [packages/example-ui](../packages/example-ui) — one `styles.css` and the `EVENT` content, loaded by the twenty established UI-adapter apps
 
@@ -260,11 +263,11 @@ Together they cover:
 `Example Verification` runs the smoke layer across the complete 25-example
 matrix on relevant pull requests and `main` pushes, including the deterministic
 request-scope concurrency checks for React Router, Solid, TanStack Start,
-and Waku. It runs the Playwright layer for its 21 browser-capable examples on a
+and Waku. It runs the Playwright layer for its 22 browser-capable examples on a
 weekly schedule or when a maintainer selects `run_browser` in manual dispatch.
-The four Remix v3 examples are intentionally excluded from that browser layer:
-their server-first beta adapter has no shared client-interaction contract yet,
-but all four locale strategies are covered by smoke verification.
+That set includes `remix-cookie`; the other three Remix v3 examples remain
+outside the browser layer while all four locale strategies retain smoke
+verification.
 
 For the decision model behind cookie, route, subdomain, tld, and domain handling, see:
 
