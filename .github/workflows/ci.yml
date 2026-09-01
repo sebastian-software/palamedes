@@ -167,11 +167,29 @@ jobs:
         run: pnpm check-types
 
   validate-musl-native:
-    name: validate musl native (linux x64)
-    runs-on: ubuntu-24.04
+    name: validate musl native (linux ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-musl
+            cli_package: "@palamedes/cli-linux-x64-musl"
+            cli_dir: packages/cli-linux-x64-musl
+            node_package: "@palamedes/core-node-linux-x64-musl"
+            node_dir: packages/core-node-linux-x64-musl
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-musl
+            cli_package: "@palamedes/cli-linux-arm64-musl"
+            cli_dir: packages/cli-linux-arm64-musl
+            node_package: "@palamedes/core-node-linux-arm64-musl"
+            node_dir: packages/core-node-linux-arm64-musl
     env:
       PALAMEDES_ALLOW_CROSS_NATIVE: "1"
       PALAMEDES_RUST_PROFILE: release
@@ -188,21 +206,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Build both x64 musl artifacts before a release commit can reach the
-      # publish workflow. The shared action also loads/runs them in Alpine.
+      # Build both musl artifacts for each published architecture before a
+      # release commit can reach the publish workflow. The shared action also
+      # loads/runs them in architecture-matched Alpine containers.
       - name: Verify musl native CLI package
         uses: ./.github/actions/verify-musl-native
         with:
-          package_name: "@palamedes/cli-linux-x64-musl"
-          package_dir: packages/cli-linux-x64-musl
-          rust_target: x86_64-unknown-linux-musl
+          package_name: ${{ matrix.cli_package }}
+          package_dir: ${{ matrix.cli_dir }}
+          rust_target: ${{ matrix.rust_target }}
 
       - name: Verify musl native Node package
         uses: ./.github/actions/verify-musl-native
         with:
-          package_name: "@palamedes/core-node-linux-x64-musl"
-          package_dir: packages/core-node-linux-x64-musl
-          rust_target: x86_64-unknown-linux-musl
+          package_name: ${{ matrix.node_package }}
+          package_dir: ${{ matrix.node_dir }}
+          rust_target: ${{ matrix.rust_target }}
 
   validate-rust:
     name: validate-rust (${{ matrix.os }}, Rust ${{ matrix.toolchain }})

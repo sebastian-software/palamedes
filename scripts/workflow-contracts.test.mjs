@@ -130,7 +130,7 @@ describe("workflow contracts", () => {
     )
   })
 
-  it("preflights x64 musl artifacts in CI with the release build and smoke commands", async () => {
+  it("preflights x64 and arm64 musl artifacts in CI with the release build and smoke commands", async () => {
     const [ci, publish, verifyMuslNative] = await Promise.all([
       readRepositoryFile(".github/workflows/ci.yml"),
       readRepositoryFile(".github/workflows/publish.yml"),
@@ -141,21 +141,39 @@ describe("workflow contracts", () => {
 
     expect(ci).toContain("pull_request:")
     expect(ci).toContain("- main")
-    expect(validateMuslNative).toContain("runs-on: ubuntu-24.04")
+    expect(validateMuslNative).toContain("name: validate musl native (linux ${{ matrix.arch }})")
+    expect(validateMuslNative).toContain("runs-on: ${{ matrix.runner }}")
     expect(validateMuslNative).toContain("permissions:\n      contents: read")
+    expect(validateMuslNative).toContain("fail-fast: false")
+    for (const [arch, runner, rustTarget] of [
+      ["x64", "ubuntu-24.04", "x86_64-unknown-linux-musl"],
+      ["arm64", "ubuntu-24.04-arm", "aarch64-unknown-linux-musl"],
+    ]) {
+      expect(validateMuslNative).toContain(`arch: ${arch}`)
+      expect(validateMuslNative).toContain(`runner: ${runner}`)
+      expect(validateMuslNative).toContain(`rust_target: ${rustTarget}`)
+    }
     expect(validateMuslNative).toContain('rust-cache: "false"')
     expect(validateMuslNative).toContain("run: pnpm install --frozen-lockfile")
     expect(validateMuslNative).not.toContain("publish-package-if-needed.mjs")
-    for (const packageName of [
-      "@palamedes/cli-linux-x64-musl",
-      "@palamedes/core-node-linux-x64-musl",
+    for (const [matrixField, packageName] of [
+      ["cli_package", "@palamedes/cli-linux-x64-musl"],
+      ["node_package", "@palamedes/core-node-linux-x64-musl"],
+      ["cli_package", "@palamedes/cli-linux-arm64-musl"],
+      ["node_package", "@palamedes/core-node-linux-arm64-musl"],
     ]) {
-      expect(validateMuslNative).toContain(`package_name: "${packageName}"`)
+      expect(validateMuslNative).toContain(`${matrixField}: "${packageName}"`)
+      expect(publishNative).toContain(`package_name: "${packageName}"`)
     }
     expect(validateMuslNative.indexOf("@palamedes/cli-linux-x64-musl")).toBeLessThan(
       validateMuslNative.indexOf("@palamedes/core-node-linux-x64-musl")
     )
-    expect(validateMuslNative).toContain("uses: ./.github/actions/verify-musl-native")
+    expect(validateMuslNative.indexOf("@palamedes/cli-linux-arm64-musl")).toBeLessThan(
+      validateMuslNative.indexOf("@palamedes/core-node-linux-arm64-musl")
+    )
+    expect(
+      validateMuslNative.match(/uses: \.\/\.github\/actions\/verify-musl-native/gu)
+    ).toHaveLength(2)
     expect(publishNative).toContain("uses: ./.github/actions/verify-musl-native")
     expect(verifyMuslNative).toContain('rustup target add "${{ inputs.rust_target }}"')
     expect(verifyMuslNative).toContain('pnpm --filter "${{ inputs.package_name }}" build')
