@@ -369,9 +369,49 @@ function bindResponseBodyToScope<T extends I18nInstance>(
     },
   })
 
-  return new Response(body, {
-    headers: response.headers,
-    status: response.status,
-    statusText: response.statusText,
-  })
+  return new ScopedBodyResponse(body, response)
+}
+
+type ResponseFetchMetadata = Pick<Response, "redirected" | "type" | "url">
+
+class ScopedBodyResponse extends Response {
+  readonly #fetchMetadata: ResponseFetchMetadata
+
+  public constructor(
+    body: ReadableStream,
+    response: Response,
+    fetchMetadata?: ResponseFetchMetadata
+  ) {
+    super(body, {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText,
+    })
+    this.#fetchMetadata = fetchMetadata ?? {
+      redirected: response.redirected,
+      type: response.type,
+      url: response.url,
+    }
+  }
+
+  public override get redirected(): boolean {
+    return this.#fetchMetadata.redirected
+  }
+
+  public override get type(): ResponseType {
+    return this.#fetchMetadata.type
+  }
+
+  public override get url(): string {
+    return this.#fetchMetadata.url
+  }
+
+  public override clone(): Response {
+    const response = super.clone()
+    if (!response.body) {
+      return response
+    }
+
+    return new ScopedBodyResponse(response.body, response, this.#fetchMetadata)
+  }
 }

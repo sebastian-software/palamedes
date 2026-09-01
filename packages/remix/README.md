@@ -276,7 +276,8 @@ export default createController(routes, {
 `createRemixI18nRequestScope()` remains available for lower-level integrations.
 Both APIs preserve the active i18n scope while a returned `Response.body` is
 streamed, so translated code that executes during body consumption still sees
-the same request-local i18n instance.
+the same request-local i18n instance. Fetch metadata on that response, including
+`url`, `type`, and `redirected`, is preserved while the body is wrapped.
 
 `createRemixI18nServer()` also exposes `createClientBootstrap(locale)` and
 `renderClientBootstrap(locale)`. Pass `loadClientMessages` when the server's
