@@ -108,7 +108,8 @@
     "@palamedes/core": "workspace:^",
     "@palamedes/core-node": "workspace:^",
     "@palamedes/runtime": "workspace:^",
-    "@palamedes/transform": "workspace:^"
+    "@palamedes/transform": "workspace:^",
+    "source-map-js": "^1.2.1"
   },
   "peerDependencies": {
     "remix": "^3.0.0-rc.1"

@@ -18,6 +18,7 @@ const assetServer = createAssetServer({
   },
   allowFiles: ["app/**/public/**"],
   allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: { loaders: [createPalamedesRemixAssetLoader()] },
 })
 

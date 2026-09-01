@@ -39,6 +39,7 @@ const assetServer = createAssetServer({
   basePath: "/assets",
   allowFiles: ["app/routes.ts", "app/**/public/**"],
   allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: { loaders: [createPalamedesRemixAssetLoader()] },
 })
 ```
@@ -48,6 +49,34 @@ and JavaScript. Remix then rewrites the injected `@palamedes/runtime` import to
 an asset URL. The loader does not compile `.po` imports or load Palamedes config;
 those remain server-hook responsibilities. A custom `runtimeModule` package
 must be added to `allowPackages` in place of the default package constant.
+
+### Development source maps and invalidation
+
+Enable Remix `sourceMaps` in development as shown above. The Palamedes loader
+returns a map from its generated runtime calls to Remix's compiled JavaScript;
+Remix composes that map with its own TypeScript/JSX map and any later import
+rewrites or minification. Browser stack traces therefore point to the authored
+`.ts`/`.tsx` call site. Transform errors are remapped through the same incoming
+map before Remix reports them. Without Remix source maps, the loader can only
+report positions in the compiled JavaScript it receives.
+
+Remix's asset watcher owns macro-bearing browser source files. Editing one
+invalidates the cached transformed module and re-runs the Palamedes loader; the
+normal Remix HMR rules then apply. A module below an accepted HMR boundary is
+updated in place, while a change without an accepted boundary intentionally
+causes a full browser reload. Neither case requires a server-process restart.
+The loader is stateless and safe when Remix invokes it repeatedly for the same
+module.
+
+PO catalogs and `palamedes.yaml` are intentionally not dependencies of browser
+asset modules: browser transforms contain stable message IDs and source
+fallbacks, while the active catalog comes from the document bootstrap. The
+server register hook makes imported PO files and the config file dependencies
+of the Node module graph. With `node --watch`, changing either restarts the
+server, clears the per-locale server/bootstrap caches, and requires a full
+document reload so markup and browser messages change atomically. Custom
+development runners must provide the equivalent restart. A catalog/config edit
+is therefore never expected to hot-swap only an already running browser module.
 
 ## Scope
 
