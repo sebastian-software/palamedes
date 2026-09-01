@@ -153,7 +153,9 @@ describe("workflow contracts", () => {
       expect(validateMuslNative).toContain(`runner: ${runner}`)
       expect(validateMuslNative).toContain(`rust_target: ${rustTarget}`)
     }
-    expect(validateMuslNative).toContain('rust-cache: "false"')
+    expect(validateMuslNative).toContain('rust-cache: "true"')
+    expect(validateMuslNative).toContain('cargo-cache: "true"')
+    expect(publishNative).not.toContain('cargo-cache: "true"')
     expect(validateMuslNative).toContain("run: pnpm install --frozen-lockfile")
     expect(validateMuslNative).not.toContain("publish-package-if-needed.mjs")
     for (const [matrixField, packageName] of [
@@ -177,7 +179,10 @@ describe("workflow contracts", () => {
     expect(publishNative).toContain("uses: ./.github/actions/verify-musl-native")
     expect(verifyMuslNative).toContain('rustup target add "${{ inputs.rust_target }}"')
     expect(verifyMuslNative).toContain('pnpm --filter "${{ inputs.package_name }}" build')
-    expect(verifyMuslNative).toContain("rust:alpine")
+    expect(verifyMuslNative).toContain("uses: actions/cache@v5")
+    expect(verifyMuslNative).toContain("inputs.cargo-cache == 'true'")
+    expect(verifyMuslNative).toContain("/usr/local/cargo/registry")
+    expect(verifyMuslNative).toContain("rust:1.95-alpine")
     expect(verifyMuslNative).toContain("node:24-alpine")
     expect(verifyMuslNative).toContain("node ../core-node/scripts/build-native.mjs")
     expect(verifyMuslNative).toContain("execFileSync('./bin/pmds', ['version']")
