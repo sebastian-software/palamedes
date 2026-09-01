@@ -106,6 +106,20 @@ landed in.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [1.19.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.18.1...palamedes-v1.19.0) (2026-09-01)
+
+
+### Features
+
+* **site:** show build metadata in footer ([#1041](https://github.com/sebastian-software/palamedes/issues/1041)) ([c213614](https://github.com/sebastian-software/palamedes/commit/c21361419040ef47d0f619b894a282861a93be8f))
+
+
+### Bug Fixes
+
+* **cli:** bound binary plugin protocol resources ([#1049](https://github.com/sebastian-software/palamedes/issues/1049)) ([fc83ccc](https://github.com/sebastian-software/palamedes/commit/fc83ccce552b1b16d1e41e3eb2743fe75dbf54e2))
+* **cli:** canonicalize watch mode paths ([#1050](https://github.com/sebastian-software/palamedes/issues/1050)) ([fbb768e](https://github.com/sebastian-software/palamedes/commit/fbb768e3a3e3cd5c4d65f4adad5d30188b7233ca))
+* **config:** align metadata validation across loaders ([#1048](https://github.com/sebastian-software/palamedes/issues/1048)) ([72d429c](https://github.com/sebastian-software/palamedes/commit/72d429c1e8abd3e1fb9c787c28aaf3110894c829))
+
 ## [1.18.1](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.18.0...palamedes-v1.18.1) (2026-08-28)
 
 
