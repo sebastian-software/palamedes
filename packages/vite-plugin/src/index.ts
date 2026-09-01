@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto"
 import { realpathSync } from "node:fs"
 import path from "node:path"
+import * as viteModule from "vite"
 import type { Plugin, FilterPattern } from "vite"
 import { createFilter, version as viteVersion } from "vite"
 import {
@@ -72,13 +73,17 @@ function bareMessageAsset(rendered: string, locale: string): string {
 }
 const MISSING_CONFIG_ERROR_PREFIX = "Could not find a Palamedes config."
 const VITE_MAJOR = Number.parseInt(viteVersion.split(".")[0] ?? "0", 10)
-// `moduleType` and Rollup's `moduleTypes` bridge were added with Vite's
-// Rolldown-based pipeline. Rollup-based Vite 7 ignores both, leaving React
-// MDX's generated JSX for import analysis (or the browser) to parse as .mdx.
-const VITE_SUPPORTS_REACT_MDX_MODULE_TYPE = VITE_MAJOR >= 8
+// `moduleType` and Rollup's `moduleTypes` bridge require Vite's Rolldown-based
+// pipeline. The official rolldown-vite alias exposes this on the Vite 7 line,
+// so detect the optional export instead of using only Vite's major version.
+// Reflect.get keeps the published bundle compatible with Vite versions that
+// do not provide a named `rolldownVersion` export.
+function viteSupportsReactMdxModuleType(): boolean {
+  return VITE_MAJOR >= 8 || typeof Reflect.get(viteModule, "rolldownVersion") === "string"
+}
 
 const REACT_MDX_VITE_REQUIREMENT =
-  'Palamedes React MDX compilation requires Vite 8 or newer because Vite 7\'s Rollup pipeline cannot parse generated JSX from .mdx files. Upgrade Vite, set `mdx: { framework: "solid" }` for Solid, or disable first-class MDX with `mdx: false`.'
+  'Palamedes React MDX compilation requires Vite 8 or rolldown-vite because Rollup-based Vite cannot parse generated JSX from .mdx files. Upgrade Vite, use rolldown-vite, set `mdx: { framework: "solid" }` for Solid, or disable first-class MDX with `mdx: false`.'
 
 type EnvironmentAwarePluginContext = {
   environment?: {
@@ -513,7 +518,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           ...resolveMdxOptions(cfg),
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
         }
-        if ((mdx.framework ?? "react") !== "react" || !VITE_SUPPORTS_REACT_MDX_MODULE_TYPE) {
+        if ((mdx.framework ?? "react") !== "react" || !viteSupportsReactMdxModuleType()) {
           return
         }
         return {
@@ -553,7 +558,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           ...resolveMdxOptions(cfg),
           keepSourceFallbacks: resolvedKeepSourceFallbacks,
         }
-        if ((mdx.framework ?? "react") === "react" && !VITE_SUPPORTS_REACT_MDX_MODULE_TYPE) {
+        if ((mdx.framework ?? "react") === "react" && !viteSupportsReactMdxModuleType()) {
           this.error(REACT_MDX_VITE_REQUIREMENT)
         }
         const result = analyzeMdxNative(source, cleanId, mdx)
