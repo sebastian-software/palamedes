@@ -141,8 +141,10 @@ describe("@palamedes/remix compiled rich-message runtime", () => {
     type MacroSelectOrdinalProps = Parameters<typeof MacroSelectOrdinal>[0]["props"]
 
     const trans = {
+      message: "Hello Ada",
+      context: "greeting",
+      comment: "Shown first",
       children: ["Hello ", createElement("strong", {}, "Ada")],
-      components: { 0: createElement("strong") },
     } satisfies MacroTransProps
     const plural = { value: 2, one: "one", other: "other" } satisfies MacroPluralProps
     const select = { value: "female", female: "She", other: "They" } satisfies MacroSelectProps

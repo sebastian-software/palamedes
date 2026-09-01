@@ -359,6 +359,12 @@ try {
     `import { plural, select, selectOrdinal, t } from "@palamedes/core/macro"
 import { Select as RuntimeSelect } from "@palamedes/react"
 import { Plural, Select, SelectOrdinal, Trans } from "@palamedes/react/macro"
+import {
+  Plural as SolidPlural,
+  Select as SolidSelect,
+  SelectOrdinal as SolidSelectOrdinal,
+  Trans as SolidTrans,
+} from "@palamedes/solid/macro"
 import palamedesLint, { configs as palamedesLintConfigs } from "@palamedes/eslint-plugin"
 import withPalamedes from "@palamedes/next-plugin"
 import { createWakuI18nInterceptor } from "@palamedes/waku"
@@ -382,15 +388,17 @@ select("a", { a: undefined, other: "Other" })
 select("a", { a: "A" })
 
 export const macroProps = [
-  { message: "Hello", values: { name: "Ada" }, children: "Hello" } satisfies Parameters<
-    typeof Trans
-  >[0],
-  { value: 2, one: "one", other: "other" } satisfies Parameters<typeof Plural>[0],
-  { value: 2, one: "first", other: "other" } satisfies Parameters<typeof SelectOrdinal>[0],
+  { message: "Hello", context: "greeting", comment: "Shown first", children: "Hello" } satisfies Parameters<typeof Trans>[0],
+  { value: 2, one: "one", other: "other", context: "cart", comment: "Item count" } satisfies Parameters<typeof Plural>[0],
+  { value: 2, one: "first", other: "other", context: "rank" } satisfies Parameters<typeof SelectOrdinal>[0],
+  { message: "Hello", context: "greeting", children: "Hello" } satisfies Parameters<typeof SolidTrans>[0],
+  { value: 2, one: "one", other: "other", context: "cart" } satisfies Parameters<typeof SolidPlural>[0],
+  { value: 2, one: "first", other: "other", comment: "Rank" } satisfies Parameters<typeof SolidSelectOrdinal>[0],
 ]
 
-Select({ value: "a", a: "A", other: "Other" })
+Select({ value: "a", a: "A", other: "Other", context: "navigation", comment: "Choice" })
 Select({ value: 2, two: "Two", other: "Other" })
+SolidSelect({ value: "a", a: "A", other: "Other", context: "navigation", comment: "Choice" })
 RuntimeSelect({ value: "female", female: "She", other: "They" })
 // @ts-expect-error React Select macro branches must be strings.
 Select({ value: "a", a: 1, other: "Other" })
@@ -403,8 +411,22 @@ RuntimeSelect({ value: "a", a: undefined, other: "Other" })
 
 // @ts-expect-error Choice macros require their fallback branch.
 const missingPluralFallback: Parameters<typeof Plural>[0] = { value: 2, one: "one" }
-// @ts-expect-error Trans values must retain the documented record shape.
-const invalidTransValues: Parameters<typeof Trans>[0] = { message: "Hello", values: "Ada" }
+// @ts-expect-error Authored Trans macros cannot provide explicit ids.
+const invalidTransId: Parameters<typeof Trans>[0] = { id: "hello", children: "Hello" }
+// @ts-expect-error Authored Trans macro values are derived by the transform.
+const invalidTransValues: Parameters<typeof Trans>[0] = { message: "Hello", values: { name: "Ada" } }
+// @ts-expect-error Authored Trans macro components are derived by the transform.
+const invalidTransComponents: Parameters<typeof Trans>[0] = { message: "Hello", components: {} }
+// @ts-expect-error Choice macros cannot provide explicit ids.
+const invalidPluralId: Parameters<typeof Plural>[0] = { id: "items", value: 2, other: "other" }
+// @ts-expect-error Select macros cannot provide explicit ids.
+Select({ id: "choice", value: "a", a: "A", other: "Other" })
+// @ts-expect-error Select macro messages are derived from their branches.
+Select({ message: "Choice", value: "a", a: "A", other: "Other" })
+// @ts-expect-error Solid Select macro branches must be strings.
+SolidSelect({ value: "a", a: 1, other: "Other" })
+// @ts-expect-error Solid Trans macros cannot provide transform-generated values.
+const invalidSolidTransValues: Parameters<typeof SolidTrans>[0] = { message: "Hello", values: {} }
 // @ts-expect-error t only accepts a tagged template or message descriptor.
 t("Hello")
 
