@@ -637,6 +637,9 @@ importers:
       '@palamedes/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@palamedes/core-node':
+        specifier: workspace:^
+        version: link:../../packages/core-node
       '@palamedes/remix':
         specifier: workspace:^
         version: link:../../packages/remix

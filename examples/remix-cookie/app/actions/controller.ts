@@ -1,4 +1,6 @@
 import { createController } from "remix/router"
+import { createElement } from "remix/ui"
+import { renderToString } from "remix/ui/server"
 
 import {
   getLocaleLabel,
@@ -9,6 +11,7 @@ import {
 } from "../i18n.ts"
 import { renderFrameContent, renderFrameDocument } from "../frame-page.tsx"
 import { renderHomePage } from "../page.ts"
+import { ClientProof } from "../public/interactive.tsx"
 import { routes } from "../routes.ts"
 
 export default createController(routes, {
@@ -16,9 +19,13 @@ export default createController(routes, {
     home(context) {
       return remixI18n.run(
         context,
-        ({ locale }) =>
+        async ({ locale }) =>
           new Response(
             renderHomePage({
+              clientBootstrap: remixI18n.renderClientBootstrap(locale),
+              clientProof: await renderToString(
+                createElement(ClientProof, { audience: "developer", count: 1 })
+              ),
               locale,
               localeLabel: getLocaleLabel(normalizeLocale(locale)),
               strategyLabel: "cookie",
@@ -26,6 +33,7 @@ export default createController(routes, {
             {
               headers: {
                 "content-type": "text/html; charset=utf-8",
+                vary: "Cookie, Accept-Language",
                 "x-palamedes-locale": locale,
               },
             }

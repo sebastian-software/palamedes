@@ -85,6 +85,10 @@ jobs:
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm verify:react-router-rsc
 
+      - name: Verify Remix v3 full-stack browser path
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
+        run: pnpm verify:examples:browser -- --id remix-cookie
+
       - name: Verify Next.js development catalog invalidation
         if: matrix.os == 'ubuntu-24.04' && matrix.node == 24
         run: pnpm --filter @palamedes/example-nextjs-cookie test:message-splitting:development

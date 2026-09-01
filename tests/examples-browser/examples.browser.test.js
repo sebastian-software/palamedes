@@ -170,6 +170,39 @@ async function expectTanStackServerFunctionMessages(page, locale) {
   }
 }
 
+async function expectRemixClientProof(page, locale, count) {
+  if (activeExample().id !== "remix-cookie") {
+    return
+  }
+
+  const messages =
+    locale === "de"
+      ? {
+          heading: "Palamedes ist im Browser aktiv",
+          plural: `${count} Browser-${count === 1 ? "Nachricht" : "Nachrichten"}`,
+          rich: "Öffne den Remix-Client-Leitfaden.",
+          select: "Für Entwickler gemacht",
+        }
+      : {
+          heading: "Palamedes está activo en el navegador",
+          plural: `${count} ${count === 1 ? "mensaje" : "mensajes"} del navegador`,
+          rich: "Abre la guía del cliente de Remix.",
+          select: "Creado para desarrolladores",
+        }
+
+  await expect.poll(() => page.getByTestId("client-heading").textContent()).toBe(messages.heading)
+  await expect.poll(() => page.getByTestId("client-rich-message").textContent()).toBe(messages.rich)
+  await expect
+    .poll(() => page.getByTestId("client-rich-message").locator("a").getAttribute("href"))
+    .toBe("/frames")
+  await expect
+    .poll(() => page.getByTestId("client-plural-message").textContent())
+    .toBe(messages.plural)
+  await expect
+    .poll(() => page.getByTestId("client-select-message").textContent())
+    .toBe(messages.select)
+}
+
 async function stabilizePage(page) {
   await page
     .addStyleTag({
@@ -246,7 +279,18 @@ test("matrix example browser contract", async () => {
         : example.strategy === "tld"
           ? example.tldUrl
           : `${example.baseUrl}/`
-  await page.goto(initialUrl, { waitUntil: "domcontentloaded" })
+  const initialResponse = await page.goto(initialUrl, { waitUntil: "domcontentloaded" })
+
+  if (example.id === "remix-cookie") {
+    expect(initialResponse).not.toBeNull()
+    const initialHtml = await initialResponse.text()
+    expect(initialHtml).toContain("Palamedes está activo en el navegador")
+    expect(initialHtml).toContain("Abre la ")
+    expect(initialHtml).toContain("guía del cliente de Remix")
+    expect(initialHtml).toContain('id="palamedes-i18n-bootstrap"')
+    expect(initialHtml).toContain('src="/assets/app/public/client.tsx"')
+    expect(initialHtml).not.toContain('data-testid="client-ready"')
+  }
 
   if (example.strategy === "client") {
     const mdxPage = page.getByTestId("mdx-page")
@@ -288,6 +332,11 @@ test("matrix example browser contract", async () => {
       .poll(() => page.getByTestId("client-locale-value").textContent())
       .toBe("Añadir al carrito")
   }
+  await expectRemixClientProof(page, "es", 1)
+  if (example.id === "remix-cookie") {
+    await page.getByTestId("client-increment").click()
+    await expectRemixClientProof(page, "es", 2)
+  }
   await captureScreenshot(page, example, "initial")
 
   if (example.strategy === "cookie") {
@@ -301,6 +350,15 @@ test("matrix example browser contract", async () => {
     await expect.poll(() => currentServerLocale(page)).toContain("Deutsch")
 
     await waitForClientReady(page)
+    if (example.id === "remix-cookie") {
+      await expectRemixClientProof(page, "de", 1)
+      await page.getByTestId("client-increment").click()
+      await expectRemixClientProof(page, "de", 2)
+      await expectSettledDocumentLocale(page, "de")
+      expectNoRuntimeErrors(pageErrors, hydrationErrors)
+      await captureScreenshot(page, example, "interactive")
+      return
+    }
     if (example.id === "nextjs-cookie") {
       await expect.poll(() => page.locator(".ticket .cta").textContent()).toBe("In den Warenkorb")
       await expect

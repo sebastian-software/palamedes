@@ -93,7 +93,7 @@ jobs:
         if: github.event_name == 'schedule' || inputs.run_browser
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Browser-test 21 browser-capable examples
+      - name: Browser-test 22 browser-capable examples
         if: github.event_name == 'schedule' || inputs.run_browser
         env:
           PALAMEDES_BROWSER_RETRY: ${{ github.event_name == 'schedule' && '1' || '0' }}

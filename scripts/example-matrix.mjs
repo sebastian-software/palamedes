@@ -274,7 +274,13 @@ export const EXAMPLE_MATRIX = [
         headers: { "accept-language": "de" },
         path: "/",
         htmlLang: "de",
-        substrings: ["Deutsch", "Plätze frei"],
+        substrings: [
+          "Deutsch",
+          "Plätze frei",
+          "Palamedes ist im Browser aktiv",
+          "Remix-Client-Leitfaden",
+          "1 Browser-Nachricht",
+        ],
       },
       {
         headers: { "accept-language": "de" },
@@ -732,15 +738,16 @@ export const SERVER_EXAMPLES = EXAMPLE_MATRIX.filter((example) =>
   SERVER_FRAMEWORKS.includes(example.framework)
 )
 
-// Remix v3 is deliberately server-first while its component/UI adapter settles.
-// Its four entries have smoke contracts, but not the shared browser-interaction
-// contract that the other framework families and Vite exercise.
+// The cookie example is Remix v3's focused full-stack browser proof. The other
+// three strategies retain smoke coverage until their UI variants need a client.
 export function selectBrowserExamples(filters) {
-  return selectExamples(filters).filter((example) => example.framework !== "remix")
+  return selectExamples(filters).filter(
+    (example) => example.framework !== "remix" || example.id === "remix-cookie"
+  )
 }
 
 // The checked-in screenshot set records the established UI-adapter matrix.
-// Vite has the browser contract but no capture artifact, and Remix is smoke-only.
+// Vite and the focused Remix proof have browser contracts but no capture artifact.
 export function selectScreenshotExamples(filters) {
   return selectExamples(filters).filter(
     (example) => example.framework !== "remix" && example.framework !== "vite"
