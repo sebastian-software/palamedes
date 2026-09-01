@@ -357,6 +357,34 @@ describe("loadPalamedesConfig", () => {
     expect(() => loadPalamedesConfigSync({ cwd: fixtureDir, skipValidation: true })).not.toThrow()
   })
 
+  it("accepts reserved top-level metadata in data configs", async () => {
+    const fixtureDir = await createTempDir()
+    await writeFile(
+      path.join(fixtureDir, "palamedes.yaml"),
+      `
+        $schema: https://palamedes.dev/schema.json
+        x-defaults: &defaults
+          owner: localization
+        .editor:
+          folding: true
+        locales: [en]
+        source-locale: en
+        catalogs:
+          - path: locales/{locale}
+            include: [src]
+      `
+    )
+
+    await expect(loadPalamedesConfig({ cwd: fixtureDir })).resolves.toMatchObject({
+      locales: ["en"],
+      sourceLocale: "en",
+    })
+    expect(loadPalamedesConfigSync({ cwd: fixtureDir })).toMatchObject({
+      locales: ["en"],
+      sourceLocale: "en",
+    })
+  })
+
   it("rejects unknown keys at every schema-defined level in data and JavaScript configs", async () => {
     const cases = [
       {

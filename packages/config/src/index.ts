@@ -69,6 +69,7 @@ export type PalamedesConfig = {
 }
 
 type PalamedesDataConfig = {
+  $schema?: unknown
   locales?: unknown
   "source-locale"?: unknown
   source_locale?: unknown
@@ -305,10 +306,11 @@ function rejectUnknownKeys(
   record: Record<string, unknown>,
   configPath: string,
   fieldPath: string,
-  knownKeys: readonly string[]
+  knownKeys: readonly string[],
+  allowDataMetadata = false
 ): void {
   for (const key of Object.keys(record)) {
-    if (knownKeys.includes(key)) {
+    if (knownKeys.includes(key) || (allowDataMetadata && isDataMetadataKey(key))) {
       continue
     }
 
@@ -318,6 +320,10 @@ function rejectUnknownKeys(
       `Invalid Palamedes config in ${configPath}: unknown key "${fieldPath}${key}".${suggestionMessage}`
     )
   }
+}
+
+function isDataMetadataKey(key: string): boolean {
+  return key === "$schema" || key.startsWith("x-") || key.startsWith(".")
 }
 
 function suggestKnownKey(key: string, knownKeys: readonly string[]): string | undefined {
@@ -361,7 +367,7 @@ function normalizeDataConfig(
 ): PalamedesConfig {
   if (validateDataKeys) {
     rejectCamelCaseDataKeys(config, configPath)
-    rejectUnknownKeys(config, configPath, "", DATA_CONFIG_KEYS)
+    rejectUnknownKeys(config, configPath, "", DATA_CONFIG_KEYS, true)
   }
   const fallbackLocales = getConfigValue(config, "fallback-locales", "fallback_locales")
   const pseudoLocale = getConfigValue(config, "pseudo-locale", "pseudo_locale")

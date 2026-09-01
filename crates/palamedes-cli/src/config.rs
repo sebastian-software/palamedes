@@ -221,7 +221,7 @@ pub fn load_config(cwd: &Path, explicit_path: Option<&Path>) -> Result<LoadedCon
 /// Data configs are kebab-case (with snake_case aliases). Lingui-style
 /// camelCase spellings of known keys used to be dropped silently — changing
 /// pseudo-locale exclusion, fallback chains, and origin-path style without a
-/// trace. Reject them loudly; merely unknown keys only warn.
+/// trace. Reject them loudly; reserved top-level metadata remains open.
 fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), ConfigError> {
     let Some(map) = value.as_object() else {
         return Ok(());
@@ -236,11 +236,8 @@ fn check_top_level_keys(value: &serde_json::Value, path: &Path) -> Result<(), Co
             );
         }
     }
-    for key in unknown_top_level_keys(value) {
-        eprintln!(
-            "Warning: Ignoring unknown config key \"{key}\" in {}.",
-            path.display()
-        );
+    if let Some(key) = unknown_top_level_keys(value).into_iter().next() {
+        return invalid(path, &format!("Unknown key \"{key}\"."));
     }
     Ok(())
 }
@@ -264,11 +261,12 @@ fn camel_case_key_hint(key: &str) -> Option<&'static str> {
         .map(|(_, kebab)| *kebab)
 }
 
-/// Top-level keys the loader does not deserialize, in config order.
+/// Top-level keys the loader neither deserializes nor reserves as metadata, in
+/// config order.
 ///
 /// Every key that is read anywhere — including `extract-threads` and
-/// `extract-cache` — must be listed, or documented options warn as if they were
-/// typos.
+/// `extract-cache` — must be listed, or documented options fail as if they were
+/// typos. `$schema`, `x-*`, and `.*` are intentionally ignored metadata.
 fn unknown_top_level_keys(value: &serde_json::Value) -> Vec<String> {
     const KNOWN_KEYS: &[&str] = &[
         "locales",
@@ -297,9 +295,13 @@ fn unknown_top_level_keys(value: &serde_json::Value) -> Vec<String> {
     };
 
     map.keys()
-        .filter(|key| !KNOWN_KEYS.contains(&key.as_str()))
+        .filter(|key| !KNOWN_KEYS.contains(&key.as_str()) && !is_data_metadata_key(key))
         .cloned()
         .collect()
+}
+
+fn is_data_metadata_key(key: &str) -> bool {
+    key == "$schema" || key.starts_with("x-") || key.starts_with('.')
 }
 
 impl LoadedConfig {
@@ -1198,7 +1200,7 @@ catalogs:
     }
 
     #[test]
-    fn accepts_documented_extraction_keys_without_warning() {
+    fn recognizes_documented_extraction_keys() {
         for (threads_key, cache_key) in [
             ("extract-threads", "extract-cache"),
             ("extract_threads", "extract_cache"),
@@ -1213,13 +1215,57 @@ catalogs:
 
             assert!(
                 unknown_top_level_keys(&value).is_empty(),
-                "documented keys must not warn: {:?}",
+                "documented keys must be recognized: {:?}",
                 unknown_top_level_keys(&value)
             );
         }
 
         let value = serde_json::json!({ "locales": ["en"], "mystery": 1 });
         assert_eq!(unknown_top_level_keys(&value), vec!["mystery".to_owned()]);
+    }
+
+    #[test]
+    fn accepts_reserved_top_level_metadata() {
+        let app = temp_dir("config-metadata");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+$schema: https://palamedes.dev/schema.json
+x-defaults: &defaults
+  owner: localization
+.editor:
+  folding: true
+locales: [en]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("reserved metadata must be ignored");
+        assert_eq!(config.locales, vec!["en"]);
+    }
+
+    #[test]
+    fn rejects_other_unknown_top_level_keys() {
+        let app = temp_dir("unknown-config-key");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+mystery: true
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let error = load_config(&app, None).expect_err("unknown key must be rejected");
+        assert!(error.to_string().contains("Unknown key \"mystery\""));
     }
 
     #[test]
