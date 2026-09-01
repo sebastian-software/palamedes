@@ -35,7 +35,7 @@ Use the full copy-paste setup guide:
 ## Installation
 
 ```bash
-pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plugin
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plugin server-only
 pnpm add -D @palamedes/cli @palamedes/config
 ```
 

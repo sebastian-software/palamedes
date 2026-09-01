@@ -12,7 +12,7 @@ Use Node.js `>=22.22` and an application on one of the published targets.
 ## 1. Install the packages
 
 ```bash
-pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plugin
+pnpm add @palamedes/core @palamedes/react @palamedes/runtime @palamedes/next-plugin server-only
 pnpm add -D @palamedes/cli @palamedes/config
 ```
 
