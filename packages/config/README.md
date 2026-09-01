@@ -64,8 +64,11 @@ for FCL catalogs.
   `[specifier, options]` pairs. Packages are never auto-discovered, and built-in
   CLI commands do not load them.
 - `loadPalamedesConfig()` returns `sourceReferenceRoot` and the resolved
-  `referenceScopes` boolean in addition to `configPath` and `rootDir`; pass
-  `skipValidation` only when inspecting a partially-authored config file.
+  `referenceScopes` boolean in addition to `configPath` and `rootDir`. Its
+  `configDependencies` array contains real paths for the config and every local
+  file imported by a legacy executable config. Framework integrations use this
+  list for cache invalidation and file watching. Pass `skipValidation` only when
+  inspecting a partially-authored config file.
 
 See [Catalog formats](https://github.com/sebastian-software/palamedes/blob/main/docs/catalog-formats.md)
 for the PO/FCL storage boundary.

@@ -472,6 +472,7 @@ describe("experimental graph splitting", () => {
       map: null,
     })
     const initialConfig = {
+      configDependencies: ["/repo/palamedes.yaml", "/repo/config/settings.ts"],
       configPath: "/repo/palamedes.yaml",
       rootDir: "/repo",
       locales: ["en", "de"],
@@ -480,6 +481,7 @@ describe("experimental graph splitting", () => {
       catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
     }
     const updatedConfig = {
+      configDependencies: ["/repo/palamedes.yaml", "/repo/config/settings.ts"],
       configPath: "/repo/palamedes.yaml",
       rootDir: "/repo",
       locales: ["en", "fr"],
@@ -536,9 +538,10 @@ describe("experimental graph splitting", () => {
     const beforeEdit = await load.call(context as never, `\0palamedes:messages/${key}`)
     const beforeEditCode = typeof beforeEdit === "string" ? beforeEdit : beforeEdit?.code
     expect(beforeEditCode).toContain(`virtual:palamedes-messages/${key}/de`)
+    expect(context.addWatchFile).toHaveBeenCalledWith("/repo/config/settings.ts")
     expect(mocks.loadPalamedesConfig).toHaveBeenCalledTimes(configLoadsBeforeBuildStart + 1)
 
-    watchChange.call({} as never, "/repo/palamedes.yaml", { event: "update" } as never)
+    watchChange.call({} as never, "/repo/config/settings.ts", { event: "update" } as never)
 
     const afterEdit = await load.call(context as never, `\0palamedes:messages/${key}`)
     const afterEditCode = typeof afterEdit === "string" ? afterEdit : afterEdit?.code

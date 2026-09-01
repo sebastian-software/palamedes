@@ -41,6 +41,7 @@ afterEach(() => {
 describe("createPalamedesRemixLoadHook", () => {
   beforeEach(() => {
     mocks.loadPalamedesConfigSync.mockReset().mockReturnValue({
+      configDependencies: ["/repo/palamedes.yaml", "/repo/config/settings.ts"],
       configPath: "/repo/palamedes.yaml",
       rootDir: "/repo",
       locales: ["en", "de"],
@@ -136,6 +137,7 @@ describe("createPalamedesRemixLoadHook", () => {
     })
     expect(String(loaded.source)).toBe(
       'import "file:///repo/palamedes.yaml?palamedes-config-watch="\n' +
+        'import "file:///repo/config/settings.ts?palamedes-config-watch="\n' +
         'export const messages={"greeting":"Hallo"};export default { messages };'
     )
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledWith({
@@ -163,15 +165,18 @@ describe("createPalamedesRemixLoadHook", () => {
     expect(loaded).toStrictEqual({ format: "module", shortCircuit: true, source: "" })
   })
 
-  it("reloads a cached config when its file content changes", () => {
+  it("reloads a cached config when an imported dependency changes", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "palamedes-remix-config-cache-"))
     tempDirectories.push(directory)
     const configPath = path.join(directory, "palamedes.yaml")
+    const dependencyPath = path.join(directory, "settings.ts")
     const catalogPath = path.join(directory, "de.po")
-    writeFileSync(configPath, "first")
+    writeFileSync(configPath, "unchanged config")
+    writeFileSync(dependencyPath, "first")
     mocks.loadPalamedesConfigSync.mockImplementation(() => {
-      const changed = readFileSync(configPath, "utf8") === "second"
+      const changed = readFileSync(dependencyPath, "utf8") === "second"
       return {
+        configDependencies: [configPath, dependencyPath],
         configPath,
         rootDir: directory,
         locales: changed ? ["en", "fr"] : ["en", "de"],
@@ -188,7 +193,7 @@ describe("createPalamedesRemixLoadHook", () => {
     load(catalogUrl, loadContext, vi.fn())
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledOnce()
 
-    writeFileSync(configPath, "second")
+    writeFileSync(dependencyPath, "second")
     load(catalogUrl, loadContext, vi.fn())
 
     expect(mocks.loadPalamedesConfigSync).toHaveBeenCalledTimes(2)

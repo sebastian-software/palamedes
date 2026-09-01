@@ -7,7 +7,11 @@ TypeScript config. Supported file names are `palamedes.yaml`, `palamedes.yml`,
 
 `@palamedes/config` and framework plugins load the same data-only files. They
 can still load existing `palamedes.config.ts`, `.js`, `.mjs`, and `.cjs` files
-for compatibility.
+for compatibility. Local files imported by these executable legacy configs are
+part of the config dependency graph: Vite, Next, and Remix watch and hash them,
+so editing only an imported helper reloads the resolved configuration. Package
+implementation files under `node_modules` are excluded from that project watch
+graph.
 
 ## Minimal Config
 

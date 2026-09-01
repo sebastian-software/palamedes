@@ -94,6 +94,11 @@ type PalamedesDataConfig = {
 }
 
 export type LoadedPalamedesConfig = {
+  /**
+   * Real paths whose contents contributed to this resolved configuration.
+   * Populated by the loaders; optional for compatibility with caller-created values.
+   */
+  configDependencies?: string[]
   configPath: string
   rootDir: string
   sourceReferenceRoot: string
@@ -115,13 +120,13 @@ export async function loadPalamedesConfig(
 ): Promise<LoadedPalamedesConfig> {
   const cwd = path.resolve(options.cwd ?? process.cwd())
   const configPath = await resolveConfigPath(cwd, options.configPath)
-  const config = await loadConfigFile(configPath, !options.skipValidation)
+  const loaded = await loadConfigFile(configPath, !options.skipValidation)
 
   if (!options.skipValidation) {
-    validateConfig(config, configPath)
+    validateConfig(loaded.config, configPath)
   }
 
-  return normalizeConfig(config as PalamedesConfig, configPath)
+  return normalizeConfig(loaded.config as PalamedesConfig, configPath, loaded.dependencies)
 }
 
 export function loadPalamedesConfigSync(
@@ -129,75 +134,184 @@ export function loadPalamedesConfigSync(
 ): LoadedPalamedesConfig {
   const cwd = path.resolve(options.cwd ?? process.cwd())
   const configPath = resolveConfigPathSync(cwd, options.configPath)
-  const config = loadConfigFileSync(configPath, !options.skipValidation)
+  const loaded = loadConfigFileSync(configPath, !options.skipValidation)
 
   if (!options.skipValidation) {
-    validateConfig(config, configPath)
+    validateConfig(loaded.config, configPath)
   }
 
-  return normalizeConfigSync(config as PalamedesConfig, configPath)
+  return normalizeConfigSync(loaded.config as PalamedesConfig, configPath, loaded.dependencies)
 }
 
-async function loadConfigFile(configPath: string, validateDataKeys: boolean): Promise<unknown> {
+type LoadedConfigFile = {
+  config: unknown
+  dependencies: string[]
+}
+
+async function loadConfigFile(
+  configPath: string,
+  validateDataKeys: boolean
+): Promise<LoadedConfigFile> {
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
-    return normalizeDataConfig(
-      parseYaml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
-      configPath,
-      validateDataKeys
+    return loadedDataConfig(
+      normalizeDataConfig(
+        parseYaml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
+        configPath,
+        validateDataKeys
+      ),
+      configPath
     )
   }
 
   if (configPath.endsWith(".json")) {
-    return normalizeDataConfig(
-      JSON.parse(await readFile(configPath, "utf8")) as PalamedesDataConfig,
-      configPath,
-      validateDataKeys
+    return loadedDataConfig(
+      normalizeDataConfig(
+        JSON.parse(await readFile(configPath, "utf8")) as PalamedesDataConfig,
+        configPath,
+        validateDataKeys
+      ),
+      configPath
     )
   }
 
   if (configPath.endsWith(".toml")) {
-    return normalizeDataConfig(
-      parseToml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
-      configPath,
-      validateDataKeys
+    return loadedDataConfig(
+      normalizeDataConfig(
+        parseToml(await readFile(configPath, "utf8")) as PalamedesDataConfig,
+        configPath,
+        validateDataKeys
+      ),
+      configPath
     )
   }
 
-  const jiti = createJiti(import.meta.url, {
-    interopDefault: true,
-  })
-  return unwrapModule(jiti(configPath) as unknown)
+  return loadExecutableConfig(configPath)
 }
 
-function loadConfigFileSync(configPath: string, validateDataKeys: boolean): unknown {
+function loadConfigFileSync(configPath: string, validateDataKeys: boolean): LoadedConfigFile {
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
-    return normalizeDataConfig(
-      parseYaml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
-      configPath,
-      validateDataKeys
+    return loadedDataConfig(
+      normalizeDataConfig(
+        parseYaml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
+        configPath,
+        validateDataKeys
+      ),
+      configPath
     )
   }
 
   if (configPath.endsWith(".json")) {
-    return normalizeDataConfig(
-      JSON.parse(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
-      configPath,
-      validateDataKeys
+    return loadedDataConfig(
+      normalizeDataConfig(
+        JSON.parse(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
+        configPath,
+        validateDataKeys
+      ),
+      configPath
     )
   }
 
   if (configPath.endsWith(".toml")) {
-    return normalizeDataConfig(
-      parseToml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
-      configPath,
-      validateDataKeys
+    return loadedDataConfig(
+      normalizeDataConfig(
+        parseToml(readFileSync(configPath, "utf8")) as PalamedesDataConfig,
+        configPath,
+        validateDataKeys
+      ),
+      configPath
     )
   }
 
+  return loadExecutableConfig(configPath)
+}
+
+function loadedDataConfig(config: unknown, configPath: string): LoadedConfigFile {
+  return {
+    config,
+    dependencies: [canonicalConfigDependencyPath(configPath)],
+  }
+}
+
+function loadExecutableConfig(configPath: string): LoadedConfigFile {
   const jiti = createJiti(import.meta.url, {
     interopDefault: true,
   })
-  return unwrapModule(jiti(configPath) as unknown)
+  const cachedBefore = new Set(Object.values(jiti.cache))
+  let modules = new Set<ConfigModule>()
+
+  try {
+    const config = unwrapModule(jiti(configPath) as unknown)
+    modules = collectLocalConfigModules(jiti.cache, configPath)
+    if (modules.size === 0) {
+      modules = collectNewLocalConfigModules(jiti.cache, cachedBefore)
+    }
+    const canonicalConfigPath = canonicalConfigDependencyPath(configPath)
+    const transitiveDependencies = new Set(
+      [...modules].map((module) => canonicalConfigDependencyPath(module.filename))
+    )
+    transitiveDependencies.delete(canonicalConfigPath)
+    const dependencies = [canonicalConfigPath, ...[...transitiveDependencies].sort()]
+
+    return { config, dependencies }
+  } finally {
+    if (modules.size === 0) {
+      modules = collectNewLocalConfigModules(jiti.cache, cachedBefore)
+    }
+    for (const [cacheKey, module] of Object.entries(jiti.cache)) {
+      if (modules.has(module)) {
+        delete jiti.cache[cacheKey]
+      }
+    }
+  }
+}
+
+type ConfigModule = ReturnType<typeof createJiti>["cache"][string]
+
+function collectLocalConfigModules(
+  cache: ReturnType<typeof createJiti>["cache"],
+  configPath: string
+): Set<ConfigModule> {
+  const canonicalConfigPath = canonicalConfigDependencyPath(configPath)
+  const root = Object.values(cache).find(
+    (module) => canonicalConfigDependencyPath(module.filename) === canonicalConfigPath
+  )
+  const modules = new Set<ConfigModule>()
+
+  function visit(module: ConfigModule): void {
+    if (modules.has(module) || isNodeModulesPath(module.filename)) {
+      return
+    }
+    modules.add(module)
+    module.children.forEach(visit)
+  }
+
+  if (root) {
+    visit(root)
+  }
+  return modules
+}
+
+function collectNewLocalConfigModules(
+  cache: ReturnType<typeof createJiti>["cache"],
+  cachedBefore: Set<ConfigModule>
+): Set<ConfigModule> {
+  return new Set(
+    Object.values(cache).filter(
+      (module) => !cachedBefore.has(module) && !isNodeModulesPath(module.filename)
+    )
+  )
+}
+
+function canonicalConfigDependencyPath(value: string): string {
+  try {
+    return realpathSync.native(value)
+  } catch {
+    return path.resolve(value)
+  }
+}
+
+function isNodeModulesPath(value: string): boolean {
+  return value.split(path.sep).includes("node_modules")
 }
 
 const CAMEL_CASE_DATA_KEYS: [string, string][] = [
@@ -770,10 +884,12 @@ function unwrapModule(loaded: unknown): unknown {
 
 async function normalizeConfig(
   config: PalamedesConfig,
-  configPath: string
+  configPath: string,
+  configDependencies: string[]
 ): Promise<LoadedPalamedesConfig> {
   const rootDir = path.dirname(configPath)
   return {
+    configDependencies,
     configPath,
     rootDir,
     locales: [...config.locales],
@@ -795,9 +911,14 @@ async function normalizeConfig(
   }
 }
 
-function normalizeConfigSync(config: PalamedesConfig, configPath: string): LoadedPalamedesConfig {
+function normalizeConfigSync(
+  config: PalamedesConfig,
+  configPath: string,
+  configDependencies: string[]
+): LoadedPalamedesConfig {
   const rootDir = path.dirname(configPath)
   return {
+    configDependencies,
     configPath,
     rootDir,
     locales: [...config.locales],

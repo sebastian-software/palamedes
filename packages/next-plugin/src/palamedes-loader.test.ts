@@ -33,6 +33,7 @@ beforeEach(() => {
     compiledIds: [],
   })
   loadPalamedesConfigSync.mockReturnValue({
+    configDependencies: ["/repo/palamedes.yaml", "/repo/config/settings.ts"],
     configPath: "/repo/palamedes.yaml",
     rootDir: "/repo",
     locales: ["en", "de"],
@@ -105,7 +106,7 @@ describe("palamedes-loader.cjs", () => {
     expect(output).toContain('"en": () => import("./locales/en.po?palamedes-selected=')
     expect(output).toContain('"de": () => import("./locales/de.po?palamedes-selected=')
     expect(output).toContain(".then(({ messages }) => messages)")
-    expect(dependencies).toEqual(["/repo/palamedes.yaml"])
+    expect(dependencies).toEqual(["/repo/palamedes.yaml", "/repo/config/settings.ts"])
   })
 
   it("prefers the plugin project root over a divergent loader root context", async () => {

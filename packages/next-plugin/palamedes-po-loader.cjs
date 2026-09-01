@@ -78,9 +78,10 @@ module.exports = function palamedesPoLoader() {
       result = await compileCatalogModuleAsync(artifactConfig, this.resourcePath, loaderOptions)
     }
     if (typeof this.addDependency === "function") {
-      if (cfg.configPath) {
-        this.addDependency(cfg.configPath)
-      }
+      const configDependencies = Array.isArray(cfg.configDependencies)
+        ? cfg.configDependencies
+        : [cfg.configPath]
+      configDependencies.filter(Boolean).forEach((file) => this.addDependency(file))
       result.watchFiles.forEach((file) => {
         this.addDependency(file)
       })

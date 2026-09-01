@@ -245,7 +245,7 @@ function loadCatalogModule(
   return {
     format: "module",
     shortCircuit: true,
-    source: prependConfigWatchImport(result.code, config.configPath),
+    source: prependConfigWatchImports(result.code, config),
   }
 }
 
@@ -268,7 +268,7 @@ function getPalamedesConfigForCatalog(
 
 function isCurrentConfig(cached: CachedPalamedesConfig): boolean {
   try {
-    return digestConfig(cached.config.configPath) === cached.digest
+    return digestConfig(cached.config) === cached.digest
   } catch {
     return false
   }
@@ -280,24 +280,38 @@ function cacheConfig(
   config: LoadedPalamedesConfig
 ): void {
   try {
-    configCache.set(cacheKey, { config, digest: digestConfig(config.configPath) })
+    configCache.set(cacheKey, { config, digest: digestConfig(config) })
   } catch {
     // Tests and virtual configs may not have a readable config file.
   }
 }
 
-function digestConfig(configPath: string): string {
-  return createHash("sha256").update(readFileSync(configPath)).digest("hex")
+function configDependencies(config: LoadedPalamedesConfig): string[] {
+  return Array.isArray(config.configDependencies) ? config.configDependencies : [config.configPath]
+}
+
+function digestConfig(config: LoadedPalamedesConfig): string {
+  const digest = createHash("sha256")
+  for (const dependency of [...configDependencies(config)].sort()) {
+    digest.update(dependency)
+    digest.update("\0")
+    digest.update(readFileSync(dependency))
+    digest.update("\0")
+  }
+  return digest.digest("hex")
 }
 
 function isConfigWatchUrl(url: string): boolean {
   return url.startsWith("file:") && new URL(url).searchParams.has(CONFIG_WATCH_QUERY_PARAM)
 }
 
-function prependConfigWatchImport(code: string, configPath: string): string {
-  const configUrl = pathToFileURL(configPath)
-  configUrl.searchParams.set(CONFIG_WATCH_QUERY_PARAM, "")
-  return `import ${JSON.stringify(configUrl.href)}\n${code}`
+function prependConfigWatchImports(code: string, config: LoadedPalamedesConfig): string {
+  const imports = configDependencies(config).map((dependency) => {
+    const configUrl = pathToFileURL(dependency)
+    configUrl.searchParams.set(CONFIG_WATCH_QUERY_PARAM, "")
+    return `import ${JSON.stringify(configUrl.href)}`
+  })
+  return `${imports.join("\n")}\n${code}`
 }
 
 function shouldTransformUrl(url: string, options: ResolvedMacroTransformOptions): boolean {
