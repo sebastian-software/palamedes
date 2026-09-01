@@ -54,6 +54,12 @@ Options:
 | `--no-cache`          | Ignore and do not write the extraction cache in `.palamedes/`. Use for a cold run; the cache is on by default.                                               |
 | `-v, --verbose`       | Print verbose extraction details.                                                                                                                            |
 
+Watch mode resolves project and include-directory symlinks to the filesystem
+targets observed by the native watcher while continuing to apply include and
+exclude patterns in their configured path space. A project reached through a
+symlink and an included directory that is itself a symlink therefore receive
+the same extraction updates as their one-shot equivalents.
+
 `--check` runs the normal source discovery, extraction, catalog projection,
 obsolete-entry policy, metadata generation, and PO/FCL serialization in memory.
 It compares the exact resulting bytes with each configured catalog. Catalog

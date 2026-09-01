@@ -1,6 +1,7 @@
 //! `pmds extract --watch`: one long-lived process that keeps a warm cache and
 //! re-extracts on relevant file changes.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -31,10 +32,20 @@ const WATCH_DEBOUNCE_MAX: Duration = Duration::from_secs(2);
 /// every filesystem event does not pay glob compilation again.
 struct WatchMatchers {
     sets: Vec<(GlobSet, GlobSet)>,
+    /// notify backends may report the resolved target of a watched symlink.
+    /// Translate those event paths back to the spelling used to build the
+    /// catalog globs. More specific targets are evaluated first for a symlink
+    /// nested below a symlinked project root.
+    aliases: Vec<(PathBuf, PathBuf)>,
 }
 
 impl WatchMatchers {
+    #[cfg(test)]
     fn build(config: &LoadedConfig) -> Self {
+        Self::build_with_aliases(config, WatchPaths::build(config).aliases)
+    }
+
+    fn build_with_aliases(config: &LoadedConfig, aliases: Vec<(PathBuf, PathBuf)>) -> Self {
         let sets = config
             .catalogs
             .iter()
@@ -63,13 +74,24 @@ impl WatchMatchers {
                 }
             })
             .collect();
-        Self { sets }
+        Self { sets, aliases }
     }
 
     fn matches(&self, path: &Path) -> bool {
         if is_catalog_storage_path(path) {
             return false;
         }
+        if self.matches_configured_path(path) {
+            return true;
+        }
+        self.aliases.iter().any(|(target, configured)| {
+            path.strip_prefix(target)
+                .ok()
+                .is_some_and(|suffix| self.matches_configured_path(&configured.join(suffix)))
+        })
+    }
+
+    fn matches_configured_path(&self, path: &Path) -> bool {
         self.sets
             .iter()
             .any(|(include, exclude)| include.is_match(path) && !exclude.is_match(path))
@@ -89,19 +111,60 @@ fn is_catalog_storage_path(path: &Path) -> bool {
         .any(|format| format.extension() == extension)
 }
 
-/// Roots the watcher must observe: the config root plus every include root
-/// that lies outside it (includes may point above or beside root_dir).
-fn watch_roots(config: &LoadedConfig) -> Vec<PathBuf> {
+/// Every configured directory which can anchor a source glob. Keeping the
+/// configured spelling alongside the resolved target lets event matching map
+/// canonical backend paths back onto the catalog's original glob space.
+fn configured_watch_roots(config: &LoadedConfig) -> Vec<PathBuf> {
     let mut roots = vec![config.root_dir.clone()];
     for catalog in &config.catalogs {
         let patterns = normalized_include_patterns(catalog, config);
         for root in walk_roots_for_patterns(&patterns, &config.root_dir) {
-            if !root.starts_with(&config.root_dir) && !roots.contains(&root) {
+            if !roots.contains(&root) {
                 roots.push(root);
             }
         }
     }
     roots
+}
+
+fn canonical_watch_path(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+struct WatchPaths {
+    roots: Vec<PathBuf>,
+    config: PathBuf,
+    aliases: Vec<(PathBuf, PathBuf)>,
+}
+
+impl WatchPaths {
+    /// Resolve every watched path once per config generation. The canonical
+    /// roots are registered with notify, while aliases retain the configured
+    /// spelling needed by catalog globs.
+    fn build(config: &LoadedConfig) -> Self {
+        let mut configured = configured_watch_roots(config).into_iter();
+        let configured_root = configured.next().unwrap_or_else(|| config.root_dir.clone());
+        let root = canonical_watch_path(&configured_root);
+        let mut roots = vec![root.clone()];
+        let mut aliases = vec![(root.clone(), configured_root)];
+        for configured in configured {
+            let target = canonical_watch_path(&configured);
+            if !target.starts_with(&root) && !roots.contains(&target) {
+                roots.push(target.clone());
+            }
+            aliases.push((target, configured));
+        }
+
+        aliases.sort_by(|(left, _), (right, _)| {
+            right.components().count().cmp(&left.components().count())
+        });
+        aliases.dedup();
+        Self {
+            roots,
+            config: canonical_watch_path(&config.config_path),
+            aliases,
+        }
+    }
 }
 
 pub(super) fn run_watch_mode(
@@ -121,15 +184,17 @@ pub(super) fn run_watch_mode(
 
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
-    let mut watched_roots = watch_roots(&config);
+    let initial_watch_paths = WatchPaths::build(&config);
+    let mut watched_roots = initial_watch_paths.roots;
     for root in &watched_roots {
         watcher.watch(root, RecursiveMode::Recursive)?;
     }
     // The config file itself is a dependency: locale/fallback/pseudo edits
     // must take effect without restarting the watcher.
-    watcher.watch(&config.config_path, RecursiveMode::NonRecursive)?;
+    let mut watched_config_path = initial_watch_paths.config;
+    watcher.watch(&watched_config_path, RecursiveMode::NonRecursive)?;
 
-    let mut matchers = WatchMatchers::build(&config);
+    let mut matchers = WatchMatchers::build_with_aliases(&config, initial_watch_paths.aliases);
 
     loop {
         let event = match rx.recv() {
@@ -138,7 +203,8 @@ pub(super) fn run_watch_mode(
             Err(_) => return Ok(()),
         };
 
-        let mut config_changed = touches_config(&event.paths, &config);
+        let mut config_changed =
+            touches_config(&event.paths, &config.config_path, &watched_config_path);
         let mut relevant = config_changed || event.paths.iter().any(|path| matchers.matches(path));
 
         // Debounce: editors and generators emit event bursts; keep draining
@@ -154,7 +220,8 @@ pub(super) fn run_watch_mode(
 
             match rx.recv_timeout(WATCH_DEBOUNCE.min(remaining)) {
                 Ok(Ok(event)) => {
-                    config_changed = config_changed || touches_config(&event.paths, &config);
+                    config_changed = config_changed
+                        || touches_config(&event.paths, &config.config_path, &watched_config_path);
                     relevant = relevant
                         || config_changed
                         || event.paths.iter().any(|path| matchers.matches(path));
@@ -177,7 +244,21 @@ pub(super) fn run_watch_mode(
             ) {
                 Ok(()) => {
                     eprintln!("Config changed; reloaded {}", config.config_path.display());
-                    let next_roots = watch_roots(&config);
+                    let next_watch_paths = WatchPaths::build(&config);
+                    let next_config_path = next_watch_paths.config;
+                    if next_config_path != watched_config_path {
+                        let _ = watcher.unwatch(&watched_config_path);
+                        if let Err(error) =
+                            watcher.watch(&next_config_path, RecursiveMode::NonRecursive)
+                        {
+                            eprintln!(
+                                "Warning: Could not watch config {}: {error}. Changes to it will only be noticed through a watched parent directory.",
+                                next_config_path.display()
+                            );
+                        }
+                        watched_config_path = next_config_path;
+                    }
+                    let next_roots = next_watch_paths.roots;
                     for stale in watched_roots
                         .iter()
                         .filter(|root| !next_roots.contains(root))
@@ -208,7 +289,7 @@ pub(super) fn run_watch_mode(
                         &mut cache,
                         &mut cache_warnings,
                     );
-                    matchers = WatchMatchers::build(&config);
+                    matchers = WatchMatchers::build_with_aliases(&config, next_watch_paths.aliases);
                 }
                 Err(error) => {
                     eprintln!(
@@ -240,8 +321,10 @@ fn reload_config_for_watch(
     Ok(())
 }
 
-fn touches_config(paths: &[PathBuf], config: &LoadedConfig) -> bool {
-    paths.iter().any(|path| path == &config.config_path)
+fn touches_config(paths: &[PathBuf], configured: &Path, canonical: &Path) -> bool {
+    paths
+        .iter()
+        .any(|path| path == configured || path == canonical)
 }
 
 /// Watch mode must survive every extraction failure — including fatal
@@ -270,7 +353,9 @@ mod tests {
 
     use palamedes::ExtractCache;
 
-    use super::{reload_config_for_watch, run_watch_extraction, WatchMatchers};
+    use super::{
+        reload_config_for_watch, run_watch_extraction, touches_config, WatchMatchers, WatchPaths,
+    };
     use crate::commands::extract::cache::{
         load_extract_cache, persist_extract_cache_for_watch, rebuild_extract_cache_for_reload,
         CachePersistenceWarnings,
@@ -292,6 +377,74 @@ mod tests {
             cache,
             &mut CachePersistenceWarnings::default(),
         )
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_events_match_a_project_loaded_through_a_symlink() {
+        let real_app = temp_dir("watch-canonical-project-real");
+        fs::create_dir_all(real_app.join("app")).expect("create app");
+        write_config(&real_app, None);
+        let source_path = real_app.join("app/page.tsx");
+        fs::write(&source_path, "export const message = 1;\n").expect("write source");
+
+        let linked_app = real_app.with_extension("linked");
+        std::os::unix::fs::symlink(&real_app, &linked_app).expect("link project");
+        let config = load_config(&linked_app, Some(&linked_app.join("palamedes.yaml")))
+            .expect("load config through project link");
+        let matchers = WatchMatchers::build(&config);
+
+        let canonical_source = fs::canonicalize(&source_path).expect("canonical source");
+        let canonical_config =
+            fs::canonicalize(real_app.join("palamedes.yaml")).expect("canonical config");
+        assert!(WatchPaths::build(&config)
+            .roots
+            .contains(&fs::canonicalize(&real_app).expect("canonical project root")));
+        assert!(matchers.matches(&canonical_source));
+        assert!(touches_config(
+            std::slice::from_ref(&canonical_config),
+            &config.config_path,
+            &canonical_config,
+        ));
+
+        fs::remove_file(linked_app).expect("remove project link");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn watches_and_matches_the_target_of_a_symlinked_include_root() {
+        let app = temp_dir("watch-symlinked-include-app");
+        let sources = temp_dir("watch-symlinked-include-sources");
+        fs::write(sources.join("page.tsx"), "export const message = 1;\n").expect("write source");
+        fs::create_dir(sources.join("generated")).expect("create excluded directory");
+        fs::write(
+            sources.join("generated/build.ts"),
+            "export const generated = 1;\n",
+        )
+        .expect("write excluded source");
+        std::os::unix::fs::symlink(&sources, app.join("linked")).expect("link sources");
+        let config_path = app.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [linked]
+    exclude: [linked/generated/**]
+"#,
+        )
+        .expect("write config");
+        let config = load_config(&app, Some(&config_path)).expect("load config");
+
+        let canonical_sources = fs::canonicalize(&sources).expect("canonical sources");
+        assert!(WatchPaths::build(&config)
+            .roots
+            .contains(&canonical_sources));
+        assert!(WatchMatchers::build(&config).matches(&canonical_sources.join("page.tsx")));
+        assert!(
+            !WatchMatchers::build(&config).matches(&canonical_sources.join("generated/build.ts"))
+        );
     }
 
     #[test]
