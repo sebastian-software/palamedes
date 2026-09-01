@@ -111,7 +111,6 @@ landed in.
 
 ### Features
 
-* **remix:** bootstrap client catalogs from documents ([1ee589a](https://github.com/sebastian-software/palamedes/commit/1ee589a4f7a02a954d71405b4c41d1da02402fc5))
 * **remix:** bootstrap client catalogs from documents ([68100e8](https://github.com/sebastian-software/palamedes/commit/68100e8d7321ff05c320178158e4b70b6c285ab9))
 
 ## [1.21.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v1.20.0...palamedes-v1.21.0) (2026-09-01)
