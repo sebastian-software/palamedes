@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/tanstack",
-  "version": "1.22.3",
+  "version": "1.22.4",
   "description": "TanStack Start request-scoped i18n middleware for Palamedes",
   "keywords": [
     "tanstack-start",
