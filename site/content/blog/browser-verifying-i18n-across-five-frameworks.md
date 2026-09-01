@@ -54,8 +54,9 @@ Those 20 UI-adapter examples have two versioned screenshots each:
 The useful detail is that the screenshots are not hand-picked marketing
 images. They come from the same Playwright-based verification flow that checks
 those UI-adapter examples weekly and on manual dispatch. The browser lane also
-checks the Vite MDX app; the four server-first Remix v3 examples remain
-smoke-only and have no browser capture.
+checks the Vite MDX app and the focused full-stack Remix cookie proof; neither
+has a browser capture. The other three Remix locale strategies remain
+smoke-only.
 
 That changes the value of the asset. The matrix is evidence that the product
 thesis is being exercised.

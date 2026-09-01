@@ -46,7 +46,7 @@ may change faster than Stable surfaces.
 | `@palamedes/vite-plugin` and `@palamedes/next-plugin` | Stable   | Plugin options and `.po` loading behavior are public integration APIs.                                                        |
 | `@palamedes/waku`                                     | Preview  | ESM-only Waku handler interceptor and request resolver contract; Waku currently exposes the required APIs as unstable.        |
 | `@palamedes/tanstack`                                 | Stable   | TanStack Start server-function middleware and its request resolver contract are public integration APIs.                      |
-| `@palamedes/remix`                                    | Preview  | Server-first Remix v3 adapter; its Node `>=24.3.0` floor reflects the supported Remix runtime.                                |
+| `@palamedes/remix`                                    | Preview  | Full-stack Remix v3 adapter; its Node `>=24.3.0` floor and prerelease status reflect the supported Remix runtime.             |
 | `@palamedes/react-router-rsc`                         | Preview  | Opt-in React Router RSC Framework Mode request scope; the upstream RSC contract remains experimental.                         |
 | `@palamedes/config`                                   | Stable   | Config file names, `defineConfig`, and the config schema are public.                                                          |
 | `@palamedes/cli`                                      | Stable   | Documented commands and flags are public. New commands may appear in minors.                                                  |

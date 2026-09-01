@@ -1,11 +1,11 @@
 # Example Screenshots
 
 These screenshots are generated from the Playwright-based browser verifier that
-checks 21 browser-capable examples weekly and on manual dispatch. The 20
-UI-adapter examples represented here have versioned captures; Vite MDX has no
-capture artifact. All 25 examples receive smoke verification on relevant pull
-requests and `main` pushes. They are versioned verification artifacts, not
-manually curated mockups.
+checks 22 browser-capable examples weekly and on manual dispatch. The 20
+UI-adapter examples represented here have versioned captures; Vite MDX and the
+focused Remix cookie browser proof have no capture artifact. All 25 examples
+receive smoke verification on relevant pull requests and `main` pushes. They
+are versioned verification artifacts, not manually curated mockups.
 
 Refresh them with:
 
@@ -29,128 +29,128 @@ verification flow, **not** a hydration glitch or a discarded server render:
 
 ### Cookie strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                  | Interactive                                                      |
+| -------------------------------------------------------- | ---------------------------------------------------------------- |
 | ![Next.js cookie – initial](./nextjs-cookie-initial.png) | ![Next.js cookie – interactive](./nextjs-cookie-interactive.png) |
 
 ### Route strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                | Interactive                                                    |
+| ------------------------------------------------------ | -------------------------------------------------------------- |
 | ![Next.js route – initial](./nextjs-route-initial.png) | ![Next.js route – interactive](./nextjs-route-interactive.png) |
 
 ### Subdomain strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                        | Interactive                                                            |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | ![Next.js subdomain – initial](./nextjs-subdomain-initial.png) | ![Next.js subdomain – interactive](./nextjs-subdomain-interactive.png) |
 
 ### TLD strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                            | Interactive                                                |
+| -------------------------------------------------- | ---------------------------------------------------------- |
 | ![Next.js tld – initial](./nextjs-tld-initial.png) | ![Next.js tld – interactive](./nextjs-tld-interactive.png) |
 
 ## TanStack Start
 
 ### Cookie strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                     | Interactive                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
 | ![TanStack cookie – initial](./tanstack-cookie-initial.png) | ![TanStack cookie – interactive](./tanstack-cookie-interactive.png) |
 
 ### Route strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                   | Interactive                                                       |
+| --------------------------------------------------------- | ----------------------------------------------------------------- |
 | ![TanStack route – initial](./tanstack-route-initial.png) | ![TanStack route – interactive](./tanstack-route-interactive.png) |
 
 ### Subdomain strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                           | Interactive                                                               |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | ![TanStack subdomain – initial](./tanstack-subdomain-initial.png) | ![TanStack subdomain – interactive](./tanstack-subdomain-interactive.png) |
 
 ### TLD strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                               | Interactive                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------- |
 | ![TanStack tld – initial](./tanstack-tld-initial.png) | ![TanStack tld – interactive](./tanstack-tld-interactive.png) |
 
 ## Solid
 
 ### Cookie strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                               | Interactive                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------- |
 | ![Solid cookie – initial](./solid-cookie-initial.png) | ![Solid cookie – interactive](./solid-cookie-interactive.png) |
 
 ### Route strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                             | Interactive                                                 |
+| --------------------------------------------------- | ----------------------------------------------------------- |
 | ![Solid route – initial](./solid-route-initial.png) | ![Solid route – interactive](./solid-route-interactive.png) |
 
 ### Subdomain strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                     | Interactive                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
 | ![Solid subdomain – initial](./solid-subdomain-initial.png) | ![Solid subdomain – interactive](./solid-subdomain-interactive.png) |
 
 ### TLD strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                         | Interactive                                             |
+| ----------------------------------------------- | ------------------------------------------------------- |
 | ![Solid tld – initial](./solid-tld-initial.png) | ![Solid tld – interactive](./solid-tld-interactive.png) |
 
 ## Waku
 
 ### Cookie strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                             | Interactive                                                 |
+| --------------------------------------------------- | ----------------------------------------------------------- |
 | ![Waku cookie – initial](./waku-cookie-initial.png) | ![Waku cookie – interactive](./waku-cookie-interactive.png) |
 
 ### Route strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                           | Interactive                                               |
+| ------------------------------------------------- | --------------------------------------------------------- |
 | ![Waku route – initial](./waku-route-initial.png) | ![Waku route – interactive](./waku-route-interactive.png) |
 
 ### Subdomain strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                   | Interactive                                                       |
+| --------------------------------------------------------- | ----------------------------------------------------------------- |
 | ![Waku subdomain – initial](./waku-subdomain-initial.png) | ![Waku subdomain – interactive](./waku-subdomain-interactive.png) |
 
 ### TLD strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                       | Interactive                                           |
+| --------------------------------------------- | ----------------------------------------------------- |
 | ![Waku tld – initial](./waku-tld-initial.png) | ![Waku tld – interactive](./waku-tld-interactive.png) |
 
 ## React Router
 
 ### Cookie strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                             | Interactive                                                                 |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | ![React Router cookie – initial](./react-router-cookie-initial.png) | ![React Router cookie – interactive](./react-router-cookie-interactive.png) |
 
 ### Route strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                           | Interactive                                                               |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | ![React Router route – initial](./react-router-route-initial.png) | ![React Router route – interactive](./react-router-route-interactive.png) |
 
 ### Subdomain strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                                   | Interactive                                                                       |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | ![React Router subdomain – initial](./react-router-subdomain-initial.png) | ![React Router subdomain – interactive](./react-router-subdomain-interactive.png) |
 
 ### TLD strategy
 
-| Initial | Interactive |
-| --- | --- |
+| Initial                                                       | Interactive                                                           |
+| ------------------------------------------------------------- | --------------------------------------------------------------------- |
 | ![React Router tld – initial](./react-router-tld-initial.png) | ![React Router tld – interactive](./react-router-tld-interactive.png) |

@@ -3,6 +3,10 @@
 `@palamedes/remix` integrates Palamedes with Remix v3's Node loader and browser
 asset pipelines.
 
+```sh
+pnpm add @palamedes/core @palamedes/core-node @palamedes/remix @palamedes/runtime remix
+```
+
 Install `@palamedes/core` as a direct runtime dependency: generated catalog
 modules import `defineCompiledCatalog()` from its `compiled` entrypoint.
 
@@ -32,6 +36,32 @@ short-circuits TS/TSX loading before the Palamedes hook can transform macros.
 - `REMIX_I18N_BOOTSTRAP_ID`
 - `createRemixI18nRequestScope(resolveI18n)`
 - `remixI18nContext`
+
+## Complete Setup Sequence
+
+The checked [Remix cookie example](../../examples/remix-cookie) is the canonical
+full-stack reference. Its setup has six ordered parts:
+
+1. Start Node with
+   `node --import remix/node-tsx --import @palamedes/remix/register server.ts`.
+2. Add `createPalamedesRemixAssetLoader()` to the asset server's
+   `scripts.loaders`, allow `PALEMEDES_REMIX_ASSET_PACKAGES`, and enable Remix
+   source maps in development.
+3. Create the request-local server with `createRemixI18nServer()`, loading the
+   executable server catalog and serializable client ICU strings for the same
+   locale.
+4. Render the document and any Remix UI Frame endpoints inside
+   `remixI18n.run()` or its middleware.
+5. Insert `renderClientBootstrap(locale)` before the external browser entry;
+   initialize with `initializeRemixClientI18n({ createI18n })` before importing
+   translated browser modules.
+6. Import ordinary macros from `@palamedes/core/macro` and rich Remix UI macros
+   from `@palamedes/remix/macro` in both server and browser source.
+
+Locale controls must perform a full document navigation. This is a deliberate
+part of the contract, not a missing client API: the next request resolves one
+locale and emits matching SSR markup, document language, bootstrap catalog,
+and browser runtime.
 
 ## Register Options
 
@@ -99,6 +129,7 @@ export const assetServer = createAssetServer({
   basePath: "/assets",
   allowFiles: ["app/routes.ts", "app/**/public/**"],
   allowPackages: ["remix", ...PALEMEDES_REMIX_ASSET_PACKAGES],
+  sourceMaps: process.env.NODE_ENV === "development" ? "external" : undefined,
   scripts: {
     loaders: [createPalamedesRemixAssetLoader()],
   },
@@ -122,6 +153,20 @@ The browser loader only transforms script source. It does not claim `.po`
 imports or load `palamedes.yaml`; server catalog compilation remains the job of
 `@palamedes/remix/register`. Use the document bootstrap below to deliver the
 selected catalog without a browser `.po` import.
+
+With source maps enabled, Remix composes the Palamedes transform map with its
+TS/JSX compilation map, later import rewrites, and production minification.
+Browser traces and transform diagnostics therefore resolve to authored
+TypeScript/TSX positions. Remix's watcher invalidates edited macro-bearing
+browser modules and applies its normal HMR policy: accepted boundaries update
+in place and other changes reload the document, without restarting the server.
+
+PO and config files are not browser-asset dependencies because transformed
+modules contain message identities rather than active catalogs. Under
+`node --watch`, the server graph watches imported PO files and the injected
+config dependency; either edit restarts the process, clears catalog/bootstrap
+caches, and requires a full document reload. Custom development runners must
+provide the equivalent restart.
 
 ## Server Request Scope
 
@@ -232,26 +277,24 @@ pages) and invalidate the document when `catalogVersion` changes. Server and
 client catalogs are cached per locale for the life of the server object;
 restart development watch processes after catalog/config changes.
 
-## Current Scope
+## Support Matrix
 
-The Remix v3 support path covers:
+| Area                   | Support contract                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| Server macros          | Ordinary macros transformed after `remix/node-tsx`                                        |
+| Browser macros         | Ordinary macros transformed by the post-compile asset loader                              |
+| Rich Remix UI messages | `Trans`, `Plural`, `Select`, and `SelectOrdinal` in server and browser modules            |
+| Request scope          | Fetch requests and streamed responses through `createRemixI18nServer()`                   |
+| Client catalog         | Inert document bootstrap with serializable ICU strings; browser `.po` imports unsupported |
+| HMR and source maps    | Source edits invalidate through Remix; composed authored TS/TSX maps and diagnostics      |
+| Remix UI Frames        | Document render and direct frame reload retain their own request-local locale             |
+| Locale strategies      | Cookie, route, subdomain, TLD, and `Accept-Language`; switching reloads the document      |
+| Public hosting         | Source example and CI proof available; public deployment not yet verified                 |
 
-- JS macros in server-loaded modules: `t`, `plural`, `select`, and
-  `selectOrdinal`
-- request-local i18n activation for Fetch `Request` handlers
-- cookie, route, subdomain, TLD, and `Accept-Language` locale negotiation
-- `.po` catalog imports through `@palamedes/remix/register`
-- module-scope server and client catalog caching before activation
-- ordinary JS macros in browser assets through
-  `createPalamedesRemixAssetLoader()`
-- rich Remix UI messages through `@palamedes/remix/macro`, with parser-free
-  output from `@palamedes/remix/compiled`
-- document-scoped browser catalog delivery and initialization through
-  `@palamedes/remix/client`, without browser `.po` imports
-
-The browser transform compiles macro call sites and imports either the
-framework-neutral runtime getter or the Remix-native compiled component. The
-document bootstrap installs their shared active runtime before rendering.
+Reactive same-document locale replacement, browser `.po` loading, and an Edge
+or Worker server runtime are non-goals for the current Node integration. The
+browser transform compiles call sites to the same active runtime installed by
+the document bootstrap.
 
 ## Runtime Cost
 
@@ -295,7 +338,7 @@ diagnostic instead of being left as live macro calls.
 ## Migration From The Experimental Cookie Example
 
 The earlier Remix cookie example kept demo catalogs inline and wired i18n
-manually in the example controller. Move those pieces to the server-first setup:
+manually in the example controller. Move those pieces to the full-stack setup:
 
 1. Add `palamedes.yaml` and checked-in `.po` catalog files.
 2. Import catalog `messages` from `.po` files and load them through
@@ -304,9 +347,30 @@ manually in the example controller. Move those pieces to the server-first setup:
    or `remixI18n.middleware()`.
 4. Keep the Node command order as
    `node --import remix/node-tsx --import @palamedes/remix/register server.ts`.
+5. Install `createPalamedesRemixAssetLoader()` in the asset server, render the
+   inert client bootstrap, and initialize it before translated browser modules.
 
 ## Tested Remix Version
 
-The Remix examples are pinned to `remix@3.0.0-rc.1`. Keep the examples pinned
-to the exact prerelease that `pnpm verify:examples:smoke -- --framework remix`
-validates.
+The published peer range is `remix@^3.0.0-rc.1`; the examples are pinned to the
+exact proven version, currently `remix@3.0.0-rc.1`. A newer prerelease or stable
+release becomes supported only after all four example manifests move together
+and both `pnpm verify:examples:smoke -- --framework remix` and
+`pnpm verify:examples:browser -- --id remix-cookie` pass. `remix@next` may be
+run as a non-blocking canary but does not expand the supported range by itself.
+
+## Public Demo Readiness
+
+The repository example and automated browser contract are ready for hosting,
+but hosting is managed separately. Add a live-demo URL only after all of these
+conditions are true:
+
+- the published examples image contains the pinned Remix example;
+- the smoke matrix and focused Remix Chromium check are green;
+- the deployment is reachable over its final HTTPS hostname;
+- locale navigation produces matching SSR, `<html lang>`, and bootstrap data;
+- hydration, interaction, Frames, and browser-console checks pass against that
+  deployment.
+
+Until then, public pages link the repository example and label hosting as
+pending instead of presenting an unverified URL.

@@ -49,11 +49,13 @@ export function assertExampleMatrix(matrix) {
   assert.equal(viteExamples.length, 1, "Vite must be the one client-only proof entry")
   assert.equal(viteExamples[0].id, VITE_EXAMPLE.id, "Vite must retain its canonical example id")
 
-  const browserExamples = matrix.filter((example) => example.framework !== "remix")
+  const browserExamples = matrix.filter(
+    (example) => example.framework !== "remix" || example.id === "remix-cookie"
+  )
   assert.equal(
     browserExamples.length,
-    21,
-    "the browser layer must cover five full families plus Vite"
+    22,
+    "the browser layer must cover five full families, Vite, and Remix cookie"
   )
   assert.equal(
     browserExamples.filter((example) => example.framework === VITE_EXAMPLE.framework).length,

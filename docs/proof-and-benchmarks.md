@@ -11,7 +11,7 @@ uses all of them. The goal is confidence, not hype.
 
 This repo can credibly prove five things:
 
-- all 25 examples receive smoke verification on relevant pull requests and `main` pushes; 21 browser-capable examples (Next.js, TanStack Start, Solid, Waku, React Router, and Vite) receive Playwright verification weekly and on manual dispatch, while Remix v3 remains smoke-only
+- all 25 examples receive smoke verification on relevant pull requests and `main` pushes; 22 browser-capable examples (Next.js, TanStack Start, Solid, Waku, React Router, Vite, and the focused Remix cookie flow) receive Playwright verification weekly and on manual dispatch
 - the runtime model stays centered on `getI18n()`
 - the message identity model stays centered on `message + context`
 - transform, extract, source analysis, catalog update, and catalog compile steps are measured locally and reproducibly
@@ -25,7 +25,7 @@ evidence easy to inspect.
 | Topic                 | Current state                                                                                         |
 | --------------------- | ----------------------------------------------------------------------------------------------------- |
 | Recommended use cases | New projects, i18n cleanup, teams already comfortable with Lingui-style authoring                     |
-| Supported frameworks  | See verification cadence above; Remix v3 smoke-only                                                   |
+| Supported frameworks  | See verification cadence above; Remix v3 has four smoke proofs plus one full-stack browser proof      |
 | Runtime model         | `@palamedes/runtime` with `getI18n()`                                                                 |
 | Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in                             |
 | Native core           | Rust + `napi-rs`                                                                                      |

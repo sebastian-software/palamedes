@@ -54,8 +54,8 @@ const PANELS: FwPanel[] = [
     name: "Remix v3",
     slug: "remix",
     matrixSlug: "remix",
-    sourcePath: "examples/remix-route",
-    body: "The new server-first Remix stack — not React Router Framework Mode and not React. It is currently a local and CI smoke-proof surface with explicit server-only boundaries.",
+    sourcePath: "examples/remix-cookie",
+    body: "The new Remix stack — not React Router Framework Mode and not React. Node and browser asset loaders cover ordinary and rich Remix UI macros; the cookie example proves SSR, hydration, interaction, and full-document locale navigation.",
   },
   {
     name: "Vite",

@@ -84,12 +84,17 @@ Current framework note:
 ## Remix v3
 
 The `remix-cookie`, `remix-route`, `remix-subdomain`, and `remix-tld` examples
-verify the same four locale strategies through Remix's server-first controller
+verify the same four locale strategies through Remix's controller
 API. Route examples include the fixed `lvh.me` host map; the tld example
 includes French alongside English, German, and Spanish. All non-cookie
 strategies submit a normal locale-choice form before navigating to their
 canonical URL, so an explicit choice is retained for later mismatch hints
 without introducing client-side locale switching.
+
+`remix-cookie` is also the focused full-stack proof. Its Chromium contract
+checks Spanish SSR and hydration, the browser asset transform, ordinary and
+rich Remix UI macros, interaction, Frames, and a full-navigation switch to
+German without hydration or console errors.
 
 ## React Router
 

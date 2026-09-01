@@ -101,7 +101,7 @@ export function FrameworkMatrix({ scan = false }: { scan?: boolean }) {
       </div>
       <p className="mono-nums mt-3 text-[11px] text-gray-spec">
         <span className="text-accent">●</span> public demo · ◌ public host pending · ✓ verified in
-        CI — Remix v3 is currently a local/CI proof surface.
+        CI — Remix v3 has a focused browser proof; public hosting is pending.
       </p>
     </div>
   )
