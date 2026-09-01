@@ -86,6 +86,15 @@ describe("locale controls", () => {
     expect(controls.serializeChoice("de")).toContain("locale-choice=de")
   })
 
+  it("preserves cookie-safe equals signs in custom locale identifiers", () => {
+    const custom = defineLocaleControls({
+      locales: ["en", "experiment=v2"] as const,
+      defaultLocale: "en",
+      labels: { "experiment=v2": "Experiment" },
+    })
+    expect(custom.readChoice("locale-choice=experiment=v2")).toBe("experiment=v2")
+  })
+
   it("supports custom cookie names", () => {
     const custom = defineLocaleControls({
       locales: ["en", "de"] as const,
@@ -165,6 +174,114 @@ describe("locale controls", () => {
     const items = buildLocaleSwitchItems({ currentLocale: "en", locales: ["en", "de"] as const })
     expect(items).toHaveLength(2)
     expect(items[0]?.active).toBe(true)
+  })
+})
+
+describe("locale controls configuration", () => {
+  it("rejects an empty or duplicate locale set", () => {
+    expect(() => defineLocaleControls({ locales: [], defaultLocale: "en" } as never)).toThrowError(
+      "defineLocaleControls: locales must contain at least one locale."
+    )
+    expect(() => defineLocaleControls({ locales: ["en", "en"], defaultLocale: "en" })).toThrowError(
+      'defineLocaleControls: locales contains duplicate locale "en".'
+    )
+  })
+
+  it("requires the default locale to be supported", () => {
+    expect(() =>
+      defineLocaleControls({ locales: ["en", "de"], defaultLocale: "fr" } as never)
+    ).toThrowError("defineLocaleControls: defaultLocale must be included in locales.")
+  })
+
+  it("rejects unsafe cookie names and locale cookie values", () => {
+    expect(() =>
+      defineLocaleControls({
+        locales: ["en"],
+        defaultLocale: "en",
+        cookies: { choice: "bad; Path" },
+      })
+    ).toThrowError("defineLocaleControls: cookies.choice must be a valid cookie name.")
+    expect(() =>
+      defineLocaleControls({ locales: ["en; Path=/"], defaultLocale: "en; Path=/" })
+    ).toThrowError("defineLocaleControls: locales[0] must be a non-empty, cookie-safe string.")
+  })
+
+  it("allows only HTTP URL schemes", () => {
+    expect(() =>
+      defineLocaleControls({ locales: ["en"], defaultLocale: "en", protocol: "javascript" })
+    ).toThrowError('defineLocaleControls: protocol must be "http" or "https".')
+    expect(
+      defineLocaleControls({ locales: ["en"], defaultLocale: "en", protocol: "https:" })
+        .defaultLocale
+    ).toBe("en")
+  })
+
+  it("validates configured hosts and TLD labels", () => {
+    expect(() =>
+      defineLocaleControls({
+        locales: ["en", "de"],
+        defaultLocale: "en",
+        hosts: { locales: { de: "https://de.example.test" } },
+      })
+    ).toThrowError(
+      "defineLocaleControls: hosts.locales.de must be a DNS hostname with an optional port."
+    )
+    expect(() =>
+      defineLocaleControls({
+        locales: ["en", "de"],
+        defaultLocale: "en",
+        hosts: { mode: "tld", defaultTld: "-com" },
+      })
+    ).toThrowError("defineLocaleControls: hosts.defaultTld must be a valid DNS label.")
+    expect(() =>
+      defineLocaleControls({
+        locales: ["en", "de"],
+        defaultLocale: "en",
+        hosts: { mode: "tld", tld: { "not.valid": "de" } },
+      })
+    ).toThrowError('defineLocaleControls: hosts.tld key "not.valid" must be a valid DNS label.')
+  })
+
+  it("keeps custom route locale identifiers that are not used as host labels", () => {
+    const custom = defineLocaleControls({
+      locales: ["en_US"] as const,
+      defaultLocale: "en_US",
+      labels: { en_US: "Custom English" },
+    })
+    expect(custom.replaceLocaleInPath("/docs", "en_US")).toBe("/en_US/docs")
+
+    expect(() =>
+      defineLocaleControls({
+        locales: ["en_US"] as const,
+        defaultLocale: "en_US",
+        labels: { en_US: "Custom English" },
+        hosts: { mode: "subdomain" },
+      })
+    ).toThrowError(
+      'defineLocaleControls: locale "en_US" must be a valid DNS label for hosts.mode "subdomain".'
+    )
+  })
+
+  it("keeps the validated configuration isolated from later caller mutations", () => {
+    const config = {
+      locales: ["en", "de"],
+      defaultLocale: "en",
+      protocol: "https",
+      hosts: { mode: "subdomain" as const },
+    }
+    const isolated = defineLocaleControls(config)
+
+    config.protocol = "javascript"
+    config.locales.push("bad; Path=/")
+
+    expect(
+      isolated.canonicalUrl({
+        locale: "de",
+        pathname: "/",
+        requestHost: "en.example.test",
+      })
+    ).toBe("https://de.example.test/")
+    expect(isolated.locales).toStrictEqual(["en", "de"])
   })
 })
 
