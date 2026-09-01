@@ -47,8 +47,12 @@ export async function spawnNative(args, options = {}) {
     }
     const onAbort = () => forwardSignal(options.signal?.reason?.signal ?? "SIGTERM")
     // Forward direct and terminal signals to the isolated native process group
-    // so killing the launcher never orphans native subprocesses.
-    const forwardInterrupt = () => forwardSignal("SIGINT")
+    // so killing the launcher never orphans native subprocesses. On Windows,
+    // the launcher and native child share a console, so CTRL_C_EVENT already
+    // reaches both. Keep the listener alive while the native child shuts down,
+    // but do not turn that cooperative interrupt into child.kill("SIGINT"),
+    // which libuv implements as a hard TerminateProcess.
+    const forwardInterrupt = () => forwardTerminalInterrupt(process.platform, forwardSignal)
     const forwardTerminate = () => forwardSignal("SIGTERM")
     // A terminal hangup reaches the npm launcher but not its detached native
     // process group. Keep the launcher alive until the native process has
@@ -87,6 +91,11 @@ export async function spawnNative(args, options = {}) {
     process.once("exit", onParentExit)
     if (options.signal?.aborted) onAbort()
   })
+}
+
+export function forwardTerminalInterrupt(platform, forwardSignal) {
+  if (platform === "win32") return false
+  return forwardSignal("SIGINT")
 }
 
 function signalExitCode(signal) {
