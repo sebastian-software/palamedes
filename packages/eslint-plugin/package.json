@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/eslint-plugin",
-  "version": "1.22.5",
+  "version": "1.22.6",
   "description": "ESLint and Oxlint adapter for native Palamedes source diagnostics",
   "keywords": [
     "palamedes",

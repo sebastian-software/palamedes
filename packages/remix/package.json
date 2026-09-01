@@ -1,6 +1,6 @@
 {
   "name": "@palamedes/remix",
-  "version": "1.22.5",
+  "version": "1.22.6",
   "description": "Full-stack Remix v3 i18n with server and browser macro transforms",
   "keywords": [
     "remix",
