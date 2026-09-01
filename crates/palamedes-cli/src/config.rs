@@ -731,6 +731,28 @@ catalogs:
     }
 
     #[test]
+    fn loads_kebab_case_mdx_source_fallbacks() {
+        let app = temp_dir("mdx-source-fallbacks");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+mdx:
+  keep-source-fallbacks: true
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("load config");
+
+        assert!(config.mdx.keep_source_fallbacks);
+    }
+
+    #[test]
     fn disables_reference_scopes_from_yaml_config() {
         let app = temp_dir("reference-scopes");
         fs::write(
