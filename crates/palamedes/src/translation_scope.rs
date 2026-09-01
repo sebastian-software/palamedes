@@ -8,19 +8,22 @@ use crate::error::{PalamedesError, PalamedesResult};
 const EAGER_JS_MACROS: [&str; 4] = ["t", "plural", "select", "selectOrdinal"];
 const EAGER_JSX_MACROS: [&str; 3] = ["Plural", "Select", "SelectOrdinal"];
 
-pub(crate) fn validate_translation_macro_scopes<'a, F>(
+pub(crate) fn validate_translation_macro_scopes<'a, F, G>(
     program: &Program<'a>,
     filename: &str,
     source: &str,
     imported_macro_name: F,
+    is_lowered_jsx_helper: G,
 ) -> PalamedesResult<()>
 where
     F: Fn(&str, (u32, u32)) -> Option<String>,
+    G: Fn(&str, (u32, u32)) -> bool,
 {
     let mut validator = TranslationScopeValidator {
         filename,
         source,
         imported_macro_name: &imported_macro_name,
+        is_lowered_jsx_helper: &is_lowered_jsx_helper,
         function_depth: 0,
         error: None,
     };
@@ -32,17 +35,19 @@ where
     }
 }
 
-struct TranslationScopeValidator<'a, F> {
+struct TranslationScopeValidator<'a, F, G> {
     filename: &'a str,
     source: &'a str,
     imported_macro_name: &'a F,
+    is_lowered_jsx_helper: &'a G,
     function_depth: usize,
     error: Option<PalamedesError>,
 }
 
-impl<F> TranslationScopeValidator<'_, F>
+impl<F, G> TranslationScopeValidator<'_, F, G>
 where
     F: Fn(&str, (u32, u32)) -> Option<String>,
+    G: Fn(&str, (u32, u32)) -> bool,
 {
     fn validate_macro(
         &mut self,
@@ -69,9 +74,10 @@ where
     }
 }
 
-impl<'a, F> Visit<'a> for TranslationScopeValidator<'_, F>
+impl<'a, F, G> Visit<'a> for TranslationScopeValidator<'_, F, G>
 where
     F: Fn(&str, (u32, u32)) -> Option<String>,
+    G: Fn(&str, (u32, u32)) -> bool,
 {
     fn enter_node(&mut self, kind: AstKind<'a>) {
         if matches!(
@@ -134,6 +140,21 @@ where
 
         if let Some((local_name, span)) = identifier_name(&it.callee) {
             self.validate_macro(local_name, span, &EAGER_JS_MACROS, it.span.start as usize);
+            if (self.is_lowered_jsx_helper)(local_name, span) {
+                if let Some((macro_name, macro_span)) = it
+                    .arguments
+                    .first()
+                    .and_then(|argument| argument.as_expression())
+                    .and_then(identifier_name)
+                {
+                    self.validate_macro(
+                        macro_name,
+                        macro_span,
+                        &EAGER_JSX_MACROS,
+                        it.span.start as usize,
+                    );
+                }
+            }
         }
 
         if self.error.is_none() {

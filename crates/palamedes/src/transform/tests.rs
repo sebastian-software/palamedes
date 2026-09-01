@@ -3,6 +3,7 @@ use super::{
     ServerFunctionTransformOptions,
 };
 use crate::error::PalamedesResult;
+use crate::extract::extract_messages;
 use crate::icu_text::compiled_message_key;
 use crate::source::{diagnostic_location_metrics, reset_diagnostic_location_metrics};
 use crate::test_support::scope_macro_test_source;
@@ -1413,6 +1414,272 @@ fn transforms_trans_jsx_macro() {
     assert!(result.code.contains("message={\"Hello {name}\"}"));
     assert!(result.code.contains("values={{ name }}"));
     assert!(!result.code.contains("@palamedes/runtime"));
+}
+
+#[test]
+fn transforms_remix_lowered_rich_macros_by_binding_identity() {
+    let source = r#"import { Trans as Message } from "@palamedes/react/macro";
+import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
+export function View() {
+  return makeMany(Message, { children: [
+    "Hello ",
+    user.name,
+    make("strong", { className: "loud", children: owner.name }),
+    make(Group, { children: make("Icon", {}) }),
+    make(Button, { title: "Save", children: "now" }),
+  ] });
+}
+"#;
+    let result = transform_macros(source, "view.js", None)
+        .expect("Remix-lowered rich macros should transform");
+
+    assert!(result
+        .code
+        .contains("import { Trans } from \"@palamedes/react/compiled\";"));
+    assert!(result.code.contains("makeMany(Trans, { id: \""));
+    assert!(result
+        .code
+        .contains("message: \"Hello {name}<0>{name_1}</0><1/><2>now</2>\""));
+    assert!(result
+        .code
+        .contains("values: { name: user.name, name_1: owner.name }"));
+    assert!(result.code.contains(
+        "components: { 0: make(\"strong\", { className: \"loud\" }), 1: make(\"Icon\", {  }), 2: make(Button, { title: \"Save\" }) }"
+    ));
+    assert!(!result.code.contains("@palamedes/react/macro"));
+    assert_eq!(result.compiled_ids.len(), 1);
+}
+
+#[test]
+fn transforms_remix_lowered_choice_macros() {
+    let source = r##"import { Plural as Count, Select as Pick, SelectOrdinal as Rank } from "@palamedes/react/macro";
+import { jsx as render } from "remix/ui/jsx-runtime";
+export function labels(count, gender, position) {
+  return [
+    render(Count, { value: count, offset: 1, one: "# item", other: "# items" }),
+    render(Pick, { value: gender, female: "She", other: "They" }),
+    render(Rank, { value: position, one: "#st", other: "#th" }),
+  ];
+}
+"##;
+    let result = transform_macros(source, "choices.js", None)
+        .expect("Remix-lowered choices should transform");
+
+    assert!(result
+        .code
+        .contains("message: \"{count, plural, offset:1 one {# item} other {# items}}\""));
+    assert!(result
+        .code
+        .contains("message: \"{gender, select, female {She} other {They}}\""));
+    assert!(result
+        .code
+        .contains("message: \"{position, selectordinal, one {#st} other {#th}}\""));
+    assert_eq!(result.compiled_ids.len(), 3);
+    assert!(!result.code.contains("render(Count"));
+    assert!(!result.code.contains("render(Pick"));
+    assert!(!result.code.contains("render(Rank"));
+}
+
+#[test]
+fn transforms_remix_development_jsx_output() {
+    let source = r#"import { Trans as Message } from "@palamedes/react/macro";
+import { jsxDEV as render } from "remix/ui/jsx-dev-runtime";
+export function View() {
+  return render(Message, { children: ["Hello ", name] }, void 0, true, {
+    fileName: "view.tsx",
+    lineNumber: 4,
+    columnNumber: 10,
+  }, this);
+}
+"#;
+    let result =
+        transform_macros(source, "view.js", None).expect("Remix development JSX should transform");
+
+    assert!(result.code.contains("render(Trans, { id: \""));
+    assert!(result.code.contains("message: \"Hello {name}\""));
+    assert!(result.code.contains(
+        "}, void 0, true, {\n    fileName: \"view.tsx\",\n    lineNumber: 4,\n    columnNumber: 10,\n  }, this)"
+    ));
+}
+
+#[test]
+fn remix_lowered_transform_matches_authored_extraction_identity() {
+    let authored = r#"import { Trans } from "@palamedes/react/macro";
+export function View() {
+  return <Trans>Hello {user.name}<strong>{owner.name}</strong><><Icon /> again</></Trans>;
+}
+"#;
+    let lowered = r#"import { Trans as Message } from "@palamedes/react/macro";
+import { Fragment as Group, jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
+export function View() {
+  return makeMany(Message, { children: [
+    "Hello ",
+    user.name,
+    make("strong", { children: owner.name }),
+    make(Group, { children: [make(Icon, {}), " again"] }),
+  ] });
+}
+"#;
+    let extracted = extract_messages(authored, "view.tsx").expect("authored TSX should extract");
+    let transformed =
+        transform_macros(lowered, "view.js", None).expect("lowered JavaScript should transform");
+
+    assert_eq!(extracted.len(), 1);
+    assert_eq!(
+        extracted[0].message,
+        "Hello {name}<0>{name_1}</0><1/> again"
+    );
+    assert_eq!(
+        transformed.compiled_ids,
+        vec![compiled_key(&extracted[0].message, None)]
+    );
+    assert!(transformed
+        .code
+        .contains("message: \"Hello {name}<0>{name_1}</0><1/> again\""));
+}
+
+#[test]
+fn remix_lowered_transform_preserves_nested_repeated_tags_and_entities() {
+    let authored = r#"import { Trans } from "@palamedes/react/macro";
+export function View() {
+  return <Trans>Green-e&reg; applies to <strong>US &amp; Canada</strong>. <strong>{owner.name}<em> now</em></strong></Trans>;
+}
+"#;
+    let lowered = r#"import { Trans as Message } from "@palamedes/react/macro";
+import { jsx as make, jsxs as makeMany } from "remix/ui/jsx-runtime";
+export function View() {
+  return makeMany(Message, { children: [
+    "Green-e® applies to ",
+    make("strong", { children: "US & Canada" }),
+    ". ",
+    makeMany("strong", { children: [owner.name, make("em", { children: " now" })] }),
+  ] });
+}
+"#;
+    let extracted = extract_messages(authored, "view.tsx").expect("authored TSX should extract");
+    let transformed =
+        transform_macros(lowered, "view.js", None).expect("nested lowered tags should transform");
+    let message = "Green-e® applies to <0>US & Canada</0>. <1>{name}<2>now</2></1>";
+
+    assert_eq!(extracted[0].message, message);
+    assert_eq!(transformed.compiled_ids, vec![compiled_key(message, None)]);
+    assert!(transformed
+        .code
+        .contains(&format!("message: \"{message}\"")));
+    assert!(transformed.code.contains(
+        "components: { 0: make(\"strong\", {  }), 1: makeMany(\"strong\", {  }), 2: make(\"em\", {  }) }"
+    ));
+}
+
+#[test]
+fn transforms_nested_icu_choices_in_remix_lowered_choice_options() {
+    let source = r##"import { Plural as Count } from "@palamedes/react/macro";
+import { jsx as render } from "remix/ui/jsx-runtime";
+export function label(count) {
+  return render(Count, {
+    value: count,
+    one: "{count, selectordinal, one {#st item} other {#th item}}",
+    other: "# items",
+  });
+}
+"##;
+    let result = transform_macros(source, "choices.js", None)
+        .expect("nested ICU choices should remain byte-identical");
+
+    assert!(result.code.contains(
+        "message: \"{count, plural, one {{count, selectordinal, one {#st item} other {#th item}}} other {# items}}\""
+    ));
+}
+
+#[test]
+fn rejects_nested_message_macros_in_remix_lowered_children() {
+    let source = r##"import { Plural as Count, Trans as Message } from "@palamedes/react/macro";
+import { jsx as render, jsxs as renderMany } from "remix/ui/jsx-runtime";
+export function View(count) {
+  return renderMany(Message, { children: [
+    render(Count, { value: count, one: "# item", other: "# items" }),
+    " total",
+  ] });
+}
+"##;
+    let error = transform_macros(source, "view.js", None)
+        .expect_err("nested message macros should match authored JSX diagnostics");
+
+    assert!(error
+        .to_string()
+        .contains("Nested i18n macro is not extractable as a single message"));
+}
+
+#[test]
+fn rejects_macros_nested_in_remix_lowered_component_props() {
+    let source = r#"import { Trans as Message } from "@palamedes/react/macro";
+import { t } from "@palamedes/core/macro";
+import { jsx as render } from "remix/ui/jsx-runtime";
+export function View() {
+  return render(Message, { children: render(Button, { title: t`Save` }) });
+}
+"#;
+    let error = transform_macros(source, "view.js", None)
+        .expect_err("nested prop macros must not survive the outer replacement");
+
+    assert!(error
+        .to_string()
+        .contains("macros nested in lowered non-child props cannot be transformed safely"));
+}
+
+#[test]
+fn ignores_non_palamedes_and_shadowed_remix_jsx_calls() {
+    let source = r#"import { Trans as Message } from "@palamedes/react/macro";
+import { jsx as render } from "remix/ui/jsx-runtime";
+export function View(render) {
+  const ordinary = render(Message, { children: "shadowed" });
+  return [ordinary, jsx(Widget, { children: "ordinary" })];
+}
+"#;
+    let result =
+        transform_macros(source, "view.js", None).expect("ordinary calls should remain untouched");
+
+    assert!(!result.has_changed);
+    assert_eq!(result.code, scope_macro_test_source(source, "view.js"));
+}
+
+#[test]
+fn rejects_dynamic_remix_lowered_macro_shapes() {
+    let cases = [
+        r#"import { Trans } from "@palamedes/react/macro";
+import { jsx } from "remix/ui/jsx-runtime";
+export function View() { return jsx(Trans, props); }
+"#,
+        r#"import { Trans } from "@palamedes/react/macro";
+import { jsx } from "remix/ui/jsx-runtime";
+export function View() { return jsx(Trans, { ...props, children: "Hello" }); }
+"#,
+        r#"import { Trans } from "@palamedes/react/macro";
+import { jsxs } from "remix/ui/jsx-runtime";
+export function View() { return jsxs(Trans, { children: [...parts] }); }
+"#,
+    ];
+
+    for source in cases {
+        let error = transform_macros(source, "view.js", None)
+            .expect_err("dynamic lowered shapes should fail");
+        let message = error.to_string();
+        assert!(message.contains("Unsupported `Trans` macro usage at view.js:3:"));
+    }
+}
+
+#[test]
+fn rejects_eager_remix_lowered_choices_at_module_scope() {
+    let source = r##"import { Plural as Count } from "@palamedes/react/macro";
+import { jsx as render } from "remix/ui/jsx-runtime";
+const label = render(Count, { value: count, one: "# item", other: "# items" });
+"##;
+    let error = transform_macros_raw(source, "view.js", None)
+        .expect_err("lowered choice components stay eager after compilation");
+
+    assert!(error
+        .to_string()
+        .contains("Translation macro `Plural` must be used inside a function at view.js:3:15"));
 }
 
 #[test]
