@@ -1075,7 +1075,10 @@ describe("experimental graph splitting", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/label.ts"))
   })
 
-  it("skips asset emission for SSR bundles", async () => {
+  it.each([
+    ["the legacy SSR environment name", { name: "ssr" }],
+    ["an RSC server consumer", { name: "rsc", config: { consumer: "server" } }],
+  ])("skips asset emission for %s", async (_description, environment) => {
     const { sidecarPlugin } = await runSidecarLoad(
       ["id-a"],
       {},
@@ -1084,7 +1087,7 @@ describe("experimental graph splitting", () => {
     const emitFile = vi.fn()
     await sidecarPlugin.generateBundle.call(
       {
-        environment: { name: "ssr" },
+        environment,
         emitFile,
       } as never,
       {},

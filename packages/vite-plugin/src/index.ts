@@ -79,6 +79,19 @@ const VITE_SUPPORTS_REACT_MDX_MODULE_TYPE = VITE_MAJOR >= 8
 
 const REACT_MDX_VITE_REQUIREMENT =
   'Palamedes React MDX compilation requires Vite 8 or newer because Vite 7\'s Rollup pipeline cannot parse generated JSX from .mdx files. Upgrade Vite, set `mdx: { framework: "solid" }` for Solid, or disable first-class MDX with `mdx: false`.'
+
+type EnvironmentAwarePluginContext = {
+  environment?: {
+    name?: string
+    config?: { consumer?: string }
+  }
+}
+
+function isServerEnvironment(context: unknown, ssr = false): boolean {
+  const environment = (context as EnvironmentAwarePluginContext).environment
+  return ssr || environment?.config?.consumer === "server" || environment?.name === "ssr"
+}
+
 function stripQuery(id: string): string {
   return id.split("?")[0] ?? id
 }
@@ -787,9 +800,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const locales = cfg.locales
 
         if (locale === undefined) {
-          const ssr =
-            loadOptions?.ssr === true ||
-            (this as { environment?: { name?: string } }).environment?.name === "ssr"
+          const ssr = isServerEnvironment(this, loadOptions?.ssr === true)
 
           if (importMapBinding && isBuildCommand && !ssr) {
             // Import-map binding: the client aggregator imports one
@@ -844,8 +855,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       },
 
       async generateBundle(_options, bundle) {
-        const environmentName = (this as { environment?: { name?: string } }).environment?.name
-        if (!importMapBinding || environmentName === "ssr" || sidecarModules.size === 0) {
+        if (!importMapBinding || isServerEnvironment(this) || sidecarModules.size === 0) {
           return
         }
 
