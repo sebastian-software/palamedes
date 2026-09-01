@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-25
-- Revised: 2026-08-03
+- Revised: 2026-09-01
 
 ## Context
 
@@ -46,6 +46,9 @@ Rust ABI and prevents one plugin crash from corrupting the host process.
    namespace. Commands of other configured plugins run and surface the skipped
    plugin as a warning diagnostic; the failure is fatal only when it may own
    the requested namespace.
+10. The host bounds protocol line, byte, and event consumption. `describe` has
+    a mandatory deadline; `run` remains unbounded unless the caller opts into a
+    command deadline. A limit violation terminates the plugin process tree.
 
 ## Packaging And Resolution
 
