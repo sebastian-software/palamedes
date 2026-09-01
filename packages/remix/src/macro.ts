@@ -1,13 +1,16 @@
-import type { PluralProps, SelectOrdinalProps, SelectProps } from "@palamedes/core"
+import type { SelectProps } from "@palamedes/core"
+import type {
+  PluralMacroProps,
+  SelectMacroProps,
+  SelectOrdinalMacroProps,
+} from "@palamedes/core/macro"
 import type { Handle, RemixNode } from "remix/ui"
 
 import type { TransProps } from "./transShared"
 
-type MacroTransProps = TransProps & {
+type MacroTransProps = Pick<TransProps, "message" | "context" | "comment"> & {
   children?: RemixNode
 }
-type MacroSelectProps<Props extends SelectProps> = Props &
-  Record<Exclude<keyof Props, "value">, string>
 
 function throwMacroError(): never {
   throw new Error(
@@ -19,16 +22,16 @@ export function Trans(_handle: Handle<MacroTransProps>): () => RemixNode {
   return throwMacroError()
 }
 
-export function Plural(_handle: Handle<PluralProps>): () => RemixNode {
+export function Plural(_handle: Handle<PluralMacroProps>): () => RemixNode {
   return throwMacroError()
 }
 
 export function Select<const Props extends SelectProps>(
-  _handle: Handle<MacroSelectProps<Props>>
+  _handle: Handle<SelectMacroProps<Props>>
 ): () => RemixNode {
   return throwMacroError()
 }
 
-export function SelectOrdinal(_handle: Handle<SelectOrdinalProps>): () => RemixNode {
+export function SelectOrdinal(_handle: Handle<SelectOrdinalMacroProps>): () => RemixNode {
   return throwMacroError()
 }

@@ -29,6 +29,22 @@ export type SelectProps = {
   [key: string]: string | number | undefined
 }
 
+/** Metadata consumed by JSX choice transforms rather than rendered as branches. */
+export type ChoiceMacroMetadata = {
+  context?: string
+  comment?: string
+}
+
+export type PluralMacroProps = PluralProps & ChoiceMacroMetadata
+
+export type SelectOrdinalMacroProps = SelectOrdinalProps & ChoiceMacroMetadata
+
+export type SelectMacroProps<Props extends SelectProps> = Props &
+  ChoiceMacroMetadata & {
+    id?: never
+    message?: never
+  } & Record<Exclude<keyof Props, "value" | "context" | "comment" | "id" | "message">, string>
+
 const PLURAL_CATEGORIES = new Set(["zero", "one", "two", "few", "many", "other"])
 const CHOICE_MESSAGE_CACHE_LIMIT = 256
 // Choice props may be dynamic, so keep validated patterns in a small FIFO

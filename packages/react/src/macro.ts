@@ -1,13 +1,17 @@
-import type { PluralProps, SelectOrdinalProps, SelectProps } from "@palamedes/core"
+import type { SelectProps } from "@palamedes/core"
+import type {
+  PluralMacroProps,
+  SelectMacroProps,
+  SelectOrdinalMacroProps,
+} from "@palamedes/core/macro"
 import type { ReactNode } from "react"
 
-import type { TransProps } from "./transShared"
-
-type MacroTransProps = TransProps & {
+type MacroTransProps = {
+  message?: string
+  context?: string
+  comment?: string
   children?: ReactNode
 }
-type MacroSelectProps<Props extends SelectProps> = Props &
-  Record<Exclude<keyof Props, "value">, string>
 
 function throwMacroError(): never {
   throw new Error(
@@ -19,16 +23,16 @@ export function Trans(_props: MacroTransProps): ReactNode {
   return throwMacroError()
 }
 
-export function Plural(_props: PluralProps): ReactNode {
+export function Plural(_props: PluralMacroProps): ReactNode {
   return throwMacroError()
 }
 
 export function Select<const Props extends SelectProps>(
-  _props: MacroSelectProps<Props>
+  _props: SelectMacroProps<Props>
 ): ReactNode {
   return throwMacroError()
 }
 
-export function SelectOrdinal(_props: SelectOrdinalProps): ReactNode {
+export function SelectOrdinal(_props: SelectOrdinalMacroProps): ReactNode {
   return throwMacroError()
 }

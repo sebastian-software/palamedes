@@ -1,5 +1,12 @@
 import type { PluralProps, SelectOrdinalProps, SelectProps } from "./choice"
 
+export type {
+  ChoiceMacroMetadata,
+  PluralMacroProps,
+  SelectMacroProps,
+  SelectOrdinalMacroProps,
+} from "./choice"
+
 type MessageDescriptor = {
   message: string
   context?: string
